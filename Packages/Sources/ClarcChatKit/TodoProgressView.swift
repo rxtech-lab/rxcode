@@ -1,12 +1,13 @@
 import SwiftUI
 import ClarcCore
 
-// MARK: - Todo Progress Ring
+// MARK: - Todo Progress Pill
 
-public struct TodoProgressRing: View {
+public struct TodoProgressPill: View {
     public let done: Int
     public let total: Int
     public let inProgress: Bool
+    @State private var isHovering = false
 
     public init(done: Int, total: Int, inProgress: Bool) {
         self.done = done
@@ -14,31 +15,45 @@ public struct TodoProgressRing: View {
         self.inProgress = inProgress
     }
 
-    private var progress: Double {
-        guard total > 0 else { return 0 }
-        return Double(done) / Double(total)
+    private var isComplete: Bool { total > 0 && done == total }
+
+    private var accent: Color {
+        if isComplete { return ClaudeTheme.statusSuccess }
+        if inProgress { return ClaudeTheme.accent }
+        return ClaudeTheme.textSecondary
     }
 
-    private var arcColor: Color {
-        if total > 0 && done == total { return ClaudeTheme.statusSuccess }
-        return ClaudeTheme.accent
+    private var iconName: String {
+        if isComplete { return "checkmark.circle.fill" }
+        if inProgress { return "circle.dotted" }
+        return "checklist"
     }
 
     public var body: some View {
-        ZStack {
-            Circle()
-                .stroke(ClaudeTheme.borderSubtle, lineWidth: 2)
-            Circle()
-                .trim(from: 0, to: progress)
-                .stroke(arcColor, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-                .animation(.easeInOut(duration: 0.25), value: progress)
-            if inProgress && done < total {
-                Circle()
-                    .fill(ClaudeTheme.accent)
-                    .frame(width: 3, height: 3)
-            }
+        HStack(spacing: 5) {
+            Image(systemName: iconName)
+                .symbolRenderingMode(.hierarchical)
+                .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+                .foregroundStyle(accent)
+                .frame(width: 12, height: 12)
+
+            Text("\(done)/\(total)")
+                .font(.system(size: ClaudeTheme.size(11), weight: .medium, design: .monospaced))
+                .foregroundStyle(ClaudeTheme.textPrimary)
+                .monospacedDigit()
         }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(
+            Capsule()
+                .fill(isHovering ? ClaudeTheme.surfaceSecondary : ClaudeTheme.surfaceTertiary.opacity(0.6))
+        )
+        .overlay(
+            Capsule()
+                .strokeBorder(ClaudeTheme.borderSubtle, lineWidth: 0.5)
+        )
+        .onHover { isHovering = $0 }
+        .animation(.easeInOut(duration: 0.12), value: isHovering)
     }
 }
 

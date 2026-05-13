@@ -49,3 +49,4 @@
 "Currently at %lld%%" = "Currently at %lld%%";
 "Resets in %@" = "Resets in %@";
 "tokens" = "tokens";
+"tok" = "tok";

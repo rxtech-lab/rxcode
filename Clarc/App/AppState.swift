@@ -55,10 +55,18 @@ struct SessionStreamState {
     var cacheReadTokens: Int = 0
     var durationMs: Double = 0
     var turns: Int = 0
-    /// Running output-token count for the in-flight turn. Reset at the start of every
-    /// stream, updated from `assistant.message.usage.output_tokens`, and surfaced live
-    /// in the streaming indicator. Folded into `outputTokens` on `.result`.
-    var currentTurnOutputTokens: Int = 0
+    /// Per-message output-token totals for the in-flight turn, keyed by the assistant
+    /// message id. A single turn can contain several model invocations (one per tool-result
+    /// round-trip), each emitting its own `usage.output_tokens` from zero — so we track
+    /// per-id maxes and sum them to get the running turn total. Reset at stream start.
+    var currentTurnOutputTokensByMessage: [String: Int] = [:]
+    /// Fallback counter for assistant events that arrive without an `id` (defensive —
+    /// the CLI normally always populates it). Reset alongside the map.
+    var currentTurnOutputTokensUnkeyed: Int = 0
+    /// Sum of all per-message running totals — what the streaming indicator displays.
+    var currentTurnOutputTokens: Int {
+        currentTurnOutputTokensByMessage.values.reduce(0, +) + currentTurnOutputTokensUnkeyed
+    }
     var lastTurnContextUsedPercentage: Double?
     var activeModelName: String?
 
@@ -90,6 +98,11 @@ final class AppState {
     // MARK: - Session Summaries (shared — lightweight metadata for all projects)
 
     var allSessionSummaries: [ChatSession.Summary] = []
+
+    /// Bumped each time a thread file-edit row is appended in SwiftData. The
+    /// "This thread" inspector reads this so SwiftUI observation re-runs the
+    /// `threadFileEdits(in:)` fetch after a new Edit/Write tool call lands.
+    var threadFileEditsRevision: Int = 0
 
     // MARK: - Theme
 
@@ -425,6 +438,13 @@ final class AppState {
         streamState(in: window).messages
     }
 
+    /// File edits accumulated across this thread, sourced from SwiftData.
+    /// Returns an empty array for a not-yet-persisted (placeholder) session.
+    func threadFileEdits(in window: WindowState) -> [FileEditSummary] {
+        let key = window.currentSessionId ?? window.newSessionKey
+        return threadStore.fetchFileEdits(sessionId: key).map { $0.toSummary() }
+    }
+
     func isStreaming(in window: WindowState) -> Bool {
         streamState(in: window).isStreaming
     }
@@ -662,6 +682,9 @@ final class AppState {
         func observeStream() {
             withObservationTracking {
                 let state = streamState(in: window)
+                if bridge.messages.count != state.messages.count || bridge.isLoadingFromDisk != state.isLoadingFromDisk {
+                    self.logger.info("[Bridge.observe] push sid=\(window.currentSessionId ?? "<nil>", privacy: .public) messages \(bridge.messages.count)→\(state.messages.count) loading \(bridge.isLoadingFromDisk)→\(state.isLoadingFromDisk) streaming=\(state.isStreaming)")
+                }
                 bridge.messages = state.messages
                 bridge.isStreaming = state.isStreaming
                 bridge.isThinking = state.isThinking
@@ -960,7 +983,8 @@ final class AppState {
             state.hasUncheckedCompletion = false
             state.activeStreamId = streamId
             state.streamingStartDate = Date()
-            state.currentTurnOutputTokens = 0
+            state.currentTurnOutputTokensByMessage.removeAll(keepingCapacity: true)
+            state.currentTurnOutputTokensUnkeyed = 0
         }
         await permission.refreshRunToken()
 
@@ -1298,12 +1322,17 @@ final class AppState {
 
                 case .assistant(let assistantMessage):
                     logger.debug("[Stream:UI] event #\(eventCount) .assistant (gap=\(String(format: "%.1f", gap))s, blocks=\(assistantMessage.content.count))")
-                    // Cumulative output_tokens for the in-flight turn. The CLI emits assistant
-                    // events at content-block boundaries, each carrying the running total — so
-                    // `max` is defensive against any out-of-order or stale arrivals.
+                    // A turn can contain several model invocations (one per tool round-trip);
+                    // each emits its own `usage.output_tokens` starting from zero. Track the
+                    // running max per message id and sum across ids to get the turn total.
                     if let liveOutput = assistantMessage.usage?.outputTokens {
                         updateState(sessionKey) { state in
-                            state.currentTurnOutputTokens = max(state.currentTurnOutputTokens, liveOutput)
+                            if let messageId = assistantMessage.id {
+                                let existing = state.currentTurnOutputTokensByMessage[messageId] ?? 0
+                                state.currentTurnOutputTokensByMessage[messageId] = max(existing, liveOutput)
+                            } else {
+                                state.currentTurnOutputTokensUnkeyed = max(state.currentTurnOutputTokensUnkeyed, liveOutput)
+                            }
                         }
                     }
                     // Extract text only when no text_delta has been received in the current turn.
@@ -1527,7 +1556,26 @@ final class AppState {
             state.pendingToolResults.removeAll(keepingCapacity: true)
             if let idx = lastAssistantIdx() {
                 for (toolUseId, content, isError) in results {
+                    let editPersistInfo: (path: String, hunks: [PreviewFile.EditHunk], isWrite: Bool)? = {
+                        guard !isError,
+                              let blockIdx = state.messages[idx].toolCallIndex(id: toolUseId),
+                              let call = state.messages[idx].blocks[blockIdx].toolCall,
+                              ["edit", "multiedit", "multi_edit", "write"].contains(call.name.lowercased()),
+                              let path = call.editedFilePath else { return nil }
+                        let hunks = call.fileEditHunks
+                        guard !hunks.isEmpty else { return nil }
+                        return (path, hunks, call.name.lowercased() == "write")
+                    }()
                     state.messages[idx].setToolResult(id: toolUseId, result: content, isError: isError)
+                    if let info = editPersistInfo {
+                        threadStore.appendFileEdit(
+                            sessionId: key,
+                            path: info.path,
+                            hunks: info.hunks,
+                            containsWrite: info.isWrite
+                        )
+                        threadFileEditsRevision &+= 1
+                    }
                 }
             }
         }
@@ -1661,6 +1709,7 @@ final class AppState {
                         logger.info(
                             "[TodoWrite] session=\(sessionKey, privacy: .public) total=\(todos.count) done=\(done) active=\(active, privacy: .public)"
                         )
+                        threadStore.upsertTodoSnapshot(sessionId: sessionKey, items: todos)
                     }
                 }
             }
@@ -1991,6 +2040,8 @@ final class AppState {
     // MARK: - Session Management
 
     private func switchToSession(_ session: ChatSession, messages loadedMessages: [ChatMessage]? = nil, in window: WindowState) {
+        let existingState = sessionStates[session.id]
+        logger.info("[SwitchToSession] sid=\(session.id, privacy: .public) hasState=\(existingState != nil) existingMessages=\(existingState?.messages.count ?? -1) existingIsStreaming=\(existingState?.isStreaming ?? false) preloadedMessages=\(loadedMessages?.count ?? -1)")
         saveDraft(in: window)
         saveQueue(in: window)
 
@@ -2008,12 +2059,16 @@ final class AppState {
             if let msgs = loadedMessages {
                 state.messages = cleanLoadedMessages(msgs)
                 sessionStates[session.id] = state
+                logger.info("[SwitchToSession] applied preloaded messages sid=\(session.id, privacy: .public) cleaned=\(state.messages.count)")
             } else {
                 // Switch with an empty state first; actual messages are loaded in the background and injected later
                 state.isLoadingFromDisk = true
                 sessionStates[session.id] = state
                 if let project = window.selectedProject {
+                    logger.info("[SwitchToSession] background load triggered sid=\(session.id, privacy: .public) cwd=\(project.path, privacy: .public)")
                     loadMessagesInBackground(projectId: project.id, sessionId: session.id, cwd: project.path)
+                } else {
+                    logger.error("[SwitchToSession] no selectedProject — cannot load messages sid=\(session.id, privacy: .public)")
                 }
             }
         } else if sessionStates[session.id]?.messages.isEmpty == true,
@@ -2026,7 +2081,10 @@ final class AppState {
                 state.isLoadingFromDisk = true
                 sessionStates[session.id] = state
             }
+            logger.info("[SwitchToSession] re-loading empty cached state sid=\(session.id, privacy: .public) cwd=\(project.path, privacy: .public)")
             loadMessagesInBackground(projectId: project.id, sessionId: session.id, cwd: project.path)
+        } else {
+            logger.info("[SwitchToSession] reusing cached state sid=\(session.id, privacy: .public) messages=\(existingState?.messages.count ?? -1) isStreaming=\(existingState?.isStreaming ?? false)")
         }
 
         if sessionStates[session.id]?.isStreaming == true {
@@ -2418,12 +2476,17 @@ final class AppState {
     }
 
     func selectSession(id: String, in window: WindowState) {
-        guard window.currentSessionId != id else { return }
+        logger.info("[SelectSession] click sid=\(id, privacy: .public) currentSid=\(window.currentSessionId ?? "<nil>", privacy: .public) selectedProject=\(window.selectedProject?.id.uuidString ?? "<nil>", privacy: .public) summariesCount=\(self.allSessionSummaries.count)")
+        guard window.currentSessionId != id else {
+            logger.info("[SelectSession] no-op: already current sid=\(id, privacy: .public)")
+            return
+        }
 
         window.cancelSessionSwitchTask()
 
         if let summary = allSessionSummaries.first(where: { $0.id == id }),
            summary.projectId == window.selectedProject?.id {
+            logger.info("[SelectSession] match in current project sid=\(id, privacy: .public) origin=\(String(describing: summary.origin), privacy: .public) title=\(summary.title, privacy: .public)")
             let session = summary.makeSession()
             switchToSession(session, in: window)
             window.requestInputFocus = true
@@ -2436,8 +2499,12 @@ final class AppState {
 
         // If it's a session from another project, switch the project as well
         guard let summary = allSessionSummaries.first(where: { $0.id == id }),
-              let project = projects.first(where: { $0.id == summary.projectId }) else { return }
+              let project = projects.first(where: { $0.id == summary.projectId }) else {
+            logger.error("[SelectSession] summary or project missing for sid=\(id, privacy: .public)")
+            return
+        }
 
+        logger.info("[SelectSession] cross-project switch sid=\(id, privacy: .public) toProject=\(project.id.uuidString, privacy: .public)")
         window.setSessionSwitchTask(Task { [weak self] in
             guard let self else { return }
             guard !Task.isCancelled else { return }
@@ -2447,8 +2514,10 @@ final class AppState {
                 let session = s.makeSession()
                 if sessionStates[session.id] == nil,
                    let full = await persistence.loadFullSession(summary: s, cwd: project.path) {
+                    logger.info("[SelectSession] cross-project preload ok sid=\(id, privacy: .public) messages=\(full.messages.count)")
                     switchToSession(full, messages: full.messages, in: window)
                 } else {
+                    logger.info("[SelectSession] cross-project preload empty sid=\(id, privacy: .public)")
                     switchToSession(session, in: window)
                 }
                 window.requestInputFocus = true
@@ -2597,6 +2666,7 @@ final class AppState {
         // Snapshot the summary while we're on MainActor so the detached task
         // can route by origin without awaiting back to us first.
         let summary = summaryFor(sessionId: sessionId, projectId: projectId)
+        logger.info("[LoadMessages] start sid=\(sessionId, privacy: .public) origin=\(String(describing: summary.origin), privacy: .public) cwd=\(cwd, privacy: .public)")
 
         Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
@@ -2608,17 +2678,29 @@ final class AppState {
                 cleaned = []
             }
             await MainActor.run {
-                guard var state = self.sessionStates[sessionId] else { return }
+                let rawCount = full?.messages.count ?? -1
+                self.logger.info("[LoadMessages] loaded sid=\(sessionId, privacy: .public) rawMessages=\(rawCount) cleaned=\(cleaned.count)")
+                guard var state = self.sessionStates[sessionId] else {
+                    self.logger.error("[LoadMessages] dropped — no sessionState sid=\(sessionId, privacy: .public)")
+                    return
+                }
                 // Always clear the loading flag, even if we bail out — otherwise the UI
                 // would stay faded out forever on the failure / skip paths.
                 state.isLoadingFromDisk = false
                 defer { self.sessionStates[sessionId] = state }
-                guard let full else { return }
-                guard !state.isStreaming, state.messages.isEmpty else { return }
+                guard let full else {
+                    self.logger.error("[LoadMessages] no session returned by persistence sid=\(sessionId, privacy: .public) origin=\(String(describing: summary.origin), privacy: .public)")
+                    return
+                }
+                guard !state.isStreaming, state.messages.isEmpty else {
+                    self.logger.info("[LoadMessages] skipped apply sid=\(sessionId, privacy: .public) isStreaming=\(state.isStreaming) existingMessages=\(state.messages.count)")
+                    return
+                }
                 state.messages = cleaned
                 if state.model == nil { state.model = full.model }
                 if state.effort == nil { state.effort = full.effort }
                 if state.permissionMode == nil { state.permissionMode = full.permissionMode }
+                self.logger.info("[LoadMessages] applied sid=\(sessionId, privacy: .public) messages=\(state.messages.count)")
             }
         }
     }
@@ -2725,7 +2807,8 @@ final class AppState {
             state.hasUncheckedCompletion = false
             state.activeStreamId = streamId
             state.streamingStartDate = Date()
-            state.currentTurnOutputTokens = 0
+            state.currentTurnOutputTokensByMessage.removeAll(keepingCapacity: true)
+            state.currentTurnOutputTokensUnkeyed = 0
         }
 
         await permission.refreshRunToken()

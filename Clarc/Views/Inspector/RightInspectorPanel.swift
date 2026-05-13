@@ -4,7 +4,7 @@ import ClarcCore
 // MARK: - RightInspectorPanel
 
 /// Right-side panel with two modes:
-/// - Review: Last turn / Unstaged / Staged / Branch tabs.
+/// - Review: This thread / Unstaged / Staged / Branch tabs.
 /// - Inspector: Memo / Terminal tabs.
 struct RightInspectorPanel: View {
     @Environment(WindowState.self) private var windowState
@@ -120,8 +120,8 @@ struct RightInspectorPanel: View {
     @ViewBuilder
     private var reviewContent: some View {
         switch windowState.inspectorReviewTab {
-        case .lastTurn:
-            LastTurnDiffView()
+        case .thisThread:
+            ThisThreadDiffView()
         case .unstaged:
             UnstagedChangesView()
         case .staged:
@@ -223,24 +223,29 @@ struct InspectorEmptyState: View {
     }
 }
 
-// MARK: - Last Turn
+// MARK: - This Thread
 
-struct LastTurnDiffView: View {
+struct ThisThreadDiffView: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
 
+    private var summaries: [FileEditSummary] {
+        _ = appState.threadFileEditsRevision
+        return appState.threadFileEdits(in: windowState)
+    }
+
     var body: some View {
-        let summaries = appState.messages(in: windowState).lastTurnFileEdits()
+        let summaries = summaries
         if summaries.isEmpty {
             InspectorEmptyState(
                 title: "No file changes yet",
-                message: "The latest turn made no edits to files."
+                message: "This thread has not edited any files."
             )
         } else {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 4) {
                     ForEach(summaries) { summary in
-                        LastTurnFileRow(summary: summary)
+                        ThisThreadFileRow(summary: summary)
                     }
                 }
                 .padding(12)
@@ -249,7 +254,7 @@ struct LastTurnDiffView: View {
     }
 }
 
-private struct LastTurnFileRow: View {
+private struct ThisThreadFileRow: View {
     let summary: FileEditSummary
     @Environment(WindowState.self) private var windowState
     @State private var isHovering = false

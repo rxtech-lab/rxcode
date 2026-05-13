@@ -1,6 +1,6 @@
-import SwiftUI
 import AppKit
 import ClarcCore
+import SwiftUI
 
 // MARK: - ClarcToolbar
 
@@ -17,9 +17,11 @@ struct ClarcToolbarContent: ToolbarContent {
 
     var body: some ToolbarContent {
         ToolbarSpacer(.flexible, placement: .primaryAction)
-        ToolbarItemGroup(placement: .primaryAction) {
+        ToolbarItem(placement: .primaryAction) {
             TodoProgressToolbarItem()
-
+                .padding(.horizontal)
+        }
+        ToolbarItemGroup(placement: .primaryAction) {
             Button {
                 appState.startNewChat(in: windowState)
             } label: {

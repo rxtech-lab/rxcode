@@ -267,7 +267,7 @@ public extension ToolCall {
     }
 }
 
-// MARK: - Last-Turn File Edits
+// MARK: - File Edit Summary
 
 public struct FileEditSummary: Identifiable, Sendable {
     public let id = UUID()
@@ -283,42 +283,5 @@ public struct FileEditSummary: Identifiable, Sendable {
         self.name = name
         self.hunks = hunks
         self.containsWrite = containsWrite
-    }
-}
-
-public extension Array where Element == ChatMessage {
-    /// Edit/MultiEdit/Write tool calls in the most recent turn (messages after
-    /// the last user message), grouped by file_path in first-edit order.
-    /// Errored tool calls are skipped.
-    func lastTurnFileEdits() -> [FileEditSummary] {
-        let lastUserIndex = lastIndex(where: { $0.role == .user }) ?? -1
-        let turnSlice = self[(lastUserIndex + 1)...]
-
-        var orderedPaths: [String] = []
-        var byPath: [String: (name: String, hunks: [PreviewFile.EditHunk], hasWrite: Bool)] = [:]
-
-        for message in turnSlice where message.role == .assistant {
-            for call in message.toolCalls {
-                if call.isError { continue }
-                guard let path = call.editedFilePath else { continue }
-                let hunks = call.fileEditHunks
-                guard !hunks.isEmpty else { continue }
-                let name = (path as NSString).lastPathComponent
-                let isWrite = call.name.lowercased() == "write"
-                if var existing = byPath[path] {
-                    existing.hunks.append(contentsOf: hunks)
-                    existing.hasWrite = existing.hasWrite || isWrite
-                    byPath[path] = existing
-                } else {
-                    byPath[path] = (name, hunks, isWrite)
-                    orderedPaths.append(path)
-                }
-            }
-        }
-
-        return orderedPaths.compactMap { path in
-            guard let entry = byPath[path] else { return nil }
-            return FileEditSummary(path: path, name: entry.name, hunks: entry.hunks, containsWrite: entry.hasWrite)
-        }
     }
 }

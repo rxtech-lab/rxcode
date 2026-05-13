@@ -32,11 +32,13 @@ public struct SystemEvent: Sendable {
 // MARK: - Assistant Message
 
 public struct AssistantMessage: Sendable {
+    public let id: String?
     public let role: String
     public let content: [ContentBlock]
     public let usage: UsageInfo?
 
-    public init(role: String, content: [ContentBlock], usage: UsageInfo? = nil) {
+    public init(id: String? = nil, role: String, content: [ContentBlock], usage: UsageInfo? = nil) {
+        self.id = id
         self.role = role
         self.content = content
         self.usage = usage

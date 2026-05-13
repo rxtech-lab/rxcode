@@ -64,6 +64,7 @@ extension AssistantMessage: Decodable {
     }
 
     private enum MessageCodingKeys: String, CodingKey {
+        case id
         case role
         case content
         case usage
@@ -75,6 +76,7 @@ extension AssistantMessage: Decodable {
             keyedBy: MessageCodingKeys.self,
             forKey: .message
         )
+        self.id = try messageContainer.decodeIfPresent(String.self, forKey: .id)
         self.role = try messageContainer.decode(String.self, forKey: .role)
         self.content = try messageContainer.decode([ContentBlock].self, forKey: .content)
         self.usage = try messageContainer.decodeIfPresent(UsageInfo.self, forKey: .usage)

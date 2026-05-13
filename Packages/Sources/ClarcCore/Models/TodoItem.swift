@@ -2,8 +2,8 @@ import Foundation
 
 // MARK: - Todo Item
 
-public struct TodoItem: Identifiable, Sendable, Equatable {
-    public enum Status: String, Sendable {
+public struct TodoItem: Identifiable, Sendable, Equatable, Codable {
+    public enum Status: String, Sendable, Codable {
         case pending
         case inProgress = "in_progress"
         case completed

@@ -18,7 +18,7 @@ public enum InspectorTab: String, CaseIterable {
 // MARK: - InspectorReviewTab
 
 public enum InspectorReviewTab: String, CaseIterable, Sendable {
-    case lastTurn = "Last turn"
+    case thisThread = "This thread"
     case unstaged = "Unstaged"
     case staged = "Staged"
     case branch = "Branch"
@@ -114,7 +114,7 @@ public final class WindowState {
     public var showInspector: Bool = false
     public var inspectorMode: InspectorMode = .review
     public var inspectorTab: InspectorTab = .memo
-    public var inspectorReviewTab: InspectorReviewTab = .lastTurn
+    public var inspectorReviewTab: InspectorReviewTab = .thisThread
     public var inspectorFile: PreviewFile?
     public var diffFile: PreviewFile?
     public var showMarketplace = false

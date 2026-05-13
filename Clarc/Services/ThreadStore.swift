@@ -17,7 +17,7 @@ final class ThreadStore {
     /// Convenience initializer creating its own `ModelContainer` rooted at the
     /// app's Application Support directory.
     static func make() -> ThreadStore {
-        let schema = Schema([ChatThread.self])
+        let schema = Schema([ChatThread.self, TodoSnapshot.self, ThreadFileEdit.self])
         let url = Self.storeURL()
         let config = ModelConfiguration(schema: schema, url: url)
         do {
@@ -104,12 +104,16 @@ final class ThreadStore {
             row.id = newId
             if row.cliSessionId == nil { row.cliSessionId = newId }
         }
+        renameTodoSnapshot(from: oldId, to: newId)
+        renameFileEdits(from: oldId, to: newId)
         save()
     }
 
     func delete(id: String) {
         guard let row = fetch(id: id) else { return }
         context.delete(row)
+        deleteTodoSnapshotRow(sessionId: id)
+        deleteFileEditRows(sessionId: id)
         save()
     }
 
@@ -122,11 +126,128 @@ final class ThreadStore {
         }
         do {
             let rows = try context.fetch(descriptor)
+            let ids = rows.map(\.id)
             for row in rows { context.delete(row) }
+            for id in ids {
+                deleteTodoSnapshotRow(sessionId: id)
+                deleteFileEditRows(sessionId: id)
+            }
+            if projectId == nil {
+                let allTodos = (try? context.fetch(FetchDescriptor<TodoSnapshot>())) ?? []
+                for row in allTodos { context.delete(row) }
+                let allEdits = (try? context.fetch(FetchDescriptor<ThreadFileEdit>())) ?? []
+                for row in allEdits { context.delete(row) }
+            }
             save()
         } catch {
             logger.error("deleteAll failed: \(error.localizedDescription)")
         }
+    }
+
+    // MARK: - Todo Snapshots
+
+    func fetchTodoSnapshot(sessionId: String) -> TodoSnapshot? {
+        var descriptor = FetchDescriptor<TodoSnapshot>(predicate: #Predicate { $0.sessionId == sessionId })
+        descriptor.fetchLimit = 1
+        return (try? context.fetch(descriptor))?.first
+    }
+
+    func upsertTodoSnapshot(sessionId: String, items: [TodoItem]) {
+        if let existing = fetchTodoSnapshot(sessionId: sessionId) {
+            existing.apply(items: items)
+        } else {
+            context.insert(TodoSnapshot(sessionId: sessionId, items: items))
+        }
+        save()
+    }
+
+    func renameTodoSnapshot(from oldId: String, to newId: String) {
+        guard oldId != newId else { return }
+        guard let row = fetchTodoSnapshot(sessionId: oldId) else { return }
+        if let existing = fetchTodoSnapshot(sessionId: newId) {
+            // Prefer the row tied to the new sid; drop the placeholder row.
+            context.delete(row)
+            _ = existing
+        } else {
+            row.sessionId = newId
+        }
+        save()
+    }
+
+    func deleteTodoSnapshot(sessionId: String) {
+        deleteTodoSnapshotRow(sessionId: sessionId)
+        save()
+    }
+
+    private func deleteTodoSnapshotRow(sessionId: String) {
+        guard let row = fetchTodoSnapshot(sessionId: sessionId) else { return }
+        context.delete(row)
+    }
+
+    // MARK: - Thread File Edits
+
+    func fetchFileEdits(sessionId: String) -> [ThreadFileEdit] {
+        let descriptor = FetchDescriptor<ThreadFileEdit>(
+            predicate: #Predicate { $0.sessionId == sessionId },
+            sortBy: [SortDescriptor(\.firstEditedAt, order: .forward)]
+        )
+        return (try? context.fetch(descriptor)) ?? []
+    }
+
+    private func fetchFileEdit(sessionId: String, path: String) -> ThreadFileEdit? {
+        var descriptor = FetchDescriptor<ThreadFileEdit>(
+            predicate: #Predicate { $0.sessionId == sessionId && $0.path == path }
+        )
+        descriptor.fetchLimit = 1
+        return (try? context.fetch(descriptor))?.first
+    }
+
+    /// Append edit hunks to the file's row for this session, creating the row if it
+    /// does not yet exist. Hunks are aggregated across turns; `containsWrite` becomes
+    /// sticky once any Write contributes.
+    func appendFileEdit(
+        sessionId: String,
+        path: String,
+        hunks: [PreviewFile.EditHunk],
+        containsWrite: Bool
+    ) {
+        guard !hunks.isEmpty else { return }
+        let name = (path as NSString).lastPathComponent
+        if let existing = fetchFileEdit(sessionId: sessionId, path: path) {
+            existing.append(hunks: hunks, containsWrite: containsWrite)
+            existing.name = name
+        } else {
+            context.insert(ThreadFileEdit(
+                sessionId: sessionId,
+                path: path,
+                name: name,
+                hunks: hunks,
+                containsWrite: containsWrite
+            ))
+        }
+        save()
+    }
+
+    func renameFileEdits(from oldId: String, to newId: String) {
+        guard oldId != newId else { return }
+        let rows = fetchFileEdits(sessionId: oldId)
+        for row in rows {
+            if let existing = fetchFileEdit(sessionId: newId, path: row.path) {
+                existing.append(hunks: row.hunks, containsWrite: row.containsWrite)
+                context.delete(row)
+            } else {
+                row.sessionId = newId
+            }
+        }
+    }
+
+    func deleteFileEdits(sessionId: String) {
+        deleteFileEditRows(sessionId: sessionId)
+        save()
+    }
+
+    private func deleteFileEditRows(sessionId: String) {
+        for row in fetchFileEdits(sessionId: sessionId) { context.delete(row) }
     }
 
     private func save() {

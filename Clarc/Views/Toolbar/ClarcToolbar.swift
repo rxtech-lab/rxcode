@@ -16,7 +16,10 @@ struct ClarcToolbarContent: ToolbarContent {
     @Environment(\.openWindow) private var openWindow
 
     var body: some ToolbarContent {
-        ToolbarItemGroup(placement: .confirmationAction) {
+        ToolbarSpacer(.flexible, placement: .primaryAction)
+        ToolbarItemGroup(placement: .primaryAction) {
+            TodoProgressToolbarItem()
+
             Button {
                 appState.startNewChat(in: windowState)
             } label: {

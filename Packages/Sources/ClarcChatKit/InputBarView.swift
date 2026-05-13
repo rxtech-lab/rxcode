@@ -147,6 +147,9 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
             inputTextField
             composerActionRow
         }
+        .disabled(chatBridge.hasPendingPlanDecision)
+        .opacity(chatBridge.hasPendingPlanDecision ? 0.55 : 1.0)
+        .animation(.easeInOut(duration: 0.15), value: chatBridge.hasPendingPlanDecision)
     }
 
     private var composerActionRow: some View {
@@ -724,6 +727,7 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
     // MARK: - Send / Return
 
     private func sendMessage() {
+        guard !chatBridge.hasPendingPlanDecision else { return }
         guard !windowState.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 || !windowState.attachments.isEmpty else { return }
         historyIndex = -1

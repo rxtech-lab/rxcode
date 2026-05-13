@@ -147,6 +147,71 @@ public struct ChatSession: Identifiable, Codable, Sendable {
             worktreeBranch: worktreeBranch
         )
     }
+
+    /// Strip attachment markers from user message content so titles and prompts
+    /// don't surface internal tokens. Removes:
+    ///   - `[Attached image: ...]`, `[Attached file: ...]`, `[Pasted text: ...]`, `[Link: ...]`
+    ///   - `[Image1]`, `[Image2]`, ... display tokens
+    /// Collapses runs of whitespace and trims edges.
+    public static func stripAttachmentMarkers(from content: String) -> String {
+        content
+            .replacingOccurrences(
+                of: #"\[(Attached [A-Za-z]+|Pasted text|Link):[^\]]*\]"#,
+                with: "",
+                options: .regularExpression
+            )
+            .replacingOccurrences(
+                of: #"\[Image\d+\]"#,
+                with: "",
+                options: .regularExpression
+            )
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Build a sidebar-friendly title from a user message. Strips attachment markers
+    /// via `stripAttachmentMarkers` so the sidebar doesn't briefly show internal
+    /// markers before the LLM-generated title arrives. Returns `defaultTitle` when
+    /// the message is empty after stripping.
+    public static func placeholderTitle(from content: String) -> String {
+        let stripped = stripAttachmentMarkers(from: content)
+        guard !stripped.isEmpty else { return defaultTitle }
+        return stripped.count > 50 ? String(stripped.prefix(50)) + "..." : stripped
+    }
+
+    /// Result of parsing user-message content that may contain `[Attached image: /path]` markers.
+    /// Used by the chat bubble to render the actual image and display the cleaned text.
+    public struct DisplayedContent: Equatable, Sendable {
+        public let text: String
+        public let imagePaths: [String]
+    }
+
+    /// Extract `[Attached image: /path]` markers from user content, returning the cleaned
+    /// text and the list of image paths. `[ImageN]` chip tokens are left in place — they're
+    /// rendered as styled chips in the bubble, not stripped. Other `[Attached X: ...]` /
+    /// `[Pasted text: ...]` / `[Link: ...]` markers are stripped from the text since they
+    /// have no inline representation. Whitespace runs are collapsed and edges trimmed.
+    public static func extractDisplayedContent(from content: String) -> DisplayedContent {
+        let imageRegex = try! NSRegularExpression(pattern: #"\[Attached image:\s*([^\]]+)\]"#)
+        let ns = content as NSString
+        let fullRange = NSRange(location: 0, length: ns.length)
+        var paths: [String] = []
+        imageRegex.enumerateMatches(in: content, range: fullRange) { match, _, _ in
+            guard let m = match, m.numberOfRanges >= 2 else { return }
+            let path = ns.substring(with: m.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !path.isEmpty { paths.append(path) }
+        }
+        let cleaned = content
+            .replacingOccurrences(
+                of: #"\[(Attached [A-Za-z]+|Pasted text|Link):[^\]]*\]"#,
+                with: "",
+                options: .regularExpression
+            )
+            .replacingOccurrences(of: #"[ \t]+"#, with: " ", options: .regularExpression)
+            .replacingOccurrences(of: #"\n{3,}"#, with: "\n\n", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return DisplayedContent(text: cleaned, imagePaths: paths)
+    }
 }
 
 extension ChatSession.Summary {

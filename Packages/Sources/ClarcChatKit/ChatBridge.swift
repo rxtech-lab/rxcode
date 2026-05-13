@@ -19,10 +19,15 @@ public final class ChatBridge {
     /// preventing the empty → populated "blink" when switching to a session not in memory.
     public var isLoadingFromDisk: Bool = false
     public var streamingStartDate: Date?
+    /// Running output-token count for the in-flight turn. Resets on each new stream and
+    /// updates as the CLI emits cumulative usage. Surfaced beside the streaming indicator.
+    public var liveOutputTokens: Int = 0
     public var lastTurnContextUsedPercentage: Double?
     public var modelDisplayName: String = ""
     public var sessionStats: ChatSessionStats = ChatSessionStats()
     public var autoPreviewSettings: AttachmentAutoPreviewSettings = AttachmentAutoPreviewSettings()
+    public var appVersion: String = ""
+    public var claudeVersion: String?
 
     // MARK: - Action Handlers (set up by the app target)
 
@@ -66,5 +71,24 @@ public final class ChatBridge {
 
     public func togglePlanMode() async {
         await togglePlanModeHandler?()
+    }
+
+    // MARK: - Plan Decision State
+
+    /// True when the most recent `ExitPlanMode` tool call in the chat is awaiting
+    /// a user decision. Drives the input-bar lock so the user cannot send a stray
+    /// message while the plan card is still showing Accept/Reject buttons.
+    ///
+    /// Only the most recent ExitPlanMode matters — older pending cards are
+    /// either superseded by a newer decision or no longer the active state.
+    public var hasPendingPlanDecision: Bool {
+        for message in messages.reversed() {
+            for block in message.blocks.reversed() {
+                guard let toolCall = block.toolCall,
+                      PlanCardView.isExitPlanMode(toolCall) else { continue }
+                return !PlanCardView.isPlanDecided(toolCall)
+            }
+        }
+        return false
     }
 }

@@ -66,6 +66,7 @@ extension AssistantMessage: Decodable {
     private enum MessageCodingKeys: String, CodingKey {
         case role
         case content
+        case usage
     }
 
     public init(from decoder: Decoder) throws {
@@ -76,6 +77,7 @@ extension AssistantMessage: Decodable {
         )
         self.role = try messageContainer.decode(String.self, forKey: .role)
         self.content = try messageContainer.decode([ContentBlock].self, forKey: .content)
+        self.usage = try messageContainer.decodeIfPresent(UsageInfo.self, forKey: .usage)
     }
 }
 

@@ -196,18 +196,61 @@ private struct ProjectTreeRow: View {
     let onNewChat: () -> Void
 
     @State private var isHovered = false
+    @State private var showLocationPopover = false
+    @State private var hoverTask: Task<Void, Never>?
+
+    private var displayPath: String {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        if project.path.hasPrefix(home) {
+            return "~" + project.path.dropFirst(home.count)
+        }
+        return project.path
+    }
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "folder.fill")
-                .font(.system(size: ClaudeTheme.size(12)))
-                .foregroundStyle(isSelected ? ClaudeTheme.accent : ClaudeTheme.textTertiary)
+            Button {
+                isExpanded.toggle()
+            } label: {
+                Image(systemName: "folder.fill")
+                    .font(.system(size: ClaudeTheme.size(12)))
+                    .foregroundStyle(isSelected ? ClaudeTheme.accent : ClaudeTheme.textTertiary)
+                    .frame(width: 18, height: 18)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(isExpanded ? "Collapse chats" : "Expand chats")
 
             Text(project.name)
                 .font(.system(size: ClaudeTheme.size(13), weight: .medium))
                 .foregroundStyle(isSelected ? ClaudeTheme.textPrimary : ClaudeTheme.textSecondary)
                 .lineLimit(1)
                 .truncationMode(.tail)
+                .onHover { hovering in
+                    hoverTask?.cancel()
+                    if hovering {
+                        hoverTask = Task {
+                            try? await Task.sleep(nanoseconds: 600_000_000)
+                            guard !Task.isCancelled else { return }
+                            await MainActor.run { showLocationPopover = true }
+                        }
+                    } else {
+                        showLocationPopover = false
+                    }
+                }
+                .popover(isPresented: $showLocationPopover, arrowEdge: .trailing) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "folder.fill")
+                            .font(.system(size: ClaudeTheme.size(10)))
+                            .foregroundStyle(ClaudeTheme.statusWarning)
+                        Text(displayPath)
+                            .font(.system(size: ClaudeTheme.size(12), design: .monospaced))
+                            .foregroundStyle(ClaudeTheme.textPrimary)
+                            .textSelection(.enabled)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                }
 
             Spacer(minLength: 4)
 

@@ -26,7 +26,7 @@ struct ProjectWindowView: View {
                         .hidden()
                     }
                     .id(appState.themeRevision)
-                    .navigationTitle(windowState.selectedProject?.name ?? "Project")
+                    .toolbar(removing: .title)
                     .onChange(of: windowState.showInspector) { _, isShowing in
                         if isShowing, !inspectorStarted { inspectorStarted = true }
                     }

@@ -248,10 +248,13 @@ actor PermissionServer {
         // Auto mode short-circuit: when the session is registered as `.auto`, resolve every hook
         // as allow without surfacing UI. This is the contract for "Auto" in the permission dropdown
         // and for the plan-card "Accept + auto-approve" button.
-        // ExitPlanMode is excluded so the user always sees the plan card and makes a choice.
+        // ExitPlanMode and AskUserQuestion are excluded so the user always sees the plan card
+        // / question card and makes a choice — auto-approving AskUserQuestion would let the CLI
+        // proceed with no answer injected, defeating the tool's purpose.
         if let sid = req.sessionId,
            sessionRegistry[sid]?.mode == .auto,
-           !Self.isExitPlanModeTool(req.toolName) {
+           !Self.isExitPlanModeTool(req.toolName),
+           req.toolName != "AskUserQuestion" {
             return "Auto-approve mode"
         }
 

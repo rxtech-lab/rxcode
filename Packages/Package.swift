@@ -9,6 +9,9 @@ let package = Package(
         .library(name: "ClarcCore", targets: ["ClarcCore"]),
         .library(name: "ClarcChatKit", targets: ["ClarcChatKit"]),
     ],
+    dependencies: [
+        .package(url: "https://github.com/nalexn/ViewInspector", from: "0.10.0"),
+    ],
     targets: [
         .target(
             name: "ClarcCore",
@@ -29,6 +32,15 @@ let package = Package(
             name: "ClarcCoreTests",
             dependencies: ["ClarcCore"],
             path: "Tests/ClarcCoreTests"
+        ),
+        .testTarget(
+            name: "ClarcChatKitTests",
+            dependencies: [
+                "ClarcChatKit",
+                "ClarcCore",
+                .product(name: "ViewInspector", package: "ViewInspector"),
+            ],
+            path: "Tests/ClarcChatKitTests"
         ),
     ]
 )

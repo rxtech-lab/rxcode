@@ -95,19 +95,30 @@ public enum AttachmentFactory {
         )
     }
 
+    /// Persisted location for clipboard-pasted images. Lives under Application Support
+    /// so files survive temp-dir cleanup and historical messages can still render them.
+    public static let attachmentsDirectory: URL = {
+        let url = AppSupport.bundleScopedURL.appendingPathComponent("attachments", isDirectory: true)
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }()
+
+    /// Materialize in-memory clipboard images to disk so they have a usable file path.
+    /// Files are written under `attachmentsDirectory` (persistent) — historically these
+    /// went to `FileManager.temporaryDirectory` and got purged, leaving reloaded sessions
+    /// with broken image references. The second tuple element is retained for source
+    /// compatibility with existing callers; it is now always empty (no cleanup needed).
     public static func resolvingClipboardImages(_ attachments: [Attachment]) -> (resolved: [Attachment], tempPaths: [String]) {
-        var tempPaths: [String] = []
         let resolved = attachments.map { attachment -> Attachment in
             guard attachment.type == .image, attachment.path.isEmpty,
                   let data = attachment.imageData else { return attachment }
-            let tmpURL = FileManager.default.temporaryDirectory
+            let url = attachmentsDirectory
                 .appendingPathComponent("clarc-img-\(UUID().uuidString.prefix(8)).png")
-            guard (try? data.write(to: tmpURL)) != nil else { return attachment }
-            tempPaths.append(tmpURL.path)
+            guard (try? data.write(to: url)) != nil else { return attachment }
             return Attachment(id: attachment.id, type: .image, name: attachment.name,
-                              path: tmpURL.path, fileSize: Int64(data.count), imageData: data)
+                              path: url.path, fileSize: Int64(data.count), imageData: data)
         }
-        return (resolved, tempPaths)
+        return (resolved, [])
     }
 
     public static func fromURL(_ url: URL) -> Attachment {

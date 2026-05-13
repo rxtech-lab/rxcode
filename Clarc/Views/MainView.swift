@@ -1,7 +1,7 @@
+import ClarcChatKit
+import ClarcCore
 import SwiftUI
 import UniformTypeIdentifiers
-import ClarcCore
-import ClarcChatKit
 
 struct MainView: View {
     @Environment(AppState.self) private var appState
@@ -77,15 +77,7 @@ struct MainView: View {
                 .onAppear {
                     windowState.focusMode = appState.focusMode
                 }
-                .navigationTitle({
-                    let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
-                    let base = "Clarc(\(appVersion))"
-                    if let cliVersion = appState.claudeVersion {
-                        return "\(base) — CC \(cliVersion)"
-                    }
-                    return base
-                }())
-                .toolbarBackground(.visible, for: .windowToolbar)
+                .toolbar(removing: .title)
                 .toolbar {
                     if columnVisibility != .detailOnly {
                         ToolbarItem(placement: .navigation) {
@@ -219,7 +211,7 @@ struct MainView: View {
 struct DetailToolbar: View {
     var body: some View {
         Color.clear
-            .toolbarBackground(.visible, for: .windowToolbar)
+            .toolbarBackground(.hidden, for: .windowToolbar)
             .toolbar {
                 ClarcToolbarContent()
             }

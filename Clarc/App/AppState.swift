@@ -55,8 +55,17 @@ struct SessionStreamState {
     var cacheReadTokens: Int = 0
     var durationMs: Double = 0
     var turns: Int = 0
+    /// Running output-token count for the in-flight turn. Reset at the start of every
+    /// stream, updated from `assistant.message.usage.output_tokens`, and surfaced live
+    /// in the streaming indicator. Folded into `outputTokens` on `.result`.
+    var currentTurnOutputTokens: Int = 0
     var lastTurnContextUsedPercentage: Double?
     var activeModelName: String?
+
+    /// Set once the LLM title-generation task has been spawned for this session.
+    /// Prevents the early (first-text-delta) trigger and the `.result` fallback
+    /// from kicking off duplicate generations on the same session.
+    var titleGenerationTriggered: Bool = false
 }
 
 
@@ -658,6 +667,7 @@ final class AppState {
                 bridge.isThinking = state.isThinking
                 bridge.isLoadingFromDisk = state.isLoadingFromDisk
                 bridge.streamingStartDate = state.streamingStartDate
+                bridge.liveOutputTokens = state.currentTurnOutputTokens
                 bridge.lastTurnContextUsedPercentage = state.lastTurnContextUsedPercentage
                 bridge.modelDisplayName = modelDisplayName(for: window.sessionModel ?? selectedModel, in: window)
                 bridge.sessionStats = ChatSessionStats(
@@ -676,6 +686,8 @@ final class AppState {
         func observeSettings() {
             withObservationTracking {
                 bridge.autoPreviewSettings = self.autoPreviewSettings
+                bridge.appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+                bridge.claudeVersion = self.claudeVersion
             } onChange: {
                 Task { @MainActor in observeSettings() }
             }
@@ -849,6 +861,7 @@ final class AppState {
         guard terminal.reportToChat else { return }
 
         let key = window.currentSessionId ?? window.newSessionKey
+        let wasFirstUserMessage = (sessionStates[key]?.messages.filter { $0.role == .user }.count ?? 0) == 0
         updateState(key) { state in
             state.messages.append(ChatMessage(role: .user, content: terminal.title))
             let result = exitCode == 0 ? "Done" : "exit code: \(exitCode)"
@@ -860,6 +873,13 @@ final class AppState {
                 isError: exitCode != 0
             )
             state.messages.append(ChatMessage(role: .assistant, blocks: [.toolCall(toolCall)]))
+        }
+        if wasFirstUserMessage, !(sessionStates[key]?.titleGenerationTriggered ?? false) {
+            updateState(key) { $0.titleGenerationTriggered = true }
+            Task { [weak self] in
+                guard let self else { return }
+                await self.maybeGenerateLLMTitle(for: key)
+            }
         }
         Task { await saveCurrentSession(in: window) }
     }
@@ -910,6 +930,7 @@ final class AppState {
             updateState(sessionKey) { $0.messages = initial }
         }
 
+        let wasFirstUserMessage = (sessionStates[sessionKey]?.messages.filter { $0.role == .user }.count ?? 0) == 0
         if !skipAppendingUserMessage {
             updateState(sessionKey) { state in
                 state.messages.append(ChatMessage(
@@ -920,11 +941,26 @@ final class AppState {
             }
         }
 
+        // Kick off LLM title generation as soon as the first user message lands —
+        // the rename runs concurrently with the stream so the sidebar title updates
+        // without waiting for the assistant to reply.
+        if wasFirstUserMessage,
+           !skipAppendingUserMessage,
+           !(sessionStates[sessionKey]?.titleGenerationTriggered ?? false) {
+            updateState(sessionKey) { $0.titleGenerationTriggered = true }
+            let titleKey = sessionKey
+            Task { [weak self] in
+                guard let self else { return }
+                await self.maybeGenerateLLMTitle(for: titleKey)
+            }
+        }
+
         updateState(sessionKey) { state in
             state.isStreaming = true
             state.hasUncheckedCompletion = false
             state.activeStreamId = streamId
             state.streamingStartDate = Date()
+            state.currentTurnOutputTokens = 0
         }
         await permission.refreshRunToken()
 
@@ -952,7 +988,7 @@ final class AppState {
         }
 
         if isNewSession {
-            let initialTitle = Self.placeholderTitle(from: displayText ?? prompt)
+            let initialTitle = ChatSession.placeholderTitle(from: displayText ?? prompt)
             let placeholder = ChatSession(id: sessionKey, projectId: project.id, title: initialTitle, messages: [], origin: .cliBacked)
             allSessionSummaries.insert(placeholder.summary, at: 0)
             threadStore.upsert(placeholder.summary)
@@ -1133,18 +1169,25 @@ final class AppState {
                     if let model = systemEvent.model {
                         updateState(sessionKey) { $0.activeModelName = model }
                     }
-                    if let sid = systemEvent.sessionId {
+                    // Hook events (SessionStart, PreToolUse, etc.) carry the parent's session_id,
+                    // not this subprocess's. Acting on them flips currentSessionId mid-stream and
+                    // triggers MessageListView's fade-out/in — visible as a blink.
+                    let isHookEvent = systemEvent.subtype.hasPrefix("hook_")
+                    if let sid = systemEvent.sessionId, !isHookEvent {
                         await permission.registerSession(sid: sid, projectKey: cwd, mode: registerMode)
+                        // Capture the sessionKey BEFORE the reassignment so the
+                        // reconciler can rename the previous row in place when
+                        // the CLI advances `session_id` mid-stream.
+                        let previousSessionKey = sessionKey
                         if sessionKey != sid {
-                            let oldKey = sessionKey
-                            if let state = sessionStates.removeValue(forKey: oldKey) {
+                            if let state = sessionStates.removeValue(forKey: previousSessionKey) {
                                 sessionStates[sid] = state
                             }
                             sessionKey = sid
                             startFlushTimer(for: sid)
 
                             // If this is the foreground session, also update window.currentSessionId
-                            let isFg = (window.currentSessionId ?? window.newSessionKey) == oldKey || window.currentSessionId == nil
+                            let isFg = (window.currentSessionId ?? window.newSessionKey) == previousSessionKey || window.currentSessionId == nil
                             if isFg { window.currentSessionId = sid }
                         }
 
@@ -1187,15 +1230,62 @@ final class AppState {
                                 window.removePendingPlaceholder(oldKey)
                             }
 
-                            if !allSessionSummaries.contains(where: { $0.id == sid }),
-                               let project = projects.first(where: { $0.id == projectId }) {
+                            // Decide whether to rename the previous row, insert a fresh
+                            // one, or do nothing. Renaming in place is the load-bearing
+                            // case: it stops empty "New Session" rows from accumulating
+                            // every time the CLI advances `session_id` mid-stream (e.g.
+                            // after a `compact_boundary`).
+                            if let project = projects.first(where: { $0.id == projectId }) {
                                 let msgs = stateForSession(sessionKey).messages
-                                // Use the user-message timestamp (if any) so the placeholder
-                                // doesn't reorder above more recent chats while still empty.
-                                let firstUserDate = msgs.first(where: { $0.role == .user })?.timestamp ?? Date()
-                                let newSession = ChatSession(id: sid, projectId: project.id, title: ChatSession.defaultTitle, messages: [], updatedAt: firstUserDate, origin: .cliBacked)
-                                allSessionSummaries.insert(newSession.summary, at: 0)
-                                threadStore.upsert(newSession.summary, cliSessionId: sid)
+                                let firstUser = msgs.first(where: { $0.role == .user })
+                                let action = SessionRowReconciler.decide(
+                                    newSid: sid,
+                                    previousKey: previousSessionKey,
+                                    existingIds: Set(allSessionSummaries.map { $0.id }),
+                                    firstUserMessageContent: firstUser?.content
+                                )
+                                switch action {
+                                case .noop:
+                                    break
+                                case .renameInPlace(let from, let to):
+                                    if let idx = allSessionSummaries.firstIndex(where: { $0.id == from }) {
+                                        let old = allSessionSummaries[idx]
+                                        let renamed = ChatSession.Summary(
+                                            id: to,
+                                            projectId: old.projectId,
+                                            title: old.title,
+                                            createdAt: old.createdAt,
+                                            updatedAt: old.updatedAt,
+                                            isPinned: old.isPinned,
+                                            model: old.model,
+                                            effort: old.effort,
+                                            permissionMode: old.permissionMode,
+                                            origin: old.origin,
+                                            worktreePath: old.worktreePath,
+                                            worktreeBranch: old.worktreeBranch
+                                        )
+                                        allSessionSummaries.remove(at: idx)
+                                        allSessionSummaries.removeAll { $0.id == to }
+                                        allSessionSummaries.insert(renamed, at: 0)
+                                        threadStore.renameId(from: from, to: to)
+                                        threadStore.upsert(renamed, cliSessionId: to)
+                                    }
+                                case .insertNew(let id, let title):
+                                    // Use the user-message timestamp so the row doesn't
+                                    // reorder above more recent chats while still empty.
+                                    let firstUserDate = firstUser?.timestamp ?? Date()
+                                    let inserted = ChatSession.Summary(
+                                        id: id,
+                                        projectId: project.id,
+                                        title: title,
+                                        createdAt: firstUserDate,
+                                        updatedAt: firstUserDate,
+                                        isPinned: false,
+                                        origin: .cliBacked
+                                    )
+                                    allSessionSummaries.insert(inserted, at: 0)
+                                    threadStore.upsert(inserted, cliSessionId: id)
+                                }
                             }
                         }
                     }
@@ -1208,6 +1298,14 @@ final class AppState {
 
                 case .assistant(let assistantMessage):
                     logger.debug("[Stream:UI] event #\(eventCount) .assistant (gap=\(String(format: "%.1f", gap))s, blocks=\(assistantMessage.content.count))")
+                    // Cumulative output_tokens for the in-flight turn. The CLI emits assistant
+                    // events at content-block boundaries, each carrying the running total — so
+                    // `max` is defensive against any out-of-order or stale arrivals.
+                    if let liveOutput = assistantMessage.usage?.outputTokens {
+                        updateState(sessionKey) { state in
+                            state.currentTurnOutputTokens = max(state.currentTurnOutputTokens, liveOutput)
+                        }
+                    }
                     // Extract text only when no text_delta has been received in the current turn.
                     // Normally content_block_delta(text_delta) is the primary path, so this branch rarely executes.
                     updateState(sessionKey) { state in
@@ -1286,18 +1384,6 @@ final class AppState {
                             guard let self else { return }
                             if let pct = await claude.fetchContextPercentage(sessionId: sid, cwd: cwdCapture) {
                                 updateState(key) { $0.lastTurnContextUsedPercentage = pct }
-                            }
-                        }
-
-                        // After the first assistant turn completes, ask Claude to summarize the
-                        // exchange into a 3–6 word title. Idempotent: skipped if the user already
-                        // renamed the session or the LLM call fails.
-                        let userMsgCount = stateForSession(sessionKey).messages.filter { $0.role == .user }.count
-                        if userMsgCount == 1 {
-                            let titleSid = resultEvent.sessionId
-                            Task { [weak self, window] in
-                                guard let self else { return }
-                                await self.maybeGenerateLLMTitle(for: titleSid, in: window)
                             }
                         }
 
@@ -1567,6 +1653,15 @@ final class AppState {
                 if let msgIdx = state.messages.indices.reversed().first(where: { state.messages[$0].role == .assistant && state.messages[$0].isStreaming }),
                    let blockIdx = state.messages[msgIdx].toolCallIndex(id: toolId) {
                     state.messages[msgIdx].blocks[blockIdx].toolCall?.input = parsed
+                    if let toolName = state.messages[msgIdx].blocks[blockIdx].toolCall?.name,
+                       toolName.lowercased() == "todowrite" {
+                        let todos = TodoExtractor.parse(input: parsed)
+                        let done = todos.filter { $0.status == .completed }.count
+                        let active = todos.first(where: { $0.status == .inProgress })?.activeForm ?? "-"
+                        logger.info(
+                            "[TodoWrite] session=\(sessionKey, privacy: .public) total=\(todos.count) done=\(done) active=\(active, privacy: .public)"
+                        )
+                    }
                 }
             }
 
@@ -1774,23 +1869,35 @@ final class AppState {
         // In `--print` stream-json mode, ExitPlanMode is the model's last action of the
         // plan-mode turn, so the CLI emits `.result` and exits. Without a follow-up
         // prompt the chat just stops. Mirror the interactive CLI by sending a hidden
-        // continuation message that nudges the model to execute the plan it just wrote.
-        let shouldContinue: Bool = {
-            switch action {
-            case .acceptAsk, .acceptWithEdits, .acceptAutoApprove: return true
-            case .reject, .rejectWithFeedback: return false
-            }
-        }()
+        // continuation message that nudges the model to execute (or revise) the plan.
+        let continuationPrompt = Self.continuationPrompt(for: action)
 
-        if shouldContinue {
+        if let continuationPrompt {
             if let task = sessionStates[key]?.streamTask {
                 _ = await task.value
             }
             await sendPrompt(
-                "Proceed with the plan.",
+                continuationPrompt,
                 skipAppendingUserMessage: true,
                 in: window
             )
+        }
+    }
+
+    /// Hidden follow-up prompt to send after a plan decision, or nil if the chat
+    /// should stop. Plain `.reject` returns nil; `.rejectWithFeedback` with empty
+    /// feedback also returns nil (the user effectively did a plain reject).
+    static func continuationPrompt(for action: PlanDecisionAction) -> String? {
+        switch action {
+        case .acceptAsk, .acceptWithEdits, .acceptAutoApprove:
+            return "Proceed with the plan."
+        case .rejectWithFeedback(let reason):
+            let trimmed = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty
+                ? nil
+                : "Revise the plan based on this feedback: \(trimmed)"
+        case .reject:
+            return nil
         }
     }
 
@@ -2056,27 +2163,12 @@ final class AppState {
         await updateSessionMetadata(session, persistTitle: true) { $0.title = newTitle }
     }
 
-    /// Build a placeholder title from raw user-message text. Strips attachment markers
-    /// like `[Attached image: /var/folders/...]` so the sidebar doesn't briefly show a
-    /// file path before the LLM-generated title arrives.
-    static func placeholderTitle(from content: String) -> String {
-        let stripped = content
-            .replacingOccurrences(
-                of: #"\[(Attached [A-Za-z]+|Pasted text|Link):[^\]]*\]"#,
-                with: "",
-                options: .regularExpression
-            )
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !stripped.isEmpty else { return "New session" }
-        return stripped.count > 50 ? String(stripped.prefix(50)) + "..." : stripped
-    }
-
     /// True if `currentTitle` looks like our auto-derived placeholder (matches what
-    /// `placeholderTitle(from:)` would produce). Used to decide whether to overwrite
-    /// with an LLM-generated title — never overwrite a user's manual rename.
+    /// `ChatSession.placeholderTitle(from:)` would produce). Used to decide whether
+    /// to overwrite with an LLM-generated title — never overwrite a user's manual rename.
     private func isAutoGeneratedTitle(_ currentTitle: String, firstUserMessage: String) -> Bool {
         currentTitle == ChatSession.defaultTitle
-            || currentTitle == Self.placeholderTitle(from: firstUserMessage)
+            || currentTitle == ChatSession.placeholderTitle(from: firstUserMessage)
             || currentTitle == "New session"
             || currentTitle.isEmpty
     }
@@ -2084,17 +2176,14 @@ final class AppState {
     /// Spawn a one-shot Claude call to generate a 3–6 word title for the given session,
     /// then persist it via `renameSession` if the title is still the placeholder. No-op
     /// if the session was already renamed manually or the LLM call fails.
-    func maybeGenerateLLMTitle(for sessionId: String, in window: WindowState) async {
+    func maybeGenerateLLMTitle(for sessionId: String) async {
         guard let summary = allSessionSummaries.first(where: { $0.id == sessionId }) else { return }
         let messages = sessionStates[sessionId]?.messages ?? []
-        let firstUser = messages.first(where: { $0.role == .user })?.content ?? ""
-        let firstAssistant = messages.first(where: { $0.role == .assistant })?.content ?? ""
-        guard isAutoGeneratedTitle(summary.title, firstUserMessage: firstUser) else { return }
-        guard !firstAssistant.isEmpty else { return }
-        guard let title = await claude.generateSessionTitle(
-            firstUserMessage: firstUser,
-            firstAssistantReply: firstAssistant
-        ) else { return }
+        let firstUserRaw = messages.first(where: { $0.role == .user })?.content ?? ""
+        let firstUser = ChatSession.stripAttachmentMarkers(from: firstUserRaw)
+        guard !firstUser.isEmpty else { return }
+        guard isAutoGeneratedTitle(summary.title, firstUserMessage: firstUserRaw) else { return }
+        guard let title = await claude.generateSessionTitle(firstUserMessage: firstUser) else { return }
         // Re-check the title hasn't been user-renamed during the LLM call.
         guard let stillPlaceholder = allSessionSummaries.first(where: { $0.id == sessionId }),
               isAutoGeneratedTitle(stillPlaceholder.title, firstUserMessage: firstUser) else { return }
@@ -2235,6 +2324,26 @@ final class AppState {
             }
         }
 
+        // Cascade: delete each session's stored messages (CLI jsonl, meta,
+        // legacy json) before discarding the project itself. Without this the
+        // jsonls remain on disk under the project's cwd and would resurface as
+        // orphan sessions if the same path is added back as a project later.
+        let projectSummaries = allSessionSummaries.filter { $0.projectId == project.id }
+        for summary in projectSummaries {
+            let cwd = summary.worktreePath ?? project.path
+            do {
+                try await persistence.deleteSession(
+                    projectId: summary.projectId,
+                    sessionId: summary.id,
+                    origin: summary.origin,
+                    cwd: cwd
+                )
+            } catch {
+                logger.error("Failed to delete session \(summary.id) on project delete: \(error.localizedDescription)")
+            }
+            sessionStates.removeValue(forKey: summary.id)
+        }
+
         // Remove all in-memory session summaries for this project
         threadStore.deleteAll(projectId: project.id)
         allSessionSummaries.removeAll { $0.projectId == project.id }
@@ -2253,8 +2362,14 @@ final class AppState {
             detachCurrentStream(in: window)
             startNewChat(in: window)
         }
-        let origin = allSessionSummaries.first(where: { $0.id == session.id })?.origin ?? session.origin
-        let cwd = projects.first(where: { $0.id == session.projectId })?.path
+        let summary = allSessionSummaries.first(where: { $0.id == session.id })
+        let origin = summary?.origin ?? session.origin
+        // Prefer the worktreePath used while writing the jsonl — otherwise the
+        // CLI jsonl (stored under that cwd) is orphaned on disk and resurrects
+        // on next reload. Fall back to the project's path, then the session's.
+        let cwd = summary?.worktreePath
+            ?? session.worktreePath
+            ?? projects.first(where: { $0.id == session.projectId })?.path
         do {
             try await persistence.deleteSession(projectId: session.projectId, sessionId: session.id, origin: origin, cwd: cwd)
         } catch {
@@ -2283,7 +2398,8 @@ final class AppState {
         }
 
         for summary in toDelete {
-            let cwd = projects.first(where: { $0.id == summary.projectId })?.path
+            let cwd = summary.worktreePath
+                ?? projects.first(where: { $0.id == summary.projectId })?.path
             do {
                 try await persistence.deleteSession(
                     projectId: summary.projectId,
@@ -2609,6 +2725,7 @@ final class AppState {
             state.hasUncheckedCompletion = false
             state.activeStreamId = streamId
             state.streamingStartDate = Date()
+            state.currentTurnOutputTokens = 0
         }
 
         await permission.refreshRunToken()

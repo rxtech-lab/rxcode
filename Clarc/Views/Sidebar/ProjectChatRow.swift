@@ -63,6 +63,8 @@ struct ProjectChatRow: View {
     let onDelete: () -> Void
 
     @State private var isHovered = false
+    @State private var showTitlePopover = false
+    @State private var hoverTask: Task<Void, Never>?
 
     private static let relativeDateFormatter: RelativeDateTimeFormatter = {
         let f = RelativeDateTimeFormatter()
@@ -78,13 +80,20 @@ struct ProjectChatRow: View {
         }
     }
 
+    /// Title cleaned of `[Attached image: ...]` / `[ImageN]` / etc. markers that may
+    /// be baked into older persisted summaries from before title stripping landed.
+    private var displayTitle: String {
+        let cleaned = ChatSession.stripAttachmentMarkers(from: summary.title)
+        return cleaned.isEmpty ? ChatSession.defaultTitle : cleaned
+    }
+
     var body: some View {
         HStack(spacing: 8) {
             if isActiveStatus {
                 statusIndicator
             }
 
-            Text(summary.title)
+            Text(displayTitle)
                 .font(.system(size: ClaudeTheme.size(13), weight: isCurrent ? .medium : .regular))
                 .foregroundStyle(isCurrent ? ClaudeTheme.textPrimary : ClaudeTheme.textSecondary)
                 .lineLimit(1)
@@ -115,7 +124,28 @@ struct ProjectChatRow: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 1)
         .contentShape(Rectangle())
-        .onHover { isHovered = $0 }
+        .onHover { hovering in
+            isHovered = hovering
+            hoverTask?.cancel()
+            if hovering {
+                hoverTask = Task {
+                    try? await Task.sleep(nanoseconds: 600_000_000)
+                    guard !Task.isCancelled else { return }
+                    await MainActor.run { showTitlePopover = true }
+                }
+            } else {
+                showTitlePopover = false
+            }
+        }
+        .popover(isPresented: $showTitlePopover, arrowEdge: .trailing) {
+            Text(displayTitle)
+                .font(.system(size: ClaudeTheme.size(12)))
+                .foregroundStyle(ClaudeTheme.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .frame(maxWidth: 200, alignment: .leading)
+        }
         .onTapGesture { onSelect() }
         .contextMenu {
             Button { onRename() } label: {

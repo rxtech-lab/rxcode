@@ -10,6 +10,11 @@
 		33993F0F87CF4DB09F2813A8 /* AppStateProjectSwitchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4381E755142272EB2DAA9C96 /* AppStateProjectSwitchTests.swift */; };
 		92E180F9B311F3C72D5DE6B7 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A9993BB72A5307039A88B729 /* Cocoa.framework */; };
 		DCA8CF4A05C959C4A6EB391F /* ClarcCore in Frameworks */ = {isa = PBXBuildFile; productRef = CCDF9594876099576D4FD46E /* ClarcCore */; };
+		DF06CCD12FB4CAB5005991E1 /* ViewInspector in Frameworks */ = {isa = PBXBuildFile; productRef = DF06CCD02FB4CAB5005991E1 /* ViewInspector */; };
+		DFA0CCD12FB4CC01005991E1 /* PlanDecisionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA0CCC02FB4CC01005991E1 /* PlanDecisionTests.swift */; };
+		DFA0CCD22FB4CC01005991E1 /* PlanCardViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA0CCC12FB4CC01005991E1 /* PlanCardViewTests.swift */; };
+		DFA0CCD32FB4CC01005991E1 /* InputBarDisableTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA0CCC22FB4CC01005991E1 /* InputBarDisableTests.swift */; };
+		DFA0CCD42FB4CC01005991E1 /* ClarcChatKit in Frameworks */ = {isa = PBXBuildFile; productRef = DFA0CCC32FB4CC01005991E1 /* ClarcChatKit */; };
 		E6821AC12F7CEE7200829FC9 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = E6A001012F8A000100000001 /* SwiftTerm */; };
 		E6C001022F9B000100000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = E6C001012F9B000100000001 /* Sparkle */; };
 		E6D001032FA0000100000001 /* ClarcCore in Frameworks */ = {isa = PBXBuildFile; productRef = E6D001012FA0000100000001 /* ClarcCore */; };
@@ -30,6 +35,9 @@
 		4381E755142272EB2DAA9C96 /* AppStateProjectSwitchTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppStateProjectSwitchTests.swift; sourceTree = "<group>"; };
 		7321B5E8B81AAB1A2DC0593B /* ClarcTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ClarcTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A9993BB72A5307039A88B729 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
+		DFA0CCC02FB4CC01005991E1 /* PlanDecisionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlanDecisionTests.swift; sourceTree = "<group>"; };
+		DFA0CCC12FB4CC01005991E1 /* PlanCardViewTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlanCardViewTests.swift; sourceTree = "<group>"; };
+		DFA0CCC22FB4CC01005991E1 /* InputBarDisableTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = InputBarDisableTests.swift; sourceTree = "<group>"; };
 		E67335382F7356F600FD26C7 /* Clarc.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Clarc.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -48,6 +56,8 @@
 			files = (
 				92E180F9B311F3C72D5DE6B7 /* Cocoa.framework in Frameworks */,
 				DCA8CF4A05C959C4A6EB391F /* ClarcCore in Frameworks */,
+				DFA0CCD42FB4CC01005991E1 /* ClarcChatKit in Frameworks */,
+				DF06CCD12FB4CAB5005991E1 /* ViewInspector in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -69,6 +79,9 @@
 			isa = PBXGroup;
 			children = (
 				4381E755142272EB2DAA9C96 /* AppStateProjectSwitchTests.swift */,
+				DFA0CCC02FB4CC01005991E1 /* PlanDecisionTests.swift */,
+				DFA0CCC12FB4CC01005991E1 /* PlanCardViewTests.swift */,
+				DFA0CCC22FB4CC01005991E1 /* InputBarDisableTests.swift */,
 			);
 			path = ClarcTests;
 			sourceTree = "<group>";
@@ -127,6 +140,8 @@
 			name = ClarcTests;
 			packageProductDependencies = (
 				CCDF9594876099576D4FD46E /* ClarcCore */,
+				DFA0CCC32FB4CC01005991E1 /* ClarcChatKit */,
+				DF06CCD02FB4CAB5005991E1 /* ViewInspector */,
 			);
 			productName = ClarcTests;
 			productReference = 7321B5E8B81AAB1A2DC0593B /* ClarcTests.xctest */;
@@ -187,6 +202,7 @@
 				E6A001002F8A000100000001 /* XCRemoteSwiftPackageReference "SwiftTerm" */,
 				E6C001002F9B000100000001 /* XCRemoteSwiftPackageReference "Sparkle" */,
 				E6D001002FA0000100000001 /* XCLocalSwiftPackageReference "Packages" */,
+				DF06CCCF2FB4CAB5005991E1 /* XCRemoteSwiftPackageReference "ViewInspector" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = E67335392F7356F600FD26C7 /* Products */;
@@ -222,6 +238,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				33993F0F87CF4DB09F2813A8 /* AppStateProjectSwitchTests.swift in Sources */,
+				DFA0CCD12FB4CC01005991E1 /* PlanDecisionTests.swift in Sources */,
+				DFA0CCD22FB4CC01005991E1 /* PlanCardViewTests.swift in Sources */,
+				DFA0CCD32FB4CC01005991E1 /* InputBarDisableTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -249,7 +268,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				GENERATE_INFOPLIST_FILE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MACOSX_DEPLOYMENT_TARGET = 26.2;
 				PRODUCT_NAME = ClarcTests;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 6.0;
@@ -262,7 +281,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				GENERATE_INFOPLIST_FILE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MACOSX_DEPLOYMENT_TARGET = 26.2;
 				PRODUCT_NAME = ClarcTests;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 6.0;
@@ -410,7 +429,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.2.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.idealapp.Clarc;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -444,7 +463,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.2.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.idealapp.Clarc;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -498,6 +517,14 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		DF06CCCF2FB4CAB5005991E1 /* XCRemoteSwiftPackageReference "ViewInspector" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/nalexn/ViewInspector";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.10.3;
+			};
+		};
 		E6A001002F8A000100000001 /* XCRemoteSwiftPackageReference "SwiftTerm" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/migueldeicaza/SwiftTerm.git";
@@ -520,6 +547,15 @@
 		CCDF9594876099576D4FD46E /* ClarcCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = ClarcCore;
+		};
+		DF06CCD02FB4CAB5005991E1 /* ViewInspector */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DF06CCCF2FB4CAB5005991E1 /* XCRemoteSwiftPackageReference "ViewInspector" */;
+			productName = ViewInspector;
+		};
+		DFA0CCC32FB4CC01005991E1 /* ClarcChatKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ClarcChatKit;
 		};
 		E6A001012F8A000100000001 /* SwiftTerm */ = {
 			isa = XCSwiftPackageProductDependency;

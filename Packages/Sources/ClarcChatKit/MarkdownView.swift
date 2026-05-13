@@ -58,6 +58,7 @@ struct MarkdownContentView: View {
                 case .attributedText(let attrStr):
                     Text(attrStr)
                         .textSelection(.enabled)
+                        .lineSpacing(6)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 case .blockquote(let attrStr):
                     BlockquoteView(content: attrStr)
@@ -587,6 +588,7 @@ private struct BlockquoteView: View {
     var body: some View {
         Text(content)
             .textSelection(.enabled)
+            .lineSpacing(6)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.leading, 13)
             .overlay(alignment: .leading) {

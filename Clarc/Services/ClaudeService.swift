@@ -253,20 +253,18 @@ actor ClaudeService {
 
     // MARK: - Title Generation
 
-    /// Generate a short 3–6 word title for a chat from the first exchange.
+    /// Generate a short 3–6 word title for a chat from the first user message.
     /// Uses a one-shot `claude -p` invocation with Haiku — runs outside of the streaming
     /// pipeline and does NOT hit the PermissionServer hook (no `--settings` passed).
     /// Returns nil on any failure; callers should keep the placeholder title in that case.
-    func generateSessionTitle(firstUserMessage: String, firstAssistantReply: String) async -> String? {
+    func generateSessionTitle(firstUserMessage: String) async -> String? {
         guard let binary = await findClaudeBinary() else { return nil }
         let trimmedUser = String(firstUserMessage.prefix(500))
-        let trimmedAssistant = String(firstAssistantReply.prefix(500))
         let prompt = """
-        Summarize the following exchange as a 3-6 word chat title. \
+        Summarize the following user message as a 3-6 word chat title. \
         Reply with ONLY the title, no quotes, no markdown, no punctuation at the end.
 
-        User: \(trimmedUser)
-        Assistant: \(trimmedAssistant)
+        \(trimmedUser)
         """
         do {
             let output = try await runShellCommand(

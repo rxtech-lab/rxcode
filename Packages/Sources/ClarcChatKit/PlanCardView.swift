@@ -22,12 +22,17 @@ struct PlanCardView: View {
     // non-nil result (e.g., CLI-side "Exit plan mode?" responses) must not be treated
     // as a user decision, otherwise the accept/reject buttons get hidden before the
     // user has actually clicked one.
-    private static let userDecisionPrefixes: [String] = [
+    static let userDecisionPrefixes: [String] = [
         "Accepted with Ask",
         "Accepted with Edits",
         "Accepted with Auto-approve",
         "Rejected",
     ]
+
+    static func isPlanDecided(_ toolCall: ToolCall) -> Bool {
+        guard let result = toolCall.result else { return false }
+        return userDecisionPrefixes.contains { result.hasPrefix($0) }
+    }
 
     @State private var isExpanded: Bool = true
     @State private var showFullSheet: Bool = false
@@ -141,12 +146,7 @@ struct PlanCardView: View {
     }
 
     private var isDecided: Bool {
-        // Only treat the card as decided when the result matches one of the summary
-        // strings written by AppState.respondToPlanDecision. The CLI itself can leave
-        // unrelated text (e.g. "Exit plan mode?") in `toolCall.result` before the user
-        // has picked anything; that must not hide the accept/reject buttons.
-        guard let result = toolCall.result else { return false }
-        return Self.userDecisionPrefixes.contains { result.hasPrefix($0) }
+        Self.isPlanDecided(toolCall)
     }
 
     private var isStreaming: Bool {
@@ -183,6 +183,11 @@ struct PlanCardView: View {
         .bubbleStyle(.tool)
         .sheet(isPresented: $showFullSheet) {
             PlanFullSheet(markdown: resolvedMarkdown)
+        }
+        .onChange(of: isDecided) { _, newValue in
+            if newValue {
+                withAnimation(.easeInOut(duration: 0.2)) { isExpanded = false }
+            }
         }
     }
 
@@ -278,11 +283,26 @@ struct PlanCardView: View {
             .map(String.init)?
             .replacingOccurrences(of: #"^#+\s*"#, with: "", options: .regularExpression)
             ?? "(empty plan)"
-        Text(firstLine)
-            .font(.system(size: ClaudeTheme.messageSize(12)))
-            .foregroundStyle(ClaudeTheme.textSecondary)
-            .lineLimit(1)
-            .truncationMode(.tail)
+        VStack(alignment: .leading, spacing: 4) {
+            Text(firstLine)
+                .font(.system(size: ClaudeTheme.messageSize(12)))
+                .foregroundStyle(ClaudeTheme.textSecondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+
+            if isDecided, let summary = toolCall.result, !summary.isEmpty {
+                HStack(spacing: 4) {
+                    Image(systemName: "checkmark.seal.fill")
+                        .foregroundStyle(ClaudeTheme.accent)
+                        .font(.system(size: 10, weight: .medium))
+                    Text(summary)
+                        .font(.system(size: ClaudeTheme.messageSize(11), weight: .medium))
+                        .foregroundStyle(ClaudeTheme.textSecondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+            }
+        }
     }
 
     // MARK: - Decision Area

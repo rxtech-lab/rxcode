@@ -13,6 +13,7 @@ struct MessageBubble: View {
     @State private var isLongTextExpanded = false
     @State private var hoveredBlockId: String? = nil
     @State private var isHoveringUserBubble = false
+    @State private var previewImagePath: String?
 
     /// Threshold (character count) for collapsing long text
     private static let longTextThreshold = 500
@@ -30,9 +31,17 @@ struct MessageBubble: View {
                 }
 
                 if message.role == .user {
+                    let displayed = ChatSession.extractDisplayedContent(from: message.content)
+                    // Inline-render `[Attached image: /path]` markers found in content. For
+                    // freshly-sent messages `attachmentPaths` already covers this; for sessions
+                    // reloaded from CLI history, the marker is in the content text and this is
+                    // the only path that surfaces the actual image.
+                    if !displayed.imagePaths.isEmpty, message.attachmentPaths.isEmpty {
+                        inlineAttachedImages(paths: displayed.imagePaths)
+                    }
                     // User message: single text bubble
-                    if !message.content.isEmpty {
-                        textBubble
+                    if !displayed.text.isEmpty {
+                        textBubble(displayText: displayed.text)
                     }
                 } else if message.isCompactBoundary {
                     compactBoundaryBubble
@@ -112,6 +121,12 @@ struct MessageBubble: View {
                 Spacer(minLength: 40)
             }
         }
+        .sheet(item: Binding<ImagePreviewItem?>(
+            get: { previewImagePath.map(ImagePreviewItem.init) },
+            set: { previewImagePath = $0?.path }
+        )) { item in
+            MessageImagePreviewSheet(path: item.path) { previewImagePath = nil }
+        }
     }
 
     // MARK: - Compact Boundary Bubble
@@ -156,7 +171,7 @@ struct MessageBubble: View {
     // MARK: - User Text Bubble
 
     @ViewBuilder
-    private var textBubble: some View {
+    private func textBubble(displayText: String) -> some View {
         if isEditing {
             VStack(alignment: .trailing, spacing: 8) {
                 TextField(String(localized: "Edit message...", bundle: .module), text: $editText, axis: .vertical)
@@ -198,13 +213,27 @@ struct MessageBubble: View {
                 }
             }
         } else {
-            VStack(alignment: .trailing, spacing: 6) {
-                let isLong = message.content.count > Self.longTextThreshold
-                Text(chipifiedAttributedString(message.content))
+            VStack(alignment: .leading, spacing: 6) {
+                let isLong = displayText.count > Self.longTextThreshold
+                Text(chipifiedAttributedString(displayText))
                     .font(.system(size: ClaudeTheme.messageSize(14)))
                     .foregroundStyle(ClaudeTheme.userBubbleText)
                     .textSelection(.enabled)
+                    .multilineTextAlignment(.leading)
                     .lineLimit(isLong && !isLongTextExpanded ? 5 : nil)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .environment(\.openURL, OpenURLAction { url in
+                        // Intercept the synthetic `clarc-image://<index>` link
+                        // emitted by chipifiedAttributedString — open the matching
+                        // image in the preview sheet rather than the system browser.
+                        guard url.scheme == "clarc-image",
+                              let index = Int(url.host ?? ""),
+                              let path = imagePath(forChipIndex: index) else {
+                            return .systemAction
+                        }
+                        previewImagePath = path
+                        return .handled
+                    })
                 if isLong {
                     Button {
                         withAnimation(.easeInOut(duration: 0.2)) {
@@ -222,6 +251,8 @@ struct MessageBubble: View {
                     .buttonStyle(.plain)
                 }
             }
+            .frame(maxWidth: 500, alignment: .leading)
+            .fixedSize(horizontal: true, vertical: false)
             .bubbleStyle(.user)
             .overlay(alignment: .bottomTrailing) {
                 if isHoveringUserBubble {
@@ -255,7 +286,7 @@ struct MessageBubble: View {
             if message.isStreaming && isLastBlock {
                 Text(text)
                     .font(.system(size: ClaudeTheme.messageSize(15)))
-                    .lineSpacing(4)
+                    .lineSpacing(6)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
@@ -414,6 +445,36 @@ struct MessageBubble: View {
         Task { await chatBridge.editAndResend(messageId: message.id, newContent: trimmed) }
     }
 
+    // MARK: - Inline Attached Images (from content markers)
+
+    /// Render `[Attached image: /path]` markers extracted from message content as
+    /// the same thumbnail style used by `attachmentPreview`. Used only when the
+    /// message has no structured `attachmentPaths` (typically: sessions reloaded
+    /// from CLI jsonl history where the prompt blob is the source of truth).
+    private func inlineAttachedImages(paths: [String]) -> some View {
+        HStack(spacing: 6) {
+            ForEach(paths, id: \.self) { path in
+                Group {
+                    if let nsImage = NSImage(contentsOfFile: path) {
+                        Image(nsImage: nsImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 40, height: 40)
+                            .clipShape(RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
+                            .contentShape(Rectangle())
+                            .onTapGesture { previewImagePath = path }
+                    } else {
+                        Image(systemName: "photo")
+                            .font(.system(size: ClaudeTheme.messageSize(14)))
+                            .foregroundStyle(ClaudeTheme.accent)
+                            .frame(width: 40, height: 40)
+                            .background(ClaudeTheme.surfaceSecondary, in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: - Attachment Preview
 
     private var attachmentPreview: some View {
@@ -438,6 +499,10 @@ struct MessageBubble: View {
                 }
                 .padding(6)
                 .background(ClaudeTheme.surfaceSecondary, in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    if info.isImage { previewImagePath = info.path }
+                }
             }
         }
     }
@@ -455,21 +520,103 @@ struct MessageBubble: View {
     /// are inserted into the input bar by `WindowState.insertImageToken` and drawn
     /// with a rounded background there via `ChipLayoutManager`; this mirrors that
     /// treatment in the sent user bubble.
+    ///
+    /// Each chip also gets a `clarc-image://<index>` link attribute; an
+    /// `environment(\.openURL, ...)` handler on the Text intercepts the tap and
+    /// opens the corresponding image in `MessageImagePreviewSheet`. The index
+    /// matches `WindowState.imageIndex(for:)` — 1-based, image-only.
     private func chipifiedAttributedString(_ text: String) -> AttributedString {
         var attr = AttributedString(text)
         let ns = text as NSString
         let fullRange = NSRange(location: 0, length: ns.length)
         Self.imageChipRegex.enumerateMatches(in: text, range: fullRange) { match, _, _ in
             guard let m = match,
-                  let range = Range(m.range, in: attr) else { return }
+                  let range = Range(m.range, in: attr),
+                  m.numberOfRanges >= 2,
+                  let indexRange = Range(m.range(at: 1), in: text),
+                  let index = Int(text[indexRange]) else { return }
             attr[range].backgroundColor = ClaudeTheme.accent.opacity(0.22)
             attr[range].foregroundColor = ClaudeTheme.accent
             attr[range].font = .system(size: ClaudeTheme.messageSize(13), weight: .medium)
+            attr[range].link = URL(string: "clarc-image://\(index)")
+            attr[range].underlineStyle = nil
         }
         return attr
+    }
+
+    /// Resolve `[ImageN]` chip index (1-based) to a concrete image file path.
+    /// Prefers structured `attachmentPaths` (set on freshly-sent messages); falls
+    /// back to `[Attached image: /path]` markers parsed from content (the only
+    /// source of truth for sessions reloaded from CLI history).
+    private func imagePath(forChipIndex index: Int) -> String? {
+        let i = index - 1
+        let structured = message.attachmentPaths.filter { $0.isImage }.map(\.path)
+        if i >= 0, i < structured.count { return structured[i] }
+        let extracted = ChatSession.extractDisplayedContent(from: message.content).imagePaths
+        if i >= 0, i < extracted.count { return extracted[i] }
+        return nil
     }
 
     private static let imageChipRegex: NSRegularExpression = {
         try! NSRegularExpression(pattern: #"\[Image(\d+)\]"#)
     }()
+}
+
+// MARK: - Image Preview Sheet
+
+/// Sheet identifier wrapper: the path doubles as the identity so SwiftUI's
+/// `sheet(item:)` re-presents whenever the user taps a different thumbnail.
+private struct ImagePreviewItem: Identifiable, Equatable {
+    let path: String
+    var id: String { path }
+}
+
+private struct MessageImagePreviewSheet: View {
+    let path: String
+    let onDismiss: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text(URL(fileURLWithPath: path).lastPathComponent)
+                    .font(.system(size: ClaudeTheme.messageSize(12), weight: .medium))
+                    .foregroundStyle(ClaudeTheme.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer()
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: ClaudeTheme.messageSize(16)))
+                        .foregroundStyle(ClaudeTheme.textSecondary)
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.cancelAction)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+
+            Divider()
+
+            Group {
+                if let nsImage = NSImage(contentsOfFile: path) {
+                    Image(nsImage: nsImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                } else {
+                    VStack(spacing: 8) {
+                        Image(systemName: "photo")
+                            .font(.system(size: 48))
+                            .foregroundStyle(ClaudeTheme.textTertiary)
+                        Text("Image not available", bundle: .module)
+                            .font(.system(size: ClaudeTheme.messageSize(13)))
+                            .foregroundStyle(ClaudeTheme.textSecondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+            .padding(16)
+        }
+        .frame(minWidth: 480, idealWidth: 720, minHeight: 360, idealHeight: 540)
+        .background(ClaudeTheme.surfacePrimary)
+    }
 }

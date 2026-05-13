@@ -76,7 +76,8 @@ struct MessageListView: View {
                     HStack(alignment: .top, spacing: 0) {
                         StreamingIndicatorView(
                             isThinking: chatBridge.isThinking,
-                            startDate: chatBridge.streamingStartDate
+                            startDate: chatBridge.streamingStartDate,
+                            outputTokens: chatBridge.liveOutputTokens
                         )
                         Spacer(minLength: 40)
                     }
@@ -479,11 +480,33 @@ struct EmptySessionView: View {
 struct StreamingIndicatorView: View {
     let isThinking: Bool
     var startDate: Date?
+    var outputTokens: Int = 0
 
     var body: some View {
-        AnimatedDotsView()
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
+        HStack(spacing: 8) {
+            AnimatedDotsView()
+            if outputTokens > 0 {
+                Text(formatTokenCount(outputTokens))
+                    .font(.system(size: ClaudeTheme.size(11), design: .monospaced))
+                    .foregroundStyle(ClaudeTheme.textTertiary)
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+                    .animation(.easeInOut(duration: 0.2), value: outputTokens)
+                Text("tokens", bundle: .module)
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(ClaudeTheme.textTertiary)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+    }
+
+    private func formatTokenCount(_ count: Int) -> String {
+        if count >= 1000 {
+            let k = Double(count) / 1000.0
+            return String(format: "%.1fk", k)
+        }
+        return "\(count)"
     }
 }
 

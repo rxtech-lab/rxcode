@@ -2,20 +2,23 @@ import Combine
 import SwiftUI
 import ClarcCore
 
-public struct ChatView<InputAccessory: View, BottomAccessory: View>: View {
+public struct ChatView<InputAccessory: View, BottomAccessory: View, AboveInputAccessory: View>: View {
     @Environment(WindowState.self) private var windowState
     @Environment(ChatBridge.self) private var chatBridge
     @State private var shortcuts: [ChatShortcut] = []
 
     private let inputAccessory: InputAccessory
     private let bottomAccessory: BottomAccessory
+    private let aboveInputAccessory: AboveInputAccessory
 
     public init(
         @ViewBuilder inputAccessory: () -> InputAccessory,
-        @ViewBuilder bottomAccessory: () -> BottomAccessory = { EmptyView() }
+        @ViewBuilder bottomAccessory: () -> BottomAccessory = { EmptyView() },
+        @ViewBuilder aboveInputAccessory: () -> AboveInputAccessory = { EmptyView() }
     ) {
         self.inputAccessory = inputAccessory()
         self.bottomAccessory = bottomAccessory()
+        self.aboveInputAccessory = aboveInputAccessory()
     }
 
     private var isEmptyState: Bool {
@@ -30,6 +33,8 @@ public struct ChatView<InputAccessory: View, BottomAccessory: View>: View {
                 emptyStateLayout
             } else {
                 messageScrollView
+
+                aboveInputAccessory
 
                 InputBarView(accessory: inputAccessory) {
                     if windowState.selectedProject != nil && !shortcuts.isEmpty {
@@ -80,6 +85,8 @@ public struct ChatView<InputAccessory: View, BottomAccessory: View>: View {
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
                     .padding(.horizontal, 24)
+
+                aboveInputAccessory
 
                 InputBarView(accessory: inputAccessory) {
                     if windowState.selectedProject != nil && !shortcuts.isEmpty {
@@ -145,14 +152,23 @@ public struct ChatView<InputAccessory: View, BottomAccessory: View>: View {
     }
 }
 
-public extension ChatView where InputAccessory == EmptyView, BottomAccessory == EmptyView {
+public extension ChatView where InputAccessory == EmptyView, BottomAccessory == EmptyView, AboveInputAccessory == EmptyView {
     init() {
-        self.init(inputAccessory: { EmptyView() }, bottomAccessory: { EmptyView() })
+        self.init(inputAccessory: { EmptyView() }, bottomAccessory: { EmptyView() }, aboveInputAccessory: { EmptyView() })
     }
 }
 
-public extension ChatView where BottomAccessory == EmptyView {
+public extension ChatView where BottomAccessory == EmptyView, AboveInputAccessory == EmptyView {
     init(@ViewBuilder inputAccessory: () -> InputAccessory) {
-        self.init(inputAccessory: inputAccessory, bottomAccessory: { EmptyView() })
+        self.init(inputAccessory: inputAccessory, bottomAccessory: { EmptyView() }, aboveInputAccessory: { EmptyView() })
+    }
+}
+
+public extension ChatView where AboveInputAccessory == EmptyView {
+    init(
+        @ViewBuilder inputAccessory: () -> InputAccessory,
+        @ViewBuilder bottomAccessory: () -> BottomAccessory
+    ) {
+        self.init(inputAccessory: inputAccessory, bottomAccessory: bottomAccessory, aboveInputAccessory: { EmptyView() })
     }
 }

@@ -91,6 +91,10 @@ public final class WindowState {
     // MARK: - Permission Queue
 
     public var pendingPermissions: [PermissionRequest] = []
+    /// The pending permission whose detail modal is currently presented. Nil means
+    /// only the queued-permission banner is showing (or the queue is empty). Set by
+    /// the banner's tap action, cleared by the modal's close button / Esc / decision.
+    public var presentedPermissionId: String?
 
     // MARK: - AskUserQuestion Response Handler
 

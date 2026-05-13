@@ -219,20 +219,8 @@ struct ToolResultView: View {
     }
 
     private func editHunksFromToolInput() -> [PreviewFile.EditHunk] {
-        if toolNameLower == "edit",
-           let old = toolCall.input["old_string"]?.stringValue,
-           let new = toolCall.input["new_string"]?.stringValue {
-            return [PreviewFile.EditHunk(oldString: old, newString: new)]
-        }
-        if let edits = toolCall.input["edits"]?.arrayValue {
-            return edits.compactMap { entry in
-                guard let obj = entry.objectValue,
-                      let old = obj["old_string"]?.stringValue,
-                      let new = obj["new_string"]?.stringValue else { return nil }
-                return PreviewFile.EditHunk(oldString: old, newString: new)
-            }
-        }
-        return []
+        guard isEditTool else { return [] }
+        return toolCall.fileEditHunks
     }
 
     private func editDiffView(oldString: String, newString: String) -> some View {

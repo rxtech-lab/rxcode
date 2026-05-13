@@ -10,6 +10,11 @@ struct PlanCardView: View {
     let toolCall: ToolCall
     let planMarkdown: String
     let isMessageStreaming: Bool
+    /// Fallback plan markdown sourced from prior assistant messages — used when the
+    /// current `ExitPlanMode` call has no inline `plan` content (e.g. the model wrote
+    /// the plan to `~/.claude/plans/*.md` in a previous turn before an
+    /// `AskUserQuestion` split the assistant run).
+    var externalPlanMarkdown: String? = nil
 
     @Environment(WindowState.self) private var windowState
 
@@ -77,6 +82,21 @@ struct PlanCardView: View {
         return markdowns.last
     }
 
+    /// Walk backwards from the message immediately before `message`, returning the
+    /// most recent non-empty plan markdown written via `Write` to a `~/.claude/plans/*.md`
+    /// file. Used as a cross-message fallback for `ExitPlanMode` cards whose own
+    /// `plan` input is empty (typically because an `AskUserQuestion` split the
+    /// assistant run and the model relied on the prior file write).
+    static func latestPriorPlanMarkdown(before message: ChatMessage, in messages: [ChatMessage]) -> String? {
+        guard let idx = messages.firstIndex(where: { $0.id == message.id }) else { return nil }
+        for prior in messages[..<idx].reversed() {
+            if let md = fallbackPlanMarkdown(in: prior), !md.isEmpty {
+                return md
+            }
+        }
+        return nil
+    }
+
     static func containsPlanFileWrite(_ message: ChatMessage) -> Bool {
         message.blocks.contains { block in
             guard let toolCall = block.toolCall else { return false }
@@ -131,10 +151,19 @@ struct PlanCardView: View {
 
     private var isStreaming: Bool {
         // Spinner only while the parent assistant message is still streaming AND no
-        // plan content has arrived yet. Once the message stops streaming, drop the
-        // spinner even if planMarkdown is still empty — otherwise the card stays stuck
-        // when input_json_delta never arrives or the parsed input lacks a `plan` key.
-        isMessageStreaming && planMarkdown.isEmpty
+        // plan content has arrived yet (including a prior-turn fallback). Once the
+        // message stops streaming, drop the spinner even if planMarkdown is still
+        // empty — otherwise the card stays stuck when input_json_delta never arrives
+        // or the parsed input lacks a `plan` key.
+        guard isMessageStreaming else { return false }
+        if !planMarkdown.isEmpty { return false }
+        if let external = externalPlanMarkdown, !external.isEmpty { return false }
+        return true
+    }
+
+    private var resolvedMarkdown: String {
+        if !planMarkdown.isEmpty { return planMarkdown }
+        return externalPlanMarkdown ?? ""
     }
 
     var body: some View {
@@ -153,7 +182,7 @@ struct PlanCardView: View {
         }
         .bubbleStyle(.tool)
         .sheet(isPresented: $showFullSheet) {
-            PlanFullSheet(markdown: planMarkdown)
+            PlanFullSheet(markdown: resolvedMarkdown)
         }
     }
 
@@ -229,13 +258,13 @@ struct PlanCardView: View {
                     .foregroundStyle(ClaudeTheme.textSecondary)
             }
             .padding(.vertical, 4)
-        } else if planMarkdown.isEmpty {
+        } else if resolvedMarkdown.isEmpty {
             Text("Plan content unavailable.", bundle: .module)
                 .font(.system(size: ClaudeTheme.messageSize(12)))
                 .foregroundStyle(ClaudeTheme.textSecondary)
                 .padding(.vertical, 4)
         } else {
-            MarkdownContentView(text: planMarkdown)
+            MarkdownContentView(text: resolvedMarkdown)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.vertical, 2)
         }
@@ -243,7 +272,7 @@ struct PlanCardView: View {
 
     @ViewBuilder
     private var collapsedPreview: some View {
-        let firstLine = planMarkdown
+        let firstLine = resolvedMarkdown
             .split(whereSeparator: \.isNewline)
             .first
             .map(String.init)?
@@ -399,7 +428,7 @@ struct PlanCardView: View {
     private func copyMarkdown() {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        pasteboard.setString(planMarkdown, forType: .string)
+        pasteboard.setString(resolvedMarkdown, forType: .string)
     }
 
     // MARK: - Button helper

@@ -172,11 +172,15 @@
 "Command" = "Command";
 "File" = "File";
 "Input" = "Input";
-"Auto-deny in %@" = "Auto-deny in %@";
 "Deny" = "Deny";
 "Allow" = "Allow";
 "Allow this tool for the session" = "Allow this tool for the session";
 "Always allow this command" = "Always allow this command";
+"Close" = "Close";
+
+// MARK: - PermissionQueueBanner
+"%lld question(s) pending" = "%lld question(s) pending";
+"Answer" = "Answer";
 
 // MARK: - OnboardingView
 "Claude CLI Installation Check" = "Claude CLI Installation Check";

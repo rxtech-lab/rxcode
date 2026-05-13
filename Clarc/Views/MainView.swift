@@ -85,7 +85,7 @@ struct MainView: View {
                     }
                     return base
                 }())
-                .toolbarBackground(.hidden, for: .windowToolbar)
+                .toolbarBackground(.visible, for: .windowToolbar)
                 .toolbar {
                     if columnVisibility != .detailOnly {
                         ToolbarItem(placement: .navigation) {
@@ -154,6 +154,8 @@ struct MainView: View {
                         }
                     }, bottomAccessory: {
                         RecentChatsSuggestionList()
+                    }, aboveInputAccessory: {
+                        PermissionQueueBanner()
                     })
                 }
                 .modifier(ChatDetailModifiers())
@@ -217,7 +219,7 @@ struct MainView: View {
 struct DetailToolbar: View {
     var body: some View {
         Color.clear
-            .toolbarBackground(.hidden, for: .windowToolbar)
+            .toolbarBackground(.visible, for: .windowToolbar)
             .toolbar {
                 ClarcToolbarContent()
             }
@@ -591,18 +593,30 @@ struct ChatDetailModifiers: ViewModifier {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
 
+    private var presentedRequest: PermissionRequest? {
+        guard let id = windowState.presentedPermissionId else { return nil }
+        return windowState.pendingPermissions.first(where: { $0.id == id })
+    }
+
     func body(content: Content) -> some View {
         content
+            .animation(.spring(response: 0.3, dampingFraction: 0.85), value: windowState.pendingPermissions.count)
             .overlay {
-                if let request = windowState.pendingPermissions.first {
+                if let request = presentedRequest {
                     ZStack {
                         Color.black.opacity(0.4).ignoresSafeArea()
-                        PermissionModal(request: request)
+                            .onTapGesture { windowState.presentedPermissionId = nil }
+                        PermissionModal(request: request, onClose: { windowState.presentedPermissionId = nil })
                             .clipShape(RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusLarge))
                             .shadow(color: ClaudeTheme.shadowColor, radius: 20)
                             .transition(.scale(scale: 0.95).combined(with: .opacity))
                     }
-                    .animation(.spring(response: 0.3, dampingFraction: 0.85), value: windowState.pendingPermissions.count)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.85), value: windowState.presentedPermissionId)
+                }
+            }
+            .onChange(of: windowState.pendingPermissions.map(\.id)) { _, newIds in
+                if let id = windowState.presentedPermissionId, !newIds.contains(id) {
+                    windowState.presentedPermissionId = nil
                 }
             }
             .sheet(isPresented: Bindable(windowState).showModelPicker) {

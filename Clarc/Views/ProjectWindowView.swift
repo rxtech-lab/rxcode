@@ -118,6 +118,8 @@ struct ProjectWindowView: View {
                         }
                     }, bottomAccessory: {
                         RecentChatsSuggestionList()
+                    }, aboveInputAccessory: {
+                        PermissionQueueBanner()
                     })
                 }
                 .modifier(ChatDetailModifiers())
@@ -128,7 +130,7 @@ struct ProjectWindowView: View {
                     .background(ClaudeTheme.background)
             }
         }
-        .toolbarBackground(.hidden, for: .windowToolbar)
+        .toolbarBackground(.visible, for: .windowToolbar)
         .toolbar {
             ClarcToolbarContent()
         }

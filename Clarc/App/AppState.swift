@@ -321,10 +321,14 @@ final class AppState {
     private func reregisterPermissionMode(in window: WindowState) {
         guard let sid = window.currentSessionId,
               let projectPath = window.selectedProject?.path else { return }
-        let base = window.sessionPermissionMode ?? permissionMode
-        let effective: PermissionMode = window.sessionPlanMode ? .plan : base
+        // Use the dropdown value (ignore plan toggle) so an explicit Auto choice
+        // continues to auto-approve hook-matched tools while plan mode is on.
+        // The plan toggle only affects the CLI `--permission-mode` flag, not the
+        // hook auto-approve policy. ExitPlanMode is always exempt from auto-approve
+        // (see PermissionServer.autoApproveReason).
+        let hookSessionMode = window.sessionPermissionMode ?? permissionMode
         Task { [permission] in
-            await permission.registerSession(sid: sid, projectKey: projectPath, mode: effective)
+            await permission.registerSession(sid: sid, projectKey: projectPath, mode: hookSessionMode)
         }
     }
 
@@ -553,13 +557,26 @@ final class AppState {
     func initializeWindow(_ window: WindowState, selectingProjectId: UUID? = nil) async {
         // Subscribe to permission broadcasts — appends requests to this window's pendingPermissions.
         // subscribe() issues a window-exclusive stream, so events are not stolen across multiple windows.
-        Task { [weak self] in
+        Task { [weak self, weak window] in
             guard let self else { return }
             let (_, stream) = await self.permission.subscribe()
             for await request in stream {
                 guard !Task.isCancelled else { break }
+                guard let window else { break }
                 if !window.pendingPermissions.contains(where: { $0.id == request.id }) {
                     window.pendingPermissions.append(request)
+                    let projectName = window.selectedProject?.name
+                    let projectId = window.selectedProject?.id
+                    let sessionId = window.currentSessionId
+                    let toolName = request.toolName
+                    Task { @MainActor in
+                        await NotificationService.shared.postPermissionNeeded(
+                            toolName: toolName,
+                            projectName: projectName,
+                            projectId: projectId,
+                            sessionId: sessionId
+                        )
+                    }
                 }
             }
         }
@@ -912,11 +929,16 @@ final class AppState {
         await permission.refreshRunToken()
 
         let basePermissionMode = window.sessionPermissionMode ?? permissionMode
-        // Plan-mode boolean overrides the dropdown when on. The dropdown choice is preserved
-        // and re-applied automatically once plan-mode is toggled back off.
-        let currentPermissionMode: PermissionMode = window.sessionPlanMode ? .plan : basePermissionMode
+        // Plan-mode boolean overrides the dropdown for the CLI `--permission-mode` flag only.
+        // The dropdown choice is preserved and re-applied automatically once plan-mode is toggled back off.
+        let cliPermissionMode: PermissionMode = window.sessionPlanMode ? .plan : basePermissionMode
+        // PermissionServer registration uses the dropdown value directly so an explicit Auto
+        // choice continues to auto-approve hook-matched tools while plan mode is on.
+        // ExitPlanMode is always exempt from auto-approve (see PermissionServer.autoApproveReason),
+        // so the plan card still surfaces.
+        let hookSessionMode = basePermissionMode
         var hookSettingsPath: String?
-        if !currentPermissionMode.skipsHookPipeline {
+        if !cliPermissionMode.skipsHookPipeline {
             do {
                 hookSettingsPath = try await permission.writeHookSettingsFile()
             } catch {
@@ -926,11 +948,12 @@ final class AppState {
 
         // Resume already has the sid; new sessions register on first system event.
         if let sid = cliSessionId {
-            await permission.registerSession(sid: sid, projectKey: project.path, mode: currentPermissionMode)
+            await permission.registerSession(sid: sid, projectKey: project.path, mode: hookSessionMode)
         }
 
         if isNewSession {
-            let placeholder = ChatSession(id: sessionKey, projectId: project.id, title: ChatSession.defaultTitle, messages: [], origin: .cliBacked)
+            let initialTitle = Self.placeholderTitle(from: displayText ?? prompt)
+            let placeholder = ChatSession(id: sessionKey, projectId: project.id, title: initialTitle, messages: [], origin: .cliBacked)
             allSessionSummaries.insert(placeholder.summary, at: 0)
             threadStore.upsert(placeholder.summary)
         } else {
@@ -952,7 +975,8 @@ final class AppState {
                 model: window.sessionModel ?? self.selectedModel,
                 effort: window.sessionEffort ?? (self.selectedEffort == "auto" ? nil : self.selectedEffort),
                 hookSettingsPath: hookSettingsPath,
-                permissionMode: currentPermissionMode,
+                permissionMode: cliPermissionMode,
+                hookSessionMode: hookSessionMode,
                 projectId: project.id,
                 window: window
             )
@@ -1041,9 +1065,14 @@ final class AppState {
         effort: String? = nil,
         hookSettingsPath: String?,
         permissionMode: PermissionMode = .default,
+        hookSessionMode: PermissionMode? = nil,
         projectId: UUID,
         window: WindowState
     ) async {
+        // Mode used when registering a session with PermissionServer for hook auto-approve.
+        // When plan toggle is on, `permissionMode` is `.plan` (for the CLI flag) but the
+        // user's dropdown choice (e.g. `.auto`) should still drive the hook policy.
+        let registerMode = hookSessionMode ?? permissionMode
         let streamStart = Date()
         logger.info("[Stream:UI] starting processStream (cli=\(cliSessionId ?? "new"), key=\(internalSessionKey))")
 
@@ -1105,7 +1134,7 @@ final class AppState {
                         updateState(sessionKey) { $0.activeModelName = model }
                     }
                     if let sid = systemEvent.sessionId {
-                        await permission.registerSession(sid: sid, projectKey: cwd, mode: permissionMode)
+                        await permission.registerSession(sid: sid, projectKey: cwd, mode: registerMode)
                         if sessionKey != sid {
                             let oldKey = sessionKey
                             if let state = sessionStates.removeValue(forKey: oldKey) {

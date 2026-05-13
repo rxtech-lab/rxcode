@@ -76,7 +76,15 @@ struct MessageBubble: View {
                             if toolCall.name == "AskUserQuestion" {
                                 AskUserQuestionView(toolCall: toolCall)
                             } else if let planMd = PlanCardView.renderMarkdown(for: toolCall, in: message) {
-                                PlanCardView(toolCall: toolCall, planMarkdown: planMd, isMessageStreaming: message.isStreaming)
+                                let external: String? = (PlanCardView.isExitPlanMode(toolCall) && planMd.isEmpty)
+                                    ? PlanCardView.latestPriorPlanMarkdown(before: message, in: chatBridge.messages)
+                                    : nil
+                                PlanCardView(
+                                    toolCall: toolCall,
+                                    planMarkdown: planMd,
+                                    isMessageStreaming: message.isStreaming,
+                                    externalPlanMarkdown: external
+                                )
                             } else {
                                 ToolResultView(toolCall: toolCall, isMessageStreaming: message.isStreaming)
                             }

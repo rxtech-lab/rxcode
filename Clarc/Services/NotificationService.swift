@@ -33,6 +33,48 @@ final class NotificationService: NSObject {
         }
     }
 
+    /// Post a "permission needed" notification when the CLI queues a tool approval.
+    /// Silently no-ops if the user hasn't granted notification permission.
+    func postPermissionNeeded(toolName: String, projectName: String?, projectId: UUID?, sessionId: String?) async {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        switch settings.authorizationStatus {
+        case .authorized, .provisional:
+            break
+        default:
+            return
+        }
+
+        let content = UNMutableNotificationContent()
+        let titleFormat = NSLocalizedString(
+            "Permission needed%@",
+            comment: "Notification title when Claude queues a tool approval. %@ is replaced with \" — <project name>\" or empty string."
+        )
+        let projectSuffix: String = projectName.map { " — \($0)" } ?? ""
+        content.title = String(format: titleFormat, projectSuffix)
+        let bodyFormat = NSLocalizedString(
+            "Approve to run %@",
+            comment: "Notification body when Claude queues a tool approval. %@ is the tool name."
+        )
+        content.body = String(format: bodyFormat, toolName)
+        content.sound = .default
+        var userInfo: [String: Any] = [:]
+        if let projectId { userInfo["projectId"] = projectId.uuidString }
+        if let sessionId { userInfo["sessionId"] = sessionId }
+        content.userInfo = userInfo
+
+        let request = UNNotificationRequest(
+            identifier: UUID().uuidString,
+            content: content,
+            trigger: nil
+        )
+
+        do {
+            try await UNUserNotificationCenter.current().add(request)
+        } catch {
+            logger.error("Failed to post permission notification: \(error.localizedDescription)")
+        }
+    }
+
     /// Post a "response complete" notification. Silently no-ops if unauthorized.
     func postResponseComplete(title: String, body: String, projectId: UUID, sessionId: String) async {
         let settings = await UNUserNotificationCenter.current().notificationSettings()

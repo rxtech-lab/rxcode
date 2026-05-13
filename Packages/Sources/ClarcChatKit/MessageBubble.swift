@@ -48,6 +48,7 @@ struct MessageBubble: View {
                     // (so continuous text Claude sent across turns due to tool_use appears as one bubble)
                     let visibleBlocks = Self.mergeAdjacentTextBlocks(
                         in: message.blocks.filter { block in
+                            if PlanCardView.shouldHideBlock(block, in: message) { return false }
                             if let text = block.text { return !text.isEmpty }
                             if let toolCall = block.toolCall {
                                 if message.isStreaming { return true }
@@ -74,6 +75,8 @@ struct MessageBubble: View {
                         if let toolCall = block.toolCall {
                             if toolCall.name == "AskUserQuestion" {
                                 AskUserQuestionView(toolCall: toolCall)
+                            } else if let planMd = PlanCardView.renderMarkdown(for: toolCall, in: message) {
+                                PlanCardView(toolCall: toolCall, planMarkdown: planMd)
                             } else {
                                 ToolResultView(toolCall: toolCall, isMessageStreaming: message.isStreaming)
                             }
@@ -441,4 +444,3 @@ struct MessageBubble: View {
         )) ?? AttributedString(text)
     }
 }
-

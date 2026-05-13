@@ -14,6 +14,10 @@ public final class ChatBridge {
     public var messages: [ChatMessage] = []
     public var isStreaming: Bool = false
     public var isThinking: Bool = false
+    /// True while persisted messages are being loaded from disk for the current session.
+    /// MessageListView uses this to keep the ScrollView hidden until messages are present,
+    /// preventing the empty → populated "blink" when switching to a session not in memory.
+    public var isLoadingFromDisk: Bool = false
     public var streamingStartDate: Date?
     public var lastTurnContextUsedPercentage: Double?
     public var modelDisplayName: String = ""
@@ -28,6 +32,7 @@ public final class ChatBridge {
     public var runTerminalCommandHandler: ((String) async -> Void)?
     public var editAndResendHandler: ((UUID, String) async -> Void)?
     public var fetchRateLimitHandler: (() async -> RateLimitUsage?)?
+    public var togglePlanModeHandler: (() async -> Void)?
 
     // MARK: - Init
 
@@ -57,5 +62,9 @@ public final class ChatBridge {
 
     public func fetchRateLimit() async -> RateLimitUsage? {
         await fetchRateLimitHandler?()
+    }
+
+    public func togglePlanMode() async {
+        await togglePlanModeHandler?()
     }
 }

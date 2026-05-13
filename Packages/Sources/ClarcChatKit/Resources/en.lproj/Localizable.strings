@@ -1,5 +1,11 @@
 /* English — base localization for ClarcChatKit */
 
+// MARK: - InputBarView
+"Attach file" = "Attach file";
+"Plan" = "Plan";
+"Turn off plan mode" = "Turn off plan mode";
+"Type a message..." = "Type a message...";
+
 // MARK: - ToolResultView
 "Show less" = "Show less";
 "Show more" = "Show more";

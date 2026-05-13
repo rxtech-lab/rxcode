@@ -22,6 +22,12 @@ struct ProjectWindowValue: Codable, Hashable {
     let instanceId: UUID
 }
 
+// MARK: - TerminalWindowValue
+
+struct TerminalWindowValue: Codable, Hashable {
+    let path: String
+}
+
 // MARK: - App
 
 @main
@@ -67,6 +73,12 @@ struct ClarcApp: App {
             }
         }
         .defaultSize(width: 1000, height: 700)
+
+        // Detached terminal window — opened from the toolbar.
+        WindowGroup(id: "terminal-window", for: TerminalWindowValue.self) { $value in
+            TerminalWindowRoot(path: value?.path ?? "")
+        }
+        .defaultSize(width: 900, height: 600)
 
         Settings {
             SettingsWindowRoot(appState: appState)
@@ -157,5 +169,58 @@ struct ProjectWindowRoot: View {
                 windowState.currentSessionId = sessionId
                 appState.pendingNotificationSession.removeValue(forKey: projectId)
             }
+    }
+}
+
+// MARK: - Terminal Window Root
+
+struct TerminalWindowRoot: View {
+    let path: String
+    @State private var process = TerminalProcess()
+    @State private var resetID = UUID()
+    @State private var focusID: UUID? = UUID()
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: "apple.terminal")
+                    .foregroundStyle(ClaudeTheme.accent)
+                Text(path.isEmpty ? "Terminal" : URL(fileURLWithPath: path).lastPathComponent)
+                    .font(.system(size: ClaudeTheme.size(13), weight: .medium, design: .monospaced))
+                    .foregroundStyle(ClaudeTheme.textPrimary)
+
+                Spacer()
+
+                Button {
+                    process.terminate()
+                    process = TerminalProcess()
+                    resetID = UUID()
+                    focusID = UUID()
+                } label: {
+                    Image(systemName: "arrow.counterclockwise")
+                        .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+                        .frame(width: 22, height: 22)
+                }
+                .buttonStyle(.plain)
+                .help("Reset Terminal")
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+
+            ClaudeThemeDivider()
+
+            EmbeddedTerminalView(
+                executable: "/bin/zsh",
+                arguments: ["-il"],
+                currentDirectory: path.isEmpty ? nil : path,
+                process: process,
+                focusTrigger: focusID
+            )
+            .id(resetID)
+            .padding(8)
+            .background(ClaudeTheme.codeBackground)
+        }
+        .frame(minWidth: 600, idealWidth: 900, minHeight: 400, idealHeight: 600)
+        .background(ClaudeTheme.surfaceElevated)
     }
 }

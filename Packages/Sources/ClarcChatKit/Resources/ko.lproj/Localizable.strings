@@ -2,6 +2,8 @@
 
 // MARK: - InputBarView
 "Attach file" = "파일 첨부";
+"Plan" = "계획";
+"Turn off plan mode" = "플랜 모드 끄기";
 "Type a message..." = "메시지를 입력하세요...";
 
 // MARK: - FileDiffView
@@ -254,4 +256,3 @@
 
 // MARK: - AskUserQuestionView
 "Question" = "질문";
-

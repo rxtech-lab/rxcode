@@ -1,0 +1,378 @@
+import SwiftUI
+import ClarcCore
+
+// MARK: - ProjectTreeView
+
+/// Left sidebar root. Replaces the History/Files toggle.
+/// Lists projects as collapsible disclosure rows; each project expands to show
+/// its chats with a status dot.
+struct ProjectTreeView: View {
+    @Environment(AppState.self) private var appState
+    @Environment(WindowState.self) private var windowState
+    @Environment(\.openWindow) private var openWindow
+
+    @State private var expandedProjectIds: Set<UUID> = []
+    @State private var renameProject: Project? = nil
+    @State private var renameProjectText: String = ""
+    @State private var deleteProject: Project? = nil
+
+    @State private var renameSession: ChatSession? = nil
+    @State private var renameSessionText: String = ""
+
+    @State private var showAllChatsSheet = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            header
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+
+            if appState.projects.isEmpty {
+                emptyState
+            } else {
+                projectList
+            }
+        }
+        .alert("Rename Project", isPresented: Binding(
+            get: { renameProject != nil },
+            set: { if !$0 { renameProject = nil } }
+        )) {
+            TextField("Project name", text: $renameProjectText)
+            Button("Rename") {
+                if let p = renameProject, !renameProjectText.isEmpty {
+                    Task { await appState.renameProject(p, to: renameProjectText) }
+                }
+                renameProject = nil
+            }
+            Button("Cancel", role: .cancel) { renameProject = nil }
+        }
+        .confirmationDialog(
+            "Delete \"\(deleteProject?.name ?? "")\"?",
+            isPresented: Binding(
+                get: { deleteProject != nil },
+                set: { if !$0 { deleteProject = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                if let p = deleteProject {
+                    Task { await appState.deleteProject(p, in: windowState) }
+                }
+                deleteProject = nil
+            }
+            Button("Cancel", role: .cancel) { deleteProject = nil }
+        } message: {
+            Text("This will remove the project from Clarc. The files on disk will not be deleted.")
+        }
+        .alert("Rename Session", isPresented: Binding(
+            get: { renameSession != nil },
+            set: { if !$0 { renameSession = nil } }
+        )) {
+            TextField("Session name", text: $renameSessionText)
+            Button("Rename") {
+                if let s = renameSession, !renameSessionText.isEmpty {
+                    Task { await appState.renameSession(s, to: renameSessionText) }
+                }
+                renameSession = nil
+            }
+            Button("Cancel", role: .cancel) { renameSession = nil }
+        }
+        .sheet(isPresented: $showAllChatsSheet) {
+            AllChatsHistorySheet(isPresented: $showAllChatsSheet)
+        }
+        .onChange(of: windowState.selectedProject?.id) { _, newId in
+            if let newId { expandedProjectIds.insert(newId) }
+        }
+        .onAppear {
+            if let id = windowState.selectedProject?.id {
+                expandedProjectIds.insert(id)
+            }
+        }
+    }
+
+    // MARK: - Header
+
+    private var header: some View {
+        HStack {
+            Text("Projects")
+                .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+                .textCase(.uppercase)
+
+            Spacer()
+
+            Button {
+                showAllChatsSheet = true
+            } label: {
+                Image(systemName: "clock")
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(ClaudeTheme.textTertiary)
+            }
+            .buttonStyle(.borderless)
+            .help("Show all chats")
+        }
+    }
+
+    // MARK: - Empty State
+
+    private var emptyState: some View {
+        VStack(spacing: 8) {
+            Spacer().frame(height: 24)
+            Image(systemName: "folder.badge.plus")
+                .font(.system(size: ClaudeTheme.size(22)))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+            Text("No projects yet")
+                .font(.system(size: ClaudeTheme.size(13)))
+                .foregroundStyle(ClaudeTheme.textSecondary)
+            Text("Click + in the toolbar to add one.")
+                .font(.system(size: ClaudeTheme.size(11)))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    // MARK: - Project List
+
+    private var projectList: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(appState.projects) { project in
+                    ProjectTreeRow(
+                        project: project,
+                        isExpanded: Binding(
+                            get: { expandedProjectIds.contains(project.id) },
+                            set: { newValue in
+                                if newValue { expandedProjectIds.insert(project.id) }
+                                else { expandedProjectIds.remove(project.id) }
+                            }
+                        ),
+                        isSelected: windowState.selectedProject?.id == project.id,
+                        onSelectProject: { appState.selectProject(project, in: windowState) },
+                        onOpenInNewWindow: {
+                            openWindow(id: "project-window",
+                                       value: ProjectWindowValue(projectId: project.id, instanceId: UUID()))
+                        },
+                        onRename: {
+                            renameProjectText = project.name
+                            renameProject = project
+                        },
+                        onDelete: { deleteProject = project },
+                        onNewChat: {
+                            appState.selectProject(project, in: windowState)
+                            appState.startNewChat(in: windowState)
+                        }
+                    )
+
+                    if expandedProjectIds.contains(project.id) {
+                        ProjectChatsList(
+                            project: project,
+                            onSelectSession: { id in
+                                appState.selectSession(id: id, in: windowState)
+                            },
+                            onRenameSession: { session in
+                                renameSessionText = session.title
+                                renameSession = session
+                            }
+                        )
+                    }
+                }
+            }
+            .padding(.bottom, 8)
+        }
+    }
+}
+
+// MARK: - ProjectTreeRow
+
+private struct ProjectTreeRow: View {
+    let project: Project
+    @Binding var isExpanded: Bool
+    let isSelected: Bool
+    let onSelectProject: () -> Void
+    let onOpenInNewWindow: () -> Void
+    let onRename: () -> Void
+    let onDelete: () -> Void
+    let onNewChat: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "folder.fill")
+                .font(.system(size: ClaudeTheme.size(12)))
+                .foregroundStyle(isSelected ? ClaudeTheme.accent : ClaudeTheme.textTertiary)
+
+            Text(project.name)
+                .font(.system(size: ClaudeTheme.size(13), weight: .medium))
+                .foregroundStyle(isSelected ? ClaudeTheme.textPrimary : ClaudeTheme.textSecondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+
+            Spacer(minLength: 4)
+
+            // Always reserve space; fade in on hover so layout doesn't shift.
+            HStack(spacing: 2) {
+                Menu {
+                    Button { onNewChat() } label: {
+                        Label("New Chat", systemImage: "square.and.pencil")
+                    }
+                    Button { onOpenInNewWindow() } label: {
+                        Label("Open in New Window", systemImage: "macwindow.badge.plus")
+                    }
+                    Divider()
+                    Button { onRename() } label: {
+                        Label("Rename Project", systemImage: "pencil")
+                    }
+                    Button(role: .destructive) { onDelete() } label: {
+                        Label("Delete Project", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: ClaudeTheme.size(11), weight: .semibold))
+                        .foregroundStyle(ClaudeTheme.textSecondary)
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("More")
+
+                Button(action: onNewChat) {
+                    Image(systemName: "square.and.pencil")
+                        .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+                        .foregroundStyle(ClaudeTheme.textSecondary)
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("New Chat in \(project.name)")
+            }
+            .opacity(isHovered ? 1 : 0)
+            .animation(.easeInOut(duration: 0.12), value: isHovered)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
+                .fill(isHovered ? ClaudeTheme.surfaceSecondary.opacity(0.45) : Color.clear)
+        )
+        .padding(.horizontal, 8)
+        .padding(.vertical, 2)
+        .contentShape(Rectangle())
+        .onHover { isHovered = $0 }
+        .onTapGesture {
+            onSelectProject()
+            if !isExpanded { isExpanded = true }
+        }
+        .onTapGesture(count: 2) {
+            onOpenInNewWindow()
+        }
+        .contextMenu {
+            Button {
+                onNewChat()
+            } label: {
+                Label("New Chat", systemImage: "square.and.pencil")
+            }
+            Button {
+                onOpenInNewWindow()
+            } label: {
+                Label("Open in New Window", systemImage: "macwindow.badge.plus")
+            }
+            Divider()
+            Button {
+                onRename()
+            } label: {
+                Label("Rename Project", systemImage: "pencil")
+            }
+            Button(role: .destructive) {
+                onDelete()
+            } label: {
+                Label("Delete Project", systemImage: "trash")
+            }
+        }
+    }
+}
+
+// MARK: - ProjectChatsList
+
+private struct ProjectChatsList: View {
+    @Environment(AppState.self) private var appState
+    @Environment(WindowState.self) private var windowState
+
+    let project: Project
+    let onSelectSession: (String) -> Void
+    let onRenameSession: (ChatSession) -> Void
+
+    private var sessions: [ChatSession.Summary] {
+        appState.allSessionSummaries
+            .filter { $0.projectId == project.id }
+            .sorted { a, b in
+                if a.isPinned != b.isPinned { return a.isPinned }
+                return a.updatedAt > b.updatedAt
+            }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if sessions.isEmpty {
+                Text("No chats yet")
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(ClaudeTheme.textTertiary)
+                    .padding(.leading, 28)
+                    .padding(.vertical, 4)
+            } else {
+                ForEach(sessions) { summary in
+                    ProjectChatRow(
+                        summary: summary,
+                        isCurrent: windowState.currentSessionId == summary.id,
+                        status: appState.chatStatus(forSessionId: summary.id, in: windowState),
+                        onSelect: { onSelectSession(summary.id) },
+                        onRename: { onRenameSession(summary.makeSession()) },
+                        onTogglePin: {
+                            Task { await appState.togglePinSession(summary.makeSession()) }
+                        },
+                        onDelete: {
+                            Task { await appState.deleteSession(summary.makeSession(), in: windowState) }
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+// MARK: - All-Chats sheet
+
+private struct AllChatsHistorySheet: View {
+    @Binding var isPresented: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("All Chats")
+                    .font(.headline)
+                    .foregroundStyle(ClaudeTheme.textPrimary)
+                Spacer()
+                Button {
+                    isPresented = false
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+                        .frame(width: 20, height: 20)
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut("w", modifiers: .command)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+
+            ClaudeThemeDivider()
+
+            HistoryListView()
+        }
+        .frame(minWidth: 500, idealWidth: 600, minHeight: 500, idealHeight: 700)
+        .background(ClaudeTheme.background)
+    }
+}

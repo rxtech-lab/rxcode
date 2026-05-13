@@ -52,7 +52,9 @@ actor PersistenceService {
                     model: session.model,
                     effort: session.effort,
                     permissionMode: session.permissionMode,
-                    updatedAt: session.updatedAt
+                    updatedAt: session.updatedAt,
+                    worktreePath: session.worktreePath,
+                    worktreeBranch: session.worktreeBranch
                 )
             )
 

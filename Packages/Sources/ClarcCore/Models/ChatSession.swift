@@ -14,6 +14,8 @@ public struct ChatSession: Identifiable, Codable, Sendable {
     public var effort: String?
     public var permissionMode: PermissionMode?
     public var origin: SessionOrigin
+    public var worktreePath: String?
+    public var worktreeBranch: String?
 
     public init(
         id: String,
@@ -26,7 +28,9 @@ public struct ChatSession: Identifiable, Codable, Sendable {
         model: String? = nil,
         effort: String? = nil,
         permissionMode: PermissionMode? = nil,
-        origin: SessionOrigin = .cliBacked
+        origin: SessionOrigin = .cliBacked,
+        worktreePath: String? = nil,
+        worktreeBranch: String? = nil
     ) {
         self.id = id
         self.projectId = projectId
@@ -39,10 +43,12 @@ public struct ChatSession: Identifiable, Codable, Sendable {
         self.effort = effort
         self.permissionMode = permissionMode
         self.origin = origin
+        self.worktreePath = worktreePath
+        self.worktreeBranch = worktreeBranch
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, projectId, title, messages, createdAt, updatedAt, isPinned, model, effort, permissionMode, origin
+        case id, projectId, title, messages, createdAt, updatedAt, isPinned, model, effort, permissionMode, origin, worktreePath, worktreeBranch
     }
 
     public init(from decoder: Decoder) throws {
@@ -58,6 +64,8 @@ public struct ChatSession: Identifiable, Codable, Sendable {
         effort = try container.decodeIfPresent(String.self, forKey: .effort)
         permissionMode = try container.decodeIfPresent(PermissionMode.self, forKey: .permissionMode)
         origin = try container.decodeIfPresent(SessionOrigin.self, forKey: .origin) ?? .legacyClarc
+        worktreePath = try container.decodeIfPresent(String.self, forKey: .worktreePath)
+        worktreeBranch = try container.decodeIfPresent(String.self, forKey: .worktreeBranch)
     }
 
     public struct Summary: Identifiable, Codable, Sendable, Equatable {
@@ -71,6 +79,8 @@ public struct ChatSession: Identifiable, Codable, Sendable {
         public var effort: String?
         public var permissionMode: PermissionMode?
         public var origin: SessionOrigin
+        public var worktreePath: String?
+        public var worktreeBranch: String?
 
         public init(
             id: String,
@@ -82,7 +92,9 @@ public struct ChatSession: Identifiable, Codable, Sendable {
             model: String? = nil,
             effort: String? = nil,
             permissionMode: PermissionMode? = nil,
-            origin: SessionOrigin = .cliBacked
+            origin: SessionOrigin = .cliBacked,
+            worktreePath: String? = nil,
+            worktreeBranch: String? = nil
         ) {
             self.id = id
             self.projectId = projectId
@@ -94,10 +106,12 @@ public struct ChatSession: Identifiable, Codable, Sendable {
             self.effort = effort
             self.permissionMode = permissionMode
             self.origin = origin
+            self.worktreePath = worktreePath
+            self.worktreeBranch = worktreeBranch
         }
 
         private enum CodingKeys: String, CodingKey {
-            case id, projectId, title, createdAt, updatedAt, isPinned, model, effort, permissionMode, origin
+            case id, projectId, title, createdAt, updatedAt, isPinned, model, effort, permissionMode, origin, worktreePath, worktreeBranch
         }
 
         public init(from decoder: Decoder) throws {
@@ -112,6 +126,8 @@ public struct ChatSession: Identifiable, Codable, Sendable {
             effort = try container.decodeIfPresent(String.self, forKey: .effort)
             permissionMode = try container.decodeIfPresent(PermissionMode.self, forKey: .permissionMode)
             origin = try container.decodeIfPresent(SessionOrigin.self, forKey: .origin) ?? .legacyClarc
+            worktreePath = try container.decodeIfPresent(String.self, forKey: .worktreePath)
+            worktreeBranch = try container.decodeIfPresent(String.self, forKey: .worktreeBranch)
         }
     }
 
@@ -126,7 +142,9 @@ public struct ChatSession: Identifiable, Codable, Sendable {
             model: model,
             effort: effort,
             permissionMode: permissionMode,
-            origin: origin
+            origin: origin,
+            worktreePath: worktreePath,
+            worktreeBranch: worktreeBranch
         )
     }
 }
@@ -137,6 +155,7 @@ extension ChatSession.Summary {
                     messages: [], createdAt: createdAt,
                     updatedAt: updatedAt, isPinned: isPinned,
                     model: model, effort: effort, permissionMode: permissionMode,
-                    origin: origin)
+                    origin: origin,
+                    worktreePath: worktreePath, worktreeBranch: worktreeBranch)
     }
 }

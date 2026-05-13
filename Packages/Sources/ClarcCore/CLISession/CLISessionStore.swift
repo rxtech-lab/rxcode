@@ -209,7 +209,9 @@ public actor CLISessionStore {
                 model: meta.model,
                 effort: meta.effort,
                 permissionMode: meta.permissionMode,
-                origin: .cliBacked
+                origin: .cliBacked,
+                worktreePath: meta.worktreePath,
+                worktreeBranch: meta.worktreeBranch
             ))
         }
         return summaries.sorted { $0.updatedAt > $1.updatedAt }
@@ -418,7 +420,9 @@ public actor CLISessionStore {
             model: meta.model,
             effort: meta.effort,
             permissionMode: meta.permissionMode,
-            origin: .cliBacked
+            origin: .cliBacked,
+            worktreePath: meta.worktreePath,
+            worktreeBranch: meta.worktreeBranch
         )
     }
 

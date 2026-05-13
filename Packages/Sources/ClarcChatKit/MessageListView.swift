@@ -110,9 +110,14 @@ struct MessageListView: View {
             isOlderCollapsed = true
             scrollPosition = ScrollPosition()
             rebuildSettledItems()
-            // Skip scroll/fade delay for empty sessions — appear instantly
+            // Skip scroll/fade delay for empty sessions — appear instantly,
+            // unless we're still loading persisted messages from disk (in which
+            // case the onChange handler below will fade the list in once messages
+            // arrive, avoiding the empty → populated "blink").
             guard !settledItems.isEmpty else {
-                isSessionReady = true
+                if !chatBridge.isLoadingFromDisk {
+                    isSessionReady = true
+                }
                 return
             }
             try? await Task.sleep(for: .milliseconds(16))  // 1 frame: scroll after VStack layout is committed
@@ -122,6 +127,22 @@ struct MessageListView: View {
             isNearBottom = true
             try? await Task.sleep(for: .milliseconds(32))  // 2 frames: fade-in after scroll settles
             withAnimation(.easeIn(duration: 0.15)) { isSessionReady = true }
+        }
+        .onChange(of: chatBridge.isLoadingFromDisk) { _, isLoading in
+            // When a background disk load finishes for a freshly switched session,
+            // rebuild the settled list and fade in — same sequence as the .task above.
+            guard !isLoading, !isSessionReady else { return }
+            rebuildSettledItems()
+            scrollTask?.cancel()
+            scrollTask = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(16))
+                guard !Task.isCancelled else { return }
+                scrollPosition.scrollTo(edge: .bottom)
+                isNearBottom = true
+                try? await Task.sleep(for: .milliseconds(32))
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeIn(duration: 0.15)) { isSessionReady = true }
+            }
         }
         .onChange(of: chatBridge.isStreaming) { old, new in
             // Only update when streaming ends — settled list doesn't change at start, so skip
@@ -179,7 +200,7 @@ struct MessageListView: View {
         if windowState.focusMode {
             settled = settled.filter { $0.role == .user || $0.isResponseComplete || $0.isCompactBoundary }
         }
-        return settled
+        return suppressPlanReadyFollowups(in: settled)
     }
 
     private func scrollToBottomDebounced() {
@@ -231,6 +252,61 @@ fileprivate func isPureTransientMessage(_ message: ChatMessage) -> Bool {
 fileprivate func isInvisibleMessage(_ message: ChatMessage) -> Bool {
     guard message.role == .assistant, !message.isError, !message.isCompactBoundary, !message.isStreaming else { return false }
     return message.blocks.isEmpty
+}
+
+fileprivate func suppressPlanReadyFollowups(in messages: [ChatMessage]) -> [ChatMessage] {
+    var result: [ChatMessage] = []
+    var assistantRun: [ChatMessage] = []
+
+    func flushAssistantRun() {
+        guard !assistantRun.isEmpty else { return }
+        let hasExitPlan = assistantRun.contains { PlanCardView.containsExitPlanMode($0) }
+        var hasRecentPlanCard = false
+
+        for message in assistantRun {
+            if hasExitPlan && PlanCardView.isPurePlanFileWriteMessage(message) {
+                continue
+            }
+
+            if hasRecentPlanCard && isPlanReadyFollowupMessage(message) {
+                continue
+            }
+
+            if PlanCardView.containsExitPlanMode(message) {
+                hasRecentPlanCard = true
+            }
+            result.append(message)
+        }
+
+        assistantRun.removeAll(keepingCapacity: true)
+    }
+
+    for message in messages {
+        if message.role == .user {
+            flushAssistantRun()
+            result.append(message)
+            continue
+        }
+
+        assistantRun.append(message)
+    }
+    flushAssistantRun()
+
+    return result
+}
+
+fileprivate func isPlanReadyFollowupMessage(_ message: ChatMessage) -> Bool {
+    guard message.role == .assistant,
+          !message.isError,
+          !message.isCompactBoundary,
+          !message.isStreaming,
+          !message.blocks.isEmpty else {
+        return false
+    }
+    return message.blocks.allSatisfy { block in
+        guard let text = block.text else { return false }
+        return PlanCardView.isPlanReadyFollowup(text)
+    }
 }
 
 /// Groups consecutive pure-transient assistant messages into combined groups.
@@ -332,7 +408,7 @@ struct StreamingMessageView: View {
     /// Returns an empty array when not streaming so StreamingMessageView renders nothing.
     private func activeResponseMessages(from messages: [ChatMessage]) -> [ChatMessage] {
         guard messages.last?.isStreaming == true else { return [] }
-        return Array(messages[streamingBoundaryIndex(in: messages)...])
+        return suppressPlanReadyFollowups(in: Array(messages[streamingBoundaryIndex(in: messages)...]))
     }
 }
 
@@ -405,30 +481,32 @@ struct StreamingIndicatorView: View {
     var startDate: Date?
 
     var body: some View {
-        HStack(spacing: 8) {
-            PulseRingView()
-                .id("pulse")
+        AnimatedDotsView()
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+    }
+}
 
-            Group {
-                if isThinking {
-                    Text("Thinking...", bundle: .module)
-                } else {
-                    Text("Generating response...", bundle: .module)
-                }
-            }
-            .font(.system(size: ClaudeTheme.size(13)))
-            .foregroundStyle(ClaudeTheme.textSecondary)
+/// Three bouncing dots — the entire "generating response" indicator.
+/// Replaces the previous card with "Thinking..." / "Generating response..." text.
+struct AnimatedDotsView: View {
+    @State private var phase: Int = 0
+    private let timer = Timer.publish(every: 0.18, on: .main, in: .common).autoconnect()
 
-            Spacer()
-
-            if let startDate {
-                ElapsedTimeView(startDate: startDate)
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(0..<3, id: \.self) { i in
+                Circle()
+                    .fill(ClaudeTheme.textTertiary)
+                    .frame(width: 6, height: 6)
+                    .opacity(phase == i ? 1.0 : 0.3)
+                    .scaleEffect(phase == i ? 1.0 : 0.85)
+                    .animation(.easeInOut(duration: 0.25), value: phase)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(ClaudeTheme.surfacePrimary, in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusMedium))
+        .onReceive(timer) { _ in
+            phase = (phase + 1) % 3
+        }
     }
 }
 

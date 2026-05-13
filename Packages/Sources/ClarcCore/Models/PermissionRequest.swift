@@ -75,4 +75,27 @@ public enum PermissionDecision: Sendable, Equatable {
     case allowSessionTool
     /// Per-project persistent allow for an exact Bash command string.
     case allowAlwaysCommand(command: String)
+    /// Allow this tool call AND switch the session's registered permission mode to
+    /// `newMode` for all subsequent hook calls. Used by the plan-card accept buttons.
+    case allowAndSetMode(newMode: PermissionMode)
+    /// Deny this tool call and pass `reason` back to the model via the hook's
+    /// `permissionDecisionReason` so it can revise. Used by "Reject with feedback".
+    case denyWithReason(reason: String)
+}
+
+// MARK: - Plan Decision
+
+/// User's choice on a Claude `ExitPlanMode` tool call. Drives the plan card buttons on
+/// `PlanCardView` and is delivered to `AppState.respondToPlanDecision(...)` by the chat UI.
+public enum PlanDecisionAction: Sendable, Equatable {
+    /// Allow the plan and switch the session to `.default` for the rest of the conversation.
+    case acceptAsk
+    /// Allow the plan and switch the session to `.acceptEdits` for the rest of the conversation.
+    case acceptWithEdits
+    /// Allow the plan and switch the session to `.auto` for the rest of the conversation.
+    case acceptAutoApprove
+    /// Deny the plan and pass `reason` to the model so it can revise.
+    case rejectWithFeedback(reason: String)
+    /// Deny the plan without user-authored feedback.
+    case reject
 }

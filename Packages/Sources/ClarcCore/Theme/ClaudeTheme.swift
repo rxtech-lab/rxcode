@@ -214,6 +214,31 @@ public struct ClaudeSendButton: View {
     }
 }
 
+// MARK: - Claude Stop Button
+
+public struct ClaudeStopButton: View {
+    public let action: () -> Void
+
+    public init(action: @escaping () -> Void) {
+        self.action = action
+    }
+
+    public var body: some View {
+        Button(action: action) {
+            ZStack {
+                Circle()
+                    .fill(ClaudeTheme.textPrimary)
+                    .frame(width: 32, height: 32)
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(ClaudeTheme.background)
+                    .frame(width: 10, height: 10)
+            }
+        }
+        .buttonStyle(.plain)
+        .help("Stop generating")
+    }
+}
+
 // MARK: - Claude Theme Divider
 
 public struct ClaudeThemeDivider: View {

@@ -210,7 +210,7 @@ public struct ToolCall: Identifiable, Codable, Sendable, Equatable {
     /// either because the result would be empty by design, or because the UI
     /// needs to render them before the user/CLI produces a result.
     public static let keepAlwaysNames: Set<String> = [
-        "agent", "edit", "multiedit", "multi_edit", "write", "askuserquestion"
+        "agent", "edit", "multiedit", "multi_edit", "write", "askuserquestion", "exitplanmode", "exit_plan_mode"
     ]
 
     public var isKeepAlways: Bool {

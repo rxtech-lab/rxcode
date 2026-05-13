@@ -13,6 +13,8 @@ public actor SessionMetaStore {
         public var effort: String?
         public var permissionMode: PermissionMode?
         public var updatedAt: Date?
+        public var worktreePath: String?
+        public var worktreeBranch: String?
 
         public init(
             title: String? = nil,
@@ -20,7 +22,9 @@ public actor SessionMetaStore {
             model: String? = nil,
             effort: String? = nil,
             permissionMode: PermissionMode? = nil,
-            updatedAt: Date? = nil
+            updatedAt: Date? = nil,
+            worktreePath: String? = nil,
+            worktreeBranch: String? = nil
         ) {
             self.title = title
             self.isPinned = isPinned
@@ -28,6 +32,24 @@ public actor SessionMetaStore {
             self.effort = effort
             self.permissionMode = permissionMode
             self.updatedAt = updatedAt
+            self.worktreePath = worktreePath
+            self.worktreeBranch = worktreeBranch
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case title, isPinned, model, effort, permissionMode, updatedAt, worktreePath, worktreeBranch
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            title = try container.decodeIfPresent(String.self, forKey: .title)
+            isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
+            model = try container.decodeIfPresent(String.self, forKey: .model)
+            effort = try container.decodeIfPresent(String.self, forKey: .effort)
+            permissionMode = try container.decodeIfPresent(PermissionMode.self, forKey: .permissionMode)
+            updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt)
+            worktreePath = try container.decodeIfPresent(String.self, forKey: .worktreePath)
+            worktreeBranch = try container.decodeIfPresent(String.self, forKey: .worktreeBranch)
         }
     }
 

@@ -16,7 +16,9 @@ struct MainView: View {
     @State private var projectToDelete: Project? = nil
     @State private var projectToRename: Project? = nil
     @State private var renameText: String = ""
+    @State private var memoAnchor: Bool = false
 
+    // Kept for backward compatibility with `ClaudeSegmentedControl` and `SidebarTabShortcuts`.
     enum SidebarTab: String, CaseIterable {
         case history = "History"
         case files = "Files"
@@ -86,26 +88,25 @@ struct MainView: View {
                 .toolbarBackground(.hidden, for: .windowToolbar)
                 .toolbar {
                     if columnVisibility != .detailOnly {
-                        ToolbarItemGroup(placement: .confirmationAction) {
+                        ToolbarItem(placement: .navigation) {
                             Button {
                                 showGitHubSheet = true
                             } label: {
                                 Image("GitHubMark")
+                                    .renderingMode(.template)
                                     .resizable()
-                                    .frame(width: 18, height: 18)
-                                    .foregroundStyle(ClaudeTheme.textSecondary)
+                                    .scaledToFit()
+                                    .frame(width: 16, height: 16)
                             }
-                            .buttonStyle(.plain)
                             .help(appState.isLoggedIn ? "Manage GitHub Repos" : "Connect GitHub")
+                        }
 
+                        ToolbarItem(placement: .navigation) {
                             Button {
                                 showFilePicker = true
                             } label: {
                                 Image(systemName: "plus")
-                                    .font(.system(size: ClaudeTheme.size(16)))
-                                    .foregroundStyle(ClaudeTheme.textSecondary)
                             }
-                            .buttonStyle(.plain)
                             .help("Add Project")
                             .fileImporter(
                                 isPresented: $showFilePicker,
@@ -115,12 +116,11 @@ struct MainView: View {
                                 handleFolderSelection(result)
                             }
                         }
-                    
                     }
                 }
 
                 if inspectorStarted {
-                    InspectorPanel()
+                    RightInspectorPanel()
                 }
             }
         }
@@ -130,30 +130,7 @@ struct MainView: View {
 
     private var sidebarContent: some View {
         VStack(spacing: 0) {
-            if windowState.selectedProject != nil {
-                ClaudeSegmentedControl(selection: $sidebarTab)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-
-                switch sidebarTab {
-                case .files:
-                    FileTreeView(projectPath: windowState.selectedProject!.path, searchTrigger: $fileSearchTrigger)
-                case .history:
-                    HistoryListView()
-                }
-            } else {
-                HistoryListView()
-            }
-
-            if windowState.selectedProject != nil {
-                SidebarTabShortcuts(sidebarTab: $sidebarTab, fileSearchTrigger: $fileSearchTrigger, columnVisibility: $columnVisibility)
-            }
-
-            ClaudeThemeDivider()
-
-            if let project = windowState.selectedProject {
-                GitStatusView(projectPath: project.path)
-            }
+            ProjectTreeView()
         }
         .background(ClaudeTheme.sidebarBackground)
         .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 360)
@@ -162,69 +139,22 @@ struct MainView: View {
         }
     }
 
-    // MARK: - Chat Toolbar Area (moved from old ChatView)
+    // MARK: - Detail
 
     @Environment(\.openWindow) private var openWindow
-
-    private var chatToolbarArea: some View {
-        HStack(spacing: 12) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 4) {
-                    // isSelected is computed here and passed as a value so ProjectTabButton.body
-                    // does not access windowState.selectedProject — only the 2 changed buttons re-render.
-                    ForEach(appState.projects) { project in
-                        ProjectTabButton(
-                            project: project,
-                            isSelected: windowState.selectedProject?.id == project.id,
-                            projectToDelete: $projectToDelete,
-                            projectToRename: $projectToRename,
-                            renameText: $renameText
-                        )
-                    }
-                }
-            }
-
-            Spacer()
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(ClaudeTheme.surfaceElevated)
-        .confirmationDialog(
-            "Delete \"\(projectToDelete?.name ?? "")\"?",
-            isPresented: Binding(
-                get: { projectToDelete != nil },
-                set: { if !$0 { projectToDelete = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button("Delete", role: .destructive) {
-                if let project = projectToDelete {
-                    Task { await appState.deleteProject(project, in: windowState) }
-                }
-                projectToDelete = nil
-            }
-            Button("Cancel", role: .cancel) { projectToDelete = nil }
-        } message: {
-            Text("This will remove the project from Clarc. The files on disk will not be deleted.")
-        }
-        .sheet(item: $projectToRename) { project in
-            RenameProjectSheet(name: $renameText) {
-                Task { await appState.renameProject(project, to: renameText) }
-            }
-        }
-    }
-
-    // MARK: - Detail
 
     private var detailContent: some View {
         Group {
             if windowState.selectedProject != nil {
                 VStack(spacing: 0) {
-                    chatToolbarArea
-                    ClaudeThemeDivider()
-                    ChatView {
-                        ChatToolbarControls(placement: .composer)
-                    }
+                    ChatView(inputAccessory: {
+                        HStack(spacing: 8) {
+                            ChatToolbarControls(placement: .composer)
+                            BranchPickerChip()
+                        }
+                    }, bottomAccessory: {
+                        RecentChatsSuggestionList()
+                    })
                 }
                 .modifier(ChatDetailModifiers())
             } else if !windowState.isInitialized {
@@ -272,6 +202,9 @@ struct MainView: View {
         .background {
             DetailToolbar()
         }
+        .popover(isPresented: Bindable(windowState).showMemoPopover, arrowEdge: .top) {
+            MemoPopoverContent()
+        }
     }
 
     // MARK: - Folder Selection
@@ -285,37 +218,11 @@ struct MainView: View {
 // MARK: - Detail Toolbar (isolated struct — no selectedProject dependency, prevents NSToolbar re-layout on project switch)
 
 struct DetailToolbar: View {
-    @Environment(AppState.self) private var appState
-    @Environment(WindowState.self) private var windowState
-    @Environment(\.openSettings) private var openSettings
-
     var body: some View {
         Color.clear
             .toolbarBackground(.hidden, for: .windowToolbar)
             .toolbar {
-                ToolbarItemGroup(placement: .confirmationAction) {
-                    Button {
-                        appState.startNewChat(in: windowState)
-                    } label: {
-                        Image(systemName: "square.and.pencil")
-                    }
-                    .help("New Chat")
-
-                    Button {
-                        windowState.showInspector.toggle()
-                    } label: {
-                        Image(systemName: "sidebar.trailing")
-                    }
-                    .help("Toggle Inspector")
-                    .keyboardShortcut("4", modifiers: .command)
-
-                    Button {
-                        openSettings()
-                    } label: {
-                        Image(systemName: "gearshape")
-                    }
-                    .help("Settings")
-                }
+                ClarcToolbarContent()
             }
     }
 }
@@ -616,7 +523,7 @@ struct ChatToolbarControls: View {
 
             Menu {
                 Section("Permission Mode") {
-                    ForEach(PermissionMode.allCases, id: \.self) { mode in
+                    ForEach(PermissionMode.allCases.filter { $0 != .plan }, id: \.self) { mode in
                         Button {
                             appState.setSessionPermissionMode(mode, in: windowState)
                         } label: {
@@ -628,7 +535,9 @@ struct ChatToolbarControls: View {
             } label: {
                 controlLabel(
                     title: effectiveMode.displayName,
-                    isAccent: placement == .composer
+                    icon: nil,
+                    isAccent: placement == .composer,
+                    isActive: false
                 )
             }
             .menuStyle(.borderlessButton)
@@ -649,7 +558,9 @@ struct ChatToolbarControls: View {
             } label: {
                 controlLabel(
                     title: AppState.modelDisplayName(effectiveModel),
-                    isAccent: false
+                    icon: nil,
+                    isAccent: false,
+                    isActive: false
                 )
             }
             .menuStyle(.borderlessButton)
@@ -677,7 +588,9 @@ struct ChatToolbarControls: View {
             } label: {
                 controlLabel(
                     title: windowState.sessionEffort.map { effortDisplayName($0) } ?? "Auto Effort",
-                    isAccent: false
+                    icon: nil,
+                    isAccent: false,
+                    isActive: false
                 )
             }
             .menuStyle(.borderlessButton)
@@ -688,64 +601,94 @@ struct ChatToolbarControls: View {
     }
 
     @ViewBuilder
-    private func controlLabel(title: String, isAccent: Bool) -> some View {
+    private func controlLabel(title: String, icon: String?, isAccent: Bool, isActive: Bool) -> some View {
         switch placement {
         case .toolbar:
-            ToolbarChipLabel(title: title)
+            ToolbarChipLabel(title: title, icon: icon, isActive: isActive)
         case .composer:
-            ComposerControlLabel(title: title, isAccent: isAccent)
+            ComposerControlLabel(title: title, icon: icon, isAccent: isAccent, isActive: isActive)
         }
     }
 }
 
 struct ToolbarChipLabel: View {
     let title: String
+    var icon: String? = nil
+    var isActive: Bool = false
 
     @State private var isHovered = false
 
     var body: some View {
-        Text(LocalizedStringKey(title))
-            .font(.system(size: ClaudeTheme.size(12), weight: .medium))
-        .foregroundStyle(ClaudeTheme.textSecondary)
+        HStack(spacing: 4) {
+            if let icon {
+                Image(systemName: icon)
+                    .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+            }
+            Text(LocalizedStringKey(title))
+                .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+        }
+        .foregroundStyle(isActive ? ClaudeTheme.accent : ClaudeTheme.textSecondary)
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .background(
-            isHovered ? ClaudeTheme.surfaceTertiary : ClaudeTheme.surfaceSecondary,
+            isActive
+                ? ClaudeTheme.accent.opacity(isHovered ? 0.18 : 0.12)
+                : (isHovered ? ClaudeTheme.surfaceTertiary : ClaudeTheme.surfaceSecondary),
             in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
         )
         .overlay(
             RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
-                .strokeBorder(ClaudeTheme.borderSubtle, lineWidth: 0.5)
+                .strokeBorder(
+                    isActive ? ClaudeTheme.accent.opacity(0.45) : ClaudeTheme.borderSubtle,
+                    lineWidth: isActive ? 1 : 0.5
+                )
         )
         .onHover { isHovered = $0 }
         .pointerCursorOnHover()
         .animation(.easeInOut(duration: 0.15), value: isHovered)
+        .animation(.easeInOut(duration: 0.15), value: isActive)
     }
 }
 
 struct ComposerControlLabel: View {
     let title: String
+    var icon: String? = nil
     let isAccent: Bool
+    var isActive: Bool = false
 
     @State private var isHovered = false
 
     var body: some View {
         HStack(spacing: 6) {
+            if let icon {
+                Image(systemName: icon)
+                    .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+            }
             Text(LocalizedStringKey(title))
                 .font(.system(size: ClaudeTheme.size(13), weight: .medium))
                 .lineLimit(1)
         }
-        .foregroundStyle(isAccent ? ClaudeTheme.accent : ClaudeTheme.textSecondary)
+        .foregroundStyle((isAccent || isActive) ? ClaudeTheme.accent : ClaudeTheme.textSecondary)
         .padding(.horizontal, 6)
         .padding(.vertical, 5)
         .background(
-            isHovered ? ClaudeTheme.surfaceSecondary.opacity(0.85) : Color.clear,
+            isActive
+                ? ClaudeTheme.accent.opacity(isHovered ? 0.18 : 0.12)
+                : (isHovered ? ClaudeTheme.surfaceSecondary.opacity(0.85) : Color.clear),
             in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
+                .strokeBorder(
+                    isActive ? ClaudeTheme.accent.opacity(0.45) : Color.clear,
+                    lineWidth: isActive ? 1 : 0
+                )
         )
         .contentShape(RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
         .onHover { isHovered = $0 }
         .pointerCursorOnHover()
         .animation(.easeInOut(duration: 0.12), value: isHovered)
+        .animation(.easeInOut(duration: 0.15), value: isActive)
     }
 }
 

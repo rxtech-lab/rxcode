@@ -147,6 +147,7 @@ struct ProjectWindowView: View {
                     .background(ClaudeTheme.background)
             }
         }
+        .toolbarBackground(.hidden, for: .windowToolbar)
         .toolbar {
             ToolbarItemGroup(placement: .automatic) {
                 Button {

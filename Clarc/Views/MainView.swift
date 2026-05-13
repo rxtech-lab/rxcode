@@ -83,6 +83,7 @@ struct MainView: View {
                     }
                     return base
                 }())
+                .toolbarBackground(.hidden, for: .windowToolbar)
                 .toolbar {
                     if columnVisibility != .detailOnly {
                         ToolbarItemGroup(placement: .confirmationAction) {
@@ -290,6 +291,7 @@ struct DetailToolbar: View {
 
     var body: some View {
         Color.clear
+            .toolbarBackground(.hidden, for: .windowToolbar)
             .toolbar {
                 ToolbarItemGroup(placement: .confirmationAction) {
                     Button {

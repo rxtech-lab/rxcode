@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import ClarcCore
 
 // MARK: - ClarcToolbar
@@ -26,18 +27,23 @@ struct ClarcToolbarContent: ToolbarContent {
             ExternalEditorMenu()
 
             Button {
-                if let path = windowState.selectedProject?.path {
+                if NSEvent.modifierFlags.contains(.option) {
+                    let path = windowState.selectedProject?.path ?? ""
                     openWindow(id: "terminal-window", value: TerminalWindowValue(path: path))
                 } else {
-                    openWindow(id: "terminal-window", value: TerminalWindowValue(path: ""))
+                    windowState.inspectorMode = .inspector
+                    windowState.inspectorTab = .terminal
+                    windowState.showInspector = true
                 }
             } label: {
                 Image(systemName: "apple.terminal")
             }
-            .help("Open Terminal")
+            .help("Open Terminal (\u{2325}-click for window)")
 
             Button {
-                windowState.showMemoPopover.toggle()
+                windowState.inspectorMode = .inspector
+                windowState.inspectorTab = .memo
+                windowState.showInspector = true
             } label: {
                 Image(systemName: "note.text")
             }
@@ -58,45 +64,5 @@ struct ClarcToolbarContent: ToolbarContent {
             }
             .help("Settings")
         }
-    }
-}
-
-// MARK: - Memo Popover Content
-
-struct MemoPopoverContent: View {
-    @Environment(WindowState.self) private var windowState
-    @State private var clearTrigger: UUID? = nil
-    @State private var focusTrigger: UUID? = nil
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text("Memo")
-                    .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
-                    .foregroundStyle(ClaudeTheme.textPrimary)
-                Spacer()
-                Button {
-                    clearTrigger = UUID()
-                } label: {
-                    Image(systemName: "arrow.counterclockwise")
-                        .font(.system(size: ClaudeTheme.size(11), weight: .medium))
-                        .frame(width: 20, height: 20)
-                }
-                .buttonStyle(.plain)
-                .help("Clear Memo")
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-
-            ClaudeThemeDivider()
-
-            InspectorMemoPanel(
-                projectId: windowState.selectedProject?.id,
-                clearTrigger: clearTrigger,
-                focusTrigger: focusTrigger
-            )
-        }
-        .frame(width: 420, height: 480)
-        .onAppear { focusTrigger = UUID() }
     }
 }

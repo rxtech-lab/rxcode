@@ -24,6 +24,13 @@ public enum InspectorReviewTab: String, CaseIterable, Sendable {
     case branch = "Branch"
 }
 
+// MARK: - InspectorMode
+
+public enum InspectorMode: String, CaseIterable, Sendable {
+    case review = "Review"
+    case inspector = "Inspector"
+}
+
 // MARK: - QueuedMessage
 
 public struct QueuedMessage: Identifiable, Sendable {
@@ -101,9 +108,9 @@ public final class WindowState {
 
     public var interactiveTerminal: InteractiveTerminalState?
     public var showInspector: Bool = false
+    public var inspectorMode: InspectorMode = .review
     public var inspectorTab: InspectorTab = .memo
     public var inspectorReviewTab: InspectorReviewTab = .lastTurn
-    public var showMemoPopover: Bool = false
     public var inspectorFile: PreviewFile?
     public var diffFile: PreviewFile?
     public var showMarketplace = false

@@ -3,42 +3,45 @@ import ClarcCore
 
 // MARK: - RightInspectorPanel
 
-/// Right-side review/git panel.
-/// Tabs: Last turn / Unstaged / Staged / Branch.
+/// Right-side panel with two modes:
+/// - Review: Last turn / Unstaged / Staged / Branch tabs.
+/// - Inspector: Memo / Terminal tabs.
 struct RightInspectorPanel: View {
     @Environment(WindowState.self) private var windowState
 
+    // Inspector-mode state lives here so reset/clear buttons in the header
+    // can drive the embedded views.
+    @State private var inspectorProcess = TerminalProcess()
+    @State private var terminalResetID = UUID()
+    @State private var memoClearID: UUID? = nil
+    @State private var terminalFocusID: UUID? = nil
+    @State private var memoFocusID: UUID? = nil
+
+    private func bumpFocus(for tab: InspectorTab) {
+        switch tab {
+        case .terminal: terminalFocusID = UUID()
+        case .memo: memoFocusID = UUID()
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                ReviewTabControl(selection: Bindable(windowState).inspectorReviewTab)
-                Spacer()
-
-                Button {
-                    windowState.showInspector = false
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: ClaudeTheme.size(11), weight: .medium))
-                        .frame(width: 20, height: 20)
-                }
-                .buttonStyle(.plain)
-                .keyboardShortcut("w", modifiers: .command)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
+            header
 
             ClaudeThemeDivider()
 
             Group {
-                switch windowState.inspectorReviewTab {
-                case .lastTurn:
-                    LastTurnDiffView()
-                case .unstaged:
-                    UnstagedChangesView()
-                case .staged:
-                    StagedChangesView()
-                case .branch:
-                    BranchInfoView()
+                switch windowState.inspectorMode {
+                case .review:
+                    reviewContent
+                case .inspector:
+                    InspectorContentView(
+                        inspectorProcess: $inspectorProcess,
+                        terminalResetID: terminalResetID,
+                        memoClearID: memoClearID,
+                        terminalFocusID: terminalFocusID,
+                        memoFocusID: memoFocusID
+                    )
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -50,6 +53,113 @@ struct RightInspectorPanel: View {
         )
         .opacity(windowState.showInspector ? 1 : 0)
         .clipped()
+        .onChange(of: windowState.inspectorTab) { _, newTab in
+            if windowState.inspectorMode == .inspector { bumpFocus(for: newTab) }
+        }
+        .onChange(of: windowState.inspectorMode) { _, newMode in
+            if newMode == .inspector, windowState.showInspector {
+                bumpFocus(for: windowState.inspectorTab)
+            }
+        }
+        .onChange(of: windowState.showInspector) { _, isShowing in
+            if isShowing, windowState.inspectorMode == .inspector {
+                bumpFocus(for: windowState.inspectorTab)
+            }
+        }
+    }
+
+    // MARK: - Header
+
+    @ViewBuilder
+    private var header: some View {
+        HStack(spacing: 8) {
+            ModeSwitchControl(selection: Bindable(windowState).inspectorMode)
+
+            switch windowState.inspectorMode {
+            case .review:
+                ReviewTabControl(selection: Bindable(windowState).inspectorReviewTab)
+            case .inspector:
+                InspectorTabControl(
+                    selection: Bindable(windowState).inspectorTab,
+                    onTabClick: { tab in bumpFocus(for: tab) }
+                )
+            }
+
+            Spacer()
+
+            if windowState.inspectorMode == .inspector {
+                if windowState.inspectorTab == .terminal {
+                    InspectorIconButton(help: "Reset Terminal") {
+                        inspectorProcess.terminate()
+                        inspectorProcess = TerminalProcess()
+                        terminalResetID = UUID()
+                    }
+                } else if windowState.inspectorTab == .memo {
+                    InspectorIconButton(help: "Clear Memo") {
+                        memoClearID = UUID()
+                    }
+                }
+            }
+
+            Button {
+                windowState.showInspector = false
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+                    .frame(width: 20, height: 20)
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut("w", modifiers: .command)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+    }
+
+    // MARK: - Review content
+
+    @ViewBuilder
+    private var reviewContent: some View {
+        switch windowState.inspectorReviewTab {
+        case .lastTurn:
+            LastTurnDiffView()
+        case .unstaged:
+            UnstagedChangesView()
+        case .staged:
+            StagedChangesView()
+        case .branch:
+            BranchInfoView()
+        }
+    }
+}
+
+// MARK: - ModeSwitchControl
+
+private struct ModeSwitchControl: View {
+    @Binding var selection: InspectorMode
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(InspectorMode.allCases, id: \.self) { mode in
+                Button {
+                    selection = mode
+                } label: {
+                    Text(LocalizedStringKey(mode.rawValue))
+                        .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .contentShape(Rectangle())
+                        .foregroundStyle(selection == mode ? ClaudeTheme.textOnAccent : ClaudeTheme.textSecondary)
+                        .background(
+                            selection == mode ? ClaudeTheme.accent : Color.clear,
+                            in: RoundedRectangle(cornerRadius: 6)
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .background(ClaudeTheme.surfaceSecondary, in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
     }
 }
 

@@ -9,8 +9,20 @@ import AppKit
 struct PlanCardView: View {
     let toolCall: ToolCall
     let planMarkdown: String
+    let isMessageStreaming: Bool
 
     @Environment(WindowState.self) private var windowState
+
+    // Match the summary strings written by AppState.respondToPlanDecision. Any other
+    // non-nil result (e.g., CLI-side "Exit plan mode?" responses) must not be treated
+    // as a user decision, otherwise the accept/reject buttons get hidden before the
+    // user has actually clicked one.
+    private static let userDecisionPrefixes: [String] = [
+        "Accepted with Ask",
+        "Accepted with Edits",
+        "Accepted with Auto-approve",
+        "Rejected",
+    ]
 
     @State private var isExpanded: Bool = true
     @State private var showFullSheet: Bool = false
@@ -109,15 +121,20 @@ struct PlanCardView: View {
     }
 
     private var isDecided: Bool {
-        // The plan card writes a friendly summary into `toolCall.result` once the user
-        // picks a button (see AppState.respondToPlanDecision). Plain `Write`-into-plans
-        // calls never have a result here, so they stay in the read-only rendered state.
-        toolCall.result != nil
+        // Only treat the card as decided when the result matches one of the summary
+        // strings written by AppState.respondToPlanDecision. The CLI itself can leave
+        // unrelated text (e.g. "Exit plan mode?") in `toolCall.result` before the user
+        // has picked anything; that must not hide the accept/reject buttons.
+        guard let result = toolCall.result else { return false }
+        return Self.userDecisionPrefixes.contains { result.hasPrefix($0) }
     }
 
     private var isStreaming: Bool {
-        // While the CLI is still streaming input_json_delta into the tool, treat as in-flight.
-        planMarkdown.isEmpty
+        // Spinner only while the parent assistant message is still streaming AND no
+        // plan content has arrived yet. Once the message stops streaming, drop the
+        // spinner even if planMarkdown is still empty — otherwise the card stays stuck
+        // when input_json_delta never arrives or the parsed input lacks a `plan` key.
+        isMessageStreaming && planMarkdown.isEmpty
     }
 
     var body: some View {
@@ -212,6 +229,11 @@ struct PlanCardView: View {
                     .foregroundStyle(ClaudeTheme.textSecondary)
             }
             .padding(.vertical, 4)
+        } else if planMarkdown.isEmpty {
+            Text("Plan content unavailable.", bundle: .module)
+                .font(.system(size: ClaudeTheme.messageSize(12)))
+                .foregroundStyle(ClaudeTheme.textSecondary)
+                .padding(.vertical, 4)
         } else {
             MarkdownContentView(text: planMarkdown)
                 .frame(maxWidth: .infinity, alignment: .leading)

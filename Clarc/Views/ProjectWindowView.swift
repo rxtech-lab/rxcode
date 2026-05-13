@@ -135,9 +135,6 @@ struct ProjectWindowView: View {
         .focusedValue(\.startNewChat) {
             appState.startNewChat(in: windowState)
         }
-        .popover(isPresented: Bindable(windowState).showMemoPopover, arrowEdge: .top) {
-            MemoPopoverContent()
-        }
     }
 
 }

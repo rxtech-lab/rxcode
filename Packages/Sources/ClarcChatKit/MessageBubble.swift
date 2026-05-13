@@ -76,7 +76,7 @@ struct MessageBubble: View {
                             if toolCall.name == "AskUserQuestion" {
                                 AskUserQuestionView(toolCall: toolCall)
                             } else if let planMd = PlanCardView.renderMarkdown(for: toolCall, in: message) {
-                                PlanCardView(toolCall: toolCall, planMarkdown: planMd)
+                                PlanCardView(toolCall: toolCall, planMarkdown: planMd, isMessageStreaming: message.isStreaming)
                             } else {
                                 ToolResultView(toolCall: toolCall, isMessageStreaming: message.isStreaming)
                             }
@@ -192,7 +192,7 @@ struct MessageBubble: View {
         } else {
             VStack(alignment: .trailing, spacing: 6) {
                 let isLong = message.content.count > Self.longTextThreshold
-                Text(message.content)
+                Text(chipifiedAttributedString(message.content))
                     .font(.system(size: ClaudeTheme.messageSize(14)))
                     .foregroundStyle(ClaudeTheme.userBubbleText)
                     .textSelection(.enabled)
@@ -443,4 +443,26 @@ struct MessageBubble: View {
             options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
         )) ?? AttributedString(text)
     }
+
+    /// Renders `[Image\d+]` tokens with accent-tinted chip styling. The same tokens
+    /// are inserted into the input bar by `WindowState.insertImageToken` and drawn
+    /// with a rounded background there via `ChipLayoutManager`; this mirrors that
+    /// treatment in the sent user bubble.
+    private func chipifiedAttributedString(_ text: String) -> AttributedString {
+        var attr = AttributedString(text)
+        let ns = text as NSString
+        let fullRange = NSRange(location: 0, length: ns.length)
+        Self.imageChipRegex.enumerateMatches(in: text, range: fullRange) { match, _, _ in
+            guard let m = match,
+                  let range = Range(m.range, in: attr) else { return }
+            attr[range].backgroundColor = ClaudeTheme.accent.opacity(0.22)
+            attr[range].foregroundColor = ClaudeTheme.accent
+            attr[range].font = .system(size: ClaudeTheme.messageSize(13), weight: .medium)
+        }
+        return attr
+    }
+
+    private static let imageChipRegex: NSRegularExpression = {
+        try! NSRegularExpression(pattern: #"\[Image(\d+)\]"#)
+    }()
 }

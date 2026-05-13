@@ -202,9 +202,6 @@ struct MainView: View {
         .background {
             DetailToolbar()
         }
-        .popover(isPresented: Bindable(windowState).showMemoPopover, arrowEdge: .top) {
-            MemoPopoverContent()
-        }
     }
 
     // MARK: - Folder Selection
@@ -295,6 +292,8 @@ struct InspectorTabControl: View {
                 } label: {
                     Text(LocalizedStringKey(tab.rawValue))
                         .font(.system(size: ClaudeTheme.size(13), weight: .medium))
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 5)
                         .contentShape(Rectangle())
@@ -308,110 +307,6 @@ struct InspectorTabControl: View {
             }
         }
         .background(ClaudeTheme.surfaceSecondary, in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
-    }
-}
-
-// MARK: - Inspector Panel
-
-struct InspectorPanel: View {
-    @Environment(WindowState.self) private var windowState
-    @State private var inspectorProcess = TerminalProcess()
-    @State private var terminalResetID = UUID()
-    @State private var memoClearID: UUID? = nil
-    @State private var terminalFocusID: UUID? = nil
-    @State private var memoFocusID: UUID? = nil
-
-    private func bumpFocus(for tab: InspectorTab) {
-        switch tab {
-        case .terminal: terminalFocusID = UUID()
-        case .memo: memoFocusID = UUID()
-        }
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                InspectorTabControl(
-                    selection: Bindable(windowState).inspectorTab,
-                    onTabClick: { tab in bumpFocus(for: tab) }
-                )
-
-                Spacer()
-
-                if windowState.inspectorTab == .terminal {
-                    InspectorIconButton(help: "Reset Terminal") {
-                        inspectorProcess.terminate()
-                        inspectorProcess = TerminalProcess()
-                        terminalResetID = UUID()
-                    }
-                } else if windowState.inspectorTab == .memo {
-                    InspectorIconButton(help: "Clear Memo") {
-                        memoClearID = UUID()
-                    }
-                }
-
-                Button {
-                    windowState.showInspector = false
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: ClaudeTheme.size(11), weight: .medium))
-                        .frame(width: 20, height: 20)
-                }
-                .buttonStyle(.plain)
-                .keyboardShortcut("w", modifiers: .command)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-
-            ClaudeThemeDivider()
-
-            EmbeddedTerminalView(
-                executable: "/bin/zsh",
-                arguments: ["-il"],
-                currentDirectory: windowState.selectedProject?.path,
-                process: inspectorProcess,
-                focusTrigger: terminalFocusID
-            )
-            .id(terminalResetID)
-            .padding(8)
-            .background(ClaudeTheme.codeBackground)
-            .frame(maxHeight: windowState.inspectorTab == .terminal ? .infinity : 0)
-            .clipped()
-
-            InspectorMemoPanel(projectId: windowState.selectedProject?.id,
-                               clearTrigger: memoClearID,
-                               focusTrigger: memoFocusID)
-                .frame(maxHeight: windowState.inspectorTab == .memo ? .infinity : 0)
-                .clipped()
-        }
-        .background(ClaudeTheme.surfaceElevated)
-        .frame(
-            minWidth: windowState.showInspector ? 380 : 0,
-            maxWidth: windowState.showInspector ? .infinity : 0
-        )
-        .opacity(windowState.showInspector ? 1 : 0)
-        .clipped()
-        .onChange(of: windowState.inspectorTab) { _, newTab in
-            bumpFocus(for: newTab)
-        }
-        .onChange(of: windowState.showInspector) { _, isShowing in
-            if isShowing { bumpFocus(for: windowState.inspectorTab) }
-        }
-    }
-}
-
-private struct InspectorIconButton: View {
-    let help: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: "arrow.counterclockwise")
-                .font(.system(size: ClaudeTheme.size(11), weight: .medium))
-                .frame(width: 20, height: 20)
-        }
-        .buttonStyle(.plain)
-        .help(help)
     }
 }
 

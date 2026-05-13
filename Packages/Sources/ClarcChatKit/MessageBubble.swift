@@ -289,6 +289,8 @@ struct MessageBubble: View {
                     .lineSpacing(6)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentTransition(.opacity)
+                    .animation(.easeIn(duration: 0.18), value: text)
             } else {
                 MarkdownContentView(text: text)
                     .frame(maxWidth: .infinity, alignment: .leading)

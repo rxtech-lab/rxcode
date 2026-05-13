@@ -15,6 +15,11 @@ struct ClarcToolbarContent: ToolbarContent {
     @Environment(\.openSettings) private var openSettings
     @Environment(\.openWindow) private var openWindow
 
+    private var fileEditCount: Int {
+        _ = appState.threadFileEditsRevision
+        return appState.threadFileEdits(in: windowState).count
+    }
+
     var body: some ToolbarContent {
         ToolbarSpacer(.flexible, placement: .primaryAction)
         ToolbarItem(placement: .primaryAction) {
@@ -58,6 +63,18 @@ struct ClarcToolbarContent: ToolbarContent {
                 windowState.showInspector.toggle()
             } label: {
                 Image(systemName: "sidebar.trailing")
+                    .overlay(alignment: .topTrailing) {
+                        let editCount = fileEditCount
+                        if editCount > 0 {
+                            Text("\(editCount)")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 4)
+                                .frame(minWidth: 14, minHeight: 14)
+                                .background(Capsule().fill(Color.red))
+                                .offset(x: 8, y: -6)
+                        }
+                    }
             }
             .help("Toggle Inspector")
             .keyboardShortcut("4", modifiers: .command)

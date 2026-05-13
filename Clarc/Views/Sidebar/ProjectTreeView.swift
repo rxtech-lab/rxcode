@@ -18,6 +18,7 @@ struct ProjectTreeView: View {
 
     @State private var renameSession: ChatSession? = nil
     @State private var renameSessionText: String = ""
+    @State private var deleteSession: ChatSession? = nil
 
     @State private var showAllChatsSheet = false
 
@@ -76,6 +77,24 @@ struct ProjectTreeView: View {
                 renameSession = nil
             }
             Button("Cancel", role: .cancel) { renameSession = nil }
+        }
+        .alert("Delete Session", isPresented: Binding(
+            get: { deleteSession != nil },
+            set: { if !$0 { deleteSession = nil } }
+        )) {
+            Button("Delete", role: .destructive) {
+                if let s = deleteSession {
+                    Task { await appState.deleteSession(s, in: windowState) }
+                }
+                deleteSession = nil
+            }
+            Button("Cancel", role: .cancel) { deleteSession = nil }
+        } message: {
+            if let s = deleteSession {
+                Text("\"\(s.title)\" will be deleted. This action cannot be undone.")
+            } else {
+                Text("This session will be deleted. This action cannot be undone.")
+            }
         }
         .sheet(isPresented: $showAllChatsSheet) {
             AllChatsHistorySheet(isPresented: $showAllChatsSheet)
@@ -173,6 +192,9 @@ struct ProjectTreeView: View {
                             onRenameSession: { session in
                                 renameSessionText = session.title
                                 renameSession = session
+                            },
+                            onDeleteSession: { session in
+                                deleteSession = session
                             }
                         )
                     }
@@ -347,6 +369,7 @@ private struct ProjectChatsList: View {
     let project: Project
     let onSelectSession: (String) -> Void
     let onRenameSession: (ChatSession) -> Void
+    let onDeleteSession: (ChatSession) -> Void
 
     private var sessions: [ChatSession.Summary] {
         appState.allSessionSummaries
@@ -377,7 +400,7 @@ private struct ProjectChatsList: View {
                             Task { await appState.togglePinSession(summary.makeSession()) }
                         },
                         onDelete: {
-                            Task { await appState.deleteSession(summary.makeSession(), in: windowState) }
+                            onDeleteSession(summary.makeSession())
                         }
                     )
                 }

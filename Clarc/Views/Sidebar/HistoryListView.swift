@@ -8,6 +8,7 @@ struct HistoryListView: View {
     @State private var renameText = ""
     @AppStorage("historyShowAllProjects") private var showAllProjects = true
     @State private var showDeleteAllAlert = false
+    @State private var sessionToDelete: ChatSession?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -38,6 +39,23 @@ struct HistoryListView: View {
                 Text("All sessions in the current project will be deleted. This action cannot be undone.")
             } else {
                 Text("All sessions will be deleted. This action cannot be undone.")
+            }
+        }
+        .alert("Delete Session", isPresented: isDeletingSessionBinding) {
+            Button("Delete", role: .destructive) {
+                if let session = sessionToDelete {
+                    Task { await appState.deleteSession(session, in: windowState) }
+                }
+                sessionToDelete = nil
+            }
+            Button("Cancel", role: .cancel) {
+                sessionToDelete = nil
+            }
+        } message: {
+            if let session = sessionToDelete {
+                Text("\"\(session.title)\" will be deleted. This action cannot be undone.")
+            } else {
+                Text("This session will be deleted. This action cannot be undone.")
             }
         }
         .alert("Rename Session", isPresented: isRenamingBinding) {
@@ -182,7 +200,7 @@ struct HistoryListView: View {
                 Divider()
 
                 Button(role: .destructive) {
-                    Task { await appState.deleteSession(chatSession, in: windowState) }
+                    sessionToDelete = chatSession
                 } label: {
                     Label("Delete", systemImage: "trash")
                 }
@@ -275,6 +293,13 @@ struct HistoryListView: View {
     }
 
     // MARK: - Helpers
+
+    private var isDeletingSessionBinding: Binding<Bool> {
+        Binding(
+            get: { sessionToDelete != nil },
+            set: { if !$0 { sessionToDelete = nil } }
+        )
+    }
 
     private var isRenamingBinding: Binding<Bool> {
         Binding(

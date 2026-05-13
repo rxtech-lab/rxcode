@@ -217,11 +217,18 @@ struct MessageListView: View {
             if group.isTransientGroup {
                 TransientGroupSummaryView(messages: group.messages)
                     .id(group.id)
+                    .transition(messageFadeTransition(role: .assistant))
             } else if let message = group.messages.first {
                 MessageBubble(message: message)
                     .id(message.id)
+                    .transition(messageFadeTransition(role: message.role))
             }
         }
+    }
+
+    private func messageFadeTransition(role: Role) -> AnyTransition {
+        let anchor: UnitPoint = role == .user ? .bottomTrailing : .bottomLeading
+        return .opacity.combined(with: .scale(scale: 0.97, anchor: anchor))
     }
 
     // MARK: - Message Grouping
@@ -429,9 +436,11 @@ struct StreamingMessageView: View {
                         if group.isTransientGroup {
                             TransientGroupSummaryView(messages: group.messages)
                                 .id(group.id)
+                                .transition(streamFadeTransition(role: .assistant))
                         } else if let message = group.messages.first {
                             MessageBubble(message: message)
                                 .id(message.id)
+                                .transition(streamFadeTransition(role: message.role))
                         }
                     }
                 } else {
@@ -439,18 +448,27 @@ struct StreamingMessageView: View {
                     ForEach(settledActive, id: \.id) { message in
                         MessageBubble(message: message)
                             .id(message.id)
+                            .transition(streamFadeTransition(role: message.role))
                     }
                 }
 
                 ForEach(streamingActive, id: \.id) { message in
                     MessageBubble(message: message)
                         .id(message.id)
+                        .transition(streamFadeTransition(role: .assistant))
                 }
             }
         }
+        .animation(.easeOut(duration: 0.28), value: activeMessages.map(\.id))
         .onChange(of: messages.count) { _, _ in
             onStructureChanged()
         }
+    }
+
+    private func streamFadeTransition(role: Role) -> AnyTransition {
+        let anchor: UnitPoint = role == .user ? .bottomTrailing : .bottomLeading
+        let insertion: AnyTransition = .opacity.combined(with: .scale(scale: 0.97, anchor: anchor))
+        return .asymmetric(insertion: insertion, removal: .identity)
     }
 
     /// Returns the last consecutive assistant sequence (including streaming turn) while streaming.

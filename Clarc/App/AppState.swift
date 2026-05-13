@@ -1741,6 +1741,28 @@ final class AppState {
         }
 
         await permission.respond(toolUseId: toolUseId, decision: decision)
+
+        // In `--print` stream-json mode, ExitPlanMode is the model's last action of the
+        // plan-mode turn, so the CLI emits `.result` and exits. Without a follow-up
+        // prompt the chat just stops. Mirror the interactive CLI by sending a hidden
+        // continuation message that nudges the model to execute the plan it just wrote.
+        let shouldContinue: Bool = {
+            switch action {
+            case .acceptAsk, .acceptWithEdits, .acceptAutoApprove: return true
+            case .reject, .rejectWithFeedback: return false
+            }
+        }()
+
+        if shouldContinue {
+            if let task = sessionStates[key]?.streamTask {
+                _ = await task.value
+            }
+            await sendPrompt(
+                "Proceed with the plan.",
+                skipAppendingUserMessage: true,
+                in: window
+            )
+        }
     }
 
     // MARK: - Project Management

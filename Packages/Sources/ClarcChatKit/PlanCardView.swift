@@ -142,11 +142,11 @@ struct PlanCardView: View {
             header
 
             if isExpanded {
+                planBody
+
                 if isExitPlanMode {
                     decisionArea
                 }
-
-                planBody
             } else {
                 collapsedPreview
             }
@@ -285,15 +285,12 @@ struct PlanCardView: View {
 
     @ViewBuilder
     private var decisionButtons: some View {
-        LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: 132), spacing: 8, alignment: .leading)],
-            alignment: .leading,
-            spacing: 8
-        ) {
+        VStack(spacing: 8) {
             planButton(
                 title: String(localized: "Accept + Auto", bundle: .module),
                 systemImage: "wand.and.sparkles",
-                style: .primary
+                style: .primary,
+                fullWidth: true
             ) {
                 submit(.acceptAutoApprove)
             }
@@ -301,7 +298,8 @@ struct PlanCardView: View {
             planButton(
                 title: String(localized: "Accept Edits", bundle: .module),
                 systemImage: "pencil.tip.crop.circle.badge.checkmark",
-                style: .secondary
+                style: .secondary,
+                fullWidth: true
             ) {
                 submit(.acceptWithEdits)
             }
@@ -309,7 +307,8 @@ struct PlanCardView: View {
             planButton(
                 title: String(localized: "Accept Ask", bundle: .module),
                 systemImage: "bolt.shield",
-                style: .secondary
+                style: .secondary,
+                fullWidth: true
             ) {
                 submit(.acceptAsk)
             }
@@ -317,7 +316,8 @@ struct PlanCardView: View {
             planButton(
                 title: String(localized: "Reject with Reason", bundle: .module),
                 systemImage: "text.bubble",
-                style: .secondary
+                style: .secondary,
+                fullWidth: true
             ) {
                 feedbackText = ""
                 withAnimation(.easeInOut(duration: 0.18)) { isComposingFeedback = true }
@@ -326,11 +326,13 @@ struct PlanCardView: View {
             planButton(
                 title: String(localized: "Reject", bundle: .module),
                 systemImage: "xmark.circle",
-                style: .secondary
+                style: .secondary,
+                fullWidth: true
             ) {
                 submit(.reject)
             }
         }
+        .padding(.top, 4)
         .disabled(isResolving)
         .opacity(isResolving ? 0.6 : 1.0)
     }
@@ -410,6 +412,7 @@ struct PlanCardView: View {
         systemImage: String,
         style: PlanButtonStyle,
         isDisabled: Bool = false,
+        fullWidth: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
@@ -420,9 +423,10 @@ struct PlanCardView: View {
                     .font(.system(size: ClaudeTheme.messageSize(12), weight: .medium))
                     .lineLimit(1)
             }
+            .frame(maxWidth: fullWidth ? .infinity : nil)
             .foregroundStyle(style == .primary ? Color.white : ClaudeTheme.textPrimary)
             .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .padding(.vertical, 8)
             .background(
                 style == .primary
                     ? ClaudeTheme.accent

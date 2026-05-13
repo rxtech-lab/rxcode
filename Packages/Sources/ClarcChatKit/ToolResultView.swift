@@ -47,6 +47,23 @@ struct ToolResultView: View {
     }
 
     var body: some View {
+        Group {
+            if isCardTool {
+                cardBody
+                    .bubbleStyle(toolCall.isError ? .toolError : .tool)
+            } else {
+                minimalBody
+            }
+        }
+        .onChange(of: toolCall.result) { _, newResult in
+            guard ToolCategory(toolName: toolNameLower).isTransient, newResult != nil else { return }
+            isExpanded = false
+        }
+    }
+
+    /// Edit/MultiEdit get the full framed card with diff view.
+    @ViewBuilder
+    private var cardBody: some View {
         VStack(alignment: .leading, spacing: 6) {
             // Header + Input summary (both clickable)
             Button {
@@ -132,11 +149,62 @@ struct ToolResultView: View {
                 }
             }
         }
-        .bubbleStyle(toolCall.isError ? .toolError : .tool)
-        .onChange(of: toolCall.result) { _, newResult in
-            guard ToolCategory(toolName: toolNameLower).isTransient, newResult != nil else { return }
-            isExpanded = false
+    }
+
+    /// Read / Bash / Grep / Write / Agent / Skill / MCP / etc. — single muted row, no card.
+    @ViewBuilder
+    private var minimalBody: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    if toolCall.isError {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: ClaudeTheme.messageSize(11)))
+                            .foregroundStyle(ClaudeTheme.statusError)
+                            .frame(width: 14, height: 14)
+                    } else {
+                        Image(systemName: sfSymbol)
+                            .font(.system(size: ClaudeTheme.messageSize(11)))
+                            .foregroundStyle(ClaudeTheme.textTertiary)
+                            .frame(width: 14, height: 14)
+                    }
+
+                    inputSummaryView
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+
+                    if toolCall.result == nil && isMessageStreaming {
+                        ProgressView()
+                            .controlSize(.mini)
+                            .accessibilityLabel("Running")
+                    }
+                }
+                .font(.system(size: ClaudeTheme.messageSize(12)))
+                .foregroundStyle(toolCall.isError ? ClaudeTheme.statusError : ClaudeTheme.textTertiary)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded, let result = toolCall.result, !result.isEmpty {
+                ScrollView {
+                    Text(result)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(toolCall.isError ? ClaudeTheme.statusError : ClaudeTheme.textSecondary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 200)
+                .padding(.leading, 20)
+            }
         }
+    }
+
+    private var isCardTool: Bool {
+        isEditTool
     }
 
     // MARK: - Edit Diff

@@ -264,11 +264,10 @@ struct MessageBubble: View {
             }
         }
         .foregroundStyle(ClaudeTheme.textPrimary)
-        .bubbleStyle(.assistant)
+        .padding(.vertical, 2)
         .overlay(alignment: .bottomTrailing) {
             if hoveredBlockId == blockId && !message.isStreaming {
                 copyButton(for: text)
-                    .padding(6)
                     .transition(.opacity.animation(.easeInOut(duration: 0.15)))
             }
         }

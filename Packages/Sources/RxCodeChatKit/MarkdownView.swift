@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import RxCodeCore
 
 // MARK: - Render Group Cache
@@ -56,9 +57,7 @@ struct MarkdownContentView: View {
             ForEach(Array(cachedGroups.enumerated()), id: \.offset) { _, group in
                 switch group {
                 case .attributedText(let attrStr):
-                    Text(attrStr)
-                        .textSelection(.enabled)
-                        .lineSpacing(6)
+                    MarkdownAttributedTextView(content: attrStr)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 case .blockquote(let attrStr):
                     BlockquoteView(content: attrStr)
@@ -533,6 +532,166 @@ private func parseInlineMarkdown(_ content: String) -> AttributedString {
     return result
 }
 
+// MARK: - Markdown Attributed Text
+
+nonisolated(unsafe) private let inlineCodeBackgroundAttribute = NSAttributedString.Key("rxcode.inlineCodeBackground")
+
+private struct MarkdownAttributedTextView: NSViewRepresentable {
+    let content: AttributedString
+
+    func makeNSView(context: Context) -> InlineCodeTextView {
+        let textView = InlineCodeTextView()
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.drawsBackground = false
+        textView.backgroundColor = .clear
+        textView.textContainerInset = .zero
+        textView.textContainer?.lineFragmentPadding = 0
+        textView.textContainer?.widthTracksTextView = true
+        textView.textContainer?.heightTracksTextView = false
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
+        return textView
+    }
+
+    func updateNSView(_ textView: InlineCodeTextView, context: Context) {
+        let attributed = Self.nsAttributedString(from: content)
+        textView.linkTextAttributes = [
+            .foregroundColor: NSColor(ClaudeTheme.accent),
+            .underlineStyle: NSUnderlineStyle.single.rawValue
+        ]
+        textView.textStorage?.setAttributedString(attributed)
+        textView.invalidateIntrinsicContentSize()
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView textView: InlineCodeTextView, context: Context) -> CGSize? {
+        let width = proposal.width ?? 500
+        guard let layoutManager = textView.layoutManager,
+              let textContainer = textView.textContainer else {
+            return CGSize(width: width, height: 0)
+        }
+        textContainer.containerSize = NSSize(width: width, height: CGFloat.greatestFiniteMagnitude)
+        layoutManager.ensureLayout(for: textContainer)
+        let usedRect = layoutManager.usedRect(for: textContainer)
+        return CGSize(width: width, height: ceil(usedRect.height))
+    }
+
+    private static func nsAttributedString(from content: AttributedString) -> NSAttributedString {
+        let result = NSMutableAttributedString(content)
+        let fullRange = NSRange(location: 0, length: result.length)
+        guard fullRange.length > 0 else { return result }
+
+        let defaultTextColor = NSColor(ClaudeTheme.textPrimary)
+        let defaultFont = NSFont.systemFont(ofSize: ClaudeTheme.messageSize(15))
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineSpacing = 6
+        result.addAttribute(.paragraphStyle, value: paragraphStyle, range: fullRange)
+        result.enumerateAttribute(.font, in: fullRange) { value, range, _ in
+            guard value == nil else { return }
+            result.addAttribute(.font, value: defaultFont, range: range)
+        }
+        result.enumerateAttribute(.foregroundColor, in: fullRange) { value, range, _ in
+            guard value == nil else { return }
+            result.addAttribute(.foregroundColor, value: defaultTextColor, range: range)
+        }
+
+        var location = 0
+        for run in content.runs {
+            let runText = String(content[run.range].characters)
+            let length = (runText as NSString).length
+            defer { location += length }
+            guard length > 0,
+                  let intent = run.inlinePresentationIntent,
+                  intent.contains(.code) else { continue }
+
+            let range = NSRange(location: location, length: length)
+            result.addAttributes([
+                .font: NSFont.monospacedSystemFont(ofSize: ClaudeTheme.messageSize(14), weight: .regular),
+                .foregroundColor: defaultTextColor,
+                inlineCodeBackgroundAttribute: true
+            ], range: range)
+            result.removeAttribute(.backgroundColor, range: range)
+        }
+        return result
+    }
+}
+
+private final class InlineCodeLayoutManager: NSLayoutManager, @unchecked Sendable {
+    nonisolated override init() {
+        super.init()
+    }
+
+    nonisolated required init?(coder: NSCoder) {
+        super.init(coder: coder)
+    }
+
+    nonisolated override func drawBackground(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
+        guard let storage = textStorage,
+              let container = textContainers.first else {
+            super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
+            return
+        }
+
+        let fullRange = NSRange(location: 0, length: storage.length)
+        storage.enumerateAttribute(inlineCodeBackgroundAttribute, in: fullRange) { value, charRange, _ in
+            guard value != nil else { return }
+            let glyphRange = self.glyphRange(forCharacterRange: charRange, actualCharacterRange: nil)
+            let visibleRange = NSIntersectionRange(glyphRange, glyphsToShow)
+            guard visibleRange.length > 0 else { return }
+
+            self.enumerateEnclosingRects(
+                forGlyphRange: glyphRange,
+                withinSelectedGlyphRange: NSRange(location: NSNotFound, length: 0),
+                in: container
+            ) { rect, _ in
+                var roundedRect = rect.offsetBy(dx: origin.x, dy: origin.y)
+                roundedRect = roundedRect.insetBy(dx: -5, dy: -1.5)
+                let path = NSBezierPath(roundedRect: roundedRect, xRadius: 6, yRadius: 6)
+                MainActor.assumeIsolated {
+                    NSColor(ClaudeTheme.codeBackground).setFill()
+                }
+                path.fill()
+            }
+        }
+
+        super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
+    }
+}
+
+private final class InlineCodeTextView: NSTextView {
+    init() {
+        let storage = NSTextStorage()
+        let layoutManager = InlineCodeLayoutManager()
+        let container = NSTextContainer(size: NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
+        container.lineFragmentPadding = 0
+        container.widthTracksTextView = true
+        container.heightTracksTextView = false
+        storage.addLayoutManager(layoutManager)
+        layoutManager.addTextContainer(container)
+        super.init(frame: .zero, textContainer: container)
+    }
+
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override var intrinsicContentSize: NSSize {
+        guard let layoutManager, let textContainer else {
+            return NSSize(width: NSView.noIntrinsicMetric, height: 0)
+        }
+        layoutManager.ensureLayout(for: textContainer)
+        let usedRect = layoutManager.usedRect(for: textContainer)
+        return NSSize(width: NSView.noIntrinsicMetric, height: ceil(usedRect.height))
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        textContainer?.containerSize = NSSize(width: newSize.width, height: CGFloat.greatestFiniteMagnitude)
+        invalidateIntrinsicContentSize()
+    }
+}
+
 /// Removes incorrectly included characters (such as backticks) from URLs inside markdown links `[text](url)`
 func sanitizeMarkdownLinkURLs(_ text: String) -> String {
     let pattern = #"\[([^\]]*)\]\(([^)]*`[^)]*)\)"#
@@ -586,9 +745,7 @@ private struct BlockquoteView: View {
     let content: AttributedString
 
     var body: some View {
-        Text(content)
-            .textSelection(.enabled)
-            .lineSpacing(6)
+        MarkdownAttributedTextView(content: content)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.leading, 13)
             .overlay(alignment: .leading) {

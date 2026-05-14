@@ -344,15 +344,27 @@ struct HistoryListView: View {
         )
     }
 
-    private static let relativeDateFormatter: RelativeDateTimeFormatter = {
-        let f = RelativeDateTimeFormatter()
-        f.locale = .current
-        f.unitsStyle = .abbreviated
-        return f
-    }()
-
     private func formattedDate(_ date: Date) -> String {
-        Self.relativeDateFormatter.localizedString(for: date, relativeTo: Date())
+        Self.compactElapsedTime(since: date)
+    }
+
+    private static func compactElapsedTime(since date: Date, now: Date = Date()) -> String {
+        let seconds = max(0, Int(now.timeIntervalSince(date)))
+        if seconds < 60 { return "0m" }
+
+        let minutes = seconds / 60
+        if minutes < 60 { return "\(minutes)m" }
+
+        let hours = minutes / 60
+        if hours < 24 { return "\(hours)h" }
+
+        let days = hours / 24
+        if days < 7 { return "\(days)d" }
+
+        let weeks = days / 7
+        if weeks < 52 { return "\(weeks)w" }
+
+        return "\(days / 365)y"
     }
 }
 

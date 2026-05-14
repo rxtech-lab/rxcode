@@ -483,10 +483,8 @@ struct ChatToolbarControls: View {
                                 Button {
                                     appState.setSessionModel(model.id, provider: model.provider, in: windowState)
                                 } label: {
-                                    Text(model.displayName)
-                                    if effectiveProvider == model.provider && effectiveModel == model.id {
-                                        Image(systemName: "checkmark")
-                                    }
+                                    let isSelected = effectiveProvider == model.provider && effectiveModel == model.id
+                                    Text(isSelected ? "\(model.displayName) ✓" : model.displayName)
                                 }
                             }
                         }

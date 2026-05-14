@@ -32,6 +32,10 @@ actor CodexAppServer {
     private var running: [UUID: RunningProcess] = [:]
     private var stderrBuffers: [UUID: String] = [:]
     private var cachedShellPath: String?
+    private var cachedRateLimits: RateLimitUsage?
+    private var cachedRateLimitsAt: Date?
+    private var rateLimitsFetchTask: Task<RateLimitUsage?, Never>?
+    private let rateLimitsCacheTTL: TimeInterval = 300
 
     private static var candidatePaths: [String] {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
@@ -80,25 +84,119 @@ actor CodexAppServer {
     }
 
     func fetchModels() async -> [AgentModel] {
-        guard let binary = await findCodexBinary() else { return [] }
+        guard let binary = await findCodexBinary() else {
+            logger.warning("Skipping Codex model fetch because no codex binary was found")
+            return []
+        }
         do {
             let streamId = UUID()
             let handles = try await spawnAppServer(binary: binary, streamId: streamId, cwd: nil)
             defer { finalize(streamId: streamId) }
             try Self.writeJSONLine(Self.request(id: 1, method: "initialize", params: initializeParams()), to: handles.stdin)
             try Self.writeJSONLine(Self.notification(method: "initialized", params: [:]), to: handles.stdin)
-            try Self.writeJSONLine(Self.request(id: 2, method: "model/list", params: [:]), to: handles.stdin)
+            try Self.writeJSONLine(Self.request(id: 2, method: "model/list", params: ["includeHidden": .bool(false)]), to: handles.stdin)
 
             for try await line in handles.stdout.fileHandleForReading.bytes.lines {
                 guard let object = Self.decodeObject(line),
                       Self.idString(object["id"]) == "2",
                       let result = object["result"] else { continue }
-                return Self.parseModels(from: result)
+                let models = Self.parseModels(from: result)
+                logger.info("Codex app-server model/list returned \(models.count) models")
+                if !models.isEmpty { return models }
+                logger.warning("Codex app-server model/list returned no parseable models; trying codex debug models")
+                break
             }
         } catch {
             logger.warning("Codex model/list failed: \(error.localizedDescription)")
         }
-        return []
+        let debugModels = await fetchModelsFromDebugCommand(binary: binary)
+        if !debugModels.isEmpty {
+            logger.info("Codex debug models returned \(debugModels.count) models")
+        } else {
+            logger.warning("Codex debug models returned no parseable models; UI will use built-in fallback models")
+        }
+        return debugModels
+    }
+
+    func fetchRateLimits(forceRefresh: Bool = false) async -> RateLimitUsage? {
+        if !forceRefresh,
+           let cachedRateLimits,
+           let cachedRateLimitsAt,
+           Date().timeIntervalSince(cachedRateLimitsAt) < rateLimitsCacheTTL {
+            return cachedRateLimits
+        }
+
+        if let rateLimitsFetchTask {
+            return await rateLimitsFetchTask.value ?? cachedRateLimits
+        }
+
+        let task = Task { await self.fetchRateLimitsUncached() }
+        rateLimitsFetchTask = task
+        let usage = await task.value
+        rateLimitsFetchTask = nil
+
+        if let usage {
+            cachedRateLimits = usage
+            cachedRateLimitsAt = Date()
+            return usage
+        }
+        return cachedRateLimits
+    }
+
+    private func fetchRateLimitsUncached() async -> RateLimitUsage? {
+        guard let binary = await findCodexBinary() else {
+            logger.warning("Skipping Codex rate-limit fetch because no codex binary was found")
+            return nil
+        }
+        do {
+            let streamId = UUID()
+            let handles = try await spawnAppServer(binary: binary, streamId: streamId, cwd: nil)
+            defer { finalize(streamId: streamId) }
+            try Self.writeJSONLine(Self.request(id: 1, method: "initialize", params: initializeParams()), to: handles.stdin)
+            try Self.writeJSONLine(Self.notification(method: "initialized", params: [:]), to: handles.stdin)
+            try Self.writeJSONLine(Self.request(id: 2, method: "account/rateLimits/read", params: .null), to: handles.stdin)
+
+            for try await line in handles.stdout.fileHandleForReading.bytes.lines {
+                guard let object = Self.decodeObject(line) else { continue }
+
+                if let requestId = Self.idString(object["id"]), object["method"] != nil {
+                    try Self.writeJSONLine(Self.response(id: requestId, result: [:]), to: handles.stdin)
+                    continue
+                }
+
+                if Self.idString(object["id"]) == "2", let result = object["result"] {
+                    let usage = Self.parseCodexRateLimits(from: result)
+                    if let usage {
+                        logger.info("Codex rate limits 5h=\(usage.fiveHourPercent)% 24h=\(usage.twentyFourHourPercent ?? 0)%")
+                    } else {
+                        logger.warning("Codex account/rateLimits/read returned no parseable limits")
+                    }
+                    return usage
+                }
+
+                if object["method"]?.stringValue == "account/rateLimits/updated",
+                   let params = object["params"] {
+                    return Self.parseCodexRateLimits(from: params)
+                }
+            }
+        } catch {
+            logger.warning("Codex rate-limit fetch failed: \(error.localizedDescription)")
+        }
+        return nil
+    }
+
+    private func fetchModelsFromDebugCommand(binary: String) async -> [AgentModel] {
+        do {
+            let output = try await runShellCommand(binary, arguments: ["debug", "models"])
+            guard let value = Self.decodeJSONValue(output) else {
+                logger.warning("Could not decode codex debug models output as JSON")
+                return []
+            }
+            return Self.parseModels(from: value)
+        } catch {
+            logger.warning("Codex debug models failed: \(error.localizedDescription)")
+            return []
+        }
     }
 
     func send(
@@ -170,6 +268,7 @@ actor CodexAppServer {
             var activeThreadId = threadId
             var turnStarted = false
             var turnCompleted = false
+            var finalUsage: UsageInfo?
             let startedAt = Date()
 
             for try await line in handles.stdout.fileHandleForReading.bytes.lines {
@@ -219,7 +318,8 @@ actor CodexAppServer {
                     } else {
                         handleNotification(method: method, object: object, activeThreadId: activeThreadId, continuation: continuation)
                         if method == "turn/completed" || method == "turn/failed" {
-                            turnCompleted = true
+                            finalUsage = Self.usageInfo(from: object) ?? finalUsage
+                            turnCompleted = method == "turn/completed"
                             break
                         }
                     }
@@ -234,7 +334,7 @@ actor CodexAppServer {
                 sessionId: sid,
                 isError: !turnCompleted,
                 totalTurns: 1,
-                usage: nil,
+                usage: finalUsage,
                 contextWindow: nil
             )))
         } catch {
@@ -261,6 +361,17 @@ actor CodexAppServer {
         continuation: AsyncStream<StreamEvent>.Continuation
     ) {
         let params = object["params"]?.objectValue ?? [:]
+        let liveUsage = method == "thread/tokenUsage/updated"
+            ? Self.liveTokenUsage(from: params)
+            : nil
+        if let usage = liveUsage ?? Self.usageInfo(from: object) {
+            continuation.yield(.assistant(AssistantMessage(
+                id: Self.usageMessageId(from: params, fallback: activeThreadId),
+                role: "assistant",
+                content: [],
+                usage: usage
+            )))
+        }
         switch method {
         case "thread/started":
             let sid = Self.threadId(from: .object(params)) ?? activeThreadId
@@ -269,6 +380,11 @@ actor CodexAppServer {
             if let text = Self.firstString(in: params, keys: ["delta", "text", "content"]) {
                 continuation.yield(.unknown(Self.claudeTextDelta(text)))
             }
+        case "item/reasoning/textDelta",
+             "item/reasoning/summaryTextDelta",
+             "item/reasoning/summaryPartAdded":
+            let text = Self.firstString(in: params, keys: ["delta", "text", "content", "summary"]) ?? ""
+            continuation.yield(.unknown(Self.claudeThinkingDelta(text)))
         case "item/started":
             if let item = params["item"]?.objectValue ?? params["itemInfo"]?.objectValue {
                 emitToolStart(item: item, continuation: continuation)
@@ -296,6 +412,7 @@ actor CodexAppServer {
     }
 
     private func emitToolCompletion(item: [String: JSONValue], continuation: AsyncStream<StreamEvent>.Continuation) {
+        guard let name = toolName(from: item), name != "message" else { return }
         let id = Self.firstString(in: item, keys: ["id", "itemId", "callId"]) ?? UUID().uuidString
         let output = Self.firstString(in: item, keys: ["output", "result", "summary", "message"]) ?? ""
         let isError = item["error"] != nil || item["isError"]?.boolValue == true
@@ -472,23 +589,28 @@ actor CodexAppServer {
 
     private func toolName(from item: [String: JSONValue]) -> String? {
         if let type = Self.firstString(in: item, keys: ["type", "kind"]) {
-            if type.contains("command") { return "Bash" }
-            if type.contains("file") || type.contains("patch") { return "Edit" }
-            if type.contains("message") { return "message" }
+            let normalizedType = type.lowercased()
+            if normalizedType.contains("command") { return "Bash" }
+            if normalizedType.contains("file") || normalizedType.contains("patch") { return "Edit" }
+            if normalizedType.contains("message") { return "message" }
             return type
         }
-        return Self.firstString(in: item, keys: ["name", "toolName"])
+        guard let name = Self.firstString(in: item, keys: ["name", "toolName"]) else { return nil }
+        return name.lowercased().contains("message") ? "message" : name
     }
 
     private static func parseModels(from value: JSONValue) -> [AgentModel] {
         let root = value.objectValue
-        let rawModels = root?["models"]?.arrayValue ?? root?["items"]?.arrayValue ?? value.arrayValue ?? []
+        let rawModels = root?["data"]?.arrayValue ?? root?["models"]?.arrayValue ?? root?["items"]?.arrayValue ?? value.arrayValue ?? []
         return rawModels.compactMap { entry in
             if let id = entry.stringValue {
                 return AgentModel(provider: .codex, id: id, displayName: AppStateModelFormatter.codexDisplayName(id), description: "Codex model served by the Codex app-server.")
             }
             guard let object = entry.objectValue,
-                  let id = firstString(in: object, keys: ["id", "name", "model"]) else { return nil }
+                  let id = firstString(in: object, keys: ["id", "slug", "model", "name"]) else { return nil }
+            if object["hidden"]?.boolValue == true || object["visibility"]?.stringValue == "hidden" {
+                return nil
+            }
             let displayName = firstString(in: object, keys: ["displayName", "display_name", "name"]) ?? AppStateModelFormatter.codexDisplayName(id)
             let description = firstString(in: object, keys: ["description", "detail"]) ?? "Codex model served by the Codex app-server."
             return AgentModel(provider: .codex, id: id, displayName: displayName, description: description)
@@ -496,7 +618,11 @@ actor CodexAppServer {
     }
 
     private static func request(id: Int, method: String, params: [String: JSONValue]) -> JSONValue {
-        .object(["jsonrpc": .string("2.0"), "id": .number(Double(id)), "method": .string(method), "params": .object(params)])
+        request(id: id, method: method, params: .object(params))
+    }
+
+    private static func request(id: Int, method: String, params: JSONValue) -> JSONValue {
+        .object(["jsonrpc": .string("2.0"), "id": .number(Double(id)), "method": .string(method), "params": params])
     }
 
     private static func response(id: String, result: [String: JSONValue]) -> JSONValue {
@@ -518,6 +644,12 @@ actor CodexAppServer {
         guard let data = line.data(using: .utf8),
               let value = try? JSONDecoder().decode(JSONValue.self, from: data) else { return nil }
         return value.objectValue
+    }
+
+    private static func decodeJSONValue(_ text: String) -> JSONValue? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let data = trimmed.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(JSONValue.self, from: data)
     }
 
     private static func idString(_ value: JSONValue?) -> String? {
@@ -547,10 +679,211 @@ actor CodexAppServer {
         return nil
     }
 
+    private struct CodexRateLimitWindow {
+        let percent: Double
+        let resetsAt: Date?
+        let durationMinutes: Int?
+    }
+
+    private static func parseCodexRateLimits(from value: JSONValue) -> RateLimitUsage? {
+        guard let snapshot = codexRateLimitSnapshot(from: value) else { return nil }
+        let windows = [
+            parseCodexRateLimitWindow(snapshot["primary"]),
+            parseCodexRateLimitWindow(snapshot["secondary"])
+        ].compactMap { $0 }
+
+        guard !windows.isEmpty else { return nil }
+        let fiveHour = windows.first { $0.durationMinutes == 300 } ?? windows.first
+        let twentyFourHour = windows.first { $0.durationMinutes == 1_440 }
+            ?? windows.first { $0.durationMinutes != fiveHour?.durationMinutes }
+            ?? windows.dropFirst().first
+
+        return RateLimitUsage(
+            fiveHourPercent: fiveHour?.percent ?? 0,
+            sevenDayPercent: 0,
+            twentyFourHourPercent: twentyFourHour?.percent,
+            fiveHourResetsAt: fiveHour?.resetsAt,
+            sevenDayResetsAt: nil,
+            twentyFourHourResetsAt: twentyFourHour?.resetsAt
+        )
+    }
+
+    private static func codexRateLimitSnapshot(from value: JSONValue) -> [String: JSONValue]? {
+        guard let object = value.objectValue else { return nil }
+
+        if let byLimitId = object["rateLimitsByLimitId"]?.objectValue {
+            if let codex = byLimitId["codex"]?.objectValue {
+                return codex
+            }
+            for snapshot in byLimitId.values.compactMap(\.objectValue) {
+                if firstString(in: snapshot, keys: ["limitId", "limit_id"]) == "codex" {
+                    return snapshot
+                }
+            }
+        }
+
+        if let rateLimits = object["rateLimits"]?.objectValue {
+            return rateLimits
+        }
+
+        if object["primary"] != nil || object["secondary"] != nil {
+            return object
+        }
+
+        return nil
+    }
+
+    private static func parseCodexRateLimitWindow(_ value: JSONValue?) -> CodexRateLimitWindow? {
+        guard let object = value?.objectValue else { return nil }
+        let percent = firstDouble(in: object, keys: ["usedPercent", "used_percent", "utilization"])
+        let duration = firstOptionalInt(in: object, keys: ["windowDurationMins", "window_duration_mins", "windowMinutes"])
+        return CodexRateLimitWindow(
+            percent: percent,
+            resetsAt: parseUnixOrISODate(object["resetsAt"] ?? object["resets_at"]),
+            durationMinutes: duration
+        )
+    }
+
+    private static func firstDouble(in object: [String: JSONValue], keys: [String]) -> Double {
+        for key in keys {
+            if let value = object[key]?.numberValue { return value }
+            if let value = object[key]?.stringValue, let doubleValue = Double(value) { return doubleValue }
+        }
+        return 0
+    }
+
+    private static func firstOptionalInt(in object: [String: JSONValue], keys: [String]) -> Int? {
+        for key in keys {
+            if let value = object[key]?.numberValue { return Int(value) }
+            if let value = object[key]?.stringValue, let intValue = Int(value) { return intValue }
+        }
+        return nil
+    }
+
+    private static func parseUnixOrISODate(_ value: JSONValue?) -> Date? {
+        if let number = value?.numberValue {
+            let seconds = number > 1_000_000_000_000 ? number / 1_000 : number
+            return Date(timeIntervalSince1970: seconds)
+        }
+        guard let string = value?.stringValue else { return nil }
+        if let number = Double(string) {
+            let seconds = number > 1_000_000_000_000 ? number / 1_000 : number
+            return Date(timeIntervalSince1970: seconds)
+        }
+        return ISO8601DateFormatter().date(from: string)
+    }
+
+    private static func usageInfo(from object: [String: JSONValue]) -> UsageInfo? {
+        let params = object["params"]?.objectValue ?? object
+        let usageKeys = ["usage", "tokenUsage", "token_usage", "totalUsage", "total_usage", "metrics"]
+        let usage = firstObject(in: params, keys: [
+            "usage", "tokenUsage", "token_usage", "totalUsage", "total_usage", "metrics"
+        ]) ?? firstNestedObject(in: .object(params), keys: usageKeys) ?? params
+
+        var inputTokens = firstInt(in: usage, keys: [
+            "input_tokens", "inputTokens", "prompt_tokens", "promptTokens"
+        ])
+        let outputTokens = firstInt(in: usage, keys: [
+            "output_tokens", "outputTokens", "completion_tokens", "completionTokens"
+        ])
+        let cacheCreationTokens = firstInt(in: usage, keys: [
+            "cache_creation_input_tokens", "cacheCreationInputTokens", "cacheWriteInputTokens",
+            "cached_creation_tokens", "cachedCreationTokens"
+        ])
+        let explicitCacheReadTokens = firstInt(in: usage, keys: [
+            "cache_read_input_tokens", "cacheReadInputTokens", "cached_input_tokens",
+            "cachedInputTokens", "cache_read_tokens", "cacheReadTokens"
+        ])
+        let cacheReadTokens = explicitCacheReadTokens > 0 ? explicitCacheReadTokens : nestedInputCacheReadTokens(in: usage)
+
+        let total = inputTokens + outputTokens + cacheCreationTokens + cacheReadTokens
+        let totalTokens = firstInt(in: usage, keys: ["total_tokens", "totalTokens"])
+        if total == 0, totalTokens > 0 {
+            inputTokens = totalTokens
+        }
+
+        guard inputTokens + outputTokens + cacheCreationTokens + cacheReadTokens > 0 else {
+            return nil
+        }
+        return UsageInfo(
+            inputTokens: inputTokens,
+            outputTokens: outputTokens,
+            cacheCreationInputTokens: cacheCreationTokens,
+            cacheReadInputTokens: cacheReadTokens
+        )
+    }
+
+    private static func liveTokenUsage(from params: [String: JSONValue]) -> UsageInfo? {
+        let usage = firstObject(in: params, keys: ["tokenUsage", "token_usage"])
+            ?? firstNestedObject(in: .object(params), keys: ["tokenUsage", "token_usage"])
+            ?? params
+        let tokensUsed = firstInt(in: usage, keys: ["tokensUsed", "tokens_used"])
+        guard tokensUsed > 0 else { return nil }
+        return UsageInfo(
+            inputTokens: 0,
+            outputTokens: tokensUsed,
+            cacheCreationInputTokens: 0,
+            cacheReadInputTokens: 0
+        )
+    }
+
+    private static func firstObject(in object: [String: JSONValue], keys: [String]) -> [String: JSONValue]? {
+        for key in keys {
+            if let value = object[key]?.objectValue { return value }
+        }
+        return nil
+    }
+
+    private static func firstNestedObject(in value: JSONValue, keys: [String]) -> [String: JSONValue]? {
+        if let object = value.objectValue {
+            if let direct = firstObject(in: object, keys: keys) { return direct }
+            for nested in object.values {
+                if let found = firstNestedObject(in: nested, keys: keys) { return found }
+            }
+        }
+        if let array = value.arrayValue {
+            for nested in array {
+                if let found = firstNestedObject(in: nested, keys: keys) { return found }
+            }
+        }
+        return nil
+    }
+
+    private static func firstInt(in object: [String: JSONValue], keys: [String]) -> Int {
+        for key in keys {
+            if let value = object[key]?.numberValue { return Int(value) }
+            if let value = object[key]?.stringValue, let intValue = Int(value) { return intValue }
+        }
+        return 0
+    }
+
+    private static func nestedInputCacheReadTokens(in usage: [String: JSONValue]) -> Int {
+        guard let details = firstObject(in: usage, keys: [
+            "input_tokens_details", "inputTokensDetails", "prompt_tokens_details", "promptTokensDetails"
+        ]) else { return 0 }
+        return firstInt(in: details, keys: [
+            "cached_tokens", "cachedTokens", "cache_read_input_tokens", "cacheReadInputTokens"
+        ])
+    }
+
+    private static func usageMessageId(from params: [String: JSONValue], fallback: String?) -> String {
+        firstString(in: params, keys: [
+            "messageId", "message_id", "responseId", "response_id",
+            "turnId", "turn_id", "itemId", "item_id", "id"
+        ]) ?? fallback ?? "codex-turn"
+    }
+
     private static func claudeTextDelta(_ text: String) -> String {
         jsonString([
             "type": "content_block_delta",
             "delta": ["type": "text_delta", "text": text]
+        ])
+    }
+
+    private static func claudeThinkingDelta(_ text: String) -> String {
+        jsonString([
+            "type": "content_block_delta",
+            "delta": ["type": "thinking_delta", "thinking": text]
         ])
     }
 
@@ -582,7 +915,7 @@ actor CodexAppServer {
 }
 
 private enum AppStateModelFormatter {
-    static func codexDisplayName(_ model: String) -> String {
+    nonisolated static func codexDisplayName(_ model: String) -> String {
         model
             .replacingOccurrences(of: "-", with: " ")
             .split(separator: " ")

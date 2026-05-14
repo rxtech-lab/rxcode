@@ -12,6 +12,26 @@ public enum ChatStatus: Sendable, Equatable {
     case error(String)
 }
 
+// MARK: - ChatTodoProgress
+
+struct ChatTodoProgress: Sendable, Equatable {
+    let done: Int
+    let total: Int
+    let inProgress: Bool
+
+    init(done: Int, total: Int, inProgress: Bool) {
+        self.done = done
+        self.total = total
+        self.inProgress = inProgress
+    }
+
+    init(todos: [TodoItem]) {
+        self.done = todos.filter { $0.status == .completed }.count
+        self.total = todos.count
+        self.inProgress = todos.contains { $0.status == .inProgress }
+    }
+}
+
 // MARK: - StatusBadgeDot
 
 struct StatusBadgeDot: View {
@@ -57,6 +77,7 @@ struct ProjectChatRow: View {
     let summary: ChatSession.Summary
     let isCurrent: Bool
     let status: ChatStatus
+    let todoProgress: ChatTodoProgress?
     let onSelect: () -> Void
     let onRename: () -> Void
     let onTogglePin: () -> Void
@@ -64,13 +85,6 @@ struct ProjectChatRow: View {
     let onDelete: () -> Void
 
     @State private var isHovered = false
-
-    private static let relativeDateFormatter: RelativeDateTimeFormatter = {
-        let f = RelativeDateTimeFormatter()
-        f.locale = .current
-        f.unitsStyle = .abbreviated
-        return f
-    }()
 
     private var isActiveStatus: Bool {
         switch status {
@@ -107,9 +121,13 @@ struct ProjectChatRow: View {
                     .foregroundStyle(ClaudeTheme.textTertiary)
             }
 
-            Text(Self.relativeDateFormatter.localizedString(for: summary.updatedAt, relativeTo: Date()))
-                .font(.system(size: ClaudeTheme.size(11)))
-                .foregroundStyle(ClaudeTheme.textTertiary)
+            if case .streaming = status {
+                CompactSessionProgressBar(progress: todoProgress)
+            } else {
+                Text(Self.compactElapsedTime(since: summary.updatedAt))
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(ClaudeTheme.textTertiary)
+            }
         }
         .padding(.leading, 18)
         .padding(.trailing, 14)
@@ -167,5 +185,68 @@ struct ProjectChatRow: View {
         case .idle:
             EmptyView()
         }
+    }
+
+    private static func compactElapsedTime(since date: Date, now: Date = Date()) -> String {
+        let seconds = max(0, Int(now.timeIntervalSince(date)))
+        if seconds < 60 { return "0m" }
+
+        let minutes = seconds / 60
+        if minutes < 60 { return "\(minutes)m" }
+
+        let hours = minutes / 60
+        if hours < 24 { return "\(hours)h" }
+
+        let days = hours / 24
+        if days < 7 { return "\(days)d" }
+
+        let weeks = days / 7
+        if weeks < 52 { return "\(weeks)w" }
+
+        return "\(days / 365)y"
+    }
+}
+
+// MARK: - CompactSessionProgressBar
+
+private struct CompactSessionProgressBar: View {
+    let progress: ChatTodoProgress?
+    @State private var pulse = false
+
+    private var fraction: Double? {
+        guard let progress, progress.total > 0 else { return nil }
+        return min(1, max(0, Double(progress.done) / Double(progress.total)))
+    }
+
+    private var helpText: String {
+        guard let progress, progress.total > 0 else { return "Response in progress" }
+        return "Todos \(progress.done)/\(progress.total)"
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let fillFraction = fraction ?? (pulse ? 0.72 : 0.28)
+
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(ClaudeTheme.textTertiary.opacity(0.18))
+
+                Capsule()
+                    .fill(ClaudeTheme.accent)
+                    .frame(width: max(4, width * fillFraction))
+                    .opacity(fraction == nil ? 0.72 : 1)
+            }
+        }
+        .frame(width: 42, height: 5)
+        .help(helpText)
+        .accessibilityLabel(helpText)
+        .onAppear {
+            guard fraction == nil else { return }
+            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
+                pulse = true
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: fraction)
     }
 }

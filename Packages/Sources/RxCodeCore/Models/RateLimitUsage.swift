@@ -4,18 +4,24 @@ import Foundation
 public struct RateLimitUsage: Sendable {
     public let fiveHourPercent: Double
     public let sevenDayPercent: Double
+    public let twentyFourHourPercent: Double?
     public let fiveHourResetsAt: Date?
     public let sevenDayResetsAt: Date?
+    public let twentyFourHourResetsAt: Date?
 
     public init(
         fiveHourPercent: Double,
         sevenDayPercent: Double,
+        twentyFourHourPercent: Double? = nil,
         fiveHourResetsAt: Date?,
-        sevenDayResetsAt: Date?
+        sevenDayResetsAt: Date?,
+        twentyFourHourResetsAt: Date? = nil
     ) {
         self.fiveHourPercent = fiveHourPercent
         self.sevenDayPercent = sevenDayPercent
+        self.twentyFourHourPercent = twentyFourHourPercent
         self.fiveHourResetsAt = fiveHourResetsAt
         self.sevenDayResetsAt = sevenDayResetsAt
+        self.twentyFourHourResetsAt = twentyFourHourResetsAt
     }
 }

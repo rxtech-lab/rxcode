@@ -9,8 +9,40 @@ struct PermissionQueueBanner: View {
     @Environment(WindowState.self) private var windowState
     @State private var isHovered: Bool = false
 
+    private var pendingRequests: [PermissionRequest] {
+        windowState.pendingPermissions
+    }
+
+    private var questionCount: Int {
+        pendingRequests.filter { $0.toolName == "AskUserQuestion" }.count
+    }
+
+    private var permissionCount: Int {
+        pendingRequests.count - questionCount
+    }
+
+    private var bannerIcon: String {
+        permissionCount == 0 ? "questionmark.circle.fill" : "exclamationmark.shield.fill"
+    }
+
+    private var bannerText: String {
+        if questionCount > 0, permissionCount == 0 {
+            return countText(questionCount, singular: "question pending", plural: "questions pending")
+        }
+
+        if permissionCount > 0, questionCount == 0 {
+            return countText(permissionCount, singular: "permission request pending", plural: "permission requests pending")
+        }
+
+        return countText(pendingRequests.count, singular: "request pending", plural: "requests pending")
+    }
+
+    private var actionText: String {
+        permissionCount == 0 ? "Answer" : "Review"
+    }
+
     var body: some View {
-        if !windowState.pendingPermissions.isEmpty {
+        if !pendingRequests.isEmpty {
             content
                 .transition(.move(edge: .bottom).combined(with: .opacity))
         }
@@ -19,17 +51,17 @@ struct PermissionQueueBanner: View {
     private var content: some View {
         Button(action: open) {
             HStack(spacing: 10) {
-                Image(systemName: "questionmark.circle.fill")
+                Image(systemName: bannerIcon)
                     .font(.system(size: ClaudeTheme.size(16), weight: .semibold))
                     .foregroundStyle(ClaudeTheme.accent)
 
-                Text("\(windowState.pendingPermissions.count) question(s) pending")
+                Text(bannerText)
                     .font(.system(size: ClaudeTheme.size(13), weight: .medium))
                     .foregroundStyle(ClaudeTheme.textPrimary)
 
                 Spacer(minLength: 8)
 
-                Text("Answer")
+                Text(actionText)
                     .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 12)
@@ -57,6 +89,10 @@ struct PermissionQueueBanner: View {
     }
 
     private func open() {
-        windowState.presentedPermissionId = windowState.pendingPermissions.first?.id
+        windowState.presentedPermissionId = pendingRequests.first?.id
+    }
+
+    private func countText(_ count: Int, singular: String, plural: String) -> String {
+        "\(count) \(count == 1 ? singular : plural)"
     }
 }

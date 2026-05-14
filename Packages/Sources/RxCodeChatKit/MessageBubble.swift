@@ -18,6 +18,23 @@ struct MessageBubble: View {
     /// Threshold (character count) for collapsing long text
     private static let longTextThreshold = 500
 
+    private enum AssistantRenderBlock: Identifiable {
+        case text(MessageBlock)
+        case tool(ToolCall)
+        case transientTools(id: String, tools: [ToolCall])
+
+        var id: String {
+            switch self {
+            case .text(let block):
+                return block.id
+            case .tool(let toolCall):
+                return toolCall.id
+            case .transientTools(let id, _):
+                return id
+            }
+        }
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
             if message.role == .user {
@@ -50,44 +67,16 @@ struct MessageBubble: View {
                     errorBubble
                 } else {
                     // Assistant message: render blocks in order
-                    let hidden = message.isStreaming ? [] : message.blocks.compactMap(\.toolCall).filter { isTransientTool($0) && $0.hasNonEmptyResult }
-                    // Filter to only renderable blocks — exclude hidden transient tool blocks from ForEach
-                    // to prevent zero-height TupleViews from introducing VStack spacing.
-                    // Adjacent text blocks made contiguous by hidden tools are merged into a single bubble
-                    // (so continuous text Claude sent across turns due to tool_use appears as one bubble)
-                    let visibleBlocks = Self.mergeAdjacentTextBlocks(
-                        in: message.blocks.filter { block in
-                            if PlanCardView.shouldHideBlock(block, in: message, allMessages: chatBridge.messages) { return false }
-                            if let text = block.text { return !text.isEmpty }
-                            if let toolCall = block.toolCall {
-                                if PlanCardView.isSupersededExitPlanMode(
-                                    toolCall: toolCall,
-                                    in: message,
-                                    allMessages: chatBridge.messages
-                                ) { return false }
-                                if message.isStreaming { return true }
-                                if isTransientTool(toolCall) { return false }
-                                // Agent/Edit/Write tools are always shown even without a result
-                                // Agent/Edit/Write/AskUserQuestion are always shown even without a result
-                                if toolCall.isKeepAlways { return true }
-                                // Other non-transient tools: only show when there is a result or error (prevents empty tool bubbles)
-                                return toolCall.result != nil || toolCall.isError
-                            }
-                            return false
-                        }
-                    )
+                    let renderBlocks = assistantRenderBlocks()
 
-                    // Hidden tool summary — shown before text (reflects tool execution → text response order)
-                    if !hidden.isEmpty {
-                        transientToolSummary(hidden: hidden)
-                    }
-
-                    ForEach(visibleBlocks) { block in
+                    ForEach(renderBlocks) { block in
                         Group {
-                            if let text = block.text, !text.isEmpty {
-                                assistantTextBubble(text: text, blockId: block.id, hasHiddenTools: !hidden.isEmpty)
-                            }
-                            if let toolCall = block.toolCall {
+                            switch block {
+                            case .text(let textBlock):
+                                if let text = textBlock.text, !text.isEmpty {
+                                    assistantTextBubble(text: text, blockId: textBlock.id)
+                                }
+                            case .tool(let toolCall):
                                 if toolCall.name == "AskUserQuestion" {
                                     AskUserQuestionView(toolCall: toolCall)
                                 } else if let planMd = PlanCardView.renderMarkdown(for: toolCall, in: message) {
@@ -103,11 +92,13 @@ struct MessageBubble: View {
                                 } else {
                                     ToolResultView(toolCall: toolCall, isMessageStreaming: message.isStreaming)
                                 }
+                            case .transientTools(let id, let tools):
+                                transientToolSummary(groupId: id, tools: tools)
                             }
                         }
                         .transition(blockFadeTransition)
                     }
-                    .animation(.easeOut(duration: 0.28), value: visibleBlocks.map(\.id))
+                    .animation(.easeOut(duration: 0.28), value: renderBlocks.map(\.id))
                 }
 
                 // Response complete indicator + elapsed time
@@ -260,9 +251,9 @@ struct MessageBubble: View {
                     .buttonStyle(.plain)
                 }
             }
-            .frame(maxWidth: 500, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
             .bubbleStyle(.user)
-            .fixedSize(horizontal: true, vertical: false)
+            .frame(maxWidth: 500, alignment: .trailing)
             .overlay(alignment: .bottomTrailing) {
                 if isHoveringUserBubble {
                     HStack(spacing: 3) {
@@ -287,7 +278,7 @@ struct MessageBubble: View {
 
     // MARK: - Assistant Text Bubble
 
-    private func assistantTextBubble(text: String, blockId: String, hasHiddenTools: Bool = false) -> some View {
+    private func assistantTextBubble(text: String, blockId: String) -> some View {
         let isLastBlock = message.blocks.last?.isText == true
             && message.blocks.last?.text == text
 
@@ -312,13 +303,6 @@ struct MessageBubble: View {
             }
         }
         .onHover { hoveredBlockId = $0 ? blockId : nil }
-        .onTapGesture {
-            if hasHiddenTools {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    showTransientTools.toggle()
-                }
-            }
-        }
         .accessibilityLabel("Assistant: \(text)")
     }
 
@@ -374,48 +358,99 @@ struct MessageBubble: View {
         return cat == .readOnly || cat == .execution
     }
 
-    /// Merges adjacent text blocks made contiguous by hidden transient tools.
-    /// Displays continuous text Claude split across turns due to tool_use as a single bubble.
-    ///
-    /// Join rule: respects original trailing/leading whitespace; adds a single space only when
-    /// neither side has whitespace. Forced paragraph breaks would split bullets mid-list,
-    /// so they are avoided — even text following a complete sentence joins naturally with a single space.
-    private static func mergeAdjacentTextBlocks(in blocks: [MessageBlock]) -> [MessageBlock] {
-        var result: [MessageBlock] = []
-        for block in blocks {
-            if block.isText,
-               let lastIdx = result.indices.last,
-               result[lastIdx].isText {
-                let prev = result[lastIdx].text ?? ""
-                let curr = block.text ?? ""
-                let needsSpace = !(prev.last?.isWhitespace ?? true) && !(curr.first?.isWhitespace ?? true)
-                let joined = needsSpace ? prev + " " + curr : prev + curr
-                // Preserve original block id to ensure ForEach diff stability
-                result[lastIdx] = .text(joined, id: result[lastIdx].id)
+    /// Builds the assistant render list in source order. Completed transient
+    /// tools are folded into contiguous collapsed groups, while edit/write/plan
+    /// cards remain inline between those groups.
+    private func assistantRenderBlocks() -> [AssistantRenderBlock] {
+        var result: [AssistantRenderBlock] = []
+        var pendingTransientTools: [ToolCall] = []
+        var pendingTransientGroupStartId: String?
+
+        func appendText(_ block: MessageBlock) {
+            guard let text = block.text, !text.isEmpty else { return }
+            if let lastIndex = result.indices.last,
+               case .text(let previousBlock) = result[lastIndex] {
+                let previous = previousBlock.text ?? ""
+                let needsSpace = !(previous.last?.isWhitespace ?? true) && !(text.first?.isWhitespace ?? true)
+                let joined = needsSpace ? previous + " " + text : previous + text
+                result[lastIndex] = .text(.text(joined, id: previousBlock.id))
             } else {
-                result.append(block)
+                result.append(.text(block))
             }
         }
+
+        func flushTransientTools() {
+            guard !pendingTransientTools.isEmpty else { return }
+            let startId = pendingTransientGroupStartId ?? pendingTransientTools[0].id
+            result.append(.transientTools(
+                id: "transient-tools-\(startId)-\(pendingTransientTools.count)",
+                tools: pendingTransientTools
+            ))
+            pendingTransientTools = []
+            pendingTransientGroupStartId = nil
+        }
+
+        for block in message.blocks {
+            if PlanCardView.shouldHideBlock(block, in: message, allMessages: chatBridge.messages) { continue }
+            if block.isText {
+                flushTransientTools()
+                appendText(block)
+                continue
+            }
+            guard let toolCall = block.toolCall else { continue }
+            if PlanCardView.isSupersededExitPlanMode(
+                toolCall: toolCall,
+                in: message,
+                allMessages: chatBridge.messages
+            ) { continue }
+
+            if message.isStreaming {
+                flushTransientTools()
+                result.append(.tool(toolCall))
+                continue
+            }
+
+            if isTransientTool(toolCall) {
+                guard toolCall.result != nil || toolCall.isError else { continue }
+                if pendingTransientGroupStartId == nil {
+                    pendingTransientGroupStartId = toolCall.id
+                }
+                pendingTransientTools.append(toolCall)
+                continue
+            }
+
+            if toolCall.isKeepAlways || toolCall.result != nil || toolCall.isError {
+                flushTransientTools()
+                result.append(.tool(toolCall))
+            }
+        }
+
+        flushTransientTools()
         return result
     }
 
-    @State private var showTransientTools = false
+    @State private var expandedTransientGroupIds: Set<String> = []
 
-    private func transientToolSummary(hidden: [ToolCall]) -> some View {
+    private func transientToolSummary(groupId: String, tools: [ToolCall]) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
-                    showTransientTools.toggle()
+                    if expandedTransientGroupIds.contains(groupId) {
+                        expandedTransientGroupIds.remove(groupId)
+                    } else {
+                        expandedTransientGroupIds.insert(groupId)
+                    }
                 }
             } label: {
+                let isExpanded = expandedTransientGroupIds.contains(groupId)
                 HStack(spacing: 6) {
                     Image(systemName: "eye.slash")
                         .font(.system(size: ClaudeTheme.messageSize(11)))
                         .foregroundStyle(ClaudeTheme.textTertiary)
-                    Text(String(format: String(localized: "%lld tools executed", bundle: .module), hidden.count))
+                    Text(String(format: String(localized: "%lld tools executed", bundle: .module), tools.count))
                         .font(.system(size: ClaudeTheme.messageSize(12)))
                         .foregroundStyle(ClaudeTheme.textTertiary)
-                    Image(systemName: showTransientTools ? "chevron.up" : "chevron.down")
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                         .font(.system(size: ClaudeTheme.messageSize(9)))
                         .foregroundStyle(ClaudeTheme.textTertiary)
                 }
@@ -424,8 +459,8 @@ struct MessageBubble: View {
             }
             .buttonStyle(.plain)
 
-            if showTransientTools {
-                ForEach(hidden, id: \.id) { toolCall in
+            if expandedTransientGroupIds.contains(groupId) {
+                ForEach(tools, id: \.id) { toolCall in
                     ToolResultView(toolCall: toolCall, isMessageStreaming: false)
                 }
             }

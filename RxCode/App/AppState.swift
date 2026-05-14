@@ -344,6 +344,8 @@ final class AppState {
     /// `refreshRateLimitUsage()`; nil until first successful fetch (or when not
     /// signed in to Claude Code).
     var latestRateLimitUsage: RateLimitUsage?
+    var latestCodexRateLimitUsage: RateLimitUsage?
+    @ObservationIgnored private var rateLimitUsageRefreshTasks: [AgentProvider: Task<RateLimitUsage?, Never>] = [:]
 
     /// Sessions currently streaming, anywhere across all windows.
     var inProgressSessionCount: Int {
@@ -356,11 +358,85 @@ final class AppState {
         sessionStates.values.reduce(0) { $0 + ($1.hasUncheckedCompletion ? 1 : 0) }
     }
 
-    /// Force-refresh the rate-limit usage. Cheap to call repeatedly — RateLimitService
-    /// caches for 5 minutes on its own.
+    func cachedRateLimitUsage(for provider: AgentProvider) -> RateLimitUsage? {
+        switch provider {
+        case .claudeCode:
+            return latestRateLimitUsage
+        case .codex:
+            return latestCodexRateLimitUsage
+        }
+    }
+
+    func rateLimitUsage(for provider: AgentProvider, forceRefresh: Bool = false) async -> RateLimitUsage? {
+        if !forceRefresh, let cached = cachedRateLimitUsage(for: provider) {
+            return cached
+        }
+
+        if let task = rateLimitUsageRefreshTasks[provider] {
+            return await task.value ?? cachedRateLimitUsage(for: provider)
+        }
+
+        let task = Task<RateLimitUsage?, Never> { [weak self] in
+            guard let self else { return nil }
+            switch provider {
+            case .claudeCode:
+                return await RateLimitService.shared.fetchUsage(forceRefresh: forceRefresh)
+            case .codex:
+                guard self.codexInstalled else { return nil }
+                return await self.codex.fetchRateLimits(forceRefresh: forceRefresh)
+            }
+        }
+        rateLimitUsageRefreshTasks[provider] = task
+
+        let usage = await task.value
+        rateLimitUsageRefreshTasks[provider] = nil
+
+        if let usage {
+            storeRateLimitUsage(usage, for: provider)
+            return usage
+        }
+        return cachedRateLimitUsage(for: provider)
+    }
+
+    private func storeRateLimitUsage(_ usage: RateLimitUsage, for provider: AgentProvider) {
+        switch provider {
+        case .claudeCode:
+            latestRateLimitUsage = usage
+        case .codex:
+            latestCodexRateLimitUsage = usage
+        }
+    }
+
+    /// Force-refresh the shared Claude rate-limit usage.
     func refreshRateLimitUsage(forceRefresh: Bool = false) async {
-        let usage = await RateLimitService.shared.fetchUsage(forceRefresh: forceRefresh)
-        latestRateLimitUsage = usage
+        _ = await rateLimitUsage(for: .claudeCode, forceRefresh: forceRefresh)
+    }
+
+    /// Warm Codex usage early so the status bar can render Codex limits from cache.
+    func refreshCodexRateLimitUsage(forceRefresh: Bool = false) async {
+        _ = await rateLimitUsage(for: .codex, forceRefresh: forceRefresh)
+    }
+
+    func refreshSelectedAgentRateLimitUsage(forceRefresh: Bool = false) async {
+        switch selectedAgentProvider {
+        case .claudeCode:
+            await refreshRateLimitUsage(forceRefresh: forceRefresh)
+        case .codex:
+            await refreshCodexRateLimitUsage(forceRefresh: forceRefresh)
+        }
+    }
+
+    func setDefaultAgentProvider(_ provider: AgentProvider) {
+        guard provider != selectedAgentProvider else { return }
+
+        selectedAgentProvider = provider
+        if let model = availableAgentModelSections()
+            .first(where: { $0.provider == provider })?
+            .models
+            .first?
+            .id {
+            selectedModel = model
+        }
     }
 
     /// Ref-counted set of projectIds with at least one open dedicated project window.
@@ -415,6 +491,21 @@ final class AppState {
             // user's choice immediately; the next system event will refill it.
             state.activeModelName = nil
         }
+    }
+
+    /// Sets only the active client for the current session. The model is resolved to the
+    /// current default for that client when possible, otherwise the first available model.
+    func setSessionProvider(_ provider: AgentProvider, in window: WindowState) {
+        let currentProvider = window.sessionAgentProvider ?? selectedAgentProvider
+        guard provider != currentProvider else { return }
+
+        let fallbackModel = availableAgentModelSections()
+            .first { $0.provider == provider }?
+            .models
+            .first?
+            .id
+        let model = selectedAgentProvider == provider ? selectedModel : (fallbackModel ?? selectedModel)
+        setSessionModel(model, provider: provider, in: window)
     }
 
     /// Sets the effort for the current session and persists it in the session state.
@@ -879,6 +970,7 @@ final class AppState {
         // popover is opened. RateLimitService caches for 5 minutes internally.
         Task { [weak self] in
             await self?.refreshRateLimitUsage()
+            await self?.refreshCodexRateLimitUsage()
         }
 
         // Recurring probe so disconnected MCP servers surface promptly even
@@ -913,11 +1005,19 @@ final class AppState {
             do {
                 codexVersion = try await codex.checkVersion()
                 codexModels = await codex.fetchModels()
+                logger.info("Codex CLI detected; fetched \(self.codexModels.count) Codex models")
+                if codexModels.isEmpty {
+                    logger.warning("Codex model discovery returned empty; using built-in Codex fallback models")
+                }
+                Task { [weak self] in
+                    await self?.refreshCodexRateLimitUsage()
+                }
             } catch {
                 logger.warning("Failed to fetch Codex CLI version or models: \(error.localizedDescription)")
             }
         } else {
             codexModels = []
+            logger.info("Codex CLI not detected; Codex model list cleared")
         }
     }
 
@@ -1029,8 +1129,12 @@ final class AppState {
             guard let self, let window else { return }
             await self.editAndResend(messageId: messageId, newContent: newContent, in: window)
         }
-        bridge.fetchRateLimitHandler = {
-            await RateLimitService.shared.fetchUsage()
+        bridge.fetchRateLimitHandler = { [weak self] provider in
+            await self?.rateLimitUsage(for: provider)
+        }
+        bridge.setSessionProviderHandler = { [weak self, weak window] provider in
+            guard let self, let window else { return }
+            self.setSessionProvider(provider, in: window)
         }
         bridge.togglePlanModeHandler = { [weak self, weak window] in
             guard let self, let window else { return }
@@ -1079,7 +1183,9 @@ final class AppState {
                 bridge.liveOutputTokens = state.currentTurnOutputTokens
                 bridge.lastTurnContextUsedPercentage = state.lastTurnContextUsedPercentage
                 let provider = window.sessionAgentProvider ?? selectedAgentProvider
-                bridge.modelDisplayName = modelDisplayName(for: window.sessionModel ?? selectedModel, provider: provider, in: window)
+                let currentModel = window.sessionModel ?? selectedModel
+                bridge.agentProvider = provider
+                bridge.modelDisplayName = modelDisplayName(for: currentModel, provider: provider, in: window)
                 bridge.sessionStats = ChatSessionStats(
                     costUsd: state.costUsd,
                     inputTokens: state.inputTokens,
@@ -1098,6 +1204,7 @@ final class AppState {
                 bridge.autoPreviewSettings = self.autoPreviewSettings
                 bridge.appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
                 bridge.claudeVersion = self.claudeVersion
+                bridge.codexVersion = self.codexVersion
             } onChange: {
                 Task { @MainActor in observeSettings() }
             }
@@ -1763,6 +1870,12 @@ final class AppState {
 
                 case .assistant(let assistantMessage):
                     logger.debug("[Stream:UI] event #\(eventCount) .assistant (gap=\(String(format: "%.1f", gap))s, blocks=\(assistantMessage.content.count))")
+                    if assistantMessage.content.contains(where: {
+                        if case .thinking = $0 { return true }
+                        return false
+                    }) {
+                        updateState(sessionKey) { $0.isThinking = true }
+                    }
                     // A turn can contain several model invocations (one per tool round-trip);
                     // each emits its own `usage.output_tokens` starting from zero. Track the
                     // running max per message id and sum across ids to get the turn total.

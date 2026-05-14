@@ -89,6 +89,89 @@ struct ChatBridgePlanStateTests {
         #expect(!bridge.hasPendingPlanDecision)
     }
 
+    // MARK: - isSupersededExitPlanMode
+
+    @Test("Earlier ExitPlanMode in same assistant run is superseded by a later one")
+    func earlierPlanSupersededInSameRun() {
+        let old = makeExitPlanToolCall(id: "old", result: nil)
+        let new = makeExitPlanToolCall(id: "new", result: nil)
+        let oldMsg = makeAssistantMessage(toolCall: old)
+        let newMsg = makeAssistantMessage(toolCall: new)
+        let messages: [ChatMessage] = [oldMsg, newMsg]
+
+        #expect(PlanCardView.isSupersededExitPlanMode(
+            toolCall: old,
+            in: oldMsg,
+            allMessages: messages
+        ))
+    }
+
+    @Test("Latest ExitPlanMode is never superseded")
+    func latestPlanNeverSuperseded() {
+        let old = makeExitPlanToolCall(id: "old", result: nil)
+        let new = makeExitPlanToolCall(id: "new", result: nil)
+        let oldMsg = makeAssistantMessage(toolCall: old)
+        let newMsg = makeAssistantMessage(toolCall: new)
+        let messages: [ChatMessage] = [oldMsg, newMsg]
+
+        #expect(!PlanCardView.isSupersededExitPlanMode(
+            toolCall: new,
+            in: newMsg,
+            allMessages: messages
+        ))
+    }
+
+    @Test("ExitPlanMode in a prior assistant run (separated by user message) is NOT superseded")
+    func priorRunPlanNotSuperseded() {
+        let old = makeExitPlanToolCall(id: "old", result: "Accepted with Edits")
+        let new = makeExitPlanToolCall(id: "new", result: nil)
+        let oldMsg = makeAssistantMessage(toolCall: old)
+        let userMsg = ChatMessage(role: .user, content: "next question")
+        let newMsg = makeAssistantMessage(toolCall: new)
+        let messages: [ChatMessage] = [oldMsg, userMsg, newMsg]
+
+        #expect(!PlanCardView.isSupersededExitPlanMode(
+            toolCall: old,
+            in: oldMsg,
+            allMessages: messages
+        ))
+    }
+
+    @Test("Two ExitPlanMode tool calls in the same message — the first is superseded")
+    func twoPlansInSameMessage() {
+        let old = makeExitPlanToolCall(id: "old", result: nil)
+        let new = makeExitPlanToolCall(id: "new", result: nil)
+        let msg = ChatMessage(
+            role: .assistant,
+            blocks: [.toolCall(old), .toolCall(new)]
+        )
+
+        #expect(PlanCardView.isSupersededExitPlanMode(
+            toolCall: old,
+            in: msg,
+            allMessages: [msg]
+        ))
+        #expect(!PlanCardView.isSupersededExitPlanMode(
+            toolCall: new,
+            in: msg,
+            allMessages: [msg]
+        ))
+    }
+
+    @Test("Non-ExitPlanMode tool call is never superseded")
+    func nonExitPlanModeNeverSuperseded() {
+        let other = ToolCall(id: "x", name: "Bash", input: [:], result: nil, isError: false)
+        let plan = makeExitPlanToolCall(id: "plan", result: nil)
+        let otherMsg = makeAssistantMessage(toolCall: other)
+        let planMsg = makeAssistantMessage(toolCall: plan)
+
+        #expect(!PlanCardView.isSupersededExitPlanMode(
+            toolCall: other,
+            in: otherMsg,
+            allMessages: [otherMsg, planMsg]
+        ))
+    }
+
     // MARK: - Helpers
 
     private func makeExitPlanToolCall(

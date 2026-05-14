@@ -456,7 +456,18 @@ public actor CLISessionStore {
     }
 
     private func jsonlURL(sid: String, cwd: String) async -> URL {
-        await directory(forCwd: cwd).appendingPathComponent("\(sid).jsonl")
+        // Fast path: most cwds round-trip cleanly through forward encoding, so
+        // the jsonl is sitting at the predictable path. Probe that first and
+        // return immediately if found. The cwd-index rebuild (which scans every
+        // CLI project directory and sniff-reads its newest jsonl line-by-line)
+        // can stall for seconds when the 60s TTL has expired and the user has
+        // many projects — we don't want to pay that on every session click.
+        let forwardURL = CLIProjectsDirectory.directory(forCwd: cwd)
+            .appendingPathComponent("\(sid).jsonl")
+        if FileManager.default.fileExists(atPath: forwardURL.path) {
+            return forwardURL
+        }
+        return await directory(forCwd: cwd).appendingPathComponent("\(sid).jsonl")
     }
 
     // MARK: - External activity detection (S2)

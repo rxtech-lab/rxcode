@@ -132,13 +132,72 @@ struct PlanCardView: View {
         return planMarkdown(from: toolCall)
     }
 
-    static func shouldHideBlock(_ block: MessageBlock, in message: ChatMessage) -> Bool {
-        let hasExitPlan = containsExitPlanMode(message)
+    static func shouldHideBlock(
+        _ block: MessageBlock,
+        in message: ChatMessage,
+        allMessages: [ChatMessage] = []
+    ) -> Bool {
+        let hasExitPlanInMessage = containsExitPlanMode(message)
         if let text = block.text {
-            return hasExitPlan && isPlanReadyFollowup(text)
+            return hasExitPlanInMessage && isPlanReadyFollowup(text)
         }
-        guard hasExitPlan, let toolCall = block.toolCall else { return false }
-        return isPlanFileWrite(toolCall)
+        guard let toolCall = block.toolCall, isPlanFileWrite(toolCall) else { return false }
+        // Hide a plan-file Write when the ExitPlanMode card is present anywhere in
+        // the same assistant run — not just in this exact message. Two cards otherwise
+        // appear when the model splits "write plan.md" and "ExitPlanMode" across
+        // sibling messages within one turn.
+        return hasExitPlanInMessage || assistantRunContainsExitPlanMode(after: message, in: allMessages)
+    }
+
+    /// True if any message in the same assistant run as `message` contains an
+    /// `ExitPlanMode` tool call. An assistant run is a maximal sequence of
+    /// assistant messages bounded by user messages on either side.
+    private static func assistantRunContainsExitPlanMode(
+        after message: ChatMessage,
+        in allMessages: [ChatMessage]
+    ) -> Bool {
+        guard let idx = allMessages.firstIndex(where: { $0.id == message.id }) else { return false }
+        // Scan forward to the next user message — a later sibling assistant message
+        // can carry the ExitPlanMode card.
+        for i in (idx + 1)..<allMessages.count {
+            let m = allMessages[i]
+            if m.role == .user { break }
+            if containsExitPlanMode(m) { return true }
+        }
+        // Scan backward to the previous user message — covers the (rare) ordering
+        // where ExitPlanMode arrives before the plan-file Write in the same run.
+        if idx > 0 {
+            for i in stride(from: idx - 1, through: 0, by: -1) {
+                let m = allMessages[i]
+                if m.role == .user { break }
+                if containsExitPlanMode(m) { return true }
+            }
+        }
+        return false
+    }
+
+    /// True if this `ExitPlanMode` tool call is followed by another `ExitPlanMode`
+    /// in the same assistant run (no user message between). Used to hide stale plan
+    /// cards when the model re-emits a fresh plan — only the latest is actionable.
+    static func isSupersededExitPlanMode(
+        toolCall: ToolCall,
+        in message: ChatMessage,
+        allMessages: [ChatMessage]
+    ) -> Bool {
+        guard isExitPlanMode(toolCall) else { return false }
+        guard let msgIdx = allMessages.firstIndex(where: { $0.id == message.id }) else { return false }
+
+        var sawSelf = false
+        for i in msgIdx..<allMessages.count {
+            let m = allMessages[i]
+            if i > msgIdx, m.role == .user { return false }
+            for block in m.blocks {
+                guard let tc = block.toolCall, isExitPlanMode(tc) else { continue }
+                if tc.id == toolCall.id { sawSelf = true; continue }
+                if sawSelf { return true }
+            }
+        }
+        return false
     }
 
     private var isExitPlanMode: Bool {

@@ -38,6 +38,11 @@ public final class ChatBridge {
     public var editAndResendHandler: ((UUID, String) async -> Void)?
     public var fetchRateLimitHandler: (() async -> RateLimitUsage?)?
     public var togglePlanModeHandler: (() async -> Void)?
+    public var enqueueMessageHandler: ((String, [Attachment]) -> Void)?
+    public var removeQueuedMessageHandler: ((UUID) -> Void)?
+    public var dequeueNextForFlushHandler: (() -> QueuedMessage?)?
+    public var sendQueuedNowHandler: ((UUID) async -> Void)?
+    public var sendAllQueuedAsOneHandler: (() async -> Void)?
 
     // MARK: - Init
 
@@ -71,6 +76,26 @@ public final class ChatBridge {
 
     public func togglePlanMode() async {
         await togglePlanModeHandler?()
+    }
+
+    public func enqueueMessage(text: String, attachments: [Attachment]) {
+        enqueueMessageHandler?(text, attachments)
+    }
+
+    public func removeQueuedMessage(id: UUID) {
+        removeQueuedMessageHandler?(id)
+    }
+
+    public func dequeueNextForFlush() -> QueuedMessage? {
+        dequeueNextForFlushHandler?()
+    }
+
+    public func sendQueuedNow(id: UUID) async {
+        await sendQueuedNowHandler?(id)
+    }
+
+    public func sendAllQueuedAsOne() async {
+        await sendAllQueuedAsOneHandler?()
     }
 
     // MARK: - Plan Decision State

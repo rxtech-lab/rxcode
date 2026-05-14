@@ -133,7 +133,7 @@ struct HistoryListView: View {
     private func sessionRow(_ session: DisplaySession) -> some View {
         return HStack(spacing: 4) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(session.title)
+                Text(session.title.prefix(1).uppercased() + session.title.dropFirst())
                     .font(.system(size: ClaudeTheme.size(13)))
                     .foregroundStyle(.primary.opacity(0.8))
                     .lineLimit(1)

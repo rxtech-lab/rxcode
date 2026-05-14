@@ -148,7 +148,7 @@ actor ClaudeService {
 
     /// Build the full environment dictionary for spawned subprocesses,
     /// inheriting the GUI environment but with PATH replaced by ``resolvedShellPath()``.
-    private func resolvedEnvironment() async -> [String: String] {
+    func resolvedEnvironment() async -> [String: String] {
         var env = ProcessInfo.processInfo.environment
         env["PATH"] = await resolvedShellPath()
         return env

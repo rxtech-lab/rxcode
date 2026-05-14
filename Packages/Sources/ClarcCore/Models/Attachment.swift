@@ -48,6 +48,44 @@ public struct Attachment: Identifiable, Sendable {
     }
 }
 
+// MARK: - Codable bridge
+
+extension Attachment {
+    public struct DTO: Codable, Sendable {
+        public let id: UUID
+        public let type: String
+        public let name: String
+        public let path: String
+        public let fileSize: Int64?
+        public let textContent: String?
+        public let imageData: Data?
+    }
+
+    public var dto: DTO {
+        DTO(
+            id: id,
+            type: type.rawValue,
+            name: name,
+            path: path,
+            fileSize: fileSize,
+            textContent: textContent,
+            imageData: imageData
+        )
+    }
+
+    public init(dto: DTO) {
+        self.init(
+            id: dto.id,
+            type: AttachmentType(rawValue: dto.type) ?? .file,
+            name: dto.name,
+            path: dto.path,
+            fileSize: dto.fileSize,
+            textContent: dto.textContent,
+            imageData: dto.imageData
+        )
+    }
+}
+
 // MARK: - Attachment Factory
 
 public enum AttachmentFactory {

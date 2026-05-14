@@ -57,9 +57,14 @@ struct MessageBubble: View {
                     // (so continuous text Claude sent across turns due to tool_use appears as one bubble)
                     let visibleBlocks = Self.mergeAdjacentTextBlocks(
                         in: message.blocks.filter { block in
-                            if PlanCardView.shouldHideBlock(block, in: message) { return false }
+                            if PlanCardView.shouldHideBlock(block, in: message, allMessages: chatBridge.messages) { return false }
                             if let text = block.text { return !text.isEmpty }
                             if let toolCall = block.toolCall {
+                                if PlanCardView.isSupersededExitPlanMode(
+                                    toolCall: toolCall,
+                                    in: message,
+                                    allMessages: chatBridge.messages
+                                ) { return false }
                                 if message.isStreaming { return true }
                                 if isTransientTool(toolCall) { return false }
                                 // Agent/Edit/Write tools are always shown even without a result

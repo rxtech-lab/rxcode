@@ -49,8 +49,8 @@ public struct ChatView<InputAccessory: View, BottomAccessory: View, AboveInputAc
         }
         .background(ClaudeTheme.background)
         .onKeyPress(.escape, phases: .down) { _ in
-            if !windowState.messageQueue.isEmpty {
-                windowState.messageQueue.removeLast()
+            if let last = windowState.messageQueue.last {
+                chatBridge.removeQueuedMessage(id: last.id)
                 return .handled
             }
             guard chatBridge.isStreaming else { return .ignored }

@@ -35,6 +35,12 @@ struct SettingsView: View {
                     Label("Shortcuts", systemImage: "bolt.fill")
                 }
                 .tag(3)
+
+            MCPSettingsTab()
+                .tabItem {
+                    Label("MCP", systemImage: "puzzlepiece.extension")
+                }
+                .tag(4)
         }
         .frame(width: 680, height: 620)
         .focusable(false)

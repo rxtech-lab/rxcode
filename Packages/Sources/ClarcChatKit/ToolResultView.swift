@@ -6,6 +6,7 @@ struct ToolResultView: View {
     var isMessageStreaming: Bool = false
     @State private var isExpanded: Bool
     @State private var isDiffExpanded = false
+    @State private var showBashSheet = false
     @Environment(WindowState.self) private var windowState
 
     /// Lowercased tool name (avoids repeated lowercased() calls)
@@ -156,8 +157,12 @@ struct ToolResultView: View {
     private var minimalBody: some View {
         VStack(alignment: .leading, spacing: 4) {
             Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isExpanded.toggle()
+                if isBashTool, toolCall.result != nil {
+                    showBashSheet = true
+                } else {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isExpanded.toggle()
+                    }
                 }
             } label: {
                 HStack(spacing: 6) {
@@ -189,7 +194,7 @@ struct ToolResultView: View {
             }
             .buttonStyle(.plain)
 
-            if isExpanded, let result = toolCall.result, !result.isEmpty {
+            if isExpanded, !isBashTool, let result = toolCall.result, !result.isEmpty {
                 ScrollView {
                     Text(result)
                         .font(.system(.caption, design: .monospaced))
@@ -201,6 +206,13 @@ struct ToolResultView: View {
                 .padding(.leading, 20)
             }
         }
+        .sheet(isPresented: $showBashSheet) {
+            BashTerminalSheet(toolCall: toolCall)
+        }
+    }
+
+    private var isBashTool: Bool {
+        toolNameLower == "bash"
     }
 
     private var isCardTool: Bool {

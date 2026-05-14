@@ -95,6 +95,12 @@ final class AppState {
     /// `internal` (not private) — read access required from WindowState / extensions
     var sessionStates: [String: SessionStreamState] = [:]
 
+    /// Maps a stale session id (a `pending-...` placeholder, or a sid that was
+    /// advanced by `compact_boundary`) to the current sid it was swapped to.
+    /// Lets long-running async tasks (LLM title generation) resolve the current
+    /// id after the swap that happens mid-stream in `processStream`.
+    private var sessionIdRedirect: [String: String] = [:]
+
     // MARK: - Session Summaries (shared — lightweight metadata for all projects)
 
     var allSessionSummaries: [ChatSession.Summary] = []
@@ -415,15 +421,88 @@ final class AppState {
     let claude: ClaudeService
     let persistence: PersistenceService
     let marketplace = MarketplaceService()
+    let mcp: MCPService
     let threadStore: ThreadStore
+
+    /// Disk-persisted draft queues loaded at init. Hydrated into each
+    /// `WindowState.draftQueues` when the window is initialized so messages
+    /// queued during a prior run reappear in their session's input bar.
+    private var persistedQueues: [String: [QueuedMessage]] = [:]
+
+    // MARK: - MCP State
+
+    var mcpServers: [MCPServerInfo] = []
+    var mcpProbeResults: [String: MCPProbeResult] = [:]
+    var mcpInFlightProbes: Set<String> = []
+    var mcpIsLoading: Bool = false
+    var mcpListError: String?
 
     init() {
         let metaStore = self.metaStore
         let cliStore = CLISessionStore(metaStore: metaStore)
         self.cliStore = cliStore
-        self.claude = ClaudeService(cliStore: cliStore)
+        let claude = ClaudeService(cliStore: cliStore)
+        self.claude = claude
         self.persistence = PersistenceService(metaStore: metaStore, cliStore: cliStore)
+        self.mcp = MCPService(claudeService: claude)
         self.threadStore = ThreadStore.make()
+    }
+
+    // MARK: - MCP Actions
+
+    func refreshMCPServers() async {
+        mcpIsLoading = true
+        mcpListError = nil
+        defer { mcpIsLoading = false }
+        do {
+            let list = try await mcp.list()
+            mcpServers = list
+        } catch {
+            mcpListError = error.localizedDescription
+            logger.error("MCP list failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    func probeMCPServer(name: String) async {
+        guard !mcpInFlightProbes.contains(name) else { return }
+        mcpInFlightProbes.insert(name)
+        defer { mcpInFlightProbes.remove(name) }
+        let result = await mcp.probe(name: name)
+        mcpProbeResults[name] = result
+        // Reflect probe outcome into the row's status indicator.
+        if let idx = mcpServers.firstIndex(where: { $0.name == name }) {
+            let updated = MCPServerInfo(
+                name: mcpServers[idx].name,
+                transport: mcpServers[idx].transport,
+                endpoint: mcpServers[idx].endpoint,
+                status: result.ok ? .connected : .failed(result.error ?? "Probe failed"),
+                scope: mcpServers[idx].scope
+            )
+            mcpServers[idx] = updated
+        }
+    }
+
+    @discardableResult
+    func addMCPServer(spec: MCPServerSpec, scope: MCPScope) async -> String? {
+        do {
+            try await mcp.add(spec: spec, scope: scope)
+            await refreshMCPServers()
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    @discardableResult
+    func removeMCPServer(name: String, scope: MCPScope) async -> String? {
+        do {
+            try await mcp.remove(name: name, scope: scope)
+            mcpProbeResults.removeValue(forKey: name)
+            await refreshMCPServers()
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
     }
 
     // MARK: - Private State
@@ -566,6 +645,8 @@ final class AppState {
         // it does not drive thread discovery.
         allSessionSummaries = threadStore.loadAllSummaries()
 
+        persistedQueues = threadStore.loadAllQueues()
+
         if claudeInstalled && !onboardingCompleted {
             onboardingCompleted = true
             UserDefaults.standard.set(true, forKey: "onboardingCompleted")
@@ -624,6 +705,12 @@ final class AppState {
             Task { await self.respondToPlanDecision(toolUseId: toolUseId, action: action, in: window) }
         }
 
+        // Hydrate per-window draft queues from disk-persisted queues so messages
+        // typed-while-streaming survive an app relaunch.
+        for (key, queue) in persistedQueues where window.draftQueues[key] == nil {
+            window.draftQueues[key] = queue
+        }
+
         if let projectId = selectingProjectId,
            let project = projects.first(where: { $0.id == projectId }) {
             selectProject(project, in: window)
@@ -669,6 +756,26 @@ final class AppState {
         bridge.togglePlanModeHandler = { [weak self, weak window] in
             guard let self, let window else { return }
             self.toggleSessionPlanMode(in: window)
+        }
+        bridge.enqueueMessageHandler = { [weak self, weak window] text, attachments in
+            guard let self, let window else { return }
+            self.enqueueMessage(text: text, attachments: attachments, in: window)
+        }
+        bridge.removeQueuedMessageHandler = { [weak self, weak window] id in
+            guard let self, let window else { return }
+            self.removeQueuedMessage(id: id, in: window)
+        }
+        bridge.dequeueNextForFlushHandler = { [weak self, weak window] in
+            guard let self, let window else { return nil }
+            return self.dequeueNextForFlush(in: window)
+        }
+        bridge.sendQueuedNowHandler = { [weak self, weak window] id in
+            guard let self, let window else { return }
+            await self.sendQueuedNow(id: id, in: window)
+        }
+        bridge.sendAllQueuedAsOneHandler = { [weak self, weak window] in
+            guard let self, let window else { return }
+            await self.sendAllQueuedAsOne(in: window)
         }
 
         startBridgeObservation(bridge, for: window)
@@ -1175,6 +1282,7 @@ final class AppState {
                             if let state = sessionStates.removeValue(forKey: sessionKey) {
                                 sessionStates[resultEvent.sessionId] = state
                             }
+                            sessionIdRedirect[sessionKey] = resultEvent.sessionId
                             sessionKey = resultEvent.sessionId
                         }
                         let msgs = stateForSession(sessionKey).messages
@@ -1207,6 +1315,7 @@ final class AppState {
                             if let state = sessionStates.removeValue(forKey: previousSessionKey) {
                                 sessionStates[sid] = state
                             }
+                            sessionIdRedirect[previousSessionKey] = sid
                             sessionKey = sid
                             startFlushTimer(for: sid)
 
@@ -2231,27 +2340,46 @@ final class AppState {
             || currentTitle.isEmpty
     }
 
+    /// Follow `sessionIdRedirect` chains to the current sid. The CLI may swap
+    /// `pending-<uuid>` → real sid (and later advance the sid again on
+    /// `compact_boundary`) while a long-running task holds the old id.
+    private func resolveCurrentSessionId(_ id: String) -> String {
+        var current = id
+        var seen: Set<String> = [current]
+        while let next = sessionIdRedirect[current] {
+            if seen.contains(next) { break }
+            seen.insert(next)
+            current = next
+        }
+        return current
+    }
+
     /// Spawn a one-shot Claude call to generate a 3–6 word title for the given session,
     /// then persist it via `renameSession` if the title is still the placeholder. No-op
     /// if the session was already renamed manually or the LLM call fails.
     func maybeGenerateLLMTitle(for sessionId: String) async {
-        guard let summary = allSessionSummaries.first(where: { $0.id == sessionId }) else { return }
-        let messages = sessionStates[sessionId]?.messages ?? []
+        let resolved = resolveCurrentSessionId(sessionId)
+        guard let summary = allSessionSummaries.first(where: { $0.id == resolved }) else {
+            logger.warning("Title generation skipped: no summary for \(resolved) (original \(sessionId))")
+            return
+        }
+        let messages = sessionStates[resolved]?.messages ?? []
         let firstUserRaw = messages.first(where: { $0.role == .user })?.content ?? ""
         let firstUser = ChatSession.stripAttachmentMarkers(from: firstUserRaw)
         guard !firstUser.isEmpty else { return }
         guard isAutoGeneratedTitle(summary.title, firstUserMessage: firstUserRaw) else { return }
         guard let title = await claude.generateSessionTitle(firstUserMessage: firstUser) else { return }
-        // Re-check the title hasn't been user-renamed during the LLM call.
-        guard let stillPlaceholder = allSessionSummaries.first(where: { $0.id == sessionId }),
+        // Re-resolve after the LLM call — the id may have been swapped while we waited.
+        let currentId = resolveCurrentSessionId(sessionId)
+        guard let stillPlaceholder = allSessionSummaries.first(where: { $0.id == currentId }),
               isAutoGeneratedTitle(stillPlaceholder.title, firstUserMessage: firstUser) else { return }
-        guard let project = projects.first(where: { $0.id == summary.projectId }) else { return }
+        guard let project = projects.first(where: { $0.id == stillPlaceholder.projectId }) else { return }
         let session = ChatSession(
-            id: sessionId,
+            id: currentId,
             projectId: project.id,
             title: title,
-            messages: messages,
-            origin: summary.origin
+            messages: sessionStates[currentId]?.messages ?? messages,
+            origin: stillPlaceholder.origin
         )
         await renameSession(session, to: title)
     }
@@ -2777,9 +2905,103 @@ final class AppState {
     }
 
     private func saveQueue(in window: WindowState) {
-        let key = window.currentSessionId ?? "new"
+        let key = queueKey(for: window)
         if window.messageQueue.isEmpty { window.draftQueues.removeValue(forKey: key) }
         else { window.draftQueues[key] = window.messageQueue }
+    }
+
+    /// Persistence key used for both the in-memory `draftQueues` mirror and the
+    /// SwiftData `QueuedMessageRecord.sessionKey` column. Matches the legacy
+    /// keying used by `saveQueue` so existing in-memory state migrates without churn.
+    private func queueKey(for window: WindowState) -> String {
+        window.currentSessionId ?? "new"
+    }
+
+    // MARK: - Message Queue (persisted)
+
+    func enqueueMessage(text: String, attachments: [Attachment], in window: WindowState) {
+        let message = QueuedMessage(text: text, attachments: attachments)
+        window.messageQueue.append(message)
+        let key = queueKey(for: window)
+        window.draftQueues[key] = window.messageQueue
+        threadStore.appendQueued(sessionKey: key, message: message)
+    }
+
+    func removeQueuedMessage(id: UUID, in window: WindowState) {
+        window.dequeueMessage(id: id)
+        saveQueue(in: window)
+        threadStore.removeQueued(id: id)
+    }
+
+    /// Pops the head of the queue (the auto-flush path used when a stream ends)
+    /// and removes the persisted row.
+    func dequeueNextForFlush(in window: WindowState) -> QueuedMessage? {
+        guard let next = window.dequeueNext() else { return nil }
+        saveQueue(in: window)
+        threadStore.removeQueued(id: next.id)
+        return next
+    }
+
+    /// Cancels any in-flight stream for the current session, removes the chosen
+    /// queued message, and sends it as the next user turn.
+    func sendQueuedNow(id: UUID, in window: WindowState) async {
+        guard let target = window.messageQueue.first(where: { $0.id == id }) else { return }
+        // Take a snapshot of remaining queue items so we can restore them after
+        // `cancelStreaming` clobbers `window.inputText`/`window.attachments`.
+        let remaining = window.messageQueue.filter { $0.id != id }
+
+        // Clear the queue from memory + disk first, so the cancellation path
+        // doesn't see the queued item we're about to send.
+        let key = queueKey(for: window)
+        window.messageQueue.removeAll()
+        window.draftQueues.removeValue(forKey: key)
+        threadStore.clearQueue(sessionKey: key)
+
+        if isStreaming(in: window) {
+            await cancelStreaming(in: window)
+        }
+
+        // Restore the remaining items into memory + disk.
+        for msg in remaining {
+            window.messageQueue.append(msg)
+            threadStore.appendQueued(sessionKey: key, message: msg)
+        }
+        if remaining.isEmpty {
+            window.draftQueues.removeValue(forKey: key)
+        } else {
+            window.draftQueues[key] = window.messageQueue
+        }
+
+        window.inputText = target.text
+        window.attachments = target.attachments
+        await send(in: window)
+    }
+
+    /// Concatenates every queued message (texts joined with a blank line,
+    /// attachments merged in order), cancels any in-flight stream, clears the
+    /// queue, then sends the combined message as a single user turn.
+    func sendAllQueuedAsOne(in window: WindowState) async {
+        guard !window.messageQueue.isEmpty else { return }
+        let snapshot = window.messageQueue
+
+        let key = queueKey(for: window)
+        window.messageQueue.removeAll()
+        window.draftQueues.removeValue(forKey: key)
+        threadStore.clearQueue(sessionKey: key)
+
+        if isStreaming(in: window) {
+            await cancelStreaming(in: window)
+        }
+
+        let combinedText = snapshot
+            .map(\.text)
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .joined(separator: "\n\n")
+        let combinedAttachments = snapshot.flatMap(\.attachments)
+
+        window.inputText = combinedText
+        window.attachments = combinedAttachments
+        await send(in: window)
     }
 
     /// Sends the next queued message for a background session (one the window is not currently displaying).
@@ -2795,6 +3017,7 @@ final class AppState {
         let next = queue.removeFirst()
         if queue.isEmpty { window.draftQueues.removeValue(forKey: sessionKey) }
         else { window.draftQueues[sessionKey] = queue }
+        threadStore.removeQueued(id: next.id)
 
         let (resolvedAttachments, tempFilePaths) = AttachmentFactory.resolvingClipboardImages(next.attachments)
         let prompt = buildPromptWithAttachments(next.text, attachments: resolvedAttachments)

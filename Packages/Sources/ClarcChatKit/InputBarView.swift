@@ -638,6 +638,9 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
 
     private var queuedMessagePreviews: some View {
         VStack(spacing: 6) {
+            if windowState.messageQueue.count >= 2 {
+                queuedHeader
+            }
             ForEach(windowState.messageQueue) { queued in
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: "arrow.turn.down.right")
@@ -653,6 +656,19 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Button {
+                        sendQueuedNow(queued.id)
+                    } label: {
+                        Image(systemName: "paperplane.fill")
+                            .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+                            .foregroundStyle(ClaudeTheme.accent)
+                            .frame(width: 24, height: 24)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(chatBridge.hasPendingPlanDecision)
+                    .help("Send now — cancels current response")
 
                     Button {
                         removeQueuedMessage(queued.id)
@@ -683,10 +699,51 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
         .padding(.bottom, 6)
     }
 
+    private var queuedHeader: some View {
+        HStack(spacing: 8) {
+            Text("\(windowState.messageQueue.count) messages queued")
+                .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+
+            Spacer(minLength: 0)
+
+            Button {
+                sendAllQueuedAsOne()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "paperplane.fill")
+                        .font(.system(size: ClaudeTheme.size(10), weight: .medium))
+                    Text("Send all as one")
+                        .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+                }
+                .foregroundStyle(ClaudeTheme.accent)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(ClaudeTheme.accentSubtle, in: Capsule())
+                .overlay(
+                    Capsule()
+                        .strokeBorder(ClaudeTheme.accent.opacity(0.35), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(chatBridge.hasPendingPlanDecision)
+            .help("Combine and send all queued messages as a single turn")
+        }
+        .padding(.horizontal, 4)
+    }
+
     private func removeQueuedMessage(_ id: UUID) {
         withAnimation(.easeOut(duration: 0.15)) {
-            windowState.dequeueMessage(id: id)
+            chatBridge.removeQueuedMessage(id: id)
         }
+    }
+
+    private func sendQueuedNow(_ id: UUID) {
+        Task { await chatBridge.sendQueuedNow(id: id) }
+    }
+
+    private func sendAllQueuedAsOne() {
+        Task { await chatBridge.sendAllQueuedAsOne() }
     }
 
     private func queuedDisplayText(_ queued: QueuedMessage) -> String {
@@ -734,7 +791,7 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
 
         if chatBridge.isStreaming {
             withAnimation(.easeOut(duration: 0.2)) {
-                windowState.enqueueMessage(text: windowState.inputText, attachments: windowState.attachments)
+                chatBridge.enqueueMessage(text: windowState.inputText, attachments: windowState.attachments)
             }
             windowState.inputText = ""
             windowState.attachments = []
@@ -747,7 +804,7 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
     }
 
     private func processNextQueued() {
-        guard let next = windowState.dequeueNext() else { return }
+        guard let next = chatBridge.dequeueNextForFlush() else { return }
         windowState.inputText = next.text
         windowState.attachments = next.attachments
         Task { await chatBridge.send() }

@@ -23,19 +23,23 @@ public struct TodoProgressPill: View {
         return ClaudeTheme.textSecondary
     }
 
-    private var iconName: String {
-        if isComplete { return "checkmark.circle.fill" }
-        if inProgress { return "circle.dotted" }
-        return "checklist"
+    private var progress: Double {
+        guard total > 0 else { return 0 }
+        return min(1, max(0, Double(done) / Double(total)))
     }
 
     public var body: some View {
         HStack(spacing: 5) {
-            Image(systemName: iconName)
-                .symbolRenderingMode(.hierarchical)
-                .font(.system(size: ClaudeTheme.size(11), weight: .medium))
-                .foregroundStyle(accent)
-                .frame(width: 12, height: 12)
+            ZStack {
+                Circle()
+                    .stroke(accent.opacity(0.25), lineWidth: 1.5)
+                Circle()
+                    .trim(from: 0, to: progress)
+                    .stroke(accent, style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .animation(.easeInOut(duration: 0.2), value: progress)
+            }
+            .frame(width: 12, height: 12)
 
             Text("\(done)/\(total)")
                 .font(.system(size: ClaudeTheme.size(11), weight: .medium, design: .monospaced))

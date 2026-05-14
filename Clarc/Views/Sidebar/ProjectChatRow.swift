@@ -84,7 +84,8 @@ struct ProjectChatRow: View {
     /// be baked into older persisted summaries from before title stripping landed.
     private var displayTitle: String {
         let cleaned = ChatSession.stripAttachmentMarkers(from: summary.title)
-        return cleaned.isEmpty ? ChatSession.defaultTitle : cleaned
+        let resolved = cleaned.isEmpty ? ChatSession.defaultTitle : cleaned
+        return resolved.prefix(1).uppercased() + resolved.dropFirst()
     }
 
     var body: some View {
@@ -141,10 +142,12 @@ struct ProjectChatRow: View {
             Text(displayTitle)
                 .font(.system(size: ClaudeTheme.size(12)))
                 .foregroundStyle(ClaudeTheme.textPrimary)
+                .lineLimit(nil)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: 280, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .frame(maxWidth: 200, alignment: .leading)
         }
         .onTapGesture { onSelect() }
         .contextMenu {

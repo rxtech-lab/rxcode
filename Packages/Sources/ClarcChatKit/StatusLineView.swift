@@ -94,16 +94,14 @@ struct StatusLineView: View {
 
     @ViewBuilder
     private func versionSegment() -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: "sparkle")
-                .font(.system(size: ClaudeTheme.size(10)))
-            Text("Clarc \(chatBridge.appVersion)")
-            if let cli = chatBridge.claudeVersion {
-                Text("·")
+        if let cli = chatBridge.claudeVersion {
+            HStack(spacing: 4) {
+                Image(systemName: "sparkle")
+                    .font(.system(size: ClaudeTheme.size(10)))
                 Text("CC \(cli)")
             }
+            .foregroundStyle(ClaudeTheme.textTertiary)
         }
-        .foregroundStyle(ClaudeTheme.textTertiary)
     }
 
     // MARK: - Segment

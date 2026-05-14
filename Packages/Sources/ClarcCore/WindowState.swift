@@ -38,8 +38,8 @@ public struct QueuedMessage: Identifiable, Sendable {
     public var text: String
     public var attachments: [Attachment]
 
-    public init(text: String, attachments: [Attachment]) {
-        self.id = UUID()
+    public init(id: UUID = UUID(), text: String, attachments: [Attachment]) {
+        self.id = id
         self.text = text
         self.attachments = attachments
     }

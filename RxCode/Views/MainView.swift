@@ -1,3 +1,4 @@
+import AppKit
 import RxCodeChatKit
 import RxCodeCore
 import SwiftUI
@@ -29,6 +30,15 @@ struct MainView: View {
             case .history: "clock"
             }
         }
+    }
+
+    private var navigationTitleText: String {
+        if let id = windowState.currentSessionId,
+           let title = appState.allSessionSummaries.first(where: { $0.id == id })?.title,
+           !title.isEmpty {
+            return title
+        }
+        return windowState.selectedProject?.name ?? ""
     }
 
     var body: some View {
@@ -77,7 +87,9 @@ struct MainView: View {
                 .onAppear {
                     windowState.focusMode = appState.focusMode
                 }
-                .toolbar(removing: .title)
+                .navigationTitle(navigationTitleText)
+                .toolbarBackground(.hidden, for: .windowToolbar)
+                .background(UnifiedTitleBarAccessor())
                 .toolbar {
                     if columnVisibility != .detailOnly {
                         ToolbarItem(placement: .navigation) {
@@ -124,7 +136,7 @@ struct MainView: View {
         VStack(spacing: 0) {
             ProjectTreeView()
         }
-        .background(ClaudeTheme.sidebarBackground)
+        .background(ClaudeTheme.sidebarBackground.ignoresSafeArea())
         .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 360)
         .sheet(isPresented: $showGitHubSheet) {
             GitHubSheet()
@@ -216,10 +228,34 @@ struct MainView: View {
 struct DetailToolbar: View {
     var body: some View {
         Color.clear
-            .toolbarBackground(.hidden, for: .windowToolbar)
             .toolbar {
                 RxCodeToolbarContent()
             }
+    }
+}
+
+// MARK: - Unified Title Bar
+
+/// Makes the hosting NSWindow's titlebar transparent and lets content extend
+/// under it, so sidebar/detail backgrounds reach the top of the window
+/// instead of leaving a separate full-width colored title-bar strip.
+struct UnifiedTitleBarAccessor: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { [weak view] in
+            guard let window = view?.window else { return }
+            window.styleMask.insert(.fullSizeContentView)
+            window.titlebarAppearsTransparent = true
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async { [weak nsView] in
+            guard let window = nsView?.window else { return }
+            window.styleMask.insert(.fullSizeContentView)
+            window.titlebarAppearsTransparent = true
+        }
     }
 }
 

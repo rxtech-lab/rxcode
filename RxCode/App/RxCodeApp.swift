@@ -104,33 +104,66 @@ private struct MenuBarLabel: View {
     var body: some View {
         let inProgress = appState.inProgressSessionCount
         let unchecked = appState.uncheckedFinishedSessionCount
+        let totalJobs = inProgress + unchecked
         let fiveHour = appState.latestRateLimitUsage?.fiveHourPercent
 
-        VStack(alignment: .trailing, spacing: 0) {
-            HStack(spacing: 2) {
-                Image(systemName: "circle.dotted")
-                Text("\(inProgress)/\(inProgress + unchecked)")
-                    .monospacedDigit()
-            }
-
-            HStack(spacing: 2) {
-                Text("5h")
-                if let fiveHour {
-                    Text("\(formatPercent(fiveHour))%")
-                        .monospacedDigit()
-                } else {
-                    Text("—")
-                }
-            }
+        if let image = Self.renderLabelImage(fiveHour: fiveHour, inProgress: inProgress, totalJobs: totalJobs) {
+            Image(nsImage: image)
+        } else {
+            Image(systemName: "message")
         }
-        .font(.system(size: 9, weight: .medium))
     }
 
-    private func formatPercent(_ value: Double) -> String {
+    @MainActor
+    private static func renderLabelImage(fiveHour: Double?, inProgress: Int, totalJobs: Int) -> NSImage? {
+        let content = MenuBarLabelContent(
+            fiveHourText: fiveHour.map { "\(formatPercent($0))%" } ?? "—%",
+            jobsText: inProgress > 0 ? "\(inProgress) Job\(inProgress == 1 ? "" : "s")" : nil
+        )
+        let renderer = ImageRenderer(content: content)
+        renderer.scale = NSScreen.main?.backingScaleFactor ?? 2
+        guard let cgImage = renderer.cgImage else { return nil }
+        let size = NSSize(width: CGFloat(cgImage.width) / renderer.scale,
+                          height: CGFloat(cgImage.height) / renderer.scale)
+        let image = NSImage(cgImage: cgImage, size: size)
+        image.isTemplate = true
+        return image
+    }
+
+    private static func formatPercent(_ value: Double) -> String {
         if value > 0 && value < 1 {
             return String(format: "%.1f", value)
         }
         return "\(Int(value.rounded()))"
+    }
+}
+
+private struct MenuBarLabelContent: View {
+    let fiveHourText: String
+    let jobsText: String?
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "message")
+                .font(.system(size: 11, weight: .medium))
+
+            VStack(alignment: .trailing, spacing: -1) {
+                HStack(alignment: .bottom, spacing: 1) {
+                    Text(fiveHourText)
+                        .font(.system(size: 11, weight: .semibold))
+                        .monospacedDigit()
+                    Text("5h")
+                        .font(.system(size: 7, weight: .medium))
+                }
+                if let jobsText {
+                    Text(jobsText)
+                        .font(.system(size: 8, weight: .semibold))
+                        .monospacedDigit()
+                }
+            }
+        }
+        .padding(.vertical, 1)
+        .foregroundStyle(.black)
     }
 }
 

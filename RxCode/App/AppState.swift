@@ -822,6 +822,12 @@ final class AppState {
             await self?.refreshAndProbeAllMCPServers()
         }
 
+        // Warm the rate-limit usage so the menu-bar label has data before the
+        // popover is opened. RateLimitService caches for 5 minutes internally.
+        Task { [weak self] in
+            await self?.refreshRateLimitUsage()
+        }
+
         // Recurring probe so disconnected MCP servers surface promptly even
         // when the user isn't actively interacting with the Settings tab.
         startMCPPeriodicProbe()

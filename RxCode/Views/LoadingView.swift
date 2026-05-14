@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import RxCodeCore
 
 /// Splash shown while `AppState.initialize()` is loading projects, sessions,
@@ -26,6 +27,78 @@ struct LoadingView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(ClaudeTheme.background.ignoresSafeArea())
+        .toolbarBackground(.hidden, for: .windowToolbar)
+        .background(TitleBarHider())
         .onAppear { pulse = true }
+    }
+}
+
+/// Hides the hosting NSWindow's title bar while the loading view is visible,
+/// then restores the original chrome when it disappears.
+private struct TitleBarHider: NSViewRepresentable {
+    final class Coordinator {
+        weak var window: NSWindow?
+        var savedStyleMask: NSWindow.StyleMask?
+        var savedTitleVisibility: NSWindow.TitleVisibility?
+        var savedTitlebarAppearsTransparent: Bool?
+        var savedStandardButtonHidden: [NSWindow.ButtonType: Bool] = [:]
+
+        func apply(to window: NSWindow) {
+            guard self.window !== window else { return }
+            restore()
+            self.window = window
+            savedStyleMask = window.styleMask
+            savedTitleVisibility = window.titleVisibility
+            savedTitlebarAppearsTransparent = window.titlebarAppearsTransparent
+            for type in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
+                savedStandardButtonHidden[type] = window.standardWindowButton(type)?.isHidden ?? false
+            }
+
+            window.styleMask.insert(.fullSizeContentView)
+            window.titleVisibility = .hidden
+            window.titlebarAppearsTransparent = true
+            for type in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
+                window.standardWindowButton(type)?.isHidden = true
+            }
+        }
+
+        func restore() {
+            guard let window else { return }
+            if let mask = savedStyleMask { window.styleMask = mask }
+            if let vis = savedTitleVisibility { window.titleVisibility = vis }
+            if let transparent = savedTitlebarAppearsTransparent { window.titlebarAppearsTransparent = transparent }
+            for (type, hidden) in savedStandardButtonHidden {
+                window.standardWindowButton(type)?.isHidden = hidden
+            }
+            self.window = nil
+            savedStyleMask = nil
+            savedTitleVisibility = nil
+            savedTitlebarAppearsTransparent = nil
+            savedStandardButtonHidden.removeAll()
+        }
+
+        deinit { restore() }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { [weak view] in
+            guard let window = view?.window else { return }
+            context.coordinator.apply(to: window)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async { [weak nsView] in
+            guard let window = nsView?.window else { return }
+            context.coordinator.apply(to: window)
+        }
+    }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        coordinator.restore()
     }
 }

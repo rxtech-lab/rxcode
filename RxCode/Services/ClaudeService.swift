@@ -449,42 +449,89 @@ actor ClaudeService {
     /// children die alongside the parent. Escalate to SIGKILL after 5 seconds.
     func cancel(streamId: UUID) {
         guard let pgid = streamPGIDs[streamId] else { return }
+        let escapees = Self.descendantPids(of: pgid)
 
-        logger.info("Sending SIGINT to claude pgid \(pgid) (stream=\(streamId))")
+        logger.info("Sending SIGINT to claude pgid \(pgid) escapees=\(escapees) (stream=\(streamId))")
         killpg(pgid, SIGINT)
+        for pid in escapees { kill(pid, SIGINT) }
 
         let log = logger
-        Task {
+        Task.detached {
             try? await Task.sleep(nanoseconds: 5_000_000_000)
-            // killpg on a fully-dead group returns ESRCH — harmless. Send unconditionally
-            // to cover any subagent that ignored SIGINT.
-            if killpg(pgid, SIGKILL) == 0 {
-                log.warning("Process group \(pgid) still alive after 5 s — sent SIGKILL")
-            }
+            // killpg/kill on a fully-dead target returns ESRCH — harmless. Send unconditionally
+            // to cover any subagent that ignored SIGINT or escaped the process group.
+            killpg(pgid, SIGKILL)
+            for pid in escapees { kill(pid, SIGKILL) }
+            log.debug("Cancel SIGKILL pgid=\(pgid) escapees=\(escapees)")
         }
     }
 
     /// Thread-finished sweep. Called after the `result` event (and from the exit
     /// handler) to guarantee no subagent process outlives the parent CLI.
     ///
-    /// The parent `claude` will already be on its way out by the time we call this
-    /// (`closeStdin` was just invoked), so SIGTERM to the group is a no-op race
-    /// for the leader and a real kill for any subagent that the parent failed to
-    /// reap on exit. SIGKILL escalation 2 s later handles the rare case where a
-    /// subagent ignores SIGTERM.
+    /// MCP servers and Node children spawned `detached: true` may escape the
+    /// parent's process group (via `setsid`/`setpgid`), so `killpg` alone is not
+    /// enough. Snapshot the descendant tree before signaling and SIGKILL each
+    /// escapee individually as the safety net — running in a detached Task so
+    /// actor contention can't delay the escalation.
     func finalize(streamId: UUID) {
         guard let pgid = streamPGIDs[streamId] else { return }
+        let escapees = Self.descendantPids(of: pgid)
 
-        logger.info("Finalizing stream — killpg(SIGTERM) pgid=\(pgid) stream=\(streamId)")
+        logger.info("Finalizing stream — pgid=\(pgid) escapees=\(escapees) stream=\(streamId)")
         killpg(pgid, SIGTERM)
+        for pid in escapees { kill(pid, SIGTERM) }
 
         let log = logger
-        Task {
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
-            if killpg(pgid, SIGKILL) == 0 {
-                log.debug("Finalize SIGKILL pgid=\(pgid) reaped stragglers")
-            }
+        Task.detached {
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            killpg(pgid, SIGKILL)
+            for pid in escapees { kill(pid, SIGKILL) }
+            log.debug("Finalize SIGKILL pgid=\(pgid) escapees=\(escapees)")
         }
+    }
+
+    /// Walk the process tree rooted at `root` via `ps -Ao pid,ppid` and return
+    /// every descendant pid (not including `root`). Used to find subagents that
+    /// escaped the original process group so they can be signaled directly.
+    ///
+    /// Must be called *before* the root dies — once the root exits, its children
+    /// are reparented to launchd (ppid=1) and the link back to the original
+    /// process is lost.
+    private static func descendantPids(of root: pid_t) -> [pid_t] {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/bin/ps")
+        proc.arguments = ["-Ao", "pid,ppid"]
+        let pipe = Pipe()
+        proc.standardOutput = pipe
+        proc.standardError = FileHandle.nullDevice
+        do {
+            try proc.run()
+            proc.waitUntilExit()
+        } catch {
+            return []
+        }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        guard let text = String(data: data, encoding: .utf8) else { return [] }
+
+        var childrenByParent: [pid_t: [pid_t]] = [:]
+        for line in text.split(separator: "\n").dropFirst() {
+            let parts = line.split(whereSeparator: { $0 == " " || $0 == "\t" })
+            guard parts.count >= 2,
+                  let pid = pid_t(parts[0]),
+                  let ppid = pid_t(parts[1]) else { continue }
+            childrenByParent[ppid, default: []].append(pid)
+        }
+
+        var result: [pid_t] = []
+        var queue: [pid_t] = [root]
+        while !queue.isEmpty {
+            let next = queue.removeFirst()
+            guard let children = childrenByParent[next] else { continue }
+            result.append(contentsOf: children)
+            queue.append(contentsOf: children)
+        }
+        return result
     }
 
     // MARK: - Private Helpers
@@ -827,15 +874,33 @@ actor ClaudeService {
 
     // MARK: - Cleanup
 
-    /// Tear down any resources held by the service.
+    /// Tear down any resources held by the service. Called on app termination
+    /// so spawned `claude` CLIs (and any subagent or MCP server children they
+    /// hold open) don't outlive the host app and linger in Activity Monitor.
     func cleanup() {
         inactivityTimer?.cancel()
         inactivityTimer = nil
 
-        // killpg sweeps the parent CLI + every subagent in its process group.
+        // Snapshot every descendant tree before signaling so escaped subagents
+        // (MCP servers detached via setsid) still get the SIGKILL pass.
+        var allEscapees: [pid_t] = []
+        for (_, pgid) in streamPGIDs {
+            allEscapees.append(contentsOf: Self.descendantPids(of: pgid))
+        }
+
         for (_, pgid) in streamPGIDs {
             killpg(pgid, SIGTERM)
         }
+        for pid in allEscapees { kill(pid, SIGTERM) }
+
+        // Synchronous SIGKILL escalation — the host process is exiting, so a
+        // detached Task wouldn't have time to fire.
+        usleep(200_000)
+        for (_, pgid) in streamPGIDs {
+            killpg(pgid, SIGKILL)
+        }
+        for pid in allEscapees { kill(pid, SIGKILL) }
+
         streamPGIDs.removeAll()
         for (_, handle) in stdinHandles {
             try? handle.close()

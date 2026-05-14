@@ -9,6 +9,15 @@ struct ProjectWindowView: View {
     @State private var inspectorStarted = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
+    private var navigationTitleText: String {
+        if let id = windowState.currentSessionId,
+           let title = appState.allSessionSummaries.first(where: { $0.id == id })?.title,
+           !title.isEmpty {
+            return title
+        }
+        return windowState.selectedProject?.name ?? ""
+    }
+
     var body: some View {
         Group {
             if windowState.isInitialized {
@@ -26,7 +35,7 @@ struct ProjectWindowView: View {
                         .hidden()
                     }
                     .id(appState.themeRevision)
-                    .toolbar(removing: .title)
+                    .navigationTitle(navigationTitleText)
                     .onChange(of: windowState.showInspector) { _, isShowing in
                         if isShowing, !inspectorStarted { inspectorStarted = true }
                     }
@@ -79,7 +88,7 @@ struct ProjectWindowView: View {
         VStack(spacing: 0) {
             ProjectTreeView()
         }
-        .background(ClaudeTheme.sidebarBackground)
+        .background(ClaudeTheme.sidebarBackground.ignoresSafeArea())
         .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 360)
     }
 
@@ -135,10 +144,11 @@ struct ProjectWindowView: View {
                     .background(ClaudeTheme.background)
             }
         }
-        .toolbarBackground(.visible, for: .windowToolbar)
+        .toolbarBackground(.hidden, for: .windowToolbar)
         .toolbar {
             RxCodeToolbarContent()
         }
+        .background(UnifiedTitleBarAccessor())
         .focusedValue(\.startNewChat) {
             appState.startNewChat(in: windowState)
         }

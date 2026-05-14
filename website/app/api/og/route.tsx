@@ -119,10 +119,11 @@ export async function GET(request: NextRequest) {
             color: "#7A6E68",
             fontSize: "22px",
             marginTop: "28px",
-            letterSpacing: "0.06em",
+            letterSpacing: "0.12em",
+            textTransform: "uppercase",
             display: "flex",
-            textAlign: "center",
-            maxWidth: "820px",
+            gap: "16px",
+            alignItems: "center",
           }}
         >
           {description}

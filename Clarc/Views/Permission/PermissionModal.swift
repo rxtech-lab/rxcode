@@ -1,16 +1,13 @@
 import SwiftUI
 import ClarcCore
-import Combine
 
 struct PermissionModal: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
     let request: PermissionRequest
+    var onClose: (() -> Void)? = nil
 
-    @State private var remainingSeconds: Int = 300
     @FocusState private var isFocused: Bool
-
-    private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
         VStack(spacing: 20) {
@@ -18,7 +15,6 @@ struct PermissionModal: View {
             ClaudeThemeDivider()
             detailsSection
             Spacer()
-            timerSection
             buttonSection
         }
         .padding(24)
@@ -31,14 +27,14 @@ struct PermissionModal: View {
             Task { await appState.respondToPermission(request, decision: .allow, in: windowState) }
             return .handled
         }
-        .onAppear { isFocused = true }
-        .onReceive(timer) { _ in
-            if remainingSeconds > 0 {
-                remainingSeconds -= 1
-            } else {
-                Task { await appState.respondToPermission(request, decision: .deny, in: windowState) }
+        .onKeyPress(.escape) {
+            if let onClose {
+                onClose()
+                return .handled
             }
+            return .ignored
         }
+        .onAppear { isFocused = true }
     }
 
     // MARK: - Header
@@ -61,6 +57,19 @@ struct PermissionModal: View {
             }
 
             Spacer()
+
+            if let onClose {
+                Button {
+                    onClose()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(ClaudeTheme.textTertiary)
+                }
+                .buttonStyle(.plain)
+                .help(Text("Close"))
+                .accessibilityLabel(Text("Close"))
+            }
         }
     }
 
@@ -104,26 +113,6 @@ struct PermissionModal: View {
         }
     }
 
-    // MARK: - Timer
-
-    private var timerSection: some View {
-        HStack(spacing: 4) {
-            Image(systemName: "clock")
-                .font(.caption)
-                .foregroundStyle(ClaudeTheme.textTertiary)
-
-            Text("Auto-deny in \(formattedTime)")
-                .font(.caption)
-                .foregroundStyle(ClaudeTheme.textTertiary)
-        }
-    }
-
-    private var formattedTime: String {
-        let minutes = remainingSeconds / 60
-        let seconds = remainingSeconds % 60
-        return String(format: "%d:%02d", minutes, seconds)
-    }
-
     // MARK: - Buttons
 
     /// Plan mode is a deliberate read-only stance; a one-click broad allow would silently undo it.
@@ -156,7 +145,6 @@ struct PermissionModal: View {
             Button("Deny") {
                 Task { await appState.respondToPermission(request, decision: .deny, in: windowState) }
             }
-            .keyboardShortcut(.escape)
             .buttonStyle(ClaudeSecondaryButtonStyle())
             .controlSize(.large)
 

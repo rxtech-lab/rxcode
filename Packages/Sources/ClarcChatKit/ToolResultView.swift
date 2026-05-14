@@ -6,6 +6,7 @@ struct ToolResultView: View {
     var isMessageStreaming: Bool = false
     @State private var isExpanded: Bool
     @State private var isDiffExpanded = false
+    @State private var showBashSheet = false
     @Environment(WindowState.self) private var windowState
 
     /// Lowercased tool name (avoids repeated lowercased() calls)
@@ -47,6 +48,29 @@ struct ToolResultView: View {
     }
 
     var body: some View {
+        Group {
+            if isCardTool {
+                cardBody
+                    .bubbleStyle(toolCall.isError ? .toolError : .tool)
+                    .transition(.asymmetric(
+                        insertion: .opacity
+                            .combined(with: .move(edge: .top))
+                            .combined(with: .scale(scale: 0.96, anchor: .top)),
+                        removal: .opacity
+                    ))
+            } else {
+                minimalBody
+            }
+        }
+        .onChange(of: toolCall.result) { _, newResult in
+            guard ToolCategory(toolName: toolNameLower).isTransient, newResult != nil else { return }
+            isExpanded = false
+        }
+    }
+
+    /// Edit/MultiEdit get the full framed card with diff view.
+    @ViewBuilder
+    private var cardBody: some View {
         VStack(alignment: .leading, spacing: 6) {
             // Header + Input summary (both clickable)
             Button {
@@ -77,33 +101,39 @@ struct ToolResultView: View {
 
                         Spacer()
 
-                        if toolCall.isError {
-                            Image(systemName: "exclamationmark.circle.fill")
-                                .foregroundStyle(ClaudeTheme.statusError)
-                                .font(.caption)
-                                .accessibilityLabel("Error occurred")
-                        } else if toolCall.result != nil {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(ClaudeTheme.statusSuccess)
-                                .font(.caption)
-                                .accessibilityLabel("Completed")
-                        } else if isMessageStreaming {
-                            ProgressView()
-                                .controlSize(.mini)
-                                .accessibilityLabel("Running")
-                        } else {
-                            Image(systemName: "minus.circle.fill")
-                                .foregroundStyle(ClaudeTheme.textTertiary)
-                                .font(.caption)
-                                .accessibilityLabel("Interrupted")
+                        Group {
+                            if toolCall.isError {
+                                Image(systemName: "exclamationmark.circle.fill")
+                                    .foregroundStyle(ClaudeTheme.statusError)
+                                    .font(.caption)
+                                    .accessibilityLabel("Error occurred")
+                            } else if toolCall.result != nil {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(ClaudeTheme.statusSuccess)
+                                    .font(.caption)
+                                    .accessibilityLabel("Completed")
+                            } else if isMessageStreaming {
+                                ProgressView()
+                                    .controlSize(.mini)
+                                    .accessibilityLabel("Running")
+                            } else {
+                                Image(systemName: "minus.circle.fill")
+                                    .foregroundStyle(ClaudeTheme.textTertiary)
+                                    .font(.caption)
+                                    .accessibilityLabel("Interrupted")
+                            }
                         }
+                        .transition(.scale(scale: 0.4).combined(with: .opacity))
+                        .id(statusIconID)
 
                         if toolCall.result != nil || hasExpandableContent {
-                            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            Image(systemName: "chevron.down")
                                 .font(.caption2)
                                 .foregroundStyle(ClaudeTheme.textTertiary)
+                                .rotationEffect(.degrees(isExpanded ? 180 : 0))
                         }
                     }
+                    .animation(.spring(response: 0.35, dampingFraction: 0.7), value: statusIconID)
 
                     inputSummaryView
                         .lineLimit(isExpanded ? nil : 1)
@@ -114,29 +144,111 @@ struct ToolResultView: View {
 
             // Expanded detail
             if isExpanded {
-                if isEditTool, let oldStr = toolCall.input["old_string"]?.stringValue,
-                   let newStr = toolCall.input["new_string"]?.stringValue {
-                    ClaudeThemeDivider()
-                    editDiffView(oldString: oldStr, newString: newStr)
-                } else if let result = toolCall.result, !result.isEmpty {
-                    ClaudeThemeDivider()
+                Group {
+                    if isEditTool, let oldStr = toolCall.input["old_string"]?.stringValue,
+                       let newStr = toolCall.input["new_string"]?.stringValue {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ClaudeThemeDivider()
+                            editDiffView(oldString: oldStr, newString: newStr)
+                        }
+                    } else if let result = toolCall.result, !result.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ClaudeThemeDivider()
 
-                    ScrollView {
-                        Text(result)
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundStyle(toolCall.isError ? ClaudeTheme.statusError : ClaudeTheme.textPrimary)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                            ScrollView {
+                                Text(result)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .foregroundStyle(toolCall.isError ? ClaudeTheme.statusError : ClaudeTheme.textPrimary)
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .frame(maxHeight: 200)
+                        }
                     }
-                    .frame(maxHeight: 200)
                 }
+                .transition(.asymmetric(
+                    insertion: .opacity.combined(with: .move(edge: .top)),
+                    removal: .opacity.combined(with: .move(edge: .top))
+                ))
             }
         }
-        .bubbleStyle(toolCall.isError ? .toolError : .tool)
-        .onChange(of: toolCall.result) { _, newResult in
-            guard ToolCategory(toolName: toolNameLower).isTransient, newResult != nil else { return }
-            isExpanded = false
+        .animation(.easeInOut(duration: 0.25), value: isExpanded)
+    }
+
+    /// Stable identifier for the current status icon — used to animate transitions
+    /// between progress / checkmark / error states.
+    private var statusIconID: Int {
+        if toolCall.isError { return 1 }
+        if toolCall.result != nil { return 2 }
+        if isMessageStreaming { return 3 }
+        return 4
+    }
+
+    /// Read / Bash / Grep / Write / Agent / Skill / MCP / etc. — single muted row, no card.
+    @ViewBuilder
+    private var minimalBody: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Button {
+                if isBashTool, toolCall.result != nil {
+                    showBashSheet = true
+                } else {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isExpanded.toggle()
+                    }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    if toolCall.isError {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: ClaudeTheme.messageSize(11)))
+                            .foregroundStyle(ClaudeTheme.statusError)
+                            .frame(width: 14, height: 14)
+                    } else {
+                        Image(systemName: sfSymbol)
+                            .font(.system(size: ClaudeTheme.messageSize(11)))
+                            .foregroundStyle(ClaudeTheme.textTertiary)
+                            .frame(width: 14, height: 14)
+                    }
+
+                    inputSummaryView
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+
+                    if toolCall.result == nil && isMessageStreaming {
+                        ProgressView()
+                            .controlSize(.mini)
+                            .accessibilityLabel("Running")
+                    }
+                }
+                .font(.system(size: ClaudeTheme.messageSize(12)))
+                .foregroundStyle(toolCall.isError ? ClaudeTheme.statusError : ClaudeTheme.textTertiary)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded, !isBashTool, let result = toolCall.result, !result.isEmpty {
+                ScrollView {
+                    Text(result)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(toolCall.isError ? ClaudeTheme.statusError : ClaudeTheme.textSecondary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 200)
+                .padding(.leading, 20)
+            }
         }
+        .sheet(isPresented: $showBashSheet) {
+            BashTerminalSheet(toolCall: toolCall)
+        }
+    }
+
+    private var isBashTool: Bool {
+        toolNameLower == "bash"
+    }
+
+    private var isCardTool: Bool {
+        isEditTool
     }
 
     // MARK: - Edit Diff
@@ -151,20 +263,8 @@ struct ToolResultView: View {
     }
 
     private func editHunksFromToolInput() -> [PreviewFile.EditHunk] {
-        if toolNameLower == "edit",
-           let old = toolCall.input["old_string"]?.stringValue,
-           let new = toolCall.input["new_string"]?.stringValue {
-            return [PreviewFile.EditHunk(oldString: old, newString: new)]
-        }
-        if let edits = toolCall.input["edits"]?.arrayValue {
-            return edits.compactMap { entry in
-                guard let obj = entry.objectValue,
-                      let old = obj["old_string"]?.stringValue,
-                      let new = obj["new_string"]?.stringValue else { return nil }
-                return PreviewFile.EditHunk(oldString: old, newString: new)
-            }
-        }
-        return []
+        guard isEditTool else { return [] }
+        return toolCall.fileEditHunks
     }
 
     private func editDiffView(oldString: String, newString: String) -> some View {
@@ -183,7 +283,7 @@ struct ToolResultView: View {
             : allLines
 
         return VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(visibleLines.enumerated()), id: \.offset) { _, item in
+            ForEach(Array(visibleLines.enumerated()), id: \.offset) { idx, item in
                 let (prefix, text, isAdded) = item
                 Text(prefix + " " + text)
                     .font(.system(size: ClaudeTheme.messageSize(12), design: .monospaced))
@@ -192,6 +292,15 @@ struct ToolResultView: View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 1)
                     .background((isAdded ? ClaudeTheme.statusSuccess : ClaudeTheme.statusError).opacity(0.06))
+                    .transition(.asymmetric(
+                        insertion: .move(edge: isAdded ? .leading : .trailing)
+                            .combined(with: .opacity),
+                        removal: .opacity
+                    ))
+                    .animation(
+                        .easeOut(duration: 0.28).delay(Double(idx) * 0.015),
+                        value: visibleLines.count
+                    )
             }
 
             if needsToggle {
@@ -286,19 +395,23 @@ struct ToolResultView: View {
                 if isEditTool, toolCall.result != nil {
                     let hunks = editHunksFromToolInput()
                     if !hunks.isEmpty {
-                        Text(" · ")
-                            .font(.system(size: ClaudeTheme.messageSize(12)))
-                            .foregroundStyle(ClaudeTheme.textTertiary)
-                        fileActionLink(label: "diff") {
-                            windowState.diffFile = PreviewFile(
-                                path: filePath,
-                                name: fileName,
-                                editHunks: hunks
-                            )
+                        HStack(spacing: 0) {
+                            Text(" · ")
+                                .font(.system(size: ClaudeTheme.messageSize(12)))
+                                .foregroundStyle(ClaudeTheme.textTertiary)
+                            fileActionLink(label: "diff") {
+                                windowState.diffFile = PreviewFile(
+                                    path: filePath,
+                                    name: fileName,
+                                    editHunks: hunks
+                                )
+                            }
                         }
+                        .transition(.opacity.combined(with: .scale(scale: 0.85, anchor: .leading)))
                     }
                 }
             }
+            .animation(.easeOut(duration: 0.25), value: toolCall.result != nil)
         } else {
             Text(inputSummary)
                 .font(.system(size: ClaudeTheme.messageSize(12)))

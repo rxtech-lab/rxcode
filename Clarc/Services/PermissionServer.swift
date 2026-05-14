@@ -25,10 +25,12 @@ actor PermissionServer {
     private let logger = Logger(subsystem: "com.claudework", category: "PermissionServer")
 
     /// Resolved outcome for a pending hook: the permission decision plus an optional
-    /// `updatedInput` payload (used by AskUserQuestion to inject answers).
+    /// `updatedInput` payload (used by AskUserQuestion to inject answers) and an
+    /// optional reason override (used by Reject-with-feedback on the plan card).
     private struct DecisionOutcome: Sendable {
         let decision: PermissionDecision
         let updatedInput: JSONValue?
+        let reasonOverride: String?
     }
 
     /// toolUseId → the continuations and routing context for that request.
@@ -40,6 +42,9 @@ actor PermissionServer {
         /// Populated by `respondAskUserQuestion` so the hook response can carry back
         /// the user's answer as `updatedInput`.
         var updatedInput: JSONValue?
+        /// Populated by `denyWithReason` so the hook response carries the user's
+        /// improvement feedback back to the model as `permissionDecisionReason`.
+        var reasonOverride: String?
     }
     private var pending: [String: Pending] = [:]
     private var timeoutTasks: [String: Task<Void, Never>] = [:]
@@ -52,7 +57,7 @@ actor PermissionServer {
 
     private struct SessionContext: Sendable {
         let projectKey: String
-        let mode: PermissionMode
+        var mode: PermissionMode
     }
     private var sessionRegistry: [String: SessionContext] = [:]
 
@@ -146,7 +151,7 @@ actor PermissionServer {
         for (id, entry) in pending {
             logger.info("Denying \(entry.continuations.count) pending request(s) for \(id) on server stop")
             for continuation in entry.continuations {
-                continuation.resume(returning: DecisionOutcome(decision: .deny, updatedInput: nil))
+                continuation.resume(returning: DecisionOutcome(decision: .deny, updatedInput: nil, reasonOverride: nil))
             }
         }
         pending.removeAll()
@@ -174,7 +179,7 @@ actor PermissionServer {
     func respond(toolUseId: String, decision: PermissionDecision) async {
         timeoutTasks.removeValue(forKey: toolUseId)?.cancel()
 
-        guard let entry = pending.removeValue(forKey: toolUseId) else {
+        guard var entry = pending.removeValue(forKey: toolUseId) else {
             logger.warning("No pending continuation for toolUseId \(toolUseId)")
             return
         }
@@ -202,11 +207,29 @@ actor PermissionServer {
             }
             resolved = .allow
 
+        case .allowAndSetMode(let newMode):
+            if let sid = entry.sessionId, var ctx = sessionRegistry[sid] {
+                ctx.mode = newMode
+                sessionRegistry[sid] = ctx
+                logger.info("Session \(sid.prefix(8)) mode → \(newMode.rawValue) (allowAndSetMode)")
+            } else {
+                logger.warning("allowAndSetMode without registered session for \(toolUseId) — falling back to allow")
+            }
+            resolved = .allow
+
+        case .denyWithReason(let reason):
+            entry.reasonOverride = reason
+            resolved = .deny
+
         case .allow, .deny:
             resolved = decision
         }
 
-        let outcome = DecisionOutcome(decision: resolved, updatedInput: entry.updatedInput)
+        let outcome = DecisionOutcome(
+            decision: resolved,
+            updatedInput: entry.updatedInput,
+            reasonOverride: entry.reasonOverride
+        )
         for continuation in entry.continuations {
             continuation.resume(returning: outcome)
         }
@@ -222,6 +245,19 @@ actor PermissionServer {
 
     /// Determines whether the request should be auto-approved. Returns a reason string if approved, or nil otherwise.
     private func autoApproveReason(for req: HookRequestBody) async -> String? {
+        // Auto mode short-circuit: when the session is registered as `.auto`, resolve every hook
+        // as allow without surfacing UI. This is the contract for "Auto" in the permission dropdown
+        // and for the plan-card "Accept + auto-approve" button.
+        // ExitPlanMode and AskUserQuestion are excluded so the user always sees the plan card
+        // / question card and makes a choice — auto-approving AskUserQuestion would let the CLI
+        // proceed with no answer injected, defeating the tool's purpose.
+        if let sid = req.sessionId,
+           sessionRegistry[sid]?.mode == .auto,
+           !Self.isExitPlanModeTool(req.toolName),
+           req.toolName != "AskUserQuestion" {
+            return "Auto-approve mode"
+        }
+
         if let sid = req.sessionId,
            sessionToolAllows.contains(Self.sessionToolKey(sid: sid, tool: req.toolName)) {
             return "Tool allowed for session by user"
@@ -262,7 +298,7 @@ actor PermissionServer {
             "hooks": [
                 "PreToolUse": [
                     [
-                        "matcher": "^(Bash|Edit|Write|MultiEdit|AskUserQuestion|mcp__.*)$",
+                        "matcher": "^(Bash|Edit|Write|MultiEdit|AskUserQuestion|ExitPlanMode|exit_plan_mode|mcp__.*)$",
                         "hooks": [
                             [
                                 "type": "http",
@@ -336,7 +372,8 @@ actor PermissionServer {
                     toolName: hookRequest.toolName,
                     toolInput: hookRequest.toolInput,
                     runToken: runToken,
-                    streamPermissionMode: streamMode
+                    streamPermissionMode: streamMode,
+                    sessionId: hookRequest.sessionId
                 )
 
                 let outcome = await waitForDecision(
@@ -347,10 +384,13 @@ actor PermissionServer {
                 )
 
                 let allowed = outcome.decision == .allow
+                // For deny-with-feedback we pass the user's improvement text as the hook's
+                // `permissionDecisionReason` so the CLI can hand it back to the model.
+                let defaultReason = allowed ? "User approved" : "User denied"
                 try await sendHookResponse(
                     connection,
                     decision: allowed ? "allow" : "deny",
-                    reason: allowed ? "User approved" : "User denied",
+                    reason: outcome.reasonOverride ?? defaultReason,
                     updatedInput: outcome.updatedInput
                 )
 
@@ -370,9 +410,11 @@ actor PermissionServer {
         emit request: PermissionRequest
     ) async -> DecisionOutcome {
         let isFirst = pending[toolUseId] == nil
-        // AskUserQuestion is answered inline inside the chat bubble (AskUserQuestionView),
-        // so we skip the generic PermissionModal broadcast — otherwise two UIs compete.
-        if isFirst && toolName != "AskUserQuestion" {
+        // ExitPlanMode owns its own inline plan card so it skips the generic broadcast.
+        // AskUserQuestion now flows through the same queue as permissions — the UI distinguishes
+        // by `toolName` and presents `QuestionSheetView` instead of `PermissionModal`.
+        let suppressGenericModal = Self.isExitPlanModeTool(toolName)
+        if isFirst && !suppressGenericModal {
             broadcast(request)
         }
 
@@ -385,7 +427,8 @@ actor PermissionServer {
                     continuations: [continuation],
                     sessionId: sessionId,
                     toolName: toolName,
-                    updatedInput: nil
+                    updatedInput: nil,
+                    reasonOverride: nil
                 )
                 timeoutTasks[toolUseId] = Task { [weak self] in
                     try? await Task.sleep(nanoseconds: UInt64(Self.timeoutSeconds) * 1_000_000_000)
@@ -398,11 +441,16 @@ actor PermissionServer {
         return outcome
     }
 
+    private static func isExitPlanModeTool(_ toolName: String) -> Bool {
+        let normalized = toolName.lowercased()
+        return normalized == "exitplanmode" || normalized == "exit_plan_mode"
+    }
+
     /// Remove and resume all pending continuations with .deny (timeout case).
     private func cancelPendingIfNeeded(toolUseId: String) {
         guard let entry = pending.removeValue(forKey: toolUseId) else { return }
         for continuation in entry.continuations {
-            continuation.resume(returning: DecisionOutcome(decision: .deny, updatedInput: nil))
+            continuation.resume(returning: DecisionOutcome(decision: .deny, updatedInput: nil, reasonOverride: nil))
         }
     }
 

@@ -3,8 +3,10 @@ import ClarcCore
 
 struct StatusLineView: View {
     @Environment(ChatBridge.self) private var chatBridge
-    @Environment(WindowState.self) private var windowState
     @State private var rateLimit: RateLimitUsage?
+    @State private var showFiveHourPopover = false
+    @State private var showSevenDayPopover = false
+    @State private var showContextPopover = false
 
     private var modelDisplayName: String {
         chatBridge.modelDisplayName
@@ -24,32 +26,32 @@ struct StatusLineView: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            if let project = windowState.selectedProject {
-                segment(icon: "folder.fill", text: abbreviatePath(project.path), color: ClaudeTheme.statusWarning)
-            }
-
             segment(icon: "cpu", text: modelDisplayName, color: ClaudeTheme.statusSuccess)
 
             Divider().frame(height: 12)
 
-            rateLimitSegment(label: String(localized: "5h", bundle: .module), icon: "clock", percent: rateLimit?.fiveHourPercent, resetsAt: rateLimit?.fiveHourResetsAt)
-            rateLimitSegment(label: String(localized: "7d", bundle: .module), icon: "calendar", percent: rateLimit?.sevenDayPercent, resetsAt: rateLimit?.sevenDayResetsAt)
+            rateLimitSegment(
+                label: String(localized: "5h", bundle: .module),
+                icon: "clock",
+                percent: rateLimit?.fiveHourPercent,
+                resetsAt: rateLimit?.fiveHourResetsAt,
+                isPresented: $showFiveHourPopover,
+                title: "5-hour rate limit",
+                body: "Tracks usage against Anthropic's rolling 5-hour limit. Resets gradually as older requests age out."
+            )
+            rateLimitSegment(
+                label: String(localized: "7d", bundle: .module),
+                icon: "calendar",
+                percent: rateLimit?.sevenDayPercent,
+                resetsAt: rateLimit?.sevenDayResetsAt,
+                isPresented: $showSevenDayPopover,
+                title: "7-day rate limit",
+                body: "Tracks usage against Anthropic's rolling 7-day limit. Resets gradually as older requests age out."
+            )
 
             Divider().frame(height: 12)
 
-            HStack(spacing: 4) {
-                Image(systemName: "memorychip")
-                    .font(.system(size: ClaudeTheme.size(10)))
-                Text("context", bundle: .module)
-                if let ctxPct = contextPercentage {
-                    miniBar(percent: ctxPct)
-                    Text("\(Int(ctxPct))%")
-                        .foregroundStyle(colorForPercent(ctxPct))
-                } else {
-                    Text("--")
-                }
-            }
-            .foregroundStyle(ClaudeTheme.textTertiary)
+            contextSegment()
 
             Spacer()
 
@@ -59,6 +61,10 @@ struct StatusLineView: View {
                 Text(formatTotalDuration(totalResponseDuration))
             }
             .foregroundStyle(ClaudeTheme.textTertiary)
+
+            Divider().frame(height: 12)
+
+            versionSegment()
         }
         .font(.system(size: ClaudeTheme.size(12), weight: .medium, design: .monospaced))
         .padding(.leading, 12)
@@ -84,6 +90,20 @@ struct StatusLineView: View {
         }
     }
 
+    // MARK: - Version Segment
+
+    @ViewBuilder
+    private func versionSegment() -> some View {
+        if let cli = chatBridge.claudeVersion {
+            HStack(spacing: 4) {
+                Image(systemName: "sparkle")
+                    .font(.system(size: ClaudeTheme.size(10)))
+                Text("CC \(cli)")
+            }
+            .foregroundStyle(ClaudeTheme.textTertiary)
+        }
+    }
+
     // MARK: - Segment
 
     private func segment(icon: String, text: String, color: Color) -> some View {
@@ -98,7 +118,15 @@ struct StatusLineView: View {
     // MARK: - Rate Limit Segment
 
     @ViewBuilder
-    private func rateLimitSegment(label: String, icon: String, percent: Double?, resetsAt: Date?) -> some View {
+    private func rateLimitSegment(
+        label: String,
+        icon: String,
+        percent: Double?,
+        resetsAt: Date?,
+        isPresented: Binding<Bool>,
+        title: LocalizedStringKey,
+        body: LocalizedStringKey
+    ) -> some View {
         HStack(spacing: 4) {
             Image(systemName: icon)
                 .font(.system(size: ClaudeTheme.size(10)))
@@ -117,6 +145,77 @@ struct StatusLineView: View {
                     .foregroundStyle(ClaudeTheme.textTertiary)
             }
         }
+        .contentShape(Rectangle())
+        .onTapGesture { isPresented.wrappedValue.toggle() }
+        .popover(isPresented: isPresented, arrowEdge: .top) {
+            descriptionPopover(title: title, body: body, percent: percent, resetsAt: resetsAt)
+        }
+    }
+
+    // MARK: - Context Segment
+
+    @ViewBuilder
+    private func contextSegment() -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: "memorychip")
+                .font(.system(size: ClaudeTheme.size(10)))
+            Text("context", bundle: .module)
+            if let ctxPct = contextPercentage {
+                miniBar(percent: ctxPct)
+                Text("\(Int(ctxPct))%")
+                    .foregroundStyle(colorForPercent(ctxPct))
+            } else {
+                Text("--")
+            }
+        }
+        .foregroundStyle(ClaudeTheme.textTertiary)
+        .contentShape(Rectangle())
+        .onTapGesture { showContextPopover.toggle() }
+        .popover(isPresented: $showContextPopover, arrowEdge: .top) {
+            descriptionPopover(
+                title: "Context window",
+                body: "Portion of the current conversation's context window in use. When it fills, older messages may be summarized or dropped.",
+                percent: contextPercentage,
+                resetsAt: nil
+            )
+        }
+    }
+
+    // MARK: - Description Popover
+
+    @ViewBuilder
+    private func descriptionPopover(
+        title: LocalizedStringKey,
+        body: LocalizedStringKey,
+        percent: Double?,
+        resetsAt: Date?
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title, bundle: .module)
+                .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
+                .foregroundStyle(ClaudeTheme.textPrimary)
+            Text(body, bundle: .module)
+                .font(.system(size: ClaudeTheme.size(12)))
+                .foregroundStyle(ClaudeTheme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let pct = percent {
+                Divider()
+                    .padding(.vertical, 2)
+                HStack(spacing: 6) {
+                    Text("Currently at \(Int(pct))%", bundle: .module)
+                        .foregroundStyle(colorForPercent(pct))
+                    if let resets = resetsAt, resets.timeIntervalSinceNow > 0 {
+                        Text("·")
+                            .foregroundStyle(ClaudeTheme.textTertiary)
+                        Text("Resets in \(shortCountdown(until: resets))", bundle: .module)
+                            .foregroundStyle(ClaudeTheme.textTertiary)
+                    }
+                }
+                .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: 280, alignment: .leading)
     }
 
     // MARK: - Mini Progress Bar
@@ -170,14 +269,6 @@ struct StatusLineView: View {
         f.maximumUnitCount = 2
         f.allowedUnits = [.hour, .minute, .second]
         return f.string(from: seconds) ?? "—"
-    }
-
-    private func abbreviatePath(_ path: String) -> String {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        if path.hasPrefix(home) {
-            return "~" + path.dropFirst(home.count)
-        }
-        return path
     }
 
     private func refreshRateLimit() async {

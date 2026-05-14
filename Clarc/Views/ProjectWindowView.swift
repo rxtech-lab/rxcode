@@ -6,8 +6,6 @@ import ClarcChatKit
 struct ProjectWindowView: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
-    @State private var sidebarTab: MainView.SidebarTab = .history
-    @State private var fileSearchTrigger = false
     @State private var inspectorStarted = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
@@ -28,7 +26,7 @@ struct ProjectWindowView: View {
                         .hidden()
                     }
                     .id(appState.themeRevision)
-                    .navigationTitle(windowState.selectedProject?.name ?? "Project")
+                    .toolbar(removing: .title)
                     .onChange(of: windowState.showInspector) { _, isShowing in
                         if isShowing, !inspectorStarted { inspectorStarted = true }
                     }
@@ -40,7 +38,7 @@ struct ProjectWindowView: View {
                     }
 
                     if inspectorStarted {
-                        InspectorPanel()
+                        RightInspectorPanel()
                     }
                 }
             } else {
@@ -59,7 +57,12 @@ struct ProjectWindowView: View {
                        minHeight: 600, idealHeight: 1000, maxHeight: 1200)
         }
         .sheet(item: Bindable(windowState).diffFile) { file in
-            FileDiffView(filePath: file.path, fileName: file.name, editHunks: file.editHunks)
+            FileDiffView(
+                filePath: file.path,
+                fileName: file.name,
+                editHunks: file.editHunks,
+                gitDiffMode: file.gitDiffMode
+            )
                 .frame(minWidth: 1000, idealWidth: 1400, maxWidth: 1920,
                        minHeight: 600, idealHeight: 1000, maxHeight: 1200)
         }
@@ -74,29 +77,7 @@ struct ProjectWindowView: View {
 
     private var sidebarContent: some View {
         VStack(spacing: 0) {
-            // Sidebar tabs (History/Files)
-            ClaudeSegmentedControl(selection: $sidebarTab)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-
-            ClaudeThemeDivider()
-
-            switch sidebarTab {
-            case .files:
-                if let project = windowState.selectedProject {
-                    FileTreeView(projectPath: project.path, searchTrigger: $fileSearchTrigger)
-                }
-            case .history:
-                HistoryListView()
-            }
-
-            SidebarTabShortcuts(sidebarTab: $sidebarTab, fileSearchTrigger: $fileSearchTrigger, columnVisibility: $columnVisibility)
-
-            ClaudeThemeDivider()
-
-            if let project = windowState.selectedProject {
-                GitStatusView(projectPath: project.path)
-            }
+            ProjectTreeView()
         }
         .background(ClaudeTheme.sidebarBackground)
         .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 360)
@@ -135,9 +116,16 @@ struct ProjectWindowView: View {
                 VStack(spacing: 0) {
                     chatToolbarArea
                     ClaudeThemeDivider()
-                    ChatView {
-                        ChatToolbarControls(placement: .composer)
-                    }
+                    ChatView(inputAccessory: {
+                        HStack(spacing: 8) {
+                            ChatToolbarControls(placement: .composer)
+                            BranchPickerChip()
+                        }
+                    }, bottomAccessory: {
+                        RecentChatsSuggestionList()
+                    }, aboveInputAccessory: {
+                        PermissionQueueBanner()
+                    })
                 }
                 .modifier(ChatDetailModifiers())
             } else {
@@ -147,23 +135,9 @@ struct ProjectWindowView: View {
                     .background(ClaudeTheme.background)
             }
         }
+        .toolbarBackground(.visible, for: .windowToolbar)
         .toolbar {
-            ToolbarItemGroup(placement: .automatic) {
-                Button {
-                    appState.startNewChat(in: windowState)
-                } label: {
-                    Image(systemName: "square.and.pencil")
-                }
-                .help("New Chat")
-
-                Button {
-                    windowState.showInspector.toggle()
-                } label: {
-                    Image(systemName: "sidebar.trailing")
-                }
-                .help("Toggle Inspector")
-                .keyboardShortcut("4", modifiers: .command)
-            }
+            ClarcToolbarContent()
         }
         .focusedValue(\.startNewChat) {
             appState.startNewChat(in: windowState)

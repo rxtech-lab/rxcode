@@ -2,6 +2,8 @@
 
 // MARK: - InputBarView
 "Attach file" = "파일 첨부";
+"Plan" = "계획";
+"Turn off plan mode" = "플랜 모드 끄기";
 "Type a message..." = "메시지를 입력하세요...";
 
 // MARK: - FileDiffView
@@ -145,6 +147,14 @@
 "context" = "컨텍스트";
 "5h" = "5시간";
 "7d" = "7일";
+"5-hour rate limit" = "5시간 사용량 한도";
+"Tracks usage against Anthropic's rolling 5-hour limit. Resets gradually as older requests age out." = "Anthropic의 5시간 롤링 한도 대비 사용량을 추적합니다. 이전 요청이 시간이 지남에 따라 점진적으로 리셋됩니다.";
+"7-day rate limit" = "7일 사용량 한도";
+"Tracks usage against Anthropic's rolling 7-day limit. Resets gradually as older requests age out." = "Anthropic의 7일 롤링 한도 대비 사용량을 추적합니다. 이전 요청이 시간이 지남에 따라 점진적으로 리셋됩니다.";
+"Context window" = "컨텍스트 윈도우";
+"Portion of the current conversation's context window in use. When it fills, older messages may be summarized or dropped." = "현재 대화의 컨텍스트 윈도우 중 사용 중인 비율입니다. 가득 차면 이전 메시지가 요약되거나 삭제될 수 있습니다.";
+"Currently at %lld%%" = "현재 %lld%%";
+"Resets in %@" = "%@ 후 리셋";
 
 // MARK: - ToolResultView
 "Show less" = "접기";
@@ -254,4 +264,5 @@
 
 // MARK: - AskUserQuestionView
 "Question" = "질문";
-
+"tokens" = "토큰";
+"tok" = "토큰";

@@ -12,8 +12,14 @@ actor ClaudeService {
 
     // MARK: - State
 
-    /// Concurrently running processes — managed independently per streamId
-    private var processes: [UUID: Process] = [:]
+    /// PGIDs of concurrently running streaming CLI invocations — managed independently per streamId.
+    ///
+    /// The streaming `claude` is launched in its own process group (via `posix_spawn` +
+    /// `POSIX_SPAWN_SETPGROUP`) so the leader pid == pgid. This lets us reap the
+    /// entire subagent subtree with a single `killpg` instead of chasing descendants
+    /// individually — node subagents spawned via the Task tool inherit the same group
+    /// and get swept along.
+    private var streamPGIDs: [UUID: pid_t] = [:]
     /// Writable stdin handles per stream — used for sending follow-up messages (e.g., AskUserQuestion responses).
     /// Entry is removed when stdin is closed (after `result` event or on cancel).
     private var stdinHandles: [UUID: FileHandle] = [:]
@@ -148,7 +154,7 @@ actor ClaudeService {
 
     /// Build the full environment dictionary for spawned subprocesses,
     /// inheriting the GUI environment but with PATH replaced by ``resolvedShellPath()``.
-    private func resolvedEnvironment() async -> [String: String] {
+    func resolvedEnvironment() async -> [String: String] {
         var env = ProcessInfo.processInfo.environment
         env["PATH"] = await resolvedShellPath()
         return env
@@ -249,6 +255,66 @@ actor ClaudeService {
 
         logger.info("Claude CLI version: \(version, privacy: .public)")
         return version
+    }
+
+    // MARK: - Title Generation
+
+    /// Generate a short 3–6 word title for a chat from the first user message.
+    /// Uses a one-shot `claude -p` invocation with Haiku — runs outside of the streaming
+    /// pipeline and does NOT hit the PermissionServer hook (no `--settings` passed).
+    /// Returns nil on any failure; callers should keep the placeholder title in that case.
+    func generateSessionTitle(firstUserMessage: String) async -> String? {
+        guard let binary = await findClaudeBinary() else { return nil }
+        let trimmedUser = String(firstUserMessage.prefix(500))
+        let prompt = """
+        Summarize the following user message as a 3-6 word chat title. \
+        Reply with ONLY the title, no quotes, no markdown, no punctuation at the end.
+
+        \(trimmedUser)
+        """
+        // Title generation is pure text — no tools needed. Strip MCP servers so a
+        // user's broken tool schema (e.g. an MCP server returning invalid JSON schema)
+        // can't blow up the title call with "API Error: 400 tools.NN.custom.input_schema".
+        let emptyMCPConfigPath = writeEmptyMCPConfig()
+        var args: [String] = ["-p", prompt, "--output-format", "text", "--model", "claude-haiku-4-5-20251001"]
+        if let emptyMCPConfigPath {
+            args.append(contentsOf: ["--strict-mcp-config", "--mcp-config", emptyMCPConfigPath])
+        }
+        do {
+            let output = try await runShellCommand(binary, arguments: args)
+            let cleaned = output
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
+            guard !cleaned.isEmpty else { return nil }
+            // `claude -p` prints API/CLI failures to stdout (e.g. "API Error: 400 ...").
+            // Don't promote those to the sidebar title — keep the placeholder instead.
+            let lower = cleaned.lowercased()
+            let errorPrefixes = ["api error", "error:", "execution error", "request failed", "claude error"]
+            if errorPrefixes.contains(where: { lower.hasPrefix($0) }) {
+                logger.warning("Title generation produced an error string; ignoring: \(cleaned.prefix(120))")
+                return nil
+            }
+            return String(cleaned.prefix(80))
+        } catch {
+            logger.warning("Title generation failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    /// Write a one-off MCP config file (with no servers) used by the title-generation
+    /// call so it doesn't inherit user-level MCP servers. Returns nil on I/O failure;
+    /// caller falls back to the default config.
+    private func writeEmptyMCPConfig() -> String? {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("Clarc", isDirectory: true)
+        let path = dir.appendingPathComponent("empty-mcp.json")
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try Data("{\"mcpServers\":{}}".utf8).write(to: path, options: .atomic)
+            return path.path
+        } catch {
+            logger.warning("Failed to write empty MCP config: \(error.localizedDescription)")
+            return nil
+        }
     }
 
     // MARK: - Send (spawn + stream)
@@ -377,23 +443,46 @@ actor ClaudeService {
         }
     }
 
-    // MARK: - Cancel
+    // MARK: - Cancel / Finalize
 
-    /// Terminate the process corresponding to a given streamId (SIGINT → SIGKILL after 5 seconds).
+    /// User-initiated stop. Send SIGINT to the entire process group so subagent
+    /// children die alongside the parent. Escalate to SIGKILL after 5 seconds.
     func cancel(streamId: UUID) {
-        guard let process = processes[streamId], process.isRunning else { return }
+        guard let pgid = streamPGIDs[streamId] else { return }
 
-        logger.info("Sending SIGINT to claude process \(process.processIdentifier) (stream=\(streamId))")
-        process.interrupt() // SIGINT
+        logger.info("Sending SIGINT to claude pgid \(pgid) (stream=\(streamId))")
+        killpg(pgid, SIGINT)
 
-        // Schedule a forced kill after 5 seconds if still alive.
-        let pid = process.processIdentifier
         let log = logger
         Task {
             try? await Task.sleep(nanoseconds: 5_000_000_000)
-            if process.isRunning {
-                log.warning("Process \(pid) still running after 5 s, sending SIGKILL")
-                kill(pid, SIGKILL)
+            // killpg on a fully-dead group returns ESRCH — harmless. Send unconditionally
+            // to cover any subagent that ignored SIGINT.
+            if killpg(pgid, SIGKILL) == 0 {
+                log.warning("Process group \(pgid) still alive after 5 s — sent SIGKILL")
+            }
+        }
+    }
+
+    /// Thread-finished sweep. Called after the `result` event (and from the exit
+    /// handler) to guarantee no subagent process outlives the parent CLI.
+    ///
+    /// The parent `claude` will already be on its way out by the time we call this
+    /// (`closeStdin` was just invoked), so SIGTERM to the group is a no-op race
+    /// for the leader and a real kill for any subagent that the parent failed to
+    /// reap on exit. SIGKILL escalation 2 s later handles the rare case where a
+    /// subagent ignores SIGTERM.
+    func finalize(streamId: UUID) {
+        guard let pgid = streamPGIDs[streamId] else { return }
+
+        logger.info("Finalizing stream — killpg(SIGTERM) pgid=\(pgid) stream=\(streamId)")
+        killpg(pgid, SIGTERM)
+
+        let log = logger
+        Task {
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            if killpg(pgid, SIGKILL) == 0 {
+                log.debug("Finalize SIGKILL pgid=\(pgid) reaped stragglers")
             }
         }
     }
@@ -459,7 +548,12 @@ actor ClaudeService {
         return args
     }
 
-    /// Actually launch the `Process`.
+    /// Launch the streaming `claude` CLI in its own process group via `posix_spawn`.
+    ///
+    /// Foundation's `Process` does not expose `posix_spawnattr_t`, so the streaming
+    /// invocation goes through the raw POSIX API. The new group means the leader's
+    /// pid is also its pgid — `killpg(pid, ...)` reaches every subagent the CLI
+    /// spawns via the Task tool.
     private func spawnProcess(
         streamId: UUID,
         prompt: String,
@@ -478,69 +572,148 @@ actor ClaudeService {
             throw ClaudeError.binaryNotFound
         }
 
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: binary)
-        proc.arguments = buildArguments(
+        let arguments = buildArguments(
             sessionId: sessionId,
             model: model,
             effort: effort,
             hookSettingsPath: hookSettingsPath,
             permissionMode: permissionMode
         )
-        proc.currentDirectoryURL = URL(fileURLWithPath: cwd)
-        proc.standardInput = stdinPipe
-        proc.standardOutput = stdoutPipe
-        proc.standardError = stderrPipe
+        let environment = await resolvedEnvironment()
 
-        // Inherit a reasonable environment so the CLI can find config files, etc.,
-        // and override PATH so the `node` shebang in `claude` resolves under GUI launch.
-        proc.environment = await resolvedEnvironment()
+        let stdinReadFD = stdinPipe.fileHandleForReading.fileDescriptor
+        let stdoutWriteFD = stdoutPipe.fileHandleForWriting.fileDescriptor
+        let stderrWriteFD = stderrPipe.fileHandleForWriting.fileDescriptor
 
-        let log = logger
-        proc.terminationHandler = { [weak self] process in
-            let status = process.terminationStatus
-            let reason = process.terminationReason
-            log.info(
-                "claude process exited — status: \(status), reason: \(reason.rawValue), stream=\(streamId)"
-            )
-            Task {
-                await self?.removeProcess(streamId: streamId)
-                if let sid = await self?.consumeSessionId(streamId: streamId) {
-                    await self?.cliStore.exposeToPicker(sid: sid, cwd: cwd)
-                }
-            }
-            onProcessExit?()
-        }
-
+        let pid: pid_t
         do {
-            try proc.run()
-            // Keep stdin open for stream-json input protocol.
-            // The CLI reads NDJSON messages from stdin until EOF; closing stdin
-            // is how we signal "no more input" and let the process exit cleanly.
-            // This happens in `closeStdin(streamId:)` after the `result` event.
-            let stdinHandle = stdinPipe.fileHandleForWriting
-            self.processes[streamId] = proc
-            self.stdinHandles[streamId] = stdinHandle
-
-            // Send the initial user prompt as an NDJSON user message.
-            let userMessage: [String: Any] = [
-                "type": "user",
-                "message": [
-                    "role": "user",
-                    "content": [
-                        ["type": "text", "text": prompt]
-                    ]
-                ]
-            ]
-            try Self.writeJSONLine(userMessage, to: stdinHandle)
-
-            logger.info(
-                "Spawned claude process pid=\(proc.processIdentifier) cwd=\(cwd, privacy: .public) stream=\(streamId)"
+            pid = try Self.spawnInNewProcessGroup(
+                executable: binary,
+                arguments: arguments,
+                environment: environment,
+                cwd: cwd,
+                stdinReadFD: stdinReadFD,
+                stdoutWriteFD: stdoutWriteFD,
+                stderrWriteFD: stderrWriteFD
             )
         } catch {
             logger.error("Failed to spawn claude: \(error, privacy: .public)")
             throw ClaudeError.spawnFailed(error.localizedDescription)
         }
+
+        // Parent must release the child-owned pipe ends so EOF propagates correctly.
+        try? stdinPipe.fileHandleForReading.close()
+        try? stdoutPipe.fileHandleForWriting.close()
+        try? stderrPipe.fileHandleForWriting.close()
+
+        // Keep stdin open for stream-json input protocol. closed in `closeStdin(streamId:)`
+        // after the `result` event so the CLI can flush remaining output and exit.
+        let stdinHandle = stdinPipe.fileHandleForWriting
+        self.streamPGIDs[streamId] = pid
+        self.stdinHandles[streamId] = stdinHandle
+
+        // Send the initial user prompt as an NDJSON user message.
+        let userMessage: [String: Any] = [
+            "type": "user",
+            "message": [
+                "role": "user",
+                "content": [
+                    ["type": "text", "text": prompt]
+                ]
+            ]
+        ]
+        try Self.writeJSONLine(userMessage, to: stdinHandle)
+
+        logger.info(
+            "Spawned claude process pid=\(pid) pgid=\(pid) cwd=\(cwd, privacy: .public) stream=\(streamId)"
+        )
+
+        // Wait for the parent CLI to exit on a background thread, then sweep
+        // the process group to reap any subagent children that outlived it.
+        let log = logger
+        let cwdCopy = cwd
+        Task.detached { [weak self] in
+            var status: Int32 = 0
+            var rc: pid_t = 0
+            repeat {
+                rc = waitpid(pid, &status, 0)
+            } while rc < 0 && errno == EINTR
+
+            log.info(
+                "claude process exited — pid=\(pid) raw_status=\(status) stream=\(streamId)"
+            )
+
+            await self?.handleProcessExit(streamId: streamId, cwd: cwdCopy)
+            onProcessExit?()
+        }
+    }
+
+    /// Run after the parent CLI's `waitpid` returns. Sweep any surviving subagents
+    /// in the same process group, then drop bookkeeping for the stream.
+    private func handleProcessExit(streamId: UUID, cwd: String) async {
+        finalize(streamId: streamId)
+        removeProcess(streamId: streamId)
+        if let sid = consumeSessionId(streamId: streamId) {
+            await cliStore.exposeToPicker(sid: sid, cwd: cwd)
+        }
+    }
+
+    /// Spawn `executable` with `arguments` in its own process group.
+    /// Returns the child pid (== pgid since `POSIX_SPAWN_SETPGROUP` with group 0
+    /// makes the child its own group leader).
+    private static func spawnInNewProcessGroup(
+        executable: String,
+        arguments: [String],
+        environment: [String: String],
+        cwd: String,
+        stdinReadFD: Int32,
+        stdoutWriteFD: Int32,
+        stderrWriteFD: Int32
+    ) throws -> pid_t {
+        var fileActions: posix_spawn_file_actions_t?
+        guard posix_spawn_file_actions_init(&fileActions) == 0 else {
+            throw ClaudeError.spawnFailed("posix_spawn_file_actions_init failed")
+        }
+        defer { posix_spawn_file_actions_destroy(&fileActions) }
+
+        _ = posix_spawn_file_actions_adddup2(&fileActions, stdinReadFD, 0)
+        _ = posix_spawn_file_actions_adddup2(&fileActions, stdoutWriteFD, 1)
+        _ = posix_spawn_file_actions_adddup2(&fileActions, stderrWriteFD, 2)
+
+        let chdirRC = cwd.withCString { cwdPtr in
+            posix_spawn_file_actions_addchdir_np(&fileActions, cwdPtr)
+        }
+        if chdirRC != 0 {
+            throw ClaudeError.spawnFailed("posix_spawn_file_actions_addchdir_np failed: \(chdirRC)")
+        }
+
+        var attr: posix_spawnattr_t?
+        guard posix_spawnattr_init(&attr) == 0 else {
+            throw ClaudeError.spawnFailed("posix_spawnattr_init failed")
+        }
+        defer { posix_spawnattr_destroy(&attr) }
+
+        _ = posix_spawnattr_setflags(&attr, Int16(POSIX_SPAWN_SETPGROUP))
+        _ = posix_spawnattr_setpgroup(&attr, 0)
+
+        var argv: [UnsafeMutablePointer<CChar>?] = ([executable] + arguments).map { strdup($0) }
+        argv.append(nil)
+        defer { for p in argv { if let p = p { free(p) } } }
+
+        let envEntries = environment.map { "\($0.key)=\($0.value)" }
+        var envp: [UnsafeMutablePointer<CChar>?] = envEntries.map { strdup($0) }
+        envp.append(nil)
+        defer { for p in envp { if let p = p { free(p) } } }
+
+        var pid: pid_t = 0
+        let rc = executable.withCString { execPath in
+            posix_spawn(&pid, execPath, &fileActions, &attr, argv, envp)
+        }
+        if rc != 0 {
+            let msg = String(cString: strerror(rc))
+            throw ClaudeError.spawnFailed("posix_spawn failed: \(msg) (\(rc))")
+        }
+        return pid
     }
 
     // MARK: - Stdin Writer
@@ -565,9 +738,10 @@ actor ClaudeService {
         }
     }
 
-    /// Remove a process from within actor isolation, called from terminationHandler.
+    /// Remove a stream's bookkeeping from within actor isolation, called from
+    /// the waitpid-driven exit handler.
     private func removeProcess(streamId: UUID) {
-        processes.removeValue(forKey: streamId)
+        streamPGIDs.removeValue(forKey: streamId)
         // If stdin is still open (e.g. abnormal exit before `result`), release the handle.
         if let handle = stdinHandles.removeValue(forKey: streamId) {
             try? handle.close()
@@ -658,10 +832,11 @@ actor ClaudeService {
         inactivityTimer?.cancel()
         inactivityTimer = nil
 
-        for (_, process) in processes where process.isRunning {
-            process.interrupt()
+        // killpg sweeps the parent CLI + every subagent in its process group.
+        for (_, pgid) in streamPGIDs {
+            killpg(pgid, SIGTERM)
         }
-        processes.removeAll()
+        streamPGIDs.removeAll()
         for (_, handle) in stdinHandles {
             try? handle.close()
         }

@@ -1,7 +1,7 @@
+import ClarcChatKit
+import ClarcCore
 import SwiftUI
 import UniformTypeIdentifiers
-import ClarcCore
-import ClarcChatKit
 
 struct MainView: View {
     @Environment(AppState.self) private var appState
@@ -16,7 +16,9 @@ struct MainView: View {
     @State private var projectToDelete: Project? = nil
     @State private var projectToRename: Project? = nil
     @State private var renameText: String = ""
+    @State private var memoAnchor: Bool = false
 
+    // Kept for backward compatibility with `ClaudeSegmentedControl` and `SidebarTabShortcuts`.
     enum SidebarTab: String, CaseIterable {
         case history = "History"
         case files = "Files"
@@ -75,36 +77,28 @@ struct MainView: View {
                 .onAppear {
                     windowState.focusMode = appState.focusMode
                 }
-                .navigationTitle({
-                    let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
-                    let base = "Clarc(\(appVersion))"
-                    if let cliVersion = appState.claudeVersion {
-                        return "\(base) — CC \(cliVersion)"
-                    }
-                    return base
-                }())
+                .toolbar(removing: .title)
                 .toolbar {
                     if columnVisibility != .detailOnly {
-                        ToolbarItemGroup(placement: .confirmationAction) {
+                        ToolbarItem(placement: .navigation) {
                             Button {
                                 showGitHubSheet = true
                             } label: {
                                 Image("GitHubMark")
+                                    .renderingMode(.template)
                                     .resizable()
-                                    .frame(width: 18, height: 18)
-                                    .foregroundStyle(ClaudeTheme.textSecondary)
+                                    .scaledToFit()
+                                    .frame(width: 16, height: 16)
                             }
-                            .buttonStyle(.plain)
                             .help(appState.isLoggedIn ? "Manage GitHub Repos" : "Connect GitHub")
+                        }
 
+                        ToolbarItem(placement: .navigation) {
                             Button {
                                 showFilePicker = true
                             } label: {
                                 Image(systemName: "plus")
-                                    .font(.system(size: ClaudeTheme.size(16)))
-                                    .foregroundStyle(ClaudeTheme.textSecondary)
                             }
-                            .buttonStyle(.plain)
                             .help("Add Project")
                             .fileImporter(
                                 isPresented: $showFilePicker,
@@ -114,12 +108,11 @@ struct MainView: View {
                                 handleFolderSelection(result)
                             }
                         }
-                    
                     }
                 }
 
                 if inspectorStarted {
-                    InspectorPanel()
+                    RightInspectorPanel()
                 }
             }
         }
@@ -129,30 +122,7 @@ struct MainView: View {
 
     private var sidebarContent: some View {
         VStack(spacing: 0) {
-            if windowState.selectedProject != nil {
-                ClaudeSegmentedControl(selection: $sidebarTab)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-
-                switch sidebarTab {
-                case .files:
-                    FileTreeView(projectPath: windowState.selectedProject!.path, searchTrigger: $fileSearchTrigger)
-                case .history:
-                    HistoryListView()
-                }
-            } else {
-                HistoryListView()
-            }
-
-            if windowState.selectedProject != nil {
-                SidebarTabShortcuts(sidebarTab: $sidebarTab, fileSearchTrigger: $fileSearchTrigger, columnVisibility: $columnVisibility)
-            }
-
-            ClaudeThemeDivider()
-
-            if let project = windowState.selectedProject {
-                GitStatusView(projectPath: project.path)
-            }
+            ProjectTreeView()
         }
         .background(ClaudeTheme.sidebarBackground)
         .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 360)
@@ -161,69 +131,24 @@ struct MainView: View {
         }
     }
 
-    // MARK: - Chat Toolbar Area (moved from old ChatView)
+    // MARK: - Detail
 
     @Environment(\.openWindow) private var openWindow
-
-    private var chatToolbarArea: some View {
-        HStack(spacing: 12) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 4) {
-                    // isSelected is computed here and passed as a value so ProjectTabButton.body
-                    // does not access windowState.selectedProject — only the 2 changed buttons re-render.
-                    ForEach(appState.projects) { project in
-                        ProjectTabButton(
-                            project: project,
-                            isSelected: windowState.selectedProject?.id == project.id,
-                            projectToDelete: $projectToDelete,
-                            projectToRename: $projectToRename,
-                            renameText: $renameText
-                        )
-                    }
-                }
-            }
-
-            Spacer()
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(ClaudeTheme.surfaceElevated)
-        .confirmationDialog(
-            "Delete \"\(projectToDelete?.name ?? "")\"?",
-            isPresented: Binding(
-                get: { projectToDelete != nil },
-                set: { if !$0 { projectToDelete = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button("Delete", role: .destructive) {
-                if let project = projectToDelete {
-                    Task { await appState.deleteProject(project, in: windowState) }
-                }
-                projectToDelete = nil
-            }
-            Button("Cancel", role: .cancel) { projectToDelete = nil }
-        } message: {
-            Text("This will remove the project from Clarc. The files on disk will not be deleted.")
-        }
-        .sheet(item: $projectToRename) { project in
-            RenameProjectSheet(name: $renameText) {
-                Task { await appState.renameProject(project, to: renameText) }
-            }
-        }
-    }
-
-    // MARK: - Detail
 
     private var detailContent: some View {
         Group {
             if windowState.selectedProject != nil {
                 VStack(spacing: 0) {
-                    chatToolbarArea
-                    ClaudeThemeDivider()
-                    ChatView {
-                        ChatToolbarControls(placement: .composer)
-                    }
+                    ChatView(inputAccessory: {
+                        HStack(spacing: 8) {
+                            ChatToolbarControls(placement: .composer)
+                            BranchPickerChip()
+                        }
+                    }, bottomAccessory: {
+                        RecentChatsSuggestionList()
+                    }, aboveInputAccessory: {
+                        PermissionQueueBanner()
+                    })
                 }
                 .modifier(ChatDetailModifiers())
             } else if !windowState.isInitialized {
@@ -255,7 +180,12 @@ struct MainView: View {
                        minHeight: 600, idealHeight: 1000, maxHeight: 1200)
         }
         .sheet(item: Bindable(windowState).diffFile) { file in
-            FileDiffView(filePath: file.path, fileName: file.name, editHunks: file.editHunks)
+            FileDiffView(
+                filePath: file.path,
+                fileName: file.name,
+                editHunks: file.editHunks,
+                gitDiffMode: file.gitDiffMode
+            )
                 .frame(minWidth: 1000, idealWidth: 1400, maxWidth: 1920,
                        minHeight: 600, idealHeight: 1000, maxHeight: 1200)
         }
@@ -284,36 +214,11 @@ struct MainView: View {
 // MARK: - Detail Toolbar (isolated struct — no selectedProject dependency, prevents NSToolbar re-layout on project switch)
 
 struct DetailToolbar: View {
-    @Environment(AppState.self) private var appState
-    @Environment(WindowState.self) private var windowState
-    @Environment(\.openSettings) private var openSettings
-
     var body: some View {
         Color.clear
+            .toolbarBackground(.hidden, for: .windowToolbar)
             .toolbar {
-                ToolbarItemGroup(placement: .confirmationAction) {
-                    Button {
-                        appState.startNewChat(in: windowState)
-                    } label: {
-                        Image(systemName: "square.and.pencil")
-                    }
-                    .help("New Chat")
-
-                    Button {
-                        windowState.showInspector.toggle()
-                    } label: {
-                        Image(systemName: "sidebar.trailing")
-                    }
-                    .help("Toggle Inspector")
-                    .keyboardShortcut("4", modifiers: .command)
-
-                    Button {
-                        openSettings()
-                    } label: {
-                        Image(systemName: "gearshape")
-                    }
-                    .help("Settings")
-                }
+                ClarcToolbarContent()
             }
     }
 }
@@ -386,6 +291,8 @@ struct InspectorTabControl: View {
                 } label: {
                     Text(LocalizedStringKey(tab.rawValue))
                         .font(.system(size: ClaudeTheme.size(13), weight: .medium))
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 5)
                         .contentShape(Rectangle())
@@ -399,110 +306,6 @@ struct InspectorTabControl: View {
             }
         }
         .background(ClaudeTheme.surfaceSecondary, in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
-    }
-}
-
-// MARK: - Inspector Panel
-
-struct InspectorPanel: View {
-    @Environment(WindowState.self) private var windowState
-    @State private var inspectorProcess = TerminalProcess()
-    @State private var terminalResetID = UUID()
-    @State private var memoClearID: UUID? = nil
-    @State private var terminalFocusID: UUID? = nil
-    @State private var memoFocusID: UUID? = nil
-
-    private func bumpFocus(for tab: InspectorTab) {
-        switch tab {
-        case .terminal: terminalFocusID = UUID()
-        case .memo: memoFocusID = UUID()
-        }
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                InspectorTabControl(
-                    selection: Bindable(windowState).inspectorTab,
-                    onTabClick: { tab in bumpFocus(for: tab) }
-                )
-
-                Spacer()
-
-                if windowState.inspectorTab == .terminal {
-                    InspectorIconButton(help: "Reset Terminal") {
-                        inspectorProcess.terminate()
-                        inspectorProcess = TerminalProcess()
-                        terminalResetID = UUID()
-                    }
-                } else if windowState.inspectorTab == .memo {
-                    InspectorIconButton(help: "Clear Memo") {
-                        memoClearID = UUID()
-                    }
-                }
-
-                Button {
-                    windowState.showInspector = false
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: ClaudeTheme.size(11), weight: .medium))
-                        .frame(width: 20, height: 20)
-                }
-                .buttonStyle(.plain)
-                .keyboardShortcut("w", modifiers: .command)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-
-            ClaudeThemeDivider()
-
-            EmbeddedTerminalView(
-                executable: "/bin/zsh",
-                arguments: ["-il"],
-                currentDirectory: windowState.selectedProject?.path,
-                process: inspectorProcess,
-                focusTrigger: terminalFocusID
-            )
-            .id(terminalResetID)
-            .padding(8)
-            .background(ClaudeTheme.codeBackground)
-            .frame(maxHeight: windowState.inspectorTab == .terminal ? .infinity : 0)
-            .clipped()
-
-            InspectorMemoPanel(projectId: windowState.selectedProject?.id,
-                               clearTrigger: memoClearID,
-                               focusTrigger: memoFocusID)
-                .frame(maxHeight: windowState.inspectorTab == .memo ? .infinity : 0)
-                .clipped()
-        }
-        .background(ClaudeTheme.surfaceElevated)
-        .frame(
-            minWidth: windowState.showInspector ? 380 : 0,
-            maxWidth: windowState.showInspector ? .infinity : 0
-        )
-        .opacity(windowState.showInspector ? 1 : 0)
-        .clipped()
-        .onChange(of: windowState.inspectorTab) { _, newTab in
-            bumpFocus(for: newTab)
-        }
-        .onChange(of: windowState.showInspector) { _, isShowing in
-            if isShowing { bumpFocus(for: windowState.inspectorTab) }
-        }
-    }
-}
-
-private struct InspectorIconButton: View {
-    let help: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: "arrow.counterclockwise")
-                .font(.system(size: ClaudeTheme.size(11), weight: .medium))
-                .frame(width: 20, height: 20)
-        }
-        .buttonStyle(.plain)
-        .help(help)
     }
 }
 
@@ -614,7 +417,7 @@ struct ChatToolbarControls: View {
 
             Menu {
                 Section("Permission Mode") {
-                    ForEach(PermissionMode.allCases, id: \.self) { mode in
+                    ForEach(PermissionMode.allCases.filter { $0 != .plan }, id: \.self) { mode in
                         Button {
                             appState.setSessionPermissionMode(mode, in: windowState)
                         } label: {
@@ -626,7 +429,9 @@ struct ChatToolbarControls: View {
             } label: {
                 controlLabel(
                     title: effectiveMode.displayName,
-                    isAccent: placement == .composer
+                    icon: nil,
+                    isAccent: placement == .composer,
+                    isActive: false
                 )
             }
             .menuStyle(.borderlessButton)
@@ -647,7 +452,9 @@ struct ChatToolbarControls: View {
             } label: {
                 controlLabel(
                     title: AppState.modelDisplayName(effectiveModel),
-                    isAccent: false
+                    icon: nil,
+                    isAccent: false,
+                    isActive: false
                 )
             }
             .menuStyle(.borderlessButton)
@@ -675,7 +482,9 @@ struct ChatToolbarControls: View {
             } label: {
                 controlLabel(
                     title: windowState.sessionEffort.map { effortDisplayName($0) } ?? "Auto Effort",
-                    isAccent: false
+                    icon: nil,
+                    isAccent: false,
+                    isActive: false
                 )
             }
             .menuStyle(.borderlessButton)
@@ -686,64 +495,94 @@ struct ChatToolbarControls: View {
     }
 
     @ViewBuilder
-    private func controlLabel(title: String, isAccent: Bool) -> some View {
+    private func controlLabel(title: String, icon: String?, isAccent: Bool, isActive: Bool) -> some View {
         switch placement {
         case .toolbar:
-            ToolbarChipLabel(title: title)
+            ToolbarChipLabel(title: title, icon: icon, isActive: isActive)
         case .composer:
-            ComposerControlLabel(title: title, isAccent: isAccent)
+            ComposerControlLabel(title: title, icon: icon, isAccent: isAccent, isActive: isActive)
         }
     }
 }
 
 struct ToolbarChipLabel: View {
     let title: String
+    var icon: String? = nil
+    var isActive: Bool = false
 
     @State private var isHovered = false
 
     var body: some View {
-        Text(LocalizedStringKey(title))
-            .font(.system(size: ClaudeTheme.size(12), weight: .medium))
-        .foregroundStyle(ClaudeTheme.textSecondary)
+        HStack(spacing: 4) {
+            if let icon {
+                Image(systemName: icon)
+                    .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+            }
+            Text(LocalizedStringKey(title))
+                .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+        }
+        .foregroundStyle(isActive ? ClaudeTheme.accent : ClaudeTheme.textSecondary)
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .background(
-            isHovered ? ClaudeTheme.surfaceTertiary : ClaudeTheme.surfaceSecondary,
+            isActive
+                ? ClaudeTheme.accent.opacity(isHovered ? 0.18 : 0.12)
+                : (isHovered ? ClaudeTheme.surfaceTertiary : ClaudeTheme.surfaceSecondary),
             in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
         )
         .overlay(
             RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
-                .strokeBorder(ClaudeTheme.borderSubtle, lineWidth: 0.5)
+                .strokeBorder(
+                    isActive ? ClaudeTheme.accent.opacity(0.45) : ClaudeTheme.borderSubtle,
+                    lineWidth: isActive ? 1 : 0.5
+                )
         )
         .onHover { isHovered = $0 }
         .pointerCursorOnHover()
         .animation(.easeInOut(duration: 0.15), value: isHovered)
+        .animation(.easeInOut(duration: 0.15), value: isActive)
     }
 }
 
 struct ComposerControlLabel: View {
     let title: String
+    var icon: String? = nil
     let isAccent: Bool
+    var isActive: Bool = false
 
     @State private var isHovered = false
 
     var body: some View {
         HStack(spacing: 6) {
+            if let icon {
+                Image(systemName: icon)
+                    .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+            }
             Text(LocalizedStringKey(title))
                 .font(.system(size: ClaudeTheme.size(13), weight: .medium))
                 .lineLimit(1)
         }
-        .foregroundStyle(isAccent ? ClaudeTheme.accent : ClaudeTheme.textSecondary)
+        .foregroundStyle((isAccent || isActive) ? ClaudeTheme.accent : ClaudeTheme.textSecondary)
         .padding(.horizontal, 6)
         .padding(.vertical, 5)
         .background(
-            isHovered ? ClaudeTheme.surfaceSecondary.opacity(0.85) : Color.clear,
+            isActive
+                ? ClaudeTheme.accent.opacity(isHovered ? 0.18 : 0.12)
+                : (isHovered ? ClaudeTheme.surfaceSecondary.opacity(0.85) : Color.clear),
             in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
+                .strokeBorder(
+                    isActive ? ClaudeTheme.accent.opacity(0.45) : Color.clear,
+                    lineWidth: isActive ? 1 : 0
+                )
         )
         .contentShape(RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
         .onHover { isHovered = $0 }
         .pointerCursorOnHover()
         .animation(.easeInOut(duration: 0.12), value: isHovered)
+        .animation(.easeInOut(duration: 0.15), value: isActive)
     }
 }
 
@@ -751,18 +590,67 @@ struct ChatDetailModifiers: ViewModifier {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
 
+    private var presentedRequest: PermissionRequest? {
+        guard let id = windowState.presentedPermissionId else { return nil }
+        return windowState.pendingPermissions.first(where: { $0.id == id })
+    }
+
+    private var presentedPermissionModalRequest: PermissionRequest? {
+        guard let request = presentedRequest, request.toolName != "AskUserQuestion" else { return nil }
+        return request
+    }
+
+    private var questionSheetBinding: Binding<Bool> {
+        Binding(
+            get: { presentedRequest?.toolName == "AskUserQuestion" },
+            set: { isPresented in
+                if !isPresented, presentedRequest?.toolName == "AskUserQuestion" {
+                    windowState.presentedPermissionId = nil
+                }
+            }
+        )
+    }
+
     func body(content: Content) -> some View {
         content
+            .animation(.spring(response: 0.3, dampingFraction: 0.85), value: windowState.pendingPermissions.count)
             .overlay {
-                if let request = windowState.pendingPermissions.first {
+                if let request = presentedPermissionModalRequest {
                     ZStack {
                         Color.black.opacity(0.4).ignoresSafeArea()
-                        PermissionModal(request: request)
+                            .onTapGesture { windowState.presentedPermissionId = nil }
+                        PermissionModal(request: request, onClose: { windowState.presentedPermissionId = nil })
                             .clipShape(RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusLarge))
                             .shadow(color: ClaudeTheme.shadowColor, radius: 20)
                             .transition(.scale(scale: 0.95).combined(with: .opacity))
                     }
-                    .animation(.spring(response: 0.3, dampingFraction: 0.85), value: windowState.pendingPermissions.count)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.85), value: windowState.presentedPermissionId)
+                }
+            }
+            .sheet(isPresented: questionSheetBinding) {
+                if let request = presentedRequest, request.toolName == "AskUserQuestion" {
+                    QuestionSheetView(
+                        request: request,
+                        remainingCount: max(0, windowState.pendingPermissions.count - 1),
+                        onSubmit: { answers in
+                            windowState.submitQuestionAnswersHandler?(request.id, answers)
+                        },
+                        onClose: {
+                            // Just dismiss — keep the request in the queue so the user
+                            // can re-open it from the banner later.
+                            windowState.presentedPermissionId = nil
+                        },
+                        onSkipAll: {
+                            windowState.skipQuestionHandler?(request.id)
+                        }
+                    )
+                    .environment(appState)
+                    .environment(windowState)
+                }
+            }
+            .onChange(of: windowState.pendingPermissions.map(\.id)) { _, newIds in
+                if let id = windowState.presentedPermissionId, !newIds.contains(id) {
+                    windowState.presentedPermissionId = nil
                 }
             }
             .sheet(isPresented: Bindable(windowState).showModelPicker) {

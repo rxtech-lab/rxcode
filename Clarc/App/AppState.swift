@@ -12,6 +12,11 @@ struct SessionStreamState {
     // Messages
     var messages: [ChatMessage] = []
 
+    /// True while persisted messages are being loaded from disk into this session.
+    /// MessageListView keeps the ScrollView hidden while this is true to avoid the
+    /// empty → populated "blink" when switching to a session that isn't already in memory.
+    var isLoadingFromDisk = false
+
     // Streaming
     var isStreaming = false
     var isThinking = false
@@ -19,6 +24,7 @@ struct SessionStreamState {
     var activeStreamId: UUID?
     var streamingStartDate: Date?
     var streamTask: Task<Void, Never>?
+    var hasUncheckedCompletion = false
 
     // Text delta buffer (50ms throttle)
     var textDeltaBuffer = ""
@@ -33,6 +39,13 @@ struct SessionStreamState {
     var model: String?
     var effort: String?
     var permissionMode: PermissionMode?
+    /// Per-session plan-mode toggle. When true, the CLI is launched with `--permission-mode plan`
+    /// regardless of the user-selected permission mode. Cleared on session switch.
+    var planMode: Bool = false
+    /// Override cwd for this session: when set, CLI runs in this Git worktree path
+    /// instead of `project.path`. Persisted on `ChatSession.worktreePath`.
+    var worktreePath: String?
+    var worktreeBranch: String?
 
     // Session statistics
     var costUsd: Double = 0
@@ -42,8 +55,25 @@ struct SessionStreamState {
     var cacheReadTokens: Int = 0
     var durationMs: Double = 0
     var turns: Int = 0
+    /// Per-message output-token totals for the in-flight turn, keyed by the assistant
+    /// message id. A single turn can contain several model invocations (one per tool-result
+    /// round-trip), each emitting its own `usage.output_tokens` from zero — so we track
+    /// per-id maxes and sum them to get the running turn total. Reset at stream start.
+    var currentTurnOutputTokensByMessage: [String: Int] = [:]
+    /// Fallback counter for assistant events that arrive without an `id` (defensive —
+    /// the CLI normally always populates it). Reset alongside the map.
+    var currentTurnOutputTokensUnkeyed: Int = 0
+    /// Sum of all per-message running totals — what the streaming indicator displays.
+    var currentTurnOutputTokens: Int {
+        currentTurnOutputTokensByMessage.values.reduce(0, +) + currentTurnOutputTokensUnkeyed
+    }
     var lastTurnContextUsedPercentage: Double?
     var activeModelName: String?
+
+    /// Set once the LLM title-generation task has been spawned for this session.
+    /// Prevents the early (first-text-delta) trigger and the `.result` fallback
+    /// from kicking off duplicate generations on the same session.
+    var titleGenerationTriggered: Bool = false
 }
 
 
@@ -65,9 +95,20 @@ final class AppState {
     /// `internal` (not private) — read access required from WindowState / extensions
     var sessionStates: [String: SessionStreamState] = [:]
 
+    /// Maps a stale session id (a `pending-...` placeholder, or a sid that was
+    /// advanced by `compact_boundary`) to the current sid it was swapped to.
+    /// Lets long-running async tasks (LLM title generation) resolve the current
+    /// id after the swap that happens mid-stream in `processStream`.
+    private var sessionIdRedirect: [String: String] = [:]
+
     // MARK: - Session Summaries (shared — lightweight metadata for all projects)
 
     var allSessionSummaries: [ChatSession.Summary] = []
+
+    /// Bumped each time a thread file-edit row is appended in SwiftData. The
+    /// "This thread" inspector reads this so SwiftUI observation re-runs the
+    /// `threadFileEdits(in:)` fetch after a new Edit/Write tool call lands.
+    var threadFileEditsRevision: Int = 0
 
     // MARK: - Theme
 
@@ -200,6 +241,28 @@ final class AppState {
         didSet { UserDefaults.standard.set(focusMode, forKey: "focusMode") }
     }
 
+    // MARK: - Archive
+
+    /// Auto-archive chats whose `updatedAt` is older than this many days. Pinned
+    /// chats are skipped. A value <= 0 with `autoArchiveEnabled` still leaves
+    /// chats alone — the toggle is authoritative.
+    static let defaultArchiveRetentionDays = 7
+
+    var autoArchiveEnabled: Bool = (UserDefaults.standard.object(forKey: "autoArchiveEnabled") as? Bool) ?? true {
+        didSet { UserDefaults.standard.set(autoArchiveEnabled, forKey: "autoArchiveEnabled") }
+    }
+
+    var archiveRetentionDays: Int = (UserDefaults.standard.object(forKey: "archiveRetentionDays") as? Int) ?? AppState.defaultArchiveRetentionDays {
+        didSet {
+            let clamped = max(1, min(365, archiveRetentionDays))
+            if clamped != archiveRetentionDays {
+                archiveRetentionDays = clamped
+                return
+            }
+            UserDefaults.standard.set(archiveRetentionDays, forKey: "archiveRetentionDays")
+        }
+    }
+
     // MARK: - Attachment Auto-Preview Settings
 
     private static let autoPreviewSettingsKey = "attachmentAutoPreviewSettings"
@@ -221,6 +284,31 @@ final class AppState {
     /// Pending session to navigate to when a project window opens or is already open.
     /// Keyed by projectId; consumed once applied.
     var pendingNotificationSession: [UUID: String] = [:]
+
+    // MARK: - Menu Bar Status
+
+    /// Last-fetched usage percentages for the menu-bar status popup. Updated by
+    /// `refreshRateLimitUsage()`; nil until first successful fetch (or when not
+    /// signed in to Claude Code).
+    var latestRateLimitUsage: RateLimitUsage?
+
+    /// Sessions currently streaming, anywhere across all windows.
+    var inProgressSessionCount: Int {
+        sessionStates.values.reduce(0) { $0 + ($1.isStreaming ? 1 : 0) }
+    }
+
+    /// Sessions whose stream finished but the user hasn't selected since. Cleared
+    /// on session select via `hasUncheckedCompletion`.
+    var uncheckedFinishedSessionCount: Int {
+        sessionStates.values.reduce(0) { $0 + ($1.hasUncheckedCompletion ? 1 : 0) }
+    }
+
+    /// Force-refresh the rate-limit usage. Cheap to call repeatedly — RateLimitService
+    /// caches for 5 minutes on its own.
+    func refreshRateLimitUsage(forceRefresh: Bool = false) async {
+        let usage = await RateLimitService.shared.fetchUsage(forceRefresh: forceRefresh)
+        latestRateLimitUsage = usage
+    }
 
     /// Ref-counted set of projectIds with at least one open dedicated project window.
     /// Used to decide whether a notification tap should route to the main window or
@@ -281,10 +369,42 @@ final class AppState {
     }
 
     /// Sets the permission mode for the current session and persists it in the session state.
+    /// If there's a live CLI session for this window, re-register with the PermissionServer so
+    /// the new mode takes effect for the next tool call without restarting the stream.
     func setSessionPermissionMode(_ mode: PermissionMode, in window: WindowState) {
         window.sessionPermissionMode = mode
         let key = window.currentSessionId ?? window.newSessionKey
         updateState(key) { $0.permissionMode = mode }
+        reregisterPermissionMode(in: window)
+    }
+
+    /// Toggles the boolean plan-mode flag for the active session. The CLI's permission mode
+    /// is still computed from the dropdown when plan-mode is off; when on, `.plan` is forced
+    /// for the CLI invocation regardless of dropdown selection (see `send(...)`).
+    /// Triggered by Shift+Tab in the input bar and by the Plan pill chip.
+    func toggleSessionPlanMode(in window: WindowState) {
+        let key = window.currentSessionId ?? window.newSessionKey
+        let next = !(sessionStates[key]?.planMode ?? window.sessionPlanMode)
+        window.sessionPlanMode = next
+        updateState(key) { $0.planMode = next }
+        reregisterPermissionMode(in: window)
+    }
+
+    /// Tell the PermissionServer the latest effective permission mode for the live CLI session,
+    /// if any. This is what makes mid-conversation mode changes (Ask → Auto, plan toggle, etc.)
+    /// affect the very next tool call without restarting the stream.
+    private func reregisterPermissionMode(in window: WindowState) {
+        guard let sid = window.currentSessionId,
+              let projectPath = window.selectedProject?.path else { return }
+        // Use the dropdown value (ignore plan toggle) so an explicit Auto choice
+        // continues to auto-approve hook-matched tools while plan mode is on.
+        // The plan toggle only affects the CLI `--permission-mode` flag, not the
+        // hook auto-approve policy. ExitPlanMode is always exempt from auto-approve
+        // (see PermissionServer.autoApproveReason).
+        let hookSessionMode = window.sessionPermissionMode ?? permissionMode
+        Task { [permission] in
+            await permission.registerSession(sid: sid, projectKey: projectPath, mode: hookSessionMode)
+        }
     }
 
     func modelDisplayName(for model: String, in window: WindowState) -> String {
@@ -339,6 +459,13 @@ final class AppState {
     var claudeInstalled = false
     var onboardingCompleted = UserDefaults.standard.bool(forKey: "onboardingCompleted")
 
+    // MARK: - App Initialization
+
+    /// True once `initialize()` has finished its first run. UI shows a loading
+    /// screen until this flips so we never render the main view against
+    /// half-loaded projects/sessions.
+    var isInitialized = false
+
     // MARK: - Services
 
     let github = GitHubService()
@@ -348,14 +475,189 @@ final class AppState {
     let claude: ClaudeService
     let persistence: PersistenceService
     let marketplace = MarketplaceService()
-    let directoryWatcher = DirectoryWatcher()
+    let mcp: MCPService
+    let threadStore: ThreadStore
+
+    /// Disk-persisted draft queues loaded at init. Hydrated into each
+    /// `WindowState.draftQueues` when the window is initialized so messages
+    /// queued during a prior run reappear in their session's input bar.
+    private var persistedQueues: [String: [QueuedMessage]] = [:]
+
+    // MARK: - MCP State
+
+    var mcpServers: [MCPServerInfo] = []
+    /// Keyed by `MCPServerInfo.id` (scope:projectPath:name) so rows with the same
+    /// name across different scopes/projects don't collide.
+    var mcpProbeResults: [String: MCPProbeResult] = [:]
+    var mcpInFlightProbes: Set<String> = []
+    var mcpIsLoading: Bool = false
+    var mcpListError: String?
+    private var mcpPeriodicProbeTask: Task<Void, Never>?
+    /// 5 minutes — balances disconnect-detection latency against probe cost
+    /// (each tick spawns one stdio subprocess per stdio server).
+    private static let mcpPeriodicProbeInterval: UInt64 = 300 * 1_000_000_000
+
+    /// Last project selected in any window — used to scope Local / Project MCP rows
+    /// in the (window-less) Settings sheet.
+    var activeProjectPath: String?
 
     init() {
         let metaStore = self.metaStore
         let cliStore = CLISessionStore(metaStore: metaStore)
         self.cliStore = cliStore
-        self.claude = ClaudeService(cliStore: cliStore)
+        let claude = ClaudeService(cliStore: cliStore)
+        self.claude = claude
         self.persistence = PersistenceService(metaStore: metaStore, cliStore: cliStore)
+        self.mcp = MCPService(claudeService: claude)
+        self.threadStore = ThreadStore.make()
+    }
+
+    // MARK: - MCP Actions
+
+    func refreshMCPServers() async {
+        mcpIsLoading = true
+        mcpListError = nil
+        defer { mcpIsLoading = false }
+        do {
+            // Pass nil so Settings aggregates across every project in ~/.claude.json,
+            // not just the currently-selected project.
+            let list = try await mcp.list(projectPath: nil)
+            // Preserve last-known status for rows that already exist so a list
+            // refresh doesn't visually downgrade everything to .unknown.
+            var merged: [MCPServerInfo] = []
+            merged.reserveCapacity(list.count)
+            for info in list {
+                if let existing = mcpServers.first(where: { $0.id == info.id }) {
+                    merged.append(MCPServerInfo(
+                        name: info.name,
+                        transport: info.transport,
+                        endpoint: info.endpoint,
+                        status: existing.status,
+                        scope: info.scope,
+                        projectPath: info.projectPath
+                    ))
+                } else {
+                    merged.append(info)
+                }
+            }
+            mcpServers = merged
+        } catch {
+            mcpListError = error.localizedDescription
+            logger.error("MCP list failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    func probeMCPServer(name: String) async {
+        guard let info = mcpServers.first(where: { $0.name == name }) else {
+            // Fall back to a name-only probe if the row hasn't loaded yet.
+            await probeMCPServer(id: name, name: name, lookup: { await self.mcp.probe(name: name, projectPath: self.activeProjectPath) })
+            return
+        }
+        await probeMCPServer(info: info)
+    }
+
+    /// Probe one specific row. Use this when the same server name appears in
+    /// multiple scopes/projects (aggregated Settings list) so the right
+    /// configuration is resolved.
+    func probeMCPServer(info: MCPServerInfo) async {
+        await probeMCPServer(id: info.id, name: info.name, lookup: { await self.mcp.probe(info: info) })
+    }
+
+    private func probeMCPServer(id: String, name: String, lookup: @escaping () async -> MCPProbeResult) async {
+        guard !mcpInFlightProbes.contains(id) else { return }
+        mcpInFlightProbes.insert(id)
+        defer { mcpInFlightProbes.remove(id) }
+
+        let previousStatus: MCPStatus? = mcpServers.first(where: { $0.id == id })?.status
+        let result = await lookup()
+        mcpProbeResults[id] = result
+
+        let newStatus: MCPStatus = result.ok
+            ? .connected
+            : .failed(result.error ?? "Probe failed")
+
+        if let idx = mcpServers.firstIndex(where: { $0.id == id }) {
+            let row = mcpServers[idx]
+            mcpServers[idx] = MCPServerInfo(
+                name: row.name,
+                transport: row.transport,
+                endpoint: row.endpoint,
+                status: newStatus,
+                scope: row.scope,
+                projectPath: row.projectPath
+            )
+        }
+
+        // Disconnect notification: only fire on the connected→failed edge so we
+        // don't spam the user on every failed re-probe.
+        if case .connected = (previousStatus ?? .unknown),
+           case .failed(let message) = newStatus {
+            let notifyService = NotificationService.shared
+            let serverName = name
+            Task { @MainActor in
+                await notifyService.postMCPDisconnected(name: serverName, error: message)
+            }
+        }
+    }
+
+    @discardableResult
+    func addMCPServer(spec: MCPServerSpec, scope: MCPScope) async -> String? {
+        do {
+            try await mcp.add(spec: spec, scope: scope)
+            await refreshMCPServers()
+            // Auto-probe on add so the new row shows live status and tool list
+            // without the user clicking Test.
+            await probeMCPServer(name: spec.name)
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    @discardableResult
+    func removeMCPServer(name: String, scope: MCPScope) async -> String? {
+        do {
+            try await mcp.remove(name: name, scope: scope)
+            // Clear the probe entry that belonged to the removed row. The id
+            // shape is `<scope>:[<projectPath>:]<name>` — drop any whose name
+            // suffix and scope prefix match what we just removed.
+            let scopePrefix = "\(scope.rawValue):"
+            mcpProbeResults = mcpProbeResults.filter { key, _ in
+                !(key.hasPrefix(scopePrefix) && key.hasSuffix(":\(name)"))
+            }
+            await refreshMCPServers()
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    /// Spawn the periodic MCP probe loop. Idempotent.
+    func startMCPPeriodicProbe() {
+        guard mcpPeriodicProbeTask == nil else { return }
+        mcpPeriodicProbeTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: AppState.mcpPeriodicProbeInterval)
+                guard !Task.isCancelled else { return }
+                await self?.refreshAndProbeAllMCPServers()
+            }
+        }
+    }
+
+    /// Refresh the MCP server list and probe every server concurrently.
+    /// Used at app launch (and on a 5-minute timer) so the Settings sheet shows
+    /// live status without the user having to click "Test" on each row.
+    func refreshAndProbeAllMCPServers() async {
+        await refreshMCPServers()
+        let snapshot = mcpServers
+        guard !snapshot.isEmpty else { return }
+        await withTaskGroup(of: Void.self) { group in
+            for info in snapshot {
+                group.addTask { [weak self] in
+                    await self?.probeMCPServer(info: info)
+                }
+            }
+        }
     }
 
     // MARK: - Private State
@@ -368,6 +670,13 @@ final class AppState {
 
     func messages(in window: WindowState) -> [ChatMessage] {
         streamState(in: window).messages
+    }
+
+    /// File edits accumulated across this thread, sourced from SwiftData.
+    /// Returns an empty array for a not-yet-persisted (placeholder) session.
+    func threadFileEdits(in window: WindowState) -> [FileEditSummary] {
+        let key = window.currentSessionId ?? window.newSessionKey
+        return threadStore.fetchFileEdits(sessionId: key).map { $0.toSummary() }
     }
 
     func isStreaming(in window: WindowState) -> Bool {
@@ -438,6 +747,20 @@ final class AppState {
         })
     }
 
+    /// Derive a UI status for the chat row in the project sidebar.
+    /// Phase 1 wires only the streaming + pending-permission signals; Phase 2 will
+    /// add `awaitingPermission` partitioning by session and explicit error tracking.
+    func chatStatus(forSessionId id: String, in window: WindowState) -> ChatStatus {
+        if let state = sessionStates[id] {
+            if state.isStreaming { return .streaming }
+            if state.hasUncheckedCompletion { return .done }
+        }
+        if !window.pendingPermissions.isEmpty, window.currentSessionId == id {
+            return .awaitingPermission
+        }
+        return .idle
+    }
+
     // MARK: - Initialization
 
     /// Once per app launch — start services and load shared data
@@ -471,15 +794,14 @@ final class AppState {
             _ = await github.loadToken()
         }
 
-        // Load all session summaries (excluding message bodies). Merges
-        // CLI-backed sessions (~/.claude/projects/...) with the legacy
-        // Clarc-owned JSON store, preferring CLI-backed when both exist for
-        // the same session id.
-        allSessionSummaries = await mergedSummariesAcrossProjects()
+        // Sidebar threads are now sourced from the local SwiftData store.
+        // CLI session files are no longer surfaced in the sidebar list — the
+        // CLI is still the transcript backend (replay on thread open), but
+        // it does not drive thread discovery.
+        allSessionSummaries = threadStore.loadAllSummaries()
+        autoArchiveExpiredSessionsIfNeeded()
 
-        for project in projects {
-            watchProjectDirectory(project)
-        }
+        persistedQueues = threadStore.loadAllQueues()
 
         if claudeInstalled && !onboardingCompleted {
             onboardingCompleted = true
@@ -494,38 +816,88 @@ final class AppState {
             logger.error("Failed to start permission server: \(error.localizedDescription)")
         }
 
+        // Warm MCP server statuses in the background so the Settings sheet
+        // shows live connection results without the user clicking "Test".
+        Task { [weak self] in
+            await self?.refreshAndProbeAllMCPServers()
+        }
+
+        // Recurring probe so disconnected MCP servers surface promptly even
+        // when the user isn't actively interacting with the Settings tab.
+        startMCPPeriodicProbe()
+
         // Permission request routing is handled per-window in initializeWindow's listener.
 
-        // Migrate legacy Clarc JSON sessions to CLI-compatible jsonl so they can
-        // be resumed with `claude --resume`. Runs in the background; already-migrated
-        // sessions (.json.migrated suffix) are skipped automatically.
-        let legacySummaries = allSessionSummaries.filter { $0.origin == .legacyClarc }
-        Task.detached(priority: .background) { [weak self] in
-            guard let self else { return }
-            await self.migrateLegacySessions(legacySummaries)
-        }
+        isInitialized = true
     }
 
     /// Per-window initialization — restore selected project and load session history
     func initializeWindow(_ window: WindowState, selectingProjectId: UUID? = nil) async {
         // Subscribe to permission broadcasts — appends requests to this window's pendingPermissions.
         // subscribe() issues a window-exclusive stream, so events are not stolen across multiple windows.
-        Task { [weak self] in
+        Task { [weak self, weak window] in
             guard let self else { return }
             let (_, stream) = await self.permission.subscribe()
             for await request in stream {
                 guard !Task.isCancelled else { break }
+                guard let window else { break }
                 if !window.pendingPermissions.contains(where: { $0.id == request.id }) {
                     window.pendingPermissions.append(request)
+                    let projectName = window.selectedProject?.name
+                    let projectId = window.selectedProject?.id
+                    let sessionId = window.currentSessionId
+                    let toolName = request.toolName
+                    // Auto-present the question sheet only when the user is actively viewing
+                    // the thread the question belongs to. Otherwise it stays in the queue
+                    // (yellow dot in sidebar + banner) so the user can decide when to answer.
+                    if toolName == "AskUserQuestion",
+                       window.presentedPermissionId == nil,
+                       let qSession = request.sessionId,
+                       qSession == window.currentSessionId {
+                        window.presentedPermissionId = request.id
+                    }
+                    Task { @MainActor in
+                        if toolName == "AskUserQuestion" {
+                            await NotificationService.shared.postQuestionNeeded(
+                                projectName: projectName,
+                                projectId: projectId,
+                                sessionId: sessionId
+                            )
+                        } else {
+                            await NotificationService.shared.postPermissionNeeded(
+                                toolName: toolName,
+                                projectName: projectName,
+                                projectId: projectId,
+                                sessionId: sessionId
+                            )
+                        }
+                    }
                 }
             }
         }
 
-        // Install the AskUserQuestion answer handler. When the user taps an option in the
-        // chat UI, this closure delivers the response to the currently streaming CLI.
-        window.answerQuestionHandler = { [weak self, weak window] toolUseId, optionLabel in
+        // Install the AskUserQuestion handlers. The question sheet calls submit when the
+        // user finishes answering, and skip when they dismiss without answering.
+        window.submitQuestionAnswersHandler = { [weak self, weak window] toolUseId, answers in
             guard let self, let window else { return }
-            Task { await self.respondToAskUserQuestion(toolUseId: toolUseId, optionLabel: optionLabel, in: window) }
+            Task { await self.respondToAskUserQuestion(toolUseId: toolUseId, answers: answers, in: window) }
+        }
+        window.skipQuestionHandler = { [weak self, weak window] toolUseId in
+            guard let self, let window else { return }
+            Task { await self.skipAskUserQuestion(toolUseId: toolUseId, in: window) }
+        }
+
+        // Install the plan-card decision handler. The buttons on `PlanCardView` route
+        // through here to resolve the ExitPlanMode hook and apply any follow-up mode change.
+        window.planDecisionHandler = { [weak self, weak window] toolUseId, action in
+            guard let self, let window else { return }
+            Task { await self.respondToPlanDecision(toolUseId: toolUseId, action: action, in: window) }
+        }
+
+        // Hydrate per-window draft queues from disk-persisted queues so messages
+        // typed-while-streaming survive an app relaunch.
+        for (key, queue) in persistedQueues where window.draftQueues[key] == nil {
+            window.draftQueues[key] = queue
         }
 
         if let projectId = selectingProjectId,
@@ -570,6 +942,30 @@ final class AppState {
         bridge.fetchRateLimitHandler = {
             await RateLimitService.shared.fetchUsage()
         }
+        bridge.togglePlanModeHandler = { [weak self, weak window] in
+            guard let self, let window else { return }
+            self.toggleSessionPlanMode(in: window)
+        }
+        bridge.enqueueMessageHandler = { [weak self, weak window] text, attachments in
+            guard let self, let window else { return }
+            self.enqueueMessage(text: text, attachments: attachments, in: window)
+        }
+        bridge.removeQueuedMessageHandler = { [weak self, weak window] id in
+            guard let self, let window else { return }
+            self.removeQueuedMessage(id: id, in: window)
+        }
+        bridge.dequeueNextForFlushHandler = { [weak self, weak window] in
+            guard let self, let window else { return nil }
+            return self.dequeueNextForFlush(in: window)
+        }
+        bridge.sendQueuedNowHandler = { [weak self, weak window] id in
+            guard let self, let window else { return }
+            await self.sendQueuedNow(id: id, in: window)
+        }
+        bridge.sendAllQueuedAsOneHandler = { [weak self, weak window] in
+            guard let self, let window else { return }
+            await self.sendAllQueuedAsOne(in: window)
+        }
 
         startBridgeObservation(bridge, for: window)
     }
@@ -582,10 +978,15 @@ final class AppState {
         func observeStream() {
             withObservationTracking {
                 let state = streamState(in: window)
+                if bridge.messages.count != state.messages.count || bridge.isLoadingFromDisk != state.isLoadingFromDisk {
+                    self.logger.info("[Bridge.observe] push sid=\(window.currentSessionId ?? "<nil>", privacy: .public) messages \(bridge.messages.count)→\(state.messages.count) loading \(bridge.isLoadingFromDisk)→\(state.isLoadingFromDisk) streaming=\(state.isStreaming)")
+                }
                 bridge.messages = state.messages
                 bridge.isStreaming = state.isStreaming
                 bridge.isThinking = state.isThinking
+                bridge.isLoadingFromDisk = state.isLoadingFromDisk
                 bridge.streamingStartDate = state.streamingStartDate
+                bridge.liveOutputTokens = state.currentTurnOutputTokens
                 bridge.lastTurnContextUsedPercentage = state.lastTurnContextUsedPercentage
                 bridge.modelDisplayName = modelDisplayName(for: window.sessionModel ?? selectedModel, in: window)
                 bridge.sessionStats = ChatSessionStats(
@@ -604,6 +1005,8 @@ final class AppState {
         func observeSettings() {
             withObservationTracking {
                 bridge.autoPreviewSettings = self.autoPreviewSettings
+                bridge.appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+                bridge.claudeVersion = self.claudeVersion
             } onChange: {
                 Task { @MainActor in observeSettings() }
             }
@@ -641,12 +1044,6 @@ final class AppState {
         let prompt = window.inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         let currentAttachments = window.attachments
         guard !prompt.isEmpty || !currentAttachments.isEmpty else { return }
-
-        // First send into a project may be the moment its CLI directory is
-        // created. Re-attempt the watch (no-op if already active).
-        if let project = window.selectedProject {
-            watchProjectDirectory(project)
-        }
 
         // S2: warn (in logs) if another process touched the same jsonl very
         // recently — likely a `claude` running in the terminal on the same
@@ -783,6 +1180,7 @@ final class AppState {
         guard terminal.reportToChat else { return }
 
         let key = window.currentSessionId ?? window.newSessionKey
+        let wasFirstUserMessage = (sessionStates[key]?.messages.filter { $0.role == .user }.count ?? 0) == 0
         updateState(key) { state in
             state.messages.append(ChatMessage(role: .user, content: terminal.title))
             let result = exitCode == 0 ? "Done" : "exit code: \(exitCode)"
@@ -794,6 +1192,13 @@ final class AppState {
                 isError: exitCode != 0
             )
             state.messages.append(ChatMessage(role: .assistant, blocks: [.toolCall(toolCall)]))
+        }
+        if wasFirstUserMessage, !(sessionStates[key]?.titleGenerationTriggered ?? false) {
+            updateState(key) { $0.titleGenerationTriggered = true }
+            Task { [weak self] in
+                guard let self else { return }
+                await self.maybeGenerateLLMTitle(for: key)
+            }
         }
         Task { await saveCurrentSession(in: window) }
     }
@@ -844,6 +1249,7 @@ final class AppState {
             updateState(sessionKey) { $0.messages = initial }
         }
 
+        let wasFirstUserMessage = (sessionStates[sessionKey]?.messages.filter { $0.role == .user }.count ?? 0) == 0
         if !skipAppendingUserMessage {
             updateState(sessionKey) { state in
                 state.messages.append(ChatMessage(
@@ -854,16 +1260,51 @@ final class AppState {
             }
         }
 
+        // Insert the placeholder summary before kicking off title generation —
+        // the Task below awaits and the lookup in maybeGenerateLLMTitle would
+        // otherwise race the insertion at line ~1168 and bail with "no summary".
+        if isNewSession {
+            let initialTitle = ChatSession.placeholderTitle(from: displayText ?? prompt)
+            let placeholder = ChatSession(id: sessionKey, projectId: project.id, title: initialTitle, messages: [], origin: .cliBacked)
+            allSessionSummaries.insert(placeholder.summary, at: 0)
+            threadStore.upsert(placeholder.summary)
+        }
+
+        // Kick off LLM title generation as soon as the first user message lands —
+        // the rename runs concurrently with the stream so the sidebar title updates
+        // without waiting for the assistant to reply.
+        if wasFirstUserMessage,
+           !skipAppendingUserMessage,
+           !(sessionStates[sessionKey]?.titleGenerationTriggered ?? false) {
+            updateState(sessionKey) { $0.titleGenerationTriggered = true }
+            let titleKey = sessionKey
+            Task { [weak self] in
+                guard let self else { return }
+                await self.maybeGenerateLLMTitle(for: titleKey)
+            }
+        }
+
         updateState(sessionKey) { state in
             state.isStreaming = true
+            state.hasUncheckedCompletion = false
             state.activeStreamId = streamId
             state.streamingStartDate = Date()
+            state.currentTurnOutputTokensByMessage.removeAll(keepingCapacity: true)
+            state.currentTurnOutputTokensUnkeyed = 0
         }
         await permission.refreshRunToken()
 
-        let currentPermissionMode = window.sessionPermissionMode ?? permissionMode
+        let basePermissionMode = window.sessionPermissionMode ?? permissionMode
+        // Plan-mode boolean overrides the dropdown for the CLI `--permission-mode` flag only.
+        // The dropdown choice is preserved and re-applied automatically once plan-mode is toggled back off.
+        let cliPermissionMode: PermissionMode = window.sessionPlanMode ? .plan : basePermissionMode
+        // PermissionServer registration uses the dropdown value directly so an explicit Auto
+        // choice continues to auto-approve hook-matched tools while plan mode is on.
+        // ExitPlanMode is always exempt from auto-approve (see PermissionServer.autoApproveReason),
+        // so the plan card still surfaces.
+        let hookSessionMode = basePermissionMode
         var hookSettingsPath: String?
-        if !currentPermissionMode.skipsHookPipeline {
+        if !cliPermissionMode.skipsHookPipeline {
             do {
                 hookSettingsPath = try await permission.writeHookSettingsFile()
             } catch {
@@ -873,29 +1314,30 @@ final class AppState {
 
         // Resume already has the sid; new sessions register on first system event.
         if let sid = cliSessionId {
-            await permission.registerSession(sid: sid, projectKey: project.path, mode: currentPermissionMode)
+            await permission.registerSession(sid: sid, projectKey: project.path, mode: hookSessionMode)
         }
 
-        if isNewSession {
-            let titleText = prompt.count > 50 ? String(prompt.prefix(50)) + "..." : prompt
-            let placeholder = ChatSession(id: sessionKey, projectId: project.id, title: titleText, messages: [], origin: .cliBacked)
-            allSessionSummaries.insert(placeholder.summary, at: 0)
-        } else {
+        if !isNewSession {
             await saveCurrentSession(in: window)
         }
+
+        let effectiveCwd = sessionStates[sessionKey]?.worktreePath
+            ?? allSessionSummaries.first(where: { $0.id == sessionKey })?.worktreePath
+            ?? project.path
 
         let task = Task { [weak self, window] in
             guard let self else { return }
             await self.processStream(
                 streamId: streamId,
                 prompt: prompt,
-                cwd: project.path,
+                cwd: effectiveCwd,
                 cliSessionId: cliSessionId,
                 internalSessionKey: sessionKey,
                 model: window.sessionModel ?? self.selectedModel,
                 effort: window.sessionEffort ?? (self.selectedEffort == "auto" ? nil : self.selectedEffort),
                 hookSettingsPath: hookSettingsPath,
-                permissionMode: currentPermissionMode,
+                permissionMode: cliPermissionMode,
+                hookSessionMode: hookSessionMode,
                 projectId: project.id,
                 window: window
             )
@@ -984,9 +1426,14 @@ final class AppState {
         effort: String? = nil,
         hookSettingsPath: String?,
         permissionMode: PermissionMode = .default,
+        hookSessionMode: PermissionMode? = nil,
         projectId: UUID,
         window: WindowState
     ) async {
+        // Mode used when registering a session with PermissionServer for hook auto-approve.
+        // When plan toggle is on, `permissionMode` is `.plan` (for the CLI flag) but the
+        // user's dropdown choice (e.g. `.auto`) should still drive the hook policy.
+        let registerMode = hookSessionMode ?? permissionMode
         let streamStart = Date()
         logger.info("[Stream:UI] starting processStream (cli=\(cliSessionId ?? "new"), key=\(internalSessionKey))")
 
@@ -1025,10 +1472,12 @@ final class AppState {
                     if case .result(let resultEvent) = event {
                         logger.info("[Stream:UI] event #\(eventCount) .result received after losing ownership — saving to disk")
                         await claude.closeStdin(streamId: streamId)
+                        await claude.finalize(streamId: streamId)
                         if sessionKey != resultEvent.sessionId {
                             if let state = sessionStates.removeValue(forKey: sessionKey) {
                                 sessionStates[resultEvent.sessionId] = state
                             }
+                            sessionIdRedirect[sessionKey] = resultEvent.sessionId
                             sessionKey = resultEvent.sessionId
                         }
                         let msgs = stateForSession(sessionKey).messages
@@ -1047,18 +1496,26 @@ final class AppState {
                     if let model = systemEvent.model {
                         updateState(sessionKey) { $0.activeModelName = model }
                     }
-                    if let sid = systemEvent.sessionId {
-                        await permission.registerSession(sid: sid, projectKey: cwd, mode: permissionMode)
+                    // Hook events (SessionStart, PreToolUse, etc.) carry the parent's session_id,
+                    // not this subprocess's. Acting on them flips currentSessionId mid-stream and
+                    // triggers MessageListView's fade-out/in — visible as a blink.
+                    let isHookEvent = systemEvent.subtype.hasPrefix("hook_")
+                    if let sid = systemEvent.sessionId, !isHookEvent {
+                        await permission.registerSession(sid: sid, projectKey: cwd, mode: registerMode)
+                        // Capture the sessionKey BEFORE the reassignment so the
+                        // reconciler can rename the previous row in place when
+                        // the CLI advances `session_id` mid-stream.
+                        let previousSessionKey = sessionKey
                         if sessionKey != sid {
-                            let oldKey = sessionKey
-                            if let state = sessionStates.removeValue(forKey: oldKey) {
+                            if let state = sessionStates.removeValue(forKey: previousSessionKey) {
                                 sessionStates[sid] = state
                             }
+                            sessionIdRedirect[previousSessionKey] = sid
                             sessionKey = sid
                             startFlushTimer(for: sid)
 
                             // If this is the foreground session, also update window.currentSessionId
-                            let isFg = (window.currentSessionId ?? window.newSessionKey) == oldKey || window.currentSessionId == nil
+                            let isFg = (window.currentSessionId ?? window.newSessionKey) == previousSessionKey || window.currentSessionId == nil
                             if isFg { window.currentSessionId = sid }
                         }
 
@@ -1066,22 +1523,29 @@ final class AppState {
                         if window.pendingPlaceholderIds.contains(expectedPlaceholder),
                            let idx = allSessionSummaries.firstIndex(where: { $0.id == expectedPlaceholder }) {
                             let old = allSessionSummaries[idx]
+                            // Preserve the placeholder's original timestamp so an empty
+                            // session (no assistant content yet) doesn't leapfrog
+                            // genuinely-recent chats with an "in 0s" updatedAt. The
+                            // first save once content arrives will refresh updatedAt.
                             let replacement = ChatSession(
                                 id: sid,
                                 projectId: old.projectId,
                                 title: old.title,
                                 messages: [],
                                 createdAt: old.createdAt,
-                                updatedAt: Date(),
+                                updatedAt: old.createdAt,
                                 origin: old.origin
                             )
                             allSessionSummaries.removeAll { $0.id == expectedPlaceholder || $0.id == sid }
                             allSessionSummaries.insert(replacement.summary, at: 0)
+                            threadStore.renameId(from: expectedPlaceholder, to: sid)
+                            threadStore.upsert(replacement.summary, cliSessionId: sid)
                             window.removePendingPlaceholder(expectedPlaceholder)
                         } else {
                             if window.pendingPlaceholderIds.contains(expectedPlaceholder) {
                                 window.removePendingPlaceholder(expectedPlaceholder)
                                 allSessionSummaries.removeAll { $0.id == expectedPlaceholder }
+                                threadStore.delete(id: expectedPlaceholder)
                             }
 
                             // A retry reuses the same pending session key (oldKey) with a new streamId,
@@ -1090,21 +1554,66 @@ final class AppState {
                             let oldKey = sessionKey == sid ? internalSessionKey : sessionKey
                             if oldKey != expectedPlaceholder && window.pendingPlaceholderIds.contains(oldKey) {
                                 allSessionSummaries.removeAll { $0.id == oldKey }
+                                threadStore.delete(id: oldKey)
                                 window.removePendingPlaceholder(oldKey)
                             }
 
-                            if !allSessionSummaries.contains(where: { $0.id == sid }),
-                               let project = projects.first(where: { $0.id == projectId }) {
+                            // Decide whether to rename the previous row, insert a fresh
+                            // one, or do nothing. Renaming in place is the load-bearing
+                            // case: it stops empty "New Session" rows from accumulating
+                            // every time the CLI advances `session_id` mid-stream (e.g.
+                            // after a `compact_boundary`).
+                            if let project = projects.first(where: { $0.id == projectId }) {
                                 let msgs = stateForSession(sessionKey).messages
-                                let firstUserContent = msgs.first(where: { $0.role == .user })?.content
-                                let title: String
-                                if let content = firstUserContent {
-                                    title = content.count > 50 ? String(content.prefix(50)) + "..." : content
-                                } else {
-                                    title = "New Session"
+                                let firstUser = msgs.first(where: { $0.role == .user })
+                                let action = SessionRowReconciler.decide(
+                                    newSid: sid,
+                                    previousKey: previousSessionKey,
+                                    existingIds: Set(allSessionSummaries.map { $0.id }),
+                                    firstUserMessageContent: firstUser?.content
+                                )
+                                switch action {
+                                case .noop:
+                                    break
+                                case .renameInPlace(let from, let to):
+                                    if let idx = allSessionSummaries.firstIndex(where: { $0.id == from }) {
+                                        let old = allSessionSummaries[idx]
+                                        let renamed = ChatSession.Summary(
+                                            id: to,
+                                            projectId: old.projectId,
+                                            title: old.title,
+                                            createdAt: old.createdAt,
+                                            updatedAt: old.updatedAt,
+                                            isPinned: old.isPinned,
+                                            model: old.model,
+                                            effort: old.effort,
+                                            permissionMode: old.permissionMode,
+                                            origin: old.origin,
+                                            worktreePath: old.worktreePath,
+                                            worktreeBranch: old.worktreeBranch
+                                        )
+                                        allSessionSummaries.remove(at: idx)
+                                        allSessionSummaries.removeAll { $0.id == to }
+                                        allSessionSummaries.insert(renamed, at: 0)
+                                        threadStore.renameId(from: from, to: to)
+                                        threadStore.upsert(renamed, cliSessionId: to)
+                                    }
+                                case .insertNew(let id, let title):
+                                    // Use the user-message timestamp so the row doesn't
+                                    // reorder above more recent chats while still empty.
+                                    let firstUserDate = firstUser?.timestamp ?? Date()
+                                    let inserted = ChatSession.Summary(
+                                        id: id,
+                                        projectId: project.id,
+                                        title: title,
+                                        createdAt: firstUserDate,
+                                        updatedAt: firstUserDate,
+                                        isPinned: false,
+                                        origin: .cliBacked
+                                    )
+                                    allSessionSummaries.insert(inserted, at: 0)
+                                    threadStore.upsert(inserted, cliSessionId: id)
                                 }
-                                let newSession = ChatSession(id: sid, projectId: project.id, title: title, messages: [], updatedAt: Date(), origin: .cliBacked)
-                                allSessionSummaries.insert(newSession.summary, at: 0)
                             }
                         }
                     }
@@ -1117,6 +1626,19 @@ final class AppState {
 
                 case .assistant(let assistantMessage):
                     logger.debug("[Stream:UI] event #\(eventCount) .assistant (gap=\(String(format: "%.1f", gap))s, blocks=\(assistantMessage.content.count))")
+                    // A turn can contain several model invocations (one per tool round-trip);
+                    // each emits its own `usage.output_tokens` starting from zero. Track the
+                    // running max per message id and sum across ids to get the turn total.
+                    if let liveOutput = assistantMessage.usage?.outputTokens {
+                        updateState(sessionKey) { state in
+                            if let messageId = assistantMessage.id {
+                                let existing = state.currentTurnOutputTokensByMessage[messageId] ?? 0
+                                state.currentTurnOutputTokensByMessage[messageId] = max(existing, liveOutput)
+                            } else {
+                                state.currentTurnOutputTokensUnkeyed = max(state.currentTurnOutputTokensUnkeyed, liveOutput)
+                            }
+                        }
+                    }
                     // Extract text only when no text_delta has been received in the current turn.
                     // Normally content_block_delta(text_delta) is the primary path, so this branch rarely executes.
                     updateState(sessionKey) { state in
@@ -1145,8 +1667,10 @@ final class AppState {
                     logger.info("[Stream:UI] event #\(eventCount) .result (gap=\(String(format: "%.1f", gap))s, isError=\(resultEvent.isError), session=\(resultEvent.sessionId))")
 
                     // With `--input-format stream-json` the CLI stays alive waiting for more
-                    // input. Close stdin on `result` so it exits cleanly.
+                    // input. Close stdin on `result` so it exits cleanly, then finalize so
+                    // any subagent children that survived the parent CLI get reaped.
                     await claude.closeStdin(streamId: streamId)
+                    await claude.finalize(streamId: streamId)
 
                     if sessionKey != resultEvent.sessionId {
                         if let state = sessionStates.removeValue(forKey: sessionKey) {
@@ -1168,6 +1692,9 @@ final class AppState {
                     }
 
                     let isFg = (window.currentSessionId ?? window.newSessionKey) == sessionKey
+                    if !isFg && !resultEvent.isError {
+                        updateState(sessionKey) { $0.hasUncheckedCompletion = true }
+                    }
                     if isFg {
                         window.currentSessionId = resultEvent.sessionId
                         if resultEvent.isError {
@@ -1259,6 +1786,9 @@ final class AppState {
             if stillStreaming && isStillOwner {
                 logger.warning("[Stream:UI] isStreaming was still true at stream end — forcing cleanup")
                 finalizeStreamSession(for: sessionKey)
+                if (window.currentSessionId ?? window.newSessionKey) != sessionKey {
+                    updateState(sessionKey) { $0.hasUncheckedCompletion = true }
+                }
 
                 // If the last assistant message is invisible after cleanup (blocks=[] because
                 // all tool calls had empty/nil results), show an error bubble so the user
@@ -1332,7 +1862,40 @@ final class AppState {
             state.pendingToolResults.removeAll(keepingCapacity: true)
             if let idx = lastAssistantIdx() {
                 for (toolUseId, content, isError) in results {
-                    state.messages[idx].setToolResult(id: toolUseId, result: content, isError: isError)
+                    let editPersistInfo: (path: String, hunks: [PreviewFile.EditHunk], isWrite: Bool)? = {
+                        guard !isError,
+                              let blockIdx = state.messages[idx].toolCallIndex(id: toolUseId),
+                              let call = state.messages[idx].blocks[blockIdx].toolCall,
+                              ["edit", "multiedit", "multi_edit", "write"].contains(call.name.lowercased()),
+                              let path = call.editedFilePath else { return nil }
+                        let hunks = call.fileEditHunks
+                        guard !hunks.isEmpty else { return nil }
+                        return (path, hunks, call.name.lowercased() == "write")
+                    }()
+                    // Preserve the user-decision summary on ExitPlanMode. After the user
+                    // accepts/rejects the plan, the CLI emits its own follow-up tool_result
+                    // ("User has approved your plan…") which would overwrite "Accepted with …"
+                    // and flip the plan card back to "pending" — re-showing the accept buttons
+                    // on a card that was just decided.
+                    let skipResultOverwrite: Bool = {
+                        guard let blockIdx = state.messages[idx].toolCallIndex(id: toolUseId),
+                              let call = state.messages[idx].blocks[blockIdx].toolCall,
+                              Self.isExitPlanModeCall(call),
+                              let existing = call.result else { return false }
+                        return Self.planDecisionResultPrefixes.contains { existing.hasPrefix($0) }
+                    }()
+                    if !skipResultOverwrite {
+                        state.messages[idx].setToolResult(id: toolUseId, result: content, isError: isError)
+                    }
+                    if let info = editPersistInfo {
+                        threadStore.appendFileEdit(
+                            sessionId: key,
+                            path: info.path,
+                            hunks: info.hunks,
+                            containsWrite: info.isWrite
+                        )
+                        threadFileEditsRevision &+= 1
+                    }
                 }
             }
         }
@@ -1458,6 +2021,16 @@ final class AppState {
                 if let msgIdx = state.messages.indices.reversed().first(where: { state.messages[$0].role == .assistant && state.messages[$0].isStreaming }),
                    let blockIdx = state.messages[msgIdx].toolCallIndex(id: toolId) {
                     state.messages[msgIdx].blocks[blockIdx].toolCall?.input = parsed
+                    if let toolName = state.messages[msgIdx].blocks[blockIdx].toolCall?.name,
+                       toolName.lowercased() == "todowrite" {
+                        let todos = TodoExtractor.parse(input: parsed)
+                        let done = todos.filter { $0.status == .completed }.count
+                        let active = todos.first(where: { $0.status == .inProgress })?.activeForm ?? "-"
+                        logger.info(
+                            "[TodoWrite] session=\(sessionKey, privacy: .public) total=\(todos.count) done=\(done) active=\(active, privacy: .public)"
+                        )
+                        threadStore.upsertTodoSnapshot(sessionId: sessionKey, items: todos)
+                    }
                 }
             }
 
@@ -1534,6 +2107,7 @@ final class AppState {
         // Clean up placeholder session on cancellation
         if let sid = window.currentSessionId, window.pendingPlaceholderIds.contains(sid) {
             allSessionSummaries.removeAll { $0.id == sid }
+            threadStore.delete(id: sid)
             window.removePendingPlaceholder(sid)
             sessionStates.removeValue(forKey: sid)
             window.currentSessionId = nil
@@ -1560,38 +2134,174 @@ final class AppState {
 
     // MARK: - AskUserQuestion Response
 
-    /// Deliver the user's answer for an AskUserQuestion tool call via the PreToolUse hook.
+    /// Deliver the user's answers for an AskUserQuestion tool call via the PreToolUse hook.
     ///
     /// AskUserQuestion is handled like any other PreToolUse hook: the PermissionServer is
     /// holding the HTTP connection open waiting for a decision. We resolve it with `allow` +
-    /// `updatedInput: {questions, answers: {questionText: selectedLabel}}` so the CLI injects
-    /// the answer into the tool input and proceeds.
-    func respondToAskUserQuestion(toolUseId: String, optionLabel: String, in window: WindowState) async {
+    /// `updatedInput: {questions, answers: {questionText: <answerValue>}}` so the CLI injects
+    /// the answers into the tool input and proceeds.
+    func respondToAskUserQuestion(
+        toolUseId: String,
+        answers: [Int: AskUserQuestion.Answer],
+        in window: WindowState
+    ) async {
         let key = window.currentSessionId ?? window.newSessionKey
 
-        // Build updatedInput from the tool call's original input, and reflect the answer
-        // locally in one pass so the UI updates immediately. The CLI will emit its own
-        // tool_result shortly, overwriting the optimistic value.
         var updatedInput = JSONValue.object([
             "questions": .array([]),
             "answers": .object([:]),
         ])
+
         updateState(key) { state in
             for i in state.messages.indices.reversed() {
                 guard let idx = state.messages[i].toolCallIndex(id: toolUseId),
-                      let toolInput = state.messages[i].blocks[idx].toolCall?.input else { continue }
+                      let toolInput = state.messages[i].blocks[idx].toolCall?.input,
+                      let parsed = AskUserQuestion(input: toolInput) else { continue }
 
-                let questionText = AskUserQuestion(input: toolInput)?.questions.first?.question ?? "question"
-                updatedInput = .object([
-                    "questions": toolInput["questions"] ?? .array([]),
-                    "answers": .object([questionText: .string(optionLabel)]),
-                ])
-                state.messages[i].setToolResult(id: toolUseId, result: optionLabel, isError: false)
+                updatedInput = AskUserQuestion.updatedInputJSON(
+                    originalInput: toolInput,
+                    questions: parsed.questions,
+                    answers: answers
+                )
+                let summary = AskUserQuestion.summary(questions: parsed.questions, answers: answers)
+                state.messages[i].setToolResult(id: toolUseId, result: summary, isError: false)
                 return
             }
         }
 
+        window.pendingPermissions.removeAll { $0.id == toolUseId }
+        if window.presentedPermissionId == toolUseId {
+            window.presentedPermissionId = nil
+        }
+
         await permission.respondAskUserQuestion(toolUseId: toolUseId, updatedInput: updatedInput)
+    }
+
+    /// User dismissed the question sheet without answering — resolve the hook as deny so
+    /// the CLI does not block, and clear the pending entry from the window queue.
+    func skipAskUserQuestion(toolUseId: String, in window: WindowState) async {
+        window.pendingPermissions.removeAll { $0.id == toolUseId }
+        if window.presentedPermissionId == toolUseId {
+            window.presentedPermissionId = nil
+        }
+        await permission.respond(toolUseId: toolUseId, decision: .deny)
+    }
+
+    // MARK: - Plan Decision Response
+
+    /// Resolve a Claude `ExitPlanMode` tool call based on the user's choice in the plan card.
+    /// Drives both the PermissionServer hook response (allow/deny + optional reason or
+    /// follow-up mode change) and the local UI bookkeeping (clear plan-mode pill, update
+    /// permission chip, mark the tool block decided).
+    func respondToPlanDecision(toolUseId: String, action: PlanDecisionAction, in window: WindowState) async {
+        let summary: String
+        let decision: PermissionDecision
+        let nextMode: PermissionMode?
+
+        switch action {
+        case .acceptAsk:
+            summary = "Accepted with Ask"
+            decision = .allowAndSetMode(newMode: .default)
+            nextMode = .default
+        case .acceptWithEdits:
+            summary = "Accepted with Edits"
+            decision = .allowAndSetMode(newMode: .acceptEdits)
+            nextMode = .acceptEdits
+        case .acceptAutoApprove:
+            summary = "Accepted with Auto-approve"
+            decision = .allowAndSetMode(newMode: .auto)
+            nextMode = .auto
+        case .rejectWithFeedback(let reason):
+            let trimmed = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+            summary = trimmed.isEmpty ? "Rejected" : "Rejected: \(trimmed)"
+            decision = .denyWithReason(reason: trimmed.isEmpty ? "User rejected the plan." : trimmed)
+            nextMode = nil
+        case .reject:
+            summary = "Rejected"
+            decision = .denyWithReason(reason: "User rejected the plan.")
+            nextMode = nil
+        }
+
+        // Record the outcome on the tool block so `PlanCardView` flips from buttons to
+        // a "decided" status row. This mirrors how AskUserQuestionView reads `toolCall.result`.
+        let key = window.currentSessionId ?? window.newSessionKey
+        updateState(key) { state in
+            for i in state.messages.indices.reversed() {
+                if state.messages[i].toolCallIndex(id: toolUseId) != nil {
+                    state.messages[i].setToolResult(id: toolUseId, result: summary, isError: false)
+                    break
+                }
+            }
+        }
+
+        // Plan-mode is one-shot — clear the pill so the next user turn isn't in plan mode.
+        // This also triggers a permission re-register (no-op if there's no live CLI sid).
+        if window.sessionPlanMode {
+            window.sessionPlanMode = false
+            updateState(key) { $0.planMode = false }
+        }
+
+        // Persist the new permission mode in the dropdown when the user opted for a
+        // follow-up mode change. `setSessionPermissionMode` also re-registers with the
+        // PermissionServer for the live session.
+        if let nextMode {
+            setSessionPermissionMode(nextMode, in: window)
+        } else {
+            // Even when no mode change is requested, re-register so the server registry
+            // reflects the now-cleared plan-mode boolean.
+            reregisterPermissionMode(in: window)
+        }
+
+        await permission.respond(toolUseId: toolUseId, decision: decision)
+
+        // In `--print` stream-json mode, ExitPlanMode is the model's last action of the
+        // plan-mode turn, so the CLI emits `.result` and exits. Without a follow-up
+        // prompt the chat just stops. Mirror the interactive CLI by sending a hidden
+        // continuation message that nudges the model to execute (or revise) the plan.
+        let continuationPrompt = Self.continuationPrompt(for: action)
+
+        if let continuationPrompt {
+            if let task = sessionStates[key]?.streamTask {
+                _ = await task.value
+            }
+            await sendPrompt(
+                continuationPrompt,
+                skipAppendingUserMessage: true,
+                in: window
+            )
+        }
+    }
+
+    /// Prefixes of result strings written by `respondToPlanDecision`. Must stay in
+    /// sync with `PlanCardView.userDecisionPrefixes` — duplicated here so that
+    /// `AppState` can detect a decided plan without depending on a SwiftUI view type.
+    static let planDecisionResultPrefixes: [String] = [
+        "Accepted with Ask",
+        "Accepted with Edits",
+        "Accepted with Auto-approve",
+        "Rejected",
+    ]
+
+    static func isExitPlanModeCall(_ call: ToolCall) -> Bool {
+        let n = call.name.lowercased()
+        return n == "exitplanmode" || n == "exit_plan_mode"
+    }
+
+    /// Hidden follow-up prompt to send after a plan decision, or nil if the chat
+    /// should stop. Plain `.reject` returns nil; `.rejectWithFeedback` with empty
+    /// feedback also returns nil (the user effectively did a plain reject).
+    static func continuationPrompt(for action: PlanDecisionAction) -> String? {
+        switch action {
+        case .acceptAsk, .acceptWithEdits, .acceptAutoApprove:
+            return "Proceed with the plan."
+        case .rejectWithFeedback(let reason):
+            let trimmed = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty
+                ? nil
+                : "Revise the plan based on this feedback: \(trimmed)"
+        case .reject:
+            return nil
+        }
     }
 
     // MARK: - Project Management
@@ -1600,7 +2310,6 @@ final class AppState {
         guard !projects.contains(where: { $0.path == path }) else { return }
         let project = Project(name: name, path: path, gitHubRepo: gitHubRepo)
         projects.append(project)
-        watchProjectDirectory(project)
         do {
             try await persistence.saveProjects(projects)
         } catch {
@@ -1636,13 +2345,8 @@ final class AppState {
             startNewChat(in: window)
         }
 
+        activeProjectPath = project.path
         UserDefaults.standard.set(project.id.uuidString, forKey: "selectedProjectId")
-
-        // Refresh session history in the background
-        Task { [weak self] in
-            guard let self else { return }
-            await loadSessionHistory(in: window)
-        }
     }
 
     func addProjectFromFolder(_ url: URL, in window: WindowState) async {
@@ -1690,146 +2394,9 @@ final class AppState {
 
     // MARK: - Session Management
 
-    /// One-time migration: converts legacy Clarc JSON sessions to CLI-compatible jsonl files.
-    /// Skips sessions whose jsonl already exists in ~/.claude/projects/{enc(cwd)}/.
-    /// Renames successfully converted .json → .json.migrated so they are not re-processed.
-    private func migrateLegacySessions(_ legacySummaries: [ChatSession.Summary]) async {
-        guard !legacySummaries.isEmpty else { return }
-
-        let projectsSnapshot = await MainActor.run { self.projects }
-        let projectMap = Dictionary(uniqueKeysWithValues: projectsSnapshot.map { ($0.id, $0) })
-
-        let fm = FileManager.default
-        var cwdDirCache: [String: URL] = [:]
-
-        for summary in legacySummaries {
-            guard let project = projectMap[summary.projectId] else { continue }
-            let cwd = project.path
-
-            if cwdDirCache[cwd] == nil {
-                cwdDirCache[cwd] = await cliStore.directory(forCwd: cwd)
-            }
-            let destDir = cwdDirCache[cwd]!
-            let destURL = destDir.appendingPathComponent("\(summary.id).jsonl")
-            guard !fm.fileExists(atPath: destURL.path) else { continue }
-
-            guard let session = persistence.loadLegacySessionSync(projectId: summary.projectId, sessionId: summary.id) else { continue }
-
-            do {
-                let jsonlData = try LegacyMigrator.toJSONL(session: session, cwd: cwd)
-                try fm.createDirectory(at: destDir, withIntermediateDirectories: true)
-                try jsonlData.write(to: destURL, options: .atomic)
-
-                await metaStore.save(
-                    sessionId: summary.id,
-                    meta: SessionMetaStore.Meta(
-                        title: summary.title == ChatSession.defaultTitle ? nil : summary.title,
-                        isPinned: summary.isPinned,
-                        model: summary.model,
-                        effort: summary.effort,
-                        permissionMode: summary.permissionMode,
-                        updatedAt: summary.updatedAt
-                    )
-                )
-
-                let sourceURL = persistence.legacySessionURL(projectId: summary.projectId, sessionId: summary.id)
-                let migratedURL = sourceURL.deletingPathExtension().appendingPathExtension("json.migrated")
-                try fm.moveItem(at: sourceURL, to: migratedURL)
-                logger.info("Migrated legacy session \(summary.id, privacy: .public) to CLI jsonl")
-            } catch {
-                logger.error("Failed to migrate session \(summary.id, privacy: .public): \(error.localizedDescription, privacy: .public)")
-            }
-        }
-    }
-
-    /// CLI-backed summaries for one project, with any not-yet-migrated legacy sessions merged in.
-    /// CLI wins on duplicate id. Legacy sessions disappear once migrated to jsonl.
-    private func mergedSummaries(for project: Project) async -> [ChatSession.Summary] {
-        async let legacy = persistence.loadLegacySessions(for: project.id)
-        async let cli = cliStore.loadSummaries(cwd: project.path, projectId: project.id)
-        let (cliResult, legacyResult) = await (cli, legacy)
-        let cliIDs = Set(cliResult.map { $0.id })
-        return (cliResult + legacyResult.filter { !cliIDs.contains($0.id) })
-            .sorted { $0.updatedAt > $1.updatedAt }
-    }
-
-    /// CLI-backed summaries across all projects, with any not-yet-migrated legacy sessions merged in.
-    private func mergedSummariesAcrossProjects() async -> [ChatSession.Summary] {
-        async let legacyAcrossAll = persistence.loadAllLegacySessionSummaries()
-        async let metaCache = cliStore.loadMetaCache()
-        let (legacy, meta) = await (legacyAcrossAll, metaCache)
-
-        let snapshot = projects
-        let cli: [ChatSession.Summary] = await withTaskGroup(of: [ChatSession.Summary].self) { group in
-            for project in snapshot {
-                group.addTask {
-                    await self.cliStore.loadSummaries(cwd: project.path, projectId: project.id, metaCache: meta)
-                }
-            }
-            var collected: [ChatSession.Summary] = []
-            for await batch in group { collected.append(contentsOf: batch) }
-            return collected
-        }
-
-        let cliIDs = Set(cli.map { $0.id })
-        return (cli + legacy.filter { !cliIDs.contains($0.id) })
-            .sorted { $0.updatedAt > $1.updatedAt }
-    }
-
-    /// Load/refresh the project's session list into allSessionSummaries
-    func loadSessionHistory(in window: WindowState) async {
-        guard let project = window.selectedProject else { return }
-        await reloadSessionSummaries(for: project)
-    }
-
-    /// Window-independent reload — used by the FS watcher when the CLI (or
-    /// another process) modifies a project's jsonl directory out-of-band.
-    /// Bails without touching `allSessionSummaries` if the disk view matches
-    /// the in-memory slice; otherwise SwiftUI would re-render on every
-    /// self-write event.
-    private func reloadSessionSummaries(for project: Project) async {
-        let summaries = await mergedSummaries(for: project)
-        let existing = allSessionSummaries
-            .filter { $0.projectId == project.id }
-            .sorted { $0.updatedAt > $1.updatedAt }
-        if existing == summaries { return }
-        allSessionSummaries.removeAll { $0.projectId == project.id }
-        allSessionSummaries.append(contentsOf: summaries)
-    }
-
-    // MARK: - CLI directory watch
-
-    /// Subscribe to filesystem changes in a project's CLI jsonl directory.
-    /// Idempotent — safe to call repeatedly. Silent no-op if the directory
-    /// hasn't been created yet; `send()` re-attempts after that point.
-    private func watchProjectDirectory(_ project: Project) {
-        let projectId = project.id
-        let cwd = project.path
-        Task { [weak self] in
-            guard let self else { return }
-            // cliStore.directory consults the cwd-index that survives the
-            // lossy slash/dot encoding — required for cwds containing dots.
-            let dir = await self.cliStore.directory(forCwd: cwd)
-            await self.directoryWatcher.watch(url: dir) { [weak self] in
-                Task { @MainActor [weak self] in
-                    guard let self,
-                          let p = self.projects.first(where: { $0.id == projectId }) else { return }
-                    await self.reloadSessionSummaries(for: p)
-                }
-            }
-        }
-    }
-
-    private func unwatchProjectDirectory(_ project: Project) {
-        let cwd = project.path
-        Task { [weak self] in
-            guard let self else { return }
-            let dir = await self.cliStore.directory(forCwd: cwd)
-            await self.directoryWatcher.unwatch(url: dir)
-        }
-    }
-
     private func switchToSession(_ session: ChatSession, messages loadedMessages: [ChatMessage]? = nil, in window: WindowState) {
+        let existingState = sessionStates[session.id]
+        logger.info("[SwitchToSession] sid=\(session.id, privacy: .public) hasState=\(existingState != nil) existingMessages=\(existingState?.messages.count ?? -1) existingIsStreaming=\(existingState?.isStreaming ?? false) preloadedMessages=\(loadedMessages?.count ?? -1)")
         saveDraft(in: window)
         saveQueue(in: window)
 
@@ -1847,11 +2414,16 @@ final class AppState {
             if let msgs = loadedMessages {
                 state.messages = cleanLoadedMessages(msgs)
                 sessionStates[session.id] = state
+                logger.info("[SwitchToSession] applied preloaded messages sid=\(session.id, privacy: .public) cleaned=\(state.messages.count)")
             } else {
                 // Switch with an empty state first; actual messages are loaded in the background and injected later
+                state.isLoadingFromDisk = true
                 sessionStates[session.id] = state
                 if let project = window.selectedProject {
+                    logger.info("[SwitchToSession] background load triggered sid=\(session.id, privacy: .public) cwd=\(project.path, privacy: .public)")
                     loadMessagesInBackground(projectId: project.id, sessionId: session.id, cwd: project.path)
+                } else {
+                    logger.error("[SwitchToSession] no selectedProject — cannot load messages sid=\(session.id, privacy: .public)")
                 }
             }
         } else if sessionStates[session.id]?.messages.isEmpty == true,
@@ -1861,19 +2433,26 @@ final class AppState {
                 if state.model == nil { state.model = session.model }
                 if state.effort == nil { state.effort = session.effort }
                 if state.permissionMode == nil { state.permissionMode = session.permissionMode }
+                state.isLoadingFromDisk = true
                 sessionStates[session.id] = state
             }
+            logger.info("[SwitchToSession] re-loading empty cached state sid=\(session.id, privacy: .public) cwd=\(project.path, privacy: .public)")
             loadMessagesInBackground(projectId: project.id, sessionId: session.id, cwd: project.path)
+        } else {
+            logger.info("[SwitchToSession] reusing cached state sid=\(session.id, privacy: .public) messages=\(existingState?.messages.count ?? -1) isStreaming=\(existingState?.isStreaming ?? false)")
         }
 
         if sessionStates[session.id]?.isStreaming == true {
             flushPendingUpdates(for: session.id)
         }
 
+        updateState(session.id) { $0.hasUncheckedCompletion = false }
+
         window.currentSessionId = session.id
         window.sessionModel = sessionStates[session.id]?.model ?? session.model
         window.sessionEffort = sessionStates[session.id]?.effort ?? session.effort
         window.sessionPermissionMode = sessionStates[session.id]?.permissionMode ?? session.permissionMode
+        window.sessionPlanMode = sessionStates[session.id]?.planMode ?? false
         window.inputText = window.draftTexts[session.id] ?? ""
         window.messageQueue = window.draftQueues[session.id] ?? []
 
@@ -1982,6 +2561,7 @@ final class AppState {
         window.sessionModel = nil
         window.sessionEffort = nil
         window.sessionPermissionMode = nil
+        window.sessionPlanMode = false
         sessionStates.removeValue(forKey: window.newSessionKey)
         window.inputText = window.draftTexts["new"] ?? ""
         window.messageQueue = window.draftQueues["new"] ?? []
@@ -1991,15 +2571,130 @@ final class AppState {
     func renameSession(_ session: ChatSession, to newTitle: String) async {
         if let si = allSessionSummaries.firstIndex(where: { $0.id == session.id }) {
             allSessionSummaries[si].title = newTitle
+            threadStore.upsert(allSessionSummaries[si])
         }
         await updateSessionMetadata(session, persistTitle: true) { $0.title = newTitle }
+    }
+
+    /// True if `currentTitle` looks like our auto-derived placeholder (matches what
+    /// `ChatSession.placeholderTitle(from:)` would produce). Used to decide whether
+    /// to overwrite with an LLM-generated title — never overwrite a user's manual rename.
+    private func isAutoGeneratedTitle(_ currentTitle: String, firstUserMessage: String) -> Bool {
+        currentTitle == ChatSession.defaultTitle
+            || currentTitle == ChatSession.placeholderTitle(from: firstUserMessage)
+            || currentTitle == "New session"
+            || currentTitle.isEmpty
+    }
+
+    /// Follow `sessionIdRedirect` chains to the current sid. The CLI may swap
+    /// `pending-<uuid>` → real sid (and later advance the sid again on
+    /// `compact_boundary`) while a long-running task holds the old id.
+    private func resolveCurrentSessionId(_ id: String) -> String {
+        var current = id
+        var seen: Set<String> = [current]
+        while let next = sessionIdRedirect[current] {
+            if seen.contains(next) { break }
+            seen.insert(next)
+            current = next
+        }
+        return current
+    }
+
+    /// Spawn a one-shot Claude call to generate a 3–6 word title for the given session,
+    /// then persist it via `renameSession` if the title is still the placeholder. No-op
+    /// if the session was already renamed manually or the LLM call fails.
+    func maybeGenerateLLMTitle(for sessionId: String) async {
+        let resolved = resolveCurrentSessionId(sessionId)
+        guard let summary = allSessionSummaries.first(where: { $0.id == resolved }) else {
+            logger.warning("Title generation skipped: no summary for \(resolved) (original \(sessionId))")
+            return
+        }
+        let messages = sessionStates[resolved]?.messages ?? []
+        let firstUserRaw = messages.first(where: { $0.role == .user })?.content ?? ""
+        let firstUser = ChatSession.stripAttachmentMarkers(from: firstUserRaw)
+        guard !firstUser.isEmpty else { return }
+        guard isAutoGeneratedTitle(summary.title, firstUserMessage: firstUserRaw) else { return }
+        guard let title = await claude.generateSessionTitle(firstUserMessage: firstUser) else { return }
+        // Re-resolve after the LLM call — the id may have been swapped while we waited.
+        let currentId = resolveCurrentSessionId(sessionId)
+        guard let stillPlaceholder = allSessionSummaries.first(where: { $0.id == currentId }),
+              isAutoGeneratedTitle(stillPlaceholder.title, firstUserMessage: firstUser) else { return }
+        guard let project = projects.first(where: { $0.id == stillPlaceholder.projectId }) else { return }
+        let session = ChatSession(
+            id: currentId,
+            projectId: project.id,
+            title: title,
+            messages: sessionStates[currentId]?.messages ?? messages,
+            origin: stillPlaceholder.origin
+        )
+        await renameSession(session, to: title)
     }
 
     func togglePinSession(_ session: ChatSession) async {
         guard let si = allSessionSummaries.firstIndex(where: { $0.id == session.id }) else { return }
         allSessionSummaries[si].isPinned.toggle()
         let newIsPinned = allSessionSummaries[si].isPinned
+        threadStore.upsert(allSessionSummaries[si])
         await updateSessionMetadata(session) { $0.isPinned = newIsPinned }
+    }
+
+    // MARK: - Archive
+
+    func archiveSession(_ session: ChatSession, in window: WindowState) async {
+        await setArchived(session, archived: true, in: window)
+    }
+
+    func unarchiveSession(_ session: ChatSession, in window: WindowState? = nil) async {
+        if let window {
+            await setArchived(session, archived: false, in: window)
+        } else {
+            await setArchivedNoWindow(session, archived: false)
+        }
+    }
+
+    private func setArchived(_ session: ChatSession, archived: Bool, in window: WindowState) async {
+        // If the chat being archived is currently open in this window, swap to a
+        // fresh session so the user isn't stranded staring at a now-hidden chat.
+        if archived, window.currentSessionId == session.id {
+            detachCurrentStream(in: window)
+            startNewChat(in: window)
+        }
+        await setArchivedNoWindow(session, archived: archived)
+    }
+
+    private func setArchivedNoWindow(_ session: ChatSession, archived: Bool) async {
+        let now = Date()
+        if let si = allSessionSummaries.firstIndex(where: { $0.id == session.id }) {
+            allSessionSummaries[si].isArchived = archived
+            allSessionSummaries[si].archivedAt = archived ? now : nil
+            threadStore.upsert(allSessionSummaries[si])
+        } else {
+            _ = threadStore.setArchived(id: session.id, archived: archived, at: now)
+        }
+        await updateSessionMetadata(session) { s in
+            s.isArchived = archived
+            s.archivedAt = archived ? now : nil
+        }
+    }
+
+    /// Apply the auto-archive policy: archive non-pinned chats whose `updatedAt`
+    /// is older than `archiveRetentionDays`. Run once at app launch.
+    func autoArchiveExpiredSessionsIfNeeded() {
+        guard autoArchiveEnabled else { return }
+        let cutoff = Calendar.current.date(
+            byAdding: .day,
+            value: -archiveRetentionDays,
+            to: Date()
+        ) ?? Date()
+        let archivedIds = threadStore.archiveStale(olderThan: cutoff)
+        guard !archivedIds.isEmpty else { return }
+        let idSet = Set(archivedIds)
+        let now = Date()
+        for idx in allSessionSummaries.indices where idSet.contains(allSessionSummaries[idx].id) {
+            allSessionSummaries[idx].isArchived = true
+            allSessionSummaries[idx].archivedAt = now
+        }
+        logger.info("Auto-archived \(archivedIds.count) chats older than \(self.archiveRetentionDays) days")
     }
 
     /// Persist a metadata-only edit (title, pin, etc.) routing by session
@@ -2008,6 +2703,77 @@ final class AppState {
     /// `persistTitle` should be true only for explicit user renames; pin and
     /// other non-title edits leave the sidecar title untouched so it stays
     /// in sync with the CLI's first-message-derived label.
+    // MARK: - Worktree
+
+    /// Create a Git worktree for the chat and remember it on the session.
+    /// Subsequent CLI invocations for this session will run in the worktree.
+    func attachWorktree(branch: String, in window: WindowState) async throws {
+        guard let project = window.selectedProject else {
+            throw AppError.noProjectSelected
+        }
+        guard let sessionId = window.currentSessionId else {
+            throw AppError.streamFailed("No active chat. Send a message first or pick a chat.")
+        }
+        let baseRepo = URL(fileURLWithPath: project.path)
+        let info = try await GitWorktreeService.shared.createWorktree(
+            baseRepo: baseRepo,
+            branch: branch
+        )
+        // Update in-memory state
+        sessionStates[sessionId, default: SessionStreamState()].worktreePath = info.path.path
+        sessionStates[sessionId, default: SessionStreamState()].worktreeBranch = info.branch
+        if let idx = allSessionSummaries.firstIndex(where: { $0.id == sessionId }) {
+            allSessionSummaries[idx].worktreePath = info.path.path
+            allSessionSummaries[idx].worktreeBranch = info.branch
+            threadStore.upsert(allSessionSummaries[idx])
+        }
+        // Persist via sidecar meta
+        let snap = allSessionSummaries.first(where: { $0.id == sessionId })
+        let updated = (snap ?? ChatSession.Summary(
+            id: sessionId, projectId: project.id, title: ChatSession.defaultTitle,
+            createdAt: Date(), updatedAt: Date(), isPinned: false,
+            worktreePath: info.path.path, worktreeBranch: info.branch
+        )).makeSession()
+        await updateSessionMetadata(updated) { s in
+            s.worktreePath = info.path.path
+            s.worktreeBranch = info.branch
+        }
+    }
+
+    /// Remove the worktree associated with the session (if any).
+    /// `force = true` removes even with uncommitted changes.
+    func detachWorktree(in window: WindowState, force: Bool = false) async throws {
+        guard let sessionId = window.currentSessionId else { return }
+        let path = sessionStates[sessionId]?.worktreePath
+            ?? allSessionSummaries.first(where: { $0.id == sessionId })?.worktreePath
+        guard let path else { return }
+        try await GitWorktreeService.shared.removeWorktree(URL(fileURLWithPath: path), force: force)
+        sessionStates[sessionId]?.worktreePath = nil
+        sessionStates[sessionId]?.worktreeBranch = nil
+        if let idx = allSessionSummaries.firstIndex(where: { $0.id == sessionId }) {
+            allSessionSummaries[idx].worktreePath = nil
+            allSessionSummaries[idx].worktreeBranch = nil
+            threadStore.upsert(allSessionSummaries[idx])
+        }
+        if let snap = allSessionSummaries.first(where: { $0.id == sessionId }) {
+            await updateSessionMetadata(snap.makeSession()) { s in
+                s.worktreePath = nil
+                s.worktreeBranch = nil
+            }
+        }
+    }
+
+    /// Returns the current effective working directory for the active chat —
+    /// either the chat's worktree (if attached) or the project path.
+    func effectiveCwd(in window: WindowState) -> String? {
+        guard let project = window.selectedProject else { return nil }
+        if let sid = window.currentSessionId {
+            if let p = sessionStates[sid]?.worktreePath { return p }
+            if let p = allSessionSummaries.first(where: { $0.id == sid })?.worktreePath { return p }
+        }
+        return project.path
+    }
+
     private func updateSessionMetadata(
         _ session: ChatSession,
         persistTitle: Bool = false,
@@ -2049,10 +2815,29 @@ final class AppState {
             }
         }
 
-        // Remove all in-memory session summaries for this project
-        allSessionSummaries.removeAll { $0.projectId == project.id }
+        // Cascade: delete each session's stored messages (CLI jsonl, meta,
+        // legacy json) before discarding the project itself. Without this the
+        // jsonls remain on disk under the project's cwd and would resurface as
+        // orphan sessions if the same path is added back as a project later.
+        let projectSummaries = allSessionSummaries.filter { $0.projectId == project.id }
+        for summary in projectSummaries {
+            let cwd = summary.worktreePath ?? project.path
+            do {
+                try await persistence.deleteSession(
+                    projectId: summary.projectId,
+                    sessionId: summary.id,
+                    origin: summary.origin,
+                    cwd: cwd
+                )
+            } catch {
+                logger.error("Failed to delete session \(summary.id) on project delete: \(error.localizedDescription)")
+            }
+            sessionStates.removeValue(forKey: summary.id)
+        }
 
-        unwatchProjectDirectory(project)
+        // Remove all in-memory session summaries for this project
+        threadStore.deleteAll(projectId: project.id)
+        allSessionSummaries.removeAll { $0.projectId == project.id }
 
         // Remove from projects list and persist
         projects.removeAll { $0.id == project.id }
@@ -2068,23 +2853,33 @@ final class AppState {
             detachCurrentStream(in: window)
             startNewChat(in: window)
         }
-        let origin = allSessionSummaries.first(where: { $0.id == session.id })?.origin ?? session.origin
-        let cwd = projects.first(where: { $0.id == session.projectId })?.path
+        let summary = allSessionSummaries.first(where: { $0.id == session.id })
+        let origin = summary?.origin ?? session.origin
+        // Prefer the worktreePath used while writing the jsonl — otherwise the
+        // CLI jsonl (stored under that cwd) is orphaned on disk and resurrects
+        // on next reload. Fall back to the project's path, then the session's.
+        let cwd = summary?.worktreePath
+            ?? session.worktreePath
+            ?? projects.first(where: { $0.id == session.projectId })?.path
         do {
             try await persistence.deleteSession(projectId: session.projectId, sessionId: session.id, origin: origin, cwd: cwd)
         } catch {
             logger.error("Failed to delete session: \(error.localizedDescription)")
         }
         allSessionSummaries.removeAll { $0.id == session.id }
+        threadStore.delete(id: session.id)
         sessionStates.removeValue(forKey: session.id)
     }
 
-    func deleteAllSessions(projectId: UUID? = nil, in window: WindowState) async {
-        let toDelete: [ChatSession.Summary]
+    func deleteAllSessions(projectId: UUID? = nil, archivedOnly: Bool = false, in window: WindowState) async {
+        var toDelete: [ChatSession.Summary]
         if let projectId {
             toDelete = allSessionSummaries.filter { $0.projectId == projectId }
         } else {
             toDelete = allSessionSummaries
+        }
+        if archivedOnly {
+            toDelete = toDelete.filter { $0.isArchived }
         }
         let ids = Set(toDelete.map(\.id))
 
@@ -2097,7 +2892,8 @@ final class AppState {
         }
 
         for summary in toDelete {
-            let cwd = projects.first(where: { $0.id == summary.projectId })?.path
+            let cwd = summary.worktreePath
+                ?? projects.first(where: { $0.id == summary.projectId })?.path
             do {
                 try await persistence.deleteSession(
                     projectId: summary.projectId,
@@ -2111,16 +2907,26 @@ final class AppState {
         }
 
         allSessionSummaries.removeAll { ids.contains($0.id) }
+        if archivedOnly {
+            for id in ids { threadStore.delete(id: id) }
+        } else {
+            threadStore.deleteAll(projectId: projectId)
+        }
         for id in ids { sessionStates.removeValue(forKey: id) }
     }
 
     func selectSession(id: String, in window: WindowState) {
-        guard window.currentSessionId != id else { return }
+        logger.info("[SelectSession] click sid=\(id, privacy: .public) currentSid=\(window.currentSessionId ?? "<nil>", privacy: .public) selectedProject=\(window.selectedProject?.id.uuidString ?? "<nil>", privacy: .public) summariesCount=\(self.allSessionSummaries.count)")
+        guard window.currentSessionId != id else {
+            logger.info("[SelectSession] no-op: already current sid=\(id, privacy: .public)")
+            return
+        }
 
         window.cancelSessionSwitchTask()
 
         if let summary = allSessionSummaries.first(where: { $0.id == id }),
            summary.projectId == window.selectedProject?.id {
+            logger.info("[SelectSession] match in current project sid=\(id, privacy: .public) origin=\(String(describing: summary.origin), privacy: .public) title=\(summary.title, privacy: .public)")
             let session = summary.makeSession()
             switchToSession(session, in: window)
             window.requestInputFocus = true
@@ -2133,8 +2939,12 @@ final class AppState {
 
         // If it's a session from another project, switch the project as well
         guard let summary = allSessionSummaries.first(where: { $0.id == id }),
-              let project = projects.first(where: { $0.id == summary.projectId }) else { return }
+              let project = projects.first(where: { $0.id == summary.projectId }) else {
+            logger.error("[SelectSession] summary or project missing for sid=\(id, privacy: .public)")
+            return
+        }
 
+        logger.info("[SelectSession] cross-project switch sid=\(id, privacy: .public) toProject=\(project.id.uuidString, privacy: .public)")
         window.setSessionSwitchTask(Task { [weak self] in
             guard let self else { return }
             guard !Task.isCancelled else { return }
@@ -2144,8 +2954,10 @@ final class AppState {
                 let session = s.makeSession()
                 if sessionStates[session.id] == nil,
                    let full = await persistence.loadFullSession(summary: s, cwd: project.path) {
+                    logger.info("[SelectSession] cross-project preload ok sid=\(id, privacy: .public) messages=\(full.messages.count)")
                     switchToSession(full, messages: full.messages, in: window)
                 } else {
+                    logger.info("[SelectSession] cross-project preload empty sid=\(id, privacy: .public)")
                     switchToSession(session, in: window)
                 }
                 window.requestInputFocus = true
@@ -2157,7 +2969,6 @@ final class AppState {
     func addProject(_ project: Project) {
         guard !projects.contains(where: { $0.path == project.path }) else { return }
         projects.append(project)
-        watchProjectDirectory(project)
         Task {
             do { try await persistence.saveProjects(projects) }
             catch { logger.error("Failed to save projects: \(error.localizedDescription)") }
@@ -2206,7 +3017,7 @@ final class AppState {
     }
 
     func removeAttachment(_ id: UUID, in window: WindowState) {
-        window.attachments.removeAll { $0.id == id }
+        window.removeAttachment(id)
     }
 
     private func buildPromptWithAttachments(_ text: String, attachments: [Attachment]) -> String {
@@ -2295,20 +3106,41 @@ final class AppState {
         // Snapshot the summary while we're on MainActor so the detached task
         // can route by origin without awaiting back to us first.
         let summary = summaryFor(sessionId: sessionId, projectId: projectId)
+        logger.info("[LoadMessages] start sid=\(sessionId, privacy: .public) origin=\(String(describing: summary.origin), privacy: .public) cwd=\(cwd, privacy: .public)")
 
         Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
             let full = await self.persistence.loadFullSession(summary: summary, cwd: cwd)
-            guard let full else { return }
-            let cleaned = await self.cleanLoadedMessages(full.messages)
+            let cleaned: [ChatMessage]
+            if let full {
+                cleaned = await self.cleanLoadedMessages(full.messages)
+            } else {
+                cleaned = []
+            }
             await MainActor.run {
-                guard var state = self.sessionStates[sessionId] else { return }
-                guard !state.isStreaming, state.messages.isEmpty else { return }
+                let rawCount = full?.messages.count ?? -1
+                self.logger.info("[LoadMessages] loaded sid=\(sessionId, privacy: .public) rawMessages=\(rawCount) cleaned=\(cleaned.count)")
+                guard var state = self.sessionStates[sessionId] else {
+                    self.logger.error("[LoadMessages] dropped — no sessionState sid=\(sessionId, privacy: .public)")
+                    return
+                }
+                // Always clear the loading flag, even if we bail out — otherwise the UI
+                // would stay faded out forever on the failure / skip paths.
+                state.isLoadingFromDisk = false
+                defer { self.sessionStates[sessionId] = state }
+                guard let full else {
+                    self.logger.error("[LoadMessages] no session returned by persistence sid=\(sessionId, privacy: .public) origin=\(String(describing: summary.origin), privacy: .public)")
+                    return
+                }
+                guard !state.isStreaming, state.messages.isEmpty else {
+                    self.logger.info("[LoadMessages] skipped apply sid=\(sessionId, privacy: .public) isStreaming=\(state.isStreaming) existingMessages=\(state.messages.count)")
+                    return
+                }
                 state.messages = cleaned
                 if state.model == nil { state.model = full.model }
                 if state.effort == nil { state.effort = full.effort }
                 if state.permissionMode == nil { state.permissionMode = full.permissionMode }
-                self.sessionStates[sessionId] = state
+                self.logger.info("[LoadMessages] applied sid=\(sessionId, privacy: .public) messages=\(state.messages.count)")
             }
         }
     }
@@ -2326,14 +3158,14 @@ final class AppState {
     private func saveSession(sessionId: String, projectId: UUID, messages: [ChatMessage]) async {
         guard !messages.isEmpty else { return }
 
-        // Preserve the existing title (which may have been renamed by the user).
-        // Only auto-generate a title when no summary exists yet for this session.
+        // Preserve the existing title (which may have been renamed by the user or
+        // generated by the LLM). Fall back to the default placeholder; the LLM
+        // title generator replaces it once the first assistant reply arrives.
         let title: String
         if let existing = allSessionSummaries.first(where: { $0.id == sessionId }), !existing.title.isEmpty {
             title = existing.title
         } else {
-            let firstUserContent = messages.first(where: { $0.role == .user })?.content
-            title = firstUserContent.map { $0.count > 50 ? String($0.prefix(50)) + "..." : $0 } ?? "New Session"
+            title = ChatSession.defaultTitle
         }
 
         let sessionModel = sessionStates[sessionId]?.model
@@ -2363,6 +3195,7 @@ final class AppState {
                     allSessionSummaries.insert(summary, at: 0)
                 }
             }
+            threadStore.upsert(summary)
         }
 
         // Update the project's lastSessionId
@@ -2384,9 +3217,103 @@ final class AppState {
     }
 
     private func saveQueue(in window: WindowState) {
-        let key = window.currentSessionId ?? "new"
+        let key = queueKey(for: window)
         if window.messageQueue.isEmpty { window.draftQueues.removeValue(forKey: key) }
         else { window.draftQueues[key] = window.messageQueue }
+    }
+
+    /// Persistence key used for both the in-memory `draftQueues` mirror and the
+    /// SwiftData `QueuedMessageRecord.sessionKey` column. Matches the legacy
+    /// keying used by `saveQueue` so existing in-memory state migrates without churn.
+    private func queueKey(for window: WindowState) -> String {
+        window.currentSessionId ?? "new"
+    }
+
+    // MARK: - Message Queue (persisted)
+
+    func enqueueMessage(text: String, attachments: [Attachment], in window: WindowState) {
+        let message = QueuedMessage(text: text, attachments: attachments)
+        window.messageQueue.append(message)
+        let key = queueKey(for: window)
+        window.draftQueues[key] = window.messageQueue
+        threadStore.appendQueued(sessionKey: key, message: message)
+    }
+
+    func removeQueuedMessage(id: UUID, in window: WindowState) {
+        window.dequeueMessage(id: id)
+        saveQueue(in: window)
+        threadStore.removeQueued(id: id)
+    }
+
+    /// Pops the head of the queue (the auto-flush path used when a stream ends)
+    /// and removes the persisted row.
+    func dequeueNextForFlush(in window: WindowState) -> QueuedMessage? {
+        guard let next = window.dequeueNext() else { return nil }
+        saveQueue(in: window)
+        threadStore.removeQueued(id: next.id)
+        return next
+    }
+
+    /// Cancels any in-flight stream for the current session, removes the chosen
+    /// queued message, and sends it as the next user turn.
+    func sendQueuedNow(id: UUID, in window: WindowState) async {
+        guard let target = window.messageQueue.first(where: { $0.id == id }) else { return }
+        // Take a snapshot of remaining queue items so we can restore them after
+        // `cancelStreaming` clobbers `window.inputText`/`window.attachments`.
+        let remaining = window.messageQueue.filter { $0.id != id }
+
+        // Clear the queue from memory + disk first, so the cancellation path
+        // doesn't see the queued item we're about to send.
+        let key = queueKey(for: window)
+        window.messageQueue.removeAll()
+        window.draftQueues.removeValue(forKey: key)
+        threadStore.clearQueue(sessionKey: key)
+
+        if isStreaming(in: window) {
+            await cancelStreaming(in: window)
+        }
+
+        // Restore the remaining items into memory + disk.
+        for msg in remaining {
+            window.messageQueue.append(msg)
+            threadStore.appendQueued(sessionKey: key, message: msg)
+        }
+        if remaining.isEmpty {
+            window.draftQueues.removeValue(forKey: key)
+        } else {
+            window.draftQueues[key] = window.messageQueue
+        }
+
+        window.inputText = target.text
+        window.attachments = target.attachments
+        await send(in: window)
+    }
+
+    /// Concatenates every queued message (texts joined with a blank line,
+    /// attachments merged in order), cancels any in-flight stream, clears the
+    /// queue, then sends the combined message as a single user turn.
+    func sendAllQueuedAsOne(in window: WindowState) async {
+        guard !window.messageQueue.isEmpty else { return }
+        let snapshot = window.messageQueue
+
+        let key = queueKey(for: window)
+        window.messageQueue.removeAll()
+        window.draftQueues.removeValue(forKey: key)
+        threadStore.clearQueue(sessionKey: key)
+
+        if isStreaming(in: window) {
+            await cancelStreaming(in: window)
+        }
+
+        let combinedText = snapshot
+            .map(\.text)
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .joined(separator: "\n\n")
+        let combinedAttachments = snapshot.flatMap(\.attachments)
+
+        window.inputText = combinedText
+        window.attachments = combinedAttachments
+        await send(in: window)
     }
 
     /// Sends the next queued message for a background session (one the window is not currently displaying).
@@ -2402,6 +3329,7 @@ final class AppState {
         let next = queue.removeFirst()
         if queue.isEmpty { window.draftQueues.removeValue(forKey: sessionKey) }
         else { window.draftQueues[sessionKey] = queue }
+        threadStore.removeQueued(id: next.id)
 
         let (resolvedAttachments, tempFilePaths) = AttachmentFactory.resolvingClipboardImages(next.attachments)
         let prompt = buildPromptWithAttachments(next.text, attachments: resolvedAttachments)
@@ -2411,8 +3339,11 @@ final class AppState {
         updateState(sessionKey) { state in
             state.messages.append(ChatMessage(role: .user, content: displayText, attachments: resolvedAttachments))
             state.isStreaming = true
+            state.hasUncheckedCompletion = false
             state.activeStreamId = streamId
             state.streamingStartDate = Date()
+            state.currentTurnOutputTokensByMessage.removeAll(keepingCapacity: true)
+            state.currentTurnOutputTokensUnkeyed = 0
         }
 
         await permission.refreshRunToken()
@@ -2484,6 +3415,7 @@ final class AppState {
 private enum AppError: LocalizedError {
     case noProjectSelected
     case claudeNotInstalled
+    case streamFailed(String)
 
     var errorDescription: String? {
         switch self {
@@ -2491,6 +3423,8 @@ private enum AppError: LocalizedError {
             return "No project selected. Please select or add a project first."
         case .claudeNotInstalled:
             return "Claude CLI binary not found. Please install it first."
+        case .streamFailed(let message):
+            return message
         }
     }
 }

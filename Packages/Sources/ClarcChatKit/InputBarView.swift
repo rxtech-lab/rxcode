@@ -16,6 +16,7 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
     @State private var slashSelectedIndex = 0
     @State private var slashDetailCommand: SlashCommand?
     @State private var textPreviewAttachment: Attachment?
+    @State private var imagePreviewAttachment: Attachment?
     @State private var isDragOver = false
     @State private var showAtFilePopup = false
     @State private var atFileSelectedIndex = 0
@@ -39,7 +40,6 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
 
             if !windowState.messageQueue.isEmpty {
                 queuedMessagePreviews
-                    .frame(maxWidth: .infinity, alignment: .trailing)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
@@ -60,6 +60,7 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
             .padding(.bottom, 12)
             .sheet(item: $slashDetailCommand) { cmd in CommandDetailSheet(command: cmd) }
             .sheet(item: $textPreviewAttachment) { attachment in TextPreviewSheet(attachment: attachment) }
+            .sheet(item: $imagePreviewAttachment) { attachment in ImagePreviewSheet(attachment: attachment) }
             .onDrop(of: [.fileURL, .image], isTargeted: $isDragOver) { providers in
                 processItemProviders(providers)
                 return true
@@ -146,42 +147,88 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
             inputTextField
             composerActionRow
         }
+        .disabled(chatBridge.hasPendingPlanDecision)
+        .opacity(chatBridge.hasPendingPlanDecision ? 0.55 : 1.0)
+        .animation(.easeInOut(duration: 0.15), value: chatBridge.hasPendingPlanDecision)
     }
 
     private var composerActionRow: some View {
         HStack(spacing: 10) {
             attachButton
 
+            if windowState.sessionPlanMode {
+                planModeChip
+                    .transition(.scale(scale: 0.95).combined(with: .opacity))
+            }
+
             accessory
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            if !showSlashPopup {
-                ClaudeSendButton(
-                    isEnabled: !windowState.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                        || inputHasMarkedText
-                        || !windowState.attachments.isEmpty,
-                    action: sendMessage
-                )
-                .keyboardShortcut(.return, modifiers: .command)
-            } else {
-                ClaudeSendButton(isEnabled: false, action: {}).disabled(true)
-            }
+            sendOrStopControls
         }
         .frame(height: 32)
+        .animation(.easeInOut(duration: 0.15), value: windowState.sessionPlanMode)
+    }
+
+    private var hasComposerContent: Bool {
+        !windowState.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || inputHasMarkedText
+            || !windowState.attachments.isEmpty
+    }
+
+    @ViewBuilder
+    private var sendOrStopControls: some View {
+        HStack(spacing: 8) {
+            // While streaming, show the send button only when the user has typed
+            // something to enqueue. When idle, always show send (disabled when empty).
+            if !chatBridge.isStreaming || hasComposerContent {
+                if !showSlashPopup {
+                    ClaudeSendButton(
+                        isEnabled: hasComposerContent,
+                        action: sendMessage
+                    )
+                    .keyboardShortcut(.return, modifiers: .command)
+                } else {
+                    ClaudeSendButton(isEnabled: false, action: {}).disabled(true)
+                }
+            }
+
+            if chatBridge.isStreaming {
+                ClaudeStopButton(action: stopGeneration)
+                    .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .animation(.easeInOut(duration: 0.15), value: chatBridge.isStreaming)
+    }
+
+    private func stopGeneration() {
+        Task { await chatBridge.cancelStreaming() }
     }
 
     private var attachButton: some View {
-        Button {
-            showFilePicker = true
+        Menu {
+            Button {
+                showFilePicker = true
+            } label: {
+                Label("Attach file…", systemImage: "paperclip")
+            }
+
+            Divider()
+
+            Toggle(isOn: planModeBinding) {
+                Label("Plan mode", systemImage: "checklist")
+            }
         } label: {
             Image(systemName: "plus")
                 .font(.system(size: ClaudeTheme.size(15), weight: .regular))
-                .foregroundStyle(ClaudeTheme.textTertiary)
+                .foregroundStyle(windowState.sessionPlanMode ? ClaudeTheme.accent : ClaudeTheme.textTertiary)
                 .frame(width: 32, height: 32)
                 .contentShape(Circle())
         }
-        .buttonStyle(.borderless)
-        .help("Attach file")
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(windowState.sessionPlanMode ? "Plan mode is on — Add menu" : "Add — attach file or toggle plan mode")
         .fileImporter(
             isPresented: $showFilePicker,
             allowedContentTypes: [.item],
@@ -189,6 +236,44 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
         ) { result in
             handleFileImport(result)
         }
+    }
+
+    private var planModeChip: some View {
+        Button {
+            Task { await chatBridge.togglePlanMode() }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "checklist")
+                    .font(.system(size: ClaudeTheme.size(10), weight: .semibold))
+
+                Text("Plan", bundle: .module)
+                    .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+                    .lineLimit(1)
+
+                Image(systemName: "xmark")
+                    .font(.system(size: ClaudeTheme.size(8), weight: .bold))
+            }
+            .foregroundStyle(ClaudeTheme.accent)
+            .padding(.horizontal, 9)
+            .frame(height: 26)
+            .background(ClaudeTheme.accentSubtle, in: Capsule())
+            .overlay(
+                Capsule()
+                    .strokeBorder(ClaudeTheme.accent.opacity(0.35), lineWidth: 1)
+            )
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .help(String(localized: "Turn off plan mode", bundle: .module))
+    }
+
+    /// Mirrors `windowState.sessionPlanMode` into a Binding so the Menu's `Toggle`
+    /// drives `chatBridge.togglePlanMode()` — the same path used by Shift+Tab.
+    private var planModeBinding: Binding<Bool> {
+        Binding(
+            get: { windowState.sessionPlanMode },
+            set: { _ in Task { await chatBridge.togglePlanMode() } }
+        )
     }
 
     @ViewBuilder
@@ -206,8 +291,10 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
             onUpArrow: { handleUpArrow() == .handled },
             onDownArrow: { handleDownArrow() == .handled },
             onTab: { handleTab() == .handled },
+            onShiftTab: { Task { await chatBridge.togglePlanMode() } },
             onEscape: handleEscapeKey,
-            onPasteCommandV: handlePaste
+            onPasteCommandV: handlePaste,
+            onImageChipTap: handleImageChipTap
         )
         .id(textFieldLayoutID)
         .onChange(of: windowState.inputText) { oldValue, newValue in
@@ -550,49 +637,113 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
     // MARK: - Queued Message Previews
 
     private var queuedMessagePreviews: some View {
-        VStack(alignment: .trailing, spacing: 4) {
+        VStack(spacing: 6) {
+            if windowState.messageQueue.count >= 2 {
+                queuedHeader
+            }
             ForEach(windowState.messageQueue) { queued in
-                HStack(spacing: 6) {
-                    Image(systemName: "clock")
-                        .font(.system(size: ClaudeTheme.size(10)))
-                        .foregroundStyle(ClaudeTheme.textSecondary.opacity(0.7))
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "arrow.turn.down.right")
+                        .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+                        .foregroundStyle(ClaudeTheme.textTertiary)
+                        .padding(.top, 2)
 
                     Text(queuedDisplayText(queued))
                         .font(.system(size: ClaudeTheme.size(13)))
-                        .foregroundStyle(ClaudeTheme.textSecondary)
+                        .foregroundStyle(ClaudeTheme.textPrimary)
                         .lineLimit(3)
                         .truncationMode(.tail)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Button {
+                        sendQueuedNow(queued.id)
+                    } label: {
+                        Image(systemName: "paperplane.fill")
+                            .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+                            .foregroundStyle(ClaudeTheme.accent)
+                            .frame(width: 24, height: 24)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(chatBridge.hasPendingPlanDecision)
+                    .help("Send now — cancels current response")
 
                     Button {
                         removeQueuedMessage(queued.id)
                     } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: ClaudeTheme.size(9), weight: .semibold))
+                        Image(systemName: "trash")
+                            .font(.system(size: ClaudeTheme.size(11), weight: .medium))
                             .foregroundStyle(ClaudeTheme.textSecondary)
-                            .padding(3)
-                            .background(ClaudeTheme.textSecondary.opacity(0.1), in: Circle())
+                            .frame(width: 24, height: 24)
+                            .contentShape(Rectangle())
                     }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(.plain)
                     .help("Remove")
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .background(.ultraThinMaterial)
-                .clipShape(Capsule())
-                .frame(maxWidth: 350, alignment: .trailing)
-                .opacity(0.9)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusMedium)
+                        .fill(ClaudeTheme.inputBackground)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusMedium)
+                        .strokeBorder(ClaudeTheme.inputBorder, lineWidth: 1)
+                )
+                .frame(maxWidth: .infinity)
             }
         }
-        .padding(.trailing, 14)
-        .padding(.bottom, 4)
+        .padding(.horizontal, 8)
+        .padding(.bottom, 6)
+    }
+
+    private var queuedHeader: some View {
+        HStack(spacing: 8) {
+            Text("\(windowState.messageQueue.count) messages queued")
+                .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+
+            Spacer(minLength: 0)
+
+            Button {
+                sendAllQueuedAsOne()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "paperplane.fill")
+                        .font(.system(size: ClaudeTheme.size(10), weight: .medium))
+                    Text("Send all as one")
+                        .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+                }
+                .foregroundStyle(ClaudeTheme.accent)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(ClaudeTheme.accentSubtle, in: Capsule())
+                .overlay(
+                    Capsule()
+                        .strokeBorder(ClaudeTheme.accent.opacity(0.35), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(chatBridge.hasPendingPlanDecision)
+            .help("Combine and send all queued messages as a single turn")
+        }
+        .padding(.horizontal, 4)
     }
 
     private func removeQueuedMessage(_ id: UUID) {
         withAnimation(.easeOut(duration: 0.15)) {
-            windowState.dequeueMessage(id: id)
+            chatBridge.removeQueuedMessage(id: id)
         }
+    }
+
+    private func sendQueuedNow(_ id: UUID) {
+        Task { await chatBridge.sendQueuedNow(id: id) }
+    }
+
+    private func sendAllQueuedAsOne() {
+        Task { await chatBridge.sendAllQueuedAsOne() }
     }
 
     private func queuedDisplayText(_ queued: QueuedMessage) -> String {
@@ -611,7 +762,11 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
                     AttachmentPreviewItem(attachment: attachment) {
                         windowState.removeAttachment(attachment.id)
                     } onTap: {
-                        if attachment.type == .text { textPreviewAttachment = attachment }
+                        switch attachment.type {
+                        case .text: textPreviewAttachment = attachment
+                        case .image: imagePreviewAttachment = attachment
+                        default: break
+                        }
                     }
                 }
             }
@@ -620,16 +775,23 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
         }
     }
 
+    private func handleImageChipTap(_ index: Int) {
+        let images = windowState.attachments.filter { $0.type == .image }
+        guard index >= 1, index <= images.count else { return }
+        imagePreviewAttachment = images[index - 1]
+    }
+
     // MARK: - Send / Return
 
     private func sendMessage() {
+        guard !chatBridge.hasPendingPlanDecision else { return }
         guard !windowState.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 || !windowState.attachments.isEmpty else { return }
         historyIndex = -1
 
         if chatBridge.isStreaming {
             withAnimation(.easeOut(duration: 0.2)) {
-                windowState.enqueueMessage(text: windowState.inputText, attachments: windowState.attachments)
+                chatBridge.enqueueMessage(text: windowState.inputText, attachments: windowState.attachments)
             }
             windowState.inputText = ""
             windowState.attachments = []
@@ -642,7 +804,7 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
     }
 
     private func processNextQueued() {
-        guard let next = windowState.dequeueNext() else { return }
+        guard let next = chatBridge.dequeueNextForFlush() else { return }
         windowState.inputText = next.text
         windowState.attachments = next.attachments
         Task { await chatBridge.send() }

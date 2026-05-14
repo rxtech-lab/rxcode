@@ -1,5 +1,11 @@
 /* English — base localization for ClarcChatKit */
 
+// MARK: - InputBarView
+"Attach file" = "Attach file";
+"Plan" = "Plan";
+"Turn off plan mode" = "Turn off plan mode";
+"Type a message..." = "Type a message...";
+
 // MARK: - ToolResultView
 "Show less" = "Show less";
 "Show more" = "Show more";
@@ -32,3 +38,15 @@
 "isTerminalCommand: true runs the message as a terminal command instead of sending it to chat." = "isTerminalCommand: true runs the message as a terminal command instead of sending it to chat.";
 "Shortcut button label" = "Shortcut button label";
 "Message sent to Claude or command run in terminal" = "Message sent to Claude or command run in terminal";
+
+// MARK: - StatusLineView
+"5-hour rate limit" = "5-hour rate limit";
+"Tracks usage against Anthropic's rolling 5-hour limit. Resets gradually as older requests age out." = "Tracks usage against Anthropic's rolling 5-hour limit. Resets gradually as older requests age out.";
+"7-day rate limit" = "7-day rate limit";
+"Tracks usage against Anthropic's rolling 7-day limit. Resets gradually as older requests age out." = "Tracks usage against Anthropic's rolling 7-day limit. Resets gradually as older requests age out.";
+"Context window" = "Context window";
+"Portion of the current conversation's context window in use. When it fills, older messages may be summarized or dropped." = "Portion of the current conversation's context window in use. When it fills, older messages may be summarized or dropped.";
+"Currently at %lld%%" = "Currently at %lld%%";
+"Resets in %@" = "Resets in %@";
+"tokens" = "tokens";
+"tok" = "tok";

@@ -6,15 +6,22 @@ public struct FileDiffView: View {
     public let filePath: String
     public let fileName: String
     public let editHunks: [PreviewFile.EditHunk]
+    public let gitDiffMode: PreviewFile.GitDiffMode?
     @Environment(WindowState.self) private var windowState
     @State private var diffLines: [DiffLine] = []
     @State private var isLoading = true
     @State private var isCopied = false
 
-    public init(filePath: String, fileName: String, editHunks: [PreviewFile.EditHunk] = []) {
+    public init(
+        filePath: String,
+        fileName: String,
+        editHunks: [PreviewFile.EditHunk] = [],
+        gitDiffMode: PreviewFile.GitDiffMode? = nil
+    ) {
         self.filePath = filePath
         self.fileName = fileName
         self.editHunks = editHunks
+        self.gitDiffMode = gitDiffMode
     }
 
     public var body: some View {
@@ -116,9 +123,13 @@ public struct FileDiffView: View {
     }
 
     private var diffContentView: some View {
-        DiffTextRenderer(lines: diffLines)
+        DiffTextRenderer(lines: diffLines, language: language)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(ClaudeTheme.codeBackground)
+    }
+
+    private var language: String {
+        URL(fileURLWithPath: filePath).pathExtension.lowercased()
     }
 
     // MARK: - Diff Sources
@@ -136,13 +147,30 @@ public struct FileDiffView: View {
         }
 
         let workDir = URL(fileURLWithPath: filePath).deletingLastPathComponent().path
+        if case .untracked = gitDiffMode {
+            let contents = (try? String(contentsOfFile: filePath, encoding: .utf8)) ?? ""
+            let hunks = [PreviewFile.EditHunk(oldString: "", newString: contents)]
+            diffLines = await Task.detached(priority: .userInitiated) {
+                FileDiffView.buildEditDiffLines(from: hunks)
+            }.value
+            return
+        }
         let raw: String
-        if let r1 = await GitHelper.run(["diff", "HEAD", "--", filePath], at: workDir) {
-            raw = r1
-        } else if let r2 = await GitHelper.run(["diff", "--", filePath], at: workDir) {
-            raw = r2
-        } else {
-            raw = await GitHelper.run(["show", "HEAD", "--", filePath], at: workDir) ?? ""
+        switch gitDiffMode {
+        case .unstaged:
+            raw = await GitHelper.run(["diff", "--", filePath], at: workDir) ?? ""
+        case .staged:
+            raw = await GitHelper.run(["diff", "--cached", "--", filePath], at: workDir) ?? ""
+        case .untracked:
+            raw = ""
+        case .none:
+            if let r1 = await GitHelper.run(["diff", "HEAD", "--", filePath], at: workDir) {
+                raw = r1
+            } else if let r2 = await GitHelper.run(["diff", "--", filePath], at: workDir) {
+                raw = r2
+            } else {
+                raw = await GitHelper.run(["show", "HEAD", "--", filePath], at: workDir) ?? ""
+            }
         }
         diffLines = await Task.detached(priority: .userInitiated) {
             FileDiffView.parseDiff(raw)
@@ -225,6 +253,7 @@ nonisolated func stripCommonIndent(old: [String], new: [String]) -> (old: [Strin
 
 private struct DiffTextRenderer: NSViewRepresentable {
     let lines: [DiffLine]
+    let language: String
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -270,18 +299,19 @@ private struct DiffTextRenderer: NSViewRepresentable {
         }
 
         scrollView.documentView = textView
-        context.coordinator.attach(textView: textView, lines: lines)
+        context.coordinator.attach(textView: textView, lines: lines, language: language)
         return scrollView
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? NSTextView else { return }
-        context.coordinator.update(textView: textView, lines: lines)
+        context.coordinator.update(textView: textView, lines: lines, language: language)
     }
 
     final class Coordinator {
         private weak var textView: NSTextView?
         private var lastLines: [DiffLine] = []
+        private var lastLanguage: String = ""
         private var lastFingerprint: Int = 0
         nonisolated(unsafe) private var themeObserver: NSObjectProtocol?
 
@@ -291,17 +321,17 @@ private struct DiffTextRenderer: NSViewRepresentable {
             }
         }
 
-        func attach(textView: NSTextView, lines: [DiffLine]) {
+        func attach(textView: NSTextView, lines: [DiffLine], language: String) {
             self.textView = textView
-            apply(lines: lines, to: textView)
+            apply(lines: lines, language: language, to: textView)
             registerThemeObserver()
         }
 
-        func update(textView: NSTextView, lines: [DiffLine]) {
-            let fp = fingerprint(of: lines)
+        func update(textView: NSTextView, lines: [DiffLine], language: String) {
+            let fp = fingerprint(of: lines, language: language)
             if fp == lastFingerprint, textView === self.textView { return }
             self.textView = textView
-            apply(lines: lines, to: textView)
+            apply(lines: lines, language: language, to: textView)
         }
 
         private func registerThemeObserver() {
@@ -313,19 +343,21 @@ private struct DiffTextRenderer: NSViewRepresentable {
             ) { [weak self] _ in
                 MainActor.assumeIsolated {
                     guard let self, let tv = self.textView else { return }
-                    self.apply(lines: self.lastLines, to: tv)
+                    self.apply(lines: self.lastLines, language: self.lastLanguage, to: tv)
                 }
             }
         }
 
-        private func apply(lines: [DiffLine], to textView: NSTextView) {
-            textView.textStorage?.setAttributedString(Self.buildAttributedString(lines: lines))
+        private func apply(lines: [DiffLine], language: String, to textView: NSTextView) {
+            textView.textStorage?.setAttributedString(Self.buildAttributedString(lines: lines, language: language))
             lastLines = lines
-            lastFingerprint = fingerprint(of: lines)
+            lastLanguage = language
+            lastFingerprint = fingerprint(of: lines, language: language)
         }
 
-        private func fingerprint(of lines: [DiffLine]) -> Int {
+        private func fingerprint(of lines: [DiffLine], language: String) -> Int {
             var hasher = Hasher()
+            hasher.combine(language)
             hasher.combine(lines.count)
             if let first = lines.first {
                 hasher.combine(first.text)
@@ -338,11 +370,15 @@ private struct DiffTextRenderer: NSViewRepresentable {
             return hasher.finalize()
         }
 
-        private static func buildAttributedString(lines: [DiffLine]) -> NSAttributedString {
-            let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        private static func buildAttributedString(lines: [DiffLine], language: String) -> NSAttributedString {
+            let fontSize: CGFloat = 12
+            let font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
             let gutterColor = NSColor(ClaudeTheme.textTertiary).withAlphaComponent(0.6)
             let gutterDigits = max(String(lines.count).count, 2)
             let blankPrefix = String(repeating: " ", count: gutterDigits) + "  "
+
+            let addedBg = NSColor(ClaudeTheme.statusSuccess).withAlphaComponent(0.14)
+            let removedBg = NSColor(ClaudeTheme.statusError).withAlphaComponent(0.14)
 
             let result = NSMutableAttributedString()
             for (index, line) in lines.enumerated() {
@@ -353,19 +389,101 @@ private struct DiffTextRenderer: NSViewRepresentable {
                     let n = String(index + 1)
                     prefix = String(repeating: " ", count: gutterDigits - n.count) + n + "  "
                 }
-                result.append(NSAttributedString(string: prefix, attributes: [
+
+                let rowBg: NSColor? = {
+                    switch line.kind {
+                    case .added:   return addedBg
+                    case .removed: return removedBg
+                    default:       return nil
+                    }
+                }()
+
+                var gutterAttrs: [NSAttributedString.Key: Any] = [
                     .font: font,
                     .foregroundColor: gutterColor,
-                ]))
-
-                let bodyAttrs: [NSAttributedString.Key: Any] = [
-                    .font: font,
-                    .foregroundColor: NSColor(line.kind.foregroundColor),
                 ]
-                let bodyText = (line.text.isEmpty ? " " : line.text) + "\n"
-                result.append(NSAttributedString(string: bodyText, attributes: bodyAttrs))
+                if let bg = rowBg { gutterAttrs[.backgroundColor] = bg }
+                result.append(NSAttributedString(string: prefix, attributes: gutterAttrs))
+
+                let body = buildLineBody(line: line, language: language, font: font, fontSize: fontSize, rowBg: rowBg)
+                result.append(body)
+
+                var newlineAttrs: [NSAttributedString.Key: Any] = [.font: font]
+                if let bg = rowBg { newlineAttrs[.backgroundColor] = bg }
+                result.append(NSAttributedString(string: "\n", attributes: newlineAttrs))
             }
             return result
+        }
+
+        private static func buildLineBody(
+            line: DiffLine,
+            language: String,
+            font: NSFont,
+            fontSize: CGFloat,
+            rowBg: NSColor?
+        ) -> NSAttributedString {
+            switch line.kind {
+            case .hunk, .meta:
+                let text = line.text.isEmpty ? " " : line.text
+                return NSAttributedString(string: text, attributes: [
+                    .font: font,
+                    .foregroundColor: NSColor(line.kind.foregroundColor),
+                ])
+            case .added, .removed, .context:
+                let (marker, content) = splitDiffMarker(line: line)
+                let out = NSMutableAttributedString()
+
+                if !marker.isEmpty {
+                    let markerColor: NSColor
+                    switch line.kind {
+                    case .added:   markerColor = NSColor(ClaudeTheme.statusSuccess)
+                    case .removed: markerColor = NSColor(ClaudeTheme.statusError)
+                    default:       markerColor = NSColor(ClaudeTheme.textTertiary)
+                    }
+                    var attrs: [NSAttributedString.Key: Any] = [
+                        .font: font,
+                        .foregroundColor: markerColor,
+                    ]
+                    if let bg = rowBg { attrs[.backgroundColor] = bg }
+                    out.append(NSAttributedString(string: marker, attributes: attrs))
+                }
+
+                let bodyText = content.isEmpty ? " " : content
+                let highlighted: NSMutableAttributedString
+                if !language.isEmpty, !content.isEmpty {
+                    highlighted = NSMutableAttributedString(
+                        attributedString: SyntaxHighlighter.highlightNS(bodyText, language: language, fontSize: fontSize)
+                    )
+                } else {
+                    highlighted = NSMutableAttributedString(string: bodyText, attributes: [
+                        .font: font,
+                        .foregroundColor: NSColor(ClaudeTheme.textPrimary),
+                    ])
+                }
+                if let bg = rowBg, highlighted.length > 0 {
+                    highlighted.addAttribute(
+                        .backgroundColor,
+                        value: bg,
+                        range: NSRange(location: 0, length: highlighted.length)
+                    )
+                }
+                out.append(highlighted)
+                return out
+            }
+        }
+
+        private static func splitDiffMarker(line: DiffLine) -> (marker: String, content: String) {
+            let raw = line.text
+            switch line.kind {
+            case .added where raw.hasPrefix("+"):
+                return ("+", String(raw.dropFirst()))
+            case .removed where raw.hasPrefix("-"):
+                return ("-", String(raw.dropFirst()))
+            case .context where raw.hasPrefix(" "):
+                return (" ", String(raw.dropFirst()))
+            default:
+                return ("", raw)
+            }
         }
     }
 }

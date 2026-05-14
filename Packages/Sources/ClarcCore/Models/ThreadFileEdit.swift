@@ -1,0 +1,64 @@
+import Foundation
+import SwiftData
+
+/// Persisted record of a single edited file within a chat thread. One row per
+/// (sessionId, path). Each row aggregates every Edit/MultiEdit/Write hunk applied
+/// to that path across all turns in the thread, so the "This thread" inspector
+/// can show file-level edits without re-reading the full message log.
+@Model
+public final class ThreadFileEdit {
+    public var sessionId: String
+    public var path: String
+    public var name: String
+    public var containsWrite: Bool
+    public var hunksData: Data
+    public var firstEditedAt: Date
+    public var updatedAt: Date
+
+    public init(
+        sessionId: String,
+        path: String,
+        name: String,
+        hunks: [PreviewFile.EditHunk],
+        containsWrite: Bool,
+        firstEditedAt: Date = .now,
+        updatedAt: Date = .now
+    ) {
+        self.sessionId = sessionId
+        self.path = path
+        self.name = name
+        self.containsWrite = containsWrite
+        self.hunksData = Self.encode(hunks)
+        self.firstEditedAt = firstEditedAt
+        self.updatedAt = updatedAt
+    }
+
+    public var hunks: [PreviewFile.EditHunk] {
+        guard let decoded = try? JSONDecoder().decode([StoredHunk].self, from: hunksData) else {
+            return []
+        }
+        return decoded.map { PreviewFile.EditHunk(oldString: $0.oldString, newString: $0.newString) }
+    }
+
+    public func append(hunks newHunks: [PreviewFile.EditHunk], containsWrite addWrite: Bool, at date: Date = .now) {
+        var combined = self.hunks
+        combined.append(contentsOf: newHunks)
+        self.hunksData = Self.encode(combined)
+        if addWrite { self.containsWrite = true }
+        self.updatedAt = date
+    }
+
+    public func toSummary() -> FileEditSummary {
+        FileEditSummary(path: path, name: name, hunks: hunks, containsWrite: containsWrite)
+    }
+
+    private static func encode(_ hunks: [PreviewFile.EditHunk]) -> Data {
+        let stored = hunks.map { StoredHunk(oldString: $0.oldString, newString: $0.newString) }
+        return (try? JSONEncoder().encode(stored)) ?? Data()
+    }
+
+    private struct StoredHunk: Codable {
+        let oldString: String
+        let newString: String
+    }
+}

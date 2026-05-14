@@ -209,7 +209,9 @@ public actor CLISessionStore {
                 model: meta.model,
                 effort: meta.effort,
                 permissionMode: meta.permissionMode,
-                origin: .cliBacked
+                origin: .cliBacked,
+                worktreePath: meta.worktreePath,
+                worktreeBranch: meta.worktreeBranch
             ))
         }
         return summaries.sorted { $0.updatedAt > $1.updatedAt }
@@ -348,6 +350,7 @@ public actor CLISessionStore {
         projectId: UUID
     ) async -> ChatSession? {
         let url = await jsonlURL(sid: sid, cwd: cwd)
+        logger.info("[LoadFullSession] sid=\(sid, privacy: .public) cwd=\(cwd, privacy: .public) url=\(url.path, privacy: .public) exists=\(FileManager.default.fileExists(atPath: url.path))")
 
         var lines: [CLISessionLine] = []
         var firstTimestamp: Date?
@@ -364,9 +367,10 @@ public actor CLISessionStore {
         do {
             data = try Data(contentsOf: url, options: .mappedIfSafe)
         } catch {
-            logger.debug("loadFullSession read error for \(sid, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            logger.error("[LoadFullSession] read error sid=\(sid, privacy: .public) url=\(url.path, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
             return nil
         }
+        logger.info("[LoadFullSession] read sid=\(sid, privacy: .public) bytes=\(data.count)")
         // Tolerate an in-flight final write (jsonl is append-only) — the trailing
         // partial line fails JSON decode and is silently skipped, satisfying S1.
         let content = String(data: data, encoding: .utf8) ?? ""
@@ -391,9 +395,13 @@ public actor CLISessionStore {
             }
             lines.append(decoded)
         }
-        guard !lines.isEmpty else { return nil }
+        guard !lines.isEmpty else {
+            logger.error("[LoadFullSession] zero decoded lines sid=\(sid, privacy: .public) bytes=\(data.count) url=\(url.path, privacy: .public)")
+            return nil
+        }
 
         let messages = CLILineToBlocksMapper.map(lines: lines)
+        logger.info("[LoadFullSession] parsed sid=\(sid, privacy: .public) lines=\(lines.count) messages=\(messages.count)")
         let mtimeDate = mtime(of: url) ?? Date()
         let meta = await metaStore.load(sessionId: sid)
 
@@ -418,7 +426,9 @@ public actor CLISessionStore {
             model: meta.model,
             effort: meta.effort,
             permissionMode: meta.permissionMode,
-            origin: .cliBacked
+            origin: .cliBacked,
+            worktreePath: meta.worktreePath,
+            worktreeBranch: meta.worktreeBranch
         )
     }
 
@@ -446,7 +456,18 @@ public actor CLISessionStore {
     }
 
     private func jsonlURL(sid: String, cwd: String) async -> URL {
-        await directory(forCwd: cwd).appendingPathComponent("\(sid).jsonl")
+        // Fast path: most cwds round-trip cleanly through forward encoding, so
+        // the jsonl is sitting at the predictable path. Probe that first and
+        // return immediately if found. The cwd-index rebuild (which scans every
+        // CLI project directory and sniff-reads its newest jsonl line-by-line)
+        // can stall for seconds when the 60s TTL has expired and the user has
+        // many projects — we don't want to pay that on every session click.
+        let forwardURL = CLIProjectsDirectory.directory(forCwd: cwd)
+            .appendingPathComponent("\(sid).jsonl")
+        if FileManager.default.fileExists(atPath: forwardURL.path) {
+            return forwardURL
+        }
+        return await directory(forCwd: cwd).appendingPathComponent("\(sid).jsonl")
     }
 
     // MARK: - External activity detection (S2)

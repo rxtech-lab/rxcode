@@ -210,7 +210,7 @@ public struct ToolCall: Identifiable, Codable, Sendable, Equatable {
     /// either because the result would be empty by design, or because the UI
     /// needs to render them before the user/CLI produces a result.
     public static let keepAlwaysNames: Set<String> = [
-        "agent", "edit", "multiedit", "multi_edit", "write", "askuserquestion"
+        "agent", "edit", "multiedit", "multi_edit", "write", "askuserquestion", "exitplanmode", "exit_plan_mode"
     ]
 
     public var isKeepAlways: Bool {
@@ -229,5 +229,59 @@ public struct ToolCall: Identifiable, Codable, Sendable, Equatable {
         self.input = input
         self.result = result
         self.isError = isError
+    }
+}
+
+// MARK: - File Edit Extraction
+
+public extension ToolCall {
+    /// Edit/MultiEdit/Write input → list of (old, new) hunks. Returns `[]` for
+    /// non-edit tools or malformed input. Write is represented as a single
+    /// hunk with `oldString == ""` and `newString == content`, so the existing
+    /// diff renderer treats a Write as a pure-additions diff.
+    var fileEditHunks: [PreviewFile.EditHunk] {
+        switch name.lowercased() {
+        case "edit":
+            guard let old = input["old_string"]?.stringValue,
+                  let new = input["new_string"]?.stringValue else { return [] }
+            return [PreviewFile.EditHunk(oldString: old, newString: new)]
+        case "multiedit", "multi_edit":
+            guard let edits = input["edits"]?.arrayValue else { return [] }
+            return edits.compactMap { entry in
+                guard let obj = entry.objectValue,
+                      let old = obj["old_string"]?.stringValue,
+                      let new = obj["new_string"]?.stringValue else { return nil }
+                return PreviewFile.EditHunk(oldString: old, newString: new)
+            }
+        case "write":
+            guard let content = input["content"]?.stringValue else { return [] }
+            return [PreviewFile.EditHunk(oldString: "", newString: content)]
+        default:
+            return []
+        }
+    }
+
+    var editedFilePath: String? {
+        guard ["edit", "multiedit", "multi_edit", "write"].contains(name.lowercased()) else { return nil }
+        return input["file_path"]?.stringValue
+    }
+}
+
+// MARK: - File Edit Summary
+
+public struct FileEditSummary: Identifiable, Sendable {
+    public let id = UUID()
+    public let path: String
+    public let name: String
+    public let hunks: [PreviewFile.EditHunk]
+    /// True if any contributing tool was Write — old content was overwritten,
+    /// not surgically edited.
+    public let containsWrite: Bool
+
+    public init(path: String, name: String, hunks: [PreviewFile.EditHunk], containsWrite: Bool) {
+        self.path = path
+        self.name = name
+        self.hunks = hunks
+        self.containsWrite = containsWrite
     }
 }

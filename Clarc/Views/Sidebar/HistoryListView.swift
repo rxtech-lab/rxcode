@@ -7,7 +7,9 @@ struct HistoryListView: View {
     @State private var renamingSession: ChatSession?
     @State private var renameText = ""
     @AppStorage("historyShowAllProjects") private var showAllProjects = true
+    @AppStorage("historyShowArchived") private var showArchived = false
     @State private var showDeleteAllAlert = false
+    @State private var sessionToDelete: ChatSession?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -21,7 +23,7 @@ struct HistoryListView: View {
                 sessionList
             }
         }
-        .alert("Delete All", isPresented: $showDeleteAllAlert) {
+        .alert(showArchived ? "Delete All Archived" : "Delete All", isPresented: $showDeleteAllAlert) {
             Button("Delete", role: .destructive) {
                 let projectId: UUID?
                 if windowState.isProjectWindow {
@@ -29,15 +31,38 @@ struct HistoryListView: View {
                 } else {
                     projectId = showAllProjects ? nil : windowState.selectedProject?.id
                 }
-                Task { await appState.deleteAllSessions(projectId: projectId, in: windowState) }
+                let archivedOnly = showArchived
+                Task { await appState.deleteAllSessions(projectId: projectId, archivedOnly: archivedOnly, in: windowState) }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
             let isCurrentOnly = windowState.isProjectWindow || !showAllProjects
-            if isCurrentOnly {
+            switch (showArchived, isCurrentOnly) {
+            case (true, true):
+                Text("All archived chats in the current project will be deleted. This action cannot be undone.")
+            case (true, false):
+                Text("All archived chats will be deleted. This action cannot be undone.")
+            case (false, true):
                 Text("All sessions in the current project will be deleted. This action cannot be undone.")
-            } else {
+            case (false, false):
                 Text("All sessions will be deleted. This action cannot be undone.")
+            }
+        }
+        .alert("Delete Session", isPresented: isDeletingSessionBinding) {
+            Button("Delete", role: .destructive) {
+                if let session = sessionToDelete {
+                    Task { await appState.deleteSession(session, in: windowState) }
+                }
+                sessionToDelete = nil
+            }
+            Button("Cancel", role: .cancel) {
+                sessionToDelete = nil
+            }
+        } message: {
+            if let session = sessionToDelete {
+                Text("\"\(session.title)\" will be deleted. This action cannot be undone.")
+            } else {
+                Text("This session will be deleted. This action cannot be undone.")
             }
         }
         .alert("Rename Session", isPresented: isRenamingBinding) {
@@ -58,7 +83,7 @@ struct HistoryListView: View {
 
     private var headerRow: some View {
         HStack {
-            Text("History")
+            Text(showArchived ? "Archived" : "History")
                 .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
                 .foregroundStyle(ClaudeTheme.textTertiary)
                 .textCase(.uppercase)
@@ -79,6 +104,16 @@ struct HistoryListView: View {
             }
 
             Button {
+                showArchived.toggle()
+            } label: {
+                Image(systemName: showArchived ? "archivebox.fill" : "archivebox")
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(showArchived ? ClaudeTheme.accent : ClaudeTheme.textTertiary)
+            }
+            .buttonStyle(.borderless)
+            .help(showArchived ? "Show active chats" : "Show archived chats")
+
+            Button {
                 showDeleteAllAlert = true
             } label: {
                 Image(systemName: "trash")
@@ -86,7 +121,7 @@ struct HistoryListView: View {
                     .foregroundStyle(ClaudeTheme.textTertiary)
             }
             .buttonStyle(.borderless)
-            .help("Delete All")
+            .help(showArchived ? "Delete All Archived" : "Delete All")
         }
     }
 
@@ -115,10 +150,12 @@ struct HistoryListView: View {
     private func sessionRow(_ session: DisplaySession) -> some View {
         return HStack(spacing: 4) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(session.title)
+                TypewriterTitleText(title: session.title.prefix(1).uppercased() + session.title.dropFirst())
                     .font(.system(size: ClaudeTheme.size(13)))
                     .foregroundStyle(.primary.opacity(0.8))
                     .lineLimit(1)
+                    .contentTransition(.opacity)
+                    .animation(.easeInOut(duration: 0.25), value: session.title)
 
                 HStack(spacing: 4) {
                     if showAllProjects && !windowState.isProjectWindow, let projectName = session.projectName {
@@ -179,10 +216,26 @@ struct HistoryListView: View {
                     }
                 }
 
+                Button {
+                    Task {
+                        if summary.isArchived {
+                            await appState.unarchiveSession(chatSession, in: windowState)
+                        } else {
+                            await appState.archiveSession(chatSession, in: windowState)
+                        }
+                    }
+                } label: {
+                    if summary.isArchived {
+                        Label("Unarchive", systemImage: "tray.and.arrow.up")
+                    } else {
+                        Label("Archive", systemImage: "archivebox")
+                    }
+                }
+
                 Divider()
 
                 Button(role: .destructive) {
-                    Task { await appState.deleteSession(chatSession, in: windowState) }
+                    sessionToDelete = chatSession
                 } label: {
                     Label("Delete", systemImage: "trash")
                 }
@@ -195,10 +248,10 @@ struct HistoryListView: View {
     private var emptyState: some View {
         VStack(spacing: 8) {
             Spacer()
-            Image(systemName: "bubble.left.and.bubble.right")
+            Image(systemName: showArchived ? "archivebox" : "bubble.left.and.bubble.right")
                 .font(.system(size: ClaudeTheme.size(20)))
                 .foregroundStyle(ClaudeTheme.textTertiary)
-            Text("No chat history")
+            Text(showArchived ? "No archived chats" : "No chat history")
                 .font(.system(size: ClaudeTheme.size(13)))
                 .foregroundStyle(ClaudeTheme.textSecondary)
             Spacer()
@@ -237,7 +290,7 @@ struct HistoryListView: View {
         guard let projectId = windowState.selectedProject?.id else { return [] }
         let streamingIds = appState.backgroundStreamingSessionIds(in: windowState)
         return appState.allSessionSummaries
-            .filter { $0.projectId == projectId }
+            .filter { $0.projectId == projectId && $0.isArchived == showArchived }
             .sorted { Self.sessionOrder($0, $1) }
             .map { summary in
                 DisplaySession(
@@ -259,6 +312,7 @@ struct HistoryListView: View {
         let streamingIds = appState.backgroundStreamingSessionIds(in: windowState)
         var seen = Set<String>()
         return appState.allSessionSummaries
+            .filter { $0.isArchived == showArchived }
             .sorted { Self.sessionOrder($0, $1) }
             .filter { seen.insert($0.id).inserted }
             .map { summary in
@@ -275,6 +329,13 @@ struct HistoryListView: View {
     }
 
     // MARK: - Helpers
+
+    private var isDeletingSessionBinding: Binding<Bool> {
+        Binding(
+            get: { sessionToDelete != nil },
+            set: { if !$0 { sessionToDelete = nil } }
+        )
+    }
 
     private var isRenamingBinding: Binding<Bool> {
         Binding(

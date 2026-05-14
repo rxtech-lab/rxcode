@@ -14,6 +14,10 @@ public struct ChatSession: Identifiable, Codable, Sendable {
     public var effort: String?
     public var permissionMode: PermissionMode?
     public var origin: SessionOrigin
+    public var worktreePath: String?
+    public var worktreeBranch: String?
+    public var isArchived: Bool
+    public var archivedAt: Date?
 
     public init(
         id: String,
@@ -26,7 +30,11 @@ public struct ChatSession: Identifiable, Codable, Sendable {
         model: String? = nil,
         effort: String? = nil,
         permissionMode: PermissionMode? = nil,
-        origin: SessionOrigin = .cliBacked
+        origin: SessionOrigin = .cliBacked,
+        worktreePath: String? = nil,
+        worktreeBranch: String? = nil,
+        isArchived: Bool = false,
+        archivedAt: Date? = nil
     ) {
         self.id = id
         self.projectId = projectId
@@ -39,10 +47,14 @@ public struct ChatSession: Identifiable, Codable, Sendable {
         self.effort = effort
         self.permissionMode = permissionMode
         self.origin = origin
+        self.worktreePath = worktreePath
+        self.worktreeBranch = worktreeBranch
+        self.isArchived = isArchived
+        self.archivedAt = archivedAt
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, projectId, title, messages, createdAt, updatedAt, isPinned, model, effort, permissionMode, origin
+        case id, projectId, title, messages, createdAt, updatedAt, isPinned, model, effort, permissionMode, origin, worktreePath, worktreeBranch, isArchived, archivedAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -58,6 +70,10 @@ public struct ChatSession: Identifiable, Codable, Sendable {
         effort = try container.decodeIfPresent(String.self, forKey: .effort)
         permissionMode = try container.decodeIfPresent(PermissionMode.self, forKey: .permissionMode)
         origin = try container.decodeIfPresent(SessionOrigin.self, forKey: .origin) ?? .legacyClarc
+        worktreePath = try container.decodeIfPresent(String.self, forKey: .worktreePath)
+        worktreeBranch = try container.decodeIfPresent(String.self, forKey: .worktreeBranch)
+        isArchived = try container.decodeIfPresent(Bool.self, forKey: .isArchived) ?? false
+        archivedAt = try container.decodeIfPresent(Date.self, forKey: .archivedAt)
     }
 
     public struct Summary: Identifiable, Codable, Sendable, Equatable {
@@ -71,6 +87,10 @@ public struct ChatSession: Identifiable, Codable, Sendable {
         public var effort: String?
         public var permissionMode: PermissionMode?
         public var origin: SessionOrigin
+        public var worktreePath: String?
+        public var worktreeBranch: String?
+        public var isArchived: Bool
+        public var archivedAt: Date?
 
         public init(
             id: String,
@@ -82,7 +102,11 @@ public struct ChatSession: Identifiable, Codable, Sendable {
             model: String? = nil,
             effort: String? = nil,
             permissionMode: PermissionMode? = nil,
-            origin: SessionOrigin = .cliBacked
+            origin: SessionOrigin = .cliBacked,
+            worktreePath: String? = nil,
+            worktreeBranch: String? = nil,
+            isArchived: Bool = false,
+            archivedAt: Date? = nil
         ) {
             self.id = id
             self.projectId = projectId
@@ -94,10 +118,14 @@ public struct ChatSession: Identifiable, Codable, Sendable {
             self.effort = effort
             self.permissionMode = permissionMode
             self.origin = origin
+            self.worktreePath = worktreePath
+            self.worktreeBranch = worktreeBranch
+            self.isArchived = isArchived
+            self.archivedAt = archivedAt
         }
 
         private enum CodingKeys: String, CodingKey {
-            case id, projectId, title, createdAt, updatedAt, isPinned, model, effort, permissionMode, origin
+            case id, projectId, title, createdAt, updatedAt, isPinned, model, effort, permissionMode, origin, worktreePath, worktreeBranch, isArchived, archivedAt
         }
 
         public init(from decoder: Decoder) throws {
@@ -112,6 +140,10 @@ public struct ChatSession: Identifiable, Codable, Sendable {
             effort = try container.decodeIfPresent(String.self, forKey: .effort)
             permissionMode = try container.decodeIfPresent(PermissionMode.self, forKey: .permissionMode)
             origin = try container.decodeIfPresent(SessionOrigin.self, forKey: .origin) ?? .legacyClarc
+            worktreePath = try container.decodeIfPresent(String.self, forKey: .worktreePath)
+            worktreeBranch = try container.decodeIfPresent(String.self, forKey: .worktreeBranch)
+            isArchived = try container.decodeIfPresent(Bool.self, forKey: .isArchived) ?? false
+            archivedAt = try container.decodeIfPresent(Date.self, forKey: .archivedAt)
         }
     }
 
@@ -126,8 +158,77 @@ public struct ChatSession: Identifiable, Codable, Sendable {
             model: model,
             effort: effort,
             permissionMode: permissionMode,
-            origin: origin
+            origin: origin,
+            worktreePath: worktreePath,
+            worktreeBranch: worktreeBranch,
+            isArchived: isArchived,
+            archivedAt: archivedAt
         )
+    }
+
+    /// Strip attachment markers from user message content so titles and prompts
+    /// don't surface internal tokens. Removes:
+    ///   - `[Attached image: ...]`, `[Attached file: ...]`, `[Pasted text: ...]`, `[Link: ...]`
+    ///   - `[Image1]`, `[Image2]`, ... display tokens
+    /// Collapses runs of whitespace and trims edges.
+    public static func stripAttachmentMarkers(from content: String) -> String {
+        content
+            .replacingOccurrences(
+                of: #"\[(Attached [A-Za-z]+|Pasted text|Link):[^\]]*\]"#,
+                with: "",
+                options: .regularExpression
+            )
+            .replacingOccurrences(
+                of: #"\[Image\d+\]"#,
+                with: "",
+                options: .regularExpression
+            )
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Build a sidebar-friendly title from a user message. Strips attachment markers
+    /// via `stripAttachmentMarkers` so the sidebar doesn't briefly show internal
+    /// markers before the LLM-generated title arrives. Returns `defaultTitle` when
+    /// the message is empty after stripping.
+    public static func placeholderTitle(from content: String) -> String {
+        let stripped = stripAttachmentMarkers(from: content)
+        guard !stripped.isEmpty else { return defaultTitle }
+        return stripped.count > 50 ? String(stripped.prefix(50)) + "..." : stripped
+    }
+
+    /// Result of parsing user-message content that may contain `[Attached image: /path]` markers.
+    /// Used by the chat bubble to render the actual image and display the cleaned text.
+    public struct DisplayedContent: Equatable, Sendable {
+        public let text: String
+        public let imagePaths: [String]
+    }
+
+    /// Extract `[Attached image: /path]` markers from user content, returning the cleaned
+    /// text and the list of image paths. `[ImageN]` chip tokens are left in place — they're
+    /// rendered as styled chips in the bubble, not stripped. Other `[Attached X: ...]` /
+    /// `[Pasted text: ...]` / `[Link: ...]` markers are stripped from the text since they
+    /// have no inline representation. Whitespace runs are collapsed and edges trimmed.
+    public static func extractDisplayedContent(from content: String) -> DisplayedContent {
+        let imageRegex = try! NSRegularExpression(pattern: #"\[Attached image:\s*([^\]]+)\]"#)
+        let ns = content as NSString
+        let fullRange = NSRange(location: 0, length: ns.length)
+        var paths: [String] = []
+        imageRegex.enumerateMatches(in: content, range: fullRange) { match, _, _ in
+            guard let m = match, m.numberOfRanges >= 2 else { return }
+            let path = ns.substring(with: m.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !path.isEmpty { paths.append(path) }
+        }
+        let cleaned = content
+            .replacingOccurrences(
+                of: #"\[(Attached [A-Za-z]+|Pasted text|Link):[^\]]*\]"#,
+                with: "",
+                options: .regularExpression
+            )
+            .replacingOccurrences(of: #"[ \t]+"#, with: " ", options: .regularExpression)
+            .replacingOccurrences(of: #"\n{3,}"#, with: "\n\n", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return DisplayedContent(text: cleaned, imagePaths: paths)
     }
 }
 
@@ -137,6 +238,8 @@ extension ChatSession.Summary {
                     messages: [], createdAt: createdAt,
                     updatedAt: updatedAt, isPinned: isPinned,
                     model: model, effort: effort, permissionMode: permissionMode,
-                    origin: origin)
+                    origin: origin,
+                    worktreePath: worktreePath, worktreeBranch: worktreeBranch,
+                    isArchived: isArchived, archivedAt: archivedAt)
     }
 }

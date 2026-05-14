@@ -690,6 +690,36 @@ final class AppState {
     let marketplace = MarketplaceService()
     let mcp: MCPService
     let threadStore: ThreadStore
+    let runService = RunService()
+
+    // MARK: - Run Profiles
+
+    /// Loaded lazily per project. Keyed by `Project.id`.
+    var runProfilesByProject: [UUID: [RunProfile]] = [:]
+
+    func runProfiles(for projectId: UUID) -> [RunProfile] {
+        runProfilesByProject[projectId] ?? []
+    }
+
+    /// Load this project's run profiles from disk if we haven't already.
+    /// No-op if already loaded.
+    func ensureRunProfilesLoaded(for projectId: UUID) async {
+        if runProfilesByProject[projectId] != nil { return }
+        let loaded = await persistence.loadRunProfiles(projectId: projectId)
+        runProfilesByProject[projectId] = loaded
+    }
+
+    /// Replace the in-memory list and persist atomically.
+    func setRunProfiles(_ profiles: [RunProfile], for projectId: UUID) {
+        runProfilesByProject[projectId] = profiles
+        Task { [persistence] in
+            do {
+                try await persistence.saveRunProfiles(profiles, projectId: projectId)
+            } catch {
+                logger.error("Failed to save run profiles: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
 
     /// Disk-persisted draft queues loaded at init. Hydrated into each
     /// `WindowState.draftQueues` when the window is initialized so messages

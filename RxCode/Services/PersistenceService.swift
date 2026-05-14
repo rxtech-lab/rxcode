@@ -199,6 +199,24 @@ actor PersistenceService {
         return try? decoder.decode(ChatSession.self, from: data)
     }
 
+    // MARK: - Run Profiles
+
+    func saveRunProfiles(_ profiles: [RunProfile], projectId: UUID) throws {
+        let url = runProfilesURL(projectId: projectId)
+        try encode(profiles, to: url)
+    }
+
+    func loadRunProfiles(projectId: UUID) -> [RunProfile] {
+        let url = runProfilesURL(projectId: projectId)
+        return decode([RunProfile].self, from: url) ?? []
+    }
+
+    private func runProfilesURL(projectId: UUID) -> URL {
+        baseURL
+            .appendingPathComponent("run_profiles")
+            .appendingPathComponent("\(projectId.uuidString).json")
+    }
+
     // MARK: - GitHub User Cache
 
     func saveGitHubUser(_ user: GitHubUser) throws {

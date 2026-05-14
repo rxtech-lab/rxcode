@@ -21,6 +21,9 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_SITE_URL ?? "https://rxcode.app"
+  ),
   title: "RxCode — The Visual Command Center for AI Coding Agents",
   description:
     "A native macOS desktop client that supercharges your AI coding workflow. Manage sessions, visualize project architecture, and review AI-generated code without leaving your desktop.",
@@ -29,6 +32,15 @@ export const metadata: Metadata = {
     description:
       "A native macOS desktop client for AI coding agents. Visual sessions, project tree, and code review in one place.",
     type: "website",
+    url: "/",
+    siteName: "RxCode",
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "RxCode — The Visual Command Center for AI Coding Agents",
+    description:
+      "A native macOS desktop client for AI coding agents. Visual sessions, project tree, and code review in one place.",
   },
 };
 

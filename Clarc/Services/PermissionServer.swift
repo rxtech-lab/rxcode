@@ -372,7 +372,8 @@ actor PermissionServer {
                     toolName: hookRequest.toolName,
                     toolInput: hookRequest.toolInput,
                     runToken: runToken,
-                    streamPermissionMode: streamMode
+                    streamPermissionMode: streamMode,
+                    sessionId: hookRequest.sessionId
                 )
 
                 let outcome = await waitForDecision(
@@ -409,9 +410,10 @@ actor PermissionServer {
         emit request: PermissionRequest
     ) async -> DecisionOutcome {
         let isFirst = pending[toolUseId] == nil
-        // Tools that own their own inline UI inside a chat bubble (AskUserQuestion → AskUserQuestionView,
-        // ExitPlanMode → PlanCardView) skip the generic PermissionModal broadcast so two UIs don't compete.
-        let suppressGenericModal = toolName == "AskUserQuestion" || Self.isExitPlanModeTool(toolName)
+        // ExitPlanMode owns its own inline plan card so it skips the generic broadcast.
+        // AskUserQuestion now flows through the same queue as permissions — the UI distinguishes
+        // by `toolName` and presents `QuestionSheetView` instead of `PermissionModal`.
+        let suppressGenericModal = Self.isExitPlanModeTool(toolName)
         if isFirst && !suppressGenericModal {
             broadcast(request)
         }

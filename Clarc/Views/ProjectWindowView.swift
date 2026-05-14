@@ -57,7 +57,12 @@ struct ProjectWindowView: View {
                        minHeight: 600, idealHeight: 1000, maxHeight: 1200)
         }
         .sheet(item: Bindable(windowState).diffFile) { file in
-            FileDiffView(filePath: file.path, fileName: file.name, editHunks: file.editHunks)
+            FileDiffView(
+                filePath: file.path,
+                fileName: file.name,
+                editHunks: file.editHunks,
+                gitDiffMode: file.gitDiffMode
+            )
                 .frame(minWidth: 1000, idealWidth: 1400, maxWidth: 1920,
                        minHeight: 600, idealHeight: 1000, maxHeight: 1200)
         }

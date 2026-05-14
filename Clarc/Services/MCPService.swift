@@ -40,36 +40,101 @@ actor MCPService {
 
     // MARK: - List / Get
 
-    /// Run `claude mcp list` and parse the line-oriented output.
-    /// Each row reports name, endpoint summary, and a health status.
-    /// Scope is *not* present in this output — fill it in via parallel `get` calls.
-    func list() async throws -> [MCPServerInfo] {
-        let output = try await runClaude(["mcp", "list"])
-        let infos = parseListOutput(output)
+    /// Read MCP server configs straight from disk:
+    ///   User scope    -> ~/.claude.json :: mcpServers
+    ///   Local scope   -> ~/.claude.json :: projects[<projectPath>].mcpServers
+    ///   Project scope -> <projectPath>/.mcp.json :: mcpServers
+    /// Servers listed in `projects[<projectPath>].disabledMcpjsonServers` are filtered out
+    /// of the Project section, matching what Claude Code actually loads.
+    /// Status is always `.unknown` from the file read alone — connection state comes from a probe.
+    ///
+    /// When `projectPath` is nil, aggregate Local/Project rows across every project in
+    /// `~/.claude.json`. This is what the (window-less) Settings sheet uses so the list
+    /// matches the union of `claude mcp list` run from each project directory.
+    func list(projectPath: String?) async throws -> [MCPServerInfo] {
+        let root = readClaudeRoot()
+        var rows: [MCPServerInfo] = []
 
-        guard !infos.isEmpty else { return [] }
-
-        // Hydrate scope in parallel. A single `get` failure should not blank the row,
-        // so we fall through with `scope = nil` if it errors.
-        return await withTaskGroup(of: (Int, MCPScope?).self) { group in
-            for (idx, info) in infos.enumerated() {
-                group.addTask {
-                    let detail = try? await self.get(name: info.name)
-                    return (idx, detail?.scope)
-                }
-            }
-            var hydrated = infos
-            for await (idx, scope) in group {
-                hydrated[idx].scope = scope
-            }
-            return hydrated
+        for (name, entry) in (root?.mcpServers ?? [:]).sorted(by: { $0.key < $1.key }) {
+            rows.append(makeInfo(name: name, entry: entry, scope: .user, projectPath: nil))
         }
+
+        let projectPaths: [String]
+        if let projectPath, !projectPath.isEmpty {
+            projectPaths = [projectPath]
+        } else {
+            projectPaths = (root?.projects?.keys.sorted() ?? [])
+        }
+
+        for path in projectPaths {
+            let projectEntry = root?.projects?[path]
+            for (name, entry) in (projectEntry?.mcpServers ?? [:]).sorted(by: { $0.key < $1.key }) {
+                rows.append(makeInfo(name: name, entry: entry, scope: .local, projectPath: path))
+            }
+
+            let disabled = Set(projectEntry?.disabledMcpjsonServers ?? [])
+            let projectFile = readProjectMCPFile(projectRoot: path)
+            for (name, entry) in (projectFile?.mcpServers ?? [:]).sorted(by: { $0.key < $1.key }) {
+                guard !disabled.contains(name) else { continue }
+                rows.append(makeInfo(name: name, entry: entry, scope: .project, projectPath: path))
+            }
+        }
+
+        return rows
     }
 
-    /// Fetch one server's full configuration via `claude mcp get <name>`.
-    func get(name: String) async throws -> MCPServerDetail {
-        let output = try await runClaude(["mcp", "get", name])
-        return try parseGetOutput(name: name, raw: output)
+    /// Resolve one server by name. Precedence matches the CLI: Local > Project > User.
+    /// When `projectPath` is nil, scan every project in `~/.claude.json` for a match.
+    func get(name: String, projectPath: String?) async throws -> MCPServerDetail {
+        let root = readClaudeRoot()
+
+        let candidatePaths: [String]
+        if let projectPath, !projectPath.isEmpty {
+            candidatePaths = [projectPath]
+        } else {
+            candidatePaths = (root?.projects?.keys.sorted() ?? [])
+        }
+
+        for path in candidatePaths {
+            if let entry = root?.projects?[path]?.mcpServers?[name] {
+                return makeDetail(name: name, entry: entry, scope: .local, projectPath: path)
+            }
+            let disabled = Set(root?.projects?[path]?.disabledMcpjsonServers ?? [])
+            if !disabled.contains(name),
+               let entry = readProjectMCPFile(projectRoot: path)?.mcpServers?[name] {
+                return makeDetail(name: name, entry: entry, scope: .project, projectPath: path)
+            }
+        }
+
+        if let entry = root?.mcpServers?[name] {
+            return makeDetail(name: name, entry: entry, scope: .user, projectPath: nil)
+        }
+
+        throw MCPError.parseFailure("MCP server '\(name)' not found in any scope")
+    }
+
+    /// Lookup using known scope + project hints (from an existing `MCPServerInfo` row).
+    /// Falls back to the precedence-based `get` when hints don't resolve.
+    func get(name: String, scope: MCPScope?, projectPath: String?) async throws -> MCPServerDetail {
+        let root = readClaudeRoot()
+        switch scope {
+        case .user:
+            if let entry = root?.mcpServers?[name] {
+                return makeDetail(name: name, entry: entry, scope: .user, projectPath: nil)
+            }
+        case .local:
+            if let projectPath, let entry = root?.projects?[projectPath]?.mcpServers?[name] {
+                return makeDetail(name: name, entry: entry, scope: .local, projectPath: projectPath)
+            }
+        case .project:
+            if let projectPath,
+               let entry = readProjectMCPFile(projectRoot: projectPath)?.mcpServers?[name] {
+                return makeDetail(name: name, entry: entry, scope: .project, projectPath: projectPath)
+            }
+        case .none:
+            break
+        }
+        return try await get(name: name, projectPath: projectPath)
     }
 
     // MARK: - Add / Remove
@@ -106,18 +171,30 @@ actor MCPService {
     // MARK: - Probe (test connection + list tools)
 
     /// Probe an existing server by name. Resolves the configuration via `get` first.
-    func probe(name: String) async -> MCPProbeResult {
+    func probe(name: String, projectPath: String?) async -> MCPProbeResult {
         do {
-            let detail = try await get(name: name)
+            let detail = try await get(name: name, projectPath: projectPath)
             return await probe(detail: detail)
         } catch {
             return MCPProbeResult(ok: false, error: error.localizedDescription)
         }
     }
 
-    /// Probe a not-yet-saved spec (used by the editor sheet's Test button).
+    /// Probe an existing server identified by `MCPServerInfo` (carries scope + projectPath).
+    /// Preferred over `probe(name:projectPath:)` when the row's origin is known.
+    func probe(info: MCPServerInfo) async -> MCPProbeResult {
+        do {
+            let detail = try await get(name: info.name, scope: info.scope, projectPath: info.projectPath)
+            return await probe(detail: detail)
+        } catch {
+            return MCPProbeResult(ok: false, error: error.localizedDescription)
+        }
+    }
+
+    /// Probe a not-yet-saved spec (used during auto-probe on Save).
     func probe(spec: MCPServerSpec) async -> MCPProbeResult {
         let env = Dictionary(uniqueKeysWithValues: spec.env.map { ($0.key, $0.value) })
+        let headers = Dictionary(uniqueKeysWithValues: spec.headers.map { ($0.key, $0.value) })
         let detail = MCPServerDetail(
             name: spec.name.isEmpty ? "(untitled)" : spec.name,
             scope: .local,
@@ -125,7 +202,8 @@ actor MCPService {
             url: spec.transport == .stdio ? nil : spec.url,
             command: spec.transport == .stdio ? spec.command : nil,
             args: spec.args,
-            env: env
+            env: env,
+            headers: headers
         )
         return await probe(detail: detail)
     }
@@ -209,122 +287,96 @@ actor MCPService {
         )
     }
 
-    // MARK: - Parsing: list
+    // MARK: - On-disk config
 
-    private func parseListOutput(_ raw: String) -> [MCPServerInfo] {
-        var infos: [MCPServerInfo] = []
-        for rawLine in raw.split(whereSeparator: \.isNewline) {
-            let line = String(rawLine).trimmingCharacters(in: .whitespaces)
-            if line.isEmpty { continue }
-            if line.lowercased().hasPrefix("checking mcp") { continue }
-            if line.lowercased().hasPrefix("no mcp servers") { continue }
-
-            // Format: "<name>: <endpoint> [- <status>]"
-            // The endpoint may itself contain ": " (URLs), so split on the *first*
-            // ": ", then on the *last* " - " to peel off the status suffix.
-            guard let colonRange = line.range(of: ": ") else { continue }
-            let name = String(line[..<colonRange.lowerBound])
-            var rest = String(line[colonRange.upperBound...])
-
-            var status: MCPStatus = .unknown
-            if let dashRange = rest.range(of: " - ", options: .backwards) {
-                let suffix = String(rest[dashRange.upperBound...]).trimmingCharacters(in: .whitespaces)
-                rest = String(rest[..<dashRange.lowerBound]).trimmingCharacters(in: .whitespaces)
-                status = parseStatusSuffix(suffix)
-            }
-
-            // Strip optional "(HTTP)" / "(SSE)" trailing transport tag.
-            var transport: MCPTransport = .stdio
-            if let parenRange = rest.range(of: " (", options: .backwards),
-               rest.hasSuffix(")") {
-                let tag = String(rest[parenRange.upperBound..<rest.index(before: rest.endIndex)]).lowercased()
-                switch tag {
-                case "http": transport = .http
-                case "sse":  transport = .sse
-                default:     break
-                }
-                rest = String(rest[..<parenRange.lowerBound]).trimmingCharacters(in: .whitespaces)
-            } else if rest.hasPrefix("http://") || rest.hasPrefix("https://") {
-                transport = .http
-            }
-
-            infos.append(MCPServerInfo(
-                name: name,
-                transport: transport,
-                endpoint: rest,
-                status: status
-            ))
-        }
-        return infos
+    /// Minimal mirror of the `~/.claude.json` shape we care about. Anything
+    /// missing or malformed degrades to `nil` and is treated as "no servers".
+    private struct ClaudeRootConfig: Decodable {
+        var mcpServers: [String: ServerEntry]?
+        var projects: [String: ProjectEntry]?
     }
 
-    private func parseStatusSuffix(_ suffix: String) -> MCPStatus {
-        let lower = suffix.lowercased()
-        if lower.contains("connected") { return .connected }
-        if lower.contains("needs authentication") || lower.contains("auth") { return .needsAuth }
-        if lower.contains("failed") || lower.contains("error") {
-            return .failed(suffix)
-        }
-        return .unknown
+    private struct ProjectEntry: Decodable {
+        var mcpServers: [String: ServerEntry]?
+        var enabledMcpjsonServers: [String]?
+        var disabledMcpjsonServers: [String]?
     }
 
-    // MARK: - Parsing: get
+    private struct ProjectMCPFile: Decodable {
+        var mcpServers: [String: ServerEntry]?
+    }
 
-    private func parseGetOutput(name: String, raw: String) throws -> MCPServerDetail {
-        var scope: MCPScope = .user
-        var transport: MCPTransport = .stdio
+    private struct ServerEntry: Decodable {
+        var type: String?
         var url: String?
         var command: String?
-        var args: [String] = []
-        var env: [String: String] = [:]
+        var args: [String]?
+        var env: [String: String]?
+        var headers: [String: String]?
+    }
 
-        for rawLine in raw.split(whereSeparator: \.isNewline) {
-            let line = String(rawLine)
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            guard trimmed.contains(":") else { continue }
-            let parts = trimmed.split(separator: ":", maxSplits: 1).map { String($0) }
-            guard parts.count == 2 else { continue }
-            let key = parts[0].trimmingCharacters(in: .whitespaces)
-            let value = parts[1].trimmingCharacters(in: .whitespaces)
+    private func claudeRootPath() -> String {
+        (NSHomeDirectory() as NSString).appendingPathComponent(".claude.json")
+    }
 
-            switch key {
-            case "Scope":
-                let lower = value.lowercased()
-                if lower.contains("user")    { scope = .user }
-                else if lower.contains("project") { scope = .project }
-                else if lower.contains("local")   { scope = .local }
-            case "Type":
-                switch value.lowercased() {
-                case "http": transport = .http
-                case "sse":  transport = .sse
-                default:     transport = .stdio
-                }
-            case "URL":
-                url = value
-            case "Command":
-                command = value
-            case "Args":
-                args = value.split(separator: " ").map(String.init)
-            case "Environment":
-                if !value.isEmpty {
-                    for pair in value.split(separator: " ") {
-                        let kv = pair.split(separator: "=", maxSplits: 1)
-                        if kv.count == 2 { env[String(kv[0])] = String(kv[1]) }
-                    }
-                }
-            default:
-                break
-            }
+    private func projectMCPPath(_ projectRoot: String) -> String {
+        (projectRoot as NSString).appendingPathComponent(".mcp.json")
+    }
+
+    private func readClaudeRoot() -> ClaudeRootConfig? {
+        guard let data = FileManager.default.contents(atPath: claudeRootPath()) else { return nil }
+        return try? JSONDecoder().decode(ClaudeRootConfig.self, from: data)
+    }
+
+    private func readProjectMCPFile(projectRoot: String) -> ProjectMCPFile? {
+        guard let data = FileManager.default.contents(atPath: projectMCPPath(projectRoot)) else {
+            return nil
         }
+        return try? JSONDecoder().decode(ProjectMCPFile.self, from: data)
+    }
 
+    private func transport(from entry: ServerEntry) -> MCPTransport {
+        switch entry.type?.lowercased() {
+        case "http": return .http
+        case "sse":  return .sse
+        default:     return .stdio
+        }
+    }
+
+    private func endpoint(from entry: ServerEntry) -> String {
+        switch transport(from: entry) {
+        case .http, .sse:
+            return entry.url ?? ""
+        case .stdio:
+            let cmd = entry.command ?? ""
+            let args = entry.args ?? []
+            return ([cmd] + args).filter { !$0.isEmpty }.joined(separator: " ")
+        }
+    }
+
+    private func makeInfo(name: String, entry: ServerEntry, scope: MCPScope, projectPath: String?) -> MCPServerInfo {
+        MCPServerInfo(
+            name: name,
+            transport: transport(from: entry),
+            endpoint: endpoint(from: entry),
+            status: .unknown,
+            scope: scope,
+            projectPath: projectPath
+        )
+    }
+
+    private func makeDetail(name: String, entry: ServerEntry, scope: MCPScope, projectPath: String?) -> MCPServerDetail {
+        let t = transport(from: entry)
         return MCPServerDetail(
             name: name,
             scope: scope,
-            transport: transport,
-            url: url,
-            command: command,
-            args: args,
-            env: env
+            transport: t,
+            url: (t == .stdio) ? nil : entry.url,
+            command: (t == .stdio) ? entry.command : nil,
+            args: entry.args ?? [],
+            env: entry.env ?? [:],
+            headers: entry.headers ?? [:],
+            projectPath: projectPath
         )
     }
 
@@ -447,12 +499,11 @@ actor MCPService {
 
         var sessionID: String?
         do {
-            // Headers from `claude mcp get` aren't returned, so probes against
-            // servers that need auth headers will likely fail with 401 — surface that.
             let (initData, initResp, sid) = try await postMCP(
                 url: baseURL,
                 body: initializeRequest(id: 1),
-                sessionID: nil
+                sessionID: nil,
+                headers: detail.headers
             )
             sessionID = sid
             if let http = initResp as? HTTPURLResponse, http.statusCode == 401 {
@@ -463,13 +514,15 @@ actor MCPService {
             _ = try? await postMCP(
                 url: baseURL,
                 body: initializedNotification(),
-                sessionID: sessionID
+                sessionID: sessionID,
+                headers: detail.headers
             )
 
             let (toolsData, _, _) = try await postMCP(
                 url: baseURL,
                 body: toolsListRequest(id: 2),
-                sessionID: sessionID
+                sessionID: sessionID,
+                headers: detail.headers
             )
             let tools = parseToolsListResponse(extractJSON(toolsData))
 
@@ -489,7 +542,8 @@ actor MCPService {
     private func postMCP(
         url: URL,
         body: [String: Any],
-        sessionID: String?
+        sessionID: String?,
+        headers: [String: String] = [:]
     ) async throws -> (Data, URLResponse, String?) {
         var req = URLRequest(url: url, timeoutInterval: 10)
         req.httpMethod = "POST"
@@ -497,6 +551,9 @@ actor MCPService {
         req.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
         if let sessionID {
             req.setValue(sessionID, forHTTPHeaderField: "Mcp-Session-Id")
+        }
+        for (key, value) in headers where !key.isEmpty {
+            req.setValue(value, forHTTPHeaderField: key)
         }
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
 

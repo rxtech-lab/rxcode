@@ -12,10 +12,11 @@ struct MCPSettingsTab: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 header
+                contextBanner
                 if let error = appState.mcpListError {
                     errorBanner(error)
                 }
-                ForEach(MCPScope.allCases) { scope in
+                ForEach(visibleScopes) { scope in
                     scopeSection(scope: scope)
                 }
             }
@@ -70,14 +71,14 @@ struct MCPSettingsTab: View {
             }
             Spacer()
             Button {
-                Task { await appState.refreshMCPServers() }
+                Task { await appState.refreshAndProbeAllMCPServers() }
             } label: {
                 Image(systemName: appState.mcpIsLoading ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
                     .font(.system(size: ClaudeTheme.size(12)))
             }
             .buttonStyle(.bordered)
             .disabled(appState.mcpIsLoading)
-            .help("Refresh")
+            .help("Refresh & Test All")
 
             Button {
                 showEditor = true
@@ -103,10 +104,64 @@ struct MCPSettingsTab: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
+    // MARK: - Context filtering
+
+    /// When a project is active, only project-scoped MCPs (Local/Project for the
+    /// current path) are shown. Otherwise, only User-scope (global) MCPs are shown.
+    private var visibleScopes: [MCPScope] {
+        appState.activeProjectPath != nil ? [.local, .project] : [.user]
+    }
+
+    private func servers(in scope: MCPScope) -> [MCPServerInfo] {
+        appState.mcpServers.filter { server in
+            guard (server.scope ?? .user) == scope else { return false }
+            if let activePath = appState.activeProjectPath {
+                return server.projectPath == activePath
+            }
+            return true
+        }
+    }
+
+    @ViewBuilder
+    private var contextBanner: some View {
+        if let path = appState.activeProjectPath, !path.isEmpty {
+            HStack(spacing: 6) {
+                Image(systemName: "folder")
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(.secondary)
+                Text("Showing MCPs for this project")
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(.secondary)
+                Text(verbatim: displayPath(path))
+                    .font(.system(size: ClaudeTheme.size(11), design: .monospaced))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+        } else {
+            HStack(spacing: 6) {
+                Image(systemName: "globe")
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(.secondary)
+                Text("Showing global MCPs only")
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func displayPath(_ path: String) -> String {
+        let home = NSHomeDirectory()
+        if path.hasPrefix(home) {
+            return "~" + String(path.dropFirst(home.count))
+        }
+        return path
+    }
+
     // MARK: - Scope section
 
     private func scopeSection(scope: MCPScope) -> some View {
-        let servers = appState.mcpServers.filter { ($0.scope ?? .user) == scope }
+        let servers = servers(in: scope)
         return VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .lastTextBaseline, spacing: 8) {
                 Text(LocalizedStringKey(scope.displayName))
@@ -130,9 +185,9 @@ struct MCPSettingsTab: View {
                     ForEach(servers) { server in
                         MCPServerRow(
                             server: server,
-                            probe: appState.mcpProbeResults[server.name],
-                            isProbing: appState.mcpInFlightProbes.contains(server.name),
-                            onTest: { Task { await appState.probeMCPServer(name: server.name) } },
+                            probe: appState.mcpProbeResults[server.id],
+                            isProbing: appState.mcpInFlightProbes.contains(server.id),
+                            onTest: { Task { await appState.probeMCPServer(info: server) } },
                             onRemove: { pendingRemoval = server }
                         )
                     }
@@ -184,6 +239,13 @@ private struct MCPServerRow: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
+                    if let projectPath = server.projectPath, !projectPath.isEmpty {
+                        Text(verbatim: projectDisplayPath(projectPath))
+                            .font(.system(size: ClaudeTheme.size(10)))
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
                 }
                 Spacer(minLength: 12)
 
@@ -246,6 +308,14 @@ private struct MCPServerRow: View {
         case .failed(let msg):  return (.red, msg)
         case .unknown:          return (.gray, "Unknown")
         }
+    }
+
+    private func projectDisplayPath(_ path: String) -> String {
+        let home = NSHomeDirectory()
+        if path.hasPrefix(home) {
+            return "~" + String(path.dropFirst(home.count))
+        }
+        return path
     }
 
     private var transportBadge: some View {

@@ -107,11 +107,26 @@ public final class ChatBridge {
     /// Only the most recent ExitPlanMode matters — older pending cards are
     /// either superseded by a newer decision or no longer the active state.
     public var hasPendingPlanDecision: Bool {
-        for message in messages.reversed() {
-            for block in message.blocks.reversed() {
-                guard let toolCall = block.toolCall,
+        for messageIdx in messages.indices.reversed() {
+            let message = messages[messageIdx]
+            for blockIdx in message.blocks.indices.reversed() {
+                guard let toolCall = message.blocks[blockIdx].toolCall,
                       PlanCardView.isExitPlanMode(toolCall) else { continue }
-                return !PlanCardView.isPlanDecided(toolCall)
+
+                if PlanCardView.isPlanDecided(toolCall) { return false }
+
+                // If anything came after this ExitPlanMode — later blocks in the
+                // same message, or any later message — the chat continued past
+                // it, so the user must have already acted on the plan. This
+                // covers CLI-backed sessions reloaded from disk: the CLI's
+                // recorded tool_result for ExitPlanMode does not match the UI's
+                // in-memory decision summary, so the result string alone is not
+                // a reliable signal once the session has been persisted.
+                let hasLaterBlock = blockIdx < message.blocks.count - 1
+                let hasLaterMessage = messageIdx < messages.count - 1
+                if hasLaterBlock || hasLaterMessage { return false }
+
+                return true
             }
         }
         return false

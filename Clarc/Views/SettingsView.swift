@@ -63,6 +63,7 @@ struct GeneralSettingsTab: View {
     @Binding var showUserManual: Bool
     @State private var showSkillMarket = false
     @State private var showThemePicker = false
+    @AppStorage("showMenuBarExtra") private var showMenuBarExtra: Bool = true
 
     var body: some View {
         @Bindable var appState = appState
@@ -74,6 +75,8 @@ struct GeneralSettingsTab: View {
                 Divider()
                 notificationsSection(appState: $appState.notificationsEnabled)
                 Divider()
+                menuBarSection
+                Divider()
                 VStack(alignment: .leading, spacing: 8) {
                     skillMarketSection
                     helpSection
@@ -83,6 +86,17 @@ struct GeneralSettingsTab: View {
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    // MARK: - Menu Bar Section
+
+    private var menuBarSection: some View {
+        toggleSection(
+            title: "Menu Bar",
+            label: "Show menu bar icon",
+            detail: "Shows in-progress chat counts and Claude Code usage limits in the macOS menu bar.",
+            isOn: $showMenuBarExtra
+        )
     }
 
     // MARK: - Toggle Section
@@ -360,9 +374,47 @@ struct ChatSettingsTab: View {
                 focusModeSection
                 Divider()
                 autoPreviewSection
+                Divider()
+                archiveSection
             }
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    // MARK: - Archive Section
+
+    private var archiveSection: some View {
+        @Bindable var appState = appState
+        return VStack(alignment: .leading, spacing: 12) {
+            Text("Archive")
+                .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
+
+            Text("Inactive chats are moved to the archive automatically. Pinned chats are never auto-archived.")
+                .font(.system(size: ClaudeTheme.size(11)))
+                .foregroundStyle(.secondary)
+
+            Toggle(isOn: $appState.autoArchiveEnabled) {
+                Text("Auto-archive inactive chats")
+            }
+            .toggleStyle(.switch)
+            .fixedSize()
+
+            HStack(spacing: 10) {
+                Text("Archive after")
+                    .font(.system(size: ClaudeTheme.size(12)))
+                    .foregroundStyle(.secondary)
+                Stepper(
+                    value: $appState.archiveRetentionDays,
+                    in: 1...365
+                ) {
+                    Text("\(appState.archiveRetentionDays) day\(appState.archiveRetentionDays == 1 ? "" : "s") of inactivity")
+                        .font(.system(size: ClaudeTheme.size(13), weight: .medium))
+                }
+                .fixedSize()
+            }
+            .disabled(!appState.autoArchiveEnabled)
+            .opacity(appState.autoArchiveEnabled ? 1 : 0.5)
         }
     }
 

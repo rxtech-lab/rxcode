@@ -63,23 +63,30 @@ public enum MCPStatus: Sendable, Equatable {
 // MARK: - Listing / Detail
 
 public struct MCPServerInfo: Identifiable, Sendable, Equatable, Hashable {
-    public var id: String { name }
+    public var id: String {
+        if let projectPath, !projectPath.isEmpty {
+            return "\(scope?.rawValue ?? "user"):\(projectPath):\(name)"
+        }
+        return "\(scope?.rawValue ?? "user"):\(name)"
+    }
     public let name: String
     public let transport: MCPTransport
     public let endpoint: String   // url for http/sse, command line for stdio
     public let status: MCPStatus
     public var scope: MCPScope?
+    public var projectPath: String?
 
-    public init(name: String, transport: MCPTransport, endpoint: String, status: MCPStatus, scope: MCPScope? = nil) {
+    public init(name: String, transport: MCPTransport, endpoint: String, status: MCPStatus, scope: MCPScope? = nil, projectPath: String? = nil) {
         self.name = name
         self.transport = transport
         self.endpoint = endpoint
         self.status = status
         self.scope = scope
+        self.projectPath = projectPath
     }
 
     public func hash(into hasher: inout Hasher) {
-        hasher.combine(name)
+        hasher.combine(id)
     }
 }
 
@@ -91,8 +98,10 @@ public struct MCPServerDetail: Sendable, Equatable {
     public let command: String?
     public let args: [String]
     public let env: [String: String]
+    public let headers: [String: String]
+    public let projectPath: String?
 
-    public init(name: String, scope: MCPScope, transport: MCPTransport, url: String?, command: String?, args: [String], env: [String: String]) {
+    public init(name: String, scope: MCPScope, transport: MCPTransport, url: String?, command: String?, args: [String], env: [String: String], headers: [String: String] = [:], projectPath: String? = nil) {
         self.name = name
         self.scope = scope
         self.transport = transport
@@ -100,6 +109,8 @@ public struct MCPServerDetail: Sendable, Equatable {
         self.command = command
         self.args = args
         self.env = env
+        self.headers = headers
+        self.projectPath = projectPath
     }
 }
 

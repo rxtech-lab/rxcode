@@ -241,6 +241,28 @@ final class AppState {
         didSet { UserDefaults.standard.set(focusMode, forKey: "focusMode") }
     }
 
+    // MARK: - Archive
+
+    /// Auto-archive chats whose `updatedAt` is older than this many days. Pinned
+    /// chats are skipped. A value <= 0 with `autoArchiveEnabled` still leaves
+    /// chats alone — the toggle is authoritative.
+    static let defaultArchiveRetentionDays = 7
+
+    var autoArchiveEnabled: Bool = (UserDefaults.standard.object(forKey: "autoArchiveEnabled") as? Bool) ?? true {
+        didSet { UserDefaults.standard.set(autoArchiveEnabled, forKey: "autoArchiveEnabled") }
+    }
+
+    var archiveRetentionDays: Int = (UserDefaults.standard.object(forKey: "archiveRetentionDays") as? Int) ?? AppState.defaultArchiveRetentionDays {
+        didSet {
+            let clamped = max(1, min(365, archiveRetentionDays))
+            if clamped != archiveRetentionDays {
+                archiveRetentionDays = clamped
+                return
+            }
+            UserDefaults.standard.set(archiveRetentionDays, forKey: "archiveRetentionDays")
+        }
+    }
+
     // MARK: - Attachment Auto-Preview Settings
 
     private static let autoPreviewSettingsKey = "attachmentAutoPreviewSettings"
@@ -262,6 +284,31 @@ final class AppState {
     /// Pending session to navigate to when a project window opens or is already open.
     /// Keyed by projectId; consumed once applied.
     var pendingNotificationSession: [UUID: String] = [:]
+
+    // MARK: - Menu Bar Status
+
+    /// Last-fetched usage percentages for the menu-bar status popup. Updated by
+    /// `refreshRateLimitUsage()`; nil until first successful fetch (or when not
+    /// signed in to Claude Code).
+    var latestRateLimitUsage: RateLimitUsage?
+
+    /// Sessions currently streaming, anywhere across all windows.
+    var inProgressSessionCount: Int {
+        sessionStates.values.reduce(0) { $0 + ($1.isStreaming ? 1 : 0) }
+    }
+
+    /// Sessions whose stream finished but the user hasn't selected since. Cleared
+    /// on session select via `hasUncheckedCompletion`.
+    var uncheckedFinishedSessionCount: Int {
+        sessionStates.values.reduce(0) { $0 + ($1.hasUncheckedCompletion ? 1 : 0) }
+    }
+
+    /// Force-refresh the rate-limit usage. Cheap to call repeatedly — RateLimitService
+    /// caches for 5 minutes on its own.
+    func refreshRateLimitUsage(forceRefresh: Bool = false) async {
+        let usage = await RateLimitService.shared.fetchUsage(forceRefresh: forceRefresh)
+        latestRateLimitUsage = usage
+    }
 
     /// Ref-counted set of projectIds with at least one open dedicated project window.
     /// Used to decide whether a notification tap should route to the main window or
@@ -412,6 +459,13 @@ final class AppState {
     var claudeInstalled = false
     var onboardingCompleted = UserDefaults.standard.bool(forKey: "onboardingCompleted")
 
+    // MARK: - App Initialization
+
+    /// True once `initialize()` has finished its first run. UI shows a loading
+    /// screen until this flips so we never render the main view against
+    /// half-loaded projects/sessions.
+    var isInitialized = false
+
     // MARK: - Services
 
     let github = GitHubService()
@@ -432,10 +486,20 @@ final class AppState {
     // MARK: - MCP State
 
     var mcpServers: [MCPServerInfo] = []
+    /// Keyed by `MCPServerInfo.id` (scope:projectPath:name) so rows with the same
+    /// name across different scopes/projects don't collide.
     var mcpProbeResults: [String: MCPProbeResult] = [:]
     var mcpInFlightProbes: Set<String> = []
     var mcpIsLoading: Bool = false
     var mcpListError: String?
+    private var mcpPeriodicProbeTask: Task<Void, Never>?
+    /// 5 minutes — balances disconnect-detection latency against probe cost
+    /// (each tick spawns one stdio subprocess per stdio server).
+    private static let mcpPeriodicProbeInterval: UInt64 = 300 * 1_000_000_000
+
+    /// Last project selected in any window — used to scope Local / Project MCP rows
+    /// in the (window-less) Settings sheet.
+    var activeProjectPath: String?
 
     init() {
         let metaStore = self.metaStore
@@ -455,8 +519,28 @@ final class AppState {
         mcpListError = nil
         defer { mcpIsLoading = false }
         do {
-            let list = try await mcp.list()
-            mcpServers = list
+            // Pass nil so Settings aggregates across every project in ~/.claude.json,
+            // not just the currently-selected project.
+            let list = try await mcp.list(projectPath: nil)
+            // Preserve last-known status for rows that already exist so a list
+            // refresh doesn't visually downgrade everything to .unknown.
+            var merged: [MCPServerInfo] = []
+            merged.reserveCapacity(list.count)
+            for info in list {
+                if let existing = mcpServers.first(where: { $0.id == info.id }) {
+                    merged.append(MCPServerInfo(
+                        name: info.name,
+                        transport: info.transport,
+                        endpoint: info.endpoint,
+                        status: existing.status,
+                        scope: info.scope,
+                        projectPath: info.projectPath
+                    ))
+                } else {
+                    merged.append(info)
+                }
+            }
+            mcpServers = merged
         } catch {
             mcpListError = error.localizedDescription
             logger.error("MCP list failed: \(error.localizedDescription, privacy: .public)")
@@ -464,21 +548,55 @@ final class AppState {
     }
 
     func probeMCPServer(name: String) async {
-        guard !mcpInFlightProbes.contains(name) else { return }
-        mcpInFlightProbes.insert(name)
-        defer { mcpInFlightProbes.remove(name) }
-        let result = await mcp.probe(name: name)
-        mcpProbeResults[name] = result
-        // Reflect probe outcome into the row's status indicator.
-        if let idx = mcpServers.firstIndex(where: { $0.name == name }) {
-            let updated = MCPServerInfo(
-                name: mcpServers[idx].name,
-                transport: mcpServers[idx].transport,
-                endpoint: mcpServers[idx].endpoint,
-                status: result.ok ? .connected : .failed(result.error ?? "Probe failed"),
-                scope: mcpServers[idx].scope
+        guard let info = mcpServers.first(where: { $0.name == name }) else {
+            // Fall back to a name-only probe if the row hasn't loaded yet.
+            await probeMCPServer(id: name, name: name, lookup: { await self.mcp.probe(name: name, projectPath: self.activeProjectPath) })
+            return
+        }
+        await probeMCPServer(info: info)
+    }
+
+    /// Probe one specific row. Use this when the same server name appears in
+    /// multiple scopes/projects (aggregated Settings list) so the right
+    /// configuration is resolved.
+    func probeMCPServer(info: MCPServerInfo) async {
+        await probeMCPServer(id: info.id, name: info.name, lookup: { await self.mcp.probe(info: info) })
+    }
+
+    private func probeMCPServer(id: String, name: String, lookup: @escaping () async -> MCPProbeResult) async {
+        guard !mcpInFlightProbes.contains(id) else { return }
+        mcpInFlightProbes.insert(id)
+        defer { mcpInFlightProbes.remove(id) }
+
+        let previousStatus: MCPStatus? = mcpServers.first(where: { $0.id == id })?.status
+        let result = await lookup()
+        mcpProbeResults[id] = result
+
+        let newStatus: MCPStatus = result.ok
+            ? .connected
+            : .failed(result.error ?? "Probe failed")
+
+        if let idx = mcpServers.firstIndex(where: { $0.id == id }) {
+            let row = mcpServers[idx]
+            mcpServers[idx] = MCPServerInfo(
+                name: row.name,
+                transport: row.transport,
+                endpoint: row.endpoint,
+                status: newStatus,
+                scope: row.scope,
+                projectPath: row.projectPath
             )
-            mcpServers[idx] = updated
+        }
+
+        // Disconnect notification: only fire on the connected→failed edge so we
+        // don't spam the user on every failed re-probe.
+        if case .connected = (previousStatus ?? .unknown),
+           case .failed(let message) = newStatus {
+            let notifyService = NotificationService.shared
+            let serverName = name
+            Task { @MainActor in
+                await notifyService.postMCPDisconnected(name: serverName, error: message)
+            }
         }
     }
 
@@ -487,6 +605,9 @@ final class AppState {
         do {
             try await mcp.add(spec: spec, scope: scope)
             await refreshMCPServers()
+            // Auto-probe on add so the new row shows live status and tool list
+            // without the user clicking Test.
+            await probeMCPServer(name: spec.name)
             return nil
         } catch {
             return error.localizedDescription
@@ -497,11 +618,45 @@ final class AppState {
     func removeMCPServer(name: String, scope: MCPScope) async -> String? {
         do {
             try await mcp.remove(name: name, scope: scope)
-            mcpProbeResults.removeValue(forKey: name)
+            // Clear the probe entry that belonged to the removed row. The id
+            // shape is `<scope>:[<projectPath>:]<name>` — drop any whose name
+            // suffix and scope prefix match what we just removed.
+            let scopePrefix = "\(scope.rawValue):"
+            mcpProbeResults = mcpProbeResults.filter { key, _ in
+                !(key.hasPrefix(scopePrefix) && key.hasSuffix(":\(name)"))
+            }
             await refreshMCPServers()
             return nil
         } catch {
             return error.localizedDescription
+        }
+    }
+
+    /// Spawn the periodic MCP probe loop. Idempotent.
+    func startMCPPeriodicProbe() {
+        guard mcpPeriodicProbeTask == nil else { return }
+        mcpPeriodicProbeTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: AppState.mcpPeriodicProbeInterval)
+                guard !Task.isCancelled else { return }
+                await self?.refreshAndProbeAllMCPServers()
+            }
+        }
+    }
+
+    /// Refresh the MCP server list and probe every server concurrently.
+    /// Used at app launch (and on a 5-minute timer) so the Settings sheet shows
+    /// live status without the user having to click "Test" on each row.
+    func refreshAndProbeAllMCPServers() async {
+        await refreshMCPServers()
+        let snapshot = mcpServers
+        guard !snapshot.isEmpty else { return }
+        await withTaskGroup(of: Void.self) { group in
+            for info in snapshot {
+                group.addTask { [weak self] in
+                    await self?.probeMCPServer(info: info)
+                }
+            }
         }
     }
 
@@ -644,6 +799,7 @@ final class AppState {
         // CLI is still the transcript backend (replay on thread open), but
         // it does not drive thread discovery.
         allSessionSummaries = threadStore.loadAllSummaries()
+        autoArchiveExpiredSessionsIfNeeded()
 
         persistedQueues = threadStore.loadAllQueues()
 
@@ -660,7 +816,19 @@ final class AppState {
             logger.error("Failed to start permission server: \(error.localizedDescription)")
         }
 
+        // Warm MCP server statuses in the background so the Settings sheet
+        // shows live connection results without the user clicking "Test".
+        Task { [weak self] in
+            await self?.refreshAndProbeAllMCPServers()
+        }
+
+        // Recurring probe so disconnected MCP servers surface promptly even
+        // when the user isn't actively interacting with the Settings tab.
+        startMCPPeriodicProbe()
+
         // Permission request routing is handled per-window in initializeWindow's listener.
+
+        isInitialized = true
     }
 
     /// Per-window initialization — restore selected project and load session history
@@ -679,23 +847,44 @@ final class AppState {
                     let projectId = window.selectedProject?.id
                     let sessionId = window.currentSessionId
                     let toolName = request.toolName
+                    // Auto-present the question sheet only when the user is actively viewing
+                    // the thread the question belongs to. Otherwise it stays in the queue
+                    // (yellow dot in sidebar + banner) so the user can decide when to answer.
+                    if toolName == "AskUserQuestion",
+                       window.presentedPermissionId == nil,
+                       let qSession = request.sessionId,
+                       qSession == window.currentSessionId {
+                        window.presentedPermissionId = request.id
+                    }
                     Task { @MainActor in
-                        await NotificationService.shared.postPermissionNeeded(
-                            toolName: toolName,
-                            projectName: projectName,
-                            projectId: projectId,
-                            sessionId: sessionId
-                        )
+                        if toolName == "AskUserQuestion" {
+                            await NotificationService.shared.postQuestionNeeded(
+                                projectName: projectName,
+                                projectId: projectId,
+                                sessionId: sessionId
+                            )
+                        } else {
+                            await NotificationService.shared.postPermissionNeeded(
+                                toolName: toolName,
+                                projectName: projectName,
+                                projectId: projectId,
+                                sessionId: sessionId
+                            )
+                        }
                     }
                 }
             }
         }
 
-        // Install the AskUserQuestion answer handler. When the user taps an option in the
-        // chat UI, this closure delivers the response to the currently streaming CLI.
-        window.answerQuestionHandler = { [weak self, weak window] toolUseId, optionLabel in
+        // Install the AskUserQuestion handlers. The question sheet calls submit when the
+        // user finishes answering, and skip when they dismiss without answering.
+        window.submitQuestionAnswersHandler = { [weak self, weak window] toolUseId, answers in
             guard let self, let window else { return }
-            Task { await self.respondToAskUserQuestion(toolUseId: toolUseId, optionLabel: optionLabel, in: window) }
+            Task { await self.respondToAskUserQuestion(toolUseId: toolUseId, answers: answers, in: window) }
+        }
+        window.skipQuestionHandler = { [weak self, weak window] toolUseId in
+            guard let self, let window else { return }
+            Task { await self.skipAskUserQuestion(toolUseId: toolUseId, in: window) }
         }
 
         // Install the plan-card decision handler. The buttons on `PlanCardView` route
@@ -1071,6 +1260,16 @@ final class AppState {
             }
         }
 
+        // Insert the placeholder summary before kicking off title generation —
+        // the Task below awaits and the lookup in maybeGenerateLLMTitle would
+        // otherwise race the insertion at line ~1168 and bail with "no summary".
+        if isNewSession {
+            let initialTitle = ChatSession.placeholderTitle(from: displayText ?? prompt)
+            let placeholder = ChatSession(id: sessionKey, projectId: project.id, title: initialTitle, messages: [], origin: .cliBacked)
+            allSessionSummaries.insert(placeholder.summary, at: 0)
+            threadStore.upsert(placeholder.summary)
+        }
+
         // Kick off LLM title generation as soon as the first user message lands —
         // the rename runs concurrently with the stream so the sidebar title updates
         // without waiting for the assistant to reply.
@@ -1118,12 +1317,7 @@ final class AppState {
             await permission.registerSession(sid: sid, projectKey: project.path, mode: hookSessionMode)
         }
 
-        if isNewSession {
-            let initialTitle = ChatSession.placeholderTitle(from: displayText ?? prompt)
-            let placeholder = ChatSession(id: sessionKey, projectId: project.id, title: initialTitle, messages: [], origin: .cliBacked)
-            allSessionSummaries.insert(placeholder.summary, at: 0)
-            threadStore.upsert(placeholder.summary)
-        } else {
+        if !isNewSession {
             await saveCurrentSession(in: window)
         }
 
@@ -1278,6 +1472,7 @@ final class AppState {
                     if case .result(let resultEvent) = event {
                         logger.info("[Stream:UI] event #\(eventCount) .result received after losing ownership — saving to disk")
                         await claude.closeStdin(streamId: streamId)
+                        await claude.finalize(streamId: streamId)
                         if sessionKey != resultEvent.sessionId {
                             if let state = sessionStates.removeValue(forKey: sessionKey) {
                                 sessionStates[resultEvent.sessionId] = state
@@ -1472,8 +1667,10 @@ final class AppState {
                     logger.info("[Stream:UI] event #\(eventCount) .result (gap=\(String(format: "%.1f", gap))s, isError=\(resultEvent.isError), session=\(resultEvent.sessionId))")
 
                     // With `--input-format stream-json` the CLI stays alive waiting for more
-                    // input. Close stdin on `result` so it exits cleanly.
+                    // input. Close stdin on `result` so it exits cleanly, then finalize so
+                    // any subagent children that survived the parent CLI get reaped.
                     await claude.closeStdin(streamId: streamId)
+                    await claude.finalize(streamId: streamId)
 
                     if sessionKey != resultEvent.sessionId {
                         if let state = sessionStates.removeValue(forKey: sessionKey) {
@@ -1675,7 +1872,21 @@ final class AppState {
                         guard !hunks.isEmpty else { return nil }
                         return (path, hunks, call.name.lowercased() == "write")
                     }()
-                    state.messages[idx].setToolResult(id: toolUseId, result: content, isError: isError)
+                    // Preserve the user-decision summary on ExitPlanMode. After the user
+                    // accepts/rejects the plan, the CLI emits its own follow-up tool_result
+                    // ("User has approved your plan…") which would overwrite "Accepted with …"
+                    // and flip the plan card back to "pending" — re-showing the accept buttons
+                    // on a card that was just decided.
+                    let skipResultOverwrite: Bool = {
+                        guard let blockIdx = state.messages[idx].toolCallIndex(id: toolUseId),
+                              let call = state.messages[idx].blocks[blockIdx].toolCall,
+                              Self.isExitPlanModeCall(call),
+                              let existing = call.result else { return false }
+                        return Self.planDecisionResultPrefixes.contains { existing.hasPrefix($0) }
+                    }()
+                    if !skipResultOverwrite {
+                        state.messages[idx].setToolResult(id: toolUseId, result: content, isError: isError)
+                    }
                     if let info = editPersistInfo {
                         threadStore.appendFileEdit(
                             sessionId: key,
@@ -1923,38 +2134,57 @@ final class AppState {
 
     // MARK: - AskUserQuestion Response
 
-    /// Deliver the user's answer for an AskUserQuestion tool call via the PreToolUse hook.
+    /// Deliver the user's answers for an AskUserQuestion tool call via the PreToolUse hook.
     ///
     /// AskUserQuestion is handled like any other PreToolUse hook: the PermissionServer is
     /// holding the HTTP connection open waiting for a decision. We resolve it with `allow` +
-    /// `updatedInput: {questions, answers: {questionText: selectedLabel}}` so the CLI injects
-    /// the answer into the tool input and proceeds.
-    func respondToAskUserQuestion(toolUseId: String, optionLabel: String, in window: WindowState) async {
+    /// `updatedInput: {questions, answers: {questionText: <answerValue>}}` so the CLI injects
+    /// the answers into the tool input and proceeds.
+    func respondToAskUserQuestion(
+        toolUseId: String,
+        answers: [Int: AskUserQuestion.Answer],
+        in window: WindowState
+    ) async {
         let key = window.currentSessionId ?? window.newSessionKey
 
-        // Build updatedInput from the tool call's original input, and reflect the answer
-        // locally in one pass so the UI updates immediately. The CLI will emit its own
-        // tool_result shortly, overwriting the optimistic value.
         var updatedInput = JSONValue.object([
             "questions": .array([]),
             "answers": .object([:]),
         ])
+
         updateState(key) { state in
             for i in state.messages.indices.reversed() {
                 guard let idx = state.messages[i].toolCallIndex(id: toolUseId),
-                      let toolInput = state.messages[i].blocks[idx].toolCall?.input else { continue }
+                      let toolInput = state.messages[i].blocks[idx].toolCall?.input,
+                      let parsed = AskUserQuestion(input: toolInput) else { continue }
 
-                let questionText = AskUserQuestion(input: toolInput)?.questions.first?.question ?? "question"
-                updatedInput = .object([
-                    "questions": toolInput["questions"] ?? .array([]),
-                    "answers": .object([questionText: .string(optionLabel)]),
-                ])
-                state.messages[i].setToolResult(id: toolUseId, result: optionLabel, isError: false)
+                updatedInput = AskUserQuestion.updatedInputJSON(
+                    originalInput: toolInput,
+                    questions: parsed.questions,
+                    answers: answers
+                )
+                let summary = AskUserQuestion.summary(questions: parsed.questions, answers: answers)
+                state.messages[i].setToolResult(id: toolUseId, result: summary, isError: false)
                 return
             }
         }
 
+        window.pendingPermissions.removeAll { $0.id == toolUseId }
+        if window.presentedPermissionId == toolUseId {
+            window.presentedPermissionId = nil
+        }
+
         await permission.respondAskUserQuestion(toolUseId: toolUseId, updatedInput: updatedInput)
+    }
+
+    /// User dismissed the question sheet without answering — resolve the hook as deny so
+    /// the CLI does not block, and clear the pending entry from the window queue.
+    func skipAskUserQuestion(toolUseId: String, in window: WindowState) async {
+        window.pendingPermissions.removeAll { $0.id == toolUseId }
+        if window.presentedPermissionId == toolUseId {
+            window.presentedPermissionId = nil
+        }
+        await permission.respond(toolUseId: toolUseId, decision: .deny)
     }
 
     // MARK: - Plan Decision Response
@@ -2042,6 +2272,21 @@ final class AppState {
         }
     }
 
+    /// Prefixes of result strings written by `respondToPlanDecision`. Must stay in
+    /// sync with `PlanCardView.userDecisionPrefixes` — duplicated here so that
+    /// `AppState` can detect a decided plan without depending on a SwiftUI view type.
+    static let planDecisionResultPrefixes: [String] = [
+        "Accepted with Ask",
+        "Accepted with Edits",
+        "Accepted with Auto-approve",
+        "Rejected",
+    ]
+
+    static func isExitPlanModeCall(_ call: ToolCall) -> Bool {
+        let n = call.name.lowercased()
+        return n == "exitplanmode" || n == "exit_plan_mode"
+    }
+
     /// Hidden follow-up prompt to send after a plan decision, or nil if the chat
     /// should stop. Plain `.reject` returns nil; `.rejectWithFeedback` with empty
     /// feedback also returns nil (the user effectively did a plain reject).
@@ -2100,6 +2345,7 @@ final class AppState {
             startNewChat(in: window)
         }
 
+        activeProjectPath = project.path
         UserDefaults.standard.set(project.id.uuidString, forKey: "selectedProjectId")
     }
 
@@ -2392,6 +2638,65 @@ final class AppState {
         await updateSessionMetadata(session) { $0.isPinned = newIsPinned }
     }
 
+    // MARK: - Archive
+
+    func archiveSession(_ session: ChatSession, in window: WindowState) async {
+        await setArchived(session, archived: true, in: window)
+    }
+
+    func unarchiveSession(_ session: ChatSession, in window: WindowState? = nil) async {
+        if let window {
+            await setArchived(session, archived: false, in: window)
+        } else {
+            await setArchivedNoWindow(session, archived: false)
+        }
+    }
+
+    private func setArchived(_ session: ChatSession, archived: Bool, in window: WindowState) async {
+        // If the chat being archived is currently open in this window, swap to a
+        // fresh session so the user isn't stranded staring at a now-hidden chat.
+        if archived, window.currentSessionId == session.id {
+            detachCurrentStream(in: window)
+            startNewChat(in: window)
+        }
+        await setArchivedNoWindow(session, archived: archived)
+    }
+
+    private func setArchivedNoWindow(_ session: ChatSession, archived: Bool) async {
+        let now = Date()
+        if let si = allSessionSummaries.firstIndex(where: { $0.id == session.id }) {
+            allSessionSummaries[si].isArchived = archived
+            allSessionSummaries[si].archivedAt = archived ? now : nil
+            threadStore.upsert(allSessionSummaries[si])
+        } else {
+            _ = threadStore.setArchived(id: session.id, archived: archived, at: now)
+        }
+        await updateSessionMetadata(session) { s in
+            s.isArchived = archived
+            s.archivedAt = archived ? now : nil
+        }
+    }
+
+    /// Apply the auto-archive policy: archive non-pinned chats whose `updatedAt`
+    /// is older than `archiveRetentionDays`. Run once at app launch.
+    func autoArchiveExpiredSessionsIfNeeded() {
+        guard autoArchiveEnabled else { return }
+        let cutoff = Calendar.current.date(
+            byAdding: .day,
+            value: -archiveRetentionDays,
+            to: Date()
+        ) ?? Date()
+        let archivedIds = threadStore.archiveStale(olderThan: cutoff)
+        guard !archivedIds.isEmpty else { return }
+        let idSet = Set(archivedIds)
+        let now = Date()
+        for idx in allSessionSummaries.indices where idSet.contains(allSessionSummaries[idx].id) {
+            allSessionSummaries[idx].isArchived = true
+            allSessionSummaries[idx].archivedAt = now
+        }
+        logger.info("Auto-archived \(archivedIds.count) chats older than \(self.archiveRetentionDays) days")
+    }
+
     /// Persist a metadata-only edit (title, pin, etc.) routing by session
     /// origin. cliBacked sessions go to the sidecar; legacy sessions need the
     /// full message log to be re-saved alongside the change.
@@ -2566,12 +2871,15 @@ final class AppState {
         sessionStates.removeValue(forKey: session.id)
     }
 
-    func deleteAllSessions(projectId: UUID? = nil, in window: WindowState) async {
-        let toDelete: [ChatSession.Summary]
+    func deleteAllSessions(projectId: UUID? = nil, archivedOnly: Bool = false, in window: WindowState) async {
+        var toDelete: [ChatSession.Summary]
         if let projectId {
             toDelete = allSessionSummaries.filter { $0.projectId == projectId }
         } else {
             toDelete = allSessionSummaries
+        }
+        if archivedOnly {
+            toDelete = toDelete.filter { $0.isArchived }
         }
         let ids = Set(toDelete.map(\.id))
 
@@ -2599,7 +2907,11 @@ final class AppState {
         }
 
         allSessionSummaries.removeAll { ids.contains($0.id) }
-        threadStore.deleteAll(projectId: projectId)
+        if archivedOnly {
+            for id in ids { threadStore.delete(id: id) }
+        } else {
+            threadStore.deleteAll(projectId: projectId)
+        }
         for id in ids { sessionStates.removeValue(forKey: id) }
     }
 

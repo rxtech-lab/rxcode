@@ -52,6 +52,12 @@ struct ToolResultView: View {
             if isCardTool {
                 cardBody
                     .bubbleStyle(toolCall.isError ? .toolError : .tool)
+                    .transition(.asymmetric(
+                        insertion: .opacity
+                            .combined(with: .move(edge: .top))
+                            .combined(with: .scale(scale: 0.96, anchor: .top)),
+                        removal: .opacity
+                    ))
             } else {
                 minimalBody
             }
@@ -95,33 +101,39 @@ struct ToolResultView: View {
 
                         Spacer()
 
-                        if toolCall.isError {
-                            Image(systemName: "exclamationmark.circle.fill")
-                                .foregroundStyle(ClaudeTheme.statusError)
-                                .font(.caption)
-                                .accessibilityLabel("Error occurred")
-                        } else if toolCall.result != nil {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(ClaudeTheme.statusSuccess)
-                                .font(.caption)
-                                .accessibilityLabel("Completed")
-                        } else if isMessageStreaming {
-                            ProgressView()
-                                .controlSize(.mini)
-                                .accessibilityLabel("Running")
-                        } else {
-                            Image(systemName: "minus.circle.fill")
-                                .foregroundStyle(ClaudeTheme.textTertiary)
-                                .font(.caption)
-                                .accessibilityLabel("Interrupted")
+                        Group {
+                            if toolCall.isError {
+                                Image(systemName: "exclamationmark.circle.fill")
+                                    .foregroundStyle(ClaudeTheme.statusError)
+                                    .font(.caption)
+                                    .accessibilityLabel("Error occurred")
+                            } else if toolCall.result != nil {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(ClaudeTheme.statusSuccess)
+                                    .font(.caption)
+                                    .accessibilityLabel("Completed")
+                            } else if isMessageStreaming {
+                                ProgressView()
+                                    .controlSize(.mini)
+                                    .accessibilityLabel("Running")
+                            } else {
+                                Image(systemName: "minus.circle.fill")
+                                    .foregroundStyle(ClaudeTheme.textTertiary)
+                                    .font(.caption)
+                                    .accessibilityLabel("Interrupted")
+                            }
                         }
+                        .transition(.scale(scale: 0.4).combined(with: .opacity))
+                        .id(statusIconID)
 
                         if toolCall.result != nil || hasExpandableContent {
-                            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            Image(systemName: "chevron.down")
                                 .font(.caption2)
                                 .foregroundStyle(ClaudeTheme.textTertiary)
+                                .rotationEffect(.degrees(isExpanded ? 180 : 0))
                         }
                     }
+                    .animation(.spring(response: 0.35, dampingFraction: 0.7), value: statusIconID)
 
                     inputSummaryView
                         .lineLimit(isExpanded ? nil : 1)
@@ -132,24 +144,44 @@ struct ToolResultView: View {
 
             // Expanded detail
             if isExpanded {
-                if isEditTool, let oldStr = toolCall.input["old_string"]?.stringValue,
-                   let newStr = toolCall.input["new_string"]?.stringValue {
-                    ClaudeThemeDivider()
-                    editDiffView(oldString: oldStr, newString: newStr)
-                } else if let result = toolCall.result, !result.isEmpty {
-                    ClaudeThemeDivider()
+                Group {
+                    if isEditTool, let oldStr = toolCall.input["old_string"]?.stringValue,
+                       let newStr = toolCall.input["new_string"]?.stringValue {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ClaudeThemeDivider()
+                            editDiffView(oldString: oldStr, newString: newStr)
+                        }
+                    } else if let result = toolCall.result, !result.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ClaudeThemeDivider()
 
-                    ScrollView {
-                        Text(result)
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundStyle(toolCall.isError ? ClaudeTheme.statusError : ClaudeTheme.textPrimary)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                            ScrollView {
+                                Text(result)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .foregroundStyle(toolCall.isError ? ClaudeTheme.statusError : ClaudeTheme.textPrimary)
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .frame(maxHeight: 200)
+                        }
                     }
-                    .frame(maxHeight: 200)
                 }
+                .transition(.asymmetric(
+                    insertion: .opacity.combined(with: .move(edge: .top)),
+                    removal: .opacity.combined(with: .move(edge: .top))
+                ))
             }
         }
+        .animation(.easeInOut(duration: 0.25), value: isExpanded)
+    }
+
+    /// Stable identifier for the current status icon — used to animate transitions
+    /// between progress / checkmark / error states.
+    private var statusIconID: Int {
+        if toolCall.isError { return 1 }
+        if toolCall.result != nil { return 2 }
+        if isMessageStreaming { return 3 }
+        return 4
     }
 
     /// Read / Bash / Grep / Write / Agent / Skill / MCP / etc. — single muted row, no card.
@@ -251,7 +283,7 @@ struct ToolResultView: View {
             : allLines
 
         return VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(visibleLines.enumerated()), id: \.offset) { _, item in
+            ForEach(Array(visibleLines.enumerated()), id: \.offset) { idx, item in
                 let (prefix, text, isAdded) = item
                 Text(prefix + " " + text)
                     .font(.system(size: ClaudeTheme.messageSize(12), design: .monospaced))
@@ -260,6 +292,15 @@ struct ToolResultView: View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 1)
                     .background((isAdded ? ClaudeTheme.statusSuccess : ClaudeTheme.statusError).opacity(0.06))
+                    .transition(.asymmetric(
+                        insertion: .move(edge: isAdded ? .leading : .trailing)
+                            .combined(with: .opacity),
+                        removal: .opacity
+                    ))
+                    .animation(
+                        .easeOut(duration: 0.28).delay(Double(idx) * 0.015),
+                        value: visibleLines.count
+                    )
             }
 
             if needsToggle {
@@ -354,19 +395,23 @@ struct ToolResultView: View {
                 if isEditTool, toolCall.result != nil {
                     let hunks = editHunksFromToolInput()
                     if !hunks.isEmpty {
-                        Text(" · ")
-                            .font(.system(size: ClaudeTheme.messageSize(12)))
-                            .foregroundStyle(ClaudeTheme.textTertiary)
-                        fileActionLink(label: "diff") {
-                            windowState.diffFile = PreviewFile(
-                                path: filePath,
-                                name: fileName,
-                                editHunks: hunks
-                            )
+                        HStack(spacing: 0) {
+                            Text(" · ")
+                                .font(.system(size: ClaudeTheme.messageSize(12)))
+                                .foregroundStyle(ClaudeTheme.textTertiary)
+                            fileActionLink(label: "diff") {
+                                windowState.diffFile = PreviewFile(
+                                    path: filePath,
+                                    name: fileName,
+                                    editHunks: hunks
+                                )
+                            }
                         }
+                        .transition(.opacity.combined(with: .scale(scale: 0.85, anchor: .leading)))
                     }
                 }
             }
+            .animation(.easeOut(duration: 0.25), value: toolCall.result != nil)
         } else {
             Text(inputSummary)
                 .font(.system(size: ClaudeTheme.messageSize(12)))

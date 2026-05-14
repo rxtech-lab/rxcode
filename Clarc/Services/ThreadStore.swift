@@ -110,6 +110,35 @@ final class ThreadStore {
         save()
     }
 
+    /// Mark a thread row as archived (or restore it). Returns the updated summary
+    /// on success so callers can keep `allSessionSummaries` in sync.
+    @discardableResult
+    func setArchived(id: String, archived: Bool, at date: Date = .now) -> ChatSession.Summary? {
+        guard let row = fetch(id: id) else { return nil }
+        row.isArchived = archived
+        row.archivedAt = archived ? date : nil
+        save()
+        return row.toSummary()
+    }
+
+    /// Archive all non-pinned, non-archived threads whose `updatedAt` is older than
+    /// `cutoff`. Returns the ids that were archived.
+    func archiveStale(olderThan cutoff: Date, now: Date = .now) -> [String] {
+        let descriptor = FetchDescriptor<ChatThread>(
+            predicate: #Predicate { row in
+                row.isArchived == false && row.isPinned == false && row.updatedAt < cutoff
+            }
+        )
+        let rows = (try? context.fetch(descriptor)) ?? []
+        guard !rows.isEmpty else { return [] }
+        for row in rows {
+            row.isArchived = true
+            row.archivedAt = now
+        }
+        save()
+        return rows.map(\.id)
+    }
+
     func delete(id: String) {
         guard let row = fetch(id: id) else { return }
         context.delete(row)

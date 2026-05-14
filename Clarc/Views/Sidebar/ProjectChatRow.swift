@@ -63,8 +63,6 @@ struct ProjectChatRow: View {
     let onDelete: () -> Void
 
     @State private var isHovered = false
-    @State private var showTitlePopover = false
-    @State private var hoverTask: Task<Void, Never>?
 
     private static let relativeDateFormatter: RelativeDateTimeFormatter = {
         let f = RelativeDateTimeFormatter()
@@ -127,28 +125,8 @@ struct ProjectChatRow: View {
         .contentShape(Rectangle())
         .onHover { hovering in
             isHovered = hovering
-            hoverTask?.cancel()
-            if hovering {
-                hoverTask = Task {
-                    try? await Task.sleep(nanoseconds: 600_000_000)
-                    guard !Task.isCancelled else { return }
-                    await MainActor.run { showTitlePopover = true }
-                }
-            } else {
-                showTitlePopover = false
-            }
         }
-        .popover(isPresented: $showTitlePopover, arrowEdge: .trailing) {
-            Text(displayTitle)
-                .font(.system(size: ClaudeTheme.size(12)))
-                .foregroundStyle(ClaudeTheme.textPrimary)
-                .lineLimit(nil)
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: 280, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-        }
+        .help(displayTitle)
         .onTapGesture { onSelect() }
         .contextMenu {
             Button { onRename() } label: {

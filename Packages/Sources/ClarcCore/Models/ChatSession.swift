@@ -16,6 +16,8 @@ public struct ChatSession: Identifiable, Codable, Sendable {
     public var origin: SessionOrigin
     public var worktreePath: String?
     public var worktreeBranch: String?
+    public var isArchived: Bool
+    public var archivedAt: Date?
 
     public init(
         id: String,
@@ -30,7 +32,9 @@ public struct ChatSession: Identifiable, Codable, Sendable {
         permissionMode: PermissionMode? = nil,
         origin: SessionOrigin = .cliBacked,
         worktreePath: String? = nil,
-        worktreeBranch: String? = nil
+        worktreeBranch: String? = nil,
+        isArchived: Bool = false,
+        archivedAt: Date? = nil
     ) {
         self.id = id
         self.projectId = projectId
@@ -45,10 +49,12 @@ public struct ChatSession: Identifiable, Codable, Sendable {
         self.origin = origin
         self.worktreePath = worktreePath
         self.worktreeBranch = worktreeBranch
+        self.isArchived = isArchived
+        self.archivedAt = archivedAt
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, projectId, title, messages, createdAt, updatedAt, isPinned, model, effort, permissionMode, origin, worktreePath, worktreeBranch
+        case id, projectId, title, messages, createdAt, updatedAt, isPinned, model, effort, permissionMode, origin, worktreePath, worktreeBranch, isArchived, archivedAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -66,6 +72,8 @@ public struct ChatSession: Identifiable, Codable, Sendable {
         origin = try container.decodeIfPresent(SessionOrigin.self, forKey: .origin) ?? .legacyClarc
         worktreePath = try container.decodeIfPresent(String.self, forKey: .worktreePath)
         worktreeBranch = try container.decodeIfPresent(String.self, forKey: .worktreeBranch)
+        isArchived = try container.decodeIfPresent(Bool.self, forKey: .isArchived) ?? false
+        archivedAt = try container.decodeIfPresent(Date.self, forKey: .archivedAt)
     }
 
     public struct Summary: Identifiable, Codable, Sendable, Equatable {
@@ -81,6 +89,8 @@ public struct ChatSession: Identifiable, Codable, Sendable {
         public var origin: SessionOrigin
         public var worktreePath: String?
         public var worktreeBranch: String?
+        public var isArchived: Bool
+        public var archivedAt: Date?
 
         public init(
             id: String,
@@ -94,7 +104,9 @@ public struct ChatSession: Identifiable, Codable, Sendable {
             permissionMode: PermissionMode? = nil,
             origin: SessionOrigin = .cliBacked,
             worktreePath: String? = nil,
-            worktreeBranch: String? = nil
+            worktreeBranch: String? = nil,
+            isArchived: Bool = false,
+            archivedAt: Date? = nil
         ) {
             self.id = id
             self.projectId = projectId
@@ -108,10 +120,12 @@ public struct ChatSession: Identifiable, Codable, Sendable {
             self.origin = origin
             self.worktreePath = worktreePath
             self.worktreeBranch = worktreeBranch
+            self.isArchived = isArchived
+            self.archivedAt = archivedAt
         }
 
         private enum CodingKeys: String, CodingKey {
-            case id, projectId, title, createdAt, updatedAt, isPinned, model, effort, permissionMode, origin, worktreePath, worktreeBranch
+            case id, projectId, title, createdAt, updatedAt, isPinned, model, effort, permissionMode, origin, worktreePath, worktreeBranch, isArchived, archivedAt
         }
 
         public init(from decoder: Decoder) throws {
@@ -128,6 +142,8 @@ public struct ChatSession: Identifiable, Codable, Sendable {
             origin = try container.decodeIfPresent(SessionOrigin.self, forKey: .origin) ?? .legacyClarc
             worktreePath = try container.decodeIfPresent(String.self, forKey: .worktreePath)
             worktreeBranch = try container.decodeIfPresent(String.self, forKey: .worktreeBranch)
+            isArchived = try container.decodeIfPresent(Bool.self, forKey: .isArchived) ?? false
+            archivedAt = try container.decodeIfPresent(Date.self, forKey: .archivedAt)
         }
     }
 
@@ -144,7 +160,9 @@ public struct ChatSession: Identifiable, Codable, Sendable {
             permissionMode: permissionMode,
             origin: origin,
             worktreePath: worktreePath,
-            worktreeBranch: worktreeBranch
+            worktreeBranch: worktreeBranch,
+            isArchived: isArchived,
+            archivedAt: archivedAt
         )
     }
 
@@ -221,6 +239,7 @@ extension ChatSession.Summary {
                     updatedAt: updatedAt, isPinned: isPinned,
                     model: model, effort: effort, permissionMode: permissionMode,
                     origin: origin,
-                    worktreePath: worktreePath, worktreeBranch: worktreeBranch)
+                    worktreePath: worktreePath, worktreeBranch: worktreeBranch,
+                    isArchived: isArchived, archivedAt: archivedAt)
     }
 }

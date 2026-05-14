@@ -6,32 +6,15 @@ struct RecentChatsSuggestionList: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
 
+    @State private var renamingSession: ChatSession?
+    @State private var renameText = ""
+    @State private var sessionToDelete: ChatSession?
+
     var body: some View {
         if shouldShow {
             VStack(spacing: 0) {
                 ForEach(suggestions, id: \.id) { summary in
-                    Button {
-                        appState.selectSession(id: summary.id, in: windowState)
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "bubble.left")
-                                .font(.system(size: ClaudeTheme.size(11)))
-                                .foregroundStyle(ClaudeTheme.textTertiary)
-
-                            Text(summary.title)
-                                .font(.system(size: ClaudeTheme.size(13)))
-                                .foregroundStyle(ClaudeTheme.textSecondary)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-
-                            Spacer()
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 10)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .hoverHighlight()
+                    suggestionRow(summary)
 
                     if summary.id != suggestions.last?.id {
                         ClaudeThemeDivider()
@@ -41,6 +24,110 @@ struct RecentChatsSuggestionList: View {
             .background(ClaudeTheme.background)
             .padding(.horizontal, 8)
             .padding(.bottom, 8)
+            .alert("Delete Session", isPresented: isDeletingSessionBinding) {
+                Button("Delete", role: .destructive) {
+                    if let session = sessionToDelete {
+                        Task { await appState.deleteSession(session, in: windowState) }
+                    }
+                    sessionToDelete = nil
+                }
+                Button("Cancel", role: .cancel) {
+                    sessionToDelete = nil
+                }
+            } message: {
+                if let session = sessionToDelete {
+                    Text("\"\(session.title)\" will be deleted. This action cannot be undone.")
+                } else {
+                    Text("This session will be deleted. This action cannot be undone.")
+                }
+            }
+            .alert("Rename Session", isPresented: isRenamingBinding) {
+                TextField("Session name", text: $renameText)
+                Button("Rename") {
+                    if let session = renamingSession, !renameText.isEmpty {
+                        Task { await appState.renameSession(session, to: renameText) }
+                    }
+                    renamingSession = nil
+                }
+                Button("Cancel", role: .cancel) {
+                    renamingSession = nil
+                }
+            }
+        }
+    }
+
+    private func suggestionRow(_ summary: ChatSession.Summary) -> some View {
+        Button {
+            appState.selectSession(id: summary.id, in: windowState)
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "bubble.left")
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(ClaudeTheme.textTertiary)
+
+                Text(summary.title)
+                    .font(.system(size: ClaudeTheme.size(13)))
+                    .foregroundStyle(ClaudeTheme.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                Spacer()
+
+                if summary.isPinned {
+                    Image(systemName: "pin.fill")
+                        .font(.system(size: ClaudeTheme.size(9)))
+                        .foregroundStyle(ClaudeTheme.textTertiary)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .hoverHighlight()
+        .contextMenu {
+            let chatSession = summary.makeSession()
+
+            Button {
+                renameText = summary.title
+                renamingSession = chatSession
+            } label: {
+                Label("Rename", systemImage: "pencil")
+            }
+
+            Button {
+                Task { await appState.togglePinSession(chatSession) }
+            } label: {
+                if summary.isPinned {
+                    Label("Unpin", systemImage: "pin.slash")
+                } else {
+                    Label("Pin", systemImage: "pin")
+                }
+            }
+
+            Button {
+                Task {
+                    if summary.isArchived {
+                        await appState.unarchiveSession(chatSession, in: windowState)
+                    } else {
+                        await appState.archiveSession(chatSession, in: windowState)
+                    }
+                }
+            } label: {
+                if summary.isArchived {
+                    Label("Unarchive", systemImage: "tray.and.arrow.up")
+                } else {
+                    Label("Archive", systemImage: "archivebox")
+                }
+            }
+
+            Divider()
+
+            Button(role: .destructive) {
+                sessionToDelete = chatSession
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
         }
     }
 
@@ -53,13 +140,27 @@ struct RecentChatsSuggestionList: View {
     private var suggestions: [ChatSession.Summary] {
         guard let projectId = windowState.selectedProject?.id else { return [] }
         return appState.allSessionSummaries
-            .filter { $0.projectId == projectId }
+            .filter { $0.projectId == projectId && !$0.isArchived }
             .sorted { a, b in
                 if a.isPinned != b.isPinned { return a.isPinned }
                 return a.updatedAt > b.updatedAt
             }
             .prefix(5)
             .map { $0 }
+    }
+
+    private var isDeletingSessionBinding: Binding<Bool> {
+        Binding(
+            get: { sessionToDelete != nil },
+            set: { if !$0 { sessionToDelete = nil } }
+        )
+    }
+
+    private var isRenamingBinding: Binding<Bool> {
+        Binding(
+            get: { renamingSession != nil },
+            set: { if !$0 { renamingSession = nil } }
+        )
     }
 }
 

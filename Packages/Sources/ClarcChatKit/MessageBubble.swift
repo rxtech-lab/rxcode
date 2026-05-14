@@ -83,27 +83,31 @@ struct MessageBubble: View {
                     }
 
                     ForEach(visibleBlocks) { block in
-                        if let text = block.text, !text.isEmpty {
-                            assistantTextBubble(text: text, blockId: block.id, hasHiddenTools: !hidden.isEmpty)
-                        }
-                        if let toolCall = block.toolCall {
-                            if toolCall.name == "AskUserQuestion" {
-                                AskUserQuestionView(toolCall: toolCall)
-                            } else if let planMd = PlanCardView.renderMarkdown(for: toolCall, in: message) {
-                                let external: String? = (PlanCardView.isExitPlanMode(toolCall) && planMd.isEmpty)
-                                    ? PlanCardView.latestPriorPlanMarkdown(before: message, in: chatBridge.messages)
-                                    : nil
-                                PlanCardView(
-                                    toolCall: toolCall,
-                                    planMarkdown: planMd,
-                                    isMessageStreaming: message.isStreaming,
-                                    externalPlanMarkdown: external
-                                )
-                            } else {
-                                ToolResultView(toolCall: toolCall, isMessageStreaming: message.isStreaming)
+                        Group {
+                            if let text = block.text, !text.isEmpty {
+                                assistantTextBubble(text: text, blockId: block.id, hasHiddenTools: !hidden.isEmpty)
+                            }
+                            if let toolCall = block.toolCall {
+                                if toolCall.name == "AskUserQuestion" {
+                                    AskUserQuestionView(toolCall: toolCall)
+                                } else if let planMd = PlanCardView.renderMarkdown(for: toolCall, in: message) {
+                                    let external: String? = (PlanCardView.isExitPlanMode(toolCall) && planMd.isEmpty)
+                                        ? PlanCardView.latestPriorPlanMarkdown(before: message, in: chatBridge.messages)
+                                        : nil
+                                    PlanCardView(
+                                        toolCall: toolCall,
+                                        planMarkdown: planMd,
+                                        isMessageStreaming: message.isStreaming,
+                                        externalPlanMarkdown: external
+                                    )
+                                } else {
+                                    ToolResultView(toolCall: toolCall, isMessageStreaming: message.isStreaming)
+                                }
                             }
                         }
+                        .transition(blockFadeTransition)
                     }
+                    .animation(.easeOut(duration: 0.28), value: visibleBlocks.map(\.id))
                 }
 
                 // Response complete indicator + elapsed time
@@ -256,8 +260,8 @@ struct MessageBubble: View {
                     .buttonStyle(.plain)
                 }
             }
+            .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: 500, alignment: .leading)
-            .fixedSize(horizontal: true, vertical: false)
             .bubbleStyle(.user)
             .overlay(alignment: .bottomTrailing) {
                 if isHoveringUserBubble {
@@ -288,18 +292,8 @@ struct MessageBubble: View {
             && message.blocks.last?.text == text
 
         return HStack(alignment: .bottom, spacing: 0) {
-            if message.isStreaming && isLastBlock {
-                Text(text)
-                    .font(.system(size: ClaudeTheme.messageSize(15)))
-                    .lineSpacing(6)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentTransition(.opacity)
-                    .animation(.easeIn(duration: 0.18), value: text)
-            } else {
-                MarkdownContentView(text: text)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
+            MarkdownContentView(text: text)
+                .frame(maxWidth: .infinity, alignment: .leading)
             if message.isStreaming && isLastBlock {
                 Text("|")
                     .font(.system(size: ClaudeTheme.messageSize(15), weight: .light))
@@ -359,6 +353,17 @@ struct MessageBubble: View {
         }
         .buttonStyle(.plain)
         .opacity(0.6)
+    }
+
+    // MARK: - Block Fade Transition
+
+    /// Fade-in for tool cards (Edit, Bash, PlanCard, etc.) and text blocks as they
+    /// are appended to a streaming assistant message. The parent MessageBubble
+    /// transition only fires on first insert of the message — without this, blocks
+    /// added later snap in without animation.
+    private var blockFadeTransition: AnyTransition {
+        let insertion: AnyTransition = .opacity.combined(with: .scale(scale: 0.97, anchor: .bottomLeading))
+        return .asymmetric(insertion: insertion, removal: .identity)
     }
 
     // MARK: - Transient Tool Helpers

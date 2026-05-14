@@ -5,15 +5,12 @@ struct MCPServerEditorSheet: View {
     /// Returns true on success (sheet dismisses), false on failure (stays open).
     let onSave: (MCPServerSpec, MCPScope) async -> Bool
 
-    @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
 
     @State private var spec = MCPServerSpec()
     @State private var scope: MCPScope = .user
     @State private var argsText: String = ""
     @State private var isSaving = false
-    @State private var isProbing = false
-    @State private var probe: MCPProbeResult?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -30,15 +27,13 @@ struct MCPServerEditorSheet: View {
                     } else {
                         httpFields
                     }
-                    Divider()
-                    testSection
                 }
                 .padding(20)
             }
             Divider()
             footer
         }
-        .frame(width: 540, height: 640)
+        .frame(width: 540, height: 600)
     }
 
     // MARK: - Header / Footer
@@ -55,14 +50,22 @@ struct MCPServerEditorSheet: View {
 
     private var footer: some View {
         HStack {
+            if isSaving {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("Saving and probing…")
+                        .font(.system(size: ClaudeTheme.size(11)))
+                        .foregroundStyle(.secondary)
+                }
+            }
             Spacer()
             Button("Cancel") { dismiss() }
                 .keyboardShortcut(.cancelAction)
+                .disabled(isSaving)
             Button {
                 Task { await save() }
             } label: {
-                if isSaving { ProgressView().controlSize(.small) }
-                else { Text("Save") }
+                Text("Save")
             }
             .buttonStyle(.borderedProminent)
             .disabled(!canSave || isSaving)
@@ -228,74 +231,13 @@ struct MCPServerEditorSheet: View {
         )
     }
 
-    // MARK: - Test section
-
-    private var testSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Test connection")
-                    .font(.system(size: ClaudeTheme.size(11), weight: .semibold))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button {
-                    Task { await runTest() }
-                } label: {
-                    if isProbing { ProgressView().controlSize(.small) }
-                    else { Text("Test") }
-                }
-                .buttonStyle(.bordered)
-                .disabled(isProbing || !canProbe)
-            }
-
-            if let probe {
-                if probe.ok {
-                    HStack(spacing: 8) {
-                        Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                        Text(verbatim: probeSuccessText(probe))
-                            .font(.system(size: ClaudeTheme.size(11)))
-                    }
-                    if !probe.tools.isEmpty {
-                        ForEach(probe.tools.prefix(8)) { tool in
-                            Text(verbatim: "• \(tool.name)")
-                                .font(.system(size: ClaudeTheme.size(11), design: .monospaced))
-                                .foregroundStyle(.secondary)
-                        }
-                        if probe.tools.count > 8 {
-                            Text(verbatim: "+ \(probe.tools.count - 8) more")
-                                .font(.system(size: ClaudeTheme.size(11)))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                } else {
-                    HStack(alignment: .top, spacing: 8) {
-                        Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
-                        Text(verbatim: probe.error ?? "Probe failed.")
-                            .font(.system(size: ClaudeTheme.size(11)))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
-            }
-        }
-    }
-
-    private func probeSuccessText(_ probe: MCPProbeResult) -> String {
-        var parts: [String] = ["Connected"]
-        if let name = probe.serverName { parts.append("(\(name))") }
-        parts.append("— \(probe.tools.count) tools")
-        return parts.joined(separator: " ")
-    }
-
     // MARK: - Actions
-
-    private func runTest() async {
-        isProbing = true
-        defer { isProbing = false }
-        probe = await appState.mcp.probe(spec: spec)
-    }
 
     private func save() async {
         isSaving = true
         defer { isSaving = false }
+        // AppState.addMCPServer performs the add + auto-probe (pin + fetch tools),
+        // so the row already shows live status by the time the sheet dismisses.
         let ok = await onSave(spec, scope)
         if ok { dismiss() }
     }
@@ -304,15 +246,6 @@ struct MCPServerEditorSheet: View {
 
     private var canSave: Bool {
         guard !spec.name.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
-        switch spec.transport {
-        case .stdio:
-            return !spec.command.trimmingCharacters(in: .whitespaces).isEmpty
-        case .http, .sse:
-            return URL(string: spec.url) != nil && !spec.url.isEmpty
-        }
-    }
-
-    private var canProbe: Bool {
         switch spec.transport {
         case .stdio:
             return !spec.command.trimmingCharacters(in: .whitespaces).isEmpty

@@ -180,7 +180,12 @@ struct MainView: View {
                        minHeight: 600, idealHeight: 1000, maxHeight: 1200)
         }
         .sheet(item: Bindable(windowState).diffFile) { file in
-            FileDiffView(filePath: file.path, fileName: file.name, editHunks: file.editHunks)
+            FileDiffView(
+                filePath: file.path,
+                fileName: file.name,
+                editHunks: file.editHunks,
+                gitDiffMode: file.gitDiffMode
+            )
                 .frame(minWidth: 1000, idealWidth: 1400, maxWidth: 1920,
                        minHeight: 600, idealHeight: 1000, maxHeight: 1200)
         }
@@ -590,11 +595,27 @@ struct ChatDetailModifiers: ViewModifier {
         return windowState.pendingPermissions.first(where: { $0.id == id })
     }
 
+    private var presentedPermissionModalRequest: PermissionRequest? {
+        guard let request = presentedRequest, request.toolName != "AskUserQuestion" else { return nil }
+        return request
+    }
+
+    private var questionSheetBinding: Binding<Bool> {
+        Binding(
+            get: { presentedRequest?.toolName == "AskUserQuestion" },
+            set: { isPresented in
+                if !isPresented, presentedRequest?.toolName == "AskUserQuestion" {
+                    windowState.presentedPermissionId = nil
+                }
+            }
+        )
+    }
+
     func body(content: Content) -> some View {
         content
             .animation(.spring(response: 0.3, dampingFraction: 0.85), value: windowState.pendingPermissions.count)
             .overlay {
-                if let request = presentedRequest {
+                if let request = presentedPermissionModalRequest {
                     ZStack {
                         Color.black.opacity(0.4).ignoresSafeArea()
                             .onTapGesture { windowState.presentedPermissionId = nil }
@@ -604,6 +625,27 @@ struct ChatDetailModifiers: ViewModifier {
                             .transition(.scale(scale: 0.95).combined(with: .opacity))
                     }
                     .animation(.spring(response: 0.3, dampingFraction: 0.85), value: windowState.presentedPermissionId)
+                }
+            }
+            .sheet(isPresented: questionSheetBinding) {
+                if let request = presentedRequest, request.toolName == "AskUserQuestion" {
+                    QuestionSheetView(
+                        request: request,
+                        remainingCount: max(0, windowState.pendingPermissions.count - 1),
+                        onSubmit: { answers in
+                            windowState.submitQuestionAnswersHandler?(request.id, answers)
+                        },
+                        onClose: {
+                            // Just dismiss — keep the request in the queue so the user
+                            // can re-open it from the banner later.
+                            windowState.presentedPermissionId = nil
+                        },
+                        onSkipAll: {
+                            windowState.skipQuestionHandler?(request.id)
+                        }
+                    )
+                    .environment(appState)
+                    .environment(windowState)
                 }
             }
             .onChange(of: windowState.pendingPermissions.map(\.id)) { _, newIds in

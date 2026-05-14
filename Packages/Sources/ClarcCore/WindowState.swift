@@ -98,9 +98,14 @@ public final class WindowState {
 
     // MARK: - AskUserQuestion Response Handler
 
-    /// Invoked by chat UI when the user answers an `AskUserQuestion` tool prompt.
-    /// Parameters: (toolUseId, optionLabel). Set by `AppState` at window init.
-    public var answerQuestionHandler: (@MainActor @Sendable (String, String) -> Void)?
+    /// Invoked by the question sheet when the user submits answers for an
+    /// `AskUserQuestion` tool prompt. Parameters: (toolUseId, answersByQuestionIndex).
+    /// Set by `AppState` at window init.
+    public var submitQuestionAnswersHandler: (@MainActor @Sendable (String, [Int: AskUserQuestion.Answer]) -> Void)?
+
+    /// Invoked by the question sheet when the user dismisses without answering.
+    /// Resolves the underlying PreToolUse hook as `deny`. Parameter: toolUseId.
+    public var skipQuestionHandler: (@MainActor @Sendable (String) -> Void)?
 
     // MARK: - Plan Decision Handler
 

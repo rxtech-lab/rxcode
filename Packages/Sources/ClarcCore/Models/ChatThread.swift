@@ -18,6 +18,9 @@ public final class ChatThread {
     public var worktreePath: String?
     public var worktreeBranch: String?
 
+    public var isArchived: Bool = false
+    public var archivedAt: Date?
+
     public init(
         id: String,
         projectId: UUID,
@@ -30,7 +33,9 @@ public final class ChatThread {
         effort: String? = nil,
         permissionModeRaw: String? = nil,
         worktreePath: String? = nil,
-        worktreeBranch: String? = nil
+        worktreeBranch: String? = nil,
+        isArchived: Bool = false,
+        archivedAt: Date? = nil
     ) {
         self.id = id
         self.projectId = projectId
@@ -44,6 +49,8 @@ public final class ChatThread {
         self.permissionModeRaw = permissionModeRaw
         self.worktreePath = worktreePath
         self.worktreeBranch = worktreeBranch
+        self.isArchived = isArchived
+        self.archivedAt = archivedAt
     }
 }
 
@@ -61,7 +68,9 @@ extension ChatThread {
             permissionMode: permissionModeRaw.flatMap(PermissionMode.init(rawValue:)),
             origin: .cliBacked,
             worktreePath: worktreePath,
-            worktreeBranch: worktreeBranch
+            worktreeBranch: worktreeBranch,
+            isArchived: isArchived,
+            archivedAt: archivedAt
         )
     }
 
@@ -74,6 +83,8 @@ extension ChatThread {
         permissionModeRaw = summary.permissionMode?.rawValue
         worktreePath = summary.worktreePath
         worktreeBranch = summary.worktreeBranch
+        isArchived = summary.isArchived
+        archivedAt = summary.archivedAt
     }
 
     public static func from(_ summary: ChatSession.Summary, cliSessionId: String? = nil) -> ChatThread {
@@ -89,7 +100,9 @@ extension ChatThread {
             effort: summary.effort,
             permissionModeRaw: summary.permissionMode?.rawValue,
             worktreePath: summary.worktreePath,
-            worktreeBranch: summary.worktreeBranch
+            worktreeBranch: summary.worktreeBranch,
+            isArchived: summary.isArchived,
+            archivedAt: summary.archivedAt
         )
     }
 }

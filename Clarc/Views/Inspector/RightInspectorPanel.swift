@@ -339,17 +339,14 @@ private struct ThisThreadFileRow: View {
     }
 }
 
-// MARK: - Unstaged / Staged / Branch tabs reuse the existing GitStatusView
+// MARK: - Unstaged / Staged tabs — list actual files
 
 struct UnstagedChangesView: View {
     @Environment(WindowState.self) private var windowState
 
     var body: some View {
         if let project = windowState.selectedProject {
-            VStack(spacing: 0) {
-                GitStatusView(projectPath: project.path)
-                Spacer()
-            }
+            GitChangeListView(projectPath: project.path, mode: .unstaged)
         } else {
             InspectorEmptyState(title: "No project selected", message: "Select a project to see unstaged changes.")
         }
@@ -361,10 +358,7 @@ struct StagedChangesView: View {
 
     var body: some View {
         if let project = windowState.selectedProject {
-            VStack(spacing: 0) {
-                GitStatusView(projectPath: project.path)
-                Spacer()
-            }
+            GitChangeListView(projectPath: project.path, mode: .staged)
         } else {
             InspectorEmptyState(title: "No project selected", message: "Select a project to see staged changes.")
         }
@@ -384,4 +378,298 @@ struct BranchInfoView: View {
             InspectorEmptyState(title: "No project selected", message: "Select a project to inspect its branch.")
         }
     }
+}
+
+// MARK: - Git Change List
+
+private enum GitChangeListMode {
+    case unstaged
+    case staged
+}
+
+private struct GitChangeFile: Identifiable, Hashable {
+    let id = UUID()
+    let path: String       // absolute path
+    let displayPath: String // path relative to repo
+    let statusChar: Character
+    let isUntracked: Bool
+    let diffMode: PreviewFile.GitDiffMode
+
+    var name: String {
+        (displayPath as NSString).lastPathComponent
+    }
+
+    var parentDirectory: String {
+        (displayPath as NSString).deletingLastPathComponent
+    }
+}
+
+private struct GitChangeListView: View {
+    let projectPath: String
+    let mode: GitChangeListMode
+
+    @Environment(AppState.self) private var appState
+    @Environment(WindowState.self) private var windowState
+    @State private var files: [GitChangeFile] = []
+    @State private var isLoading = true
+    @State private var headWatcher: (any DispatchSourceFileSystemObject)?
+    @State private var refreshTask: Task<Void, Never>?
+
+    var body: some View {
+        Group {
+            if isLoading {
+                VStack {
+                    Spacer()
+                    ProgressView().controlSize(.small)
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if files.isEmpty {
+                InspectorEmptyState(
+                    title: emptyTitle,
+                    message: emptyMessage
+                )
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 4) {
+                        ForEach(files) { file in
+                            GitChangeFileRow(file: file)
+                        }
+                    }
+                    .padding(12)
+                }
+            }
+        }
+        .task(id: "\(projectPath)|\(modeKey)") {
+            await refresh()
+        }
+        .onChange(of: appState.isStreaming(in: windowState)) { old, new in
+            if old && !new { triggerRefresh() }
+        }
+        .onAppear { startWatchingHEAD() }
+        .onDisappear { stopWatchingHEAD() }
+        .onChange(of: projectPath) { _, _ in
+            Task { @MainActor in
+                stopWatchingHEAD()
+                startWatchingHEAD()
+            }
+        }
+    }
+
+    private var modeKey: String {
+        switch mode {
+        case .unstaged: return "unstaged"
+        case .staged: return "staged"
+        }
+    }
+
+    private var emptyTitle: String {
+        switch mode {
+        case .unstaged: return "No unstaged changes"
+        case .staged: return "No staged changes"
+        }
+    }
+
+    private var emptyMessage: String {
+        switch mode {
+        case .unstaged: return "Working tree matches the index."
+        case .staged: return "Nothing in the index waiting to be committed."
+        }
+    }
+
+    private func triggerRefresh() {
+        refreshTask?.cancel()
+        refreshTask = Task { await refresh() }
+    }
+
+    private func refresh() async {
+        isLoading = true
+        let path = projectPath
+        let m = mode
+        let result = await Task.detached(priority: .userInitiated) {
+            await loadChangedFiles(at: path, mode: m)
+        }.value
+        guard !Task.isCancelled else { return }
+        files = result
+        isLoading = false
+    }
+
+    private func startWatchingHEAD() {
+        let headPath = projectPath + "/.git/HEAD"
+        let fd = open(headPath, O_EVTONLY)
+        guard fd != -1 else { return }
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd,
+            eventMask: [.write, .delete, .rename, .attrib],
+            queue: .main
+        )
+        source.setEventHandler { [weak source] in
+            let data = source?.data ?? []
+            triggerRefresh()
+            if !data.intersection([.delete, .rename]).isEmpty {
+                stopWatchingHEAD()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    startWatchingHEAD()
+                }
+            }
+        }
+        source.setCancelHandler { close(fd) }
+        source.resume()
+        headWatcher = source
+    }
+
+    private func stopWatchingHEAD() {
+        headWatcher?.cancel()
+        headWatcher = nil
+    }
+}
+
+private struct GitChangeFileRow: View {
+    let file: GitChangeFile
+    @Environment(WindowState.self) private var windowState
+    @State private var isHovering = false
+
+    var body: some View {
+        Button {
+            windowState.diffFile = PreviewFile(
+                path: file.path,
+                name: file.name,
+                gitDiffMode: file.diffMode
+            )
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: iconName)
+                    .font(.system(size: ClaudeTheme.size(12)))
+                    .foregroundStyle(iconColor)
+                    .frame(width: 16)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(file.name)
+                        .font(.system(size: ClaudeTheme.size(13), weight: .medium, design: .monospaced))
+                        .foregroundStyle(ClaudeTheme.textPrimary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    if !file.parentDirectory.isEmpty {
+                        Text(file.parentDirectory)
+                            .font(.system(size: ClaudeTheme.size(11)))
+                            .foregroundStyle(ClaudeTheme.textTertiary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
+
+                Spacer(minLength: 6)
+
+                Text(badgeLabel)
+                    .font(.system(size: ClaudeTheme.size(10), weight: .semibold, design: .monospaced))
+                    .foregroundStyle(iconColor)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(iconColor.opacity(0.15), in: Capsule())
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
+                    .fill(isHovering ? ClaudeTheme.surfaceSecondary : Color.clear)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+    }
+
+    private var iconName: String {
+        if file.isUntracked { return "doc.badge.plus" }
+        switch file.statusChar {
+        case "A": return "plus.circle"
+        case "D": return "minus.circle"
+        case "R": return "arrow.right.circle"
+        case "C": return "doc.on.doc"
+        case "U": return "exclamationmark.triangle"
+        default:  return "pencil"
+        }
+    }
+
+    private var iconColor: Color {
+        if file.isUntracked { return ClaudeTheme.statusSuccess }
+        switch file.statusChar {
+        case "A": return ClaudeTheme.statusSuccess
+        case "D": return ClaudeTheme.statusError
+        case "U": return ClaudeTheme.statusError
+        default:  return ClaudeTheme.statusWarning
+        }
+    }
+
+    private var badgeLabel: String {
+        if file.isUntracked { return "?" }
+        return String(file.statusChar)
+    }
+}
+
+private func loadChangedFiles(at projectPath: String, mode: GitChangeListMode) async -> [GitChangeFile] {
+    guard let raw = await GitHelper.run(["status", "--porcelain=v1", "-z"], at: projectPath) else {
+        return []
+    }
+    return parsePorcelainZ(raw, mode: mode, projectPath: projectPath)
+}
+
+/// Parses `git status --porcelain=v1 -z` output.
+/// Entries are NUL-terminated; renames have an extra NUL-terminated "old path" record.
+private func parsePorcelainZ(
+    _ raw: String,
+    mode: GitChangeListMode,
+    projectPath: String
+) -> [GitChangeFile] {
+    var result: [GitChangeFile] = []
+    let tokens = raw.split(separator: "\0", omittingEmptySubsequences: false).map(String.init)
+    var i = 0
+    while i < tokens.count {
+        let entry = tokens[i]
+        i += 1
+        guard entry.count >= 3 else { continue }
+        let chars = Array(entry)
+        let indexChar = chars[0]
+        let worktreeChar = chars[1]
+        let displayPath = String(entry.dropFirst(3))
+
+        let isUntracked = (indexChar == "?" && worktreeChar == "?")
+
+        let isRename = indexChar == "R" || worktreeChar == "R"
+        if isRename, i < tokens.count {
+            i += 1 // skip the rename "from" path
+        }
+
+        let include: Bool
+        let statusChar: Character
+        switch mode {
+        case .unstaged:
+            include = isUntracked || (worktreeChar != " " && worktreeChar != "?")
+            statusChar = isUntracked ? "?" : worktreeChar
+        case .staged:
+            include = !isUntracked && indexChar != " " && indexChar != "?"
+            statusChar = indexChar
+        }
+
+        guard include else { continue }
+        let absolute = (projectPath as NSString).appendingPathComponent(displayPath)
+        let diffMode: PreviewFile.GitDiffMode
+        if isUntracked {
+            diffMode = .untracked
+        } else {
+            switch mode {
+            case .unstaged: diffMode = .unstaged
+            case .staged:   diffMode = .staged
+            }
+        }
+        result.append(GitChangeFile(
+            path: absolute,
+            displayPath: displayPath,
+            statusChar: statusChar,
+            isUntracked: isUntracked && mode == .unstaged,
+            diffMode: diffMode
+        ))
+    }
+    return result.sorted { $0.displayPath.localizedStandardCompare($1.displayPath) == .orderedAscending }
 }

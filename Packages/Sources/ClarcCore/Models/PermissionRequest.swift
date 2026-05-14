@@ -9,19 +9,24 @@ public struct PermissionRequest: Identifiable, Sendable {
     public let runToken: String
     /// Snapshotted at hook receipt so the modal isn't affected by later picker changes.
     public let streamPermissionMode: PermissionMode?
+    /// CLI session this hook belongs to. Used by the UI to decide whether to auto-present
+    /// (only when the user is viewing this session) versus simply queueing for later.
+    public let sessionId: String?
 
     public init(
         id: String,
         toolName: String,
         toolInput: [String: JSONValue],
         runToken: String,
-        streamPermissionMode: PermissionMode? = nil
+        streamPermissionMode: PermissionMode? = nil,
+        sessionId: String? = nil
     ) {
         self.id = id
         self.toolName = toolName
         self.toolInput = toolInput
         self.runToken = runToken
         self.streamPermissionMode = streamPermissionMode
+        self.sessionId = sessionId
     }
 }
 

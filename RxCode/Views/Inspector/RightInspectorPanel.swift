@@ -28,8 +28,6 @@ struct RightInspectorPanel: View {
         VStack(spacing: 0) {
             header
 
-            ClaudeThemeDivider()
-
             Group {
                 switch windowState.inspectorMode {
                 case .review:
@@ -47,6 +45,11 @@ struct RightInspectorPanel: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(ClaudeTheme.surfaceElevated)
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(ClaudeTheme.borderSubtle.opacity(0.6))
+                .frame(width: 0.5)
+        }
         .frame(
             minWidth: windowState.showInspector ? 340 : 0,
             maxWidth: windowState.showInspector ? .infinity : 0
@@ -72,14 +75,14 @@ struct RightInspectorPanel: View {
 
     @ViewBuilder
     private var header: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             ModeSwitchControl(selection: Bindable(windowState).inspectorMode)
 
             switch windowState.inspectorMode {
             case .review:
-                ReviewTabControl(selection: Bindable(windowState).inspectorReviewTab)
+                ReviewTabPicker(selection: Bindable(windowState).inspectorReviewTab)
             case .inspector:
-                InspectorTabControl(
+                InspectorTabPicker(
                     selection: Bindable(windowState).inspectorTab,
                     onTabClick: { tab in bumpFocus(for: tab) }
                 )
@@ -89,30 +92,31 @@ struct RightInspectorPanel: View {
 
             if windowState.inspectorMode == .inspector {
                 if windowState.inspectorTab == .terminal {
-                    InspectorIconButton(help: "Reset Terminal") {
+                    HeaderIconButton(systemImage: "arrow.counterclockwise", help: "Reset Terminal") {
                         inspectorProcess.terminate()
                         inspectorProcess = TerminalProcess()
                         terminalResetID = UUID()
                     }
                 } else if windowState.inspectorTab == .memo {
-                    InspectorIconButton(help: "Clear Memo") {
+                    HeaderIconButton(systemImage: "trash", help: "Clear Memo") {
                         memoClearID = UUID()
                     }
                 }
             }
 
-            Button {
+            HeaderIconButton(systemImage: "xmark", help: "Close") {
                 windowState.showInspector = false
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: ClaudeTheme.size(11), weight: .medium))
-                    .frame(width: 20, height: 20)
             }
-            .buttonStyle(.plain)
             .keyboardShortcut("w", modifiers: .command)
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 14)
         .padding(.vertical, 10)
+        .background(ClaudeTheme.surfaceElevated)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(ClaudeTheme.borderSubtle.opacity(0.5))
+                .frame(height: 0.5)
+        }
     }
 
     // MARK: - Review content
@@ -138,34 +142,79 @@ private struct ModeSwitchControl: View {
     @Binding var selection: InspectorMode
 
     var body: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: 0) {
             ForEach(InspectorMode.allCases, id: \.self) { mode in
+                let isSelected = selection == mode
                 Button {
-                    selection = mode
+                    withAnimation(.easeInOut(duration: 0.18)) { selection = mode }
                 } label: {
                     Text(LocalizedStringKey(mode.rawValue))
-                        .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+                        .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
                         .lineLimit(1)
                         .fixedSize(horizontal: true, vertical: false)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
                         .contentShape(Rectangle())
-                        .foregroundStyle(selection == mode ? ClaudeTheme.textOnAccent : ClaudeTheme.textSecondary)
+                        .foregroundStyle(isSelected ? ClaudeTheme.textOnAccent : ClaudeTheme.textTertiary)
                         .background(
-                            selection == mode ? ClaudeTheme.accent : Color.clear,
-                            in: RoundedRectangle(cornerRadius: 6)
+                            ZStack {
+                                if isSelected {
+                                    RoundedRectangle(cornerRadius: 7)
+                                        .fill(ClaudeTheme.accent)
+                                        .shadow(color: ClaudeTheme.accent.opacity(0.25), radius: 3, x: 0, y: 1)
+                                }
+                            }
                         )
                 }
                 .buttonStyle(.plain)
             }
         }
-        .background(ClaudeTheme.surfaceSecondary, in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
+        .padding(2)
+        .background(ClaudeTheme.surfaceSecondary.opacity(0.7), in: RoundedRectangle(cornerRadius: 9))
     }
 }
 
-// MARK: - ReviewTabControl
+// MARK: - HeaderPickerLabel
 
-private struct ReviewTabControl: View {
+/// Shared chevron-down dropdown label used by both Review and Inspector mode.
+private struct HeaderPickerLabel: View {
+    let icon: String?
+    let title: String
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: 5) {
+            if let icon {
+                Image(systemName: icon)
+                    .font(.system(size: ClaudeTheme.size(11), weight: .semibold))
+                    .foregroundStyle(ClaudeTheme.textSecondary)
+            }
+            Text(LocalizedStringKey(title))
+                .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
+                .foregroundStyle(ClaudeTheme.textPrimary)
+            Image(systemName: "chevron.down")
+                .font(.system(size: ClaudeTheme.size(9), weight: .bold))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+                .padding(.leading, 1)
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 5)
+        .background(
+            (isHovered ? ClaudeTheme.surfaceSecondary : Color.clear),
+            in: RoundedRectangle(cornerRadius: 7)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 7)
+                .strokeBorder(ClaudeTheme.borderSubtle.opacity(isHovered ? 0.6 : 0.0), lineWidth: 0.5)
+        )
+        .onHover { isHovered = $0 }
+        .animation(.easeInOut(duration: 0.12), value: isHovered)
+    }
+}
+
+// MARK: - ReviewTabPicker
+
+private struct ReviewTabPicker: View {
     @Binding var selection: InspectorReviewTab
 
     var body: some View {
@@ -181,19 +230,67 @@ private struct ReviewTabControl: View {
                 }
             }
         } label: {
-            HStack(spacing: 4) {
-                Text(LocalizedStringKey(selection.rawValue))
-                    .font(.system(size: ClaudeTheme.size(13), weight: .medium))
-                Image(systemName: "chevron.down")
-                    .font(.system(size: ClaudeTheme.size(9), weight: .semibold))
-            }
-            .foregroundStyle(ClaudeTheme.textPrimary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .background(ClaudeTheme.surfaceSecondary, in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
+            HeaderPickerLabel(icon: nil, title: selection.rawValue)
         }
         .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
         .fixedSize()
+    }
+}
+
+// MARK: - InspectorTabPicker
+
+private struct InspectorTabPicker: View {
+    @Binding var selection: InspectorTab
+    var onTabClick: (InspectorTab) -> Void = { _ in }
+
+    var body: some View {
+        Menu {
+            ForEach(InspectorTab.allCases, id: \.self) { tab in
+                Button {
+                    selection = tab
+                    onTabClick(tab)
+                } label: {
+                    HStack {
+                        Image(systemName: tab.icon)
+                        Text(LocalizedStringKey(tab.rawValue))
+                        if selection == tab { Image(systemName: "checkmark") }
+                    }
+                }
+            }
+        } label: {
+            HeaderPickerLabel(icon: selection.icon, title: selection.rawValue)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+    }
+}
+
+// MARK: - HeaderIconButton
+
+private struct HeaderIconButton: View {
+    let systemImage: String
+    let help: String
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: ClaudeTheme.size(11), weight: .semibold))
+                .foregroundStyle(isHovered ? ClaudeTheme.textPrimary : ClaudeTheme.textTertiary)
+                .frame(width: 22, height: 22)
+                .background(
+                    isHovered ? ClaudeTheme.surfaceSecondary : Color.clear,
+                    in: RoundedRectangle(cornerRadius: 6)
+                )
+        }
+        .buttonStyle(.plain)
+        .help(help)
+        .onHover { isHovered = $0 }
+        .animation(.easeInOut(duration: 0.12), value: isHovered)
     }
 }
 

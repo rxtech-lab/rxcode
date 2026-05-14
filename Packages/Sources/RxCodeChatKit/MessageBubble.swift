@@ -260,9 +260,9 @@ struct MessageBubble: View {
                     .buttonStyle(.plain)
                 }
             }
-            .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: 500, alignment: .leading)
             .bubbleStyle(.user)
+            .fixedSize(horizontal: true, vertical: false)
             .overlay(alignment: .bottomTrailing) {
                 if isHoveringUserBubble {
                     HStack(spacing: 3) {
@@ -473,6 +473,10 @@ struct MessageBubble: View {
                             .aspectRatio(contentMode: .fill)
                             .frame(width: 40, height: 40)
                             .clipShape(RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
+                                    .strokeBorder(ClaudeTheme.border, lineWidth: BubbleStyle.borderWidth)
+                            )
                             .contentShape(Rectangle())
                             .onTapGesture { previewImagePath = path }
                     } else {
@@ -499,6 +503,10 @@ struct MessageBubble: View {
                             .aspectRatio(contentMode: .fill)
                             .frame(width: 40, height: 40)
                             .clipShape(RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
+                                    .strokeBorder(ClaudeTheme.border, lineWidth: BubbleStyle.borderWidth)
+                            )
                     } else {
                         Image(systemName: info.isImage ? "photo" : "doc")
                             .font(.system(size: ClaudeTheme.messageSize(14)))
@@ -588,27 +596,7 @@ private struct MessageImagePreviewSheet: View {
     let onDismiss: () -> Void
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text(URL(fileURLWithPath: path).lastPathComponent)
-                    .font(.system(size: ClaudeTheme.messageSize(12), weight: .medium))
-                    .foregroundStyle(ClaudeTheme.textSecondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Spacer()
-                Button(action: onDismiss) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: ClaudeTheme.messageSize(16)))
-                        .foregroundStyle(ClaudeTheme.textSecondary)
-                }
-                .buttonStyle(.plain)
-                .keyboardShortcut(.cancelAction)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-
-            Divider()
-
+        NavigationStack {
             Group {
                 if let nsImage = NSImage(contentsOfFile: path) {
                     Image(nsImage: nsImage)
@@ -627,6 +615,13 @@ private struct MessageImagePreviewSheet: View {
                 }
             }
             .padding(16)
+            .navigationTitle(URL(fileURLWithPath: path).lastPathComponent)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(String(localized: "Close", bundle: .module), action: onDismiss)
+                        .keyboardShortcut(.cancelAction)
+                }
+            }
         }
         .frame(minWidth: 480, idealWidth: 720, minHeight: 360, idealHeight: 540)
         .background(ClaudeTheme.surfacePrimary)

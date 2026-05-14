@@ -49,6 +49,7 @@ actor PersistenceService {
                 meta: SessionMetaStore.Meta(
                     title: titleToWrite,
                     isPinned: session.isPinned,
+                    agentProvider: session.agentProvider,
                     model: session.model,
                     effort: session.effort,
                     permissionMode: session.permissionMode,
@@ -58,7 +59,7 @@ actor PersistenceService {
                 )
             )
 
-        case .legacyRxCode:
+        case .legacyRxCode, .codexAppServer:
             let dir = baseURL
                 .appendingPathComponent("sessions")
                 .appendingPathComponent(session.projectId.uuidString)
@@ -90,11 +91,12 @@ actor PersistenceService {
                 guard var summary = decode(ChatSession.Summary.self, from: url) else { return nil }
                 // Files saved before this change may decode as `.legacyRxCode`
                 // already (default), but be defensive.
-                if summary.origin != .legacyRxCode {
+                if summary.origin != .legacyRxCode && summary.origin != .codexAppServer {
                     summary = ChatSession.Summary(
                         id: summary.id, projectId: summary.projectId, title: summary.title,
                         createdAt: summary.createdAt, updatedAt: summary.updatedAt,
-                        isPinned: summary.isPinned, model: summary.model,
+                        isPinned: summary.isPinned, agentProvider: summary.agentProvider,
+                        model: summary.model,
                         effort: summary.effort, permissionMode: summary.permissionMode,
                         origin: .legacyRxCode
                     )
@@ -148,7 +150,7 @@ actor PersistenceService {
             // it survives, the merge in AppState falls back to it after the
             // jsonl is gone and the entry resurrects on the next reload.
             try removeLegacySessionFile(projectId: projectId, sessionId: sessionId)
-        case .legacyRxCode:
+        case .legacyRxCode, .codexAppServer:
             try removeLegacySessionFile(projectId: projectId, sessionId: sessionId)
         }
     }
@@ -175,7 +177,7 @@ actor PersistenceService {
                 cwd: cwd,
                 projectId: summary.projectId
             )
-        case .legacyRxCode:
+        case .legacyRxCode, .codexAppServer:
             return loadLegacySessionSync(projectId: summary.projectId, sessionId: summary.id)
         }
     }

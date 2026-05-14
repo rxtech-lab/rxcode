@@ -2,13 +2,13 @@ import Foundation
 import RxCodeCore
 import os
 
-// MARK: - ClaudeService
+// MARK: - ClaudeCodeServer
 
 /// Manages the Claude Code CLI process lifecycle and NDJSON streaming.
 ///
 /// Spawns the `claude` binary with stream-json I/O, reads stdout as an
 /// ``AsyncStream<StreamEvent>``, and writes user messages to stdin in NDJSON format.
-actor ClaudeService {
+actor ClaudeCodeServer {
 
     // MARK: - State
 
@@ -33,7 +33,7 @@ actor ClaudeService {
     private let cliStore: CLISessionStore
     private let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "com.claudework",
-        category: "ClaudeService"
+        category: "ClaudeCodeServer"
     )
 
     init(cliStore: CLISessionStore) {
@@ -263,7 +263,7 @@ actor ClaudeService {
     /// Uses a one-shot `claude -p` invocation with Haiku — runs outside of the streaming
     /// pipeline and does NOT hit the PermissionServer hook (no `--settings` passed).
     /// Returns nil on any failure; callers should keep the placeholder title in that case.
-    func generateSessionTitle(firstUserMessage: String) async -> String? {
+    func generateSessionTitle(firstUserMessage: String, model: String = "claude-haiku-4-5-20251001") async -> String? {
         guard let binary = await findClaudeBinary() else { return nil }
         let trimmedUser = String(firstUserMessage.prefix(500))
         let prompt = """
@@ -276,7 +276,7 @@ actor ClaudeService {
         // user's broken tool schema (e.g. an MCP server returning invalid JSON schema)
         // can't blow up the title call with "API Error: 400 tools.NN.custom.input_schema".
         let emptyMCPConfigPath = writeEmptyMCPConfig()
-        var args: [String] = ["-p", prompt, "--output-format", "text", "--model", "claude-haiku-4-5-20251001"]
+        var args: [String] = ["-p", prompt, "--output-format", "text", "--model", model]
         if let emptyMCPConfigPath {
             args.append(contentsOf: ["--strict-mcp-config", "--mcp-config", emptyMCPConfigPath])
         }
@@ -908,3 +908,5 @@ actor ClaudeService {
         stdinHandles.removeAll()
     }
 }
+
+typealias ClaudeService = ClaudeCodeServer

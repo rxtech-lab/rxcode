@@ -8,10 +8,6 @@ struct StatusLineView: View {
     @State private var showSevenDayPopover = false
     @State private var showContextPopover = false
 
-    private var modelDisplayName: String {
-        chatBridge.modelDisplayName
-    }
-
     private var totalResponseDuration: Double {
         chatBridge.messages
             .filter { $0.role == .assistant }
@@ -26,28 +22,11 @@ struct StatusLineView: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            segment(icon: "cpu", text: modelDisplayName, color: ClaudeTheme.statusSuccess)
+            providerMenuSegment()
 
             Divider().frame(height: 12)
 
-            rateLimitSegment(
-                label: String(localized: "5h", bundle: .module),
-                icon: "clock",
-                percent: rateLimit?.fiveHourPercent,
-                resetsAt: rateLimit?.fiveHourResetsAt,
-                isPresented: $showFiveHourPopover,
-                title: "5-hour rate limit",
-                body: "Tracks usage against Anthropic's rolling 5-hour limit. Resets gradually as older requests age out."
-            )
-            rateLimitSegment(
-                label: String(localized: "7d", bundle: .module),
-                icon: "calendar",
-                percent: rateLimit?.sevenDayPercent,
-                resetsAt: rateLimit?.sevenDayResetsAt,
-                isPresented: $showSevenDayPopover,
-                title: "7-day rate limit",
-                body: "Tracks usage against Anthropic's rolling 7-day limit. Resets gradually as older requests age out."
-            )
+            usageSegments()
 
             Divider().frame(height: 12)
 
@@ -88,31 +67,116 @@ struct StatusLineView: View {
                 Task { await refreshRateLimit() }
             }
         }
+        .onChange(of: chatBridge.agentProvider) {
+            rateLimit = nil
+            Task { await refreshRateLimit() }
+        }
     }
 
     // MARK: - Version Segment
 
     @ViewBuilder
     private func versionSegment() -> some View {
-        if let cli = chatBridge.claudeVersion {
+        if let cli = currentRuntimeVersion {
             HStack(spacing: 4) {
                 Image(systemName: "sparkle")
                     .font(.system(size: ClaudeTheme.size(10)))
-                Text("CC \(cli)")
+                Text("\(currentRuntimeShortName) \(cli)")
             }
             .foregroundStyle(ClaudeTheme.textTertiary)
         }
     }
 
-    // MARK: - Segment
-
-    private func segment(icon: String, text: String, color: Color) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: icon)
-                .font(.system(size: ClaudeTheme.size(10)))
-            Text(text)
+    private var currentRuntimeVersion: String? {
+        switch chatBridge.agentProvider {
+        case .claudeCode: return chatBridge.claudeVersion
+        case .codex: return chatBridge.codexVersion
         }
-        .foregroundStyle(color)
+    }
+
+    private var currentRuntimeShortName: String {
+        switch chatBridge.agentProvider {
+        case .claudeCode: return "CC"
+        case .codex: return "Codex"
+        }
+    }
+
+    // MARK: - Provider Menu
+
+    private func providerMenuSegment() -> some View {
+        Menu {
+            ForEach(AgentProvider.allCases, id: \.self) { provider in
+                Button {
+                    chatBridge.setSessionProvider(provider)
+                } label: {
+                    Text(provider.displayName)
+                    if chatBridge.agentProvider == provider {
+                        Image(systemName: "checkmark")
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: chatBridge.agentProvider == .codex ? "chevron.left.forwardslash.chevron.right" : "cpu")
+                    .font(.system(size: ClaudeTheme.size(10)))
+                Text(chatBridge.agentProvider.displayName)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: ClaudeTheme.size(8), weight: .semibold))
+                    .foregroundStyle(ClaudeTheme.textTertiary)
+            }
+            .foregroundStyle(ClaudeTheme.statusSuccess)
+            .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Client: \(chatBridge.agentProvider.displayName)")
+    }
+
+    // MARK: - Usage Segments
+
+    @ViewBuilder
+    private func usageSegments() -> some View {
+        switch chatBridge.agentProvider {
+        case .claudeCode:
+            rateLimitSegment(
+                label: String(localized: "5h", bundle: .module),
+                icon: "clock",
+                percent: rateLimit?.fiveHourPercent,
+                resetsAt: rateLimit?.fiveHourResetsAt,
+                isPresented: $showFiveHourPopover,
+                title: "5-hour rate limit",
+                body: "Tracks usage against Anthropic's rolling 5-hour limit. Resets gradually as older requests age out."
+            )
+            rateLimitSegment(
+                label: String(localized: "7d", bundle: .module),
+                icon: "calendar",
+                percent: rateLimit?.sevenDayPercent,
+                resetsAt: rateLimit?.sevenDayResetsAt,
+                isPresented: $showSevenDayPopover,
+                title: "7-day rate limit",
+                body: "Tracks usage against Anthropic's rolling 7-day limit. Resets gradually as older requests age out."
+            )
+        case .codex:
+            rateLimitSegment(
+                label: String(localized: "5h", bundle: .module),
+                icon: "clock",
+                percent: rateLimit?.fiveHourPercent,
+                resetsAt: rateLimit?.fiveHourResetsAt,
+                isPresented: $showFiveHourPopover,
+                title: "5-hour rate limit",
+                body: "Tracks usage against Codex's rolling 5-hour limit. Resets gradually as older requests age out."
+            )
+            rateLimitSegment(
+                label: String(localized: "24h", bundle: .module),
+                icon: "calendar",
+                percent: rateLimit?.twentyFourHourPercent,
+                resetsAt: rateLimit?.twentyFourHourResetsAt,
+                isPresented: $showSevenDayPopover,
+                title: "24-hour rate limit",
+                body: "Tracks usage against Codex's rolling 24-hour limit. Resets gradually as older requests age out."
+            )
+        }
     }
 
     // MARK: - Rate Limit Segment

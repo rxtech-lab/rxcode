@@ -16,6 +16,7 @@ actor RateLimitService {
 
     private var cached: RateLimitUsage?
     private var cachedAt: Date?
+    private var fetchTask: Task<RateLimitUsage?, Never>?
     private let cacheTTL: TimeInterval = 300  // 5 minutes
     private var authFailed = false
 
@@ -24,6 +25,18 @@ actor RateLimitService {
             return c
         }
 
+        if let fetchTask {
+            return await fetchTask.value ?? cached
+        }
+
+        let task = Task { await self.fetchUsageUncached(forceRefresh: forceRefresh) }
+        fetchTask = task
+        let usage = await task.value
+        fetchTask = nil
+        return usage ?? cached
+    }
+
+    private func fetchUsageUncached(forceRefresh: Bool) async -> RateLimitUsage? {
         if authFailed && !forceRefresh {
             return cached
         }

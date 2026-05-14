@@ -83,6 +83,7 @@ struct MessageListView: View {
                         StreamingIndicatorView(
                             isThinking: chatBridge.isThinking,
                             startDate: chatBridge.streamingStartDate,
+                            agentProvider: chatBridge.agentProvider,
                             outputTokens: chatBridge.liveOutputTokens
                         )
                         Spacer(minLength: 40)
@@ -546,37 +547,63 @@ struct EmptySessionView: View {
 struct StreamingIndicatorView: View {
     let isThinking: Bool
     var startDate: Date?
+    var agentProvider: AgentProvider = .claudeCode
     var outputTokens: Int = 0
 
     var body: some View {
-        HStack(spacing: 10) {
-            AnimatedDotsView()
-
-            HStack(spacing: 6) {
-                if let startDate {
-                    InlineElapsedTimeView(startDate: startDate)
-                }
-
-                if outputTokens > 0 {
-                    if startDate != nil {
-                        separator
-                    }
-                    HStack(spacing: 3) {
-                        Image(systemName: "arrow.up")
-                            .font(.system(size: ClaudeTheme.size(9), weight: .semibold))
-                        Text(formatTokenCount(outputTokens))
-                            .monospacedDigit()
-                            .contentTransition(.numericText(value: Double(outputTokens)))
-                        Text("tok", bundle: .module)
-                            .foregroundStyle(ClaudeTheme.textTertiary)
-                    }
-                    .animation(.easeInOut(duration: 0.25), value: outputTokens)
+        VStack(alignment: .leading, spacing: 8) {
+            if isThinking {
+                HStack(spacing: 8) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: ClaudeTheme.size(14), weight: .medium))
+                        .foregroundStyle(ClaudeTheme.textTertiary)
+                    Text(thinkingLabel)
+                        .font(.system(size: ClaudeTheme.size(15), weight: .semibold))
+                        .foregroundStyle(ClaudeTheme.textSecondary)
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.65)
+                        .tint(ClaudeTheme.textTertiary)
                 }
             }
-            .font(.system(size: ClaudeTheme.size(11), weight: .medium, design: .monospaced))
-            .foregroundStyle(ClaudeTheme.textSecondary)
+
+            HStack(spacing: 10) {
+                AnimatedDotsView()
+                metadataView
+            }
         }
         .padding(.vertical, 8)
+        .accessibilityLabel(isThinking ? "\(thinkingLabel) in progress" : "Response in progress")
+    }
+
+    private var thinkingLabel: String {
+        agentProvider == .codex ? "reasoning" : "thinking"
+    }
+
+    private var metadataView: some View {
+        HStack(spacing: 6) {
+            if let startDate {
+                InlineElapsedTimeView(startDate: startDate)
+            }
+
+            if outputTokens > 0 {
+                if startDate != nil {
+                    separator
+                }
+                HStack(spacing: 3) {
+                    Image(systemName: "arrow.up.arrow.down")
+                        .font(.system(size: ClaudeTheme.size(9), weight: .semibold))
+                    Text(formatTokenCount(outputTokens))
+                        .monospacedDigit()
+                        .contentTransition(.numericText(value: Double(outputTokens)))
+                    Text("tok", bundle: .module)
+                        .foregroundStyle(ClaudeTheme.textTertiary)
+                }
+                .animation(.easeInOut(duration: 0.25), value: outputTokens)
+            }
+        }
+        .font(.system(size: ClaudeTheme.size(11), weight: .medium, design: .monospaced))
+        .foregroundStyle(ClaudeTheme.textSecondary)
     }
 
     private var separator: some View {

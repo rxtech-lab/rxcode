@@ -153,7 +153,7 @@ public struct ChatMessage: Identifiable, Codable, Sendable, Equatable {
     public mutating func setToolResult(id: String, result: String, isError: Bool) {
         guard let index = toolCallIndex(id: id),
               let toolCall = blocks[index].toolCall else { return }
-        if result.isEmpty && !isError && !toolCall.isKeepAlways {
+        if result.isEmpty && !isError && !toolCall.keepsEmptyResult {
             blocks.remove(at: index)
         } else {
             blocks[index].toolCall?.result = result
@@ -164,8 +164,9 @@ public struct ChatMessage: Identifiable, Codable, Sendable, Equatable {
     public mutating func finalizeToolCalls() {
         blocks.removeAll { block in
             guard let toolCall = block.toolCall else { return false }
-            if toolCall.isKeepAlways { return false }
-            return toolCall.result == nil || (toolCall.result?.isEmpty == true && !toolCall.isError)
+            if toolCall.result == nil { return !toolCall.isKeepAlways }
+            if toolCall.keepsEmptyResult { return false }
+            return toolCall.result?.isEmpty == true && !toolCall.isError
         }
     }
 }
@@ -217,6 +218,12 @@ public struct ToolCall: Identifiable, Codable, Sendable, Equatable {
         Self.keepAlwaysNames.contains(name.lowercased())
     }
 
+    /// Completed read/execution tools may have an empty result, but the chat UI
+    /// still needs the block so it can count them in the collapsed tool summary.
+    public var keepsEmptyResult: Bool {
+        isKeepAlways || ToolCategory(toolName: name).isTransient
+    }
+
     public init(
         id: String,
         name: String,
@@ -235,6 +242,37 @@ public struct ToolCall: Identifiable, Codable, Sendable, Equatable {
 // MARK: - File Edit Extraction
 
 public extension ToolCall {
+    struct FileChangeDiff: Sendable, Equatable {
+        public let path: String
+        public let diff: String
+
+        public init(path: String, diff: String) {
+            self.path = path
+            self.diff = diff
+        }
+
+        /// Synthesize a single `(oldString, newString)` hunk from a unified diff
+        /// body so Codex `fileChange` calls can flow through the same
+        /// `ThreadFileEdit` storage as Claude Edit/MultiEdit/Write.
+        public var hunk: PreviewFile.EditHunk {
+            var removed: [String] = []
+            var added: [String] = []
+            for rawLine in diff.components(separatedBy: "\n") {
+                if rawLine.hasPrefix("---") || rawLine.hasPrefix("+++") { continue }
+                if rawLine.hasPrefix("@@") { continue }
+                if rawLine.hasPrefix("-") {
+                    removed.append(String(rawLine.dropFirst()))
+                } else if rawLine.hasPrefix("+") {
+                    added.append(String(rawLine.dropFirst()))
+                }
+            }
+            return PreviewFile.EditHunk(
+                oldString: removed.joined(separator: "\n"),
+                newString: added.joined(separator: "\n")
+            )
+        }
+    }
+
     /// Edit/MultiEdit/Write input → list of (old, new) hunks. Returns `[]` for
     /// non-edit tools or malformed input. Write is represented as a single
     /// hunk with `oldString == ""` and `newString == content`, so the existing
@@ -261,9 +299,22 @@ public extension ToolCall {
         }
     }
 
+    var fileChangeDiffs: [FileChangeDiff] {
+        guard name.lowercased() == "edit",
+              let changes = input["changes"]?.arrayValue else { return [] }
+
+        return changes.compactMap { entry in
+            guard let obj = entry.objectValue,
+                  let path = obj["path"]?.stringValue,
+                  let diff = obj["diff"]?.stringValue,
+                  !diff.isEmpty else { return nil }
+            return FileChangeDiff(path: path, diff: diff)
+        }
+    }
+
     var editedFilePath: String? {
         guard ["edit", "multiedit", "multi_edit", "write"].contains(name.lowercased()) else { return nil }
-        return input["file_path"]?.stringValue
+        return input["file_path"]?.stringValue ?? fileChangeDiffs.first?.path
     }
 }
 

@@ -36,6 +36,7 @@ struct SessionStreamState {
     var activeToolInputBuffer: String = ""  // accumulator for input_json_delta
 
     // Per-session overrides (persisted in memory across session switches)
+    var agentProvider: AgentProvider?
     var model: String?
     var effort: String?
     var permissionMode: PermissionMode?
@@ -74,6 +75,24 @@ struct SessionStreamState {
     /// Prevents the early (first-text-delta) trigger and the `.result` fallback
     /// from kicking off duplicate generations on the same session.
     var titleGenerationTriggered: Bool = false
+}
+
+enum SummarizationProvider: String, CaseIterable, Identifiable {
+    case selectedClient
+    case claudeCode
+    case codex
+    case openAI
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .selectedClient: return "Selected Client"
+        case .claudeCode: return "Claude Code"
+        case .codex: return "Codex"
+        case .openAI: return "OpenAI"
+        }
+    }
 }
 
 
@@ -163,8 +182,45 @@ final class AppState {
     // MARK: - Model
 
     static let availableModels = ["default", "best", "opus", "opus[1m]", "opusplan", "sonnet", "sonnet[1m]", "haiku"]
+    static let fallbackCodexModels = ["gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex"]
+    nonisolated static let defaultOpenAISummarizationEndpoint = "https://api.openai.com/v1"
+    private static let openAISummarizationKeychainService = "com.idealapp.RxCode.openai-summarization"
+    private static let openAISummarizationKeychainAccount = "apiKey"
+
+    static var availableClaudeModels: [AgentModel] {
+        availableModels.map {
+            AgentModel(provider: .claudeCode, id: $0, displayName: modelDisplayName($0), description: modelDescription($0))
+        }
+    }
+
+    static func availableCodexModels(_ discovered: [AgentModel]) -> [AgentModel] {
+        if !discovered.isEmpty { return discovered }
+        return fallbackCodexModels.map {
+            AgentModel(provider: .codex, id: $0, displayName: modelDisplayName($0, provider: .codex), description: modelDescription($0, provider: .codex))
+        }
+    }
+
+    func availableAgentModelSections() -> [(provider: AgentProvider, models: [AgentModel])] {
+        [
+            (.claudeCode, Self.availableClaudeModels),
+            (.codex, Self.availableCodexModels(codexModels))
+        ]
+    }
 
     static func modelDisplayName(_ model: String) -> String {
+        modelDisplayName(model, provider: .claudeCode)
+    }
+
+    static func modelDisplayName(_ model: String, provider: AgentProvider) -> String {
+        if provider == .codex {
+            return model
+                .replacingOccurrences(of: "-", with: " ")
+                .split(separator: " ")
+                .map { part in
+                    part.uppercased().hasPrefix("GPT") ? part.uppercased() : part.capitalized
+                }
+                .joined(separator: " ")
+        }
         switch model {
         case "default": return "Default"
         case "best": return "Best"
@@ -179,6 +235,18 @@ final class AppState {
     }
 
     static func modelDescription(_ model: String) -> String {
+        modelDescription(model, provider: .claudeCode)
+    }
+
+    static func modelDescription(_ model: String, provider: AgentProvider) -> String {
+        if provider == .codex {
+            switch model {
+            case "gpt-5.4": return "Balanced Codex model for everyday coding."
+            case "gpt-5.4-mini": return "Fast Codex model for lighter coding tasks."
+            case "gpt-5.3-codex": return "Codex-optimized coding model."
+            default: return "Codex model served by the Codex app-server."
+            }
+        }
         let key: String
         switch model {
         case "default":   key = "model.desc.default"
@@ -225,9 +293,58 @@ final class AppState {
         didSet { UserDefaults.standard.set(selectedModel, forKey: "selectedModel") }
     }
 
+    var selectedAgentProvider: AgentProvider = AgentProvider(rawValue: UserDefaults.standard.string(forKey: "selectedAgentProvider") ?? "") ?? .claudeCode {
+        didSet { UserDefaults.standard.set(selectedAgentProvider.rawValue, forKey: "selectedAgentProvider") }
+    }
+
+    var codexModels: [AgentModel] = []
+
     var selectedEffort: String = UserDefaults.standard.string(forKey: "selectedEffort") ?? "auto" {
         didSet { UserDefaults.standard.set(selectedEffort, forKey: "selectedEffort") }
     }
+
+    // MARK: - Summarization
+
+    var summarizationProvider: SummarizationProvider = SummarizationProvider(rawValue: UserDefaults.standard.string(forKey: "summarizationProvider") ?? "") ?? .selectedClient {
+        didSet { UserDefaults.standard.set(summarizationProvider.rawValue, forKey: "summarizationProvider") }
+    }
+
+    var openAISummarizationEndpoint: String = UserDefaults.standard.string(forKey: "openAISummarizationEndpoint") ?? AppState.defaultOpenAISummarizationEndpoint {
+        didSet { UserDefaults.standard.set(openAISummarizationEndpoint, forKey: "openAISummarizationEndpoint") }
+    }
+
+    var openAISummarizationAPIKey: String = KeychainHelper.readString(
+        service: AppState.openAISummarizationKeychainService,
+        account: AppState.openAISummarizationKeychainAccount
+    ) ?? "" {
+        didSet {
+            let trimmed = openAISummarizationAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            do {
+                if trimmed.isEmpty {
+                    try KeychainHelper.delete(
+                        service: AppState.openAISummarizationKeychainService,
+                        account: AppState.openAISummarizationKeychainAccount
+                    )
+                } else if let data = trimmed.data(using: .utf8) {
+                    try KeychainHelper.save(
+                        data,
+                        service: AppState.openAISummarizationKeychainService,
+                        account: AppState.openAISummarizationKeychainAccount
+                    )
+                }
+            } catch {
+                logger.warning("Failed to update OpenAI summarization API key: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    var openAISummarizationModel: String = UserDefaults.standard.string(forKey: "openAISummarizationModel") ?? "" {
+        didSet { UserDefaults.standard.set(openAISummarizationModel, forKey: "openAISummarizationModel") }
+    }
+
+    var openAISummarizationModels: [String] = []
+    var openAISummarizationModelsError: String?
+    var isLoadingOpenAISummarizationModels = false
 
     // MARK: - Notifications
 
@@ -291,6 +408,8 @@ final class AppState {
     /// `refreshRateLimitUsage()`; nil until first successful fetch (or when not
     /// signed in to Claude Code).
     var latestRateLimitUsage: RateLimitUsage?
+    var latestCodexRateLimitUsage: RateLimitUsage?
+    @ObservationIgnored private var rateLimitUsageRefreshTasks: [AgentProvider: Task<RateLimitUsage?, Never>] = [:]
 
     /// Sessions currently streaming, anywhere across all windows.
     var inProgressSessionCount: Int {
@@ -303,11 +422,85 @@ final class AppState {
         sessionStates.values.reduce(0) { $0 + ($1.hasUncheckedCompletion ? 1 : 0) }
     }
 
-    /// Force-refresh the rate-limit usage. Cheap to call repeatedly — RateLimitService
-    /// caches for 5 minutes on its own.
+    func cachedRateLimitUsage(for provider: AgentProvider) -> RateLimitUsage? {
+        switch provider {
+        case .claudeCode:
+            return latestRateLimitUsage
+        case .codex:
+            return latestCodexRateLimitUsage
+        }
+    }
+
+    func rateLimitUsage(for provider: AgentProvider, forceRefresh: Bool = false) async -> RateLimitUsage? {
+        if !forceRefresh, let cached = cachedRateLimitUsage(for: provider) {
+            return cached
+        }
+
+        if let task = rateLimitUsageRefreshTasks[provider] {
+            return await task.value ?? cachedRateLimitUsage(for: provider)
+        }
+
+        let task = Task<RateLimitUsage?, Never> { [weak self] in
+            guard let self else { return nil }
+            switch provider {
+            case .claudeCode:
+                return await RateLimitService.shared.fetchUsage(forceRefresh: forceRefresh)
+            case .codex:
+                guard self.codexInstalled else { return nil }
+                return await self.codex.fetchRateLimits(forceRefresh: forceRefresh)
+            }
+        }
+        rateLimitUsageRefreshTasks[provider] = task
+
+        let usage = await task.value
+        rateLimitUsageRefreshTasks[provider] = nil
+
+        if let usage {
+            storeRateLimitUsage(usage, for: provider)
+            return usage
+        }
+        return cachedRateLimitUsage(for: provider)
+    }
+
+    private func storeRateLimitUsage(_ usage: RateLimitUsage, for provider: AgentProvider) {
+        switch provider {
+        case .claudeCode:
+            latestRateLimitUsage = usage
+        case .codex:
+            latestCodexRateLimitUsage = usage
+        }
+    }
+
+    /// Force-refresh the shared Claude rate-limit usage.
     func refreshRateLimitUsage(forceRefresh: Bool = false) async {
-        let usage = await RateLimitService.shared.fetchUsage(forceRefresh: forceRefresh)
-        latestRateLimitUsage = usage
+        _ = await rateLimitUsage(for: .claudeCode, forceRefresh: forceRefresh)
+    }
+
+    /// Warm Codex usage early so the status bar can render Codex limits from cache.
+    func refreshCodexRateLimitUsage(forceRefresh: Bool = false) async {
+        _ = await rateLimitUsage(for: .codex, forceRefresh: forceRefresh)
+    }
+
+    func refreshSelectedAgentRateLimitUsage(forceRefresh: Bool = false) async {
+        switch selectedAgentProvider {
+        case .claudeCode:
+            await refreshRateLimitUsage(forceRefresh: forceRefresh)
+        case .codex:
+            await refreshCodexRateLimitUsage(forceRefresh: forceRefresh)
+        }
+    }
+
+    func setDefaultAgentProvider(_ provider: AgentProvider) {
+        guard provider != selectedAgentProvider else { return }
+
+        selectedAgentProvider = provider
+        if let model = availableAgentModelSections()
+            .first(where: { $0.provider == provider })?
+            .models
+            .first?
+            .id {
+            selectedModel = model
+        }
     }
 
     /// Ref-counted set of projectIds with at least one open dedicated project window.
@@ -350,15 +543,33 @@ final class AppState {
     }
 
     /// Sets the model for the current session and persists it in the session state.
-    func setSessionModel(_ model: String, in window: WindowState) {
+    func setSessionModel(_ model: String, provider: AgentProvider? = nil, in window: WindowState) {
+        let resolvedProvider = provider ?? window.sessionAgentProvider ?? selectedAgentProvider
+        window.sessionAgentProvider = resolvedProvider
         window.sessionModel = model
         let key = window.currentSessionId ?? window.newSessionKey
         updateState(key) { state in
+            state.agentProvider = resolvedProvider
             state.model = model
             // Drop the cached CLI-reported name so the status line reflects the
             // user's choice immediately; the next system event will refill it.
             state.activeModelName = nil
         }
+    }
+
+    /// Sets only the active client for the current session. The model is resolved to the
+    /// current default for that client when possible, otherwise the first available model.
+    func setSessionProvider(_ provider: AgentProvider, in window: WindowState) {
+        let currentProvider = window.sessionAgentProvider ?? selectedAgentProvider
+        guard provider != currentProvider else { return }
+
+        let fallbackModel = availableAgentModelSections()
+            .first { $0.provider == provider }?
+            .models
+            .first?
+            .id
+        let model = selectedAgentProvider == provider ? selectedModel : (fallbackModel ?? selectedModel)
+        setSessionModel(model, provider: provider, in: window)
     }
 
     /// Sets the effort for the current session and persists it in the session state.
@@ -407,11 +618,11 @@ final class AppState {
         }
     }
 
-    func modelDisplayName(for model: String, in window: WindowState) -> String {
+    func modelDisplayName(for model: String, provider: AgentProvider, in window: WindowState) -> String {
         if let active = activeModelName(in: window) {
             return active
         }
-        return Self.modelDisplayName(model)
+        return Self.modelDisplayName(model, provider: provider)
     }
 
     static func formatModelId(_ raw: String) -> String {
@@ -446,6 +657,9 @@ final class AppState {
     // MARK: - CLI Version
 
     var claudeVersion: String?
+    var codexVersion: String?
+    var claudeBinaryPath: String?
+    var codexBinaryPath: String?
 
     // MARK: - Marketplace
 
@@ -457,6 +671,7 @@ final class AppState {
     // MARK: - Onboarding
 
     var claudeInstalled = false
+    var codexInstalled = false
     var onboardingCompleted = UserDefaults.standard.bool(forKey: "onboardingCompleted")
 
     // MARK: - App Initialization
@@ -473,6 +688,8 @@ final class AppState {
     let metaStore = SessionMetaStore()
     let cliStore: CLISessionStore
     let claude: ClaudeService
+    let codex: CodexAppServer
+    let openAISummarization = OpenAISummarizationService()
     let persistence: PersistenceService
     let marketplace = MarketplaceService()
     let mcp: MCPService
@@ -507,6 +724,7 @@ final class AppState {
         self.cliStore = cliStore
         let claude = ClaudeService(cliStore: cliStore)
         self.claude = claude
+        self.codex = CodexAppServer()
         self.persistence = PersistenceService(metaStore: metaStore, cliStore: cliStore)
         self.mcp = MCPService(claudeService: claude)
         self.threadStore = ThreadStore.make()
@@ -755,10 +973,27 @@ final class AppState {
             if state.isStreaming { return .streaming }
             if state.hasUncheckedCompletion { return .done }
         }
-        if !window.pendingPermissions.isEmpty, window.currentSessionId == id {
+        if window.pendingPermissions.contains(where: { $0.sessionId == id }) {
             return .awaitingPermission
         }
         return .idle
+    }
+
+    func todoProgress(forSessionId id: String) -> ChatTodoProgress? {
+        if let messages = sessionStates[id]?.messages,
+           let todos = TodoExtractor.latest(in: messages) {
+            return ChatTodoProgress(todos: todos)
+        }
+
+        guard let snapshot = threadStore.fetchTodoSnapshot(sessionId: id), snapshot.total > 0 else {
+            return nil
+        }
+
+        return ChatTodoProgress(
+            done: snapshot.done,
+            total: snapshot.total,
+            inProgress: snapshot.inProgress > 0
+        )
     }
 
     // MARK: - Initialization
@@ -769,16 +1004,7 @@ final class AppState {
         ThemeStore.shared.fontSizeAdjustment = fontSizeAdjustment
         ThemeStore.shared.messageFontSizeAdjustment = messageFontSizeAdjustment
 
-        let binary = await claude.findClaudeBinary()
-        claudeInstalled = binary != nil
-
-        if binary != nil {
-            do {
-                claudeVersion = try await claude.checkVersion()
-            } catch {
-                logger.warning("Failed to fetch Claude CLI version: \(error.localizedDescription)")
-            }
-        }
+        await refreshAgentInstallations()
 
         projects = await persistence.loadProjects()
         var seenPaths = Set<String>()
@@ -803,7 +1029,7 @@ final class AppState {
 
         persistedQueues = threadStore.loadAllQueues()
 
-        if claudeInstalled && !onboardingCompleted {
+        if (claudeInstalled || codexInstalled) && !onboardingCompleted {
             onboardingCompleted = true
             UserDefaults.standard.set(true, forKey: "onboardingCompleted")
         }
@@ -826,6 +1052,7 @@ final class AppState {
         // popover is opened. RateLimitService caches for 5 minutes internally.
         Task { [weak self] in
             await self?.refreshRateLimitUsage()
+            await self?.refreshCodexRateLimitUsage()
         }
 
         // Recurring probe so disconnected MCP servers surface promptly even
@@ -835,6 +1062,65 @@ final class AppState {
         // Permission request routing is handled per-window in initializeWindow's listener.
 
         isInitialized = true
+    }
+
+    func refreshAgentInstallations() async {
+        let claudeBinary = await claude.findClaudeBinary()
+        claudeBinaryPath = claudeBinary
+        claudeInstalled = claudeBinary != nil
+        claudeVersion = nil
+
+        if claudeBinary != nil {
+            do {
+                claudeVersion = try await claude.checkVersion()
+            } catch {
+                logger.warning("Failed to fetch Claude CLI version: \(error.localizedDescription)")
+            }
+        }
+
+        let codexBinary = await codex.findCodexBinary()
+        codexBinaryPath = codexBinary
+        codexInstalled = codexBinary != nil
+        codexVersion = nil
+
+        if codexBinary != nil {
+            do {
+                codexVersion = try await codex.checkVersion()
+                codexModels = await codex.fetchModels()
+                logger.info("Codex CLI detected; fetched \(self.codexModels.count) Codex models")
+                if codexModels.isEmpty {
+                    logger.warning("Codex model discovery returned empty; using built-in Codex fallback models")
+                }
+                Task { [weak self] in
+                    await self?.refreshCodexRateLimitUsage()
+                }
+            } catch {
+                logger.warning("Failed to fetch Codex CLI version or models: \(error.localizedDescription)")
+            }
+        } else {
+            codexModels = []
+            logger.info("Codex CLI not detected; Codex model list cleared")
+        }
+    }
+
+    func refreshOpenAISummarizationModels() async {
+        let endpoint = openAISummarizationEndpoint
+        let apiKey = openAISummarizationAPIKey
+
+        isLoadingOpenAISummarizationModels = true
+        openAISummarizationModelsError = nil
+        defer { isLoadingOpenAISummarizationModels = false }
+
+        do {
+            let models = try await openAISummarization.fetchModels(endpoint: endpoint, apiKey: apiKey)
+            openAISummarizationModels = models
+            if openAISummarizationModel.isEmpty || !models.contains(openAISummarizationModel) {
+                openAISummarizationModel = models.first ?? ""
+            }
+        } catch {
+            openAISummarizationModelsError = error.localizedDescription
+            logger.warning("Failed to fetch OpenAI summarization models: \(error.localizedDescription)")
+        }
     }
 
     /// Per-window initialization — restore selected project and load session history
@@ -945,8 +1231,12 @@ final class AppState {
             guard let self, let window else { return }
             await self.editAndResend(messageId: messageId, newContent: newContent, in: window)
         }
-        bridge.fetchRateLimitHandler = {
-            await RateLimitService.shared.fetchUsage()
+        bridge.fetchRateLimitHandler = { [weak self] provider in
+            await self?.rateLimitUsage(for: provider)
+        }
+        bridge.setSessionProviderHandler = { [weak self, weak window] provider in
+            guard let self, let window else { return }
+            self.setSessionProvider(provider, in: window)
         }
         bridge.togglePlanModeHandler = { [weak self, weak window] in
             guard let self, let window else { return }
@@ -994,7 +1284,10 @@ final class AppState {
                 bridge.streamingStartDate = state.streamingStartDate
                 bridge.liveOutputTokens = state.currentTurnOutputTokens
                 bridge.lastTurnContextUsedPercentage = state.lastTurnContextUsedPercentage
-                bridge.modelDisplayName = modelDisplayName(for: window.sessionModel ?? selectedModel, in: window)
+                let provider = window.sessionAgentProvider ?? selectedAgentProvider
+                let currentModel = window.sessionModel ?? selectedModel
+                bridge.agentProvider = provider
+                bridge.modelDisplayName = modelDisplayName(for: currentModel, provider: provider, in: window)
                 bridge.sessionStats = ChatSessionStats(
                     costUsd: state.costUsd,
                     inputTokens: state.inputTokens,
@@ -1013,6 +1306,7 @@ final class AppState {
                 bridge.autoPreviewSettings = self.autoPreviewSettings
                 bridge.appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
                 bridge.claudeVersion = self.claudeVersion
+                bridge.codexVersion = self.codexVersion
             } onChange: {
                 Task { @MainActor in observeSettings() }
             }
@@ -1054,7 +1348,8 @@ final class AppState {
         // S2: warn (in logs) if another process touched the same jsonl very
         // recently — likely a `claude` running in the terminal on the same
         // session. We don't block, but the operator can spot it after the fact.
-        if let sid = window.currentSessionId,
+        if (window.sessionAgentProvider ?? selectedAgentProvider) == .claudeCode,
+           let sid = window.currentSessionId,
            let cwd = window.selectedProject?.path,
            cliStore.detectExternalActivity(sid: sid, cwd: cwd, withinSeconds: 5) {
             logger.warning("Session \(sid, privacy: .public) jsonl was modified within 5s — another claude process may be active")
@@ -1089,8 +1384,10 @@ final class AppState {
         case "model":
             if parts.count > 1 {
                 let arg = String(parts[1]).trimmingCharacters(in: .whitespaces).lowercased()
-                let matched = Self.availableModels.first { $0 == arg } ?? Self.availableModels.first { arg.contains($0) } ?? arg
-                setSessionModel(matched, in: window)
+                let flattened = availableAgentModelSections().flatMap(\.models)
+                let matched = flattened.first { $0.id.lowercased() == arg }
+                    ?? flattened.first { arg.contains($0.id.lowercased()) }
+                setSessionModel(matched?.id ?? arg, provider: matched?.provider, in: window)
             } else {
                 window.showModelPicker = true
             }
@@ -1238,10 +1535,12 @@ final class AppState {
             let tempId = "pending-\(streamId.uuidString)"
             window.currentSessionId = tempId
             window.insertPendingPlaceholder(tempId)
+            let snapProvider = window.sessionAgentProvider ?? selectedAgentProvider
             let snapModel = window.sessionModel
             let snapEffort = window.sessionEffort
             let snapPermission = window.sessionPermissionMode
             updateState(tempId) { state in
+                state.agentProvider = snapProvider
                 state.model = snapModel
                 state.effort = snapEffort
                 state.permissionMode = snapPermission
@@ -1271,7 +1570,16 @@ final class AppState {
         // otherwise race the insertion at line ~1168 and bail with "no summary".
         if isNewSession {
             let initialTitle = ChatSession.placeholderTitle(from: displayText ?? prompt)
-            let placeholder = ChatSession(id: sessionKey, projectId: project.id, title: initialTitle, messages: [], origin: .cliBacked)
+            let provider = window.sessionAgentProvider ?? selectedAgentProvider
+            let placeholder = ChatSession(
+                id: sessionKey,
+                projectId: project.id,
+                title: initialTitle,
+                messages: [],
+                agentProvider: provider,
+                model: window.sessionModel ?? selectedModel,
+                origin: provider == .codex ? .codexAppServer : .cliBacked
+            )
             allSessionSummaries.insert(placeholder.summary, at: 0)
             threadStore.upsert(placeholder.summary)
         }
@@ -1309,8 +1617,11 @@ final class AppState {
         // ExitPlanMode is always exempt from auto-approve (see PermissionServer.autoApproveReason),
         // so the plan card still surfaces.
         let hookSessionMode = basePermissionMode
+        let launchAgentProvider = sessionStates[sessionKey]?.agentProvider
+            ?? window.sessionAgentProvider
+            ?? selectedAgentProvider
         var hookSettingsPath: String?
-        if !cliPermissionMode.skipsHookPipeline {
+        if launchAgentProvider == .claudeCode && !cliPermissionMode.skipsHookPipeline {
             do {
                 hookSettingsPath = try await permission.writeHookSettingsFile()
             } catch {
@@ -1330,6 +1641,10 @@ final class AppState {
         let effectiveCwd = sessionStates[sessionKey]?.worktreePath
             ?? allSessionSummaries.first(where: { $0.id == sessionKey })?.worktreePath
             ?? project.path
+        let effectiveProvider = sessionStates[sessionKey]?.agentProvider
+            ?? window.sessionAgentProvider
+            ?? selectedAgentProvider
+        let effectiveModel = window.sessionModel ?? selectedModel
 
         let task = Task { [weak self, window] in
             guard let self else { return }
@@ -1339,7 +1654,8 @@ final class AppState {
                 cwd: effectiveCwd,
                 cliSessionId: cliSessionId,
                 internalSessionKey: sessionKey,
-                model: window.sessionModel ?? self.selectedModel,
+                agentProvider: effectiveProvider,
+                model: effectiveModel,
                 effort: window.sessionEffort ?? (self.selectedEffort == "auto" ? nil : self.selectedEffort),
                 hookSettingsPath: hookSettingsPath,
                 permissionMode: cliPermissionMode,
@@ -1428,6 +1744,7 @@ final class AppState {
         cwd: String,
         cliSessionId: String?,
         internalSessionKey: String,
+        agentProvider: AgentProvider,
         model: String?,
         effort: String? = nil,
         hookSettingsPath: String?,
@@ -1445,16 +1762,30 @@ final class AppState {
 
         var sessionKey = internalSessionKey
 
-        let stream = await claude.send(
-            streamId: streamId,
-            prompt: prompt,
-            cwd: cwd,
-            sessionId: cliSessionId,
-            model: model,
-            effort: effort,
-            hookSettingsPath: hookSettingsPath,
-            permissionMode: permissionMode
-        )
+        let stream: AsyncStream<StreamEvent>
+        switch agentProvider {
+        case .claudeCode:
+            stream = await claude.send(
+                streamId: streamId,
+                prompt: prompt,
+                cwd: cwd,
+                sessionId: cliSessionId,
+                model: model,
+                effort: effort,
+                hookSettingsPath: hookSettingsPath,
+                permissionMode: permissionMode
+            )
+        case .codex:
+            stream = await codex.send(
+                streamId: streamId,
+                prompt: prompt,
+                cwd: cwd,
+                threadId: cliSessionId,
+                model: model,
+                permissionMode: registerMode,
+                permissionServer: permission
+            )
+        }
 
         startFlushTimer(for: sessionKey)
 
@@ -1474,11 +1805,10 @@ final class AppState {
 
                 let ownsSession = stateForSession(sessionKey).activeStreamId == streamId
 
-                if !ownsSession {
+                    if !ownsSession {
                     if case .result(let resultEvent) = event {
                         logger.info("[Stream:UI] event #\(eventCount) .result received after losing ownership — saving to disk")
-                        await claude.closeStdin(streamId: streamId)
-                        await claude.finalize(streamId: streamId)
+                        await finalizeAgentStream(agentProvider: agentProvider, streamId: streamId)
                         if sessionKey != resultEvent.sessionId {
                             if let state = sessionStates.removeValue(forKey: sessionKey) {
                                 sessionStates[resultEvent.sessionId] = state
@@ -1544,6 +1874,10 @@ final class AppState {
                                 messages: [],
                                 createdAt: old.createdAt,
                                 updatedAt: old.createdAt,
+                                agentProvider: old.agentProvider,
+                                model: old.model,
+                                effort: old.effort,
+                                permissionMode: old.permissionMode,
                                 origin: old.origin
                             )
                             allSessionSummaries.removeAll { $0.id == expectedPlaceholder || $0.id == sid }
@@ -1595,6 +1929,7 @@ final class AppState {
                                             createdAt: old.createdAt,
                                             updatedAt: old.updatedAt,
                                             isPinned: old.isPinned,
+                                            agentProvider: old.agentProvider,
                                             model: old.model,
                                             effort: old.effort,
                                             permissionMode: old.permissionMode,
@@ -1619,6 +1954,7 @@ final class AppState {
                                         createdAt: firstUserDate,
                                         updatedAt: firstUserDate,
                                         isPinned: false,
+                                        agentProvider: agentProvider,
                                         origin: .cliBacked
                                     )
                                     allSessionSummaries.insert(inserted, at: 0)
@@ -1636,6 +1972,12 @@ final class AppState {
 
                 case .assistant(let assistantMessage):
                     logger.debug("[Stream:UI] event #\(eventCount) .assistant (gap=\(String(format: "%.1f", gap))s, blocks=\(assistantMessage.content.count))")
+                    if assistantMessage.content.contains(where: {
+                        if case .thinking = $0 { return true }
+                        return false
+                    }) {
+                        updateState(sessionKey) { $0.isThinking = true }
+                    }
                     // A turn can contain several model invocations (one per tool round-trip);
                     // each emits its own `usage.output_tokens` starting from zero. Track the
                     // running max per message id and sum across ids to get the turn total.
@@ -1647,6 +1989,10 @@ final class AppState {
                             } else {
                                 state.currentTurnOutputTokensUnkeyed = max(state.currentTurnOutputTokensUnkeyed, liveOutput)
                             }
+                        }
+                        if agentProvider == .codex {
+                            let total = stateForSession(sessionKey).currentTurnOutputTokens
+                            logger.info("[Stream:UI] Codex usage applied messageId=\(assistantMessage.id ?? "<nil>", privacy: .public) output=\(liveOutput) total=\(total)")
                         }
                     }
                     // Extract text only when no text_delta has been received in the current turn.
@@ -1679,8 +2025,7 @@ final class AppState {
                     // With `--input-format stream-json` the CLI stays alive waiting for more
                     // input. Close stdin on `result` so it exits cleanly, then finalize so
                     // any subagent children that survived the parent CLI get reaped.
-                    await claude.closeStdin(streamId: streamId)
-                    await claude.finalize(streamId: streamId)
+                    await finalizeAgentStream(agentProvider: agentProvider, streamId: streamId)
 
                     if sessionKey != resultEvent.sessionId {
                         if let state = sessionStates.removeValue(forKey: sessionKey) {
@@ -1708,7 +2053,8 @@ final class AppState {
                     if isFg {
                         window.currentSessionId = resultEvent.sessionId
                         if resultEvent.isError {
-                            let errText = await claude.consumeStderr(for: streamId) ?? "Claude returned an error."
+                            let errText = await consumeAgentStderr(agentProvider: agentProvider, streamId: streamId)
+                                ?? "\(agentProvider.displayName) returned an error."
                             addErrorMessage(errText, in: window)
                         }
                     }
@@ -1719,16 +2065,20 @@ final class AppState {
                         messages: stateForSession(sessionKey).messages
                     )
 
-                    reconcileFromDisk(sessionId: resultEvent.sessionId, projectId: projectId, cwd: cwd)
+                    if agentProvider == .claudeCode {
+                        reconcileFromDisk(sessionId: resultEvent.sessionId, projectId: projectId, cwd: cwd)
+                    }
 
                     if !resultEvent.isError {
                         let sid = resultEvent.sessionId
                         let key = sessionKey
                         let cwdCapture = cwd
-                        Task { [weak self] in
-                            guard let self else { return }
-                            if let pct = await claude.fetchContextPercentage(sessionId: sid, cwd: cwdCapture) {
-                                updateState(key) { $0.lastTurnContextUsedPercentage = pct }
+                        if agentProvider == .claudeCode {
+                            Task { [weak self] in
+                                guard let self else { return }
+                                if let pct = await claude.fetchContextPercentage(sessionId: sid, cwd: cwdCapture) {
+                                    updateState(key) { $0.lastTurnContextUsedPercentage = pct }
+                                }
                             }
                         }
 
@@ -1776,7 +2126,7 @@ final class AppState {
 
             // Consume any remaining stderr — used as error message content below.
             // If already consumed at result.isError time, this returns nil.
-            let stderrOutput = await claude.consumeStderr(for: streamId)
+            let stderrOutput = await consumeAgentStderr(agentProvider: agentProvider, streamId: streamId)
 
             if eventCount == 0 {
                 // User cancellation revokes activeStreamId or cancels the task — distinguish
@@ -1831,6 +2181,25 @@ final class AppState {
         }
     }
 
+    private func finalizeAgentStream(agentProvider: AgentProvider, streamId: UUID) async {
+        switch agentProvider {
+        case .claudeCode:
+            await claude.closeStdin(streamId: streamId)
+            await claude.finalize(streamId: streamId)
+        case .codex:
+            await codex.finalize(streamId: streamId)
+        }
+    }
+
+    private func consumeAgentStderr(agentProvider: AgentProvider, streamId: UUID) async -> String? {
+        switch agentProvider {
+        case .claudeCode:
+            return await claude.consumeStderr(for: streamId)
+        case .codex:
+            return await codex.consumeStderr(for: streamId)
+        }
+    }
+
     // MARK: - Text Delta Throttle (50ms)
 
     private func startFlushTimer(for sessionKey: String) {
@@ -1872,15 +2241,20 @@ final class AppState {
             state.pendingToolResults.removeAll(keepingCapacity: true)
             if let idx = lastAssistantIdx() {
                 for (toolUseId, content, isError) in results {
-                    let editPersistInfo: (path: String, hunks: [PreviewFile.EditHunk], isWrite: Bool)? = {
+                    let editPersistInfos: [(path: String, hunks: [PreviewFile.EditHunk], isWrite: Bool)] = {
                         guard !isError,
                               let blockIdx = state.messages[idx].toolCallIndex(id: toolUseId),
                               let call = state.messages[idx].blocks[blockIdx].toolCall,
-                              ["edit", "multiedit", "multi_edit", "write"].contains(call.name.lowercased()),
-                              let path = call.editedFilePath else { return nil }
-                        let hunks = call.fileEditHunks
-                        guard !hunks.isEmpty else { return nil }
-                        return (path, hunks, call.name.lowercased() == "write")
+                              ["edit", "multiedit", "multi_edit", "write"].contains(call.name.lowercased())
+                        else { return [] }
+                        let claudeHunks = call.fileEditHunks
+                        if !claudeHunks.isEmpty, let path = call.editedFilePath {
+                            return [(path, claudeHunks, call.name.lowercased() == "write")]
+                        }
+                        // Codex `fileChange` shape: one tool call may touch multiple files.
+                        let codexDiffs = call.fileChangeDiffs
+                        guard !codexDiffs.isEmpty else { return [] }
+                        return codexDiffs.map { ($0.path, [$0.hunk], false) }
                     }()
                     // Preserve the user-decision summary on ExitPlanMode. After the user
                     // accepts/rejects the plan, the CLI emits its own follow-up tool_result
@@ -1897,13 +2271,15 @@ final class AppState {
                     if !skipResultOverwrite {
                         state.messages[idx].setToolResult(id: toolUseId, result: content, isError: isError)
                     }
-                    if let info = editPersistInfo {
-                        threadStore.appendFileEdit(
-                            sessionId: key,
-                            path: info.path,
-                            hunks: info.hunks,
-                            containsWrite: info.isWrite
-                        )
+                    if !editPersistInfos.isEmpty {
+                        for info in editPersistInfos {
+                            threadStore.appendFileEdit(
+                                sessionId: key,
+                                path: info.path,
+                                hunks: info.hunks,
+                                containsWrite: info.isWrite
+                            )
+                        }
                         threadFileEditsRevision &+= 1
                     }
                 }
@@ -2069,7 +2445,13 @@ final class AppState {
         sessionStates[key]?.activeStreamId = nil
 
         if let streamToCancel {
-            await claude.cancel(streamId: streamToCancel)
+            let provider = sessionStates[key]?.agentProvider ?? window.sessionAgentProvider ?? selectedAgentProvider
+            switch provider {
+            case .claudeCode:
+                await claude.cancel(streamId: streamToCancel)
+            case .codex:
+                await codex.cancel(streamId: streamToCancel)
+            }
         }
 
         flushPendingUpdates(for: key)
@@ -2339,7 +2721,20 @@ final class AppState {
            let state = sessionStates[currentId],
            !state.messages.isEmpty {
             let title = allSessionSummaries.first(where: { $0.id == currentId })?.title ?? "Session"
-            let session = ChatSession(id: currentId, projectId: currentProject.id, title: title, messages: state.messages, updatedAt: lastResponseDate(from: state.messages))
+            let provider = state.agentProvider ?? allSessionSummaries.first(where: { $0.id == currentId })?.agentProvider ?? selectedAgentProvider
+            let origin = allSessionSummaries.first(where: { $0.id == currentId })?.origin ?? (provider == .codex ? .codexAppServer : .cliBacked)
+            let session = ChatSession(
+                id: currentId,
+                projectId: currentProject.id,
+                title: title,
+                messages: state.messages,
+                updatedAt: lastResponseDate(from: state.messages),
+                agentProvider: provider,
+                model: state.model,
+                effort: state.effort,
+                permissionMode: state.permissionMode,
+                origin: origin
+            )
             Task {
                 do { try await self.persistence.saveSession(session) }
                 catch { self.logger.error("Failed to save current session before project switch: \(error.localizedDescription)") }
@@ -2418,6 +2813,7 @@ final class AppState {
 
         if sessionStates[session.id] == nil {
             var state = SessionStreamState()
+            state.agentProvider = session.agentProvider
             state.model = session.model
             state.effort = session.effort
             state.permissionMode = session.permissionMode
@@ -2441,6 +2837,7 @@ final class AppState {
                   let project = window.selectedProject {
             if var state = sessionStates[session.id] {
                 if state.model == nil { state.model = session.model }
+                if state.agentProvider == nil { state.agentProvider = session.agentProvider }
                 if state.effort == nil { state.effort = session.effort }
                 if state.permissionMode == nil { state.permissionMode = session.permissionMode }
                 state.isLoadingFromDisk = true
@@ -2459,6 +2856,7 @@ final class AppState {
         updateState(session.id) { $0.hasUncheckedCompletion = false }
 
         window.currentSessionId = session.id
+        window.sessionAgentProvider = sessionStates[session.id]?.agentProvider ?? session.agentProvider
         window.sessionModel = sessionStates[session.id]?.model ?? session.model
         window.sessionEffort = sessionStates[session.id]?.effort ?? session.effort
         window.sessionPermissionMode = sessionStates[session.id]?.permissionMode ?? session.permissionMode
@@ -2482,7 +2880,21 @@ final class AppState {
             guard let self else { return }
             if !outgoingMessages.isEmpty, let project = window.selectedProject {
                 let title = allSessionSummaries.first(where: { $0.id == outgoingId })?.title ?? "Session"
-                let outgoing = ChatSession(id: outgoingId, projectId: project.id, title: title, messages: outgoingMessages, updatedAt: lastResponseDate(from: outgoingMessages))
+                let state = sessionStates[outgoingId]
+                let provider = state?.agentProvider ?? allSessionSummaries.first(where: { $0.id == outgoingId })?.agentProvider ?? selectedAgentProvider
+                let origin = allSessionSummaries.first(where: { $0.id == outgoingId })?.origin ?? (provider == .codex ? .codexAppServer : .cliBacked)
+                let outgoing = ChatSession(
+                    id: outgoingId,
+                    projectId: project.id,
+                    title: title,
+                    messages: outgoingMessages,
+                    updatedAt: lastResponseDate(from: outgoingMessages),
+                    agentProvider: provider,
+                    model: state?.model,
+                    effort: state?.effort,
+                    permissionMode: state?.permissionMode,
+                    origin: origin
+                )
                 do { try await persistence.saveSession(outgoing) }
                 catch { logger.error("Failed to save outgoing session: \(error.localizedDescription)") }
             }
@@ -2568,6 +2980,7 @@ final class AppState {
         saveQueue(in: window)
         releaseOutgoingSession(window.currentSessionId, in: window)
         window.currentSessionId = nil
+        window.sessionAgentProvider = nil
         window.sessionModel = nil
         window.sessionEffort = nil
         window.sessionPermissionMode = nil
@@ -2610,9 +3023,9 @@ final class AppState {
         return current
     }
 
-    /// Spawn a one-shot Claude call to generate a 3–6 word title for the given session,
-    /// then persist it via `renameSession` if the title is still the placeholder. No-op
-    /// if the session was already renamed manually or the LLM call fails.
+    /// Spawn a one-shot summarization call to generate a 3–6 word title for the given
+    /// session, then persist it via `renameSession` if the title is still the placeholder.
+    /// No-op if the session was already renamed manually or the LLM call fails.
     func maybeGenerateLLMTitle(for sessionId: String) async {
         let resolved = resolveCurrentSessionId(sessionId)
         guard let summary = allSessionSummaries.first(where: { $0.id == resolved }) else {
@@ -2624,7 +3037,7 @@ final class AppState {
         let firstUser = ChatSession.stripAttachmentMarkers(from: firstUserRaw)
         guard !firstUser.isEmpty else { return }
         guard isAutoGeneratedTitle(summary.title, firstUserMessage: firstUserRaw) else { return }
-        guard let title = await claude.generateSessionTitle(firstUserMessage: firstUser) else { return }
+        guard let title = await generateSessionTitle(firstUserMessage: firstUser, summary: summary) else { return }
         // Re-resolve after the LLM call — the id may have been swapped while we waited.
         let currentId = resolveCurrentSessionId(sessionId)
         guard let stillPlaceholder = allSessionSummaries.first(where: { $0.id == currentId }),
@@ -2638,6 +3051,55 @@ final class AppState {
             origin: stillPlaceholder.origin
         )
         await renameSession(session, to: title)
+    }
+
+    private func generateSessionTitle(firstUserMessage: String, summary: ChatSession.Summary) async -> String? {
+        switch summarizationProvider {
+        case .selectedClient:
+            let provider = summary.agentProvider
+            let model = summary.model ?? selectedSummarizationModel(for: provider)
+            return await generateSessionTitle(firstUserMessage: firstUserMessage, provider: provider, model: model)
+        case .claudeCode:
+            return await generateSessionTitle(
+                firstUserMessage: firstUserMessage,
+                provider: .claudeCode,
+                model: selectedSummarizationModel(for: .claudeCode)
+            )
+        case .codex:
+            return await generateSessionTitle(
+                firstUserMessage: firstUserMessage,
+                provider: .codex,
+                model: selectedSummarizationModel(for: .codex)
+            )
+        case .openAI:
+            guard !openAISummarizationModel.isEmpty else { return nil }
+            return await openAISummarization.generateSessionTitle(
+                firstUserMessage: firstUserMessage,
+                endpoint: openAISummarizationEndpoint,
+                apiKey: openAISummarizationAPIKey,
+                model: openAISummarizationModel
+            )
+        }
+    }
+
+    private func generateSessionTitle(firstUserMessage: String, provider: AgentProvider, model: String?) async -> String? {
+        switch provider {
+        case .claudeCode:
+            return await claude.generateSessionTitle(firstUserMessage: firstUserMessage, model: model ?? "haiku")
+        case .codex:
+            return await codex.generateSessionTitle(firstUserMessage: firstUserMessage, model: model)
+        }
+    }
+
+    private func selectedSummarizationModel(for provider: AgentProvider) -> String? {
+        if selectedAgentProvider == provider {
+            return selectedModel
+        }
+        return availableAgentModelSections()
+            .first(where: { $0.provider == provider })?
+            .models
+            .first?
+            .id
     }
 
     func togglePinSession(_ session: ChatSession) async {
@@ -2742,6 +3204,7 @@ final class AppState {
         let updated = (snap ?? ChatSession.Summary(
             id: sessionId, projectId: project.id, title: ChatSession.defaultTitle,
             createdAt: Date(), updatedAt: Date(), isPinned: false,
+            agentProvider: sessionStates[sessionId]?.agentProvider ?? selectedAgentProvider,
             worktreePath: info.path.path, worktreeBranch: info.branch
         )).makeSession()
         await updateSessionMetadata(updated) { s in
@@ -2793,7 +3256,7 @@ final class AppState {
         var updated: ChatSession = switch summary.origin {
         case .cliBacked:
             summary.makeSession()
-        case .legacyRxCode:
+        case .legacyRxCode, .codexAppServer:
             persistence.loadLegacySessionSync(projectId: session.projectId, sessionId: session.id) ?? session
         }
         mutate(&updated)
@@ -3068,7 +3531,8 @@ final class AppState {
             ?? ChatSession.Summary(
                 id: sessionId, projectId: projectId, title: "",
                 createdAt: Date(), updatedAt: Date(), isPinned: false,
-                origin: .cliBacked
+                agentProvider: sessionStates[sessionId]?.agentProvider ?? selectedAgentProvider,
+                origin: (sessionStates[sessionId]?.agentProvider ?? selectedAgentProvider) == .codex ? .codexAppServer : .cliBacked
             )
     }
 
@@ -3179,10 +3643,26 @@ final class AppState {
         }
 
         let sessionModel = sessionStates[sessionId]?.model
+            ?? allSessionSummaries.first(where: { $0.id == sessionId })?.model
+        let sessionAgentProvider = sessionStates[sessionId]?.agentProvider
+            ?? allSessionSummaries.first(where: { $0.id == sessionId })?.agentProvider
+            ?? selectedAgentProvider
         let sessionEffort = sessionStates[sessionId]?.effort
         let sessionPermissionMode = sessionStates[sessionId]?.permissionMode
-        let origin = allSessionSummaries.first(where: { $0.id == sessionId })?.origin ?? .cliBacked
-        let session = ChatSession(id: sessionId, projectId: projectId, title: title, messages: messages, updatedAt: lastResponseDate(from: messages), model: sessionModel, effort: sessionEffort, permissionMode: sessionPermissionMode, origin: origin)
+        let origin = allSessionSummaries.first(where: { $0.id == sessionId })?.origin
+            ?? (sessionAgentProvider == .codex ? .codexAppServer : .cliBacked)
+        let session = ChatSession(
+            id: sessionId,
+            projectId: projectId,
+            title: title,
+            messages: messages,
+            updatedAt: lastResponseDate(from: messages),
+            agentProvider: sessionAgentProvider,
+            model: sessionModel,
+            effort: sessionEffort,
+            permissionMode: sessionPermissionMode,
+            origin: origin
+        )
 
         do {
             try await persistence.saveSession(session)
@@ -3359,8 +3839,9 @@ final class AppState {
         await permission.refreshRunToken()
 
         let currentPermissionMode = sessionStates[sessionKey]?.permissionMode ?? permissionMode
+        let agentProvider = sessionStates[sessionKey]?.agentProvider ?? selectedAgentProvider
         var hookSettingsPath: String?
-        if !currentPermissionMode.skipsHookPipeline {
+        if agentProvider == .claudeCode && !currentPermissionMode.skipsHookPipeline {
             do { hookSettingsPath = try await permission.writeHookSettingsFile() }
             catch { logger.error("Failed to write hook settings for background queue: \(error.localizedDescription)") }
         }
@@ -3377,6 +3858,7 @@ final class AppState {
                 cwd: cwd,
                 cliSessionId: sessionKey,
                 internalSessionKey: sessionKey,
+                agentProvider: agentProvider,
                 model: model,
                 effort: effort,
                 hookSettingsPath: hookSettingsPath,

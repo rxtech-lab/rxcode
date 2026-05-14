@@ -103,11 +103,11 @@ private struct MenuBarLabel: View {
 
     var body: some View {
         let inProgress = appState.inProgressSessionCount
-        let unchecked = appState.uncheckedFinishedSessionCount
-        let totalJobs = inProgress + unchecked
-        let fiveHour = appState.latestRateLimitUsage?.fiveHourPercent
+        let provider = appState.selectedAgentProvider
+        let usage = provider == .codex ? appState.latestCodexRateLimitUsage : appState.latestRateLimitUsage
+        let fiveHour = usage?.fiveHourPercent
 
-        if let image = Self.renderLabelImage(fiveHour: fiveHour, inProgress: inProgress, totalJobs: totalJobs) {
+        if let image = Self.renderLabelImage(agentText: Self.agentText(for: provider), fiveHour: fiveHour, inProgress: inProgress) {
             Image(nsImage: image)
         } else {
             Image(systemName: "message")
@@ -115,10 +115,11 @@ private struct MenuBarLabel: View {
     }
 
     @MainActor
-    private static func renderLabelImage(fiveHour: Double?, inProgress: Int, totalJobs: Int) -> NSImage? {
+    private static func renderLabelImage(agentText: String, fiveHour: Double?, inProgress: Int) -> NSImage? {
         let content = MenuBarLabelContent(
+            agentText: agentText,
             fiveHourText: fiveHour.map { "\(formatPercent($0))%" } ?? "—%",
-            jobsText: inProgress > 0 ? "\(inProgress) Job\(inProgress == 1 ? "" : "s")" : nil
+            statusText: inProgress > 0 ? "\(inProgress)job\(inProgress == 1 ? "" : "s")" : "IDLE"
         )
         let renderer = ImageRenderer(content: content)
         renderer.scale = NSScreen.main?.backingScaleFactor ?? 2
@@ -130,6 +131,13 @@ private struct MenuBarLabel: View {
         return image
     }
 
+    private static func agentText(for provider: AgentProvider) -> String {
+        switch provider {
+        case .claudeCode: return "CC"
+        case .codex: return "CODEX"
+        }
+    }
+
     private static func formatPercent(_ value: Double) -> String {
         if value > 0 && value < 1 {
             return String(format: "%.1f", value)
@@ -139,31 +147,49 @@ private struct MenuBarLabel: View {
 }
 
 private struct MenuBarLabelContent: View {
+    private static let textSize: CGFloat = 9
+
+    let agentText: String
     let fiveHourText: String
-    let jobsText: String?
+    let statusText: String
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "message")
-                .font(.system(size: 11, weight: .medium))
+        HStack(alignment: .center, spacing: 8) {
+            Text(agentText)
+                .font(.system(size: Self.textSize, weight: .bold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .fixedSize(horizontal: true, vertical: false)
+                .frame(height: 18, alignment: .center)
 
-            VStack(alignment: .trailing, spacing: -1) {
-                HStack(alignment: .bottom, spacing: 1) {
-                    Text(fiveHourText)
-                        .font(.system(size: 11, weight: .semibold))
-                        .monospacedDigit()
-                    Text("5h")
-                        .font(.system(size: 7, weight: .medium))
-                }
-                if let jobsText {
-                    Text(jobsText)
-                        .font(.system(size: 8, weight: .semibold))
-                        .monospacedDigit()
-                }
+            VStack(alignment: .leading, spacing: -1) {
+                usageLine
+                Text(statusText)
+                    .font(.system(size: Self.textSize, weight: .semibold))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             }
+            .fixedSize(horizontal: true, vertical: false)
         }
         .padding(.vertical, 1)
+        .fixedSize(horizontal: true, vertical: true)
         .foregroundStyle(.black)
+    }
+
+    private var usageLine: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Text(fiveHourText)
+                .font(.system(size: Self.textSize, weight: .semibold))
+                .monospacedDigit()
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+            Text("5h")
+                .font(.system(size: Self.textSize, weight: .medium))
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+        }
+        .fixedSize(horizontal: true, vertical: false)
     }
 }
 
@@ -173,21 +199,52 @@ private struct MenuBarContentView: View {
     @Environment(AppState.self) private var appState
     @State private var isRefreshing = false
 
+    private var selectedUsage: RateLimitUsage? {
+        switch appState.selectedAgentProvider {
+        case .claudeCode: return appState.latestRateLimitUsage
+        case .codex: return appState.latestCodexRateLimitUsage
+        }
+    }
+
+    private var secondaryLimitLabel: String {
+        switch appState.selectedAgentProvider {
+        case .claudeCode: return "7-day limit"
+        case .codex: return "24-hour limit"
+        }
+    }
+
+    private var secondaryLimitPercent: Double? {
+        switch appState.selectedAgentProvider {
+        case .claudeCode: return selectedUsage?.sevenDayPercent
+        case .codex: return selectedUsage?.twentyFourHourPercent
+        }
+    }
+
+    private var secondaryLimitResetsAt: Date? {
+        switch appState.selectedAgentProvider {
+        case .claudeCode: return selectedUsage?.sevenDayResetsAt
+        case .codex: return selectedUsage?.twentyFourHourResetsAt
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             header
+            agentPicker
 
             VStack(alignment: .leading, spacing: 12) {
                 MenuBarUsageBar(
                     label: "5-hour limit",
-                    percent: appState.latestRateLimitUsage?.fiveHourPercent,
-                    resetsAt: appState.latestRateLimitUsage?.fiveHourResetsAt
+                    percent: selectedUsage?.fiveHourPercent,
+                    resetsAt: selectedUsage?.fiveHourResetsAt,
+                    emptyText: emptyUsageText
                 )
 
                 MenuBarUsageBar(
-                    label: "7-day limit",
-                    percent: appState.latestRateLimitUsage?.sevenDayPercent,
-                    resetsAt: appState.latestRateLimitUsage?.sevenDayResetsAt
+                    label: secondaryLimitLabel,
+                    percent: secondaryLimitPercent,
+                    resetsAt: secondaryLimitResetsAt,
+                    emptyText: emptyUsageText
                 )
             }
 
@@ -202,13 +259,16 @@ private struct MenuBarContentView: View {
         .padding(14)
         .frame(width: 280)
         .task {
-            await appState.refreshRateLimitUsage()
+            await appState.refreshSelectedAgentRateLimitUsage()
+        }
+        .onChange(of: appState.selectedAgentProvider) {
+            Task { await appState.refreshSelectedAgentRateLimitUsage() }
         }
     }
 
     private var header: some View {
         HStack {
-            Text("Claude Usage")
+            Text("\(appState.selectedAgentProvider.displayName) Usage")
                 .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
@@ -219,7 +279,7 @@ private struct MenuBarContentView: View {
                 guard !isRefreshing else { return }
                 isRefreshing = true
                 Task {
-                    await appState.refreshRateLimitUsage(forceRefresh: true)
+                    await appState.refreshSelectedAgentRateLimitUsage(forceRefresh: true)
                     isRefreshing = false
                 }
             } label: {
@@ -229,6 +289,29 @@ private struct MenuBarContentView: View {
             }
             .buttonStyle(.borderless)
             .help("Refresh usage")
+        }
+    }
+
+    private var agentPicker: some View {
+        Picker("Client", selection: Binding(
+            get: { appState.selectedAgentProvider },
+            set: { provider in
+                appState.setDefaultAgentProvider(provider)
+                Task { await appState.refreshSelectedAgentRateLimitUsage() }
+            }
+        )) {
+            ForEach(AgentProvider.allCases, id: \.self) { provider in
+                Text(provider.displayName)
+                    .tag(provider)
+            }
+        }
+        .pickerStyle(.segmented)
+    }
+
+    private var emptyUsageText: String {
+        switch appState.selectedAgentProvider {
+        case .claudeCode: return "Sign in to Claude Code to see usage"
+        case .codex: return "Sign in to Codex to see usage"
         }
     }
 
@@ -289,6 +372,7 @@ private struct MenuBarUsageBar: View {
     let label: String
     let percent: Double?
     let resetsAt: Date?
+    let emptyText: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
@@ -330,7 +414,7 @@ private struct MenuBarUsageBar: View {
                     .font(.system(size: ClaudeTheme.size(10)))
                     .foregroundStyle(.tertiary)
             } else if percent == nil {
-                Text("Sign in to Claude Code to see usage")
+                Text(emptyText)
                     .font(.system(size: ClaudeTheme.size(10)))
                     .foregroundStyle(.tertiary)
             }

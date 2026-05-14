@@ -151,6 +151,11 @@ struct ToolResultView: View {
                             ClaudeThemeDivider()
                             editDiffView(oldString: oldStr, newString: newStr)
                         }
+                    } else if isEditTool, !toolCall.fileChangeDiffs.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ClaudeThemeDivider()
+                            fileChangeDiffsView(toolCall.fileChangeDiffs)
+                        }
                     } else if let result = toolCall.result, !result.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
                             ClaudeThemeDivider()
@@ -258,8 +263,11 @@ struct ToolResultView: View {
     }
 
     private var hasExpandableContent: Bool {
-        isEditTool && toolCall.input["old_string"]?.stringValue != nil
-            && toolCall.input["new_string"]?.stringValue != nil
+        isEditTool && (
+            (toolCall.input["old_string"]?.stringValue != nil
+                && toolCall.input["new_string"]?.stringValue != nil)
+            || !toolCall.fileChangeDiffs.isEmpty
+        )
     }
 
     private func editHunksFromToolInput() -> [PreviewFile.EditHunk] {
@@ -333,6 +341,79 @@ struct ToolResultView: View {
         .textSelection(.enabled)
     }
 
+    private func fileChangeDiffsView(_ changes: [ToolCall.FileChangeDiff]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(changes.enumerated()), id: \.offset) { _, change in
+                VStack(alignment: .leading, spacing: 4) {
+                    if changes.count > 1 {
+                        Text(URL(fileURLWithPath: change.path).lastPathComponent)
+                            .font(.system(size: ClaudeTheme.messageSize(12), weight: .medium))
+                            .foregroundStyle(ClaudeTheme.textSecondary)
+                            .lineLimit(1)
+                    }
+                    rawUnifiedDiffView(change.diff)
+                }
+            }
+        }
+        .textSelection(.enabled)
+    }
+
+    private func rawUnifiedDiffView(_ diff: String) -> some View {
+        let lines = diff.components(separatedBy: .newlines)
+        let collapseThreshold = 18
+        let needsToggle = lines.count > collapseThreshold
+        let visibleLines = needsToggle && !isDiffExpanded
+            ? Array(lines.prefix(collapseThreshold))
+            : lines
+
+        return VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(visibleLines.enumerated()), id: \.offset) { _, line in
+                Text(line.isEmpty ? " " : line)
+                    .font(.system(size: ClaudeTheme.messageSize(12), design: .monospaced))
+                    .foregroundStyle(diffLineColor(line))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 1)
+                    .background(diffLineBackground(line))
+            }
+
+            if needsToggle {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { isDiffExpanded.toggle() }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(isDiffExpanded ? "Show less" : "Show more", bundle: .module)
+                            .font(.system(size: ClaudeTheme.messageSize(12), weight: .medium))
+                        Image(systemName: isDiffExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: ClaudeTheme.messageSize(10), weight: .medium))
+                    }
+                    .foregroundStyle(ClaudeTheme.textTertiary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
+                            .fill(ClaudeTheme.surfacePrimary.opacity(0.6))
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func diffLineColor(_ line: String) -> Color {
+        if line.hasPrefix("+"), !line.hasPrefix("+++") { return ClaudeTheme.statusSuccess }
+        if line.hasPrefix("-"), !line.hasPrefix("---") { return ClaudeTheme.statusError }
+        if line.hasPrefix("@@") { return ClaudeTheme.accent }
+        return ClaudeTheme.textPrimary
+    }
+
+    private func diffLineBackground(_ line: String) -> Color {
+        if line.hasPrefix("+"), !line.hasPrefix("+++") { return ClaudeTheme.statusSuccess.opacity(0.06) }
+        if line.hasPrefix("-"), !line.hasPrefix("---") { return ClaudeTheme.statusError.opacity(0.06) }
+        if line.hasPrefix("@@") { return ClaudeTheme.accent.opacity(0.08) }
+        return Color.clear
+    }
+
     // MARK: - Helpers
 
     private var sfSymbol: String {
@@ -383,7 +464,7 @@ struct ToolResultView: View {
     @ViewBuilder
     private var inputSummaryView: some View {
         if isEditTool || toolNameLower == "write",
-           let filePath = toolCall.input["file_path"]?.stringValue {
+           let filePath = toolCall.editedFilePath {
             let fileName = URL(fileURLWithPath: filePath).lastPathComponent
             HStack(spacing: 0) {
                 Text("\(toolDescriptionPrefix) — ")
@@ -439,6 +520,10 @@ struct ToolResultView: View {
         }
 
         if let filePath = toolCall.input["file_path"]?.stringValue {
+            let fileName = URL(fileURLWithPath: filePath).lastPathComponent
+            return "\(toolDescriptionPrefix) — \(fileName)"
+        }
+        if let filePath = toolCall.editedFilePath {
             let fileName = URL(fileURLWithPath: filePath).lastPathComponent
             return "\(toolDescriptionPrefix) — \(fileName)"
         }

@@ -33,6 +33,8 @@ struct BubbleStyle: ViewModifier {
 
     private var padding: EdgeInsets {
         switch variant {
+        case .user:
+            return EdgeInsets(top: 14, leading: 20, bottom: 14, trailing: 20)
         case .tool, .toolError:
             return Self.toolPadding
         default:

@@ -35,7 +35,8 @@ struct MainView: View {
     private var navigationTitleText: String {
         if let id = windowState.currentSessionId,
            let title = appState.allSessionSummaries.first(where: { $0.id == id })?.title,
-           !title.isEmpty {
+           !title.isEmpty
+        {
             return title
         }
         return windowState.selectedProject?.name ?? ""
@@ -87,7 +88,7 @@ struct MainView: View {
                 .onAppear {
                     windowState.focusMode = appState.focusMode
                 }
-                .navigationTitle(navigationTitleText)
+                .toolbar(removing: .title)
                 .toolbarBackground(.hidden, for: .windowToolbar)
                 .background(UnifiedTitleBarAccessor())
                 .toolbar {
@@ -119,6 +120,11 @@ struct MainView: View {
                             ) { result in
                                 handleFolderSelection(result)
                             }
+                        }
+
+                        ToolbarItem(placement: .navigation) {
+                            Text(navigationTitleText)
+                                .padding(.trailing)
                         }
                     }
                 }
@@ -198,8 +204,8 @@ struct MainView: View {
                 editHunks: file.editHunks,
                 gitDiffMode: file.gitDiffMode
             )
-                .frame(minWidth: 1000, idealWidth: 1400, maxWidth: 1920,
-                       minHeight: 600, idealHeight: 1000, maxHeight: 1200)
+            .frame(minWidth: 1000, idealWidth: 1400, maxWidth: 1920,
+                   minHeight: 600, idealHeight: 1000, maxHeight: 1200)
         }
         .alert("Error", isPresented: Bindable(windowState).showError) {
             Button("OK", role: .cancel) {}
@@ -444,6 +450,7 @@ struct ChatToolbarControls: View {
 
     private var effectiveMode: PermissionMode { windowState.sessionPermissionMode ?? appState.permissionMode }
     private var effectiveModel: String { windowState.sessionModel ?? appState.selectedModel }
+    private var effectiveProvider: AgentProvider { windowState.sessionAgentProvider ?? appState.selectedAgentProvider }
 
     var body: some View {
         HStack(spacing: placement == .composer ? 8 : 4) {
@@ -476,18 +483,22 @@ struct ChatToolbarControls: View {
 
             Menu {
                 Section("Model Picker") {
-                    ForEach(AppState.availableModels, id: \.self) { model in
-                        Button {
-                            appState.setSessionModel(model, in: windowState)
-                        } label: {
-                            Text(AppState.modelDisplayName(model))
-                            if effectiveModel == model { Image(systemName: "checkmark") }
+                    ForEach(appState.availableAgentModelSections(), id: \.provider) { section in
+                        Section(section.provider.displayName) {
+                            ForEach(section.models, id: \.key) { model in
+                                Button {
+                                    appState.setSessionModel(model.id, provider: model.provider, in: windowState)
+                                } label: {
+                                    let isSelected = effectiveProvider == model.provider && effectiveModel == model.id
+                                    Text(isSelected ? "\(model.displayName) ✓" : model.displayName)
+                                }
+                            }
                         }
                     }
                 }
             } label: {
                 controlLabel(
-                    title: AppState.modelDisplayName(effectiveModel),
+                    title: "\(effectiveProvider == .codex ? "Codex · " : "")\(AppState.modelDisplayName(effectiveModel, provider: effectiveProvider))",
                     icon: nil,
                     isAccent: false,
                     isActive: false
@@ -495,7 +506,7 @@ struct ChatToolbarControls: View {
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
-            .help("Model: \(AppState.modelDisplayName(effectiveModel))")
+            .help("Model: \(effectiveProvider.displayName) · \(AppState.modelDisplayName(effectiveModel, provider: effectiveProvider))")
 
             Menu {
                 Section("Effort Picker") {
@@ -715,6 +726,8 @@ struct ModelPickerSheet: View {
     @FocusState private var isFocused: Bool
 
     private var effectiveModel: String { windowState.sessionModel ?? appState.selectedModel }
+    private var effectiveProvider: AgentProvider { windowState.sessionAgentProvider ?? appState.selectedAgentProvider }
+    private var flatModels: [AgentModel] { appState.availableAgentModelSections().flatMap(\.models) }
 
     var body: some View {
         VStack(spacing: 16) {
@@ -723,32 +736,41 @@ struct ModelPickerSheet: View {
                 .foregroundStyle(ClaudeTheme.textPrimary)
 
             VStack(spacing: 8) {
-                ForEach(AppState.availableModels.indices, id: \.self) { index in
-                    let model = AppState.availableModels[index]
-                    HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(AppState.modelDisplayName(model))
-                                .font(.system(size: ClaudeTheme.size(13), weight: .medium))
-                                .foregroundStyle(ClaudeTheme.textPrimary)
-                            Text(AppState.modelDescription(model))
-                                .font(.system(size: ClaudeTheme.size(11)))
-                                .foregroundStyle(ClaudeTheme.textSecondary)
-                                .fixedSize(horizontal: false, vertical: true)
+                ForEach(appState.availableAgentModelSections(), id: \.provider) { section in
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(section.provider.displayName)
+                            .font(.system(size: ClaudeTheme.size(11), weight: .semibold))
+                            .foregroundStyle(ClaudeTheme.textTertiary)
+                            .padding(.horizontal, 4)
+
+                        ForEach(section.models, id: \.key) { model in
+                            let index = flatModels.firstIndex(where: { $0.key == model.key }) ?? 0
+                            HStack(alignment: .top) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(model.displayName)
+                                        .font(.system(size: ClaudeTheme.size(13), weight: .medium))
+                                        .foregroundStyle(ClaudeTheme.textPrimary)
+                                    Text(model.description)
+                                        .font(.system(size: ClaudeTheme.size(11)))
+                                        .foregroundStyle(ClaudeTheme.textSecondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                Spacer()
+                                if effectiveProvider == model.provider && effectiveModel == model.id {
+                                    Image(systemName: "checkmark")
+                                        .foregroundStyle(ClaudeTheme.accent)
+                                        .padding(.top, 2)
+                                }
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(index == selectedIndex ? ClaudeTheme.accentSubtle : ClaudeTheme.surfacePrimary)
+                            .clipShape(RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
+                            .onTapGesture {
+                                appState.setSessionModel(model.id, provider: model.provider, in: windowState)
+                                dismiss()
+                            }
                         }
-                        Spacer()
-                        if effectiveModel == model {
-                            Image(systemName: "checkmark")
-                                .foregroundStyle(ClaudeTheme.accent)
-                                .padding(.top, 2)
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(index == selectedIndex ? ClaudeTheme.accentSubtle : ClaudeTheme.surfacePrimary)
-                    .clipShape(RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
-                    .onTapGesture {
-                        appState.setSessionModel(model, in: windowState)
-                        dismiss()
                     }
                 }
             }
@@ -763,15 +785,16 @@ struct ModelPickerSheet: View {
         .focusable()
         .focused($isFocused)
         .onKeyPress(.upArrow) {
-            selectedIndex = (selectedIndex - 1 + AppState.availableModels.count) % AppState.availableModels.count
+            selectedIndex = (selectedIndex - 1 + flatModels.count) % flatModels.count
             return .handled
         }
         .onKeyPress(.downArrow) {
-            selectedIndex = (selectedIndex + 1) % AppState.availableModels.count
+            selectedIndex = (selectedIndex + 1) % flatModels.count
             return .handled
         }
         .onKeyPress(.return) {
-            appState.setSessionModel(AppState.availableModels[selectedIndex], in: windowState)
+            let model = flatModels[selectedIndex]
+            appState.setSessionModel(model.id, provider: model.provider, in: windowState)
             dismiss()
             return .handled
         }
@@ -780,7 +803,7 @@ struct ModelPickerSheet: View {
             return .handled
         }
         .onAppear {
-            selectedIndex = AppState.availableModels.firstIndex(of: effectiveModel) ?? 0
+            selectedIndex = flatModels.firstIndex { $0.provider == effectiveProvider && $0.id == effectiveModel } ?? 0
             DispatchQueue.main.async { isFocused = true }
         }
     }

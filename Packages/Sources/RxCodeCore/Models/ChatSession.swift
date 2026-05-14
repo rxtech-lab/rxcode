@@ -10,6 +10,7 @@ public struct ChatSession: Identifiable, Codable, Sendable {
     public let createdAt: Date
     public var updatedAt: Date
     public var isPinned: Bool
+    public var agentProvider: AgentProvider
     public var model: String?
     public var effort: String?
     public var permissionMode: PermissionMode?
@@ -27,6 +28,7 @@ public struct ChatSession: Identifiable, Codable, Sendable {
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
         isPinned: Bool = false,
+        agentProvider: AgentProvider = .claudeCode,
         model: String? = nil,
         effort: String? = nil,
         permissionMode: PermissionMode? = nil,
@@ -43,6 +45,7 @@ public struct ChatSession: Identifiable, Codable, Sendable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.isPinned = isPinned
+        self.agentProvider = agentProvider
         self.model = model
         self.effort = effort
         self.permissionMode = permissionMode
@@ -54,7 +57,7 @@ public struct ChatSession: Identifiable, Codable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, projectId, title, messages, createdAt, updatedAt, isPinned, model, effort, permissionMode, origin, worktreePath, worktreeBranch, isArchived, archivedAt
+        case id, projectId, title, messages, createdAt, updatedAt, isPinned, agentProvider, model, effort, permissionMode, origin, worktreePath, worktreeBranch, isArchived, archivedAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -66,6 +69,7 @@ public struct ChatSession: Identifiable, Codable, Sendable {
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
         isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
+        agentProvider = try container.decodeIfPresent(AgentProvider.self, forKey: .agentProvider) ?? .claudeCode
         model = try container.decodeIfPresent(String.self, forKey: .model)
         effort = try container.decodeIfPresent(String.self, forKey: .effort)
         permissionMode = try container.decodeIfPresent(PermissionMode.self, forKey: .permissionMode)
@@ -83,6 +87,7 @@ public struct ChatSession: Identifiable, Codable, Sendable {
         public let createdAt: Date
         public var updatedAt: Date
         public var isPinned: Bool
+        public var agentProvider: AgentProvider
         public var model: String?
         public var effort: String?
         public var permissionMode: PermissionMode?
@@ -99,6 +104,7 @@ public struct ChatSession: Identifiable, Codable, Sendable {
             createdAt: Date,
             updatedAt: Date,
             isPinned: Bool,
+            agentProvider: AgentProvider = .claudeCode,
             model: String? = nil,
             effort: String? = nil,
             permissionMode: PermissionMode? = nil,
@@ -114,6 +120,7 @@ public struct ChatSession: Identifiable, Codable, Sendable {
             self.createdAt = createdAt
             self.updatedAt = updatedAt
             self.isPinned = isPinned
+            self.agentProvider = agentProvider
             self.model = model
             self.effort = effort
             self.permissionMode = permissionMode
@@ -125,7 +132,7 @@ public struct ChatSession: Identifiable, Codable, Sendable {
         }
 
         private enum CodingKeys: String, CodingKey {
-            case id, projectId, title, createdAt, updatedAt, isPinned, model, effort, permissionMode, origin, worktreePath, worktreeBranch, isArchived, archivedAt
+            case id, projectId, title, createdAt, updatedAt, isPinned, agentProvider, model, effort, permissionMode, origin, worktreePath, worktreeBranch, isArchived, archivedAt
         }
 
         public init(from decoder: Decoder) throws {
@@ -136,6 +143,7 @@ public struct ChatSession: Identifiable, Codable, Sendable {
             createdAt = try container.decode(Date.self, forKey: .createdAt)
             updatedAt = try container.decode(Date.self, forKey: .updatedAt)
             isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
+            agentProvider = try container.decodeIfPresent(AgentProvider.self, forKey: .agentProvider) ?? .claudeCode
             model = try container.decodeIfPresent(String.self, forKey: .model)
             effort = try container.decodeIfPresent(String.self, forKey: .effort)
             permissionMode = try container.decodeIfPresent(PermissionMode.self, forKey: .permissionMode)
@@ -155,6 +163,7 @@ public struct ChatSession: Identifiable, Codable, Sendable {
             createdAt: createdAt,
             updatedAt: updatedAt,
             isPinned: isPinned,
+            agentProvider: agentProvider,
             model: model,
             effort: effort,
             permissionMode: permissionMode,
@@ -237,6 +246,7 @@ extension ChatSession.Summary {
         ChatSession(id: id, projectId: projectId, title: title,
                     messages: [], createdAt: createdAt,
                     updatedAt: updatedAt, isPinned: isPinned,
+                    agentProvider: agentProvider,
                     model: model, effort: effort, permissionMode: permissionMode,
                     origin: origin,
                     worktreePath: worktreePath, worktreeBranch: worktreeBranch,

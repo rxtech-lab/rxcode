@@ -23,11 +23,13 @@ public final class ChatBridge {
     /// updates as the CLI emits cumulative usage. Surfaced beside the streaming indicator.
     public var liveOutputTokens: Int = 0
     public var lastTurnContextUsedPercentage: Double?
+    public var agentProvider: AgentProvider = .claudeCode
     public var modelDisplayName: String = ""
     public var sessionStats: ChatSessionStats = ChatSessionStats()
     public var autoPreviewSettings: AttachmentAutoPreviewSettings = AttachmentAutoPreviewSettings()
     public var appVersion: String = ""
     public var claudeVersion: String?
+    public var codexVersion: String?
 
     // MARK: - Action Handlers (set up by the app target)
 
@@ -36,7 +38,8 @@ public final class ChatBridge {
     public var sendSlashCommandHandler: ((String) async -> Void)?
     public var runTerminalCommandHandler: ((String) async -> Void)?
     public var editAndResendHandler: ((UUID, String) async -> Void)?
-    public var fetchRateLimitHandler: (() async -> RateLimitUsage?)?
+    public var fetchRateLimitHandler: ((AgentProvider) async -> RateLimitUsage?)?
+    public var setSessionProviderHandler: ((AgentProvider) -> Void)?
     public var togglePlanModeHandler: (() async -> Void)?
     public var enqueueMessageHandler: ((String, [Attachment]) -> Void)?
     public var removeQueuedMessageHandler: ((UUID) -> Void)?
@@ -71,7 +74,11 @@ public final class ChatBridge {
     }
 
     public func fetchRateLimit() async -> RateLimitUsage? {
-        await fetchRateLimitHandler?()
+        await fetchRateLimitHandler?(agentProvider)
+    }
+
+    public func setSessionProvider(_ provider: AgentProvider) {
+        setSessionProviderHandler?(provider)
     }
 
     public func togglePlanMode() async {

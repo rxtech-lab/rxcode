@@ -2,7 +2,7 @@
 
 **The terminal was for the few. RxCode is for everyone.**
 
-RxCode is a lightweight native macOS desktop client for Claude Code. It brings the CLI agent workflow into a project-centric GUI with streaming chat, repository switching, file browsing, Git status, permissions, terminal access, and per-project notes.
+RxCode is a lightweight native macOS desktop client for Claude Code and Codex. It brings the CLI agent workflow into a project-centric GUI with streaming chat, repository switching, file browsing, Git status, permissions, terminal access, and per-project notes.
 
 ![Platform](https://img.shields.io/badge/platform-macOS%2015.0%2B-blue)
 ![Swift](https://img.shields.io/badge/Swift-6.x-orange)
@@ -21,7 +21,7 @@ RxCode is a lightweight native macOS desktop client for Claude Code. It brings t
 
 The terminal is a wall. For most people who aren't developers, it's a closed door — install a CLI, generate SSH keys, approve every tool call without a real preview of what it's about to do. None of that is hard for engineers; all of it is hard for everyone else. The terminal was for the few, and it still is.
 
-RxCode was built so my non-developer coworkers could use Claude Code without learning a shell first. It doesn't reinvent the agent. It spawns the real `claude` CLI underneath, so your `CLAUDE.md`, skills, MCP servers, and slash commands keep working as-is. What sits on top is a native Mac app:
+RxCode was built so my non-developer coworkers could use Claude Code and Codex without learning a shell first. It doesn't reinvent the agent. It talks to the real runtimes underneath: `claude` for Claude Code, and the Codex app-server through the `codex` CLI for Codex sessions. Your existing CLI setup stays the source of truth. What sits on top is a native Mac app:
 
 - Approval modals that surface the actual diff before any tool runs, with risk-aware Allow / Allow Session / Deny options.
 - Per-project windows you can run in parallel — switch tabs, double-click to spin off a window, keep streams alive in the background.
@@ -29,15 +29,16 @@ RxCode was built so my non-developer coworkers could use Claude Code without lea
 - GitHub OAuth that handles SSH key setup for you, so `git clone` just works.
 - An inspector with a file tree, Git status, embedded terminal, and a per-project memo pad.
 
-Same engine, no terminal required.
+Same agents, no terminal required.
 
 ---
 
-## Key Features vs. Claude Desktop
+## What RxCode Adds
 
 | RxCode feature | Why it matters |
 |---------------|----------------|
 | **Native macOS app** | Built with SwiftUI, not Electron. The current v1.2.0 release is about 5.6 MB to download and about 13 MB unpacked, without bundling a browser runtime. |
+| **Claude Code and Codex support** | Choose the agent runtime per session. RxCode detects installed `claude` and `codex` binaries, surfaces available models, and keeps the same project-centric workflow for both. |
 | **Project-centric workspace** | Register multiple local repositories, switch between them from project tabs, or open a project in its own window for parallel sessions. In-progress streams keep running in the background while you switch. |
 | **Custom slash commands** | Add, edit, disable, import, and export custom slash commands. Built-in commands can be edited locally, while JSON import/export stays custom-only. |
 | **Shortcut buttons** | Create quick buttons for prompts or terminal commands you run repeatedly. Terminal-command shortcuts can launch directly into RxCode's interactive terminal popup. |
@@ -51,14 +52,14 @@ Same engine, no terminal required.
 
 | Feature | Description |
 |---------|-------------|
-| **Streaming Chat** | Real-time Claude Code conversations with Markdown rendering, tool call visualization, diff views, and error bubbles for failed empty responses. |
+| **Streaming Chat** | Real-time Claude Code and Codex conversations with Markdown rendering, tool call visualization, diff views, and error bubbles for failed empty responses. |
 | **Multi-Project Workspace** | Register local folders or GitHub repositories, switch freely, and keep per-project session history. |
 | **Dedicated Project Windows** | Double-click a project tab to open it in an independent window and work across multiple repositories at once. |
 | **Per-Session Controls** | Choose model, permission mode, and effort level per session from the chat toolbar. Defaults are configurable in Settings. |
 | **Permission Modes** | Ask, Accept Edits, Plan, Auto, and Bypass modes mirror Claude Code's permission model and can be changed from the toolbar. |
 | **Permission Management** | Risk-based approve/deny UI with Allow, Allow Session, Deny, and 5-minute auto-deny handling. |
 | **Effort Levels** | Auto, Low, Medium, High, XHigh, and Max reasoning controls for each session. |
-| **Model Selection** | Claude Code aliases with localized descriptions, including Opus, Sonnet, Haiku, 1M context, and plan variants. |
+| **Model Selection** | Claude Code aliases and Codex models with localized descriptions, including Opus, Sonnet, Haiku, 1M context, plan variants, and GPT coding models. |
 | **File Attachments** | Drag-and-drop files and images. Smart paste detects images, file paths, URLs, and long text. |
 | **Attachment Auto-Preview Settings** | Toggle automatic preview chips separately for URLs, file paths, images, and long text. |
 | **Slash Commands** | Built-in and custom command system with built-in command edits/toggles and custom-command JSON import/export. |
@@ -83,7 +84,9 @@ Same engine, no terminal required.
 ## Requirements
 
 - **macOS 15.0** or later
-- **[Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code)** installed and authenticated
+- At least one supported agent runtime installed and authenticated:
+  - **[Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code)**
+  - **Codex CLI**
 - **Xcode with Swift 6.2+ toolchain** for building the current source tree
 
 ---

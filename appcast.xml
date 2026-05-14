@@ -1,78 +1,78 @@
 <?xml version="1.0" encoding="utf-8"?>
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
   <channel>
-    <title>Clarc</title>
-    <description>Clarc Updates</description>
+    <title>RxCode</title>
+    <description>RxCode Updates</description>
     <language>en</language>
 
     <item>
-      <title>Clarc v1.1.9</title>
+      <title>RxCode v1.1.9</title>
       <sparkle:version>15</sparkle:version>
       <sparkle:shortVersionString>1.1.9</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
       <pubDate>Thu, 24 Apr 2026 00:00:00 +0000</pubDate>
       <enclosure
-        url="https://github.com/ttnear/Clarc/releases/download/v1.1.9/Clarc-1.1.9.zip"
+        url="https://github.com/ttnear/RxCode/releases/download/v1.1.9/RxCode-1.1.9.zip"
         length="5849011"
         type="application/octet-stream"
         sparkle:edSignature="+iXXigudfHWBGKVwSuurj6JKO5c+rcFclNtCNog2zCQopmjvPAykqlXgT2h7Ox6rfFW5Omhy3rJiHxsHw4kWBg==" />
     </item>
 
     <item>
-      <title>Clarc v1.1.8</title>
+      <title>RxCode v1.1.8</title>
       <sparkle:version>14</sparkle:version>
       <sparkle:shortVersionString>1.1.8</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
       <pubDate>Tue, 22 Apr 2026 00:00:00 +0000</pubDate>
       <enclosure
-        url="https://github.com/ttnear/Clarc/releases/download/v1.1.8/Clarc-1.1.8.zip"
+        url="https://github.com/ttnear/RxCode/releases/download/v1.1.8/RxCode-1.1.8.zip"
         length="5832319"
         type="application/octet-stream"
         sparkle:edSignature="6UYBHjOmlkhLhtivEdxnnPnwu1QZYRtDi+u5Udhp/BlNg+gIlveEKTImaXM4b5mXTQ5N86VY2GeE4XL182RuCw==" />
     </item>
 
     <item>
-      <title>Clarc v1.1.4</title>
+      <title>RxCode v1.1.4</title>
       <sparkle:version>9</sparkle:version>
       <sparkle:shortVersionString>1.1.4</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
       <pubDate>Sun, 20 Apr 2026 00:00:00 +0000</pubDate>
       <enclosure
-        url="https://github.com/ttnear/Clarc/releases/download/v1.1.4/Clarc-1.1.4.zip"
+        url="https://github.com/ttnear/RxCode/releases/download/v1.1.4/RxCode-1.1.4.zip"
         length="5778040"
         type="application/octet-stream"
         sparkle:edSignature="dXkMOsPLazMJ9T7+ZuLYhsJcl66MXBLo37oEJFTGN5ufmWrxniJV6cZvIytBgfGVk6JpVrE2amOaURpZsJxBDQ==" />
     </item>
     <item>
-      <title>Clarc v1.1.3</title>
+      <title>RxCode v1.1.3</title>
       <sparkle:version>8</sparkle:version>
       <sparkle:shortVersionString>1.1.3</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
       <pubDate>Sun, 20 Apr 2026 00:00:00 +0000</pubDate>
       <enclosure
-        url="https://github.com/ttnear/Clarc/releases/download/v1.1.3/Clarc-1.1.3.zip"
+        url="https://github.com/ttnear/RxCode/releases/download/v1.1.3/RxCode-1.1.3.zip"
         length="5790499"
         type="application/octet-stream"
         sparkle:edSignature="ZaFDZdWHMyy70tJITsdbmP4Aczk3hyLyNSIF4w4vh+66dJNFOPDxoEU08iJY9MKfc1RHmXUXwjnnHSiwSayjBQ==" />
     </item>
     <item>
-      <title>Clarc v1.1.2</title>
+      <title>RxCode v1.1.2</title>
       <sparkle:version>7</sparkle:version>
       <sparkle:shortVersionString>1.1.2</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
       <pubDate>Sun, 20 Apr 2026 00:00:00 +0000</pubDate>
       <enclosure
-        url="https://github.com/ttnear/Clarc/releases/download/v1.1.2/Clarc-1.1.2.zip"
+        url="https://github.com/ttnear/RxCode/releases/download/v1.1.2/RxCode-1.1.2.zip"
         length="5790511"
         type="application/octet-stream"
         sparkle:edSignature="MbgLpFpd5u68xSTEmoBD1Kw3O68ORm5W3i+mUOJtT7KJpeQ1hfYicfTBZaBE2y/fxb3N26KcXsTYsZ2UvhDnBQ==" />
     </item>
     <item>
-      <title>Clarc v1.1.0</title>
-      <sparkle:releaseNotesLink>https://github.com/ttnear/Clarc/releases/tag/v1.1.0</sparkle:releaseNotesLink>
+      <title>RxCode v1.1.0</title>
+      <sparkle:releaseNotesLink>https://github.com/ttnear/RxCode/releases/tag/v1.1.0</sparkle:releaseNotesLink>
       <pubDate>Fri, 17 Apr 2026 07:56:20 +0000</pubDate>
       <enclosure
-        url="https://github.com/ttnear/Clarc/releases/download/v1.1.0/Clarc-1.1.0.zip"
+        url="https://github.com/ttnear/RxCode/releases/download/v1.1.0/RxCode-1.1.0.zip"
         sparkle:version="4"
         sparkle:shortVersionString="1.1.0"
         length="5749949"
@@ -82,11 +82,11 @@
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
     </item>
     <item>
-      <title>Clarc v1.0.2</title>
-      <sparkle:releaseNotesLink>https://github.com/ttnear/Clarc/releases/tag/v1.0.2</sparkle:releaseNotesLink>
+      <title>RxCode v1.0.2</title>
+      <sparkle:releaseNotesLink>https://github.com/ttnear/RxCode/releases/tag/v1.0.2</sparkle:releaseNotesLink>
       <pubDate>Wed, 15 Apr 2026 07:57:18 +0000</pubDate>
       <enclosure
-        url="https://github.com/ttnear/Clarc/releases/download/v1.0.2/Clarc-1.0.2.zip"
+        url="https://github.com/ttnear/RxCode/releases/download/v1.0.2/RxCode-1.0.2.zip"
         sparkle:version="3"
         sparkle:shortVersionString="1.0.2"
         length="6080820"
@@ -96,11 +96,11 @@
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
     </item>
     <item>
-      <title>Clarc v1.0.1</title>
-      <sparkle:releaseNotesLink>https://github.com/ttnear/Clarc/releases/tag/v1.0.1</sparkle:releaseNotesLink>
+      <title>RxCode v1.0.1</title>
+      <sparkle:releaseNotesLink>https://github.com/ttnear/RxCode/releases/tag/v1.0.1</sparkle:releaseNotesLink>
       <pubDate>Wed, 15 Apr 2026 06:56:38 +0000</pubDate>
       <enclosure
-        url="https://github.com/ttnear/Clarc/releases/download/v1.0.1/Clarc-1.0.1.zip"
+        url="https://github.com/ttnear/RxCode/releases/download/v1.0.1/RxCode-1.0.1.zip"
         sparkle:version="2"
         sparkle:shortVersionString="1.0.1"
         length="6088696"
@@ -110,11 +110,11 @@
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
     </item>
     <item>
-      <title>Clarc v1.0.0</title>
-      <sparkle:releaseNotesLink>https://github.com/ttnear/Clarc/releases/tag/v1.0.0</sparkle:releaseNotesLink>
+      <title>RxCode v1.0.0</title>
+      <sparkle:releaseNotesLink>https://github.com/ttnear/RxCode/releases/tag/v1.0.0</sparkle:releaseNotesLink>
       <pubDate>Tue, 15 Apr 2026 00:00:00 +0000</pubDate>
       <enclosure
-        url="https://github.com/ttnear/Clarc/releases/download/v1.0.0/Clarc-1.0.0.zip"
+        url="https://github.com/ttnear/RxCode/releases/download/v1.0.0/RxCode-1.0.0.zip"
         sparkle:version="1.0.0"
         sparkle:shortVersionString="1.0.0"
         length="6045761"
@@ -124,55 +124,55 @@
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
     </item>
     <item>
-      <title>Clarc v1.1.1</title>
+      <title>RxCode v1.1.1</title>
       <sparkle:version>6</sparkle:version>
       <sparkle:shortVersionString>1.1.1</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
       <pubDate>Fri, 17 Apr 2026 12:50:10 +0000</pubDate>
       <enclosure
-        url="https://github.com/ttnear/Clarc/releases/download/v1.1.1/Clarc-1.1.1.zip"
+        url="https://github.com/ttnear/RxCode/releases/download/v1.1.1/RxCode-1.1.1.zip"
         length="5756506"
         type="application/octet-stream"
         sparkle:edSignature="UfK7p6YwNHuWPWV4jkcWs3qb413FAnEF3W63rVb6sA/VEhaTA0v7SpOzD7VuFJKSGA4e+v7giFF8Nf1S6WZDBA==" />
     </item>
     <item>
-      <title>Clarc v1.1.6</title>
+      <title>RxCode v1.1.6</title>
       <sparkle:version>12</sparkle:version>
       <sparkle:shortVersionString>1.1.6</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
       <pubDate>Sun, 20 Apr 2026 00:00:00 +0000</pubDate>
       <enclosure
-        url="https://github.com/ttnear/Clarc/releases/download/v1.1.6/Clarc-1.1.6.zip"
+        url="https://github.com/ttnear/RxCode/releases/download/v1.1.6/RxCode-1.1.6.zip"
         length="5787523"
         type="application/octet-stream"
         sparkle:edSignature="wQLaRIbcCFtPFQkuoONTXKswNAMeGXOPGkmU5lwfNQgIjHg6UuqgbfG9rshDxpypMln6fZzZsp/6i5YacNicCA==" />
     </item>
     <item>
-      <title>Clarc v1.1.5</title>
+      <title>RxCode v1.1.5</title>
       <sparkle:version>11</sparkle:version>
       <sparkle:shortVersionString>1.1.5</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
       <pubDate>Mon, 20 Apr 2026 06:47:18 +0000</pubDate>
       <enclosure
-        url="https://github.com/ttnear/Clarc/releases/download/v1.1.5/Clarc-1.1.5.zip"
+        url="https://github.com/ttnear/RxCode/releases/download/v1.1.5/RxCode-1.1.5.zip"
         length="5779659"
         type="application/octet-stream"
         sparkle:edSignature="1i+LKsqepjFvbDPW3GlcddYhdtqR8IL0CiujCW7FJQtDYbjKdtvkEgJ5vSnusSTahnQLtUbPPaxGqLpZV8KIAA==" />
     </item>
     <item>
-      <title>Clarc v1.1.7</title>
+      <title>RxCode v1.1.7</title>
       <sparkle:version>13</sparkle:version>
       <sparkle:shortVersionString>1.1.7</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
       <pubDate>Tue, 21 Apr 2026 09:08:19 +0000</pubDate>
       <enclosure
-        url="https://github.com/ttnear/Clarc/releases/download/v1.1.7/Clarc-1.1.7.zip"
+        url="https://github.com/ttnear/RxCode/releases/download/v1.1.7/RxCode-1.1.7.zip"
         length="5830731"
         type="application/octet-stream"
         sparkle:edSignature="hMHvH5E/XYiVNoqrCHt+Zb7JvQhqo3PirNfk6WAx/Tw0QxqyGkxQhc4au4maOmMYELDQ7ocTgjGTjBEfsJi3AQ==" />
     </item>
     <item>
-      <title>Clarc v1.2.0</title>
+      <title>RxCode v1.2.0</title>
       <sparkle:version>16</sparkle:version>
       <sparkle:shortVersionString>1.2.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
@@ -194,13 +194,13 @@
 </ul>
       ]]></description>
       <enclosure
-        url="https://github.com/ttnear/Clarc/releases/download/v1.2.0/Clarc-1.2.0.zip"
+        url="https://github.com/ttnear/RxCode/releases/download/v1.2.0/RxCode-1.2.0.zip"
         length="5889200"
         type="application/octet-stream"
         sparkle:edSignature="Azp3incOAtkpQZ485tHtd0t8eIRICWEva8bLGI6yC6jmos3S10o91wtsd2Fm7WX/UrL+tJnD189uAzH6QdoUAw==" />
     </item>
     <item>
-      <title>Clarc v1.2.1</title>
+      <title>RxCode v1.2.1</title>
       <sparkle:version>18</sparkle:version>
       <sparkle:shortVersionString>1.2.1</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
@@ -223,13 +223,13 @@
 </ul>
       ]]></description>
       <enclosure
-        url="https://github.com/ttnear/Clarc/releases/download/v1.2.1/Clarc-1.2.1.zip"
+        url="https://github.com/ttnear/RxCode/releases/download/v1.2.1/RxCode-1.2.1.zip"
         length="5919084"
         type="application/octet-stream"
         sparkle:edSignature="3sOvrfwTrqlGd0a3NwS4mW4RKKrk15IP7QdnJHjV9AwSeAV3bU3IGoloidpqkIV9I3J7EZ7n9nWFl6mDIIQwBA==" />
     </item>
     <item>
-      <title>Clarc v1.2.3</title>
+      <title>RxCode v1.2.3</title>
       <sparkle:version>21</sparkle:version>
       <sparkle:shortVersionString>1.2.3</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
@@ -237,7 +237,7 @@
       <description><![CDATA[
 <h3>New</h3>
 <ul>
-  <li>Sessions started in Clarc now appear in the <code>claude --resume</code> picker — switch freely between Clarc and the terminal CLI.</li>
+  <li>Sessions started in RxCode now appear in the <code>claude --resume</code> picker — switch freely between RxCode and the terminal CLI.</li>
   <li>Legacy sessions are automatically migrated to the new format.</li>
 </ul>
 <h3>Improved</h3>
@@ -254,14 +254,14 @@
 </ul>
       ]]></description>
       <enclosure
-        url="https://github.com/ttnear/Clarc/releases/download/v1.2.3/Clarc-1.2.3.zip"
+        url="https://github.com/ttnear/RxCode/releases/download/v1.2.3/RxCode-1.2.3.zip"
         length="6253605"
         type="application/octet-stream"
         sparkle:edSignature="8DdsCPKz4zfFoxnhDt9C2XIhugubv9+cNc+S3R5j793ex0LPt8EaRS+R8++1C9wC6dahOuoF8vN6j408bRpBDg==" />
     </item>
 
     <item>
-      <title>Clarc v1.2.2</title>
+      <title>RxCode v1.2.2</title>
       <sparkle:version>20</sparkle:version>
       <sparkle:shortVersionString>1.2.2</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
@@ -279,13 +279,13 @@
 </ul>
       ]]></description>
       <enclosure
-        url="https://github.com/ttnear/Clarc/releases/download/v1.2.2/Clarc-1.2.2.zip"
+        url="https://github.com/ttnear/RxCode/releases/download/v1.2.2/RxCode-1.2.2.zip"
         length="5918951"
         type="application/octet-stream"
         sparkle:edSignature="rrpfCh6xwUUR57Ok1k5US2dWYCWsxrWwM2VfxEBYHfbtKjcAIau1IKM7Ay2Y8zVct04tYKRF/J8vgvmuSSrSAw==" />
     </item>
     <item>
-      <title>Clarc v1.2.4</title>
+      <title>RxCode v1.2.4</title>
       <sparkle:version>23</sparkle:version>
       <sparkle:shortVersionString>1.2.4</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
@@ -297,13 +297,13 @@
 </ul>
       ]]></description>
       <enclosure
-        url="https://github.com/ttnear/Clarc/releases/download/v1.2.4/Clarc-1.2.4.zip"
+        url="https://github.com/ttnear/RxCode/releases/download/v1.2.4/RxCode-1.2.4.zip"
         length="6263985"
         type="application/octet-stream"
         sparkle:edSignature="wo8bwxHmh7B3iODRlPyDI6FtNgt4bgxp7DmrNM38jrq8FiTcz+EW0+AIwQhPNr4EqSnILeSzAS/q2+Ok4dVcBA==" />
     </item>
     <item>
-      <title>Clarc v1.2.5</title>
+      <title>RxCode v1.2.5</title>
       <sparkle:version>24</sparkle:version>
       <sparkle:shortVersionString>1.2.5</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
@@ -316,7 +316,7 @@
 </ul>
       ]]></description>
       <enclosure
-        url="https://github.com/ttnear/Clarc/releases/download/v1.2.5/Clarc-1.2.5.zip"
+        url="https://github.com/ttnear/RxCode/releases/download/v1.2.5/RxCode-1.2.5.zip"
         length="6273658"
         type="application/octet-stream"
         sparkle:edSignature="NQ1mzCs8WpjmY6RttGqZXrFo8roFCsL+sBS6krB1kZO3orHCBlyXSaDqzW6p4xhtQEex0GOWF7n/qHxCieSWDg==" />

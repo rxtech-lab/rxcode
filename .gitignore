@@ -23,3 +23,12 @@ scripts/.sparkle_private_key
 
 # Sparkle CLI tools (reinstallable via setup_sparkle.sh)
 scripts/sparkle_tools/
+
+# CI build outputs
+output/
+test-results/
+RxCode.dmg
+sparkle.key
+release_notes.html
+release_notes.md
+

@@ -1,0 +1,268 @@
+/* Korean localization — RxCodeChatKit */
+
+// MARK: - InputBarView
+"Attach file" = "파일 첨부";
+"Plan" = "계획";
+"Turn off plan mode" = "플랜 모드 끄기";
+"Type a message..." = "메시지를 입력하세요...";
+
+// MARK: - FileDiffView
+"Diff" = "Diff";
+"No changes" = "변경사항 없음";
+"Copy" = "복사";
+"Copied" = "복사됨";
+"loading..." = "불러오는 중...";
+
+// MARK: - SlashCommandManagerView
+"Slash Command Manager" = "슬래시 커맨드 관리자";
+"%lld commands" = "%lld개 커맨드";
+"Reset Defaults" = "기본값 초기화";
+"Restore modified default commands to their original state" = "수정한 기본 커맨드를 원래 상태로 복원합니다";
+"Export" = "내보내기";
+"Export custom commands to a JSON file" = "커스텀 커맨드를 JSON 파일로 내보냅니다";
+"Import" = "가져오기";
+"Import commands from a JSON file" = "JSON 파일에서 커맨드를 가져옵니다";
+"New Command" = "새 커맨드";
+"Search commands..." = "커맨드 검색...";
+"default" = "기본";
+"accepts input" = "입력 허용";
+"terminal" = "터미널";
+"Disable" = "비활성화";
+"Enable" = "활성화";
+"Delete" = "삭제";
+"No results found" = "검색 결과 없음";
+"Try a different keyword" = "다른 키워드로 검색해 보세요";
+"Reset Default Commands" = "기본 커맨드 초기화";
+"Reset" = "초기화";
+"Cancel" = "취소";
+"All modified default commands will be restored to their original state." = "수정한 모든 기본 커맨드가 원래 상태로 복원됩니다.";
+"Import Succeeded" = "가져오기 성공";
+"Import Failed" = "가져오기 실패";
+"OK" = "확인";
+"Edit Command" = "커맨드 편집";
+"Add New Command" = "새 커맨드 추가";
+"Name" = "이름";
+"Command name (e.g. my-command)" = "커맨드 이름 (예: my-command)";
+"Description" = "설명";
+"Short description" = "짧은 설명";
+"Detail Description (optional)" = "상세 설명 (선택사항)";
+"Accepts Input" = "입력 허용";
+"Allows additional text to be entered after the command" = "커맨드 뒤에 추가 텍스트를 입력할 수 있습니다";
+"Interactive (Terminal)" = "인터랙티브 (터미널)";
+"Commands requiring TUI will run in the inline terminal" = "TUI가 필요한 커맨드는 인라인 터미널에서 실행됩니다";
+"Restore Default" = "기본값 복원";
+"Save" = "저장";
+"Add" = "추가";
+"Export Slash Commands" = "슬래시 커맨드 내보내기";
+"Import Slash Commands" = "슬래시 커맨드 가져오기";
+"Invalid JSON format." = "유효하지 않은 JSON 형식입니다.";
+"Imported %lld custom commands." = "%lld개 커스텀 커맨드를 가져왔습니다.";
+"A command with this name already exists." = "이미 존재하는 커맨드 이름입니다.";
+"RxCode slash command export file." = "RxCode 슬래시 커맨드 내보내기 파일입니다.";
+"Usage:" = "사용법:";
+"Edit the array below to add, remove, or change custom slash commands." = "아래 배열을 편집해서 커스텀 슬래시 커맨드를 추가, 삭제, 변경하세요.";
+"The leading slash is optional while editing names; RxCode saves names without it." = "이름을 편집할 때 앞의 /는 선택사항입니다. RxCode는 / 없이 저장합니다.";
+"Built-in command names are ignored on import and are never exported." = "기본 명령어 이름은 가져올 때 무시되며 내보내기에 포함되지 않습니다.";
+"Each custom command supports these properties:" = "각 커스텀 커맨드는 다음 속성을 지원합니다:";
+"name: command name without the leading slash." = "name: 앞의 /를 제외한 커맨드 이름입니다.";
+"description: short text shown in the command picker." = "description: 커맨드 선택기에 표시되는 짧은 설명입니다.";
+"detailDescription: optional longer text shown in command details. Use null or omit it when empty." = "detailDescription: 커맨드 상세에 표시되는 선택적 긴 설명입니다. 비어 있으면 null을 쓰거나 생략하세요.";
+"acceptsInput: true lets users type additional text after the command." = "acceptsInput: true이면 커맨드 뒤에 추가 텍스트를 입력할 수 있습니다.";
+"isInteractive: true runs the command in the interactive terminal." = "isInteractive: true이면 인터랙티브 터미널에서 실행됩니다.";
+"All properties example:" = "모든 속성 예시:";
+"Short description shown in the command picker" = "커맨드 선택기에 표시되는 짧은 설명";
+"Optional longer description shown in command details" = "커맨드 상세에 표시되는 선택적 긴 설명";
+"RxCode shortcut export file." = "RxCode 단축키 내보내기 파일입니다.";
+"Edit the array below to add, remove, or change shortcuts." = "아래 배열을 편집해서 단축키를 추가, 삭제, 변경하세요.";
+"Each shortcut supports these properties:" = "각 단축키는 다음 속성을 지원합니다:";
+"id: optional unique identifier (UUID). Auto-generated on import if omitted." = "id: 선택적 고유 식별자 (UUID). 가져올 때 생략하면 자동 생성됩니다.";
+"name: label shown on the shortcut button." = "name: 단축키 버튼에 표시되는 이름입니다.";
+"message: text sent to Claude, or command run in the terminal." = "message: Claude에 전송할 텍스트 또는 터미널에서 실행할 커맨드입니다.";
+"isTerminalCommand: true runs the message as a terminal command instead of sending it to chat." = "isTerminalCommand: true이면 채팅 대신 터미널 커맨드로 실행됩니다.";
+"Shortcut button label" = "단축키 버튼 이름";
+"Message sent to Claude or command run in terminal" = "Claude에 전송할 메시지 또는 터미널에서 실행할 커맨드";
+
+// MARK: - ShortcutManagerView
+"Shortcut Manager" = "단축키 관리자";
+"%lld shortcuts" = "%lld개 단축키";
+"Export shortcuts to a JSON file" = "단축키를 JSON 파일로 내보냅니다";
+"Import shortcuts from a JSON file" = "JSON 파일에서 단축키를 가져옵니다";
+"New Shortcut" = "새 단축키";
+"No shortcuts" = "단축키 없음";
+"Register frequently used messages as shortcuts" = "자주 사용하는 메시지를 단축키로 등록하세요";
+"Add First Shortcut" = "첫 단축키 추가";
+"Edit Shortcut" = "단축키 편집";
+"Add New Shortcut" = "새 단축키 추가";
+"Name shown on the button" = "버튼에 표시될 이름";
+"Command" = "커맨드";
+"Message" = "메시지";
+"This command will run in the terminal when the button is clicked" = "버튼을 클릭하면 이 커맨드가 터미널에서 실행됩니다";
+"This message will be sent when the button is clicked" = "버튼을 클릭하면 이 메시지가 전송됩니다";
+"Execution Mode" = "실행 모드";
+"Run as terminal command" = "터미널 커맨드로 실행";
+"When enabled, the command runs in the terminal instead of chat" = "활성화하면 커맨드가 채팅 대신 터미널에서 실행됩니다";
+"Preview" = "미리보기";
+"Shortcut" = "단축키";
+"Export Shortcuts" = "단축키 내보내기";
+"Import Shortcuts" = "단축키 가져오기";
+
+// MARK: - SlashCommandBar / CommandMenuButton / UsagePopoverView
+"Slash Commands" = "슬래시 커맨드";
+"Close" = "닫기";
+"Copied" = "복사됨";
+"Copy Conversation" = "대화 복사";
+"Usage" = "사용량";
+"Manage Commands" = "커맨드 관리";
+"Commands" = "커맨드";
+"Session Usage" = "세션 사용량";
+"Cost" = "비용";
+"Input tokens" = "입력 토큰";
+"Output tokens" = "출력 토큰";
+"Cache creation" = "캐시 생성";
+"Cache read" = "캐시 읽기";
+"Duration" = "소요 시간";
+"Turns" = "대화 횟수";
+"File Search" = "파일 검색";
+
+// MARK: - MessageListView
+"Show %lld earlier messages" = "%lld개 이전 메시지 보기";
+"Collapse earlier messages" = "이전 메시지 접기";
+"%lld tools executed" = "%lld개 도구 실행됨";
+"How can I help you?" = "무엇을 도와드릴까요?";
+"Thinking..." = "생각하는 중...";
+"Generating response..." = "응답 생성 중...";
+
+// MARK: - MessageBubble
+"Edit message..." = "메시지 편집...";
+"Send" = "전송";
+"Collapse" = "접기";
+"Show more" = "더 보기";
+"Copy Message" = "메시지 복사";
+"Edit Message" = "메시지 편집";
+
+// MARK: - ChatView
+"Manage shortcuts" = "단축키 관리";
+
+// MARK: - StatusLineView
+"context" = "컨텍스트";
+"5h" = "5시간";
+"7d" = "7일";
+"5-hour rate limit" = "5시간 사용량 한도";
+"Tracks usage against Anthropic's rolling 5-hour limit. Resets gradually as older requests age out." = "Anthropic의 5시간 롤링 한도 대비 사용량을 추적합니다. 이전 요청이 시간이 지남에 따라 점진적으로 리셋됩니다.";
+"7-day rate limit" = "7일 사용량 한도";
+"Tracks usage against Anthropic's rolling 7-day limit. Resets gradually as older requests age out." = "Anthropic의 7일 롤링 한도 대비 사용량을 추적합니다. 이전 요청이 시간이 지남에 따라 점진적으로 리셋됩니다.";
+"Context window" = "컨텍스트 윈도우";
+"Portion of the current conversation's context window in use. When it fills, older messages may be summarized or dropped." = "현재 대화의 컨텍스트 윈도우 중 사용 중인 비율입니다. 가득 차면 이전 메시지가 요약되거나 삭제될 수 있습니다.";
+"Currently at %lld%%" = "현재 %lld%%";
+"Resets in %@" = "%@ 후 리셋";
+
+// MARK: - ToolResultView
+"Show less" = "접기";
+"Show more" = "더 보기";
+"Error occurred" = "오류 발생";
+"Completed" = "완료됨";
+"Running" = "실행 중";
+"Interrupted" = "중단됨";
+"Read file" = "파일 읽기";
+"Edit file" = "파일 편집";
+"Create new file" = "새 파일 생성";
+"Run command" = "커맨드 실행";
+"Find files" = "파일 찾기";
+"Search in code" = "코드 검색";
+"Edit multiple locations" = "여러 위치 편집";
+"Edit notebook" = "노트북 편집";
+"Subagent" = "서브에이전트";
+"Skill" = "스킬";
+"Interactive terminal" = "인터랙티브 터미널";
+
+// MARK: - MarkdownView / TextPreviewSheet
+"Copy" = "복사";
+"Copied" = "복사됨";
+
+// MARK: - WebPreviewButton
+"View Result" = "결과 보기";
+"Open in browser" = "브라우저에서 열기";
+
+// MARK: - Slash Command Descriptions
+"Start a new conversation" = "새 대화 시작";
+"Side question not added to conversation" = "대화에 추가되지 않는 부가 질문";
+"Compact conversation (focus instructions allowed)" = "대화 압축 (선택적 포커스 지침 허용)";
+"Copy last response to clipboard" = "마지막 응답을 클립보드에 복사";
+"Export conversation as text" = "현재 대화를 텍스트로 내보내기";
+"Create a branch of current conversation" = "현재 대화의 브랜치 생성";
+"Rewind to a previous point" = "이전 시점으로 되돌리기";
+"Rename session" = "세션 이름 변경";
+"Diff viewer for uncommitted changes" = "미커밋 변경사항 diff 뷰어";
+"Generate a one-line session summary" = "세션 한 줄 요약 생성";
+"Select/change AI model" = "AI 모델 선택/변경";
+"Toggle fast mode" = "빠른 모드 켜기/끄기";
+"Set model effort level" = "모델 effort 수준 설정";
+"Token usage statistics" = "토큰 사용 통계";
+"Plan usage limits and rate limits" = "요금제 사용 한도 및 속도 제한";
+"Daily usage and session history visualization" = "일일 사용량, 세션 기록, 연속 기록 시각화";
+"Configure extra usage" = "속도 제한 초과 시 추가 사용량 구성";
+"Settings interface" = "설정 인터페이스";
+"Manage permissions" = "권한 규칙 관리";
+"Privacy settings (Pro/Max)" = "개인정보 설정 (Pro/Max)";
+"Change color theme" = "색상 테마 변경";
+"Set prompt bar color" = "프롬프트 바 색상 설정";
+"Configure status line" = "상태 표시줄 구성";
+"Configure keybindings" = "키바인딩 구성";
+"Configure terminal keybindings" = "터미널 키바인딩 구성";
+"Toggle sandbox mode" = "샌드박스 모드 전환";
+"Initialize project with CLAUDE.md" = "CLAUDE.md로 프로젝트 초기화";
+"Edit CLAUDE.md memory file" = "CLAUDE.md 메모리 파일 편집";
+"Add working directory to session" = "세션에 작업 디렉토리 추가";
+"Visualize context usage" = "컨텍스트 사용량 시각화";
+"Enter plan mode" = "플랜 모드 진입";
+"Manage background tasks" = "백그라운드 작업 관리";
+"List available skills" = "사용 가능한 스킬 목록";
+"Session analysis report" = "세션 분석 보고서 생성";
+"Review and fix code quality/efficiency of changes" = "변경사항 코드 품질/효율성 검토 및 수정";
+"Analyze security vulnerabilities" = "현재 브랜치 변경사항 보안 분석";
+"Repeat execution (e.g. /loop 5m /foo)" = "반복 실행 (예: /loop 5m /foo)";
+"Manage cloud scheduled tasks" = "클라우드 예약 작업 관리";
+"Auto-fix PR CI failures and review comments" = "PR CI 실패 및 리뷰 댓글 자동 수정";
+"Orchestrate large-scale parallel changes" = "대규모 병렬 변경 오케스트레이션";
+"Load Claude API reference for current project" = "현재 프로젝트용 Claude API 레퍼런스 로드";
+"Enable debug logging and diagnose issues" = "디버그 로그 활성화 및 문제 진단";
+"Reduce permission prompts by scanning transcripts" = "대화 기록 분석으로 권한 요청 횟수 줄이기";
+"Review a pull request locally" = "로컬에서 PR 리뷰";
+"Generate a team onboarding guide" = "팀 온보딩 가이드 생성";
+"Manage agent configuration" = "에이전트 구성 관리";
+"View hook configuration" = "훅 구성 보기";
+"Manage plugins" = "플러그인 관리";
+"Reload plugins" = "플러그인 다시 로드";
+"Manage MCP servers" = "MCP 서버 연결 관리";
+"Manage IDE integration" = "IDE 통합 관리";
+"Configure Claude in Chrome" = "Chrome에서 Claude 설정";
+"Continue in Desktop app" = "데스크톱 앱에서 세션 계속";
+"Remote control from claude.ai" = "claude.ai에서 원격 제어";
+"Configure remote environment" = "원격 환경 구성";
+"Toggle voice dictation" = "음성 받아쓰기 전환";
+"Interactive feature lessons with demos" = "애니메이션 데모와 함께하는 기능 학습";
+"Pull a web session into this terminal" = "웹 세션을 터미널로 가져오기";
+"Set terminal UI renderer" = "터미널 UI 렌더러 설정";
+"Draft a plan in an ultraplan session" = "Ultraplan 세션에서 계획 작성";
+"Deep multi-agent cloud code review" = "다중 에이전트 심층 클라우드 코드 리뷰";
+"Connect GitHub account to Claude Code on the web" = "GitHub 계정을 Claude Code 웹에 연결";
+"Log in to Anthropic account" = "Anthropic 계정 로그인";
+"Log out of Anthropic account" = "Anthropic 계정 로그아웃";
+"Set up GitHub Actions app" = "GitHub Actions 앱 설정";
+"Install Slack app" = "Slack 앱 설치";
+"Mobile app QR code" = "모바일 앱 QR 코드";
+"Write heap snapshot for memory diagnostics" = "메모리 진단을 위한 힙 스냅샷 저장";
+"Diagnose installation/configuration" = "설치 및 설정 진단";
+"Version, model, and account status" = "버전, 모델, 계정 상태";
+"Show help" = "도움말 보기";
+"Submit feedback/bug report" = "피드백/버그 보고";
+"View changelog" = "변경 로그 보기";
+"Upgrade plan" = "상위 요금제로 업그레이드";
+"Order Claude Code stickers" = "Claude Code 스티커 주문";
+"Share free 1-week passes" = "1주 무료 이용권 공유";
+"Exit CLI" = "CLI 종료";
+
+// MARK: - AskUserQuestionView
+"Question" = "질문";
+"tokens" = "토큰";
+"tok" = "토큰";

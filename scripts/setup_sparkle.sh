@@ -15,7 +15,7 @@ set -e
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 TOOLS_DIR="$SCRIPTS_DIR/sparkle_tools"
 KEY_FILE="$SCRIPTS_DIR/.sparkle_private_key"
-PBXPROJ="$(dirname "$SCRIPTS_DIR")/Clarc.xcodeproj/project.pbxproj"
+PBXPROJ="$(dirname "$SCRIPTS_DIR")/RxCode.xcodeproj/project.pbxproj"
 
 SPARKLE_VERSION="2.9.1"
 SPARKLE_URL="https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz"
@@ -80,7 +80,7 @@ echo "✅ 설정 완료"
 echo ""
 echo "📌 다음 단계: Xcode에서 SUPublicEDKey 설정"
 echo ""
-echo "   1. Xcode → Clarc 타겟 → Build Settings → Info.plist Values"
+echo "   1. Xcode → RxCode 타겟 → Build Settings → Info.plist Values"
 echo "   2. 아래 키/값을 추가:"
 echo ""
 echo "      키:  SUPublicEDKey"
@@ -97,7 +97,7 @@ if grep -q "INFOPLIST_KEY_SUPublicEDKey" "$PBXPROJ" 2>/dev/null; then
     echo "✓ SUPublicEDKey가 이미 pbxproj에 있습니다."
 else
     echo "🔧 pbxproj에 SUPublicEDKey 자동 추가 중..."
-    sed -i '' "s|INFOPLIST_KEY_SUFeedURL = \"https://raw.githubusercontent.com/ttnear/Clarc/main/appcast.xml\";|INFOPLIST_KEY_SUFeedURL = \"https://raw.githubusercontent.com/ttnear/Clarc/main/appcast.xml\";\n\t\t\t\tINFOPLIST_KEY_SUPublicEDKey = \"${PUBLIC_KEY}\";|g" "$PBXPROJ"
+    sed -i '' "s|INFOPLIST_KEY_SUFeedURL = \"https://raw.githubusercontent.com/ttnear/RxCode/main/appcast.xml\";|INFOPLIST_KEY_SUFeedURL = \"https://raw.githubusercontent.com/ttnear/RxCode/main/appcast.xml\";\n\t\t\t\tINFOPLIST_KEY_SUPublicEDKey = \"${PUBLIC_KEY}\";|g" "$PBXPROJ"
     echo "✓ SUPublicEDKey가 pbxproj에 추가되었습니다."
 fi
 

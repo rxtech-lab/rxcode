@@ -1,11 +1,11 @@
 # Attachment Auto-Preview Settings
 
 **Date:** 2026-04-27  
-**Issue:** https://github.com/ttnear/Clarc/issues/4
+**Issue:** https://github.com/ttnear/RxCode/issues/4
 
 ## Problem
 
-When a user pastes a URL, file path, image, or long text into the chat input, Clarc automatically converts it into an attachment preview chip. There is no way to disable this behavior per content type. Users who want a URL to remain as plain text in the message have no option to do so.
+When a user pastes a URL, file path, image, or long text into the chat input, RxCode automatically converts it into an attachment preview chip. There is no way to disable this behavior per content type. Users who want a URL to remain as plain text in the message have no option to do so.
 
 ## Goal
 
@@ -23,7 +23,7 @@ Four independently toggleable content types:
 
 ### Data Model
 
-New file: `Packages/Sources/ClarcCore/Models/AttachmentAutoPreviewSettings.swift`
+New file: `Packages/Sources/RxCodeCore/Models/AttachmentAutoPreviewSettings.swift`
 
 ```swift
 struct AttachmentAutoPreviewSettings: Codable {
@@ -56,7 +56,7 @@ No `@AppStorage` wrapper needed since the value is `Codable` (not a primitive). 
 
 ### InputBarView
 
-`Packages/Sources/ClarcChatKit/InputBarView.swift`
+`Packages/Sources/RxCodeChatKit/InputBarView.swift`
 
 In `attachmentFromPastedText()` and `handlePasteKey()`, check settings before creating each attachment type:
 
@@ -115,9 +115,9 @@ User toggles in SettingsView
 
 | File | Change |
 |---|---|
-| `Packages/Sources/ClarcCore/Models/AttachmentAutoPreviewSettings.swift` | New file — settings model |
+| `Packages/Sources/RxCodeCore/Models/AttachmentAutoPreviewSettings.swift` | New file — settings model |
 | `App/AppState.swift` | Add `autoPreviewSettings` property with UserDefaults load/save |
-| `Packages/Sources/ClarcChatKit/InputBarView.swift` | Guard attachment creation with settings flags |
+| `Packages/Sources/RxCodeChatKit/InputBarView.swift` | Guard attachment creation with settings flags |
 | `Views/SettingsView.swift` | Add toggles section in Message tab |
 
 ## Out of Scope

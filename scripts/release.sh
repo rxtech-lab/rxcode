@@ -2,7 +2,7 @@
 set -e
 
 # ─────────────────────────────────────────────
-# Clarc release script
+# RxCode release script
 #
 # Usage:   ./scripts/release.sh <version> [notes-file]
 # Example: ./scripts/release.sh 1.0.1
@@ -29,7 +29,7 @@ if [ -z "$VERSION" ]; then
 fi
 
 TAG="v${VERSION}"
-ZIP="build/Clarc-${VERSION}.zip"
+ZIP="build/RxCode-${VERSION}.zip"
 META_FILE="build/.sparkle_meta"
 
 NOTES_FILE_ARG=${2:-""}
@@ -47,11 +47,11 @@ else
     HAS_NOTES=0
 fi
 
-echo "▶ Starting Clarc ${TAG} release"
+echo "▶ Starting RxCode ${TAG} release"
 echo ""
 
 # ── 1. Bump version in pbxproj ───────────────
-PBXPROJ="Clarc.xcodeproj/project.pbxproj"
+PBXPROJ="RxCode.xcodeproj/project.pbxproj"
 APPCAST="appcast.xml"
 
 CURRENT_BUILD=$(grep -m1 "CURRENT_PROJECT_VERSION = " "$PBXPROJ" | sed 's/.*= \([0-9]*\);/\1/')
@@ -99,7 +99,7 @@ if [ -f "$META_FILE" ]; then
 
     DESC_BLOCK=""
     if [ "$HAS_NOTES" = "1" ]; then
-        DESC_FILE="$(mktemp -t clarc_desc).html"
+        DESC_FILE="$(mktemp -t rxcode_desc).html"
         python3 - "$NOTES_FILE" "$DESC_FILE" <<'PYEOF'
 import re, sys
 src = open(sys.argv[1], encoding='utf-8').read()
@@ -153,7 +153,7 @@ ${DESC_HTML}
     fi
 
     NEW_ITEM="    <item>
-      <title>Clarc ${TAG}</title>
+      <title>RxCode ${TAG}</title>
       <sparkle:version>${BUILD_NUMBER}</sparkle:version>
       <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
@@ -166,7 +166,7 @@ ${DESC_HTML}
     </item>"
 
     # Insert the new item right before </channel>
-    NEW_ITEM_FILE="$(mktemp -t clarc_item).xml"
+    NEW_ITEM_FILE="$(mktemp -t rxcode_item).xml"
     printf '%s' "$NEW_ITEM" > "$NEW_ITEM_FILE"
     python3 - "$NEW_ITEM_FILE" <<'PYEOF'
 import sys
@@ -207,16 +207,16 @@ echo ""
 echo "🚀 Creating GitHub Release..."
 if [ "$HAS_NOTES" = "1" ]; then
     gh release create "$TAG" "$ZIP" \
-        --title "Clarc ${TAG}" \
+        --title "RxCode ${TAG}" \
         --notes-file "$NOTES_FILE"
 else
     gh release create "$TAG" "$ZIP" \
-        --title "Clarc ${TAG}" \
-        --notes "## Clarc ${TAG}
+        --title "RxCode ${TAG}" \
+        --notes "## RxCode ${TAG}
 
 ### Installation
-1. Download \`Clarc-${VERSION}.zip\`
-2. Unzip and move \`Clarc.app\` to \`/Applications\`
+1. Download \`RxCode-${VERSION}.zip\`
+2. Unzip and move \`RxCode.app\` to \`/Applications\`
 3. On first launch, right-click → Open
 
 > Existing users will receive this via the in-app auto-updater."

@@ -4,7 +4,7 @@
 
 **Goal:** Add four independently toggleable settings (URL, file path, image, long text) that control whether pasted content is auto-converted to an attachment preview chip in the chat input.
 
-**Architecture:** `AttachmentAutoPreviewSettings` struct lives in `ClarcCore`. `AppState` owns and persists it to UserDefaults. The existing `startBridgeObservation` loop pushes the value from `AppState` into each `ChatBridge`. `InputBarView` reads from `chatBridge.autoPreviewSettings` and skips attachment creation for disabled types.
+**Architecture:** `AttachmentAutoPreviewSettings` struct lives in `RxCodeCore`. `AppState` owns and persists it to UserDefaults. The existing `startBridgeObservation` loop pushes the value from `AppState` into each `ChatBridge`. `InputBarView` reads from `chatBridge.autoPreviewSettings` and skips attachment creation for disabled types.
 
 **Tech Stack:** Swift, SwiftUI (`@Observable`, `@Bindable`), `UserDefaults` + `JSONEncoder`/`JSONDecoder`, `NSPasteboard`
 
@@ -14,24 +14,24 @@
 
 | File | Action | Responsibility |
 |---|---|---|
-| `Packages/Sources/ClarcCore/Models/AttachmentAutoPreviewSettings.swift` | Create | Settings model — four Bool fields, Codable |
-| `Packages/Sources/ClarcChatKit/ChatBridge.swift` | Modify | Add `autoPreviewSettings` property for InputBarView to read |
-| `Clarc/App/AppState.swift` | Modify | Add `autoPreviewSettings` property with UserDefaults persistence |
-| `Clarc/App/AppState.swift` (`startBridgeObservation`) | Modify | Push settings into bridge inside observation loop |
-| `Packages/Sources/ClarcChatKit/InputBarView.swift` | Modify | Guard each attachment-creation path with the matching setting |
-| `Clarc/Views/SettingsView.swift` | Modify | Add four Toggles in a new section inside `ChatSettingsTab` |
+| `Packages/Sources/RxCodeCore/Models/AttachmentAutoPreviewSettings.swift` | Create | Settings model — four Bool fields, Codable |
+| `Packages/Sources/RxCodeChatKit/ChatBridge.swift` | Modify | Add `autoPreviewSettings` property for InputBarView to read |
+| `RxCode/App/AppState.swift` | Modify | Add `autoPreviewSettings` property with UserDefaults persistence |
+| `RxCode/App/AppState.swift` (`startBridgeObservation`) | Modify | Push settings into bridge inside observation loop |
+| `Packages/Sources/RxCodeChatKit/InputBarView.swift` | Modify | Guard each attachment-creation path with the matching setting |
+| `RxCode/Views/SettingsView.swift` | Modify | Add four Toggles in a new section inside `ChatSettingsTab` |
 
 ---
 
 ## Task 1: Create AttachmentAutoPreviewSettings model
 
 **Files:**
-- Create: `Packages/Sources/ClarcCore/Models/AttachmentAutoPreviewSettings.swift`
+- Create: `Packages/Sources/RxCodeCore/Models/AttachmentAutoPreviewSettings.swift`
 
 - [ ] **Step 1: Create the file**
 
 ```swift
-// Packages/Sources/ClarcCore/Models/AttachmentAutoPreviewSettings.swift
+// Packages/Sources/RxCodeCore/Models/AttachmentAutoPreviewSettings.swift
 import Foundation
 
 public struct AttachmentAutoPreviewSettings: Codable, Sendable {
@@ -44,10 +44,10 @@ public struct AttachmentAutoPreviewSettings: Codable, Sendable {
 }
 ```
 
-- [ ] **Step 2: Build ClarcCore to verify**
+- [ ] **Step 2: Build RxCodeCore to verify**
 
 ```bash
-cd /Users/jmlee/workspace/Clarc/Packages && swift build --target ClarcCore 2>&1 | tail -5
+cd /Users/jmlee/workspace/RxCode/Packages && swift build --target RxCodeCore 2>&1 | tail -5
 ```
 
 Expected: `Build complete!`
@@ -55,7 +55,7 @@ Expected: `Build complete!`
 - [ ] **Step 3: Commit**
 
 ```bash
-git add Packages/Sources/ClarcCore/Models/AttachmentAutoPreviewSettings.swift
+git add Packages/Sources/RxCodeCore/Models/AttachmentAutoPreviewSettings.swift
 git commit -m "feat(core): add AttachmentAutoPreviewSettings model"
 ```
 
@@ -64,11 +64,11 @@ git commit -m "feat(core): add AttachmentAutoPreviewSettings model"
 ## Task 2: Add autoPreviewSettings to ChatBridge
 
 **Files:**
-- Modify: `Packages/Sources/ClarcChatKit/ChatBridge.swift`
+- Modify: `Packages/Sources/RxCodeChatKit/ChatBridge.swift`
 
 - [ ] **Step 1: Add property to ChatBridge**
 
-Open `Packages/Sources/ClarcChatKit/ChatBridge.swift`. After the last `public var` in the "Streaming State" section (after `sessionStats`), add:
+Open `Packages/Sources/RxCodeChatKit/ChatBridge.swift`. After the last `public var` in the "Streaming State" section (after `sessionStats`), add:
 
 ```swift
 public var autoPreviewSettings: AttachmentAutoPreviewSettings = AttachmentAutoPreviewSettings()
@@ -88,10 +88,10 @@ public var sessionStats: ChatSessionStats = ChatSessionStats()
 public var autoPreviewSettings: AttachmentAutoPreviewSettings = AttachmentAutoPreviewSettings()
 ```
 
-- [ ] **Step 2: Build ClarcChatKit to verify**
+- [ ] **Step 2: Build RxCodeChatKit to verify**
 
 ```bash
-cd /Users/jmlee/workspace/Clarc/Packages && swift build --target ClarcChatKit 2>&1 | tail -5
+cd /Users/jmlee/workspace/RxCode/Packages && swift build --target RxCodeChatKit 2>&1 | tail -5
 ```
 
 Expected: `Build complete!`
@@ -99,7 +99,7 @@ Expected: `Build complete!`
 - [ ] **Step 3: Commit**
 
 ```bash
-git add Packages/Sources/ClarcChatKit/ChatBridge.swift
+git add Packages/Sources/RxCodeChatKit/ChatBridge.swift
 git commit -m "feat(chatkit): add autoPreviewSettings to ChatBridge"
 ```
 
@@ -108,11 +108,11 @@ git commit -m "feat(chatkit): add autoPreviewSettings to ChatBridge"
 ## Task 3: Add autoPreviewSettings to AppState
 
 **Files:**
-- Modify: `Clarc/App/AppState.swift`
+- Modify: `RxCode/App/AppState.swift`
 
 - [ ] **Step 1: Add property to AppState**
 
-Open `Clarc/App/AppState.swift`. After the `focusMode` property (around line 199), add a new MARK and property:
+Open `RxCode/App/AppState.swift`. After the `focusMode` property (around line 199), add a new MARK and property:
 
 ```swift
 // MARK: - Attachment Auto-Preview Settings
@@ -135,7 +135,7 @@ var autoPreviewSettings: AttachmentAutoPreviewSettings = {
 - [ ] **Step 2: Build to verify**
 
 ```bash
-xcodebuild -project /Users/jmlee/workspace/Clarc/Clarc.xcodeproj -scheme Clarc -configuration Debug build 2>&1 | grep -E "error:|Build complete|BUILD SUCCEEDED|BUILD FAILED" | tail -5
+xcodebuild -project /Users/jmlee/workspace/RxCode/RxCode.xcodeproj -scheme RxCode -configuration Debug build 2>&1 | grep -E "error:|Build complete|BUILD SUCCEEDED|BUILD FAILED" | tail -5
 ```
 
 Expected: `BUILD SUCCEEDED`
@@ -143,7 +143,7 @@ Expected: `BUILD SUCCEEDED`
 - [ ] **Step 3: Commit**
 
 ```bash
-git add Clarc/App/AppState.swift
+git add RxCode/App/AppState.swift
 git commit -m "feat(app): add autoPreviewSettings to AppState with UserDefaults persistence"
 ```
 
@@ -152,11 +152,11 @@ git commit -m "feat(app): add autoPreviewSettings to AppState with UserDefaults 
 ## Task 4: Sync settings into ChatBridge via observation loop
 
 **Files:**
-- Modify: `Clarc/App/AppState.swift` (the `startBridgeObservation` function, around line 489)
+- Modify: `RxCode/App/AppState.swift` (the `startBridgeObservation` function, around line 489)
 
 - [ ] **Step 1: Add sync line inside withObservationTracking**
 
-Open `Clarc/App/AppState.swift`. In `startBridgeObservation`, inside the `withObservationTracking` closure, add one line after `bridge.sessionStats = ...`:
+Open `RxCode/App/AppState.swift`. In `startBridgeObservation`, inside the `withObservationTracking` closure, add one line after `bridge.sessionStats = ...`:
 
 ```swift
 bridge.autoPreviewSettings = self.autoPreviewSettings
@@ -190,7 +190,7 @@ withObservationTracking {
 - [ ] **Step 2: Build to verify**
 
 ```bash
-xcodebuild -project /Users/jmlee/workspace/Clarc/Clarc.xcodeproj -scheme Clarc -configuration Debug build 2>&1 | grep -E "error:|BUILD SUCCEEDED|BUILD FAILED" | tail -5
+xcodebuild -project /Users/jmlee/workspace/RxCode/RxCode.xcodeproj -scheme RxCode -configuration Debug build 2>&1 | grep -E "error:|BUILD SUCCEEDED|BUILD FAILED" | tail -5
 ```
 
 Expected: `BUILD SUCCEEDED`
@@ -198,7 +198,7 @@ Expected: `BUILD SUCCEEDED`
 - [ ] **Step 3: Commit**
 
 ```bash
-git add Clarc/App/AppState.swift
+git add RxCode/App/AppState.swift
 git commit -m "feat(app): sync autoPreviewSettings into ChatBridge via observation loop"
 ```
 
@@ -207,7 +207,7 @@ git commit -m "feat(app): sync autoPreviewSettings into ChatBridge via observati
 ## Task 5: Guard attachment creation in InputBarView
 
 **Files:**
-- Modify: `Packages/Sources/ClarcChatKit/InputBarView.swift`
+- Modify: `Packages/Sources/RxCodeChatKit/InputBarView.swift`
 
 ### Step-by-step changes
 
@@ -355,10 +355,10 @@ if chatBridge.autoPreviewSettings.longText,
 }
 ```
 
-- [ ] **Step 6: Build ClarcChatKit to verify**
+- [ ] **Step 6: Build RxCodeChatKit to verify**
 
 ```bash
-cd /Users/jmlee/workspace/Clarc/Packages && swift build --target ClarcChatKit 2>&1 | tail -5
+cd /Users/jmlee/workspace/RxCode/Packages && swift build --target RxCodeChatKit 2>&1 | tail -5
 ```
 
 Expected: `Build complete!`
@@ -366,7 +366,7 @@ Expected: `Build complete!`
 - [ ] **Step 7: Commit**
 
 ```bash
-git add Packages/Sources/ClarcChatKit/InputBarView.swift
+git add Packages/Sources/RxCodeChatKit/InputBarView.swift
 git commit -m "feat(chatkit): guard attachment creation with autoPreviewSettings flags"
 ```
 
@@ -375,11 +375,11 @@ git commit -m "feat(chatkit): guard attachment creation with autoPreviewSettings
 ## Task 6: Add settings UI in ChatSettingsTab
 
 **Files:**
-- Modify: `Clarc/Views/SettingsView.swift`
+- Modify: `RxCode/Views/SettingsView.swift`
 
 - [ ] **Step 1: Add autoPreviewSection helper**
 
-Open `Clarc/Views/SettingsView.swift`. Inside `ChatSettingsTab`, after `focusModeSection` (around line 443, before `effortDisplayName`), add a new helper:
+Open `RxCode/Views/SettingsView.swift`. Inside `ChatSettingsTab`, after `focusModeSection` (around line 443, before `effortDisplayName`), add a new helper:
 
 ```swift
 // MARK: - Auto-Preview Attachments Section
@@ -451,7 +451,7 @@ var body: some View {
 - [ ] **Step 3: Build to verify**
 
 ```bash
-xcodebuild -project /Users/jmlee/workspace/Clarc/Clarc.xcodeproj -scheme Clarc -configuration Debug build 2>&1 | grep -E "error:|BUILD SUCCEEDED|BUILD FAILED" | tail -5
+xcodebuild -project /Users/jmlee/workspace/RxCode/RxCode.xcodeproj -scheme RxCode -configuration Debug build 2>&1 | grep -E "error:|BUILD SUCCEEDED|BUILD FAILED" | tail -5
 ```
 
 Expected: `BUILD SUCCEEDED`
@@ -459,7 +459,7 @@ Expected: `BUILD SUCCEEDED`
 - [ ] **Step 4: Commit**
 
 ```bash
-git add Clarc/Views/SettingsView.swift
+git add RxCode/Views/SettingsView.swift
 git commit -m "feat(settings): add auto-preview attachment toggles in Message tab"
 ```
 

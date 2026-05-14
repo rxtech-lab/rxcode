@@ -179,7 +179,7 @@ actor CodexAppServer {
                             activeThreadId = Self.threadId(from: result) ?? UUID().uuidString
                         }
                         if let activeThreadId, !turnStarted {
-                            try Self.writeJSONLine(Self.request(id: 3, method: "turn/start", params: turnParams(threadId: activeThreadId, prompt: prompt, cwd: cwd, model: model)), to: handles.stdin)
+                            try Self.writeJSONLine(Self.request(id: 3, method: "turn/start", params: turnParams(threadId: activeThreadId, prompt: prompt, cwd: cwd, model: model, permissionMode: .default, planMode: false)), to: handles.stdin)
                             turnStarted = true
                         }
                     default:
@@ -275,6 +275,7 @@ actor CodexAppServer {
         threadId: String?,
         model: String?,
         permissionMode: PermissionMode,
+        planMode: Bool,
         permissionServer: PermissionServer
     ) -> AsyncStream<StreamEvent> {
         AsyncStream<StreamEvent> { continuation in
@@ -290,6 +291,7 @@ actor CodexAppServer {
                     threadId: threadId,
                     model: model,
                     permissionMode: permissionMode,
+                    planMode: planMode,
                     permissionServer: permissionServer,
                     continuation: continuation
                 )
@@ -326,6 +328,7 @@ actor CodexAppServer {
         threadId: String?,
         model: String?,
         permissionMode: PermissionMode,
+        planMode: Bool,
         permissionServer: PermissionServer,
         continuation: AsyncStream<StreamEvent>.Continuation
     ) async {
@@ -349,7 +352,10 @@ actor CodexAppServer {
                     case "1":
                         try Self.writeJSONLine(Self.notification(method: "initialized", params: [:]), to: handles.stdin)
                         let method = activeThreadId == nil ? "thread/start" : "thread/resume"
-                        try Self.writeJSONLine(Self.request(id: 2, method: method, params: threadParams(threadId: activeThreadId, cwd: cwd)), to: handles.stdin)
+                        let params = method == "thread/start"
+                            ? threadStartParams(threadId: activeThreadId, cwd: cwd, permissionMode: permissionMode, planMode: planMode)
+                            : threadParams(threadId: activeThreadId, cwd: cwd)
+                        try Self.writeJSONLine(Self.request(id: 2, method: method, params: params), to: handles.stdin)
                     case "2":
                         if let result = object["result"] {
                             activeThreadId = Self.threadId(from: result) ?? activeThreadId ?? UUID().uuidString
@@ -362,7 +368,7 @@ actor CodexAppServer {
                             )))
                         }
                         if let activeThreadId, !turnStarted {
-                            try Self.writeJSONLine(Self.request(id: 3, method: "turn/start", params: turnParams(threadId: activeThreadId, prompt: prompt, cwd: cwd, model: model)), to: handles.stdin)
+                            try Self.writeJSONLine(Self.request(id: 3, method: "turn/start", params: turnParams(threadId: activeThreadId, prompt: prompt, cwd: cwd, model: model, permissionMode: permissionMode, planMode: planMode)), to: handles.stdin)
                             turnStarted = true
                         }
                     case "3":
@@ -381,6 +387,7 @@ actor CodexAppServer {
                             object: object,
                             activeThreadId: activeThreadId,
                             permissionMode: permissionMode,
+                            planMode: planMode,
                             permissionServer: permissionServer,
                             stdin: handles.stdin
                         )
@@ -508,6 +515,7 @@ actor CodexAppServer {
         object: [String: JSONValue],
         activeThreadId: String?,
         permissionMode: PermissionMode,
+        planMode: Bool,
         permissionServer: PermissionServer,
         stdin: FileHandle
     ) async throws {
@@ -516,6 +524,15 @@ actor CodexAppServer {
         case "item/commandExecution/requestApproval",
              "item/fileChange/requestApproval",
              "request/approval":
+            // Belt-and-suspenders: even though we set approvalPolicy on thread/start,
+            // older codex versions may still escalate. Auto-accept when the user picked
+            // .auto or .bypassPermissions and we're not in plan mode.
+            if !planMode, permissionMode == .auto || permissionMode == .bypassPermissions {
+                try Self.writeJSONLine(Self.response(id: requestId, result: [
+                    "decision": .string("accept")
+                ]), to: stdin)
+                return
+            }
             let toolUseId = Self.firstString(in: params, keys: ["itemId", "callId", "id"]) ?? requestId
             let command = Self.firstString(in: params, keys: ["command", "cmd"])
             let toolName = command == nil ? "Edit" : "Bash"
@@ -571,7 +588,18 @@ actor CodexAppServer {
         return params
     }
 
-    private func turnParams(threadId: String, prompt: String, cwd: String, model: String?) -> [String: JSONValue] {
+    private func threadStartParams(threadId: String?, cwd: String, permissionMode: PermissionMode, planMode: Bool) -> [String: JSONValue] {
+        var params: [String: JSONValue] = ["cwd": .string(cwd)]
+        if let threadId { params["threadId"] = .string(threadId) }
+        params["approvalPolicy"] = .string(Self.codexApprovalPolicy(permissionMode: permissionMode, planMode: planMode))
+        params["sandbox"] = .string(Self.codexSandboxMode(permissionMode: permissionMode, planMode: planMode))
+        if planMode {
+            params["developerInstructions"] = .string(Self.planModeInstructions)
+        }
+        return params
+    }
+
+    private func turnParams(threadId: String, prompt: String, cwd: String, model: String?, permissionMode: PermissionMode, planMode: Bool) -> [String: JSONValue] {
         var params: [String: JSONValue] = [
             "threadId": .string(threadId),
             "cwd": .string(cwd),
@@ -580,7 +608,45 @@ actor CodexAppServer {
             ])
         ]
         if let model { params["model"] = .string(model) }
+        params["approvalPolicy"] = .string(Self.codexApprovalPolicy(permissionMode: permissionMode, planMode: planMode))
+        params["sandboxPolicy"] = Self.codexSandboxPolicy(permissionMode: permissionMode, planMode: planMode)
         return params
+    }
+
+    private static let planModeInstructions = """
+    Plan mode is enabled. Produce a clear, step-by-step plan using the update_plan tool. \
+    Do not modify files; do not run commands that mutate state. \
+    Read-only inspection is allowed. End with a concise summary of the proposed plan and \
+    wait for the user to disable plan mode before making changes.
+    """
+
+    private static func codexApprovalPolicy(permissionMode: PermissionMode, planMode: Bool) -> String {
+        if planMode { return "on-request" }
+        switch permissionMode {
+        case .default, .plan: return "untrusted"
+        case .acceptEdits, .auto: return "on-request"
+        case .bypassPermissions: return "never"
+        }
+    }
+
+    private static func codexSandboxMode(permissionMode: PermissionMode, planMode: Bool) -> String {
+        if planMode { return "read-only" }
+        switch permissionMode {
+        case .bypassPermissions: return "danger-full-access"
+        default: return "workspace-write"
+        }
+    }
+
+    private static func codexSandboxPolicy(permissionMode: PermissionMode, planMode: Bool) -> JSONValue {
+        if planMode {
+            return .object(["type": .string("readOnly"), "networkAccess": .bool(false)])
+        }
+        switch permissionMode {
+        case .bypassPermissions:
+            return .object(["type": .string("dangerFullAccess")])
+        default:
+            return .object(["type": .string("workspaceWrite")])
+        }
     }
 
     private func spawnAppServer(binary: String, streamId: UUID, cwd: String?) async throws -> (process: Process, stdin: FileHandle, stdout: Pipe) {

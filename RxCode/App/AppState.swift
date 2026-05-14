@@ -79,18 +79,14 @@ struct SessionStreamState {
 
 enum SummarizationProvider: String, CaseIterable, Identifiable {
     case selectedClient
-    case claudeCode
-    case codex
     case openAI
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
-        case .selectedClient: return "Selected Client"
-        case .claudeCode: return "Claude Code"
-        case .codex: return "Codex"
-        case .openAI: return "OpenAI"
+        case .selectedClient: return "Thread Model"
+        case .openAI: return "OpenAI-Compatible Endpoint"
         }
     }
 }
@@ -966,15 +962,13 @@ final class AppState {
     }
 
     /// Derive a UI status for the chat row in the project sidebar.
-    /// Phase 1 wires only the streaming + pending-permission signals; Phase 2 will
-    /// add `awaitingPermission` partitioning by session and explicit error tracking.
     func chatStatus(forSessionId id: String, in window: WindowState) -> ChatStatus {
+        if window.pendingPermissions.contains(where: { $0.sessionId == id }) {
+            return .awaitingPermission
+        }
         if let state = sessionStates[id] {
             if state.isStreaming { return .streaming }
             if state.hasUncheckedCompletion { return .done }
-        }
-        if window.pendingPermissions.contains(where: { $0.sessionId == id }) {
-            return .awaitingPermission
         }
         return .idle
     }
@@ -1783,6 +1777,7 @@ final class AppState {
                 threadId: cliSessionId,
                 model: model,
                 permissionMode: registerMode,
+                planMode: permissionMode == .plan,
                 permissionServer: permission
             )
         }
@@ -3059,18 +3054,6 @@ final class AppState {
             let provider = summary.agentProvider
             let model = summary.model ?? selectedSummarizationModel(for: provider)
             return await generateSessionTitle(firstUserMessage: firstUserMessage, provider: provider, model: model)
-        case .claudeCode:
-            return await generateSessionTitle(
-                firstUserMessage: firstUserMessage,
-                provider: .claudeCode,
-                model: selectedSummarizationModel(for: .claudeCode)
-            )
-        case .codex:
-            return await generateSessionTitle(
-                firstUserMessage: firstUserMessage,
-                provider: .codex,
-                model: selectedSummarizationModel(for: .codex)
-            )
         case .openAI:
             guard !openAISummarizationModel.isEmpty else { return nil }
             return await openAISummarization.generateSessionTitle(

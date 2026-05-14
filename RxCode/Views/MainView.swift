@@ -639,7 +639,9 @@ struct ChatDetailModifiers: ViewModifier {
 
     private var presentedRequest: PermissionRequest? {
         guard let id = windowState.presentedPermissionId else { return nil }
-        return windowState.pendingPermissions.first(where: { $0.id == id })
+        return windowState.pendingPermissions.first {
+            $0.id == id && $0.sessionId == windowState.currentSessionId
+        }
     }
 
     private var presentedPermissionModalRequest: PermissionRequest? {

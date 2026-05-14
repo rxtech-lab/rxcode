@@ -35,12 +35,21 @@ export const metadata: Metadata = {
     url: "/",
     siteName: "RxCode",
     locale: "en_US",
+    images: [
+      {
+        url: "/api/og",
+        width: 1200,
+        height: 630,
+        alt: "RxCode — The Visual Command Center for AI Coding Agents",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "RxCode — The Visual Command Center for AI Coding Agents",
     description:
       "A native macOS desktop client for AI coding agents. Visual sessions, project tree, and code review in one place.",
+    images: ["/api/og"],
   },
 };
 

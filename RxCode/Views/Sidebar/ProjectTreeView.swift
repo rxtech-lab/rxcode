@@ -366,10 +366,14 @@ private struct ProjectChatsList: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
 
+    private static let defaultVisibleThreadCount = 5
+
     let project: Project
     let onSelectSession: (String) -> Void
     let onRenameSession: (ChatSession) -> Void
     let onDeleteSession: (ChatSession) -> Void
+
+    @State private var showsAllThreads = false
 
     private var sessions: [ChatSession.Summary] {
         appState.allSessionSummaries
@@ -378,6 +382,15 @@ private struct ProjectChatsList: View {
                 if a.isPinned != b.isPinned { return a.isPinned }
                 return a.updatedAt > b.updatedAt
             }
+    }
+
+    private var visibleSessions: [ChatSession.Summary] {
+        guard !showsAllThreads else { return sessions }
+        return Array(sessions.prefix(Self.defaultVisibleThreadCount))
+    }
+
+    private var hiddenThreadCount: Int {
+        max(0, sessions.count - Self.defaultVisibleThreadCount)
     }
 
     var body: some View {
@@ -389,33 +402,77 @@ private struct ProjectChatsList: View {
                     .padding(.leading, 28)
                     .padding(.vertical, 4)
             } else {
-                ForEach(sessions) { summary in
-                    ProjectChatRow(
-                        summary: summary,
-                        isCurrent: windowState.currentSessionId == summary.id,
-                        status: appState.chatStatus(forSessionId: summary.id, in: windowState),
-                        onSelect: { onSelectSession(summary.id) },
-                        onRename: { onRenameSession(summary.makeSession()) },
-                        onTogglePin: {
-                            Task { await appState.togglePinSession(summary.makeSession()) }
-                        },
-                        onToggleArchive: {
-                            let session = summary.makeSession()
-                            Task {
-                                if summary.isArchived {
-                                    await appState.unarchiveSession(session, in: windowState)
-                                } else {
-                                    await appState.archiveSession(session, in: windowState)
-                                }
-                            }
-                        },
-                        onDelete: {
-                            onDeleteSession(summary.makeSession())
-                        }
-                    )
+                ForEach(visibleSessions) { summary in
+                    chatRow(for: summary)
+                }
+
+                if hiddenThreadCount > 0 {
+                    threadLimitToggle
                 }
             }
         }
+    }
+
+    private var threadLimitToggle: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.16)) {
+                showsAllThreads.toggle()
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: showsAllThreads ? "chevron.up" : "chevron.down")
+                    .font(.system(size: ClaudeTheme.size(9), weight: .semibold))
+                    .frame(width: 12, height: 12)
+
+                Text(showsAllThreads ? "Hide more" : "Show more")
+                    .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+
+                if !showsAllThreads {
+                    Text("\(hiddenThreadCount)")
+                        .font(.system(size: ClaudeTheme.size(10), weight: .medium))
+                        .foregroundStyle(ClaudeTheme.textTertiary)
+                }
+            }
+            .foregroundStyle(ClaudeTheme.textTertiary)
+            .padding(.leading, 28)
+            .padding(.trailing, 14)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(showsAllThreads ? "Show only the first five threads" : "Show all threads in this project")
+    }
+
+    private func chatRow(for summary: ChatSession.Summary) -> some View {
+        let sessionId = summary.id
+        let session = summary.makeSession()
+        let status = appState.chatStatus(forSessionId: sessionId, in: windowState)
+        let progress = appState.todoProgress(forSessionId: sessionId)
+
+        return ProjectChatRow(
+            summary: summary,
+            isCurrent: windowState.currentSessionId == sessionId,
+            status: status,
+            todoProgress: progress,
+            onSelect: { onSelectSession(sessionId) },
+            onRename: { onRenameSession(session) },
+            onTogglePin: {
+                Task { await appState.togglePinSession(session) }
+            },
+            onToggleArchive: {
+                Task {
+                    if summary.isArchived {
+                        await appState.unarchiveSession(session, in: windowState)
+                    } else {
+                        await appState.archiveSession(session, in: windowState)
+                    }
+                }
+            },
+            onDelete: {
+                onDeleteSession(session)
+            }
+        )
     }
 }
 

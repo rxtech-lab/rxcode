@@ -36,6 +36,7 @@ actor CodexAppServer {
     private var cachedRateLimitsAt: Date?
     private var rateLimitsFetchTask: Task<RateLimitUsage?, Never>?
     private let rateLimitsCacheTTL: TimeInterval = 300
+    private var notificationMethodCounts: [String: Int] = [:]
 
     private static var candidatePaths: [String] {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
@@ -141,6 +142,74 @@ actor CodexAppServer {
             return usage
         }
         return cachedRateLimits
+    }
+
+    func generateSessionTitle(firstUserMessage: String, model: String?) async -> String? {
+        guard let binary = await findCodexBinary() else { return nil }
+        let trimmedUser = String(firstUserMessage.prefix(500))
+        let prompt = """
+        Summarize the following user message as a 3-6 word chat title. Reply with ONLY the title, no quotes, no markdown, no punctuation at the end.
+
+        \(trimmedUser)
+        """
+
+        let streamId = UUID()
+        var title = ""
+
+        do {
+            let cwd = FileManager.default.homeDirectoryForCurrentUser.path
+            let handles = try await spawnAppServer(binary: binary, streamId: streamId, cwd: cwd)
+            defer { finalize(streamId: streamId) }
+
+            try Self.writeJSONLine(Self.request(id: 1, method: "initialize", params: initializeParams()), to: handles.stdin)
+
+            var activeThreadId: String?
+            var turnStarted = false
+
+            for try await line in handles.stdout.fileHandleForReading.bytes.lines {
+                guard let object = Self.decodeObject(line) else { continue }
+
+                if let id = Self.idString(object["id"]), object["method"] == nil {
+                    switch id {
+                    case "1":
+                        try Self.writeJSONLine(Self.notification(method: "initialized", params: [:]), to: handles.stdin)
+                        try Self.writeJSONLine(Self.request(id: 2, method: "thread/start", params: threadParams(threadId: nil, cwd: cwd)), to: handles.stdin)
+                    case "2":
+                        if let result = object["result"] {
+                            activeThreadId = Self.threadId(from: result) ?? UUID().uuidString
+                        }
+                        if let activeThreadId, !turnStarted {
+                            try Self.writeJSONLine(Self.request(id: 3, method: "turn/start", params: turnParams(threadId: activeThreadId, prompt: prompt, cwd: cwd, model: model)), to: handles.stdin)
+                            turnStarted = true
+                        }
+                    default:
+                        break
+                    }
+                    continue
+                }
+
+                guard let method = object["method"]?.stringValue else { continue }
+                if let requestId = Self.idString(object["id"]) {
+                    try Self.writeJSONLine(Self.response(id: requestId, result: [:]), to: handles.stdin)
+                    continue
+                }
+
+                let params = object["params"]?.objectValue ?? [:]
+                switch method {
+                case "item/agentMessage/delta", "item/agent_message/delta":
+                    title += Self.firstString(in: params, keys: ["delta", "text", "content"]) ?? ""
+                case "turn/completed":
+                    return cleanTitle(title)
+                case "turn/failed", "error":
+                    return nil
+                default:
+                    break
+                }
+            }
+        } catch {
+            logger.warning("Codex title generation failed: \(error.localizedDescription)")
+        }
+        return cleanTitle(title)
     }
 
     private func fetchRateLimitsUncached() async -> RateLimitUsage? {
@@ -361,9 +430,23 @@ actor CodexAppServer {
         continuation: AsyncStream<StreamEvent>.Continuation
     ) {
         let params = object["params"]?.objectValue ?? [:]
+        notificationMethodCounts[method, default: 0] += 1
+        if notificationMethodCounts[method] == 1 {
+            logger.info("[CodexAppServer] notification method=\(method, privacy: .public)")
+        }
+
         let liveUsage = method == "thread/tokenUsage/updated"
             ? Self.liveTokenUsage(from: params)
             : nil
+        if method == "thread/tokenUsage/updated" {
+            let outputTokens = Self.tokenUsageOutputTokens(from: params) ?? 0
+            let tokenUsage = Self.tokenUsageTokensUsed(from: params) ?? 0
+            let tokenBudget = Self.tokenUsageTokenBudget(from: params) ?? 0
+            logger.info("[CodexAppServer] tokenUsage.updated outputTokens=\(outputTokens) tokensUsed=\(tokenUsage) tokenBudget=\(tokenBudget) parsedOutput=\(liveUsage?.outputTokens ?? 0)")
+            if liveUsage?.outputTokens ?? 0 == 0 {
+                logger.info("[CodexAppServer] tokenUsage.payload \(JSONValue.object(params).description, privacy: .public)")
+            }
+        }
         if let usage = liveUsage ?? Self.usageInfo(from: object) {
             continuation.yield(.assistant(AssistantMessage(
                 id: Self.usageMessageId(from: params, fallback: activeThreadId),
@@ -587,6 +670,18 @@ actor CodexAppServer {
         return out
     }
 
+    private func cleanTitle(_ raw: String) -> String? {
+        let cleaned = raw
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
+        guard !cleaned.isEmpty else { return nil }
+
+        let lower = cleaned.lowercased()
+        let errorPrefixes = ["api error", "error:", "execution error", "request failed", "codex error"]
+        guard !errorPrefixes.contains(where: { lower.hasPrefix($0) }) else { return nil }
+        return String(cleaned.prefix(80))
+    }
+
     private func toolName(from item: [String: JSONValue]) -> String? {
         if let type = Self.firstString(in: item, keys: ["type", "kind"]) {
             let normalizedType = type.lowercased()
@@ -783,8 +878,11 @@ actor CodexAppServer {
         var inputTokens = firstInt(in: usage, keys: [
             "input_tokens", "inputTokens", "prompt_tokens", "promptTokens"
         ])
-        let outputTokens = firstInt(in: usage, keys: [
+        var outputTokens = firstInt(in: usage, keys: [
             "output_tokens", "outputTokens", "completion_tokens", "completionTokens"
+        ])
+        outputTokens += firstInt(in: usage, keys: [
+            "reasoning_output_tokens", "reasoningOutputTokens"
         ])
         let cacheCreationTokens = firstInt(in: usage, keys: [
             "cache_creation_input_tokens", "cacheCreationInputTokens", "cacheWriteInputTokens",
@@ -814,17 +912,52 @@ actor CodexAppServer {
     }
 
     private static func liveTokenUsage(from params: [String: JSONValue]) -> UsageInfo? {
-        let usage = firstObject(in: params, keys: ["tokenUsage", "token_usage"])
-            ?? firstNestedObject(in: .object(params), keys: ["tokenUsage", "token_usage"])
-            ?? params
-        let tokensUsed = firstInt(in: usage, keys: ["tokensUsed", "tokens_used"])
-        guard tokensUsed > 0 else { return nil }
+        guard let outputTokens = tokenUsageOutputTokens(from: params),
+              outputTokens > 0 else { return nil }
         return UsageInfo(
             inputTokens: 0,
-            outputTokens: tokensUsed,
+            outputTokens: outputTokens,
             cacheCreationInputTokens: 0,
             cacheReadInputTokens: 0
         )
+    }
+
+    private static func tokenUsageOutputTokens(from params: [String: JSONValue]) -> Int? {
+        let usage = tokenUsageSummary(from: params)
+        let outputTokens = firstInt(in: usage, keys: ["outputTokens", "output_tokens"])
+        let reasoningOutputTokens = firstInt(in: usage, keys: [
+            "reasoningOutputTokens", "reasoning_output_tokens"
+        ])
+        let total = outputTokens + reasoningOutputTokens
+        return total > 0 ? total : nil
+    }
+
+    private static func tokenUsageTokensUsed(from params: [String: JSONValue]) -> Int? {
+        let usage = tokenUsageSummary(from: params)
+        let tokensUsed = firstInt(in: usage, keys: [
+            "tokensUsed", "tokens_used", "totalTokens", "total_tokens",
+            "total", "used", "currentTokens", "current_tokens"
+        ])
+        return tokensUsed > 0 ? tokensUsed : nil
+    }
+
+    private static func tokenUsageTokenBudget(from params: [String: JSONValue]) -> Int? {
+        let usage = firstObject(in: params, keys: ["tokenUsage", "token_usage"])
+            ?? firstNestedObject(in: .object(params), keys: ["tokenUsage", "token_usage"])
+            ?? params
+        let tokenBudget = firstInt(in: usage, keys: [
+            "tokenBudget", "token_budget", "modelContextWindow", "model_context_window"
+        ])
+        return tokenBudget > 0 ? tokenBudget : nil
+    }
+
+    private static func tokenUsageSummary(from params: [String: JSONValue]) -> [String: JSONValue] {
+        let usage = firstObject(in: params, keys: ["tokenUsage", "token_usage"])
+            ?? firstNestedObject(in: .object(params), keys: ["tokenUsage", "token_usage"])
+            ?? params
+        return firstObject(in: usage, keys: ["last"])
+            ?? firstObject(in: usage, keys: ["total"])
+            ?? usage
     }
 
     private static func firstObject(in object: [String: JSONValue], keys: [String]) -> [String: JSONValue]? {

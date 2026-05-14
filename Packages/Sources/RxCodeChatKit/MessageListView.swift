@@ -591,7 +591,7 @@ struct StreamingIndicatorView: View {
                     separator
                 }
                 HStack(spacing: 3) {
-                    Image(systemName: "arrow.up")
+                    Image(systemName: "arrow.up.arrow.down")
                         .font(.system(size: ClaudeTheme.size(9), weight: .semibold))
                     Text(formatTokenCount(outputTokens))
                         .monospacedDigit()

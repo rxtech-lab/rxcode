@@ -281,21 +281,24 @@ struct MessageBubble: View {
     private func assistantTextBubble(text: String, blockId: String) -> some View {
         let isLastBlock = message.blocks.last?.isText == true
             && message.blocks.last?.text == text
+        let showsCursor = message.isStreaming && isLastBlock
 
-        return HStack(alignment: .bottom, spacing: 0) {
-            MarkdownContentView(text: text)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            if message.isStreaming && isLastBlock {
-                Text("|")
-                    .font(.system(size: ClaudeTheme.messageSize(15), weight: .light))
-                    .foregroundStyle(ClaudeTheme.accent)
-                    .opacity(cursorVisible ? 1 : 0)
-                    .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: cursorVisible)
-                    .onAppear { cursorVisible = false }
-            }
-        }
+        return MarkdownContentView(
+            text: text,
+            showsTrailingCursor: showsCursor,
+            isCursorVisible: cursorVisible
+        )
+        .frame(maxWidth: .infinity, alignment: .leading)
         .foregroundStyle(ClaudeTheme.textPrimary)
         .padding(.vertical, 2)
+        .task(id: showsCursor) {
+            guard showsCursor else { return }
+            cursorVisible = true
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(500))
+                cursorVisible.toggle()
+            }
+        }
         .overlay(alignment: .bottomTrailing) {
             if hoveredBlockId == blockId && !message.isStreaming {
                 copyButton(for: text)

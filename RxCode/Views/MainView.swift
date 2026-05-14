@@ -35,7 +35,8 @@ struct MainView: View {
     private var navigationTitleText: String {
         if let id = windowState.currentSessionId,
            let title = appState.allSessionSummaries.first(where: { $0.id == id })?.title,
-           !title.isEmpty {
+           !title.isEmpty
+        {
             return title
         }
         return windowState.selectedProject?.name ?? ""
@@ -87,7 +88,7 @@ struct MainView: View {
                 .onAppear {
                     windowState.focusMode = appState.focusMode
                 }
-                .navigationTitle(navigationTitleText)
+                .toolbar(removing: .title)
                 .toolbarBackground(.hidden, for: .windowToolbar)
                 .background(UnifiedTitleBarAccessor())
                 .toolbar {
@@ -119,6 +120,11 @@ struct MainView: View {
                             ) { result in
                                 handleFolderSelection(result)
                             }
+                        }
+
+                        ToolbarItem(placement: .navigation) {
+                            Text(navigationTitleText)
+                                .padding(.trailing)
                         }
                     }
                 }
@@ -198,8 +204,8 @@ struct MainView: View {
                 editHunks: file.editHunks,
                 gitDiffMode: file.gitDiffMode
             )
-                .frame(minWidth: 1000, idealWidth: 1400, maxWidth: 1920,
-                       minHeight: 600, idealHeight: 1000, maxHeight: 1200)
+            .frame(minWidth: 1000, idealWidth: 1400, maxWidth: 1920,
+                   minHeight: 600, idealHeight: 1000, maxHeight: 1200)
         }
         .alert("Error", isPresented: Bindable(windowState).showError) {
             Button("OK", role: .cancel) {}

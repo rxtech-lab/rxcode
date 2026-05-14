@@ -77,6 +77,24 @@ struct SessionStreamState {
     var titleGenerationTriggered: Bool = false
 }
 
+enum SummarizationProvider: String, CaseIterable, Identifiable {
+    case selectedClient
+    case claudeCode
+    case codex
+    case openAI
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .selectedClient: return "Selected Client"
+        case .claudeCode: return "Claude Code"
+        case .codex: return "Codex"
+        case .openAI: return "OpenAI"
+        }
+    }
+}
+
 
 @Observable
 @MainActor
@@ -165,6 +183,9 @@ final class AppState {
 
     static let availableModels = ["default", "best", "opus", "opus[1m]", "opusplan", "sonnet", "sonnet[1m]", "haiku"]
     static let fallbackCodexModels = ["gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex"]
+    nonisolated static let defaultOpenAISummarizationEndpoint = "https://api.openai.com/v1"
+    private static let openAISummarizationKeychainService = "com.idealapp.RxCode.openai-summarization"
+    private static let openAISummarizationKeychainAccount = "apiKey"
 
     static var availableClaudeModels: [AgentModel] {
         availableModels.map {
@@ -281,6 +302,49 @@ final class AppState {
     var selectedEffort: String = UserDefaults.standard.string(forKey: "selectedEffort") ?? "auto" {
         didSet { UserDefaults.standard.set(selectedEffort, forKey: "selectedEffort") }
     }
+
+    // MARK: - Summarization
+
+    var summarizationProvider: SummarizationProvider = SummarizationProvider(rawValue: UserDefaults.standard.string(forKey: "summarizationProvider") ?? "") ?? .selectedClient {
+        didSet { UserDefaults.standard.set(summarizationProvider.rawValue, forKey: "summarizationProvider") }
+    }
+
+    var openAISummarizationEndpoint: String = UserDefaults.standard.string(forKey: "openAISummarizationEndpoint") ?? AppState.defaultOpenAISummarizationEndpoint {
+        didSet { UserDefaults.standard.set(openAISummarizationEndpoint, forKey: "openAISummarizationEndpoint") }
+    }
+
+    var openAISummarizationAPIKey: String = KeychainHelper.readString(
+        service: AppState.openAISummarizationKeychainService,
+        account: AppState.openAISummarizationKeychainAccount
+    ) ?? "" {
+        didSet {
+            let trimmed = openAISummarizationAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            do {
+                if trimmed.isEmpty {
+                    try KeychainHelper.delete(
+                        service: AppState.openAISummarizationKeychainService,
+                        account: AppState.openAISummarizationKeychainAccount
+                    )
+                } else if let data = trimmed.data(using: .utf8) {
+                    try KeychainHelper.save(
+                        data,
+                        service: AppState.openAISummarizationKeychainService,
+                        account: AppState.openAISummarizationKeychainAccount
+                    )
+                }
+            } catch {
+                logger.warning("Failed to update OpenAI summarization API key: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    var openAISummarizationModel: String = UserDefaults.standard.string(forKey: "openAISummarizationModel") ?? "" {
+        didSet { UserDefaults.standard.set(openAISummarizationModel, forKey: "openAISummarizationModel") }
+    }
+
+    var openAISummarizationModels: [String] = []
+    var openAISummarizationModelsError: String?
+    var isLoadingOpenAISummarizationModels = false
 
     // MARK: - Notifications
 
@@ -625,6 +689,7 @@ final class AppState {
     let cliStore: CLISessionStore
     let claude: ClaudeService
     let codex: CodexAppServer
+    let openAISummarization = OpenAISummarizationService()
     let persistence: PersistenceService
     let marketplace = MarketplaceService()
     let mcp: MCPService
@@ -908,10 +973,27 @@ final class AppState {
             if state.isStreaming { return .streaming }
             if state.hasUncheckedCompletion { return .done }
         }
-        if !window.pendingPermissions.isEmpty, window.currentSessionId == id {
+        if window.pendingPermissions.contains(where: { $0.sessionId == id }) {
             return .awaitingPermission
         }
         return .idle
+    }
+
+    func todoProgress(forSessionId id: String) -> ChatTodoProgress? {
+        if let messages = sessionStates[id]?.messages,
+           let todos = TodoExtractor.latest(in: messages) {
+            return ChatTodoProgress(todos: todos)
+        }
+
+        guard let snapshot = threadStore.fetchTodoSnapshot(sessionId: id), snapshot.total > 0 else {
+            return nil
+        }
+
+        return ChatTodoProgress(
+            done: snapshot.done,
+            total: snapshot.total,
+            inProgress: snapshot.inProgress > 0
+        )
     }
 
     // MARK: - Initialization
@@ -1018,6 +1100,26 @@ final class AppState {
         } else {
             codexModels = []
             logger.info("Codex CLI not detected; Codex model list cleared")
+        }
+    }
+
+    func refreshOpenAISummarizationModels() async {
+        let endpoint = openAISummarizationEndpoint
+        let apiKey = openAISummarizationAPIKey
+
+        isLoadingOpenAISummarizationModels = true
+        openAISummarizationModelsError = nil
+        defer { isLoadingOpenAISummarizationModels = false }
+
+        do {
+            let models = try await openAISummarization.fetchModels(endpoint: endpoint, apiKey: apiKey)
+            openAISummarizationModels = models
+            if openAISummarizationModel.isEmpty || !models.contains(openAISummarizationModel) {
+                openAISummarizationModel = models.first ?? ""
+            }
+        } catch {
+            openAISummarizationModelsError = error.localizedDescription
+            logger.warning("Failed to fetch OpenAI summarization models: \(error.localizedDescription)")
         }
     }
 
@@ -1888,6 +1990,10 @@ final class AppState {
                                 state.currentTurnOutputTokensUnkeyed = max(state.currentTurnOutputTokensUnkeyed, liveOutput)
                             }
                         }
+                        if agentProvider == .codex {
+                            let total = stateForSession(sessionKey).currentTurnOutputTokens
+                            logger.info("[Stream:UI] Codex usage applied messageId=\(assistantMessage.id ?? "<nil>", privacy: .public) output=\(liveOutput) total=\(total)")
+                        }
                     }
                     // Extract text only when no text_delta has been received in the current turn.
                     // Normally content_block_delta(text_delta) is the primary path, so this branch rarely executes.
@@ -2135,15 +2241,20 @@ final class AppState {
             state.pendingToolResults.removeAll(keepingCapacity: true)
             if let idx = lastAssistantIdx() {
                 for (toolUseId, content, isError) in results {
-                    let editPersistInfo: (path: String, hunks: [PreviewFile.EditHunk], isWrite: Bool)? = {
+                    let editPersistInfos: [(path: String, hunks: [PreviewFile.EditHunk], isWrite: Bool)] = {
                         guard !isError,
                               let blockIdx = state.messages[idx].toolCallIndex(id: toolUseId),
                               let call = state.messages[idx].blocks[blockIdx].toolCall,
-                              ["edit", "multiedit", "multi_edit", "write"].contains(call.name.lowercased()),
-                              let path = call.editedFilePath else { return nil }
-                        let hunks = call.fileEditHunks
-                        guard !hunks.isEmpty else { return nil }
-                        return (path, hunks, call.name.lowercased() == "write")
+                              ["edit", "multiedit", "multi_edit", "write"].contains(call.name.lowercased())
+                        else { return [] }
+                        let claudeHunks = call.fileEditHunks
+                        if !claudeHunks.isEmpty, let path = call.editedFilePath {
+                            return [(path, claudeHunks, call.name.lowercased() == "write")]
+                        }
+                        // Codex `fileChange` shape: one tool call may touch multiple files.
+                        let codexDiffs = call.fileChangeDiffs
+                        guard !codexDiffs.isEmpty else { return [] }
+                        return codexDiffs.map { ($0.path, [$0.hunk], false) }
                     }()
                     // Preserve the user-decision summary on ExitPlanMode. After the user
                     // accepts/rejects the plan, the CLI emits its own follow-up tool_result
@@ -2160,13 +2271,15 @@ final class AppState {
                     if !skipResultOverwrite {
                         state.messages[idx].setToolResult(id: toolUseId, result: content, isError: isError)
                     }
-                    if let info = editPersistInfo {
-                        threadStore.appendFileEdit(
-                            sessionId: key,
-                            path: info.path,
-                            hunks: info.hunks,
-                            containsWrite: info.isWrite
-                        )
+                    if !editPersistInfos.isEmpty {
+                        for info in editPersistInfos {
+                            threadStore.appendFileEdit(
+                                sessionId: key,
+                                path: info.path,
+                                hunks: info.hunks,
+                                containsWrite: info.isWrite
+                            )
+                        }
                         threadFileEditsRevision &+= 1
                     }
                 }
@@ -2910,9 +3023,9 @@ final class AppState {
         return current
     }
 
-    /// Spawn a one-shot Claude call to generate a 3–6 word title for the given session,
-    /// then persist it via `renameSession` if the title is still the placeholder. No-op
-    /// if the session was already renamed manually or the LLM call fails.
+    /// Spawn a one-shot summarization call to generate a 3–6 word title for the given
+    /// session, then persist it via `renameSession` if the title is still the placeholder.
+    /// No-op if the session was already renamed manually or the LLM call fails.
     func maybeGenerateLLMTitle(for sessionId: String) async {
         let resolved = resolveCurrentSessionId(sessionId)
         guard let summary = allSessionSummaries.first(where: { $0.id == resolved }) else {
@@ -2924,7 +3037,7 @@ final class AppState {
         let firstUser = ChatSession.stripAttachmentMarkers(from: firstUserRaw)
         guard !firstUser.isEmpty else { return }
         guard isAutoGeneratedTitle(summary.title, firstUserMessage: firstUserRaw) else { return }
-        guard let title = await claude.generateSessionTitle(firstUserMessage: firstUser) else { return }
+        guard let title = await generateSessionTitle(firstUserMessage: firstUser, summary: summary) else { return }
         // Re-resolve after the LLM call — the id may have been swapped while we waited.
         let currentId = resolveCurrentSessionId(sessionId)
         guard let stillPlaceholder = allSessionSummaries.first(where: { $0.id == currentId }),
@@ -2938,6 +3051,55 @@ final class AppState {
             origin: stillPlaceholder.origin
         )
         await renameSession(session, to: title)
+    }
+
+    private func generateSessionTitle(firstUserMessage: String, summary: ChatSession.Summary) async -> String? {
+        switch summarizationProvider {
+        case .selectedClient:
+            let provider = summary.agentProvider
+            let model = summary.model ?? selectedSummarizationModel(for: provider)
+            return await generateSessionTitle(firstUserMessage: firstUserMessage, provider: provider, model: model)
+        case .claudeCode:
+            return await generateSessionTitle(
+                firstUserMessage: firstUserMessage,
+                provider: .claudeCode,
+                model: selectedSummarizationModel(for: .claudeCode)
+            )
+        case .codex:
+            return await generateSessionTitle(
+                firstUserMessage: firstUserMessage,
+                provider: .codex,
+                model: selectedSummarizationModel(for: .codex)
+            )
+        case .openAI:
+            guard !openAISummarizationModel.isEmpty else { return nil }
+            return await openAISummarization.generateSessionTitle(
+                firstUserMessage: firstUserMessage,
+                endpoint: openAISummarizationEndpoint,
+                apiKey: openAISummarizationAPIKey,
+                model: openAISummarizationModel
+            )
+        }
+    }
+
+    private func generateSessionTitle(firstUserMessage: String, provider: AgentProvider, model: String?) async -> String? {
+        switch provider {
+        case .claudeCode:
+            return await claude.generateSessionTitle(firstUserMessage: firstUserMessage, model: model ?? "haiku")
+        case .codex:
+            return await codex.generateSessionTitle(firstUserMessage: firstUserMessage, model: model)
+        }
+    }
+
+    private func selectedSummarizationModel(for provider: AgentProvider) -> String? {
+        if selectedAgentProvider == provider {
+            return selectedModel
+        }
+        return availableAgentModelSections()
+            .first(where: { $0.provider == provider })?
+            .models
+            .first?
+            .id
     }
 
     func togglePinSession(_ session: ChatSession) async {

@@ -9,10 +9,14 @@ struct SettingsView: View {
 
     @State private var selectedTab = 0
     @State private var showUserManual = false
+    @State private var showOnboarding = false
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            GeneralSettingsTab(showUserManual: $showUserManual)
+            GeneralSettingsTab(
+                showUserManual: $showUserManual,
+                showOnboarding: $showOnboarding
+            )
                 .tabItem {
                     Label("General", systemImage: "slider.horizontal.3")
                 }
@@ -53,6 +57,12 @@ struct SettingsView: View {
         .sheet(isPresented: $showUserManual) {
             UserManualView()
         }
+        .sheet(isPresented: $showOnboarding) {
+            OnboardingView {
+                showOnboarding = false
+            }
+            .environment(appState)
+        }
     }
 }
 
@@ -61,6 +71,7 @@ struct SettingsView: View {
 struct GeneralSettingsTab: View {
     @Environment(AppState.self) private var appState
     @Binding var showUserManual: Bool
+    @Binding var showOnboarding: Bool
     @State private var showSkillMarket = false
     @State private var showThemePicker = false
     @AppStorage("showMenuBarExtra") private var showMenuBarExtra: Bool = true
@@ -79,6 +90,7 @@ struct GeneralSettingsTab: View {
                 Divider()
                 VStack(alignment: .leading, spacing: 8) {
                     skillMarketSection
+                    onboardingSection
                     helpSection
                     sourceCodeSection
                 }
@@ -295,7 +307,7 @@ struct GeneralSettingsTab: View {
     // MARK: - Source Code Section
 
     private var sourceCodeSection: some View {
-        Link(destination: URL(string: "https://github.com/ttnear/RxCode")!) {
+        Link(destination: URL(string: "https://github.com/rxtech-lab/rxcode")!) {
             HStack(spacing: 10) {
                 Image(systemName: "chevron.left.forwardslash.chevron.right")
                     .font(.system(size: ClaudeTheme.size(14)))
@@ -304,7 +316,7 @@ struct GeneralSettingsTab: View {
                     Text("Open Source")
                         .font(.system(size: ClaudeTheme.size(13)))
                         .foregroundStyle(.primary)
-                    Text(verbatim: "github.com/ttnear/RxCode")
+                    Text(verbatim: "github.com/rxtech-lab/rxcode")
                         .font(.system(size: ClaudeTheme.size(11)))
                         .foregroundStyle(.secondary)
                 }
@@ -326,6 +338,39 @@ struct GeneralSettingsTab: View {
     }
 
     // MARK: - Help Section
+
+    private var onboardingSection: some View {
+        Button {
+            showOnboarding = true
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: ClaudeTheme.size(14)))
+                    .frame(width: 20)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Show Onboarding")
+                        .font(.system(size: ClaudeTheme.size(13)))
+                        .foregroundStyle(.primary)
+                    Text("Review the CLI setup check")
+                        .font(.system(size: ClaudeTheme.size(11)))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(Color(NSColor.controlBackgroundColor))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
 
     private var helpSection: some View {
         Button {
@@ -369,6 +414,8 @@ struct ChatSettingsTab: View {
                 agentRuntimeSection
                 Divider()
                 modelSection
+                Divider()
+                summarizationSection
                 Divider()
                 permissionModeSection
                 Divider()
@@ -564,6 +611,133 @@ struct ChatSettingsTab: View {
             displayName: AppState.modelDisplayName(appState.selectedModel, provider: appState.selectedAgentProvider),
             description: AppState.modelDescription(appState.selectedModel, provider: appState.selectedAgentProvider)
         )
+    }
+
+    // MARK: - Summarization Section
+
+    private var summarizationSection: some View {
+        @Bindable var appState = appState
+        return VStack(alignment: .leading, spacing: 12) {
+            Text("Summarization Model")
+                .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
+
+            Text("Used to generate short session titles. The default follows the selected chat client.")
+                .font(.system(size: ClaudeTheme.size(11)))
+                .foregroundStyle(.secondary)
+
+            Picker("Provider", selection: $appState.summarizationProvider) {
+                ForEach(SummarizationProvider.allCases) { provider in
+                    Text(provider.displayName).tag(provider)
+                }
+            }
+            .pickerStyle(.menu)
+            .fixedSize()
+            .onChange(of: appState.summarizationProvider) { _, newValue in
+                guard newValue == .openAI, appState.openAISummarizationModels.isEmpty else { return }
+                Task { await appState.refreshOpenAISummarizationModels() }
+            }
+
+            switch appState.summarizationProvider {
+            case .selectedClient:
+                Text("Uses \(appState.selectedAgentProvider.displayName) with \(selectedDefaultModel.displayName).")
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(.secondary)
+            case .claudeCode:
+                Text("Uses Claude Code with \(summarizationModelName(for: .claudeCode)).")
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(.secondary)
+            case .codex:
+                Text("Uses Codex with \(summarizationModelName(for: .codex)).")
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(.secondary)
+            case .openAI:
+                openAISummarizationForm
+            }
+        }
+    }
+
+    private var openAISummarizationForm: some View {
+        @Bindable var appState = appState
+        return VStack(alignment: .leading, spacing: 10) {
+            settingsTextFieldRow(
+                label: "Endpoint",
+                text: $appState.openAISummarizationEndpoint,
+                prompt: AppState.defaultOpenAISummarizationEndpoint
+            )
+
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text("API Key")
+                    .font(.system(size: ClaudeTheme.size(12)))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 84, alignment: .leading)
+                SecureField("sk-...", text: $appState.openAISummarizationAPIKey)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: ClaudeTheme.size(12), design: .monospaced))
+            }
+
+            HStack(spacing: 10) {
+                Picker("Model", selection: $appState.openAISummarizationModel) {
+                    if !appState.openAISummarizationModel.isEmpty,
+                       !appState.openAISummarizationModels.contains(appState.openAISummarizationModel) {
+                        Text(appState.openAISummarizationModel).tag(appState.openAISummarizationModel)
+                    }
+                    ForEach(appState.openAISummarizationModels, id: \.self) { model in
+                        Text(model).tag(model)
+                    }
+                    if appState.openAISummarizationModels.isEmpty && appState.openAISummarizationModel.isEmpty {
+                        Text("Fetch models first").tag("")
+                    }
+                }
+                .pickerStyle(.menu)
+                .frame(width: 260, alignment: .leading)
+
+                Button {
+                    Task { await appState.refreshOpenAISummarizationModels() }
+                } label: {
+                    if appState.isLoadingOpenAISummarizationModels {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Label("Fetch Models", systemImage: "arrow.clockwise")
+                    }
+                }
+                .disabled(appState.isLoadingOpenAISummarizationModels)
+            }
+
+            if let error = appState.openAISummarizationModelsError {
+                Text(error)
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(ClaudeTheme.statusError)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .onAppear {
+            guard appState.openAISummarizationModels.isEmpty else { return }
+            Task { await appState.refreshOpenAISummarizationModels() }
+        }
+    }
+
+    private func settingsTextFieldRow(label: String, text: Binding<String>, prompt: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(label)
+                .font(.system(size: ClaudeTheme.size(12)))
+                .foregroundStyle(.secondary)
+                .frame(width: 84, alignment: .leading)
+            TextField(prompt, text: text)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: ClaudeTheme.size(12), design: .monospaced))
+        }
+    }
+
+    private func summarizationModelName(for provider: AgentProvider) -> String {
+        if appState.selectedAgentProvider == provider {
+            return selectedDefaultModel.displayName
+        }
+        let model = appState.availableAgentModelSections()
+            .first(where: { $0.provider == provider })?
+            .models
+            .first
+        return model?.displayName ?? "the first available model"
     }
 
     // MARK: - Permission Mode Section

@@ -88,7 +88,7 @@ struct ProjectChatRow: View {
 
     private var isActiveStatus: Bool {
         switch status {
-        case .streaming, .awaitingPermission, .done, .error: return true
+        case .awaitingPermission, .done, .error: return true
         default: return false
         }
     }
@@ -122,7 +122,7 @@ struct ProjectChatRow: View {
             }
 
             if case .streaming = status {
-                CompactSessionProgressBar(progress: todoProgress)
+                CompactSessionProgressView(progress: todoProgress)
             } else {
                 Text(Self.compactElapsedTime(since: summary.updatedAt))
                     .font(.system(size: ClaudeTheme.size(11)))
@@ -175,14 +175,9 @@ struct ProjectChatRow: View {
     @ViewBuilder
     private var statusIndicator: some View {
         switch status {
-        case .streaming:
-            ProgressView()
-                .controlSize(.mini)
-                .frame(width: 8, height: 8)
-                .help("Response in progress")
         case .awaitingPermission, .done, .error:
             StatusBadgeDot(status: status)
-        case .idle:
+        case .idle, .streaming:
             EmptyView()
         }
     }
@@ -207,11 +202,10 @@ struct ProjectChatRow: View {
     }
 }
 
-// MARK: - CompactSessionProgressBar
+// MARK: - CompactSessionProgressView
 
-private struct CompactSessionProgressBar: View {
+private struct CompactSessionProgressView: View {
     let progress: ChatTodoProgress?
-    @State private var pulse = false
 
     private var fraction: Double? {
         guard let progress, progress.total > 0 else { return nil }
@@ -224,29 +218,18 @@ private struct CompactSessionProgressBar: View {
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            let width = proxy.size.width
-            let fillFraction = fraction ?? (pulse ? 0.72 : 0.28)
-
-            ZStack(alignment: .leading) {
-                Capsule()
-                    .fill(ClaudeTheme.textTertiary.opacity(0.18))
-
-                Capsule()
-                    .fill(ClaudeTheme.accent)
-                    .frame(width: max(4, width * fillFraction))
-                    .opacity(fraction == nil ? 0.72 : 1)
+        Group {
+            if let fraction {
+                ProgressView(value: fraction, total: 1)
+            } else {
+                ProgressView()
             }
         }
-        .frame(width: 42, height: 5)
+        .progressViewStyle(.circular)
+        .controlSize(.small)
+        .frame(width: 14, height: 14)
         .help(helpText)
         .accessibilityLabel(helpText)
-        .onAppear {
-            guard fraction == nil else { return }
-            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
-                pulse = true
-            }
-        }
         .animation(.easeInOut(duration: 0.2), value: fraction)
     }
 }

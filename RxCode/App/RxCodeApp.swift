@@ -119,7 +119,7 @@ private struct MenuBarLabel: View {
         let content = MenuBarLabelContent(
             agentText: agentText,
             fiveHourText: fiveHour.map { "\(formatPercent($0))%" } ?? "—%",
-            statusText: inProgress > 0 ? "\(inProgress) Job\(inProgress == 1 ? "" : "s")" : "IDLE"
+            statusText: inProgress > 0 ? "\(inProgress)job\(inProgress == 1 ? "" : "s")" : "IDLE"
         )
         let renderer = ImageRenderer(content: content)
         renderer.scale = NSScreen.main?.backingScaleFactor ?? 2
@@ -134,7 +134,7 @@ private struct MenuBarLabel: View {
     private static func agentText(for provider: AgentProvider) -> String {
         switch provider {
         case .claudeCode: return "CC"
-        case .codex: return "Codex"
+        case .codex: return "CODEX"
         }
     }
 
@@ -154,34 +154,42 @@ private struct MenuBarLabelContent: View {
     let statusText: String
 
     var body: some View {
-        HStack(spacing: 5) {
-            icon
-            VStack(alignment: .trailing, spacing: -1) {
+        HStack(alignment: .center, spacing: 8) {
+            Text(agentText)
+                .font(.system(size: Self.textSize, weight: .bold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .fixedSize(horizontal: true, vertical: false)
+                .frame(height: 18, alignment: .center)
+
+            VStack(alignment: .leading, spacing: -1) {
                 usageLine
                 Text(statusText)
                     .font(.system(size: Self.textSize, weight: .semibold))
                     .monospacedDigit()
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             }
+            .fixedSize(horizontal: true, vertical: false)
         }
         .padding(.vertical, 1)
+        .fixedSize(horizontal: true, vertical: true)
         .foregroundStyle(.black)
-    }
-
-    private var icon: some View {
-        Image(systemName: "message")
-            .font(.system(size: 11, weight: .medium))
     }
 
     private var usageLine: some View {
         HStack(alignment: .firstTextBaseline, spacing: 4) {
-            Text(agentText)
-                .font(.system(size: Self.textSize, weight: .bold))
             Text(fiveHourText)
                 .font(.system(size: Self.textSize, weight: .semibold))
                 .monospacedDigit()
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
             Text("5h")
                 .font(.system(size: Self.textSize, weight: .medium))
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
         }
+        .fixedSize(horizontal: true, vertical: false)
     }
 }
 

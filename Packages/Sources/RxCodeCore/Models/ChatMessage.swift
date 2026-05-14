@@ -250,6 +250,27 @@ public extension ToolCall {
             self.path = path
             self.diff = diff
         }
+
+        /// Synthesize a single `(oldString, newString)` hunk from a unified diff
+        /// body so Codex `fileChange` calls can flow through the same
+        /// `ThreadFileEdit` storage as Claude Edit/MultiEdit/Write.
+        public var hunk: PreviewFile.EditHunk {
+            var removed: [String] = []
+            var added: [String] = []
+            for rawLine in diff.components(separatedBy: "\n") {
+                if rawLine.hasPrefix("---") || rawLine.hasPrefix("+++") { continue }
+                if rawLine.hasPrefix("@@") { continue }
+                if rawLine.hasPrefix("-") {
+                    removed.append(String(rawLine.dropFirst()))
+                } else if rawLine.hasPrefix("+") {
+                    added.append(String(rawLine.dropFirst()))
+                }
+            }
+            return PreviewFile.EditHunk(
+                oldString: removed.joined(separator: "\n"),
+                newString: added.joined(separator: "\n")
+            )
+        }
     }
 
     /// Edit/MultiEdit/Write input → list of (old, new) hunks. Returns `[]` for

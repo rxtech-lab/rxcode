@@ -36,11 +36,15 @@ private final class RenderGroupCache: @unchecked Sendable {
 /// Renders markdown text with styled code blocks, headers, lists, and rich text.
 struct MarkdownContentView: View {
     let text: String
+    let showsTrailingCursor: Bool
+    let isCursorVisible: Bool
     @State private var cachedGroups: [RenderGroup]
     @State private var cachedText: String
 
-    init(text: String) {
+    init(text: String, showsTrailingCursor: Bool = false, isCursorVisible: Bool = true) {
         self.text = text
+        self.showsTrailingCursor = showsTrailingCursor
+        self.isCursorVisible = isCursorVisible
         let groups: [RenderGroup]
         if let cached = RenderGroupCache.shared.get(text) {
             groups = cached
@@ -54,10 +58,14 @@ struct MarkdownContentView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            ForEach(Array(cachedGroups.enumerated()), id: \.offset) { _, group in
+            ForEach(Array(cachedGroups.enumerated()), id: \.offset) { index, group in
                 switch group {
                 case .attributedText(let attrStr):
-                    MarkdownAttributedTextView(content: attrStr)
+                    MarkdownAttributedTextView(
+                        content: attrStr,
+                        showsTrailingCursor: showsTrailingCursor && index == cachedGroups.count - 1,
+                        isCursorVisible: isCursorVisible
+                    )
                         .frame(maxWidth: .infinity, alignment: .leading)
                 case .blockquote(let attrStr):
                     BlockquoteView(content: attrStr)
@@ -538,6 +546,8 @@ nonisolated(unsafe) private let inlineCodeBackgroundAttribute = NSAttributedStri
 
 private struct MarkdownAttributedTextView: NSViewRepresentable {
     let content: AttributedString
+    var showsTrailingCursor: Bool = false
+    var isCursorVisible: Bool = true
 
     func makeNSView(context: Context) -> InlineCodeTextView {
         let textView = InlineCodeTextView()
@@ -556,7 +566,11 @@ private struct MarkdownAttributedTextView: NSViewRepresentable {
     }
 
     func updateNSView(_ textView: InlineCodeTextView, context: Context) {
-        let attributed = Self.nsAttributedString(from: content)
+        let attributed = Self.nsAttributedString(
+            from: content,
+            showsTrailingCursor: showsTrailingCursor,
+            isCursorVisible: isCursorVisible
+        )
         textView.linkTextAttributes = [
             .foregroundColor: NSColor(ClaudeTheme.accent),
             .underlineStyle: NSUnderlineStyle.single.rawValue
@@ -577,10 +591,19 @@ private struct MarkdownAttributedTextView: NSViewRepresentable {
         return CGSize(width: width, height: ceil(usedRect.height))
     }
 
-    private static func nsAttributedString(from content: AttributedString) -> NSAttributedString {
+    private static func nsAttributedString(
+        from content: AttributedString,
+        showsTrailingCursor: Bool,
+        isCursorVisible: Bool
+    ) -> NSAttributedString {
         let result = NSMutableAttributedString(content)
         let fullRange = NSRange(location: 0, length: result.length)
-        guard fullRange.length > 0 else { return result }
+        guard fullRange.length > 0 else {
+            if showsTrailingCursor {
+                appendTrailingCursor(to: result, isVisible: isCursorVisible)
+            }
+            return result
+        }
 
         let defaultTextColor = NSColor(ClaudeTheme.textPrimary)
         let defaultFont = NSFont.systemFont(ofSize: ClaudeTheme.messageSize(15))
@@ -613,7 +636,17 @@ private struct MarkdownAttributedTextView: NSViewRepresentable {
             ], range: range)
             result.removeAttribute(.backgroundColor, range: range)
         }
+        if showsTrailingCursor {
+            appendTrailingCursor(to: result, isVisible: isCursorVisible)
+        }
         return result
+    }
+
+    private static func appendTrailingCursor(to result: NSMutableAttributedString, isVisible: Bool) {
+        result.append(NSAttributedString(string: " ●", attributes: [
+            .font: NSFont.systemFont(ofSize: ClaudeTheme.messageSize(8), weight: .regular),
+            .foregroundColor: isVisible ? NSColor(ClaudeTheme.accent) : NSColor.clear
+        ]))
     }
 }
 

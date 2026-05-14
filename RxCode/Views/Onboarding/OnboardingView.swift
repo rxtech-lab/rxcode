@@ -3,6 +3,7 @@ import RxCodeCore
 
 struct OnboardingView: View {
     @Environment(AppState.self) private var appState
+    var onCompletion: (() -> Void)? = nil
     @State private var isCheckingCLI = false
     @State private var claudeInstalled = false
     @State private var claudeVersion: String?
@@ -132,6 +133,7 @@ struct OnboardingView: View {
             Spacer()
             Button("Get Started") {
                 appState.skipGitHubLogin()
+                onCompletion?()
             }
             .buttonStyle(ClaudeAccentButtonStyle())
             .disabled(!canContinue)

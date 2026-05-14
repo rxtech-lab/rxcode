@@ -16,9 +16,7 @@ struct MCPSettingsTab: View {
                 if let error = appState.mcpListError {
                     errorBanner(error)
                 }
-                ForEach(visibleScopes) { scope in
-                    scopeSection(scope: scope)
-                }
+                serverSection
             }
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -49,7 +47,7 @@ struct MCPSettingsTab: View {
                 }
             }
         } message: { server in
-            Text(verbatim: "“\(server.name)” will be removed from the \(server.scope?.displayName ?? "User") scope.")
+            Text(verbatim: "“\(server.name)” will be removed from RxCode MCP settings.")
         }
         .alert("MCP error", isPresented: actionErrorBinding, presenting: actionError) { _ in
             Button("OK", role: .cancel) { actionError = nil }
@@ -65,7 +63,7 @@ struct MCPSettingsTab: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("MCP Servers")
                     .font(.system(size: ClaudeTheme.size(15), weight: .semibold))
-                Text("Configure Model Context Protocol servers used by Claude Code.")
+                Text("Configure Model Context Protocol servers used by Claude Code and Codex.")
                     .font(.system(size: ClaudeTheme.size(11)))
                     .foregroundStyle(.secondary)
             }
@@ -106,22 +104,6 @@ struct MCPSettingsTab: View {
 
     // MARK: - Context filtering
 
-    /// When a project is active, only project-scoped MCPs (Local/Project for the
-    /// current path) are shown. Otherwise, only User-scope (global) MCPs are shown.
-    private var visibleScopes: [MCPScope] {
-        appState.activeProjectPath != nil ? [.local, .project] : [.user]
-    }
-
-    private func servers(in scope: MCPScope) -> [MCPServerInfo] {
-        appState.mcpServers.filter { server in
-            guard (server.scope ?? .user) == scope else { return false }
-            if let activePath = appState.activeProjectPath {
-                return server.projectPath == activePath
-            }
-            return true
-        }
-    }
-
     @ViewBuilder
     private var contextBanner: some View {
         if let path = appState.activeProjectPath, !path.isEmpty {
@@ -129,7 +111,7 @@ struct MCPSettingsTab: View {
                 Image(systemName: "folder")
                     .font(.system(size: ClaudeTheme.size(11)))
                     .foregroundStyle(.secondary)
-                Text("Showing MCPs for this project")
+                Text("Showing effective MCP state for this project")
                     .font(.system(size: ClaudeTheme.size(11)))
                     .foregroundStyle(.secondary)
                 Text(verbatim: displayPath(path))
@@ -143,7 +125,7 @@ struct MCPSettingsTab: View {
                 Image(systemName: "globe")
                     .font(.system(size: ClaudeTheme.size(11)))
                     .foregroundStyle(.secondary)
-                Text("Showing global MCPs only")
+                Text("Showing global MCP defaults")
                     .font(.system(size: ClaudeTheme.size(11)))
                     .foregroundStyle(.secondary)
             }
@@ -158,20 +140,19 @@ struct MCPSettingsTab: View {
         return path
     }
 
-    // MARK: - Scope section
+    // MARK: - Server section
 
-    private func scopeSection(scope: MCPScope) -> some View {
-        let servers = servers(in: scope)
-        return VStack(alignment: .leading, spacing: 8) {
+    private var serverSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .lastTextBaseline, spacing: 8) {
-                Text(LocalizedStringKey(scope.displayName))
+                Text("Servers")
                     .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
-                Text(LocalizedStringKey(scope.subtitle))
+                Text("Global default plus per-project override")
                     .font(.system(size: ClaudeTheme.size(11)))
                     .foregroundStyle(.secondary)
             }
 
-            if servers.isEmpty {
+            if appState.mcpServers.isEmpty {
                 Text("No servers")
                     .font(.system(size: ClaudeTheme.size(11)))
                     .foregroundStyle(.secondary)
@@ -182,12 +163,27 @@ struct MCPSettingsTab: View {
                     .clipShape(RoundedRectangle(cornerRadius: 8))
             } else {
                 VStack(spacing: 6) {
-                    ForEach(servers) { server in
+                    ForEach(appState.mcpServers) { server in
                         MCPServerRow(
                             server: server,
+                            projectPath: appState.activeProjectPath,
                             probe: appState.mcpProbeResults[server.id],
                             isProbing: appState.mcpInFlightProbes.contains(server.id),
                             onTest: { Task { await appState.probeMCPServer(info: server) } },
+                            onGlobalEnabledChange: { enabled in
+                                Task {
+                                    if let err = await appState.setMCPServerGlobalEnabled(name: server.name, enabled: enabled) {
+                                        actionError = err
+                                    }
+                                }
+                            },
+                            onProjectOverrideChange: { override in
+                                Task {
+                                    if let err = await appState.setMCPServerProjectOverride(name: server.name, override: override) {
+                                        actionError = err
+                                    }
+                                }
+                            },
                             onRemove: { pendingRemoval = server }
                         )
                     }
@@ -217,63 +213,88 @@ struct MCPSettingsTab: View {
 
 private struct MCPServerRow: View {
     let server: MCPServerInfo
+    let projectPath: String?
     let probe: MCPProbeResult?
     let isProbing: Bool
     let onTest: () -> Void
+    let onGlobalEnabledChange: (Bool) -> Void
+    let onProjectOverrideChange: (MCPProjectOverride) -> Void
     let onRemove: () -> Void
 
     @State private var expanded = false
 
+    private var inProject: Bool { projectPath != nil }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 10) {
+            HStack(spacing: 12) {
                 statusDot
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 8) {
                         Text(verbatim: server.name)
                             .font(.system(size: ClaudeTheme.size(13), weight: .medium))
                         transportBadge
+                        if inProject && server.projectOverride != .inherit {
+                            overrideBadge
+                        }
                     }
                     Text(verbatim: server.endpoint)
-                        .font(.system(size: ClaudeTheme.size(11)))
+                        .font(.system(size: ClaudeTheme.size(11), design: .monospaced))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                    if let projectPath = server.projectPath, !projectPath.isEmpty {
-                        Text(verbatim: projectDisplayPath(projectPath))
-                            .font(.system(size: ClaudeTheme.size(10)))
-                            .foregroundStyle(.tertiary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
+                    Text(verbatim: scopeDescription)
+                        .font(.system(size: ClaudeTheme.size(10)))
+                        .foregroundStyle(.tertiary)
                 }
                 Spacer(minLength: 12)
 
-                Button(action: onTest) {
-                    if isProbing {
-                        ProgressView().controlSize(.small)
-                    } else {
-                        Text("Test")
-                            .font(.system(size: ClaudeTheme.size(11)))
-                    }
+                if isProbing {
+                    ProgressView().controlSize(.small)
                 }
-                .buttonStyle(.bordered)
-                .disabled(isProbing)
+
+                Toggle("", isOn: effectiveBinding)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .help(toggleHelp)
 
                 Menu {
-                    Button("Reconnect", action: onTest)
-                    if probe != nil {
-                        Button(expanded ? "Hide Tools" : "View Tools") { expanded.toggle() }
+                    Button(isProbing ? "Testing…" : "Test connection", action: onTest)
+                        .disabled(isProbing || !server.effectiveEnabled)
+                    if let probe, !probe.tools.isEmpty || probe.error != nil {
+                        Button(expanded ? "Hide details" : "View details") { expanded.toggle() }
                     }
+
+                    if inProject {
+                        Divider()
+                        Section("This project") {
+                            Picker("Override", selection: overrideBinding) {
+                                Text("Inherit global default").tag(MCPProjectOverride.inherit)
+                                Text("Force on").tag(MCPProjectOverride.enabled)
+                                Text("Force off").tag(MCPProjectOverride.disabled)
+                            }
+                            .pickerStyle(.inline)
+                            .labelsHidden()
+                        }
+                        Section("Global default") {
+                            Button(server.isGloballyEnabled ? "Disable globally" : "Enable globally") {
+                                onGlobalEnabledChange(!server.isGloballyEnabled)
+                            }
+                        }
+                    }
+
                     Divider()
-                    Button("Remove", role: .destructive, action: onRemove)
+                    Button("Remove…", role: .destructive, action: onRemove)
                 } label: {
                     Image(systemName: "ellipsis")
                         .font(.system(size: ClaudeTheme.size(12)))
+                        .frame(width: 28, height: 24)
+                        .contentShape(Rectangle())
                 }
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
-                .frame(width: 28, height: 24)
+                .fixedSize()
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
@@ -293,6 +314,66 @@ private struct MCPServerRow: View {
         )
     }
 
+    // MARK: - Bindings
+
+    private var effectiveBinding: Binding<Bool> {
+        Binding(
+            get: { server.effectiveEnabled },
+            set: { newValue in
+                if inProject {
+                    onProjectOverrideChange(newValue ? .enabled : .disabled)
+                } else {
+                    onGlobalEnabledChange(newValue)
+                }
+            }
+        )
+    }
+
+    private var overrideBinding: Binding<MCPProjectOverride> {
+        Binding(
+            get: { server.projectOverride },
+            set: { onProjectOverrideChange($0) }
+        )
+    }
+
+    // MARK: - Labels
+
+    private var toggleHelp: String {
+        if inProject {
+            return server.effectiveEnabled
+                ? "Turn off for this project"
+                : "Turn on for this project"
+        }
+        return server.effectiveEnabled ? "Disable globally" : "Enable globally"
+    }
+
+    private var scopeDescription: String {
+        guard inProject else {
+            return server.isGloballyEnabled ? "Global default · On" : "Global default · Off"
+        }
+        switch server.projectOverride {
+        case .inherit:
+            return server.isGloballyEnabled
+                ? "Inherits global default (On)"
+                : "Inherits global default (Off)"
+        case .enabled:
+            return "Forced on for this project"
+        case .disabled:
+            return "Forced off for this project"
+        }
+    }
+
+    private var overrideBadge: some View {
+        Text(server.projectOverride == .enabled ? "Project: On" : "Project: Off")
+            .font(.system(size: ClaudeTheme.size(10), weight: .semibold))
+            .foregroundStyle(.orange)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Color.orange.opacity(0.12))
+            .clipShape(RoundedRectangle(cornerRadius: 4))
+            .help("Project-specific override is set")
+    }
+
     private var statusDot: some View {
         let (color, label) = statusColorAndLabel
         return Circle()
@@ -308,14 +389,6 @@ private struct MCPServerRow: View {
         case .failed(let msg):  return (.red, msg)
         case .unknown:          return (.gray, "Unknown")
         }
-    }
-
-    private func projectDisplayPath(_ path: String) -> String {
-        let home = NSHomeDirectory()
-        if path.hasPrefix(home) {
-            return "~" + String(path.dropFirst(home.count))
-        }
-        return path
     }
 
     private var transportBadge: some View {

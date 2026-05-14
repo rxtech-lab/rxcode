@@ -8,7 +8,7 @@ RxCode is a native macOS desktop client for the Claude Code CLI. Written in Swif
 
 ## Writing Rules
 
-- All text committed to the project — code comments, commit messages, PR descriptions, log messages — must be written in **English**. Chat responses to the user remain in Korean.
+- All text committed to the project — code comments, commit messages, PR descriptions, log messages — must be written in **English**.
 
 ## Build & Run
 
@@ -41,23 +41,23 @@ xcodebuild -project RxCode.xcodeproj -scheme RxCode -configuration Release build
 
 The codebase is split into two Swift packages under `Packages/`:
 
-| Package | Role |
-|---------|------|
-| `RxCodeCore` | Shared models, theme, utilities — no UI dependencies |
+| Package         | Role                                                             |
+| --------------- | ---------------------------------------------------------------- |
+| `RxCodeCore`    | Shared models, theme, utilities — no UI dependencies             |
 | `RxCodeChatKit` | Chat UI components (ChatView, MessageBubble, InputBarView, etc.) |
 
 ### Service Layer (`Services/`)
 
-| Service | Role |
-|---------|------|
-| `ClaudeService` | Spawns Claude CLI as a subprocess, parses stdout NDJSON stream, buffers text deltas at 50ms intervals |
-| `PermissionServer` | Network framework-based local HTTP server (ports 19836–19846). Receives CLI PreToolUse hook requests and holds the connection until UI approval |
-| `GitHubService` | OAuth Device Flow authentication, Keychain token storage, SSH key generation/registration, repo cloning |
-| `PersistenceService` | JSON file-based persistence at `~/Library/Application Support/RxCode/`. Per-project/session directory structure |
-| `MarketplaceService` | Parallel fetch of plugin catalog from 4 Anthropic GitHub repos, 5-minute cache |
-| `RateLimitService` | Anthropic usage API polling, OAuth token refresh, usage tracking |
-| `UpdateService` | Sparkle-based auto-update manager. Starts updater on launch; exposes `checkForUpdates()` for menu-initiated checks |
-| `BashSafety` | Whitelist-based read-only command validator. Blocks mutating git/claude/npm subcommands and write redirections |
+| Service              | Role                                                                                                                                            |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ClaudeService`      | Spawns Claude CLI as a subprocess, parses stdout NDJSON stream, buffers text deltas at 50ms intervals                                           |
+| `PermissionServer`   | Network framework-based local HTTP server (ports 19836–19846). Receives CLI PreToolUse hook requests and holds the connection until UI approval |
+| `GitHubService`      | OAuth Device Flow authentication, Keychain token storage, SSH key generation/registration, repo cloning                                         |
+| `PersistenceService` | JSON file-based persistence at `~/Library/Application Support/RxCode/`. Per-project/session directory structure                                 |
+| `MarketplaceService` | Parallel fetch of plugin catalog from 4 Anthropic GitHub repos, 5-minute cache                                                                  |
+| `RateLimitService`   | Anthropic usage API polling, OAuth token refresh, usage tracking                                                                                |
+| `UpdateService`      | Sparkle-based auto-update manager. Starts updater on launch; exposes `checkForUpdates()` for menu-initiated checks                              |
+| `BashSafety`         | Whitelist-based read-only command validator. Blocks mutating git/claude/npm subcommands and write redirections                                  |
 
 ### Data Flow
 

@@ -42,6 +42,29 @@ public enum MCPScope: String, Codable, Sendable, CaseIterable, Identifiable {
     }
 }
 
+public enum MCPProjectOverride: String, Codable, Sendable, CaseIterable, Identifiable {
+    case inherit
+    case enabled
+    case disabled
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .inherit: return "Inherit"
+        case .enabled: return "On"
+        case .disabled: return "Off"
+        }
+    }
+}
+
+public enum MCPProvider: String, Codable, Sendable, CaseIterable, Identifiable {
+    case claudeCode
+    case codex
+
+    public var id: String { rawValue }
+}
+
 // MARK: - Status
 
 public enum MCPStatus: Sendable, Equatable {
@@ -75,14 +98,30 @@ public struct MCPServerInfo: Identifiable, Sendable, Equatable, Hashable {
     public let status: MCPStatus
     public var scope: MCPScope?
     public var projectPath: String?
+    public var isGloballyEnabled: Bool
+    public var projectOverride: MCPProjectOverride
+    public var effectiveEnabled: Bool
 
-    public init(name: String, transport: MCPTransport, endpoint: String, status: MCPStatus, scope: MCPScope? = nil, projectPath: String? = nil) {
+    public init(
+        name: String,
+        transport: MCPTransport,
+        endpoint: String,
+        status: MCPStatus,
+        scope: MCPScope? = nil,
+        projectPath: String? = nil,
+        isGloballyEnabled: Bool = true,
+        projectOverride: MCPProjectOverride = .inherit,
+        effectiveEnabled: Bool = true
+    ) {
         self.name = name
         self.transport = transport
         self.endpoint = endpoint
         self.status = status
         self.scope = scope
         self.projectPath = projectPath
+        self.isGloballyEnabled = isGloballyEnabled
+        self.projectOverride = projectOverride
+        self.effectiveEnabled = effectiveEnabled
     }
 
     public func hash(into hasher: inout Hasher) {
@@ -141,6 +180,70 @@ public struct MCPServerSpec: Sendable, Equatable {
         self.command = command
         self.args = args
         self.env = env
+    }
+}
+
+public struct MCPServerRecord: Codable, Sendable, Equatable, Identifiable {
+    public var id: String { name }
+    public var name: String
+    public var transport: MCPTransport
+    public var url: String?
+    public var command: String?
+    public var args: [String]
+    public var env: [String: String]
+    public var headers: [String: String]
+    public var cwd: String?
+    public var bearerTokenEnvVar: String?
+    public var isGloballyEnabled: Bool
+    public var projectOverrides: [String: MCPProjectOverride]
+
+    public init(
+        name: String,
+        transport: MCPTransport,
+        url: String? = nil,
+        command: String? = nil,
+        args: [String] = [],
+        env: [String: String] = [:],
+        headers: [String: String] = [:],
+        cwd: String? = nil,
+        bearerTokenEnvVar: String? = nil,
+        isGloballyEnabled: Bool = true,
+        projectOverrides: [String: MCPProjectOverride] = [:]
+    ) {
+        self.name = name
+        self.transport = transport
+        self.url = url
+        self.command = command
+        self.args = args
+        self.env = env
+        self.headers = headers
+        self.cwd = cwd
+        self.bearerTokenEnvVar = bearerTokenEnvVar
+        self.isGloballyEnabled = isGloballyEnabled
+        self.projectOverrides = projectOverrides
+    }
+
+    public func projectOverride(for projectPath: String?) -> MCPProjectOverride {
+        guard let projectPath, !projectPath.isEmpty else { return .inherit }
+        return projectOverrides[projectPath] ?? .inherit
+    }
+
+    public func isEnabled(for projectPath: String?) -> Bool {
+        switch projectOverride(for: projectPath) {
+        case .inherit: return isGloballyEnabled
+        case .enabled: return true
+        case .disabled: return false
+        }
+    }
+}
+
+public struct MCPConfiguration: Codable, Sendable, Equatable {
+    public var version: Int
+    public var servers: [MCPServerRecord]
+
+    public init(version: Int = 1, servers: [MCPServerRecord] = []) {
+        self.version = version
+        self.servers = servers
     }
 }
 

@@ -2,12 +2,12 @@ import SwiftUI
 import RxCodeCore
 import RxCodeChatKit
 
-/// Toolbar pill rendering the current session's TodoWrite progress.
+/// Toolbar pill rendering the current session's todo-style progress.
 ///
-/// Hidden until the active CLI session emits at least one `TodoWrite` tool
-/// call. Live updates come from in-memory messages; a SwiftData-backed
-/// snapshot fills in for cold opens before message replay completes. Tap
-/// toggles a popover listing each todo with status icon.
+/// Hidden until the active CLI session emits progress. Live `TodoWrite`
+/// updates come from in-memory messages; a SwiftData-backed snapshot fills in
+/// for cold opens and Codex plan updates. Tap toggles a popover listing each
+/// todo with status icon.
 struct TodoProgressToolbarItem: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState

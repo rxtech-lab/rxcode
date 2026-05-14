@@ -8,6 +8,7 @@ public enum StreamEvent: Sendable {
     case user(UserMessage)
     case result(ResultEvent)
     case rateLimitEvent(RateLimitInfo)
+    case todoSnapshot(TodoSnapshotEvent)
     case unknown(String)
 }
 
@@ -64,6 +65,18 @@ public struct UserMessage: Sendable {
         self.toolUseId = toolUseId
         self.content = content
         self.isError = isError
+    }
+}
+
+// MARK: - Todo Snapshot Event
+
+public struct TodoSnapshotEvent: Sendable {
+    public let sessionId: String?
+    public let items: [TodoItem]
+
+    public init(sessionId: String?, items: [TodoItem]) {
+        self.sessionId = sessionId
+        self.items = items
     }
 }
 

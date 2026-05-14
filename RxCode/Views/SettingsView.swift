@@ -621,7 +621,7 @@ struct ChatSettingsTab: View {
             Text("Summarization Model")
                 .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
 
-            Text("Used to generate short session titles. The default follows the selected chat client.")
+            Text("Used to generate short session titles. The default follows each thread's model.")
                 .font(.system(size: ClaudeTheme.size(11)))
                 .foregroundStyle(.secondary)
 
@@ -639,15 +639,7 @@ struct ChatSettingsTab: View {
 
             switch appState.summarizationProvider {
             case .selectedClient:
-                Text("Uses \(appState.selectedAgentProvider.displayName) with \(selectedDefaultModel.displayName).")
-                    .font(.system(size: ClaudeTheme.size(11)))
-                    .foregroundStyle(.secondary)
-            case .claudeCode:
-                Text("Uses Claude Code with \(summarizationModelName(for: .claudeCode)).")
-                    .font(.system(size: ClaudeTheme.size(11)))
-                    .foregroundStyle(.secondary)
-            case .codex:
-                Text("Uses Codex with \(summarizationModelName(for: .codex)).")
+                Text("Uses the model saved on the current thread.")
                     .font(.system(size: ClaudeTheme.size(11)))
                     .foregroundStyle(.secondary)
             case .openAI:
@@ -727,17 +719,6 @@ struct ChatSettingsTab: View {
                 .textFieldStyle(.roundedBorder)
                 .font(.system(size: ClaudeTheme.size(12), design: .monospaced))
         }
-    }
-
-    private func summarizationModelName(for provider: AgentProvider) -> String {
-        if appState.selectedAgentProvider == provider {
-            return selectedDefaultModel.displayName
-        }
-        let model = appState.availableAgentModelSections()
-            .first(where: { $0.provider == provider })?
-            .models
-            .first
-        return model?.displayName ?? "the first available model"
     }
 
     // MARK: - Permission Mode Section

@@ -22,7 +22,7 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL(
-    process.env.NEXT_PUBLIC_SITE_URL ?? "https://rxcode.app"
+    process.env.NEXT_PUBLIC_SITE_URL ?? "https://code.rxlab.app"
   ),
   title: "RxCode — The Visual Command Center for AI Coding Agents",
   description:

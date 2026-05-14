@@ -733,9 +733,9 @@ final class AppState {
         mcpListError = nil
         defer { mcpIsLoading = false }
         do {
-            // Pass nil so Settings aggregates across every project in ~/.claude.json,
-            // not just the currently-selected project.
-            let list = try await mcp.list(projectPath: nil)
+            // Pass the active project so Settings can show global defaults plus
+            // the effective per-project override state.
+            let list = try await mcp.list(projectPath: activeProjectPath)
             // Preserve last-known status for rows that already exist so a list
             // refresh doesn't visually downgrade everything to .unknown.
             var merged: [MCPServerInfo] = []
@@ -748,7 +748,10 @@ final class AppState {
                         endpoint: info.endpoint,
                         status: existing.status,
                         scope: info.scope,
-                        projectPath: info.projectPath
+                        projectPath: info.projectPath,
+                        isGloballyEnabled: info.isGloballyEnabled,
+                        projectOverride: info.projectOverride,
+                        effectiveEnabled: info.effectiveEnabled
                     ))
                 } else {
                     merged.append(info)
@@ -798,7 +801,10 @@ final class AppState {
                 endpoint: row.endpoint,
                 status: newStatus,
                 scope: row.scope,
-                projectPath: row.projectPath
+                projectPath: row.projectPath,
+                isGloballyEnabled: row.isGloballyEnabled,
+                projectOverride: row.projectOverride,
+                effectiveEnabled: row.effectiveEnabled
             )
         }
 
@@ -817,7 +823,7 @@ final class AppState {
     @discardableResult
     func addMCPServer(spec: MCPServerSpec, scope: MCPScope) async -> String? {
         do {
-            try await mcp.add(spec: spec, scope: scope)
+            try await mcp.add(spec: spec, scope: scope, projectPath: activeProjectPath)
             await refreshMCPServers()
             // Auto-probe on add so the new row shows live status and tool list
             // without the user clicking Test.
@@ -839,6 +845,31 @@ final class AppState {
             mcpProbeResults = mcpProbeResults.filter { key, _ in
                 !(key.hasPrefix(scopePrefix) && key.hasSuffix(":\(name)"))
             }
+            await refreshMCPServers()
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    @discardableResult
+    func setMCPServerGlobalEnabled(name: String, enabled: Bool) async -> String? {
+        do {
+            try await mcp.setGlobalEnabled(name: name, enabled: enabled)
+            await refreshMCPServers()
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    @discardableResult
+    func setMCPServerProjectOverride(name: String, override: MCPProjectOverride) async -> String? {
+        guard let activeProjectPath else {
+            return "No active project selected."
+        }
+        do {
+            try await mcp.setProjectOverride(name: name, projectPath: activeProjectPath, override: override)
             await refreshMCPServers()
             return nil
         } catch {
@@ -1759,6 +1790,7 @@ final class AppState {
         let stream: AsyncStream<StreamEvent>
         switch agentProvider {
         case .claudeCode:
+            let mcpConfigPath = await mcp.writeClaudeConfig(projectPath: cwd)
             stream = await claude.send(
                 streamId: streamId,
                 prompt: prompt,
@@ -1767,9 +1799,11 @@ final class AppState {
                 model: model,
                 effort: effort,
                 hookSettingsPath: hookSettingsPath,
+                mcpConfigPath: mcpConfigPath,
                 permissionMode: permissionMode
             )
         case .codex:
+            let mcpConfigOverrides = await mcp.codexConfigOverrides(projectPath: cwd)
             stream = await codex.send(
                 streamId: streamId,
                 prompt: prompt,
@@ -1778,6 +1812,7 @@ final class AppState {
                 model: model,
                 permissionMode: registerMode,
                 planMode: permissionMode == .plan,
+                mcpConfigOverrides: mcpConfigOverrides,
                 permissionServer: permission
             )
         }
@@ -2107,6 +2142,15 @@ final class AppState {
                        let retry = info.retrySec, retry > 0 {
                         addErrorMessage("Rate limited. Retrying in \(Int(retry))s...", in: window)
                     }
+
+                case .todoSnapshot(let snapshot):
+                    let targetSession = snapshot.sessionId ?? sessionKey
+                    let done = snapshot.items.filter { $0.status == .completed }.count
+                    let active = snapshot.items.first(where: { $0.status == .inProgress })?.activeForm ?? "-"
+                    logger.info(
+                        "[TodoSnapshot] session=\(targetSession, privacy: .public) total=\(snapshot.items.count) done=\(done) active=\(active, privacy: .public)"
+                    )
+                    threadStore.upsertTodoSnapshot(sessionId: targetSession, items: snapshot.items)
 
                 case .unknown(let raw):
                     if eventCount <= 5 || eventCount % 100 == 0 {
@@ -2746,6 +2790,7 @@ final class AppState {
         }
 
         activeProjectPath = project.path
+        Task { await refreshMCPServers() }
         UserDefaults.standard.set(project.id.uuidString, forKey: "selectedProjectId")
     }
 

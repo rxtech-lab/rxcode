@@ -14,12 +14,22 @@ actor ClaudeCodeServer {
 
     /// PGIDs of concurrently running streaming CLI invocations — managed independently per streamId.
     ///
-    /// The streaming `claude` is launched in its own process group (via `posix_spawn` +
-    /// `POSIX_SPAWN_SETPGROUP`) so the leader pid == pgid. This lets us reap the
+    /// The streaming `claude` is launched as a new session leader (via `posix_spawn` +
+    /// `POSIX_SPAWN_SETSID`) so the leader pid == pgid == sid. This lets us reap the
     /// entire subagent subtree with a single `killpg` instead of chasing descendants
-    /// individually — node subagents spawned via the Task tool inherit the same group
-    /// and get swept along.
+    /// individually, and also enables session-id filtering to find descendants whose
+    /// parent chain was severed by reparenting to launchd.
     private var streamPGIDs: [UUID: pid_t] = [:]
+    /// Accumulated set of every descendant pid ever observed for a stream. A background
+    /// poller samples the live process table while the stream is running and unions the
+    /// results here. This is the only way to catch descendants that call `setsid()`
+    /// themselves (creating a new session that doesn't match our root sid) and then
+    /// get reparented to launchd when an intermediate parent dies — by the time
+    /// `finalize` runs, those processes are invisible to both the ppid walk and the
+    /// session-id filter, but they were briefly findable while their parent was alive.
+    private var trackedDescendants: [UUID: Set<pid_t>] = [:]
+    /// Polling tasks that populate `trackedDescendants`. Cancelled in `removeProcess`.
+    private var descendantTrackers: [UUID: Task<Void, Never>] = [:]
     /// Writable stdin handles per stream — used for sending follow-up messages (e.g., AskUserQuestion responses).
     /// Entry is removed when stdin is closed (after `result` event or on cancel).
     private var stdinHandles: [UUID: FileHandle] = [:]
@@ -334,6 +344,7 @@ actor ClaudeCodeServer {
         model: String? = nil,
         effort: String? = nil,
         hookSettingsPath: String? = nil,
+        mcpConfigPath: String? = nil,
         permissionMode: PermissionMode = .default
     ) -> AsyncStream<StreamEvent> {
         let stdin = Pipe()
@@ -362,6 +373,7 @@ actor ClaudeCodeServer {
                         model: model,
                         effort: effort,
                         hookSettingsPath: hookSettingsPath,
+                        mcpConfigPath: mcpConfigPath,
                         permissionMode: permissionMode,
                         stdinPipe: stdin,
                         stdoutPipe: stdout,
@@ -443,26 +455,70 @@ actor ClaudeCodeServer {
         }
     }
 
+    // MARK: - Descendant tracker
+
+    /// Start a background poller that periodically snapshots every descendant of `root`
+    /// and merges them into `trackedDescendants[streamId]`. The accumulated set is the
+    /// safety net for descendants that briefly exist as findable children of `root`
+    /// before detaching themselves (via `setsid`/`setpgid`) and being reparented away.
+    ///
+    /// Cancelled in `removeProcess` when the stream ends.
+    private func startDescendantTracker(streamId: UUID, root: pid_t) {
+        // Capture sid once at startup — getsid() on a live root returns the session id,
+        // which equals `root` itself since we spawned with POSIX_SPAWN_SETSID.
+        let sid = getsid(root)
+        let task = Task.detached { [weak self] in
+            while !Task.isCancelled {
+                let pids = Self.descendantPids(of: root, sid: sid)
+                if !pids.isEmpty {
+                    await self?.mergeTrackedDescendants(streamId: streamId, pids: pids)
+                }
+                // 500ms is a balance: short enough to catch transient ppid links before
+                // an intermediate parent dies and reparenting hides the child, while not
+                // burning measurable CPU on the `ps` invocation (~5ms per snapshot).
+                try? await Task.sleep(nanoseconds: 500_000_000)
+            }
+        }
+        descendantTrackers[streamId] = task
+    }
+
+    private func mergeTrackedDescendants(streamId: UUID, pids: [pid_t]) {
+        trackedDescendants[streamId, default: []].formUnion(pids)
+    }
+
+    /// Union of the live snapshot and every descendant ever seen for this stream.
+    /// `kill(pid, 0)` filters out already-reaped pids so signals only target live ones.
+    private func allKnownDescendants(streamId: UUID, root: pid_t, sid: pid_t) -> [pid_t] {
+        var union = trackedDescendants[streamId] ?? []
+        union.formUnion(Self.descendantPids(of: root, sid: sid))
+        return union.filter { kill($0, 0) == 0 }
+    }
+
     // MARK: - Cancel / Finalize
 
     /// User-initiated stop. Send SIGINT to the entire process group so subagent
     /// children die alongside the parent. Escalate to SIGKILL after 5 seconds.
     func cancel(streamId: UUID) {
         guard let pgid = streamPGIDs[streamId] else { return }
-        let escapees = Self.descendantPids(of: pgid)
+        // Capture sid while the root is still alive — getsid(pid) returns -1 once
+        // the process is fully reaped, but the value is needed for the SIGKILL re-snapshot.
+        let sid = getsid(pgid)
+        let escapees = allKnownDescendants(streamId: streamId, root: pgid, sid: sid)
 
         logger.info("Sending SIGINT to claude pgid \(pgid) escapees=\(escapees) (stream=\(streamId))")
         killpg(pgid, SIGINT)
         for pid in escapees { kill(pid, SIGINT) }
 
         let log = logger
-        Task.detached {
+        Task.detached { [weak self] in
             try? await Task.sleep(nanoseconds: 5_000_000_000)
+            // Re-snapshot before SIGKILL — picks up anything that emerged in the 5s window.
+            let finalEscapees = await self?.allKnownDescendants(streamId: streamId, root: pgid, sid: sid) ?? []
             // killpg/kill on a fully-dead target returns ESRCH — harmless. Send unconditionally
             // to cover any subagent that ignored SIGINT or escaped the process group.
             killpg(pgid, SIGKILL)
-            for pid in escapees { kill(pid, SIGKILL) }
-            log.debug("Cancel SIGKILL pgid=\(pgid) escapees=\(escapees)")
+            for pid in finalEscapees { kill(pid, SIGKILL) }
+            log.debug("Cancel SIGKILL pgid=\(pgid) escapees=\(finalEscapees)")
         }
     }
 
@@ -475,30 +531,48 @@ actor ClaudeCodeServer {
     /// escapee individually as the safety net — running in a detached Task so
     /// actor contention can't delay the escalation.
     func finalize(streamId: UUID) {
-        guard let pgid = streamPGIDs[streamId] else { return }
-        let escapees = Self.descendantPids(of: pgid)
+        // Claim the entry atomically so a second concurrent caller (e.g. AppState's
+        // result-driven finalize racing with the waitpid-driven handleProcessExit)
+        // becomes a no-op instead of re-signaling an already-reaped pgid.
+        guard let pgid = streamPGIDs.removeValue(forKey: streamId) else { return }
+        // Capture sid while the root is still alive — see cancel() for rationale.
+        let sid = getsid(pgid)
+        let escapees = allKnownDescendants(streamId: streamId, root: pgid, sid: sid)
 
-        logger.info("Finalizing stream — pgid=\(pgid) escapees=\(escapees) stream=\(streamId)")
+        logger.info("Finalizing stream — pgid=\(pgid) sid=\(sid) escapees=\(escapees) stream=\(streamId)")
         killpg(pgid, SIGTERM)
         for pid in escapees { kill(pid, SIGTERM) }
 
         let log = logger
-        Task.detached {
+        Task.detached { [weak self] in
             try? await Task.sleep(nanoseconds: 1_500_000_000)
+            // Re-snapshot before SIGKILL. By this time the root may have already
+            // exited; the accumulated `trackedDescendants` set is what catches
+            // session-escaped, reparented processes that no live ps query can find.
+            let finalEscapees = await self?.allKnownDescendants(streamId: streamId, root: pgid, sid: sid) ?? []
             killpg(pgid, SIGKILL)
-            for pid in escapees { kill(pid, SIGKILL) }
-            log.debug("Finalize SIGKILL pgid=\(pgid) escapees=\(escapees)")
+            for pid in finalEscapees { kill(pid, SIGKILL) }
+            log.debug("Finalize SIGKILL pgid=\(pgid) escapees=\(finalEscapees)")
         }
     }
 
-    /// Walk the process tree rooted at `root` via `ps -Ao pid,ppid` and return
-    /// every descendant pid (not including `root`). Used to find subagents that
-    /// escaped the original process group so they can be signaled directly.
+    /// Find every descendant pid of `root` (not including `root`). Combines two
+    /// strategies for maximum coverage:
     ///
-    /// Must be called *before* the root dies — once the root exits, its children
-    /// are reparented to launchd (ppid=1) and the link back to the original
-    /// process is lost.
-    private static func descendantPids(of root: pid_t) -> [pid_t] {
+    /// 1. **Parent walk** — BFS via `ps -Ao pid,ppid`. Catches everything reachable
+    ///    through ppid links from `root`. Works for live, non-reparented trees but
+    ///    breaks once an intermediate parent dies and its children are reparented
+    ///    to launchd (ppid=1).
+    /// 2. **Session match** — for each running pid, compare `getsid(pid)` to the
+    ///    passed-in `sid`. Catches descendants that broke out of the pgid (called
+    ///    `setpgid`) and whose ppid chain was severed by reparenting, as long as
+    ///    they did not call `setsid` themselves. Relies on the root having been
+    ///    spawned with `POSIX_SPAWN_SETSID` so that `sid == root`.
+    ///
+    /// Pass `sid: 0` to skip the session match (e.g., if `getsid(root)` already
+    /// returned an error). Callers should capture `sid` while the root is alive,
+    /// since `getsid()` on a reaped pid returns -1.
+    private static func descendantPids(of root: pid_t, sid: pid_t) -> [pid_t] {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/bin/ps")
         proc.arguments = ["-Ao", "pid,ppid"]
@@ -515,23 +589,41 @@ actor ClaudeCodeServer {
         guard let text = String(data: data, encoding: .utf8) else { return [] }
 
         var childrenByParent: [pid_t: [pid_t]] = [:]
+        var allPids: [pid_t] = []
         for line in text.split(separator: "\n").dropFirst() {
             let parts = line.split(whereSeparator: { $0 == " " || $0 == "\t" })
             guard parts.count >= 2,
                   let pid = pid_t(parts[0]),
                   let ppid = pid_t(parts[1]) else { continue }
             childrenByParent[ppid, default: []].append(pid)
+            allPids.append(pid)
         }
 
-        var result: [pid_t] = []
+        var result = Set<pid_t>()
+
+        // (1) BFS via ppid links — works while parent chain is intact.
         var queue: [pid_t] = [root]
         while !queue.isEmpty {
             let next = queue.removeFirst()
             guard let children = childrenByParent[next] else { continue }
-            result.append(contentsOf: children)
-            queue.append(contentsOf: children)
+            for child in children where child != root {
+                if result.insert(child).inserted {
+                    queue.append(child)
+                }
+            }
         }
-        return result
+
+        // (2) Session-id match — survives reparenting; misses processes that
+        //     called setsid themselves (rare for CLI subagents).
+        if sid > 0 {
+            for pid in allPids where pid != root {
+                if getsid(pid) == sid {
+                    result.insert(pid)
+                }
+            }
+        }
+
+        return Array(result)
     }
 
     // MARK: - Private Helpers
@@ -546,6 +638,7 @@ actor ClaudeCodeServer {
         model: String?,
         effort: String?,
         hookSettingsPath: String?,
+        mcpConfigPath: String?,
         permissionMode: PermissionMode
     ) -> [String] {
         var args: [String] = [
@@ -576,6 +669,10 @@ actor ClaudeCodeServer {
 
         if let hookSettingsPath {
             args += ["--settings", hookSettingsPath]
+        }
+
+        if let mcpConfigPath {
+            args += ["--strict-mcp-config", "--mcp-config", mcpConfigPath]
         }
 
         if let sessionId {
@@ -609,6 +706,7 @@ actor ClaudeCodeServer {
         model: String?,
         effort: String? = nil,
         hookSettingsPath: String?,
+        mcpConfigPath: String?,
         permissionMode: PermissionMode = .default,
         stdinPipe: Pipe,
         stdoutPipe: Pipe,
@@ -624,6 +722,7 @@ actor ClaudeCodeServer {
             model: model,
             effort: effort,
             hookSettingsPath: hookSettingsPath,
+            mcpConfigPath: mcpConfigPath,
             permissionMode: permissionMode
         )
         let environment = await resolvedEnvironment()
@@ -658,6 +757,7 @@ actor ClaudeCodeServer {
         let stdinHandle = stdinPipe.fileHandleForWriting
         self.streamPGIDs[streamId] = pid
         self.stdinHandles[streamId] = stdinHandle
+        self.startDescendantTracker(streamId: streamId, root: pid)
 
         // Send the initial user prompt as an NDJSON user message.
         let userMessage: [String: Any] = [
@@ -740,8 +840,11 @@ actor ClaudeCodeServer {
         }
         defer { posix_spawnattr_destroy(&attr) }
 
-        _ = posix_spawnattr_setflags(&attr, Int16(POSIX_SPAWN_SETPGROUP))
-        _ = posix_spawnattr_setpgroup(&attr, 0)
+        // SETSID makes the child a new session leader (sid == pid == pgid). Session id
+        // is preserved across reparenting, so we can locate descendants via getsid()
+        // even after an intermediate parent has died and orphans were reparented to
+        // launchd. Pure SETPGROUP would not survive reparenting on its own.
+        _ = posix_spawnattr_setflags(&attr, Int16(POSIX_SPAWN_SETSID))
 
         var argv: [UnsafeMutablePointer<CChar>?] = ([executable] + arguments).map { strdup($0) }
         argv.append(nil)
@@ -789,10 +892,23 @@ actor ClaudeCodeServer {
     /// the waitpid-driven exit handler.
     private func removeProcess(streamId: UUID) {
         streamPGIDs.removeValue(forKey: streamId)
+        descendantTrackers.removeValue(forKey: streamId)?.cancel()
+        // Retain `trackedDescendants[streamId]` long enough for the SIGKILL re-snapshot
+        // in cancel/finalize (those run in detached tasks after this method). Clear it
+        // after a short delay so the actor doesn't accumulate stale entries.
+        let clearKey = streamId
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 6_000_000_000)
+            await self?.clearTrackedDescendants(streamId: clearKey)
+        }
         // If stdin is still open (e.g. abnormal exit before `result`), release the handle.
         if let handle = stdinHandles.removeValue(forKey: streamId) {
             try? handle.close()
         }
+    }
+
+    private func clearTrackedDescendants(streamId: UUID) {
+        trackedDescendants.removeValue(forKey: streamId)
     }
 
     private func recordSessionId(streamId: UUID, sessionId: String) {
@@ -881,25 +997,37 @@ actor ClaudeCodeServer {
         inactivityTimer?.cancel()
         inactivityTimer = nil
 
+        // Cancel pollers so they don't race with the teardown.
+        for (_, task) in descendantTrackers { task.cancel() }
+        descendantTrackers.removeAll()
+
         // Snapshot every descendant tree before signaling so escaped subagents
         // (MCP servers detached via setsid) still get the SIGKILL pass.
+        // Capture sid per stream while roots are alive — see finalize() for rationale.
+        let streamSnapshots: [(UUID, pid_t, pid_t)] = streamPGIDs.map { ($0.key, $0.value, getsid($0.value)) }
         var allEscapees: [pid_t] = []
-        for (_, pgid) in streamPGIDs {
-            allEscapees.append(contentsOf: Self.descendantPids(of: pgid))
+        for (streamId, pgid, sid) in streamSnapshots {
+            allEscapees.append(contentsOf: allKnownDescendants(streamId: streamId, root: pgid, sid: sid))
         }
 
-        for (_, pgid) in streamPGIDs {
+        for (_, pgid, _) in streamSnapshots {
             killpg(pgid, SIGTERM)
         }
         for pid in allEscapees { kill(pid, SIGTERM) }
 
         // Synchronous SIGKILL escalation — the host process is exiting, so a
-        // detached Task wouldn't have time to fire.
+        // detached Task wouldn't have time to fire. Re-snapshot to catch any
+        // descendants that emerged or were reparented between SIGTERM and now.
         usleep(200_000)
-        for (_, pgid) in streamPGIDs {
+        var finalEscapees: [pid_t] = []
+        for (streamId, pgid, sid) in streamSnapshots {
+            finalEscapees.append(contentsOf: allKnownDescendants(streamId: streamId, root: pgid, sid: sid))
+        }
+        for (_, pgid, _) in streamSnapshots {
             killpg(pgid, SIGKILL)
         }
-        for pid in allEscapees { kill(pid, SIGKILL) }
+        for pid in finalEscapees { kill(pid, SIGKILL) }
+        trackedDescendants.removeAll()
 
         streamPGIDs.removeAll()
         for (_, handle) in stdinHandles {

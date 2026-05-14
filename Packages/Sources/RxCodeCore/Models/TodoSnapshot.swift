@@ -1,8 +1,8 @@
 import Foundation
 import SwiftData
 
-/// Persisted snapshot of the latest `TodoWrite` tool call for a chat session.
-/// One row per session id; updated each time the CLI emits a new TodoWrite.
+/// Persisted snapshot of the latest todo-style progress for a chat session.
+/// One row per session id; updated from Claude `TodoWrite` or Codex plan events.
 @Model
 public final class TodoSnapshot {
     @Attribute(.unique) public var sessionId: String

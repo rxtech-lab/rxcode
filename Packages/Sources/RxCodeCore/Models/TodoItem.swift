@@ -53,4 +53,31 @@ public enum TodoExtractor {
             return TodoItem(id: index, content: content, activeForm: activeForm, status: status)
         }
     }
+
+    /// Parse Codex app-server `turn/plan/updated` params into the same todo
+    /// shape used by `TodoWrite`.
+    public static func parseCodexPlanUpdate(params: [String: JSONValue]) -> [TodoItem]? {
+        guard let array = params["plan"]?.arrayValue else { return nil }
+        return array.enumerated().map { index, value in
+            let step = value["step"]?.stringValue ?? ""
+            let rawStatus = value["status"]?.stringValue ?? ""
+            return TodoItem(
+                id: index,
+                content: step,
+                activeForm: step,
+                status: parseCodexPlanStatus(rawStatus)
+            )
+        }
+    }
+
+    private static func parseCodexPlanStatus(_ rawStatus: String) -> TodoItem.Status {
+        switch rawStatus {
+        case "completed":
+            return .completed
+        case "inProgress", "in_progress":
+            return .inProgress
+        default:
+            return .pending
+        }
+    }
 }

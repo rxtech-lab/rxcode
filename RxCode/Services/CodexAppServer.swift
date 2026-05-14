@@ -276,6 +276,7 @@ actor CodexAppServer {
         model: String?,
         permissionMode: PermissionMode,
         planMode: Bool,
+        mcpConfigOverrides: [String] = [],
         permissionServer: PermissionServer
     ) -> AsyncStream<StreamEvent> {
         AsyncStream<StreamEvent> { continuation in
@@ -292,6 +293,7 @@ actor CodexAppServer {
                     model: model,
                     permissionMode: permissionMode,
                     planMode: planMode,
+                    mcpConfigOverrides: mcpConfigOverrides,
                     permissionServer: permissionServer,
                     continuation: continuation
                 )
@@ -329,12 +331,13 @@ actor CodexAppServer {
         model: String?,
         permissionMode: PermissionMode,
         planMode: Bool,
+        mcpConfigOverrides: [String],
         permissionServer: PermissionServer,
         continuation: AsyncStream<StreamEvent>.Continuation
     ) async {
         do {
             guard let binary = await findCodexBinary() else { throw CodexError.binaryNotFound }
-            let handles = try await spawnAppServer(binary: binary, streamId: streamId, cwd: cwd)
+            let handles = try await spawnAppServer(binary: binary, streamId: streamId, cwd: cwd, configOverrides: mcpConfigOverrides)
             try Self.writeJSONLine(Self.request(id: 1, method: "initialize", params: initializeParams()), to: handles.stdin)
 
             var activeThreadId = threadId
@@ -342,6 +345,12 @@ actor CodexAppServer {
             var turnCompleted = false
             var finalUsage: UsageInfo?
             let startedAt = Date()
+            // Captured per turn so we can synthesize an `ExitPlanMode` tool call when a
+            // plan-mode turn completes. Codex never emits ExitPlanMode itself — its plan
+            // arrives as `turn/plan/updated` notifications (steps) and a final agent
+            // message (concise summary). See PlanCardView for the rendering contract.
+            var planItems: [TodoItem] = []
+            var assistantTextBuffer = ""
 
             for try await line in handles.stdout.fileHandleForReading.bytes.lines {
                 guard !Task.isCancelled else { break }
@@ -392,10 +401,30 @@ actor CodexAppServer {
                             stdin: handles.stdin
                         )
                     } else {
+                        let params = object["params"]?.objectValue ?? [:]
+                        switch method {
+                        case "turn/plan/updated":
+                            if let items = TodoExtractor.parseCodexPlanUpdate(params: params) {
+                                planItems = items
+                            }
+                        case "item/agentMessage/delta", "item/agent_message/delta":
+                            if let text = Self.firstString(in: params, keys: ["delta", "text", "content"]) {
+                                assistantTextBuffer += text
+                            }
+                        default:
+                            break
+                        }
                         handleNotification(method: method, object: object, activeThreadId: activeThreadId, continuation: continuation)
                         if method == "turn/completed" || method == "turn/failed" {
                             finalUsage = Self.usageInfo(from: object) ?? finalUsage
                             turnCompleted = method == "turn/completed"
+                            if turnCompleted, planMode {
+                                emitSynthesizedExitPlanMode(
+                                    planItems: planItems,
+                                    assistantText: assistantTextBuffer,
+                                    continuation: continuation
+                                )
+                            }
                             break
                         }
                     }
@@ -479,6 +508,11 @@ actor CodexAppServer {
             if let item = params["item"]?.objectValue ?? params["itemInfo"]?.objectValue {
                 emitToolStart(item: item, continuation: continuation)
             }
+        case "turn/plan/updated":
+            if let items = TodoExtractor.parseCodexPlanUpdate(params: params) {
+                let sessionId = Self.firstString(in: params, keys: ["threadId", "thread_id"]) ?? activeThreadId
+                continuation.yield(.todoSnapshot(TodoSnapshotEvent(sessionId: sessionId, items: items)))
+            }
         case "item/completed":
             if let item = params["item"]?.objectValue ?? params["itemInfo"]?.objectValue {
                 emitToolCompletion(item: item, continuation: continuation)
@@ -507,6 +541,44 @@ actor CodexAppServer {
         let output = Self.firstString(in: item, keys: ["output", "result", "summary", "message"]) ?? ""
         let isError = item["error"] != nil || item["isError"]?.boolValue == true
         continuation.yield(.user(UserMessage(toolUseId: id, content: output, isError: isError)))
+    }
+
+    /// Synthesize a Claude-shaped `ExitPlanMode` tool call so `PlanCardView` can render
+    /// an interactive accept/reject card at the end of a Codex plan-mode turn. Plan body
+    /// is rendered from the latest `update_plan` steps; falls back to the assistant's
+    /// final summary text if no plan steps were emitted.
+    private func emitSynthesizedExitPlanMode(
+        planItems: [TodoItem],
+        assistantText: String,
+        continuation: AsyncStream<StreamEvent>.Continuation
+    ) {
+        let stepsMarkdown = Self.planItemsMarkdown(planItems)
+        let trimmedText = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let markdown: String
+        if !stepsMarkdown.isEmpty {
+            markdown = stepsMarkdown
+        } else if !trimmedText.isEmpty {
+            markdown = trimmedText
+        } else {
+            return
+        }
+        let id = "codex-plan-\(UUID().uuidString)"
+        continuation.yield(.unknown(Self.claudeToolStart(id: id, name: "ExitPlanMode")))
+        continuation.yield(.unknown(Self.claudeInputDelta(["plan": .string(markdown)])))
+        continuation.yield(.unknown(Self.claudeContentBlockStop()))
+    }
+
+    private static func planItemsMarkdown(_ items: [TodoItem]) -> String {
+        guard !items.isEmpty else { return "" }
+        return items.enumerated().map { index, item in
+            let suffix: String
+            switch item.status {
+            case .completed: suffix = " *(completed)*"
+            case .inProgress: suffix = " *(in progress)*"
+            case .pending: suffix = ""
+            }
+            return "\(index + 1). \(item.content)\(suffix)"
+        }.joined(separator: "\n")
     }
 
     private func handleServerRequest(
@@ -649,10 +721,10 @@ actor CodexAppServer {
         }
     }
 
-    private func spawnAppServer(binary: String, streamId: UUID, cwd: String?) async throws -> (process: Process, stdin: FileHandle, stdout: Pipe) {
+    private func spawnAppServer(binary: String, streamId: UUID, cwd: String?, configOverrides: [String] = []) async throws -> (process: Process, stdin: FileHandle, stdout: Pipe) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: binary)
-        process.arguments = ["app-server", "--listen", "stdio://"]
+        process.arguments = ["app-server", "--listen", "stdio://"] + configOverrides
         if let cwd { process.currentDirectoryURL = URL(fileURLWithPath: cwd) }
         process.environment = await resolvedEnvironment()
 

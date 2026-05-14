@@ -4,11 +4,11 @@ import os
 
 // MARK: - MCPService
 
-/// Manages MCP (Model Context Protocol) servers configured for the Claude CLI.
+/// Manages RxCode-owned MCP server definitions and per-project activation.
 ///
-/// All persistent state is owned by `claude mcp …` — this service just shells out
-/// for add/list/get/remove and runs an in-process JSON-RPC handshake to test
-/// connections and enumerate the tools each server exposes.
+/// RxCode is the source of truth. Provider-specific config is generated at
+/// launch time for Claude Code and Codex instead of treating either CLI's
+/// native config as authoritative.
 actor MCPService {
 
     private let claudeService: ClaudeService
@@ -21,17 +21,13 @@ actor MCPService {
     // MARK: - Errors
 
     enum MCPError: LocalizedError {
-        case binaryNotFound
-        case cliFailed(Int32, String)
         case parseFailure(String)
         case probeTimeout
         case probeFailed(String)
 
         var errorDescription: String? {
             switch self {
-            case .binaryNotFound:           return "Could not find the claude CLI binary."
-            case .cliFailed(let s, let m):  return "claude exited with status \(s): \(m)"
-            case .parseFailure(let detail): return "Could not parse claude output: \(detail)"
+            case .parseFailure(let detail): return "Could not parse MCP config: \(detail)"
             case .probeTimeout:             return "MCP server did not respond within the timeout."
             case .probeFailed(let detail):  return detail
             }
@@ -40,137 +36,139 @@ actor MCPService {
 
     // MARK: - List / Get
 
-    /// Read MCP server configs straight from disk:
-    ///   User scope    -> ~/.claude.json :: mcpServers
-    ///   Local scope   -> ~/.claude.json :: projects[<projectPath>].mcpServers
-    ///   Project scope -> <projectPath>/.mcp.json :: mcpServers
-    /// Servers listed in `projects[<projectPath>].disabledMcpjsonServers` are filtered out
-    /// of the Project section, matching what Claude Code actually loads.
-    /// Status is always `.unknown` from the file read alone — connection state comes from a probe.
-    ///
-    /// When `projectPath` is nil, aggregate Local/Project rows across every project in
-    /// `~/.claude.json`. This is what the (window-less) Settings sheet uses so the list
-    /// matches the union of `claude mcp list` run from each project directory.
     func list(projectPath: String?) async throws -> [MCPServerInfo] {
-        let root = readClaudeRoot()
-        var rows: [MCPServerInfo] = []
-
-        for (name, entry) in (root?.mcpServers ?? [:]).sorted(by: { $0.key < $1.key }) {
-            rows.append(makeInfo(name: name, entry: entry, scope: .user, projectPath: nil))
-        }
-
-        let projectPaths: [String]
-        if let projectPath, !projectPath.isEmpty {
-            projectPaths = [projectPath]
-        } else {
-            projectPaths = (root?.projects?.keys.sorted() ?? [])
-        }
-
-        for path in projectPaths {
-            let projectEntry = root?.projects?[path]
-            for (name, entry) in (projectEntry?.mcpServers ?? [:]).sorted(by: { $0.key < $1.key }) {
-                rows.append(makeInfo(name: name, entry: entry, scope: .local, projectPath: path))
-            }
-
-            let disabled = Set(projectEntry?.disabledMcpjsonServers ?? [])
-            let projectFile = readProjectMCPFile(projectRoot: path)
-            for (name, entry) in (projectFile?.mcpServers ?? [:]).sorted(by: { $0.key < $1.key }) {
-                guard !disabled.contains(name) else { continue }
-                rows.append(makeInfo(name: name, entry: entry, scope: .project, projectPath: path))
-            }
-        }
-
-        return rows
+        let config = try loadConfig()
+        return config.servers
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            .map { makeInfo(record: $0, projectPath: projectPath) }
     }
 
-    /// Resolve one server by name. Precedence matches the CLI: Local > Project > User.
-    /// When `projectPath` is nil, scan every project in `~/.claude.json` for a match.
     func get(name: String, projectPath: String?) async throws -> MCPServerDetail {
-        let root = readClaudeRoot()
-
-        let candidatePaths: [String]
-        if let projectPath, !projectPath.isEmpty {
-            candidatePaths = [projectPath]
-        } else {
-            candidatePaths = (root?.projects?.keys.sorted() ?? [])
+        guard let record = try loadConfig().servers.first(where: { $0.name == name }) else {
+            throw MCPError.parseFailure("MCP server '\(name)' not found")
         }
-
-        for path in candidatePaths {
-            if let entry = root?.projects?[path]?.mcpServers?[name] {
-                return makeDetail(name: name, entry: entry, scope: .local, projectPath: path)
-            }
-            let disabled = Set(root?.projects?[path]?.disabledMcpjsonServers ?? [])
-            if !disabled.contains(name),
-               let entry = readProjectMCPFile(projectRoot: path)?.mcpServers?[name] {
-                return makeDetail(name: name, entry: entry, scope: .project, projectPath: path)
-            }
-        }
-
-        if let entry = root?.mcpServers?[name] {
-            return makeDetail(name: name, entry: entry, scope: .user, projectPath: nil)
-        }
-
-        throw MCPError.parseFailure("MCP server '\(name)' not found in any scope")
+        return makeDetail(record: record, projectPath: projectPath)
     }
 
-    /// Lookup using known scope + project hints (from an existing `MCPServerInfo` row).
-    /// Falls back to the precedence-based `get` when hints don't resolve.
     func get(name: String, scope: MCPScope?, projectPath: String?) async throws -> MCPServerDetail {
-        let root = readClaudeRoot()
-        switch scope {
-        case .user:
-            if let entry = root?.mcpServers?[name] {
-                return makeDetail(name: name, entry: entry, scope: .user, projectPath: nil)
-            }
-        case .local:
-            if let projectPath, let entry = root?.projects?[projectPath]?.mcpServers?[name] {
-                return makeDetail(name: name, entry: entry, scope: .local, projectPath: projectPath)
-            }
-        case .project:
-            if let projectPath,
-               let entry = readProjectMCPFile(projectRoot: projectPath)?.mcpServers?[name] {
-                return makeDetail(name: name, entry: entry, scope: .project, projectPath: projectPath)
-            }
-        case .none:
-            break
-        }
-        return try await get(name: name, projectPath: projectPath)
+        try await get(name: name, projectPath: projectPath)
     }
 
-    // MARK: - Add / Remove
+    // MARK: - Mutations
 
-    /// Build and run `claude mcp add` for the supplied spec.
-    /// Falls back to `add-json` for stdio specs that include flag-like args
-    /// the parent shell would otherwise mangle.
-    func add(spec: MCPServerSpec, scope: MCPScope) async throws {
-        var args: [String] = ["mcp", "add", "-s", scope.rawValue]
+    func add(spec: MCPServerSpec, scope: MCPScope, projectPath: String?) async throws {
+        var config = try loadConfig()
+        let name = spec.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { throw MCPError.parseFailure("Server name is required.") }
 
-        switch spec.transport {
-        case .http, .sse:
-            args += ["-t", spec.transport.rawValue]
-            for header in spec.headers where !header.key.isEmpty {
-                args += ["-H", "\(header.key): \(header.value)"]
-            }
-            args += [spec.name, spec.url]
+        let env = Dictionary(uniqueKeysWithValues: spec.env.compactMap { kv -> (String, String)? in
+            let key = kv.key.trimmingCharacters(in: .whitespacesAndNewlines)
+            return key.isEmpty ? nil : (key, kv.value)
+        })
+        let headers = Dictionary(uniqueKeysWithValues: spec.headers.compactMap { kv -> (String, String)? in
+            let key = kv.key.trimmingCharacters(in: .whitespacesAndNewlines)
+            return key.isEmpty ? nil : (key, kv.value)
+        })
 
-        case .stdio:
-            for kv in spec.env where !kv.key.isEmpty {
-                args += ["-e", "\(kv.key)=\(kv.value)"]
-            }
-            args += [spec.name, "--", spec.command]
-            args += spec.args
+        var record = MCPServerRecord(
+            name: name,
+            transport: spec.transport,
+            url: spec.transport == .stdio ? nil : spec.url.trimmingCharacters(in: .whitespacesAndNewlines),
+            command: spec.transport == .stdio ? spec.command.trimmingCharacters(in: .whitespacesAndNewlines) : nil,
+            args: spec.args,
+            env: env,
+            headers: headers,
+            isGloballyEnabled: true
+        )
+
+        if scope != .user, let projectPath, !projectPath.isEmpty {
+            record.isGloballyEnabled = false
+            record.projectOverrides[projectPath] = .enabled
         }
 
-        _ = try await runClaude(args)
+        if let index = config.servers.firstIndex(where: { $0.name == name }) {
+            let existing = config.servers[index]
+            record.projectOverrides = existing.projectOverrides.merging(record.projectOverrides) { _, new in new }
+            if scope == .user {
+                record.isGloballyEnabled = existing.isGloballyEnabled
+            }
+            config.servers[index] = record
+        } else {
+            config.servers.append(record)
+        }
+
+        try saveConfig(config)
     }
 
     func remove(name: String, scope: MCPScope) async throws {
-        _ = try await runClaude(["mcp", "remove", "-s", scope.rawValue, name])
+        var config = try loadConfig()
+        config.servers.removeAll { $0.name == name }
+        try saveConfig(config)
     }
 
-    // MARK: - Probe (test connection + list tools)
+    func setGlobalEnabled(name: String, enabled: Bool) async throws {
+        var config = try loadConfig()
+        guard let index = config.servers.firstIndex(where: { $0.name == name }) else {
+            throw MCPError.parseFailure("MCP server '\(name)' not found")
+        }
+        config.servers[index].isGloballyEnabled = enabled
+        try saveConfig(config)
+    }
 
-    /// Probe an existing server by name. Resolves the configuration via `get` first.
+    func setProjectOverride(name: String, projectPath: String, override: MCPProjectOverride) async throws {
+        var config = try loadConfig()
+        guard let index = config.servers.firstIndex(where: { $0.name == name }) else {
+            throw MCPError.parseFailure("MCP server '\(name)' not found")
+        }
+        if override == .inherit {
+            config.servers[index].projectOverrides.removeValue(forKey: projectPath)
+        } else {
+            config.servers[index].projectOverrides[projectPath] = override
+        }
+        try saveConfig(config)
+    }
+
+    // MARK: - Provider Config
+
+    func writeClaudeConfig(projectPath: String?) async -> String? {
+        do {
+            let records = try enabledRecords(projectPath: projectPath)
+            let data = try JSONSerialization.data(
+                withJSONObject: ["mcpServers": dictionaryForClaude(records)],
+                options: [.prettyPrinted, .sortedKeys]
+            )
+            return try writeGeneratedConfig(data: data, filename: "claude-mcp.json")
+        } catch {
+            logger.warning("Failed to write Claude MCP config: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    func codexConfigOverrides(projectPath: String?) async -> [String] {
+        do {
+            let config = try loadConfig()
+            var pairs: [String] = []
+            for record in config.servers.sorted(by: { $0.name < $1.name }) {
+                // Always emit the full inline table. A bare `enabled=false`
+                // override fails codex's validation ("invalid transport") when
+                // the server isn't already defined in ~/.codex/config.toml.
+                let key = "mcp_servers.\(tomlKey(record.name))"
+                let enabled = record.isEnabled(for: projectPath)
+                pairs += ["-c", "\(key)=\(tomlInlineTable(for: record, enabled: enabled))"]
+            }
+            return pairs
+        } catch {
+            logger.warning("Failed to build Codex MCP overrides: \(error.localizedDescription)")
+            return []
+        }
+    }
+
+    private func enabledRecords(projectPath: String?) throws -> [MCPServerRecord] {
+        try loadConfig().servers.filter { $0.isEnabled(for: projectPath) }
+    }
+
+    // MARK: - Probe
+
     func probe(name: String, projectPath: String?) async -> MCPProbeResult {
         do {
             let detail = try await get(name: name, projectPath: projectPath)
@@ -180,18 +178,15 @@ actor MCPService {
         }
     }
 
-    /// Probe an existing server identified by `MCPServerInfo` (carries scope + projectPath).
-    /// Preferred over `probe(name:projectPath:)` when the row's origin is known.
     func probe(info: MCPServerInfo) async -> MCPProbeResult {
         do {
-            let detail = try await get(name: info.name, scope: info.scope, projectPath: info.projectPath)
+            let detail = try await get(name: info.name, projectPath: info.projectPath)
             return await probe(detail: detail)
         } catch {
             return MCPProbeResult(ok: false, error: error.localizedDescription)
         }
     }
 
-    /// Probe a not-yet-saved spec (used during auto-probe on Save).
     func probe(spec: MCPServerSpec) async -> MCPProbeResult {
         let env = Dictionary(uniqueKeysWithValues: spec.env.map { ($0.key, $0.value) })
         let headers = Dictionary(uniqueKeysWithValues: spec.headers.map { ($0.key, $0.value) })
@@ -217,88 +212,91 @@ actor MCPService {
         }
     }
 
-    // MARK: - Internal: claude CLI runner
+    // MARK: - RxCode Config
 
-    private func runClaude(_ args: [String]) async throws -> String {
-        guard let binary = await claudeService.findClaudeBinary() else {
-            throw MCPError.binaryNotFound
-        }
-        let env = await claudeService.resolvedEnvironment()
-        let result = try await runProcess(
-            executable: binary,
-            arguments: args,
-            environment: env
-        )
-        guard result.status == 0 else {
-            let msg = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-            throw MCPError.cliFailed(result.status, msg.isEmpty ? result.stdout : msg)
-        }
-        return result.stdout
+    private func configURL() -> URL {
+        AppSupport.bundleScopedURL.appendingPathComponent("mcp.json")
     }
 
-    private struct ProcessResult: Sendable {
-        let status: Int32
-        let stdout: String
-        let stderr: String
+    private func generatedConfigDirectory() -> URL {
+        AppSupport.bundleScopedURL.appendingPathComponent("GeneratedMCP", isDirectory: true)
     }
 
-    private func runProcess(
-        executable: String,
-        arguments: [String],
-        environment: [String: String]?,
-        stdinData: Data? = nil,
-        currentDirectory: String? = nil
-    ) async throws -> ProcessResult {
-        let proc = Process()
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-        let stdinPipe = Pipe()
-
-        proc.executableURL = URL(fileURLWithPath: executable)
-        proc.arguments = arguments
-        proc.standardOutput = stdoutPipe
-        proc.standardError = stderrPipe
-        proc.standardInput = stdinPipe
-        if let environment { proc.environment = environment }
-        if let currentDirectory {
-            proc.currentDirectoryURL = URL(fileURLWithPath: currentDirectory)
+    private func loadConfig() throws -> MCPConfiguration {
+        let url = configURL()
+        if FileManager.default.fileExists(atPath: url.path) {
+            let data = try Data(contentsOf: url)
+            return try JSONDecoder().decode(MCPConfiguration.self, from: data)
         }
+        let imported = importExistingConfigs()
+        try saveConfig(imported)
+        return imported
+    }
 
-        try proc.run()
+    private func saveConfig(_ config: MCPConfiguration) throws {
+        let url = configURL()
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(config)
+        try data.write(to: url, options: .atomic)
+    }
 
-        if let stdinData {
-            let handle = stdinPipe.fileHandleForWriting
-            try handle.write(contentsOf: stdinData)
-            try handle.close()
-        } else {
-            try stdinPipe.fileHandleForWriting.close()
-        }
+    private func writeGeneratedConfig(data: Data, filename: String) throws -> String {
+        let dir = generatedConfigDirectory()
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let path = dir.appendingPathComponent(filename)
+        try data.write(to: path, options: .atomic)
+        return path.path
+    }
 
-        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-            proc.terminationHandler = { _ in cont.resume() }
-        }
-
-        let outData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-        let errData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-        return ProcessResult(
-            status: proc.terminationStatus,
-            stdout: String(data: outData, encoding: .utf8) ?? "",
-            stderr: String(data: errData, encoding: .utf8) ?? ""
+    private func makeInfo(record: MCPServerRecord, projectPath: String?) -> MCPServerInfo {
+        MCPServerInfo(
+            name: record.name,
+            transport: record.transport,
+            endpoint: endpoint(from: record),
+            status: .unknown,
+            scope: .user,
+            projectPath: projectPath,
+            isGloballyEnabled: record.isGloballyEnabled,
+            projectOverride: record.projectOverride(for: projectPath),
+            effectiveEnabled: record.isEnabled(for: projectPath)
         )
     }
 
-    // MARK: - On-disk config
+    private func makeDetail(record: MCPServerRecord, projectPath: String?) -> MCPServerDetail {
+        MCPServerDetail(
+            name: record.name,
+            scope: .user,
+            transport: record.transport,
+            url: record.transport == .stdio ? nil : record.url,
+            command: record.transport == .stdio ? record.command : nil,
+            args: record.args,
+            env: record.env,
+            headers: record.headers,
+            projectPath: projectPath
+        )
+    }
 
-    /// Minimal mirror of the `~/.claude.json` shape we care about. Anything
-    /// missing or malformed degrades to `nil` and is treated as "no servers".
+    private func endpoint(from record: MCPServerRecord) -> String {
+        switch record.transport {
+        case .http, .sse:
+            return record.url ?? ""
+        case .stdio:
+            let cmd = record.command ?? ""
+            return ([cmd] + record.args).filter { !$0.isEmpty }.joined(separator: " ")
+        }
+    }
+
+    // MARK: - Imports
+
     private struct ClaudeRootConfig: Decodable {
         var mcpServers: [String: ServerEntry]?
-        var projects: [String: ProjectEntry]?
+        var projects: [String: ClaudeProjectEntry]?
     }
 
-    private struct ProjectEntry: Decodable {
+    private struct ClaudeProjectEntry: Decodable {
         var mcpServers: [String: ServerEntry]?
-        var enabledMcpjsonServers: [String]?
         var disabledMcpjsonServers: [String]?
     }
 
@@ -315,6 +313,100 @@ actor MCPService {
         var headers: [String: String]?
     }
 
+    private func importExistingConfigs() -> MCPConfiguration {
+        var recordsByName: [String: MCPServerRecord] = [:]
+        for record in importClaudeConfigs() + importCodexConfig() {
+            recordsByName[record.name] = merge(recordsByName[record.name], with: record)
+        }
+        return MCPConfiguration(servers: recordsByName.values.sorted { $0.name < $1.name })
+    }
+
+    private func merge(_ existing: MCPServerRecord?, with incoming: MCPServerRecord) -> MCPServerRecord {
+        guard var existing else { return incoming }
+        existing.transport = incoming.transport
+        existing.url = incoming.url
+        existing.command = incoming.command
+        existing.args = incoming.args
+        existing.env = incoming.env
+        existing.headers = incoming.headers
+        existing.cwd = incoming.cwd
+        existing.bearerTokenEnvVar = incoming.bearerTokenEnvVar
+        existing.isGloballyEnabled = existing.isGloballyEnabled || incoming.isGloballyEnabled
+        existing.projectOverrides.merge(incoming.projectOverrides) { _, new in new }
+        return existing
+    }
+
+    private func importClaudeConfigs() -> [MCPServerRecord] {
+        guard let root = readJSON(ClaudeRootConfig.self, from: claudeRootPath()) else { return [] }
+        var records: [MCPServerRecord] = []
+
+        for (name, entry) in root.mcpServers ?? [:] {
+            records.append(record(name: name, entry: entry, isGloballyEnabled: true))
+        }
+
+        for (projectPath, project) in root.projects ?? [:] {
+            for (name, entry) in project.mcpServers ?? [:] {
+                var record = record(name: name, entry: entry, isGloballyEnabled: false)
+                record.projectOverrides[projectPath] = .enabled
+                records.append(record)
+            }
+
+            if let projectFile = readJSON(ProjectMCPFile.self, from: projectMCPPath(projectPath)) {
+                let disabled = Set(project.disabledMcpjsonServers ?? [])
+                for (name, entry) in projectFile.mcpServers ?? [:] {
+                    var record = record(name: name, entry: entry, isGloballyEnabled: false)
+                    record.projectOverrides[projectPath] = disabled.contains(name) ? .disabled : .enabled
+                    records.append(record)
+                }
+            }
+        }
+
+        return records
+    }
+
+    private func importCodexConfig() -> [MCPServerRecord] {
+        let path = (NSHomeDirectory() as NSString).appendingPathComponent(".codex/config.toml")
+        guard let text = try? String(contentsOfFile: path, encoding: .utf8) else { return [] }
+
+        var records: [MCPServerRecord] = []
+        var currentName: String?
+        var fields: [String: String] = [:]
+
+        func flush() {
+            guard let name = currentName else { return }
+            let enabled = fields["enabled"].map { $0.trimmingCharacters(in: .whitespaces) != "false" } ?? true
+            if let url = fields["url"]?.tomlUnquoted {
+                records.append(MCPServerRecord(name: name, transport: .http, url: url, isGloballyEnabled: enabled))
+            } else if let command = fields["command"]?.tomlUnquoted {
+                let args = fields["args"]?.tomlArrayValues ?? []
+                let cwd = fields["cwd"]?.tomlUnquoted
+                records.append(MCPServerRecord(name: name, transport: .stdio, command: command, args: args, cwd: cwd, isGloballyEnabled: enabled))
+            }
+        }
+
+        for rawLine in text.split(whereSeparator: \.isNewline).map(String.init) {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            guard !line.isEmpty, !line.hasPrefix("#") else { continue }
+            if line.hasPrefix("[mcp_servers."), line.hasSuffix("]") {
+                flush()
+                let name = String(line.dropFirst("[mcp_servers.".count).dropLast())
+                currentName = name.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+                fields = [:]
+            } else if currentName != nil, let equal = line.firstIndex(of: "=") {
+                let key = String(line[..<equal]).trimmingCharacters(in: .whitespaces)
+                let value = String(line[line.index(after: equal)...]).trimmingCharacters(in: .whitespaces)
+                fields[key] = value
+            }
+        }
+        flush()
+        return records
+    }
+
+    private func readJSON<T: Decodable>(_ type: T.Type, from path: String) -> T? {
+        guard let data = FileManager.default.contents(atPath: path) else { return nil }
+        return try? JSONDecoder().decode(T.self, from: data)
+    }
+
     private func claudeRootPath() -> String {
         (NSHomeDirectory() as NSString).appendingPathComponent(".claude.json")
     }
@@ -323,61 +415,93 @@ actor MCPService {
         (projectRoot as NSString).appendingPathComponent(".mcp.json")
     }
 
-    private func readClaudeRoot() -> ClaudeRootConfig? {
-        guard let data = FileManager.default.contents(atPath: claudeRootPath()) else { return nil }
-        return try? JSONDecoder().decode(ClaudeRootConfig.self, from: data)
-    }
-
-    private func readProjectMCPFile(projectRoot: String) -> ProjectMCPFile? {
-        guard let data = FileManager.default.contents(atPath: projectMCPPath(projectRoot)) else {
-            return nil
-        }
-        return try? JSONDecoder().decode(ProjectMCPFile.self, from: data)
+    private func record(name: String, entry: ServerEntry, isGloballyEnabled: Bool) -> MCPServerRecord {
+        let transport = transport(from: entry)
+        return MCPServerRecord(
+            name: name,
+            transport: transport,
+            url: transport == .stdio ? nil : entry.url,
+            command: transport == .stdio ? entry.command : nil,
+            args: entry.args ?? [],
+            env: entry.env ?? [:],
+            headers: entry.headers ?? [:],
+            isGloballyEnabled: isGloballyEnabled
+        )
     }
 
     private func transport(from entry: ServerEntry) -> MCPTransport {
         switch entry.type?.lowercased() {
-        case "http": return .http
-        case "sse":  return .sse
-        default:     return .stdio
+        case "http", "streamable_http": return .http
+        case "sse": return .sse
+        default: return .stdio
         }
     }
 
-    private func endpoint(from entry: ServerEntry) -> String {
-        switch transport(from: entry) {
-        case .http, .sse:
-            return entry.url ?? ""
+    // MARK: - Provider Serialization
+
+    private func dictionaryForClaude(_ records: [MCPServerRecord]) -> [String: [String: Any]] {
+        Dictionary(uniqueKeysWithValues: records.map { record in
+            var entry: [String: Any] = ["type": record.transport.rawValue]
+            switch record.transport {
+            case .stdio:
+                entry["command"] = record.command ?? ""
+                if !record.args.isEmpty { entry["args"] = record.args }
+                if !record.env.isEmpty { entry["env"] = record.env }
+            case .http, .sse:
+                entry["url"] = record.url ?? ""
+                if !record.headers.isEmpty { entry["headers"] = record.headers }
+            }
+            return (record.name, entry)
+        })
+    }
+
+    private func tomlInlineTable(for record: MCPServerRecord, enabled: Bool = true) -> String {
+        var parts = ["enabled=\(enabled ? "true" : "false")"]
+        switch record.transport {
         case .stdio:
-            let cmd = entry.command ?? ""
-            let args = entry.args ?? []
-            return ([cmd] + args).filter { !$0.isEmpty }.joined(separator: " ")
+            parts.append("command=\(tomlString(record.command ?? ""))")
+            if !record.args.isEmpty {
+                parts.append("args=\(tomlArray(record.args))")
+            }
+            if !record.env.isEmpty {
+                parts.append("env=\(tomlDictionary(record.env))")
+            }
+            if let cwd = record.cwd, !cwd.isEmpty {
+                parts.append("cwd=\(tomlString(cwd))")
+            }
+        case .http, .sse:
+            parts.append("url=\(tomlString(record.url ?? ""))")
+            if let bearer = record.bearerTokenEnvVar, !bearer.isEmpty {
+                parts.append("bearer_token_env_var=\(tomlString(bearer))")
+            }
         }
+        return "{\(parts.joined(separator: ","))}"
     }
 
-    private func makeInfo(name: String, entry: ServerEntry, scope: MCPScope, projectPath: String?) -> MCPServerInfo {
-        MCPServerInfo(
-            name: name,
-            transport: transport(from: entry),
-            endpoint: endpoint(from: entry),
-            status: .unknown,
-            scope: scope,
-            projectPath: projectPath
-        )
+    private func tomlKey(_ key: String) -> String {
+        if key.range(of: #"^[A-Za-z0-9_-]+$"#, options: .regularExpression) != nil {
+            return key
+        }
+        return tomlString(key)
     }
 
-    private func makeDetail(name: String, entry: ServerEntry, scope: MCPScope, projectPath: String?) -> MCPServerDetail {
-        let t = transport(from: entry)
-        return MCPServerDetail(
-            name: name,
-            scope: scope,
-            transport: t,
-            url: (t == .stdio) ? nil : entry.url,
-            command: (t == .stdio) ? entry.command : nil,
-            args: entry.args ?? [],
-            env: entry.env ?? [:],
-            headers: entry.headers ?? [:],
-            projectPath: projectPath
-        )
+    private func tomlString(_ value: String) -> String {
+        let escaped = value
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\n", with: "\\n")
+        return "\"\(escaped)\""
+    }
+
+    private func tomlArray(_ values: [String]) -> String {
+        "[\(values.map(tomlString).joined(separator: ","))]"
+    }
+
+    private func tomlDictionary(_ values: [String: String]) -> String {
+        let parts = values.keys.sorted().map { key in
+            "\(tomlKey(key))=\(tomlString(values[key] ?? ""))"
+        }
+        return "{\(parts.joined(separator: ","))}"
     }
 
     // MARK: - Probe: stdio
@@ -411,14 +535,11 @@ actor MCPService {
         let stdinHandle = stdinPipe.fileHandleForWriting
         let stdoutHandle = stdoutPipe.fileHandleForReading
 
-        // Pre-build payloads outside the @Sendable closure so it doesn't need
-        // to capture `self`. The closure can then reach back via `self.parse…`.
         let initializeJSON = initializeRequest(id: 1)
         let initializedJSON = initializedNotification()
         let toolsListJSON = toolsListRequest(id: 2)
 
         let result = await withTimeout(seconds: 10) { [self] () -> MCPProbeResult in
-            // 1. initialize
             do {
                 try Self.writeJSONRPC(initializeJSON, to: stdinHandle)
             } catch {
@@ -430,15 +551,8 @@ actor MCPService {
             }
             let (serverName, serverVersion) = self.parseInitializeResponse(initReply)
 
-            // 2. notifications/initialized
             do {
                 try Self.writeJSONRPC(initializedJSON, to: stdinHandle)
-            } catch {
-                return MCPProbeResult(ok: false, error: "stdin write failed: \(error.localizedDescription)")
-            }
-
-            // 3. tools/list
-            do {
                 try Self.writeJSONRPC(toolsListJSON, to: stdinHandle)
             } catch {
                 return MCPProbeResult(ok: false, error: "stdin write failed: \(error.localizedDescription)")
@@ -462,7 +576,6 @@ actor MCPService {
             )
         }
 
-        // Tear down — SIGTERM then SIGKILL after 2s.
         if proc.isRunning {
             proc.terminate()
             let pid = proc.processIdentifier
@@ -475,8 +588,6 @@ actor MCPService {
         return result ?? MCPProbeResult(ok: false, error: MCPError.probeTimeout.errorDescription)
     }
 
-    /// Probe a stdio command name (e.g. `npx`) by walking PATH from the resolved env.
-    /// Returns the absolute executable path, or nil if not found / already absolute.
     private func resolveCommand(_ command: String, env: [String: String]) -> String? {
         if command.contains("/") {
             return FileManager.default.isExecutableFile(atPath: command) ? command : nil
@@ -537,8 +648,6 @@ actor MCPService {
         }
     }
 
-    /// One round-trip of MCP-over-HTTP (Streamable HTTP variant).
-    /// Returns the raw response body, response, and any new MCP-Session-Id.
     private func postMCP(
         url: URL,
         body: [String: Any],
@@ -562,13 +671,11 @@ actor MCPService {
         return (data, response, returnedSession ?? sessionID)
     }
 
-    /// Pull the JSON-RPC payload out of either a plain JSON body or an SSE stream.
     private func extractJSON(_ data: Data) -> [String: Any]? {
         if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             return obj
         }
         guard let text = String(data: data, encoding: .utf8) else { return nil }
-        // SSE: look for lines starting with "data: "
         for rawLine in text.split(whereSeparator: \.isNewline) {
             let line = String(rawLine)
             guard line.hasPrefix("data: ") else { continue }
@@ -624,64 +731,70 @@ actor MCPService {
 
     private nonisolated func parseToolsListResponse(_ json: [String: Any]?) -> [MCPTool] {
         guard let result = json?["result"] as? [String: Any],
-              let raw = result["tools"] as? [[String: Any]] else { return [] }
-        return raw.compactMap { dict in
+              let tools = result["tools"] as? [[String: Any]] else {
+            return []
+        }
+        return tools.compactMap { dict in
             guard let name = dict["name"] as? String else { return nil }
             return MCPTool(name: name, description: dict["description"] as? String)
         }
     }
 
-    // MARK: - JSON line I/O for stdio probe
-
-    private static func writeJSONRPC(_ obj: [String: Any], to handle: FileHandle) throws {
-        let data = try JSONSerialization.data(withJSONObject: obj)
-        try handle.write(contentsOf: data)
-        try handle.write(contentsOf: Data([0x0A]))
+    private nonisolated static func writeJSONRPC(_ object: [String: Any], to handle: FileHandle) throws {
+        let data = try JSONSerialization.data(withJSONObject: object)
+        handle.write(data)
+        handle.write(Data("\n".utf8))
     }
 
-    /// Read one newline-delimited JSON object from the handle.
-    /// Returns nil on EOF or parse failure.
-    private static func readJSONLine(from handle: FileHandle) async -> [String: Any]? {
-        await withCheckedContinuation { (cont: CheckedContinuation<[String: Any]?, Never>) in
-            DispatchQueue.global(qos: .userInitiated).async {
-                var buffer = Data()
-                while true {
-                    let chunk = handle.availableData
-                    if chunk.isEmpty {
-                        cont.resume(returning: nil)
-                        return
-                    }
-                    buffer.append(chunk)
-                    while let nlIdx = buffer.firstIndex(of: 0x0A) {
-                        let lineData = buffer.subdata(in: 0..<nlIdx)
-                        buffer.removeSubrange(0...nlIdx)
-                        if lineData.isEmpty { continue }
-                        if let obj = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any] {
-                            cont.resume(returning: obj)
-                            return
-                        }
-                        // Non-JSON line (some servers print banners) — keep reading.
-                    }
-                }
+    private nonisolated static func readJSONLine(from handle: FileHandle) async -> [String: Any]? {
+        await Task.detached {
+            let data = handle.availableData
+            guard !data.isEmpty,
+                  let text = String(data: data, encoding: .utf8),
+                  let line = text.split(whereSeparator: \.isNewline).first else {
+                return nil
             }
-        }
+            let lineData = Data(String(line).utf8)
+            return (try? JSONSerialization.jsonObject(with: lineData)) as? [String: Any]
+        }.value
     }
-
-    // MARK: - Timeout helper
 
     private func withTimeout<T: Sendable>(
-        seconds: Double,
+        seconds: UInt64,
         operation: @escaping @Sendable () async -> T
     ) async -> T? {
         await withTaskGroup(of: T?.self) { group in
             group.addTask { await operation() }
             group.addTask {
-                try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
                 return nil
             }
-            let first = await group.next() ?? nil
+            let result = await group.next() ?? nil
             group.cancelAll()
-            return first
+            return result
         }
+    }
+}
+
+private extension String {
+    nonisolated var tomlUnquoted: String {
+        var value = trimmingCharacters(in: .whitespaces)
+        if value.hasPrefix("\""), value.hasSuffix("\""), value.count >= 2 {
+            value = String(value.dropFirst().dropLast())
+        }
+        return value
+            .replacingOccurrences(of: "\\\"", with: "\"")
+            .replacingOccurrences(of: "\\n", with: "\n")
+            .replacingOccurrences(of: "\\\\", with: "\\")
+    }
+
+    nonisolated var tomlArrayValues: [String]? {
+        let value = trimmingCharacters(in: .whitespaces)
+        guard value.hasPrefix("["), value.hasSuffix("]") else { return nil }
+        let body = value.dropFirst().dropLast()
+        return body
+            .split(separator: ",")
+            .map { String($0).tomlUnquoted }
+            .filter { !$0.isEmpty }
     }
 }

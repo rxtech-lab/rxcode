@@ -1,0 +1,52 @@
+/* English — base localization for RxCodeChatKit */
+
+// MARK: - InputBarView
+"Attach file" = "Attach file";
+"Plan" = "Plan";
+"Turn off plan mode" = "Turn off plan mode";
+"Type a message..." = "Type a message...";
+
+// MARK: - ToolResultView
+"Show less" = "Show less";
+"Show more" = "Show more";
+
+// MARK: - SlashCommandManagerView
+"Imported %lld custom commands." = "Imported %lld custom commands.";
+"A command with this name already exists." = "A command with this name already exists.";
+"Restore modified default commands to their original state" = "Restore modified default commands to their original state";
+"All modified default commands will be restored to their original state." = "All modified default commands will be restored to their original state.";
+"RxCode slash command export file." = "RxCode slash command export file.";
+"Usage:" = "Usage:";
+"Edit the array below to add, remove, or change custom slash commands." = "Edit the array below to add, remove, or change custom slash commands.";
+"The leading slash is optional while editing names; RxCode saves names without it." = "The leading slash is optional while editing names; RxCode saves names without it.";
+"Built-in command names are ignored on import and are never exported." = "Built-in command names are ignored on import and are never exported.";
+"Each custom command supports these properties:" = "Each custom command supports these properties:";
+"name: command name without the leading slash." = "name: command name without the leading slash.";
+"description: short text shown in the command picker." = "description: short text shown in the command picker.";
+"detailDescription: optional longer text shown in command details. Use null or omit it when empty." = "detailDescription: optional longer text shown in command details. Use null or omit it when empty.";
+"acceptsInput: true lets users type additional text after the command." = "acceptsInput: true lets users type additional text after the command.";
+"isInteractive: true runs the command in the interactive terminal." = "isInteractive: true runs the command in the interactive terminal.";
+"All properties example:" = "All properties example:";
+"Short description shown in the command picker" = "Short description shown in the command picker";
+"Optional longer description shown in command details" = "Optional longer description shown in command details";
+"RxCode shortcut export file." = "RxCode shortcut export file.";
+"Edit the array below to add, remove, or change shortcuts." = "Edit the array below to add, remove, or change shortcuts.";
+"Each shortcut supports these properties:" = "Each shortcut supports these properties:";
+"id: optional unique identifier (UUID). Auto-generated on import if omitted." = "id: optional unique identifier (UUID). Auto-generated on import if omitted.";
+"name: label shown on the shortcut button." = "name: label shown on the shortcut button.";
+"message: text sent to Claude, or command run in the terminal." = "message: text sent to Claude, or command run in the terminal.";
+"isTerminalCommand: true runs the message as a terminal command instead of sending it to chat." = "isTerminalCommand: true runs the message as a terminal command instead of sending it to chat.";
+"Shortcut button label" = "Shortcut button label";
+"Message sent to Claude or command run in terminal" = "Message sent to Claude or command run in terminal";
+
+// MARK: - StatusLineView
+"5-hour rate limit" = "5-hour rate limit";
+"Tracks usage against Anthropic's rolling 5-hour limit. Resets gradually as older requests age out." = "Tracks usage against Anthropic's rolling 5-hour limit. Resets gradually as older requests age out.";
+"7-day rate limit" = "7-day rate limit";
+"Tracks usage against Anthropic's rolling 7-day limit. Resets gradually as older requests age out." = "Tracks usage against Anthropic's rolling 7-day limit. Resets gradually as older requests age out.";
+"Context window" = "Context window";
+"Portion of the current conversation's context window in use. When it fills, older messages may be summarized or dropped." = "Portion of the current conversation's context window in use. When it fills, older messages may be summarized or dropped.";
+"Currently at %lld%%" = "Currently at %lld%%";
+"Resets in %@" = "Resets in %@";
+"tokens" = "tokens";
+"tok" = "tok";

@@ -2,25 +2,25 @@
 import PackageDescription
 
 let package = Package(
-    name: "ClarcPackages",
+    name: "RxCodePackages",
     defaultLocalization: "en",
     platforms: [.macOS(.v15)],
     products: [
-        .library(name: "ClarcCore", targets: ["ClarcCore"]),
-        .library(name: "ClarcChatKit", targets: ["ClarcChatKit"]),
+        .library(name: "RxCodeCore", targets: ["RxCodeCore"]),
+        .library(name: "RxCodeChatKit", targets: ["RxCodeChatKit"]),
     ],
     dependencies: [
         .package(url: "https://github.com/nalexn/ViewInspector", from: "0.10.0"),
     ],
     targets: [
         .target(
-            name: "ClarcCore",
-            path: "Sources/ClarcCore"
+            name: "RxCodeCore",
+            path: "Sources/RxCodeCore"
         ),
         .target(
-            name: "ClarcChatKit",
-            dependencies: ["ClarcCore"],
-            path: "Sources/ClarcChatKit",
+            name: "RxCodeChatKit",
+            dependencies: ["RxCodeCore"],
+            path: "Sources/RxCodeChatKit",
             resources: [
                 .process("Resources"),
             ],
@@ -29,18 +29,18 @@ let package = Package(
             ]
         ),
         .testTarget(
-            name: "ClarcCoreTests",
-            dependencies: ["ClarcCore"],
-            path: "Tests/ClarcCoreTests"
+            name: "RxCodeCoreTests",
+            dependencies: ["RxCodeCore"],
+            path: "Tests/RxCodeCoreTests"
         ),
         .testTarget(
-            name: "ClarcChatKitTests",
+            name: "RxCodeChatKitTests",
             dependencies: [
-                "ClarcChatKit",
-                "ClarcCore",
+                "RxCodeChatKit",
+                "RxCodeCore",
                 .product(name: "ViewInspector", package: "ViewInspector"),
             ],
-            path: "Tests/ClarcChatKitTests"
+            path: "Tests/RxCodeChatKitTests"
         ),
     ]
 )

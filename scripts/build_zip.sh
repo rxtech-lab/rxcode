@@ -2,7 +2,7 @@
 set -e
 
 # ─────────────────────────────────────────────
-# Clarc ZIP 배포 빌드 스크립트 (노터라이제이션 포함)
+# RxCode ZIP 배포 빌드 스크립트 (노터라이제이션 포함)
 #
 # 사용법: ./scripts/build_zip.sh [버전]
 # 예시:   ./scripts/build_zip.sh 1.2.0
@@ -24,18 +24,18 @@ else
     exit 1
 fi
 
-SCHEME="Clarc"
-PROJECT="Clarc.xcodeproj"
+SCHEME="RxCode"
+PROJECT="RxCode.xcodeproj"
 EXPORT_OPTIONS="scripts/ExportOptions.plist"
 BUILD_DIR="build"
 VERSION=${1:-"1.0.0"}
 
-ARCHIVE_PATH="$BUILD_DIR/Clarc.xcarchive"
+ARCHIVE_PATH="$BUILD_DIR/RxCode.xcarchive"
 EXPORT_PATH="$BUILD_DIR/export"
-APP_PATH="$EXPORT_PATH/Clarc.app"
-ZIP_NAME="Clarc-${VERSION}.zip"
+APP_PATH="$EXPORT_PATH/RxCode.app"
+ZIP_NAME="RxCode-${VERSION}.zip"
 
-echo "▶ Clarc v${VERSION} 빌드 시작"
+echo "▶ RxCode v${VERSION} 빌드 시작"
 echo ""
 
 # 이전 빌드 정리
@@ -80,7 +80,7 @@ echo ""
 # ── 3. 노터라이제이션 ────────────────────────
 echo "🔐 노터라이제이션 제출 중 (수 분 소요)..."
 
-NOTARIZE_ZIP="$BUILD_DIR/Clarc-notarize.zip"
+NOTARIZE_ZIP="$BUILD_DIR/RxCode-notarize.zip"
 ditto -c -k --keepParent "$APP_PATH" "$NOTARIZE_ZIP"
 
 xcrun notarytool submit "$NOTARIZE_ZIP" \

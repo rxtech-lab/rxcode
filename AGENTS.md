@@ -4,7 +4,7 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 ## Project Overview
 
-Clarc is a native macOS desktop client for the Codex CLI. Written in Swift + SwiftUI with two external dependencies: SwiftTerm (terminal emulation) and Sparkle (auto-update).
+RxCode is a native macOS desktop client for the Codex CLI. Written in Swift + SwiftUI with two external dependencies: SwiftTerm (terminal emulation) and Sparkle (auto-update).
 
 ## Writing Rules
 
@@ -14,18 +14,18 @@ Clarc is a native macOS desktop client for the Codex CLI. Written in Swift + Swi
 
 ```bash
 # Open in Xcode (build/run with Cmd+R)
-open Clarc.xcodeproj
+open RxCode.xcodeproj
 
 # CLI build
-xcodebuild -project Clarc.xcodeproj -scheme Clarc -configuration Debug build
+xcodebuild -project RxCode.xcodeproj -scheme RxCode -configuration Debug build
 
 # Release build
-xcodebuild -project Clarc.xcodeproj -scheme Clarc -configuration Release build
+xcodebuild -project RxCode.xcodeproj -scheme RxCode -configuration Release build
 ```
 
 - Minimum deployment target: macOS 15.0+
 - No test suite (UI app)
-- Bundle ID: `com.idealapp.Clarc`
+- Bundle ID: `com.idealapp.RxCode`
 - External dependencies: SwiftTerm (terminal emulation), Sparkle (auto-update)
 
 ## Architecture
@@ -33,7 +33,7 @@ xcodebuild -project Clarc.xcodeproj -scheme Clarc -configuration Release build
 ### Core Patterns
 
 - **Observable AppState** (`App/AppState.swift`): `@MainActor @Observable` single state container. Manages all app state including projects, sessions, chat, and permission approvals.
-- **App entry point** (`App/ClarcApp.swift`): Defines WindowGroup (main), WindowGroup(id: "project-window") for dedicated per-project windows, Settings window, and Command menu (theme, update).
+- **App entry point** (`App/RxCodeApp.swift`): Defines WindowGroup (main), WindowGroup(id: "project-window") for dedicated per-project windows, Settings window, and Command menu (theme, update).
 - **Actor-based services**: All services are implemented as `actor` for concurrency safety. Isolated without locks.
 - **SwiftUI only**: No Storyboards or XIBs. 100% declarative UI.
 
@@ -43,8 +43,8 @@ The codebase is split into two Swift packages under `Packages/`:
 
 | Package        | Role                                                             |
 | -------------- | ---------------------------------------------------------------- |
-| `ClarcCore`    | Shared models, theme, utilities — no UI dependencies             |
-| `ClarcChatKit` | Chat UI components (ChatView, MessageBubble, InputBarView, etc.) |
+| `RxCodeCore`    | Shared models, theme, utilities — no UI dependencies             |
+| `RxCodeChatKit` | Chat UI components (ChatView, MessageBubble, InputBarView, etc.) |
 
 ### Service Layer (`Services/`)
 
@@ -53,7 +53,7 @@ The codebase is split into two Swift packages under `Packages/`:
 | `ClaudeService`      | Spawns Codex CLI as a subprocess, parses stdout NDJSON stream, buffers text deltas at 50ms intervals                                            |
 | `PermissionServer`   | Network framework-based local HTTP server (ports 19836–19846). Receives CLI PreToolUse hook requests and holds the connection until UI approval |
 | `GitHubService`      | OAuth Device Flow authentication, Keychain token storage, SSH key generation/registration, repo cloning                                         |
-| `PersistenceService` | JSON file-based persistence at `~/Library/Application Support/Clarc/`. Per-project/session directory structure                                  |
+| `PersistenceService` | JSON file-based persistence at `~/Library/Application Support/RxCode/`. Per-project/session directory structure                                  |
 | `MarketplaceService` | Parallel fetch of plugin catalog from 4 Anthropic GitHub repos, 5-minute cache                                                                  |
 | `RateLimitService`   | Anthropic usage API polling, OAuth token refresh, usage tracking                                                                                |
 | `UpdateService`      | Sparkle-based auto-update manager. Starts updater on launch; exposes `checkForUpdates()` for menu-initiated checks                              |

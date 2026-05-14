@@ -1,0 +1,718 @@
+import Foundation
+import RxCodeCore
+import Network
+import os
+
+// MARK: - PermissionServer
+
+/// An actor that runs a local HTTP server using NWListener to receive
+/// PreToolUse hook requests from the Claude CLI and hold connections
+/// open until the UI responds with allow/deny.
+actor PermissionServer {
+
+    // MARK: - Constants
+
+    private static let basePort: UInt16 = 19836
+    private static let maxPort: UInt16 = 19846
+    private static let timeoutSeconds: UInt64 = 300 // 5 minutes
+
+    // MARK: - Properties
+
+    private var listener: NWListener?
+    private(set) var port: UInt16 = PermissionServer.basePort
+    private let appSecret = UUID().uuidString
+    private var runToken = UUID().uuidString
+    private let logger = Logger(subsystem: "com.claudework", category: "PermissionServer")
+
+    /// Resolved outcome for a pending hook: the permission decision plus an optional
+    /// `updatedInput` payload (used by AskUserQuestion to inject answers) and an
+    /// optional reason override (used by Reject-with-feedback on the plan card).
+    private struct DecisionOutcome: Sendable {
+        let decision: PermissionDecision
+        let updatedInput: JSONValue?
+        let reasonOverride: String?
+    }
+
+    /// toolUseId → the continuations and routing context for that request.
+    /// On CLI retry, multiple continuations may accumulate under the same toolUseId.
+    private struct Pending {
+        var continuations: [CheckedContinuation<DecisionOutcome, Never>]
+        let sessionId: String?
+        let toolName: String
+        /// Populated by `respondAskUserQuestion` so the hook response can carry back
+        /// the user's answer as `updatedInput`.
+        var updatedInput: JSONValue?
+        /// Populated by `denyWithReason` so the hook response carries the user's
+        /// improvement feedback back to the model as `permissionDecisionReason`.
+        var reasonOverride: String?
+    }
+    private var pending: [String: Pending] = [:]
+    private var timeoutTasks: [String: Task<Void, Never>] = [:]
+
+    /// In-memory only; cleared on `stop()`.
+    private var sessionToolAllows: Set<String> = []
+
+    /// `nil` means the on-disk allowlist hasn't been loaded yet. `[:]` means loaded but empty.
+    private var bashCmdAllows: [String: Set<String>]?
+
+    private struct SessionContext: Sendable {
+        let projectKey: String
+        var mode: PermissionMode
+    }
+    private var sessionRegistry: [String: SessionContext] = [:]
+
+    /// Safe: CLI tool names are alphanumeric (`Bash`, `Edit`, `mcp__server__name`).
+    private static func sessionToolKey(sid: String, tool: String) -> String {
+        "\(sid)::\(tool)"
+    }
+
+    /// Per-subscriber broadcast continuations. One is issued per window via subscribe().
+    private var subscribers: [UUID: AsyncStream<PermissionRequest>.Continuation] = [:]
+
+    // MARK: - Init
+
+    init() {}
+
+    // MARK: - Subscription
+
+    /// Called by a UI window to subscribe to the permission request stream. Must unsubscribe using the returned token.
+    func subscribe() -> (token: UUID, stream: AsyncStream<PermissionRequest>) {
+        let token = UUID()
+        let stream = AsyncStream<PermissionRequest> { continuation in
+            self.subscribers[token] = continuation
+            continuation.onTermination = { [weak self] _ in
+                Task { await self?.unsubscribe(token: token) }
+            }
+        }
+        return (token, stream)
+    }
+
+    func unsubscribe(token: UUID) {
+        subscribers.removeValue(forKey: token)?.finish()
+    }
+
+    private func broadcast(_ request: PermissionRequest) {
+        for continuation in subscribers.values {
+            continuation.yield(request)
+        }
+    }
+
+    // MARK: - Lifecycle
+
+    /// Start the TCP listener, auto-incrementing the port on conflict.
+    func start() async throws {
+        for candidatePort in Self.basePort...Self.maxPort {
+            do {
+                let params = NWParameters.tcp
+                params.allowLocalEndpointReuse = true
+                params.requiredInterfaceType = .loopback
+                let l = try NWListener(using: params, on: NWEndpoint.Port(rawValue: candidatePort)!)
+                self.port = candidatePort
+                self.listener = l
+
+                // Use a detached task to handle state updates since NWListener
+                // callbacks are on an internal queue.
+                let serverPort = candidatePort
+                let logger = self.logger
+
+                l.stateUpdateHandler = { [weak l] state in
+                    switch state {
+                    case .ready:
+                        logger.info("PermissionServer listening on port \(serverPort)")
+                    case .failed(let error):
+                        logger.error("Listener failed: \(error.localizedDescription)")
+                        l?.cancel()
+                    default:
+                        break
+                    }
+                }
+
+                l.newConnectionHandler = { [weak self] connection in
+                    guard let self else { return }
+                    Task { await self.handleConnection(connection) }
+                }
+
+                l.start(queue: .global(qos: .userInitiated))
+                logger.info("Attempting to listen on port \(serverPort)")
+                return
+            } catch {
+                logger.warning("Port \(candidatePort) unavailable, trying next…")
+                continue
+            }
+        }
+        throw PermissionServerError.noAvailablePort
+    }
+
+    /// Stop the listener and deny all pending requests.
+    func stop() {
+        listener?.cancel()
+        listener = nil
+
+        for (id, entry) in pending {
+            logger.info("Denying \(entry.continuations.count) pending request(s) for \(id) on server stop")
+            for continuation in entry.continuations {
+                continuation.resume(returning: DecisionOutcome(decision: .deny, updatedInput: nil, reasonOverride: nil))
+            }
+        }
+        pending.removeAll()
+        timeoutTasks.values.forEach { $0.cancel() }
+        timeoutTasks.removeAll()
+        for continuation in subscribers.values {
+            continuation.finish()
+        }
+        subscribers.removeAll()
+        sessionRegistry.removeAll()
+        sessionToolAllows.removeAll()
+        bashCmdAllows = nil
+    }
+
+    // MARK: - Public API
+
+    /// Called by the UI when the user answers an AskUserQuestion prompt.
+    /// Stores the updated tool input (questions + answers) and resolves the pending hook as allow.
+    func respondAskUserQuestion(toolUseId: String, updatedInput: JSONValue) async {
+        pending[toolUseId]?.updatedInput = updatedInput
+        await respond(toolUseId: toolUseId, decision: .allow)
+    }
+
+    /// Called by the UI when the user makes a decision.
+    func respond(toolUseId: String, decision: PermissionDecision) async {
+        timeoutTasks.removeValue(forKey: toolUseId)?.cancel()
+
+        guard var entry = pending.removeValue(forKey: toolUseId) else {
+            logger.warning("No pending continuation for toolUseId \(toolUseId)")
+            return
+        }
+
+        let resolved: PermissionDecision
+        switch decision {
+        case .allowSessionTool:
+            if let sid = entry.sessionId {
+                sessionToolAllows.insert(Self.sessionToolKey(sid: sid, tool: entry.toolName))
+                logger.info("Session-allowed tool \(entry.toolName) for \(sid.prefix(8))")
+            } else {
+                logger.warning("allowSessionTool without sessionId for \(toolUseId) — falling back to allow")
+            }
+            resolved = .allow
+
+        case .allowAlwaysCommand(let command):
+            if let sid = entry.sessionId,
+               let projectKey = sessionRegistry[sid]?.projectKey {
+                await loadBashAllowlistIfNeeded()
+                bashCmdAllows?[projectKey, default: []].insert(command)
+                await persistBashAllowlist()
+                logger.info("Persisted Bash command for project \(projectKey.suffix(40)): \(command)")
+            } else {
+                logger.warning("allowAlwaysCommand without sid/project for \(toolUseId) — falling back to allow")
+            }
+            resolved = .allow
+
+        case .allowAndSetMode(let newMode):
+            if let sid = entry.sessionId, var ctx = sessionRegistry[sid] {
+                ctx.mode = newMode
+                sessionRegistry[sid] = ctx
+                logger.info("Session \(sid.prefix(8)) mode → \(newMode.rawValue) (allowAndSetMode)")
+            } else {
+                logger.warning("allowAndSetMode without registered session for \(toolUseId) — falling back to allow")
+            }
+            resolved = .allow
+
+        case .denyWithReason(let reason):
+            entry.reasonOverride = reason
+            resolved = .deny
+
+        case .allow, .deny:
+            resolved = decision
+        }
+
+        let outcome = DecisionOutcome(
+            decision: resolved,
+            updatedInput: entry.updatedInput,
+            reasonOverride: entry.reasonOverride
+        )
+        for continuation in entry.continuations {
+            continuation.resume(returning: outcome)
+        }
+    }
+
+    /// Idempotent.
+    func registerSession(sid: String, projectKey: String, mode: PermissionMode) async {
+        await loadBashAllowlistIfNeeded()
+        sessionRegistry[sid] = SessionContext(projectKey: projectKey, mode: mode)
+    }
+
+    // MARK: - Auto-approve
+
+    /// Determines whether the request should be auto-approved. Returns a reason string if approved, or nil otherwise.
+    private func autoApproveReason(for req: HookRequestBody) async -> String? {
+        // Auto mode short-circuit: when the session is registered as `.auto`, resolve every hook
+        // as allow without surfacing UI. This is the contract for "Auto" in the permission dropdown
+        // and for the plan-card "Accept + auto-approve" button.
+        // ExitPlanMode and AskUserQuestion are excluded so the user always sees the plan card
+        // / question card and makes a choice — auto-approving AskUserQuestion would let the CLI
+        // proceed with no answer injected, defeating the tool's purpose.
+        if let sid = req.sessionId,
+           sessionRegistry[sid]?.mode == .auto,
+           !Self.isExitPlanModeTool(req.toolName),
+           req.toolName != "AskUserQuestion" {
+            return "Auto-approve mode"
+        }
+
+        if let sid = req.sessionId,
+           sessionToolAllows.contains(Self.sessionToolKey(sid: sid, tool: req.toolName)) {
+            return "Tool allowed for session by user"
+        }
+
+        if req.toolName == "Bash",
+           let command = req.toolInput["command"]?.stringValue {
+            if BashSafety.isSafeReadOnly(command: command) {
+                return "Safe read-only command"
+            }
+            await loadBashAllowlistIfNeeded()
+            if let sid = req.sessionId,
+               let projectKey = sessionRegistry[sid]?.projectKey,
+               bashCmdAllows?[projectKey]?.contains(command) == true {
+                return "Bash command allowlisted for this project"
+            }
+        }
+
+        return nil
+    }
+
+    /// Refresh the run token (call at the start of each CLI session).
+    func refreshRunToken() {
+        runToken = UUID().uuidString
+    }
+
+    /// The current run token for building the hook URL.
+    func currentRunToken() -> String {
+        runToken
+    }
+
+    // MARK: - Hook Settings
+
+    /// Generate the hook settings JSON that should be passed to `claude --settings`.
+    func generateHookSettings() -> String {
+        let url = "http://127.0.0.1:\(port)/hook/pre-tool-use/\(appSecret)/\(runToken)"
+        let settings: [String: Any] = [
+            "hooks": [
+                "PreToolUse": [
+                    [
+                        "matcher": "^(Bash|Edit|Write|MultiEdit|AskUserQuestion|ExitPlanMode|exit_plan_mode|mcp__.*)$",
+                        "hooks": [
+                            [
+                                "type": "http",
+                                "url": url,
+                                "timeout": 300
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys]),
+              let json = String(data: data, encoding: .utf8) else {
+            return "{}"
+        }
+        return json
+    }
+
+    /// Write hook settings to a temporary file and return its path.
+    func writeHookSettingsFile() throws -> String {
+        let json = generateHookSettings()
+        let tempDir = FileManager.default.temporaryDirectory
+        let filePath = tempDir.appendingPathComponent("claudework-hooks-\(UUID().uuidString).json")
+        try json.write(to: filePath, atomically: true, encoding: .utf8)
+        return filePath.path
+    }
+
+    // MARK: - Connection Handling
+
+    /// Handle a single inbound TCP connection.
+    private func handleConnection(_ connection: NWConnection) {
+        connection.start(queue: .global(qos: .userInitiated))
+        Task {
+            do {
+                let rawRequest = try await readHTTPRequest(connection)
+                let (method, path, body) = try parseHTTPRequest(rawRequest)
+
+                guard method == "POST" else {
+                    await sendHTTPResponse(connection, status: "405 Method Not Allowed", body: #"{"error":"method not allowed"}"#)
+                    return
+                }
+
+                // Validate path: /hook/pre-tool-use/{appSecret}/{runToken}
+                let components = path.split(separator: "/").map(String.init)
+                guard components.count == 4,
+                      components[0] == "hook",
+                      components[1] == "pre-tool-use",
+                      components[2] == appSecret,
+                      components[3] == runToken else {
+                    logger.warning("Invalid path or secret: \(path)")
+                    await sendHTTPResponse(connection, status: "403 Forbidden", body: #"{"error":"invalid path"}"#)
+                    return
+                }
+
+                // Parse the JSON body.
+                guard let bodyData = body.data(using: .utf8) else {
+                    await sendHTTPResponse(connection, status: "400 Bad Request", body: #"{"error":"invalid body"}"#)
+                    return
+                }
+
+                let hookRequest = try JSONDecoder().decode(HookRequestBody.self, from: bodyData)
+
+                if let autoReason = await autoApproveReason(for: hookRequest) {
+                    try await sendHookResponse(connection, decision: "allow", reason: autoReason)
+                    return
+                }
+
+                let streamMode = hookRequest.sessionId.flatMap { sessionRegistry[$0]?.mode }
+                let permissionRequest = PermissionRequest(
+                    id: hookRequest.toolUseId,
+                    toolName: hookRequest.toolName,
+                    toolInput: hookRequest.toolInput,
+                    runToken: runToken,
+                    streamPermissionMode: streamMode,
+                    sessionId: hookRequest.sessionId
+                )
+
+                let outcome = await waitForDecision(
+                    toolUseId: hookRequest.toolUseId,
+                    sessionId: hookRequest.sessionId,
+                    toolName: hookRequest.toolName,
+                    emit: permissionRequest
+                )
+
+                let allowed = outcome.decision == .allow
+                // For deny-with-feedback we pass the user's improvement text as the hook's
+                // `permissionDecisionReason` so the CLI can hand it back to the model.
+                let defaultReason = allowed ? "User approved" : "User denied"
+                try await sendHookResponse(
+                    connection,
+                    decision: allowed ? "allow" : "deny",
+                    reason: outcome.reasonOverride ?? defaultReason,
+                    updatedInput: outcome.updatedInput
+                )
+
+            } catch {
+                logger.error("Error handling connection: \(error.localizedDescription)")
+                await sendHTTPResponse(connection, status: "500 Internal Server Error", body: #"{"error":"internal error"}"#)
+            }
+        }
+    }
+
+    /// Wait for a UI decision with a 5-minute timeout.
+    /// The first requester emits to the UI stream and sets the timeout. CLI retries join the same entry.
+    private func waitForDecision(
+        toolUseId: String,
+        sessionId: String?,
+        toolName: String,
+        emit request: PermissionRequest
+    ) async -> DecisionOutcome {
+        let isFirst = pending[toolUseId] == nil
+        // ExitPlanMode owns its own inline plan card so it skips the generic broadcast.
+        // AskUserQuestion now flows through the same queue as permissions — the UI distinguishes
+        // by `toolName` and presents `QuestionSheetView` instead of `PermissionModal`.
+        let suppressGenericModal = Self.isExitPlanModeTool(toolName)
+        if isFirst && !suppressGenericModal {
+            broadcast(request)
+        }
+
+        let outcome: DecisionOutcome = await withCheckedContinuation { continuation in
+            if var entry = pending[toolUseId] {
+                entry.continuations.append(continuation)
+                pending[toolUseId] = entry
+            } else {
+                pending[toolUseId] = Pending(
+                    continuations: [continuation],
+                    sessionId: sessionId,
+                    toolName: toolName,
+                    updatedInput: nil,
+                    reasonOverride: nil
+                )
+                timeoutTasks[toolUseId] = Task { [weak self] in
+                    try? await Task.sleep(nanoseconds: UInt64(Self.timeoutSeconds) * 1_000_000_000)
+                    guard !Task.isCancelled else { return }
+                    await self?.cancelPendingIfNeeded(toolUseId: toolUseId)
+                }
+            }
+        }
+        timeoutTasks.removeValue(forKey: toolUseId)?.cancel()
+        return outcome
+    }
+
+    private static func isExitPlanModeTool(_ toolName: String) -> Bool {
+        let normalized = toolName.lowercased()
+        return normalized == "exitplanmode" || normalized == "exit_plan_mode"
+    }
+
+    /// Remove and resume all pending continuations with .deny (timeout case).
+    private func cancelPendingIfNeeded(toolUseId: String) {
+        guard let entry = pending.removeValue(forKey: toolUseId) else { return }
+        for continuation in entry.continuations {
+            continuation.resume(returning: DecisionOutcome(decision: .deny, updatedInput: nil, reasonOverride: nil))
+        }
+    }
+
+    private func sendHookResponse(
+        _ connection: NWConnection,
+        decision: String,
+        reason: String,
+        updatedInput: JSONValue? = nil
+    ) async throws {
+        let body = HookResponseBody(
+            hookSpecificOutput: .init(
+                hookEventName: "PreToolUse",
+                permissionDecision: decision,
+                permissionDecisionReason: reason,
+                updatedInput: updatedInput
+            )
+        )
+        let data = try JSONEncoder().encode(body)
+        let json = String(data: data, encoding: .utf8) ?? "{}"
+        await sendHTTPResponse(connection, status: "200 OK", body: json)
+    }
+
+    // MARK: - Bash Allowlist Persistence
+
+    private static var bashAllowlistURL: URL {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        return appSupport.appendingPathComponent("RxCode").appendingPathComponent("bash_allowlist.json")
+    }
+
+    private func loadBashAllowlistIfNeeded() async {
+        guard bashCmdAllows == nil else { return }
+        let url = Self.bashAllowlistURL
+        guard let data = try? Data(contentsOf: url),
+              let decoded = try? JSONDecoder().decode([String: [String]].self, from: data) else {
+            bashCmdAllows = [:]
+            return
+        }
+        let loaded = decoded.mapValues(Set.init)
+        bashCmdAllows = loaded
+        logger.info("Loaded Bash allowlist for \(loaded.count) project(s)")
+    }
+
+    private func persistBashAllowlist() async {
+        guard let snapshot = bashCmdAllows?.mapValues({ Array($0).sorted() }) else { return }
+        let url = Self.bashAllowlistURL
+        do {
+            try FileManager.default.createDirectory(
+                at: url.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            let data = try JSONEncoder().encode(snapshot)
+            try data.write(to: url, options: .atomic)
+        } catch {
+            logger.error("Failed to persist Bash allowlist: \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - TCP / HTTP Helpers
+
+    /// Read raw bytes from the connection until we have a complete HTTP request.
+    private func readHTTPRequest(_ connection: NWConnection) async throws -> Data {
+        var buffer = Data()
+        let headerEnd = Data("\r\n\r\n".utf8)
+
+        // Phase 1: Read until we find the end of headers.
+        while !buffer.contains(headerEnd) {
+            let chunk = try await readChunk(connection, maxLength: 8192)
+            guard !chunk.isEmpty else { throw PermissionServerError.connectionClosed }
+            buffer.append(chunk)
+        }
+
+        // Phase 2: If there's a Content-Length, read the body too.
+        guard let headerRange = buffer.range(of: headerEnd) else {
+            throw PermissionServerError.malformedRequest
+        }
+        let headerData = buffer[buffer.startIndex..<headerRange.lowerBound]
+        let headerString = String(data: headerData, encoding: .utf8) ?? ""
+        let contentLength = parseContentLength(from: headerString)
+
+        if contentLength > 0 {
+            let bodyStart = headerRange.upperBound
+            let bodyBytesRead = buffer.count - buffer.distance(from: buffer.startIndex, to: bodyStart)
+            var remaining = contentLength - bodyBytesRead
+            while remaining > 0 {
+                let chunk = try await readChunk(connection, maxLength: min(remaining, 8192))
+                guard !chunk.isEmpty else { throw PermissionServerError.connectionClosed }
+                buffer.append(chunk)
+                remaining -= chunk.count
+            }
+        }
+
+        return buffer
+    }
+
+    /// Read a single chunk from the connection.
+    private func readChunk(_ connection: NWConnection, maxLength: Int) async throws -> Data {
+        try await withCheckedThrowingContinuation { continuation in
+            connection.receive(minimumIncompleteLength: 1, maximumLength: maxLength) { data, _, _, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else if let data {
+                    continuation.resume(returning: data)
+                } else {
+                    continuation.resume(returning: Data())
+                }
+            }
+        }
+    }
+
+    /// Parse the HTTP request into method, path, and body.
+    private func parseHTTPRequest(_ data: Data) throws -> (method: String, path: String, body: String) {
+        let headerEnd = Data("\r\n\r\n".utf8)
+        guard let headerRange = data.range(of: headerEnd) else {
+            throw PermissionServerError.malformedRequest
+        }
+
+        let headerData = data[data.startIndex..<headerRange.lowerBound]
+        let bodyData = data[headerRange.upperBound...]
+
+        guard let headerString = String(data: headerData, encoding: .utf8) else {
+            throw PermissionServerError.malformedRequest
+        }
+
+        let lines = headerString.components(separatedBy: "\r\n")
+        guard let requestLine = lines.first else {
+            throw PermissionServerError.malformedRequest
+        }
+
+        // "POST /hook/pre-tool-use/{secret}/{token} HTTP/1.1"
+        let parts = requestLine.split(separator: " ", maxSplits: 2).map(String.init)
+        guard parts.count >= 2 else {
+            throw PermissionServerError.malformedRequest
+        }
+
+        let method = parts[0]
+        let path = parts[1]
+        let body = String(data: bodyData, encoding: .utf8) ?? ""
+
+        return (method, path, body)
+    }
+
+    /// Extract Content-Length from raw headers string.
+    private func parseContentLength(from headers: String) -> Int {
+        for line in headers.components(separatedBy: "\r\n") {
+            let lower = line.lowercased()
+            if lower.hasPrefix("content-length:") {
+                let value = line.dropFirst("content-length:".count).trimmingCharacters(in: .whitespaces)
+                return Int(value) ?? 0
+            }
+        }
+        return 0
+    }
+
+    /// Send a complete HTTP response and close the connection.
+    private func sendHTTPResponse(_ connection: NWConnection, status: String, body: String) async {
+        let bodyData = Data(body.utf8)
+        let response = [
+            "HTTP/1.1 \(status)",
+            "Content-Type: application/json",
+            "Content-Length: \(bodyData.count)",
+            "Connection: close",
+            "",
+            ""
+        ].joined(separator: "\r\n")
+
+        var payload = Data(response.utf8)
+        payload.append(bodyData)
+
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            connection.send(content: payload, completion: .contentProcessed { _ in
+                connection.cancel()
+                continuation.resume()
+            })
+        }
+    }
+}
+
+// MARK: - Data Extension
+
+private extension Data {
+    nonisolated func contains(_ other: Data) -> Bool {
+        range(of: other) != nil
+    }
+}
+
+// MARK: - Request / Response Codables
+
+/// The JSON body sent by the Claude CLI hook.
+private struct HookRequestBody: Decodable {
+    let hookEventName: String
+    let toolName: String
+    let toolInput: [String: JSONValue]
+    let toolUseId: String
+    let sessionId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case hookEventName = "hook_event_name"
+        case toolName = "tool_name"
+        case toolInput = "tool_input"
+        case toolUseId = "tool_use_id"
+        case sessionId = "session_id"
+    }
+
+    nonisolated init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        hookEventName = try c.decode(String.self, forKey: .hookEventName)
+        toolName = try c.decode(String.self, forKey: .toolName)
+        toolInput = try c.decode([String: JSONValue].self, forKey: .toolInput)
+        toolUseId = try c.decode(String.self, forKey: .toolUseId)
+        sessionId = try c.decodeIfPresent(String.self, forKey: .sessionId)
+    }
+}
+
+/// The JSON response body returned to the Claude CLI.
+private struct HookResponseBody: Encodable {
+    let hookSpecificOutput: HookOutput
+
+    struct HookOutput: Encodable {
+        let hookEventName: String
+        let permissionDecision: String
+        let permissionDecisionReason: String
+        /// When non-nil, the CLI replaces the original tool input with this value.
+        /// Used for AskUserQuestion to inject the user's answers.
+        let updatedInput: JSONValue?
+
+        nonisolated func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(hookEventName, forKey: .hookEventName)
+            try c.encode(permissionDecision, forKey: .permissionDecision)
+            try c.encode(permissionDecisionReason, forKey: .permissionDecisionReason)
+            if let updatedInput {
+                try c.encode(updatedInput, forKey: .updatedInput)
+            }
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case hookEventName, permissionDecision, permissionDecisionReason, updatedInput
+        }
+    }
+
+    nonisolated func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(hookSpecificOutput, forKey: .hookSpecificOutput)
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case hookSpecificOutput
+    }
+}
+
+// MARK: - Errors
+
+enum PermissionServerError: LocalizedError {
+    case noAvailablePort
+    case connectionClosed
+    case malformedRequest
+
+    var errorDescription: String? {
+        switch self {
+        case .noAvailablePort: return "No available port in range 19836–19846"
+        case .connectionClosed: return "Connection closed unexpectedly"
+        case .malformedRequest: return "Malformed HTTP request"
+        }
+    }
+}

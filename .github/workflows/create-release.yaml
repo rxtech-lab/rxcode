@@ -1,0 +1,44 @@
+name: Create Release
+on:
+    workflow_dispatch:
+    push:
+
+jobs:
+    create-release:
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v6
+            - uses: actions/setup-node@v6
+              with:
+                  node-version: "22"
+            - name: Setup Git
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
+            - name: Dry Run Release
+              uses: cycjimmy/semantic-release-action@v6
+              if: github.event_name == 'push'
+              env:
+                  GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+              with:
+                  dry_run: true
+                  branches: |
+                      [
+                        '+([0-9])?(.{+([0-9]),x}).x',
+                        'main',
+                        {name: '*', prerelease: true}
+                      ]
+                  extra_plugins: |
+                      @semantic-release/exec
+            - name: Create Release
+              uses: cycjimmy/semantic-release-action@v6
+              if: github.event_name == 'workflow_dispatch'
+              env:
+                  GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+              with:
+                  branch: main
+                  extra_plugins: |
+                      @semantic-release/exec

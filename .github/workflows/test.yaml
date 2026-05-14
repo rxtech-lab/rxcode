@@ -1,0 +1,66 @@
+name: Tests
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    
+jobs:
+  test-packages:
+    name: swift test (Packages)
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install xcpretty
+        run: gem install xcpretty
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Run package tests
+        working-directory: Packages
+        run: |
+          set -o pipefail
+          swift test 2>&1 | xcpretty
+
+  build-smoke:
+    name: xcodebuild build (Release)
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Cache Xcode derived data
+        uses: irgaly/xcode-cache@v1
+        with:
+          key: xcode-cache-deriveddata-${{ github.workflow }}-${{ github.ref_name }}
+          restore-keys: xcode-cache-deriveddata-${{ github.workflow }}-${{ github.ref_name }}
+
+      - name: Install xcpretty
+        run: gem install xcpretty
+
+      - name: Build (no signing)
+        run: |
+          set -o pipefail && xcodebuild \
+            -project RxCode.xcodeproj \
+            -scheme RxCode \
+            -configuration Release \
+            -destination platform=macOS \
+            CODE_SIGNING_ALLOWED=NO \
+            build | xcpretty

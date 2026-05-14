@@ -1,0 +1,174 @@
+name: Build & Release
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: Build macOS App
+    runs-on: self-hosted
+    permissions:
+      contents: write
+      packages: write
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Cache Xcode derived data
+        uses: irgaly/xcode-cache@v1
+        with:
+          key: xcode-cache-deriveddata-${{ github.workflow }}-${{ github.ref_name }}
+          restore-keys: xcode-cache-deriveddata-${{ github.workflow }}-${{ github.ref_name }}
+
+      - name: Install create-dmg
+        run: npm install --global create-dmg
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+
+      - name: Install Python dependencies
+        run: pip install markdown
+
+      - name: Import code signing certificate
+        uses: apple-actions/import-codesign-certs@v6
+        with:
+          p12-file-base64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          p12-password: ${{ secrets.P12_PASSWORD }}
+
+      - name: Bump version (release only)
+        if: github.event_name == 'release'
+        run: |
+          # Strip leading 'v' from release tag (v1.2.3 -> 1.2.3) — Apple's
+          # MARKETING_VERSION must be numeric.
+          RELEASE_VERSION="${GITHUB_REF_NAME#v}"
+          echo "RELEASE_VERSION=${RELEASE_VERSION}" >> "$GITHUB_ENV"
+          ./scripts/ci/update-version.sh "${RELEASE_VERSION}"
+
+      - name: Build archive
+        run: |
+          gem install xcpretty
+          # CURRENT_PROJECT_VERSION is overridden per-build so every CI build
+          # has a unique build number (github.run_number), without committing
+          # churn to project.pbxproj.
+          set -o pipefail && xcodebuild -destination platform=macOS \
+            -project RxCode.xcodeproj \
+            -scheme RxCode \
+            -configuration Release \
+            -archivePath output/output.xcarchive \
+            -allowProvisioningUpdates \
+            CODE_SIGN_IDENTITY="${{ secrets.SIGNING_CERTIFICATE_NAME }}" \
+            CODE_SIGN_STYLE=Manual \
+            OTHER_CODE_SIGN_FLAGS="--options=runtime --timestamp" \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            archive | xcpretty
+
+      - name: Sign Sparkle
+        run: ./scripts/ci/sign-sparkle.sh
+        env:
+          SIGNING_CERTIFICATE_NAME: ${{ secrets.SIGNING_CERTIFICATE_NAME }}
+
+      - name: Notarize
+        run: ./scripts/ci/notary.sh
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PWD: ${{ secrets.APPLE_ID_PWD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Generate appcast
+        run: ./scripts/ci/generate-appcast.sh
+        env:
+          SPARKLE_KEY: ${{ secrets.SPARKLE_KEY }}
+          VERSION: ${{ github.ref_name }}
+          BUILD_NUMBER: ${{ github.run_number }}
+          RELEASE_NOTE: ${{ github.event.release.body }}
+
+      # Upload artifact for Pull Requests (1 day retention)
+      - name: Upload artifact for PR
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: RxCode-PR-${{ github.event.pull_request.number }}
+          path: RxCode.dmg
+          retention-days: 1
+
+      # Upload to release for release events
+      - name: Upload DMG to Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v3
+        with:
+          files: RxCode.dmg
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Upload appcast as an artifact for the deploy job
+      - name: Upload appcast for deploy job
+        if: github.event_name == 'release'
+        uses: actions/upload-artifact@v7
+        with:
+          name: appcast-${{ github.sha }}
+          path: appcast.xml
+          retention-days: 1
+
+      - name: Upload release notes for deploy job
+        if: github.event_name == 'release'
+        uses: actions/upload-artifact@v7
+        with:
+          name: release_notes-${{ github.sha }}
+          path: release_notes.html
+          retention-days: 1
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Download appcast from build job
+        uses: actions/download-artifact@v8
+        with:
+          name: appcast-${{ github.sha }}
+
+      - name: Download release notes from build job
+        uses: actions/download-artifact@v8
+        with:
+          name: release_notes-${{ github.sha }}
+
+      - name: Prepare pages directory
+        run: |
+          mkdir -p pages
+          cp appcast.xml pages/
+          cp release_notes.html pages/
+          # Pin custom domain — without this, deploy-pages strips the CNAME
+          # GitHub wrote when the domain was set in Settings → Pages.
+          echo "update.code.rxlab.app" > pages/CNAME
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v6
+
+      - name: Upload pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: "pages"
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

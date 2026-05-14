@@ -715,6 +715,13 @@ struct ChatDetailModifiers: ViewModifier {
             .sheet(item: Bindable(windowState).interactiveTerminal) { terminal in
                 InteractiveTerminalPopup(state: terminal)
             }
+            .sheet(isPresented: Bindable(windowState).showRunConfigurations) {
+                if let project = windowState.selectedProject {
+                    RunConfigurationsView(project: project)
+                        .environment(appState)
+                        .environment(windowState)
+                }
+            }
     }
 }
 

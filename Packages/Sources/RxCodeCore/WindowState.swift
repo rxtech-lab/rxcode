@@ -6,11 +6,13 @@ import SwiftUI
 public enum InspectorTab: String, CaseIterable {
     case memo = "Memo"
     case terminal = "Terminal"
+    case run = "Run"
 
     public var icon: String {
         switch self {
         case .terminal: "apple.terminal"
         case .memo: "note.text"
+        case .run: "play.fill"
         }
     }
 }
@@ -119,6 +121,14 @@ public final class WindowState {
     public var showInspector: Bool = false
     public var inspectorMode: InspectorMode = .review
     public var inspectorTab: InspectorTab = .memo
+    /// Currently-selected run profile in the toolbar picker. Persisted only in
+    /// memory — re-selecting on relaunch is fine. Per-window so two windows
+    /// can target different profiles in the same project.
+    public var selectedRunProfileId: UUID?
+    /// Whether the run-configurations editor sheet is open.
+    public var showRunConfigurations: Bool = false
+    /// Which active run task the Run inspector tab is currently displaying.
+    public var selectedRunTaskId: UUID?
     public var inspectorReviewTab: InspectorReviewTab = .thisThread
     public var inspectorFile: PreviewFile?
     public var diffFile: PreviewFile?

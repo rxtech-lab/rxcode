@@ -21,6 +21,7 @@ struct RightInspectorPanel: View {
         switch tab {
         case .terminal: terminalFocusID = UUID()
         case .memo: memoFocusID = UUID()
+        case .run: break
         }
     }
 

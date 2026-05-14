@@ -36,6 +36,10 @@ struct InspectorContentView: View {
                                focusTrigger: memoFocusID)
                 .frame(maxHeight: windowState.inspectorTab == .memo ? .infinity : 0)
                 .clipped()
+
+            RunOutputInspectorView()
+                .frame(maxHeight: windowState.inspectorTab == .run ? .infinity : 0)
+                .clipped()
         }
     }
 }

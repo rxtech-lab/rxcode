@@ -27,14 +27,18 @@ struct RxCodeToolbarContent: ToolbarContent {
                 .padding(.horizontal)
         }
         ToolbarItemGroup(placement: .primaryAction) {
+            RunProfileToolbarGroup()
+        }
+
+        ToolbarItemGroup(placement: .primaryAction) {
+            ExternalEditorMenu()
+
             Button {
                 appState.startNewChat(in: windowState)
             } label: {
                 Image(systemName: "square.and.pencil")
             }
             .help("New Chat")
-
-            ExternalEditorMenu()
 
             Button {
                 if NSEvent.modifierFlags.contains(.option) {

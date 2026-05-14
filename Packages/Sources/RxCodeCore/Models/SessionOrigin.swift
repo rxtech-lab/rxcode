@@ -9,4 +9,8 @@ public enum SessionOrigin: String, Codable, Sendable {
     /// Backed by Claude Code CLI's `~/.claude/projects/{enc(cwd)}/{sid}.jsonl`.
     /// Source of truth is the CLI; RxCode keeps RxCode-only metadata in a sidecar.
     case cliBacked
+
+    /// Backed by Codex app-server for execution. RxCode persists a local replay
+    /// copy of the rendered messages while using the Codex thread id for turns.
+    case codexAppServer
 }

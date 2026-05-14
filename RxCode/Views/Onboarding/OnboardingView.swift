@@ -4,9 +4,14 @@ import RxCodeCore
 struct OnboardingView: View {
     @Environment(AppState.self) private var appState
     @State private var isCheckingCLI = false
-    @State private var cliInstalled = false
-    @State private var cliVersion: String?
-    @State private var cliError: String?
+    @State private var claudeInstalled = false
+    @State private var claudeVersion: String?
+    @State private var claudeError: String?
+    @State private var codexInstalled = false
+    @State private var codexVersion: String?
+    @State private var codexError: String?
+
+    private var canContinue: Bool { claudeInstalled || codexInstalled }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -21,7 +26,7 @@ struct OnboardingView: View {
                 .padding(.bottom, 24)
         }
         .padding(.horizontal, 40)
-        .frame(width: 560, height: 420)
+        .frame(width: 600, height: 560)
         .background(ClaudeTheme.background)
         .task {
             await checkCLI()
@@ -43,59 +48,81 @@ struct OnboardingView: View {
 
             if isCheckingCLI {
                 ProgressView("Checking...")
-            } else if cliInstalled {
-                Label("Installed — \(cliVersion ?? "")", systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(ClaudeTheme.statusSuccess)
-                    .font(.body)
-            } else {
-                VStack(spacing: 12) {
-                    Label("Claude CLI not found", systemImage: "xmark.circle.fill")
-                        .foregroundStyle(ClaudeTheme.statusError)
-                        .font(.body)
+            }
 
-                    if let error = cliError {
-                        Text(error)
-                            .font(.caption)
+            VStack(spacing: 10) {
+                cliStatusRow(
+                    title: "Claude Code",
+                    installed: claudeInstalled,
+                    version: claudeVersion,
+                    error: claudeError,
+                    installCommand: "npm install -g @anthropic-ai/claude-code"
+                )
+                cliStatusRow(
+                    title: "Codex",
+                    installed: codexInstalled,
+                    version: codexVersion,
+                    error: codexError,
+                    installCommand: "npm install -g @openai/codex"
+                )
+            }
+
+            Button("Check Again") {
+                Task { await checkCLI() }
+            }
+            .buttonStyle(ClaudeSecondaryButtonStyle())
+            .padding(.top, 4)
+        }
+    }
+
+    private func cliStatusRow(
+        title: String,
+        installed: Bool,
+        version: String?,
+        error: String?,
+        installCommand: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label(
+                    installed ? "\(title) installed\(version.map { " — \($0)" } ?? "")" : "\(title) not found",
+                    systemImage: installed ? "checkmark.circle.fill" : "xmark.circle.fill"
+                )
+                .foregroundStyle(installed ? ClaudeTheme.statusSuccess : ClaudeTheme.statusError)
+                .font(.body)
+                Spacer()
+            }
+
+            if !installed {
+                if let error {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(ClaudeTheme.textSecondary)
+                }
+                HStack {
+                    Text(installCommand)
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundStyle(ClaudeTheme.textPrimary)
+                        .textSelection(.enabled)
+                        .padding(8)
+                        .background(ClaudeTheme.codeBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(installCommand, forType: .string)
+                    } label: {
+                        Image(systemName: "doc.on.doc")
                             .foregroundStyle(ClaudeTheme.textSecondary)
                     }
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Install command:")
-                            .font(.subheadline)
-                            .foregroundStyle(ClaudeTheme.textSecondary)
-
-                        HStack {
-                            Text("npm install -g @anthropic-ai/claude-code")
-                                .font(.system(.body, design: .monospaced))
-                                .foregroundStyle(ClaudeTheme.textPrimary)
-                                .textSelection(.enabled)
-                                .padding(8)
-                                .background(ClaudeTheme.codeBackground)
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
-
-                            Button {
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(
-                                    "npm install -g @anthropic-ai/claude-code",
-                                    forType: .string
-                                )
-                            } label: {
-                                Image(systemName: "doc.on.doc")
-                                    .foregroundStyle(ClaudeTheme.textSecondary)
-                            }
-                            .buttonStyle(.borderless)
-                            .help("Copy")
-                        }
-                    }
+                    .buttonStyle(.borderless)
+                    .help("Copy")
                 }
-
-                Button("Check Again") {
-                    Task { await checkCLI() }
-                }
-                .buttonStyle(ClaudeSecondaryButtonStyle())
-                .padding(.top, 4)
             }
         }
+        .padding(12)
+        .background(ClaudeTheme.surfacePrimary)
+        .clipShape(RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
     }
 
     // MARK: - Navigation
@@ -107,7 +134,7 @@ struct OnboardingView: View {
                 appState.skipGitHubLogin()
             }
             .buttonStyle(ClaudeAccentButtonStyle())
-            .disabled(!cliInstalled)
+            .disabled(!canContinue)
         }
     }
 
@@ -115,22 +142,54 @@ struct OnboardingView: View {
 
     private func checkCLI() async {
         isCheckingCLI = true
-        cliError = nil
+        claudeError = nil
+        codexError = nil
 
         do {
             let version = try await appState.claude.checkVersion()
-            cliVersion = version
-            cliInstalled = true
+            claudeVersion = version
+            claudeInstalled = true
             appState.claudeInstalled = true
+            appState.claudeVersion = version
+            appState.claudeBinaryPath = await appState.claude.findClaudeBinary()
         } catch {
-            cliInstalled = false
-            cliError = error.localizedDescription
+            claudeInstalled = false
+            claudeError = error.localizedDescription
 
             let binary = await appState.claude.findClaudeBinary()
+            appState.claudeBinaryPath = binary
             if let binary {
-                cliError = "Binary found: \(binary), but version check failed"
-                cliInstalled = true
+                claudeError = "Binary found: \(binary), but version check failed"
+                claudeInstalled = true
                 appState.claudeInstalled = true
+                appState.claudeVersion = nil
+            } else {
+                appState.claudeInstalled = false
+                appState.claudeVersion = nil
+            }
+        }
+
+        do {
+            let version = try await appState.codex.checkVersion()
+            codexVersion = version
+            codexInstalled = true
+            appState.codexInstalled = true
+            appState.codexVersion = version
+            appState.codexBinaryPath = await appState.codex.findCodexBinary()
+        } catch {
+            codexInstalled = false
+            codexError = error.localizedDescription
+
+            let binary = await appState.codex.findCodexBinary()
+            appState.codexBinaryPath = binary
+            if let binary {
+                codexError = "Binary found: \(binary), but version check failed"
+                codexInstalled = true
+                appState.codexInstalled = true
+                appState.codexVersion = nil
+            } else {
+                appState.codexInstalled = false
+                appState.codexVersion = nil
             }
         }
 

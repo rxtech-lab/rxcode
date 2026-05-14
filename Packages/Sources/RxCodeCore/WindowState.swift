@@ -128,6 +128,9 @@ public final class WindowState {
     /// Per-session model override. When set, this model is used instead of the global default.
     /// Cleared when a new chat is started or a different session is selected.
     public var sessionModel: String?
+    /// Per-session agent provider override. Kept with `sessionModel` so new
+    /// sessions and resumes route to the correct runtime.
+    public var sessionAgentProvider: AgentProvider?
     /// Per-session effort override. When set, passed as --effort to the CLI.
     /// Cleared when a new chat is started or a different session is selected.
     public var sessionEffort: String?

@@ -2,13 +2,13 @@ import Foundation
 import RxCodeCore
 import os
 
-// MARK: - ClaudeService
+// MARK: - ClaudeCodeServer
 
 /// Manages the Claude Code CLI process lifecycle and NDJSON streaming.
 ///
 /// Spawns the `claude` binary with stream-json I/O, reads stdout as an
 /// ``AsyncStream<StreamEvent>``, and writes user messages to stdin in NDJSON format.
-actor ClaudeService {
+actor ClaudeCodeServer {
 
     // MARK: - State
 
@@ -33,7 +33,7 @@ actor ClaudeService {
     private let cliStore: CLISessionStore
     private let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "com.claudework",
-        category: "ClaudeService"
+        category: "ClaudeCodeServer"
     )
 
     init(cliStore: CLISessionStore) {
@@ -908,3 +908,5 @@ actor ClaudeService {
         stdinHandles.removeAll()
     }
 }
+
+typealias ClaudeService = ClaudeCodeServer

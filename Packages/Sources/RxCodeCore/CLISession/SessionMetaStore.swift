@@ -9,6 +9,7 @@ public actor SessionMetaStore {
     public struct Meta: Codable, Sendable {
         public var title: String?
         public var isPinned: Bool
+        public var agentProvider: AgentProvider?
         public var model: String?
         public var effort: String?
         public var permissionMode: PermissionMode?
@@ -19,6 +20,7 @@ public actor SessionMetaStore {
         public init(
             title: String? = nil,
             isPinned: Bool = false,
+            agentProvider: AgentProvider? = nil,
             model: String? = nil,
             effort: String? = nil,
             permissionMode: PermissionMode? = nil,
@@ -28,6 +30,7 @@ public actor SessionMetaStore {
         ) {
             self.title = title
             self.isPinned = isPinned
+            self.agentProvider = agentProvider
             self.model = model
             self.effort = effort
             self.permissionMode = permissionMode
@@ -37,13 +40,14 @@ public actor SessionMetaStore {
         }
 
         private enum CodingKeys: String, CodingKey {
-            case title, isPinned, model, effort, permissionMode, updatedAt, worktreePath, worktreeBranch
+            case title, isPinned, agentProvider, model, effort, permissionMode, updatedAt, worktreePath, worktreeBranch
         }
 
         public init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             title = try container.decodeIfPresent(String.self, forKey: .title)
             isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
+            agentProvider = try container.decodeIfPresent(AgentProvider.self, forKey: .agentProvider)
             model = try container.decodeIfPresent(String.self, forKey: .model)
             effort = try container.decodeIfPresent(String.self, forKey: .effort)
             permissionMode = try container.decodeIfPresent(PermissionMode.self, forKey: .permissionMode)

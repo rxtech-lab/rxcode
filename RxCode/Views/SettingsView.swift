@@ -360,12 +360,15 @@ struct GeneralSettingsTab: View {
 
 struct ChatSettingsTab: View {
     @Environment(AppState.self) private var appState
+    @State private var isRefreshingAgentStatus = false
 
     var body: some View {
         @Bindable var appState = appState
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                modelSection(selectedModel: $appState.selectedModel)
+                agentRuntimeSection
+                Divider()
+                modelSection
                 Divider()
                 permissionModeSection
                 Divider()
@@ -380,6 +383,97 @@ struct ChatSettingsTab: View {
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    // MARK: - Agent Runtime Section
+
+    private var agentRuntimeSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Agent Runtimes")
+                    .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
+
+                Spacer()
+
+                Button {
+                    Task {
+                        isRefreshingAgentStatus = true
+                        await appState.refreshAgentInstallations()
+                        isRefreshingAgentStatus = false
+                    }
+                } label: {
+                    if isRefreshingAgentStatus {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                }
+                .buttonStyle(.borderless)
+                .disabled(isRefreshingAgentStatus)
+                .help("Refresh installation status")
+            }
+
+            VStack(spacing: 8) {
+                agentRuntimeRow(
+                    title: "Claude Code",
+                    installed: appState.claudeInstalled,
+                    version: appState.claudeVersion,
+                    path: appState.claudeBinaryPath
+                )
+                agentRuntimeRow(
+                    title: "Codex",
+                    installed: appState.codexInstalled,
+                    version: appState.codexVersion,
+                    path: appState.codexBinaryPath
+                )
+            }
+        }
+    }
+
+    private func agentRuntimeRow(
+        title: String,
+        installed: Bool,
+        version: String?,
+        path: String?
+    ) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: installed ? "checkmark.circle.fill" : "xmark.circle.fill")
+                .foregroundStyle(installed ? ClaudeTheme.statusSuccess : ClaudeTheme.statusError)
+                .font(.system(size: ClaudeTheme.size(14)))
+                .frame(width: 18, height: 18)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(title)
+                        .font(.system(size: ClaudeTheme.size(13), weight: .medium))
+                    Text(installed ? "Installed" : "Not found")
+                        .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+                        .foregroundStyle(installed ? ClaudeTheme.statusSuccess : ClaudeTheme.statusError)
+                    if let version, !version.isEmpty {
+                        Text(version)
+                            .font(.system(size: ClaudeTheme.size(11)))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Text(path ?? "No executable detected")
+                    .font(.system(size: ClaudeTheme.size(11), design: .monospaced))
+                    .foregroundStyle(path == nil ? .secondary : ClaudeTheme.textPrimary)
+                    .lineLimit(2)
+                    .truncationMode(.middle)
+                    .textSelection(.enabled)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .background(Color(NSColor.controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1)
+        )
     }
 
     // MARK: - Archive Section
@@ -420,7 +514,7 @@ struct ChatSettingsTab: View {
 
     // MARK: - Model Section
 
-    private func modelSection(selectedModel: Binding<String>) -> some View {
+    private var modelSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Default Model")
                 .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
@@ -429,19 +523,47 @@ struct ChatSettingsTab: View {
                 .font(.system(size: ClaudeTheme.size(11)))
                 .foregroundStyle(.secondary)
 
-            Picker("", selection: selectedModel) {
-                ForEach(AppState.availableModels, id: \.self) { model in
-                    Text(AppState.modelDisplayName(model)).tag(model)
+            Picker("", selection: defaultModelKey) {
+                ForEach(appState.availableAgentModelSections(), id: \.provider) { section in
+                    Section(section.provider.displayName) {
+                        ForEach(section.models, id: \.key) { model in
+                            Text(model.displayName).tag(model.key)
+                        }
+                    }
                 }
             }
             .labelsHidden()
             .pickerStyle(.menu)
             .fixedSize()
 
-            Text(AppState.modelDescription(selectedModel.wrappedValue))
+            Text(selectedDefaultModel.description)
                 .font(.system(size: ClaudeTheme.size(11)))
                 .foregroundStyle(.secondary)
         }
+    }
+
+    private var defaultModelKey: Binding<String> {
+        Binding(
+            get: { "\(appState.selectedAgentProvider.rawValue):\(appState.selectedModel)" },
+            set: { key in
+                let parts = key.split(separator: ":", maxSplits: 1).map(String.init)
+                guard parts.count == 2, let provider = AgentProvider(rawValue: parts[0]) else { return }
+                appState.selectedAgentProvider = provider
+                appState.selectedModel = parts[1]
+            }
+        )
+    }
+
+    private var selectedDefaultModel: AgentModel {
+        appState.availableAgentModelSections()
+            .flatMap(\.models)
+            .first { $0.provider == appState.selectedAgentProvider && $0.id == appState.selectedModel }
+        ?? AgentModel(
+            provider: appState.selectedAgentProvider,
+            id: appState.selectedModel,
+            displayName: AppState.modelDisplayName(appState.selectedModel, provider: appState.selectedAgentProvider),
+            description: AppState.modelDescription(appState.selectedModel, provider: appState.selectedAgentProvider)
+        )
     }
 
     // MARK: - Permission Mode Section

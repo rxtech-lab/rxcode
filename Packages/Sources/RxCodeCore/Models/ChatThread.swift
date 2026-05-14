@@ -12,6 +12,8 @@ public final class ChatThread {
 
     public var cliSessionId: String?
 
+    public var agentProviderRaw: String?
+    public var originRaw: String?
     public var model: String?
     public var effort: String?
     public var permissionModeRaw: String?
@@ -29,6 +31,8 @@ public final class ChatThread {
         updatedAt: Date = .now,
         isPinned: Bool = false,
         cliSessionId: String? = nil,
+        agentProviderRaw: String? = AgentProvider.claudeCode.rawValue,
+        originRaw: String? = SessionOrigin.cliBacked.rawValue,
         model: String? = nil,
         effort: String? = nil,
         permissionModeRaw: String? = nil,
@@ -44,6 +48,8 @@ public final class ChatThread {
         self.updatedAt = updatedAt
         self.isPinned = isPinned
         self.cliSessionId = cliSessionId
+        self.agentProviderRaw = agentProviderRaw
+        self.originRaw = originRaw
         self.model = model
         self.effort = effort
         self.permissionModeRaw = permissionModeRaw
@@ -56,17 +62,22 @@ public final class ChatThread {
 
 extension ChatThread {
     public func toSummary() -> ChatSession.Summary {
-        ChatSession.Summary(
+        let agentProvider = agentProviderRaw.flatMap(AgentProvider.init(rawValue:)) ?? .claudeCode
+        let origin = originRaw.flatMap(SessionOrigin.init(rawValue:))
+            ?? (agentProvider == .codex ? .codexAppServer : .cliBacked)
+
+        return ChatSession.Summary(
             id: id,
             projectId: projectId,
             title: title,
             createdAt: createdAt,
             updatedAt: updatedAt,
             isPinned: isPinned,
+            agentProvider: agentProvider,
             model: model,
             effort: effort,
             permissionMode: permissionModeRaw.flatMap(PermissionMode.init(rawValue:)),
-            origin: .cliBacked,
+            origin: origin,
             worktreePath: worktreePath,
             worktreeBranch: worktreeBranch,
             isArchived: isArchived,
@@ -78,6 +89,8 @@ extension ChatThread {
         title = summary.title
         updatedAt = summary.updatedAt
         isPinned = summary.isPinned
+        agentProviderRaw = summary.agentProvider.rawValue
+        originRaw = summary.origin.rawValue
         model = summary.model
         effort = summary.effort
         permissionModeRaw = summary.permissionMode?.rawValue
@@ -96,6 +109,8 @@ extension ChatThread {
             updatedAt: summary.updatedAt,
             isPinned: summary.isPinned,
             cliSessionId: cliSessionId,
+            agentProviderRaw: summary.agentProvider.rawValue,
+            originRaw: summary.origin.rawValue,
             model: summary.model,
             effort: summary.effort,
             permissionModeRaw: summary.permissionMode?.rawValue,

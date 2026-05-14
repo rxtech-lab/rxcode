@@ -235,6 +235,32 @@ actor PermissionServer {
         }
     }
 
+    /// Reuses the same permission UI/decision queue for non-Claude transports
+    /// such as Codex app-server JSON-RPC requests.
+    func requestDecision(
+        toolUseId: String,
+        sessionId: String?,
+        toolName: String,
+        toolInput: [String: JSONValue],
+        mode: PermissionMode?
+    ) async -> PermissionDecision {
+        let request = PermissionRequest(
+            id: toolUseId,
+            toolName: toolName,
+            toolInput: toolInput,
+            runToken: runToken,
+            streamPermissionMode: mode,
+            sessionId: sessionId
+        )
+        let outcome = await waitForDecision(
+            toolUseId: toolUseId,
+            sessionId: sessionId,
+            toolName: toolName,
+            emit: request
+        )
+        return outcome.decision
+    }
+
     /// Idempotent.
     func registerSession(sid: String, projectKey: String, mode: PermissionMode) async {
         await loadBashAllowlistIfNeeded()

@@ -2483,18 +2483,70 @@ final class AppState {
                             logger.info("[Stream:UI] Codex usage applied messageId=\(assistantMessage.id ?? "<nil>", privacy: .public) output=\(liveOutput) total=\(total)")
                         }
                     }
-                    // Extract text only when no text_delta has been received in the current turn.
-                    // Normally content_block_delta(text_delta) is the primary path, so this branch rarely executes.
+                    // ACP-style providers deliver fully-formed tool_use blocks inside .assistant
+                    // events (no content_block_start raw stream). Commit any buffered text first
+                    // so tool bubbles appear after — and not in the middle of — the prior text.
+                    let hasToolUse = assistantMessage.content.contains {
+                        if case .toolUse = $0 { return true }
+                        return false
+                    }
+                    if hasToolUse {
+                        flushPendingUpdates(for: sessionKey)
+                    }
+
                     updateState(sessionKey) { state in
-                        guard state.textDeltaBuffer.isEmpty else { return }
-                        let afterLastUser = (state.messages.lastIndex(where: { $0.role == .user }).map { $0 + 1 }) ?? 0
-                        let hasStreamedText = state.messages.suffix(from: afterLastUser).contains {
-                            $0.role == .assistant && $0.blocks.contains(where: \.isText)
-                        }
-                        guard !hasStreamedText else { return }
+                        // Text fallback: only buffer text when no text_delta has been received in
+                        // this turn. Normally content_block_delta(text_delta) is the primary path.
+                        let canBufferText: Bool = {
+                            guard state.textDeltaBuffer.isEmpty else { return false }
+                            let afterLastUser = (state.messages.lastIndex(where: { $0.role == .user }).map { $0 + 1 }) ?? 0
+                            return !state.messages.suffix(from: afterLastUser).contains {
+                                $0.role == .assistant && $0.blocks.contains(where: \.isText)
+                            }
+                        }()
+
                         for block in assistantMessage.content {
-                            if case .text(let text) = block, !text.isEmpty {
-                                state.textDeltaBuffer += text
+                            switch block {
+                            case .text(let text):
+                                if canBufferText, !text.isEmpty {
+                                    state.textDeltaBuffer += text
+                                }
+                            case .toolUse(let id, let name, let input):
+                                state.isThinking = false
+                                // Merge updates by id: ACP agents may re-emit the same toolUse
+                                // with additional input (e.g. diff content arriving via a
+                                // follow-up tool_call_update). Patch the existing block in
+                                // place so the live edit info reaches `flushPendingUpdates`
+                                // when the result lands.
+                                if let existingMsgIdx = state.messages.indices.reversed().first(where: {
+                                    state.messages[$0].toolCallIndex(id: id) != nil
+                                }),
+                                   let existingBlockIdx = state.messages[existingMsgIdx].toolCallIndex(id: id) {
+                                    var merged = state.messages[existingMsgIdx].blocks[existingBlockIdx].toolCall?.input ?? [:]
+                                    for (key, value) in input { merged[key] = value }
+                                    state.messages[existingMsgIdx].blocks[existingBlockIdx].toolCall?.input = merged
+                                } else {
+                                    if state.needsNewMessage {
+                                        if let idx = state.messages.indices.reversed().first(where: {
+                                            state.messages[$0].role == .assistant && state.messages[$0].isStreaming
+                                        }) {
+                                            state.messages[idx].isStreaming = false
+                                            state.messages[idx].finalizeToolCalls()
+                                            Self.stripNoOpText(at: idx, in: &state.messages)
+                                        }
+                                        state.messages.append(ChatMessage(role: .assistant, isStreaming: true))
+                                        state.needsNewMessage = false
+                                    } else if state.messages.last?.role != .assistant
+                                                || !(state.messages.last?.isStreaming ?? false) {
+                                        state.messages.append(ChatMessage(role: .assistant, isStreaming: true))
+                                    }
+                                    if let lastIndex = state.messages.indices.last,
+                                       state.messages[lastIndex].role == .assistant {
+                                        state.messages[lastIndex].appendToolCall(ToolCall(id: id, name: name, input: input))
+                                    }
+                                }
+                            case .thinking:
+                                state.isThinking = true
                             }
                         }
                     }

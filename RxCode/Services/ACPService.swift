@@ -7,43 +7,60 @@ import os
 // Speaks the Agent Client Protocol (https://agentclientprotocol.com) over
 // newline-delimited JSON-RPC on a child process's stdio.
 //
-// One ACPService instance hosts many concurrent streams. Each stream owns a
-// dedicated agent subprocess for its turn — the simplest mapping that mirrors
-// `ClaudeService`'s one-process-per-prompt model. A future optimization could
-// pool processes per (cwd, clientSpec) since ACP supports `session/load`.
+// One ACPService instance hosts many concurrent sessions. Each session pools
+// a single agent subprocess across turns of the same RxCode thread so the
+// agent retains conversation memory — ACP itself doesn't pass history in
+// `session/prompt`, so a fresh process per turn would treat every prompt as
+// the start of a new conversation. The pool is keyed by a canonical session
+// key (initially the AppState `clientSessionKey`, re-keyed to the agent's
+// `session/new` sessionId once known) so subsequent turns whose key has been
+// renamed in AppState still find the same process.
 
 actor ACPService {
 
     private let logger = Logger(subsystem: "com.claudework", category: "ACPService")
 
-    private struct StreamEntry {
+    /// Per-pool entry. Persistent fields outlive a single turn; per-turn
+    /// fields are reset before each `session/prompt`.
+    private struct SessionEntry {
+        // Persistent (process-level)
         let process: Process
         let stdin: FileHandle
+        let spec: ACPClientSpec
+        let cwd: String
+        var canonicalKey: String
+        var agentSessionId: String?
+        var modelConfigId: String?
         var nextId: Int = 1
         var pending: [Int: CheckedContinuation<JSONValue, Error>] = [:]
-        var agentSessionId: String?
-        var continuation: AsyncStream<StreamEvent>.Continuation?
-        var spec: ACPClientSpec
-        var cwd: String
-        var clientSessionKey: String
         var stderr: String = ""
-        /// `tool_call.toolCallId` → synthesized RxCode ToolCall id (same string).
+        var stdoutReaderTask: Task<Void, Never>?
+
+        // Per-turn (reset before `session/prompt`)
+        var currentStreamId: UUID?
+        var continuation: AsyncStream<StreamEvent>.Continuation?
         var liveToolCalls: Set<String> = []
-        /// Plan card uses a stable synthetic id per stream so successive `plan` updates replace the same card.
-        let planSyntheticId: String = "acp-plan-\(UUID().uuidString)"
+        var planSyntheticId: String = "acp-plan-\(UUID().uuidString)"
         var planEmitted: Bool = false
-        /// `SessionConfigId` of the model selector advertised by the agent's
-        /// `session/new` response, if any. Cached so the turn can issue
-        /// `session/set_config_option` to switch models.
-        var modelConfigId: String?
-        /// Toggled on just before `session/prompt` is sent. Agents like
-        /// OpenCode replay the historical conversation as `session/update`
-        /// notifications during `session/load`; we discard those so they don't
-        /// get rendered as live messages.
+        /// Toggled on just before `session/prompt` is sent. Some agents replay
+        /// the historical conversation as `session/update` notifications during
+        /// `session/load`; we discard those so they don't get rendered as live
+        /// messages.
         var acceptingUpdates: Bool = false
+        /// Probe entries get torn down in `probeModels` instead of pooled
+        /// across turns.
+        let isEphemeral: Bool
     }
 
-    private var streams: [UUID: StreamEntry] = [:]
+    private var sessions: [String: SessionEntry] = [:]
+    /// Maps an externally-issued streamId to its canonical pool key.
+    private var streamToKey: [UUID: String] = [:]
+    /// Maps a previously-seen pool key (e.g. AppState's "pending-…" key) to
+    /// the canonical key (the agent's `session/new` sessionId). Used to
+    /// resolve subsequent turns whose `clientSessionKey` was renamed by
+    /// AppState's session-id reconciliation.
+    private var aliasToCanonical: [String: String] = [:]
+
     /// Reference to the permission server for bridging `session/request_permission`.
     private weak var permissionServer: PermissionServer?
 
@@ -70,7 +87,7 @@ actor ACPService {
         permissionMode: PermissionMode,
         clientSessionKey: String
     ) -> AsyncStream<StreamEvent> {
-        logger.info("[ACP] send streamId=\(streamId.uuidString, privacy: .public) client=\(spec.displayName, privacy: .public) launch=\(spec.launch.displayKind, privacy: .public) model=\(model ?? "<default>", privacy: .public) sessionId=\(sessionId ?? "<new>", privacy: .public) mode=\(String(describing: permissionMode), privacy: .public) cwd=\(cwd, privacy: .public) promptLen=\(prompt.count)")
+        logger.info("[ACP] send streamId=\(streamId.uuidString, privacy: .public) client=\(spec.displayName, privacy: .public) launch=\(spec.launch.displayKind, privacy: .public) model=\(model ?? "<default>", privacy: .public) sessionId=\(sessionId ?? "<new>", privacy: .public) mode=\(String(describing: permissionMode), privacy: .public) cwd=\(cwd, privacy: .public) clientKey=\(clientSessionKey, privacy: .public) promptLen=\(prompt.count)")
         return AsyncStream<StreamEvent> { continuation in
             let task = Task {
                 await self.runTurn(
@@ -92,17 +109,30 @@ actor ACPService {
         }
     }
 
+    /// Releases per-stream bookkeeping for a turn that ran to completion.
+    /// The pooled agent process stays alive so the next turn for the same
+    /// session inherits its conversation memory.
     func finalize(streamId: UUID) {
-        guard var entry = streams.removeValue(forKey: streamId) else { return }
-        logger.info("[ACP] finalize streamId=\(streamId.uuidString, privacy: .public) pid=\(entry.process.processIdentifier) pending=\(entry.pending.count) running=\(entry.process.isRunning)")
-        try? entry.stdin.close()
-        if entry.process.isRunning {
-            entry.process.terminate()
+        guard let key = streamToKey.removeValue(forKey: streamId) else { return }
+        guard var entry = sessions[key] else { return }
+        if entry.currentStreamId == streamId {
+            entry.currentStreamId = nil
+            entry.continuation = nil
+            entry.acceptingUpdates = false
+            entry.liveToolCalls.removeAll()
+            entry.planEmitted = false
+            // pending should be empty after a clean turn; if any are left,
+            // resume them with streamClosed so the turn surfaces the error.
+            for (_, cont) in entry.pending {
+                cont.resume(throwing: ACPError.streamClosed)
+            }
+            entry.pending.removeAll()
         }
-        for (_, cont) in entry.pending {
-            cont.resume(throwing: ACPError.streamClosed)
+        sessions[key] = entry
+        if entry.isEphemeral {
+            killSession(key: key)
         }
-        entry.pending.removeAll()
+        logger.info("[ACP] finalize streamId=\(streamId.uuidString, privacy: .public) key=\(key, privacy: .public) keepingProcess=\(!entry.isEphemeral) running=\(entry.process.isRunning)")
     }
 
     func handleStreamTermination(streamId: UUID) {
@@ -110,32 +140,75 @@ actor ACPService {
         finalize(streamId: streamId)
     }
 
+    /// Cancels the in-flight turn for `streamId` via `session/cancel` but
+    /// keeps the agent process alive so the user can immediately send a new
+    /// prompt without losing conversation state.
     func cancel(streamId: UUID) {
-        // Attempt graceful cancel via session/cancel notification, then kill the process.
-        if let entry = streams[streamId], let sid = entry.agentSessionId {
+        guard let key = streamToKey[streamId], let entry = sessions[key] else {
+            return
+        }
+        if let agentSid = entry.agentSessionId {
             let frame: [String: Any] = [
                 "jsonrpc": "2.0",
                 "method": "session/cancel",
-                "params": ["sessionId": sid]
+                "params": ["sessionId": agentSid]
             ]
             if let data = try? JSONSerialization.data(withJSONObject: frame),
                let line = String(data: data, encoding: .utf8) {
                 _ = try? entry.stdin.write(contentsOf: Data((line + "\n").utf8))
             }
         }
+        // Resume any pending requests with .streamClosed so the runTurn await
+        // unblocks and we hit the per-turn cleanup path in finalize.
+        mutateSession(key) { e in
+            for (_, cont) in e.pending {
+                cont.resume(throwing: ACPError.streamClosed)
+            }
+            e.pending.removeAll()
+            e.continuation?.finish()
+        }
         finalize(streamId: streamId)
     }
 
     func consumeStderr(for streamId: UUID) -> String? {
-        guard let entry = streams[streamId] else { return nil }
+        guard let key = streamToKey[streamId], let entry = sessions[key] else {
+            return nil
+        }
         let trimmed = entry.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
     }
 
     func cleanup() {
-        for (id, _) in streams {
-            finalize(streamId: id)
+        for (key, _) in sessions {
+            killSession(key: key)
         }
+        sessions.removeAll()
+        streamToKey.removeAll()
+        aliasToCanonical.removeAll()
+    }
+
+    /// Tear down a pooled session — terminate the process and forget all
+    /// references. Used by `cleanup()`, ephemeral probe sessions, and as a
+    /// recovery path when a pooled process dies between turns.
+    private func killSession(key: String) {
+        guard var entry = sessions.removeValue(forKey: key) else { return }
+        try? entry.stdin.close()
+        if entry.process.isRunning {
+            entry.process.terminate()
+        }
+        entry.stdoutReaderTask?.cancel()
+        for (_, cont) in entry.pending {
+            cont.resume(throwing: ACPError.streamClosed)
+        }
+        entry.pending.removeAll()
+        entry.continuation?.finish()
+        if let sid = entry.currentStreamId {
+            streamToKey.removeValue(forKey: sid)
+        }
+        // Drop any aliases that pointed at this canonical key so future
+        // lookups don't follow a dangling entry.
+        let aliases = aliasToCanonical.filter { $0.value == key }.map(\.key)
+        for alias in aliases { aliasToCanonical.removeValue(forKey: alias) }
     }
 
     /// One-shot probe that spawns the agent, runs `initialize` + `session/new`,
@@ -151,30 +224,35 @@ actor ACPService {
         timeout: Duration = .seconds(20)
     ) async throws -> ACPModelConfig? {
         let streamId = UUID()
+        let key = "probe-\(streamId.uuidString)"
         logger.info("[ACP] probe start: \(spec.displayName, privacy: .public) (launch=\(spec.launch.displayKind, privacy: .public)) cwd=\(cwd, privacy: .public)")
 
         let (process, stdin, stdout, stderr) = try await spawn(spec: spec, model: nil, cwd: cwd)
         logger.info("[ACP] probe spawned pid=\(process.processIdentifier) for \(spec.displayName, privacy: .public)")
 
-        let entry = StreamEntry(
+        var entry = SessionEntry(
             process: process,
             stdin: stdin,
             spec: spec,
             cwd: cwd,
-            clientSessionKey: ""
+            canonicalKey: key,
+            isEphemeral: true
         )
-        streams[streamId] = entry
+        entry.currentStreamId = streamId
+        sessions[key] = entry
+        streamToKey[streamId] = key
 
-        startStderrReader(streamId: streamId, stderr: stderr)
-        let readerTask = Self.spawnStdoutReader(streamId: streamId, stdout: stdout, service: self)
+        startStderrReader(key: key, stderr: stderr)
+        let readerTask = Self.spawnStdoutReader(key: key, stdout: stdout, service: self)
+        mutateSession(key) { $0.stdoutReaderTask = readerTask }
         process.terminationHandler = { [weak self] _ in
-            Task.detached { await self?.handleProcessExit(streamId: streamId) }
+            Task.detached { await self?.handleProcessExit(key: key) }
         }
 
         do {
             let result = try await withThrowingTaskGroup(of: ACPModelConfig?.self) { group in
                 group.addTask {
-                    try await self.runProbeSequence(streamId: streamId, spec: spec, cwd: cwd)
+                    try await self.runProbeSequence(key: key, spec: spec, cwd: cwd)
                 }
                 group.addTask {
                     try await Task.sleep(for: timeout)
@@ -185,27 +263,29 @@ actor ACPService {
                 return value
             }
             readerTask.cancel()
-            finalize(streamId: streamId)
+            killSession(key: key)
+            streamToKey.removeValue(forKey: streamId)
             return result
         } catch {
-            let stderrSnapshot = streams[streamId]?.stderr.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let stderrSnapshot = sessions[key]?.stderr.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             if !stderrSnapshot.isEmpty {
                 logger.error("[ACP] probe stderr for \(spec.displayName, privacy: .public): \(stderrSnapshot, privacy: .public)")
             }
             readerTask.cancel()
-            finalize(streamId: streamId)
+            killSession(key: key)
+            streamToKey.removeValue(forKey: streamId)
             throw error
         }
     }
 
     private func runProbeSequence(
-        streamId: UUID,
+        key: String,
         spec: ACPClientSpec,
         cwd: String
     ) async throws -> ACPModelConfig? {
         logger.info("[ACP] probe → initialize \(spec.displayName, privacy: .public)")
         _ = try await sendRequest(
-            streamId: streamId,
+            key: key,
             method: "initialize",
             params: [
                 "protocolVersion": .number(1),
@@ -221,7 +301,7 @@ actor ACPService {
 
         logger.info("[ACP] probe → session/new \(spec.displayName, privacy: .public)")
         let newResult = try await sendRequest(
-            streamId: streamId,
+            key: key,
             method: "session/new",
             params: [
                 "cwd": .string(cwd),
@@ -254,165 +334,48 @@ actor ACPService {
         continuation: AsyncStream<StreamEvent>.Continuation
     ) async {
         do {
-            let (process, stdin, stdout, stderr) = try await spawn(spec: spec, model: model, cwd: cwd)
-            var entry = StreamEntry(
-                process: process,
-                stdin: stdin,
-                spec: spec,
+            // Resolve the pool key — AppState may pass the original
+            // `pending-…` key OR the agent's later sessionId. Either should
+            // map to the same pooled entry.
+            let resolvedKey = aliasToCanonical[clientSessionKey] ?? clientSessionKey
+            let canReuse: Bool = {
+                guard let existing = sessions[resolvedKey] else { return false }
+                guard !existing.isEphemeral else { return false }
+                guard existing.spec.id == spec.id else { return false }
+                guard existing.cwd == cwd else { return false }
+                guard existing.process.isRunning else { return false }
+                guard existing.agentSessionId != nil else { return false }
+                return true
+            }()
+
+            if canReuse {
+                try await runReusedTurn(
+                    streamId: streamId,
+                    poolKey: resolvedKey,
+                    prompt: prompt,
+                    model: model,
+                    continuation: continuation
+                )
+                return
+            }
+
+            // Pool has a stale entry (different spec/cwd or process dead).
+            if sessions[resolvedKey] != nil {
+                logger.info("[ACP] dropping stale pooled session for key=\(resolvedKey, privacy: .public)")
+                killSession(key: resolvedKey)
+            }
+
+            try await runFreshTurn(
+                streamId: streamId,
+                bootstrapKey: clientSessionKey,
+                prompt: prompt,
                 cwd: cwd,
-                clientSessionKey: clientSessionKey
-            )
-            entry.continuation = continuation
-            streams[streamId] = entry
-
-            // Start background readers detached so they don't fight the writer
-            // for ACPService actor reentrance — they only hop onto the actor
-            // when delivering a line.
-            startStderrReader(streamId: streamId, stderr: stderr)
-            let readerTask = Self.spawnStdoutReader(streamId: streamId, stdout: stdout, service: self)
-            process.terminationHandler = { [weak self] _ in
-                Task.detached { await self?.handleProcessExit(streamId: streamId) }
-            }
-            let heartbeat = Task.detached { [weak self, displayName = spec.displayName, launchKind = spec.launch.displayKind] in
-                let started = Date()
-                while !Task.isCancelled {
-                    try? await Task.sleep(for: .seconds(5))
-                    if Task.isCancelled { break }
-                    let elapsed = Int(Date().timeIntervalSince(started))
-                    await self?.heartbeatTick(displayName: displayName, elapsed: elapsed, launchKind: launchKind)
-                }
-            }
-
-            // 1. initialize
-            let initResult = try await sendRequest(
-                streamId: streamId,
-                method: "initialize",
-                params: [
-                    "protocolVersion": .number(1),
-                    "clientCapabilities": .object([
-                        "fs": .object([
-                            "readTextFile": .bool(true),
-                            "writeTextFile": .bool(true)
-                        ])
-                    ])
-                ]
-            )
-            heartbeat.cancel()
-            logger.info("[ACP] initialize ok for \(spec.displayName, privacy: .public): \(initResult.shortDescription, privacy: .public)")
-
-            // Surface the agent identity as a system event so the chat header
-            // matches the Claude path.
-            continuation.yield(.system(SystemEvent(
-                subtype: "init",
-                sessionId: incomingSessionId,
-                tools: nil,
+                incomingSessionId: incomingSessionId,
                 model: model,
-                claudeCodeVersion: nil
-            )))
-
-            // 2. Always `session/new`. We could `session/load` here if the agent
-            // advertises `loadSession`, but ACP's load-replay is only useful
-            // when the same agent *process* is being reattached. Our current
-            // architecture spawns a fresh subprocess per turn, so `session/load`
-            // on agents that persist sessions to disk (Gemini CLI) makes them
-            // re-emit the persisted conversation during the next `session/prompt`,
-            // which surfaces in the UI as prior answers being prepended to new
-            // ones. Each turn therefore starts a fresh ACP session; conversation
-            // continuity is preserved by RxCode's chat history, not by the agent.
-            let agentSessionId: String
-            var modelConfig: ACPModelConfig?
-            let sessionMethod = "session/new"
-            let newParams: [String: JSONValue] = [
-                "cwd": .string(cwd),
-                "mcpServers": .array([])
-            ]
-            let newResult = try await sendRequest(streamId: streamId, method: "session/new", params: newParams)
-            guard let sid = newResult.objectValue?["sessionId"]?.stringValue else {
-                throw ACPError.protocolMismatch("session/new returned no sessionId")
-            }
-            modelConfig = Self.parseModelConfig(from: newResult)
-            agentSessionId = sid
-            _ = incomingSessionId // intentionally unused — see comment above
-            mutateStream(streamId) {
-                $0.agentSessionId = agentSessionId
-                $0.modelConfigId = modelConfig?.configId
-            }
-
-            // Tell AppState about the discovered model list so it can refresh
-            // the picker and persist it to disk.
-            if let modelConfig {
-                logger.info("[ACP] discovered model selector for \(spec.displayName, privacy: .public) via \(sessionMethod, privacy: .public) configId=\(modelConfig.configId, privacy: .public) current=\(modelConfig.currentValue ?? "nil", privacy: .public) models=\(modelConfig.options.count) [\(Self.modelListDescription(modelConfig.options), privacy: .public)]")
-                continuation.yield(.acpModelsDiscovered(ACPModelsDiscoveredEvent(
-                    clientId: spec.id,
-                    config: modelConfig
-                )))
-            } else {
-                logger.info("[ACP] no model selector discovered for \(spec.displayName, privacy: .public) via \(sessionMethod, privacy: .public)")
-            }
-
-            // Apply the user's model choice via the spec-compliant route when
-            // the agent advertised a selector. Env-var-at-spawn covers the
-            // fallback case for older agents.
-            if let modelConfig,
-               let model,
-               !model.isEmpty,
-               modelConfig.options.contains(where: { $0.value == model }),
-               modelConfig.currentValue != model {
-                do {
-                    _ = try await sendRequest(
-                        streamId: streamId,
-                        method: "session/set_config_option",
-                        params: [
-                            "sessionId": .string(agentSessionId),
-                            "configId": .string(modelConfig.configId),
-                            "value": .string(model)
-                        ]
-                    )
-                } catch {
-                    logger.warning("[ACP] session/set_config_option failed for model \(model, privacy: .public): \(error.localizedDescription, privacy: .public)")
-                }
-            }
-
-            // Emit the agent's session id so the chat UI replaces its pending placeholder.
-            continuation.yield(.system(SystemEvent(
-                subtype: "session_started",
-                sessionId: agentSessionId,
-                tools: nil,
-                model: model,
-                claudeCodeVersion: nil
-            )))
-
-            // 3. session/prompt — blocks until the turn completes.
-            // Flip the gate AFTER the optional `session/set_config_option`
-            // exchange so we don't accept stray updates before the prompt is
-            // actually in flight.
-            mutateStream(streamId) { $0.acceptingUpdates = true }
-            let promptResult = try await sendRequest(
-                streamId: streamId,
-                method: "session/prompt",
-                params: [
-                    "sessionId": .string(agentSessionId),
-                    "prompt": .array([.object([
-                        "type": .string("text"),
-                        "text": .string(prompt)
-                    ])])
-                ]
+                spec: spec,
+                permissionMode: permissionMode,
+                continuation: continuation
             )
-
-            let stopReason = promptResult.objectValue?["stopReason"]?.stringValue ?? "end_turn"
-            continuation.yield(.result(ResultEvent(
-                durationMs: nil,
-                totalCostUsd: nil,
-                sessionId: agentSessionId,
-                isError: stopReason == "refusal",
-                totalTurns: nil,
-                usage: nil,
-                contextWindow: nil
-            )))
-
-            readerTask.cancel()
-            continuation.finish()
-            finalize(streamId: streamId)
         } catch {
             logger.error("[ACP] turn failed: \(error.localizedDescription, privacy: .public)")
             continuation.yield(.user(UserMessage(
@@ -421,6 +384,277 @@ actor ACPService {
                 isError: true
             )))
             continuation.finish()
+            finalize(streamId: streamId)
+        }
+    }
+
+    private func runFreshTurn(
+        streamId: UUID,
+        bootstrapKey: String,
+        prompt: String,
+        cwd: String,
+        incomingSessionId: String?,
+        model: String?,
+        spec: ACPClientSpec,
+        permissionMode: PermissionMode,
+        continuation: AsyncStream<StreamEvent>.Continuation
+    ) async throws {
+        let (process, stdin, stdout, stderr) = try await spawn(spec: spec, model: model, cwd: cwd)
+        var entry = SessionEntry(
+            process: process,
+            stdin: stdin,
+            spec: spec,
+            cwd: cwd,
+            canonicalKey: bootstrapKey,
+            isEphemeral: false
+        )
+        entry.continuation = continuation
+        entry.currentStreamId = streamId
+        sessions[bootstrapKey] = entry
+        streamToKey[streamId] = bootstrapKey
+
+        // Reader closures capture the canonical key, not the streamId, so
+        // the readers keep delivering correctly across turns when the pool
+        // entry is later re-keyed to the agent's sessionId.
+        startStderrReader(key: bootstrapKey, stderr: stderr)
+        let readerTask = Self.spawnStdoutReader(key: bootstrapKey, stdout: stdout, service: self)
+        mutateSession(bootstrapKey) { $0.stdoutReaderTask = readerTask }
+        process.terminationHandler = { [weak self] _ in
+            // Use the canonical key at exit time — `handleProcessExit` looks
+            // up via the alias map, so this works even if the pool entry has
+            // since been re-keyed to the agent's sessionId.
+            Task.detached { await self?.handleProcessExit(key: bootstrapKey) }
+        }
+
+        let heartbeat = Task.detached { [weak self, displayName = spec.displayName, launchKind = spec.launch.displayKind] in
+            let started = Date()
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(5))
+                if Task.isCancelled { break }
+                let elapsed = Int(Date().timeIntervalSince(started))
+                await self?.heartbeatTick(displayName: displayName, elapsed: elapsed, launchKind: launchKind)
+            }
+        }
+
+        // 1. initialize
+        let initResult = try await sendRequest(
+            key: bootstrapKey,
+            method: "initialize",
+            params: [
+                "protocolVersion": .number(1),
+                "clientCapabilities": .object([
+                    "fs": .object([
+                        "readTextFile": .bool(true),
+                        "writeTextFile": .bool(true)
+                    ])
+                ])
+            ]
+        )
+        heartbeat.cancel()
+        logger.info("[ACP] initialize ok for \(spec.displayName, privacy: .public): \(initResult.shortDescription, privacy: .public)")
+
+        continuation.yield(.system(SystemEvent(
+            subtype: "init",
+            sessionId: incomingSessionId,
+            tools: nil,
+            model: model,
+            claudeCodeVersion: nil
+        )))
+
+        // 2. session/new — fresh ACP session backed by the new process. The
+        // agent's history will accumulate within this process across pooled
+        // turns; we don't use `session/load` because that re-emits the
+        // persisted conversation as updates and would duplicate messages.
+        let newParams: [String: JSONValue] = [
+            "cwd": .string(cwd),
+            "mcpServers": .array([])
+        ]
+        let newResult = try await sendRequest(key: bootstrapKey, method: "session/new", params: newParams)
+        guard let agentSessionId = newResult.objectValue?["sessionId"]?.stringValue else {
+            throw ACPError.protocolMismatch("session/new returned no sessionId")
+        }
+        let modelConfig = Self.parseModelConfig(from: newResult)
+        _ = incomingSessionId
+
+        // Re-key the pool entry to the agent's sessionId so subsequent turns
+        // (where AppState's sessionKey is the agent sid) hit the cache.
+        let canonicalKey = agentSessionId
+        if canonicalKey != bootstrapKey {
+            if var moved = sessions.removeValue(forKey: bootstrapKey) {
+                moved.canonicalKey = canonicalKey
+                moved.agentSessionId = agentSessionId
+                moved.modelConfigId = modelConfig?.configId
+                sessions[canonicalKey] = moved
+            }
+            streamToKey[streamId] = canonicalKey
+            aliasToCanonical[bootstrapKey] = canonicalKey
+        } else {
+            mutateSession(canonicalKey) {
+                $0.agentSessionId = agentSessionId
+                $0.modelConfigId = modelConfig?.configId
+            }
+        }
+
+        if let modelConfig {
+            logger.info("[ACP] discovered model selector for \(spec.displayName, privacy: .public) configId=\(modelConfig.configId, privacy: .public) current=\(modelConfig.currentValue ?? "nil", privacy: .public) models=\(modelConfig.options.count) [\(Self.modelListDescription(modelConfig.options), privacy: .public)]")
+            continuation.yield(.acpModelsDiscovered(ACPModelsDiscoveredEvent(
+                clientId: spec.id,
+                config: modelConfig
+            )))
+        } else {
+            logger.info("[ACP] no model selector discovered for \(spec.displayName, privacy: .public)")
+        }
+
+        try await applyModelSelection(
+            key: canonicalKey,
+            agentSessionId: agentSessionId,
+            modelConfig: modelConfig,
+            model: model
+        )
+
+        continuation.yield(.system(SystemEvent(
+            subtype: "session_started",
+            sessionId: agentSessionId,
+            tools: nil,
+            model: model,
+            claudeCodeVersion: nil
+        )))
+
+        try await runPrompt(
+            key: canonicalKey,
+            agentSessionId: agentSessionId,
+            prompt: prompt,
+            continuation: continuation
+        )
+    }
+
+    private func runReusedTurn(
+        streamId: UUID,
+        poolKey: String,
+        prompt: String,
+        model: String?,
+        continuation: AsyncStream<StreamEvent>.Continuation
+    ) async throws {
+        guard let agentSessionId = sessions[poolKey]?.agentSessionId else {
+            throw ACPError.protocolMismatch("pooled session missing agentSessionId")
+        }
+        let modelConfigId = sessions[poolKey]?.modelConfigId
+        let spec = sessions[poolKey]!.spec
+        logger.info("[ACP] reusing pooled session key=\(poolKey, privacy: .public) agentSid=\(agentSessionId, privacy: .public) client=\(spec.displayName, privacy: .public)")
+
+        // Reset per-turn state and adopt the new streamId/continuation.
+        mutateSession(poolKey) { e in
+            e.currentStreamId = streamId
+            e.continuation = continuation
+            e.liveToolCalls.removeAll()
+            e.planEmitted = false
+            e.planSyntheticId = "acp-plan-\(UUID().uuidString)"
+            e.acceptingUpdates = false
+        }
+        streamToKey[streamId] = poolKey
+
+        continuation.yield(.system(SystemEvent(
+            subtype: "init",
+            sessionId: agentSessionId,
+            tools: nil,
+            model: model,
+            claudeCodeVersion: nil
+        )))
+
+        // Apply model change if the user picked a different one for this turn.
+        if let modelConfigId, let model, !model.isEmpty {
+            let cfg = ACPModelConfig(configId: modelConfigId, currentValue: nil, options: [
+                ACPModelOption(value: model, name: model, description: nil)
+            ])
+            try await applyModelSelection(
+                key: poolKey,
+                agentSessionId: agentSessionId,
+                modelConfig: cfg,
+                model: model
+            )
+        }
+
+        continuation.yield(.system(SystemEvent(
+            subtype: "session_started",
+            sessionId: agentSessionId,
+            tools: nil,
+            model: model,
+            claudeCodeVersion: nil
+        )))
+
+        try await runPrompt(
+            key: poolKey,
+            agentSessionId: agentSessionId,
+            prompt: prompt,
+            continuation: continuation
+        )
+    }
+
+    /// Issues `session/set_config_option` to switch the agent's active model
+    /// when the user picked a different value than the one currently selected.
+    /// Best-effort: failures are logged but don't abort the turn.
+    private func applyModelSelection(
+        key: String,
+        agentSessionId: String,
+        modelConfig: ACPModelConfig?,
+        model: String?
+    ) async throws {
+        guard let modelConfig,
+              let model,
+              !model.isEmpty,
+              modelConfig.options.contains(where: { $0.value == model }),
+              modelConfig.currentValue != model
+        else { return }
+        do {
+            _ = try await sendRequest(
+                key: key,
+                method: "session/set_config_option",
+                params: [
+                    "sessionId": .string(agentSessionId),
+                    "configId": .string(modelConfig.configId),
+                    "value": .string(model)
+                ]
+            )
+        } catch {
+            logger.warning("[ACP] session/set_config_option failed for model \(model, privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private func runPrompt(
+        key: String,
+        agentSessionId: String,
+        prompt: String,
+        continuation: AsyncStream<StreamEvent>.Continuation
+    ) async throws {
+        // Flip the gate AFTER any optional `session/set_config_option`
+        // exchange so we don't accept stray updates before the prompt is
+        // actually in flight.
+        mutateSession(key) { $0.acceptingUpdates = true }
+        let promptResult = try await sendRequest(
+            key: key,
+            method: "session/prompt",
+            params: [
+                "sessionId": .string(agentSessionId),
+                "prompt": .array([.object([
+                    "type": .string("text"),
+                    "text": .string(prompt)
+                ])])
+            ]
+        )
+
+        let stopReason = promptResult.objectValue?["stopReason"]?.stringValue ?? "end_turn"
+        continuation.yield(.result(ResultEvent(
+            durationMs: nil,
+            totalCostUsd: nil,
+            sessionId: agentSessionId,
+            isError: stopReason == "refusal",
+            totalTurns: nil,
+            usage: nil,
+            contextWindow: nil
+        )))
+
+        continuation.finish()
+        if let streamId = sessions[key]?.currentStreamId {
             finalize(streamId: streamId)
         }
     }
@@ -517,7 +751,6 @@ actor ACPService {
     {
         switch launch {
         case .npx(let package, let args, let env):
-            // `npx -y <package>` so it runs without an install prompt.
             return ("/usr/bin/env", ["npx", "-y", package] + args, env)
         case .uvx(let package, let args, let env):
             return ("/usr/bin/env", ["uvx", package] + args, env)
@@ -530,36 +763,36 @@ actor ACPService {
 
     // MARK: - JSON-RPC Framing
 
-    private func sendRequest(streamId: UUID, method: String, params: [String: JSONValue])
+    private func sendRequest(key: String, method: String, params: [String: JSONValue])
         async throws -> JSONValue
     {
-        guard streams[streamId] != nil else { throw ACPError.streamClosed }
+        guard sessions[key] != nil else { throw ACPError.streamClosed }
 
-        let id = nextRequestId(streamId: streamId)
+        let id = nextRequestId(key: key)
         let frame: [String: JSONValue] = [
             "jsonrpc": .string("2.0"),
             "id": .number(Double(id)),
             "method": .string(method),
             "params": .object(params)
         ]
-        try writeFrame(streamId: streamId, frame: .object(frame))
-        logger.info("[ACP] → \(method, privacy: .public) id=\(id) stream=\(streamId.uuidString.prefix(8), privacy: .public)")
+        try writeFrame(key: key, frame: .object(frame))
+        logger.info("[ACP] → \(method, privacy: .public) id=\(id) key=\(key, privacy: .public)")
 
         return try await withCheckedThrowingContinuation { cont in
-            mutateStream(streamId) { $0.pending[id] = cont }
+            mutateSession(key) { $0.pending[id] = cont }
         }
     }
 
-    private func sendResult(streamId: UUID, id: JSONValue, result: JSONValue) {
+    private func sendResult(key: String, id: JSONValue, result: JSONValue) {
         let frame: [String: JSONValue] = [
             "jsonrpc": .string("2.0"),
             "id": id,
             "result": result
         ]
-        try? writeFrame(streamId: streamId, frame: .object(frame))
+        try? writeFrame(key: key, frame: .object(frame))
     }
 
-    private func sendError(streamId: UUID, id: JSONValue, code: Int, message: String) {
+    private func sendError(key: String, id: JSONValue, code: Int, message: String) {
         let frame: [String: JSONValue] = [
             "jsonrpc": .string("2.0"),
             "id": id,
@@ -568,30 +801,30 @@ actor ACPService {
                 "message": .string(message)
             ])
         ]
-        try? writeFrame(streamId: streamId, frame: .object(frame))
+        try? writeFrame(key: key, frame: .object(frame))
     }
 
-    private func writeFrame(streamId: UUID, frame: JSONValue) throws {
-        guard let entry = streams[streamId] else { throw ACPError.streamClosed }
+    private func writeFrame(key: String, frame: JSONValue) throws {
+        guard let entry = sessions[key] else { throw ACPError.streamClosed }
         let data = try JSONEncoder().encode(frame)
         var line = data
-        line.append(0x0A) // newline
+        line.append(0x0A)
         try entry.stdin.write(contentsOf: line)
     }
 
-    private func nextRequestId(streamId: UUID) -> Int {
+    private func nextRequestId(key: String) -> Int {
         var id = 0
-        mutateStream(streamId) { entry in
+        mutateSession(key) { entry in
             id = entry.nextId
             entry.nextId += 1
         }
         return id
     }
 
-    private func mutateStream(_ streamId: UUID, _ mutate: (inout StreamEntry) -> Void) {
-        guard var entry = streams[streamId] else { return }
+    private func mutateSession(_ key: String, _ mutate: (inout SessionEntry) -> Void) {
+        guard var entry = sessions[key] else { return }
         mutate(&entry)
-        streams[streamId] = entry
+        sessions[key] = entry
     }
 
     // MARK: - Read Loop
@@ -603,7 +836,7 @@ actor ACPService {
     // arrives, and split into newline-delimited frames ourselves.
 
     private static func spawnStdoutReader(
-        streamId: UUID,
+        key: String,
         stdout: FileHandle,
         service: ACPService
     ) -> Task<Void, Never> {
@@ -623,12 +856,11 @@ actor ACPService {
         }
 
         return Task.detached { [weak service] in
-            let shortId = String(streamId.uuidString.prefix(8))
-            await service?.logReaderStarted(shortId: shortId)
+            await service?.logReaderStarted(key: key)
             var buffer = Data()
             for await chunk in chunkStream {
                 if Task.isCancelled {
-                    await service?.logReaderCancelled(shortId: shortId)
+                    await service?.logReaderCancelled(key: key)
                     stdout.readabilityHandler = nil
                     return
                 }
@@ -638,32 +870,35 @@ actor ACPService {
                     buffer.removeSubrange(buffer.startIndex...nlIdx)
                     guard !lineData.isEmpty,
                           let line = String(data: lineData, encoding: .utf8) else { continue }
-                    await service?.deliverStdoutLine(streamId: streamId, line: line, data: lineData)
+                    await service?.deliverStdoutLine(key: key, line: line, data: lineData)
                 }
             }
-            await service?.logReaderEOF(shortId: shortId)
+            await service?.logReaderEOF(key: key)
         }
     }
 
-    fileprivate func logReaderStarted(shortId: String) {
-        logger.info("[ACP] read loop started for stream=\(shortId, privacy: .public)")
+    fileprivate func logReaderStarted(key: String) {
+        logger.info("[ACP] read loop started for key=\(key, privacy: .public)")
     }
-    fileprivate func logReaderCancelled(shortId: String) {
-        logger.info("[ACP] read loop cancelled for stream=\(shortId, privacy: .public)")
+    fileprivate func logReaderCancelled(key: String) {
+        logger.info("[ACP] read loop cancelled for key=\(key, privacy: .public)")
     }
-    fileprivate func logReaderEOF(shortId: String) {
-        logger.info("[ACP] read loop EOF for stream=\(shortId, privacy: .public)")
+    fileprivate func logReaderEOF(key: String) {
+        logger.info("[ACP] read loop EOF for key=\(key, privacy: .public)")
     }
     fileprivate func logReaderError(error: Error) {
         logger.warning("[ACP] read loop error: \(error.localizedDescription, privacy: .public)")
     }
 
-    fileprivate func deliverStdoutLine(streamId: UUID, line: String, data: Data) async {
+    fileprivate func deliverStdoutLine(key: String, line: String, data: Data) async {
+        // Resolve the latest canonical key in case the entry has been
+        // re-keyed (bootstrap key → agent sessionId).
+        let resolved = aliasToCanonical[key] ?? key
         logger.info("[ACP][stdout] \(line.prefix(400), privacy: .public)")
-        await handleIncoming(streamId: streamId, data: data)
+        await handleIncoming(key: resolved, data: data)
     }
 
-    private func handleIncoming(streamId: UUID, data: Data) async {
+    private func handleIncoming(key: String, data: Data) async {
         let value: JSONValue
         do {
             value = try JSONDecoder().decode(JSONValue.self, from: data)
@@ -675,7 +910,7 @@ actor ACPService {
 
         // Response (has "id" and "result"/"error", no "method").
         if obj["method"] == nil, let idVal = obj["id"], let idInt = idVal.intValue {
-            resolveResponse(streamId: streamId, id: idInt, body: obj)
+            resolveResponse(key: key, id: idInt, body: obj)
             return
         }
 
@@ -684,21 +919,19 @@ actor ACPService {
         let params = obj["params"] ?? .null
 
         if let idVal = obj["id"] {
-            // Server-initiated request: respond.
-            await handleAgentRequest(streamId: streamId, id: idVal, method: method, params: params)
+            await handleAgentRequest(key: key, id: idVal, method: method, params: params)
         } else {
-            // Notification.
-            handleAgentNotification(streamId: streamId, method: method, params: params)
+            handleAgentNotification(key: key, method: method, params: params)
         }
     }
 
-    private func resolveResponse(streamId: UUID, id: Int, body: [String: JSONValue]) {
+    private func resolveResponse(key: String, id: Int, body: [String: JSONValue]) {
         var cont: CheckedContinuation<JSONValue, Error>?
-        mutateStream(streamId) { entry in
+        mutateSession(key) { entry in
             cont = entry.pending.removeValue(forKey: id)
         }
         guard let cont else {
-            logger.warning("[ACP] ← response id=\(id) had no pending continuation stream=\(streamId.uuidString.prefix(8), privacy: .public)")
+            logger.warning("[ACP] ← response id=\(id) had no pending continuation key=\(key, privacy: .public)")
             return
         }
         if let err = body["error"]?.objectValue {
@@ -715,29 +948,26 @@ actor ACPService {
 
     // MARK: - Agent Notifications
 
-    private func handleAgentNotification(streamId: UUID, method: String, params: JSONValue) {
+    private func handleAgentNotification(key: String, method: String, params: JSONValue) {
         switch method {
         case "session/update":
-            // Drop updates that arrive before `session/prompt` is sent — those
-            // are the agent's replay of historical content from `session/load`
-            // and would duplicate prior messages in the UI.
-            guard streams[streamId]?.acceptingUpdates == true else {
+            guard sessions[key]?.acceptingUpdates == true else {
                 let kind = params.objectValue?["update"]?.objectValue?["sessionUpdate"]?.stringValue ?? "<unknown>"
                 logger.info("[ACP] ⟵ pre-prompt session/update dropped kind=\(kind, privacy: .public)")
                 return
             }
-            handleSessionUpdate(streamId: streamId, params: params)
+            handleSessionUpdate(key: key, params: params)
         default:
             logger.warning("[ACP] ⟵ unknown notification: \(method, privacy: .public)")
         }
     }
 
-    private func handleSessionUpdate(streamId: UUID, params: JSONValue) {
+    private func handleSessionUpdate(key: String, params: JSONValue) {
         guard let p = params.objectValue,
               let update = p["update"]?.objectValue,
               let kind = update["sessionUpdate"]?.stringValue,
-              let continuation = streams[streamId]?.continuation else {
-            logger.warning("[ACP] session/update missing fields or no continuation stream=\(streamId.uuidString.prefix(8), privacy: .public)")
+              let continuation = sessions[key]?.continuation else {
+            logger.warning("[ACP] session/update missing fields or no continuation key=\(key, privacy: .public)")
             return
         }
 
@@ -745,12 +975,6 @@ actor ACPService {
         case "agent_message_chunk":
             if let text = update["content"]?.objectValue?["text"]?.stringValue {
                 logger.info("[ACP] ⟵ agent_message_chunk len=\(text.count)")
-                // Route through the Claude `content_block_delta` / `text_delta`
-                // pipeline so consecutive chunks accumulate into the same
-                // streaming assistant bubble via `state.textDeltaBuffer`. The
-                // `.assistant(.text(_))` path only flushes the first chunk per
-                // turn (dedup guard in `processStream`), so it was dropping
-                // every chunk after the first.
                 continuation.yield(.unknown(Self.textDeltaFrame(text)))
             } else {
                 logger.warning("[ACP] agent_message_chunk had no text content")
@@ -759,33 +983,29 @@ actor ACPService {
         case "agent_thought_chunk":
             if let text = update["content"]?.objectValue?["text"]?.stringValue {
                 logger.info("[ACP] ⟵ agent_thought_chunk len=\(text.count)")
-                // Only the `isThinking` flag flip in `handlePartialEvent` is
-                // wired up for thinking text; emitting a thinking_delta is
-                // enough to surface the "thinking…" indicator in the UI.
                 continuation.yield(.unknown(Self.thinkingDeltaFrame(text)))
             }
 
         case "plan":
             let entries = update["entries"]?.arrayValue?.count ?? 0
             logger.info("[ACP] ⟵ plan entries=\(entries)")
-            handlePlanUpdate(streamId: streamId, update: update, continuation: continuation)
+            handlePlanUpdate(key: key, update: update, continuation: continuation)
 
         case "tool_call":
-            handleToolCall(streamId: streamId, update: update, continuation: continuation)
+            handleToolCall(key: key, update: update, continuation: continuation)
 
         case "tool_call_update":
-            handleToolCallUpdate(streamId: streamId, update: update, continuation: continuation)
+            handleToolCallUpdate(key: key, update: update, continuation: continuation)
 
         default:
             logger.warning("[ACP] ⟵ unhandled sessionUpdate kind: \(kind, privacy: .public)")
         }
     }
 
-    private func handlePlanUpdate(streamId: UUID, update: [String: JSONValue],
+    private func handlePlanUpdate(key: String, update: [String: JSONValue],
                                    continuation: AsyncStream<StreamEvent>.Continuation) {
         guard let entries = update["entries"]?.arrayValue else { return }
 
-        // Render a markdown checklist so the existing PlanCardView renders it.
         var markdown = "# Plan\n\n"
         for entry in entries {
             guard let obj = entry.objectValue else { continue }
@@ -800,7 +1020,7 @@ actor ACPService {
             markdown += "\(mark)\(content)\n"
         }
 
-        let planId = streams[streamId]?.planSyntheticId ?? "acp-plan"
+        let planId = sessions[key]?.planSyntheticId ?? "acp-plan"
         continuation.yield(.assistant(AssistantMessage(
             role: "assistant",
             content: [.toolUse(
@@ -809,28 +1029,30 @@ actor ACPService {
                 input: ["plan": .string(markdown)]
             )]
         )))
-        mutateStream(streamId) { $0.planEmitted = true }
+        mutateSession(key) { $0.planEmitted = true }
     }
 
-    private func handleToolCall(streamId: UUID, update: [String: JSONValue],
+    private func handleToolCall(key: String, update: [String: JSONValue],
                                  continuation: AsyncStream<StreamEvent>.Continuation) {
         guard let toolCallId = update["toolCallId"]?.stringValue else {
             logger.warning("[ACP] tool_call missing toolCallId")
             return
         }
         let title = update["title"]?.stringValue ?? update["kind"]?.stringValue ?? "tool"
+        let kind = update["kind"]?.stringValue
         let rawInput = update["rawInput"]?.objectValue ?? [:]
-        logger.info("[ACP] ⟵ tool_call id=\(toolCallId, privacy: .public) name=\(title, privacy: .public) inputKeys=[\(rawInput.keys.sorted().joined(separator: ","), privacy: .public)]")
+        let normalized = Self.normalizeToolCall(kind: kind, title: title, update: update, rawInput: rawInput)
+        logger.info("[ACP] ⟵ tool_call id=\(toolCallId, privacy: .public) name=\(normalized.name, privacy: .public) kind=\(kind ?? "<nil>", privacy: .public) inputKeys=[\(normalized.input.keys.sorted().joined(separator: ","), privacy: .public)]")
 
-        mutateStream(streamId) { $0.liveToolCalls.insert(toolCallId) }
+        mutateSession(key) { $0.liveToolCalls.insert(toolCallId) }
 
         continuation.yield(.assistant(AssistantMessage(
             role: "assistant",
-            content: [.toolUse(id: toolCallId, name: title, input: rawInput)]
+            content: [.toolUse(id: toolCallId, name: normalized.name, input: normalized.input)]
         )))
     }
 
-    private func handleToolCallUpdate(streamId: UUID, update: [String: JSONValue],
+    private func handleToolCallUpdate(key: String, update: [String: JSONValue],
                                        continuation: AsyncStream<StreamEvent>.Continuation) {
         guard let toolCallId = update["toolCallId"]?.stringValue else {
             logger.warning("[ACP] tool_call_update missing toolCallId")
@@ -838,6 +1060,24 @@ actor ACPService {
         }
         let status = update["status"]?.stringValue ?? "completed"
         logger.info("[ACP] ⟵ tool_call_update id=\(toolCallId, privacy: .public) status=\(status, privacy: .public)")
+
+        // If the update carries diff content (ACP allows the agent to attach
+        // diffs on either tool_call or tool_call_update), re-emit a toolUse
+        // with the merged input so AppState can persist the file edit when the
+        // result lands. AppState merges by toolCallId, so this patches the
+        // existing block in place rather than appending a duplicate.
+        let diffEntries = Self.diffEntries(in: update)
+        if !diffEntries.isEmpty {
+            let kind = update["kind"]?.stringValue
+            let title = update["title"]?.stringValue ?? kind ?? "tool"
+            let rawInput = update["rawInput"]?.objectValue ?? [:]
+            let normalized = Self.normalizeToolCall(kind: kind ?? "edit", title: title, update: update, rawInput: rawInput)
+            logger.info("[ACP] ⟵ tool_call_update id=\(toolCallId, privacy: .public) carrying diffs=\(diffEntries.count) → patching toolUse name=\(normalized.name, privacy: .public)")
+            continuation.yield(.assistant(AssistantMessage(
+                role: "assistant",
+                content: [.toolUse(id: toolCallId, name: normalized.name, input: normalized.input)]
+            )))
+        }
 
         // Compose tool result text from rawOutput or content[]
         var resultText = ""
@@ -867,54 +1107,54 @@ actor ACPService {
 
     // MARK: - Agent Requests (server-initiated)
 
-    private func handleAgentRequest(streamId: UUID, id: JSONValue, method: String, params: JSONValue) async {
-        logger.info("[ACP] ⟵ agent-request \(method, privacy: .public) stream=\(streamId.uuidString.prefix(8), privacy: .public)")
+    private func handleAgentRequest(key: String, id: JSONValue, method: String, params: JSONValue) async {
+        logger.info("[ACP] ⟵ agent-request \(method, privacy: .public) key=\(key, privacy: .public)")
         switch method {
         case "fs/read_text_file":
-            await handleFsReadTextFile(streamId: streamId, id: id, params: params)
+            await handleFsReadTextFile(key: key, id: id, params: params)
         case "fs/write_text_file":
-            await handleFsWriteTextFile(streamId: streamId, id: id, params: params)
+            await handleFsWriteTextFile(key: key, id: id, params: params)
         case "session/request_permission":
-            await handleSessionRequestPermission(streamId: streamId, id: id, params: params)
+            await handleSessionRequestPermission(key: key, id: id, params: params)
         default:
             logger.warning("[ACP] unsupported agent-request: \(method, privacy: .public)")
-            sendError(streamId: streamId, id: id, code: -32601, message: "Method not supported: \(method)")
+            sendError(key: key, id: id, code: -32601, message: "Method not supported: \(method)")
         }
     }
 
-    private func handleFsReadTextFile(streamId: UUID, id: JSONValue, params: JSONValue) async {
+    private func handleFsReadTextFile(key: String, id: JSONValue, params: JSONValue) async {
         guard let path = params.objectValue?["path"]?.stringValue else {
-            sendError(streamId: streamId, id: id, code: -32602, message: "Missing path")
+            sendError(key: key, id: id, code: -32602, message: "Missing path")
             return
         }
         do {
             let line = params.objectValue?["line"]?.intValue
             let limit = params.objectValue?["limit"]?.intValue
             let content = try Self.readTextFile(path: path, line: line, limit: limit)
-            sendResult(streamId: streamId, id: id, result: .object(["content": .string(content)]))
+            sendResult(key: key, id: id, result: .object(["content": .string(content)]))
         } catch {
-            sendError(streamId: streamId, id: id, code: -32000, message: error.localizedDescription)
+            sendError(key: key, id: id, code: -32000, message: error.localizedDescription)
         }
     }
 
-    private func handleFsWriteTextFile(streamId: UUID, id: JSONValue, params: JSONValue) async {
+    private func handleFsWriteTextFile(key: String, id: JSONValue, params: JSONValue) async {
         guard let path = params.objectValue?["path"]?.stringValue,
               let content = params.objectValue?["content"]?.stringValue else {
-            sendError(streamId: streamId, id: id, code: -32602, message: "Missing path or content")
+            sendError(key: key, id: id, code: -32602, message: "Missing path or content")
             return
         }
         do {
             try Self.writeTextFile(path: path, content: content)
-            sendResult(streamId: streamId, id: id, result: .object([:]))
+            sendResult(key: key, id: id, result: .object([:]))
         } catch {
-            sendError(streamId: streamId, id: id, code: -32000, message: error.localizedDescription)
+            sendError(key: key, id: id, code: -32000, message: error.localizedDescription)
         }
     }
 
-    private func handleSessionRequestPermission(streamId: UUID, id: JSONValue, params: JSONValue) async {
-        guard let entry = streams[streamId] else {
-            logger.warning("[ACP] permission request arrived for closed stream")
-            sendError(streamId: streamId, id: id, code: -32000, message: "Stream closed")
+    private func handleSessionRequestPermission(key: String, id: JSONValue, params: JSONValue) async {
+        guard let entry = sessions[key] else {
+            logger.warning("[ACP] permission request arrived for closed session")
+            sendError(key: key, id: id, code: -32000, message: "Session closed")
             return
         }
         let toolCall = params.objectValue?["toolCall"]?.objectValue ?? [:]
@@ -924,12 +1164,11 @@ actor ACPService {
         logger.info("[ACP] permission request tool=\(toolName, privacy: .public) id=\(toolCallId, privacy: .public)")
 
         guard let server = permissionServer else {
-            // No permission server registered — auto-allow so the agent doesn't hang.
             let optionId = params.objectValue?["options"]?.arrayValue?
                 .first(where: { $0.objectValue?["kind"]?.stringValue == "allow_once" })?
                 .objectValue?["optionId"]?.stringValue ?? "allow"
             logger.warning("[ACP] no permission server — auto-allowing \(toolName, privacy: .public) via optionId=\(optionId, privacy: .public)")
-            sendResult(streamId: streamId, id: id, result: .object([
+            sendResult(key: key, id: id, result: .object([
                 "outcome": .object([
                     "outcome": .string("selected"),
                     "optionId": .string(optionId)
@@ -947,7 +1186,6 @@ actor ACPService {
         )
         logger.info("[ACP] permission decision tool=\(toolName, privacy: .public) decision=\(String(describing: decision), privacy: .public)")
 
-        // Map RxCode decision to an ACP option from the options[] array, defaulting to allow_once / reject_once.
         let options = params.objectValue?["options"]?.arrayValue ?? []
         let wantKind: String
         switch decision {
@@ -961,7 +1199,7 @@ actor ACPService {
         let optionId = chosen?.objectValue?["optionId"]?.stringValue ?? wantKind
         logger.info("[ACP] permission reply wantKind=\(wantKind, privacy: .public) optionId=\(optionId, privacy: .public)")
 
-        sendResult(streamId: streamId, id: id, result: .object([
+        sendResult(key: key, id: id, result: .object([
             "outcome": .object([
                 "outcome": .string("selected"),
                 "optionId": .string(optionId)
@@ -1012,7 +1250,6 @@ actor ACPService {
             for entry in opts {
                 guard let entryObj = entry.objectValue else { continue }
                 if let groupOpts = entryObj["options"]?.arrayValue {
-                    // SessionConfigSelectGroup — flatten its options.
                     for groupEntry in groupOpts {
                         if let parsed = parseSelectOption(groupEntry) {
                             flattened.append(parsed)
@@ -1030,6 +1267,102 @@ actor ACPService {
             )
         }
         return nil
+    }
+
+    // MARK: - Tool Call Normalization
+    //
+    // ACP `tool_call` notifications expose two views of a tool invocation:
+    // a machine-readable `kind` ("edit", "execute", "read", …) and a
+    // human-readable `title`. The agent's `rawInput` is opaque (each agent
+    // chooses its own schema), but the optional `content` array surfaces
+    // structured `diff` entries (`{path, oldText, newText}`) that we can
+    // translate into the Claude-shaped `Edit`/`Write`/`MultiEdit` input keys
+    // the rest of RxCode (sidebar persistence, diff renderer, plan card)
+    // already understands.
+
+    private struct NormalizedToolCall {
+        let name: String
+        let input: [String: JSONValue]
+    }
+
+    /// Extracts `{type: "diff", path, oldText, newText}` entries from a
+    /// session/update payload's `content` array. Returns `[]` for non-edit
+    /// kinds or absent content.
+    private static func diffEntries(in update: [String: JSONValue]) -> [(path: String, oldText: String?, newText: String)] {
+        guard let content = update["content"]?.arrayValue else { return [] }
+        var out: [(path: String, oldText: String?, newText: String)] = []
+        for entry in content {
+            guard let obj = entry.objectValue,
+                  obj["type"]?.stringValue == "diff",
+                  let path = obj["path"]?.stringValue,
+                  let newText = obj["newText"]?.stringValue
+            else { continue }
+            let oldText = obj["oldText"]?.stringValue
+            out.append((path: path, oldText: oldText, newText: newText))
+        }
+        return out
+    }
+
+    /// Translates an ACP tool_call payload into a Claude-shaped (name, input).
+    /// Edit-kind calls with diff content become `Edit`/`Write`/`MultiEdit` so
+    /// `ChatMessage.fileEditHunks` and `editedFilePath` can extract the path
+    /// and hunks for sidebar persistence. Other kinds fall back to the agent's
+    /// title + rawInput unchanged.
+    private static func normalizeToolCall(
+        kind: String?,
+        title: String,
+        update: [String: JSONValue],
+        rawInput: [String: JSONValue]
+    ) -> NormalizedToolCall {
+        let normalizedKind = (kind ?? "").lowercased()
+        let diffs = diffEntries(in: update)
+        if normalizedKind == "edit" || !diffs.isEmpty {
+            if !diffs.isEmpty {
+                if diffs.count == 1 {
+                    let only = diffs[0]
+                    let oldText = only.oldText ?? ""
+                    if oldText.isEmpty {
+                        return NormalizedToolCall(
+                            name: "Write",
+                            input: [
+                                "file_path": .string(only.path),
+                                "content": .string(only.newText)
+                            ]
+                        )
+                    }
+                    return NormalizedToolCall(
+                        name: "Edit",
+                        input: [
+                            "file_path": .string(only.path),
+                            "old_string": .string(oldText),
+                            "new_string": .string(only.newText)
+                        ]
+                    )
+                }
+                let primaryPath = diffs.first!.path
+                let edits: [JSONValue] = diffs.filter { $0.path == primaryPath }.map { d in
+                    .object([
+                        "old_string": .string(d.oldText ?? ""),
+                        "new_string": .string(d.newText)
+                    ])
+                }
+                return NormalizedToolCall(
+                    name: "MultiEdit",
+                    input: [
+                        "file_path": .string(primaryPath),
+                        "edits": .array(edits)
+                    ]
+                )
+            }
+            var input = rawInput
+            if input["file_path"] == nil,
+               let path = (update["locations"]?.arrayValue?.first?.objectValue?["path"]?.stringValue) {
+                input["file_path"] = .string(path)
+            }
+            return NormalizedToolCall(name: "Edit", input: input)
+        }
+
+        return NormalizedToolCall(name: title, input: rawInput)
     }
 
     /// Wraps a text chunk in the same raw-event shape Claude's CLI emits, so
@@ -1074,9 +1407,7 @@ actor ACPService {
 
     // MARK: - Process Lifecycle
 
-    private func startStderrReader(streamId: UUID, stderr: FileHandle) {
-        // Same rationale as `spawnStdoutReader`: avoid `FileHandle.bytes.lines`
-        // and pump from `readabilityHandler` instead.
+    private func startStderrReader(key: String, stderr: FileHandle) {
         let chunkStream = AsyncStream<Data> { continuation in
             stderr.readabilityHandler = { handle in
                 let data = handle.availableData
@@ -1104,29 +1435,34 @@ actor ACPService {
                     let lineData = buffer.subdata(in: buffer.startIndex..<nlIdx)
                     buffer.removeSubrange(buffer.startIndex...nlIdx)
                     guard let line = String(data: lineData, encoding: .utf8) else { continue }
-                    await self?.appendStderr(streamId: streamId, line: line)
+                    await self?.appendStderr(key: key, line: line)
                 }
             }
         }
     }
 
-    private func appendStderr(streamId: UUID, line: String) {
-        mutateStream(streamId) { $0.stderr += line + "\n" }
+    private func appendStderr(key: String, line: String) {
+        let resolved = aliasToCanonical[key] ?? key
+        mutateSession(resolved) { $0.stderr += line + "\n" }
         let trimmed = line.trimmingCharacters(in: .whitespaces)
         if !trimmed.isEmpty {
             logger.info("[ACP][stderr] \(trimmed, privacy: .public)")
         }
     }
 
-    private func handleProcessExit(streamId: UUID) {
-        guard let entry = streams[streamId] else { return }
+    private func handleProcessExit(key: String) {
+        let resolved = aliasToCanonical[key] ?? key
+        guard let entry = sessions[resolved] else { return }
         logger.info("[ACP] process exit pid=\(entry.process.processIdentifier) status=\(entry.process.terminationStatus) reason=\(String(describing: entry.process.terminationReason.rawValue), privacy: .public) pending=\(entry.pending.count) client=\(entry.spec.displayName, privacy: .public)")
-        // If pending requests remain, fail them so the turn surfaces an error.
         for (_, cont) in entry.pending {
             cont.resume(throwing: ACPError.processExited(code: entry.process.terminationStatus))
         }
-        mutateStream(streamId) { $0.pending.removeAll() }
+        mutateSession(resolved) { $0.pending.removeAll() }
         entry.continuation?.finish()
+        // Drop the entire pool entry — once the agent process is gone we
+        // can't reuse it for the next turn anyway. The next `send()` will
+        // spawn fresh.
+        killSession(key: resolved)
     }
 }
 

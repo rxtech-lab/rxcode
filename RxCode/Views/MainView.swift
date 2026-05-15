@@ -483,22 +483,32 @@ struct ChatToolbarControls: View {
 
             Menu {
                 Section("Model Picker") {
-                    ForEach(appState.availableAgentModelSections(), id: \.provider) { section in
-                        Section(section.provider.displayName) {
+                    ForEach(appState.availableAgentModelSections(), id: \.id) { section in
+                        Section {
                             ForEach(section.models, id: \.key) { model in
                                 Button {
                                     appState.setSessionModel(model.id, provider: model.provider, in: windowState)
                                 } label: {
                                     let isSelected = effectiveProvider == model.provider && effectiveModel == model.id
-                                    Text(isSelected ? "\(model.displayName) ✓" : model.displayName)
+                                    if let iconURL = section.iconURL {
+                                        Label {
+                                            Text(isSelected ? "\(model.displayName) ✓" : model.displayName)
+                                        } icon: {
+                                            ACPIconView(url: iconURL, size: 14)
+                                        }
+                                    } else {
+                                        Text(isSelected ? "\(model.displayName) ✓" : model.displayName)
+                                    }
                                 }
                             }
+                        } header: {
+                            Text(section.title)
                         }
                     }
                 }
             } label: {
                 controlLabel(
-                    title: "\(effectiveProvider == .codex ? "Codex · " : "")\(AppState.modelDisplayName(effectiveModel, provider: effectiveProvider))",
+                    title: "\(effectiveProvider == .codex ? "Codex · " : "")\(appState.modelDisplayLabel(effectiveModel, provider: effectiveProvider))",
                     icon: nil,
                     isAccent: false,
                     isActive: false
@@ -506,7 +516,7 @@ struct ChatToolbarControls: View {
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
-            .help("Model: \(effectiveProvider.displayName) · \(AppState.modelDisplayName(effectiveModel, provider: effectiveProvider))")
+            .help("Model: \(effectiveProvider.displayName) · \(appState.modelDisplayLabel(effectiveModel, provider: effectiveProvider))")
 
             Menu {
                 Section("Effort Picker") {
@@ -789,12 +799,17 @@ struct ModelPickerSheet: View {
                 .foregroundStyle(ClaudeTheme.textPrimary)
 
             VStack(spacing: 8) {
-                ForEach(appState.availableAgentModelSections(), id: \.provider) { section in
+                ForEach(appState.availableAgentModelSections(), id: \.id) { section in
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(section.provider.displayName)
-                            .font(.system(size: ClaudeTheme.size(11), weight: .semibold))
-                            .foregroundStyle(ClaudeTheme.textTertiary)
-                            .padding(.horizontal, 4)
+                        HStack(spacing: 6) {
+                            if let iconURL = section.iconURL {
+                                ACPIconView(url: iconURL, size: 14)
+                            }
+                            Text(section.title)
+                                .font(.system(size: ClaudeTheme.size(11), weight: .semibold))
+                                .foregroundStyle(ClaudeTheme.textTertiary)
+                        }
+                        .padding(.horizontal, 4)
 
                         ForEach(section.models, id: \.key) { model in
                             let index = flatModels.firstIndex(where: { $0.key == model.key }) ?? 0

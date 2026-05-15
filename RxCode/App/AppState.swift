@@ -1,8 +1,8 @@
 import Foundation
-import RxCodeCore
-import SwiftUI
 import os
 import RxCodeChatKit
+import RxCodeCore
+import SwiftUI
 
 // MARK: - Per-Session Stream State
 
@@ -27,7 +27,7 @@ struct SessionStreamState {
     // Streaming
     var isStreaming = false
     var isThinking = false
-    var needsNewMessage = false   // After receiving .user(tool result), the next block starts a new ChatMessage
+    var needsNewMessage = false // After receiving .user(tool result), the next block starts a new ChatMessage
     var activeStreamId: UUID?
     var streamingStartDate: Date?
     var streamTask: Task<Void, Never>?
@@ -39,12 +39,14 @@ struct SessionStreamState {
     var flushTask: Task<Void, Never>?
 
     // tool_use input streaming buffer
-    var activeToolId: String?           // tool_use id currently receiving input_json_delta
-    var activeToolInputBuffer: String = ""  // accumulator for input_json_delta
+    var activeToolId: String? // tool_use id currently receiving input_json_delta
+    var activeToolInputBuffer: String = "" // accumulator for input_json_delta
 
     // Per-session overrides (persisted in memory across session switches)
     var agentProvider: AgentProvider?
     var model: String?
+    /// Identifies which `ACPClientSpec` to use when `agentProvider == .acp`.
+    var acpClientId: String?
     var effort: String?
     var permissionMode: PermissionMode?
     /// Per-session plan-mode toggle. When true, the CLI is launched with `--permission-mode plan`
@@ -82,6 +84,7 @@ struct SessionStreamState {
     var currentTurnOutputTokens: Int {
         currentTurnOutputTokensByMessage.values.reduce(0, +) + currentTurnOutputTokensUnkeyed
     }
+
     var lastTurnContextUsedPercentage: Double?
     var activeModelName: String?
 
@@ -105,11 +108,9 @@ enum SummarizationProvider: String, CaseIterable, Identifiable {
     }
 }
 
-
 @Observable
 @MainActor
 final class AppState {
-
     // MARK: - Logger
 
     private let logger = Logger(subsystem: "com.claudework", category: "AppState")
@@ -141,13 +142,14 @@ final class AppState {
 
     // MARK: - Theme
 
-    var selectedTheme: AppTheme = AppTheme(rawValue: UserDefaults.standard.string(forKey: "selectedTheme") ?? "") ?? .claude {
+    var selectedTheme: AppTheme = .init(rawValue: UserDefaults.standard.string(forKey: "selectedTheme") ?? "") ?? .claude {
         didSet {
             UserDefaults.standard.set(selectedTheme.rawValue, forKey: "selectedTheme")
             ThemeStore.shared.current = selectedTheme
             themeRevision += 1
         }
     }
+
     /// Incrementing causes NavigationSplitView to rebuild and immediately apply theme colors
     var themeRevision: Int = 0
 
@@ -210,11 +212,110 @@ final class AppState {
         }
     }
 
-    func availableAgentModelSections() -> [(provider: AgentProvider, models: [AgentModel])] {
-        [
-            (.claudeCode, Self.availableClaudeModels),
-            (.codex, Self.availableCodexModels(codexModels))
+    func availableAgentModelSections() -> [(id: String, title: String, provider: AgentProvider, iconURL: String?, models: [AgentModel])] {
+        var sections: [(id: String, title: String, provider: AgentProvider, iconURL: String?, models: [AgentModel])] = [
+            ("claudeCode", AgentProvider.claudeCode.displayName, .claudeCode, nil, Self.availableClaudeModels),
+            ("codex", AgentProvider.codex.displayName, .codex, nil, Self.availableCodexModels(codexModels)),
         ]
+
+        // Each enabled ACP client becomes its own section, titled with the
+        // client's display name (e.g. "gemini-cli"). Model ids are prefixed
+        // with the client id so the selection round-trips back to the right client.
+        // When no models were discovered, inject a synthetic "Default" entry
+        // (empty model id) so the client is still selectable in the picker —
+        // the agent picks its own default at session start.
+        for client in acpClients where client.enabled {
+            let models: [AgentModel]
+            if let options = client.modelOptions, !options.isEmpty {
+                models = options.map { option in
+                    AgentModel(
+                        provider: .acp,
+                        id: "\(client.id)::\(option.value)",
+                        displayName: option.name.isEmpty ? option.value : Self.stripACPProviderPrefix(option.name),
+                        description: option.description ?? "ACP client \(client.displayName)"
+                    )
+                }
+            } else if client.models.isEmpty {
+                models = [AgentModel(
+                    provider: .acp,
+                    id: "\(client.id)::",
+                    displayName: "Default",
+                    description: "ACP client \(client.displayName)"
+                )]
+            } else {
+                models = client.models.map { model in
+                    AgentModel(
+                        provider: .acp,
+                        id: "\(client.id)::\(model)",
+                        displayName: model,
+                        description: "ACP client \(client.displayName)"
+                    )
+                }
+            }
+            sections.append(("acp:\(client.id)", client.displayName, .acp, client.iconURL, models))
+        }
+        return sections
+    }
+
+    /// Splits an ACP model key `<clientId>::<model>` into its parts.
+    static func splitACPModelKey(_ key: String) -> (clientId: String, model: String)? {
+        let parts = key.components(separatedBy: "::")
+        guard parts.count == 2 else { return nil }
+        return (parts[0], parts[1])
+    }
+
+    private func acpSelectionParts(for model: String?) -> (clientId: String, model: String)? {
+        guard let model, !model.isEmpty else { return nil }
+        if let parts = Self.splitACPModelKey(model) {
+            return parts
+        }
+        if acpClients.contains(where: { $0.id == model }) {
+            return (model, "")
+        }
+        if !selectedACPClientId.isEmpty {
+            return (selectedACPClientId, model)
+        }
+        if let client = acpClients.first(where: { $0.enabled && ($0.modelOptions?.contains(where: { $0.value == model }) ?? false) }) {
+            return (client.id, model)
+        }
+        if let client = acpClients.first(where: { $0.enabled && $0.models.contains(model) }) {
+            return (client.id, model)
+        }
+        return nil
+    }
+
+    private func acpModelDisplayName(client: ACPClientSpec, model: String) -> String {
+        if model.isEmpty {
+            return "Default"
+        }
+        if let option = client.modelOptions?.first(where: { $0.value == model }),
+           !option.name.isEmpty
+        {
+            return Self.stripACPProviderPrefix(option.name)
+        }
+        return model
+    }
+
+    /// Drops the leading `<provider>/` segment from an ACP model option name
+    /// when the picker already shows the client name to the left. Example:
+    /// `"OpenCode Zen/MiniMax M2.5 Free"` → `"MiniMax M2.5 Free"`. Names
+    /// without a `/` are returned unchanged.
+    static func stripACPProviderPrefix(_ name: String) -> String {
+        guard let slash = name.lastIndex(of: "/") else { return name }
+        let tail = name[name.index(after: slash)...].trimmingCharacters(in: .whitespaces)
+        return tail.isEmpty ? name : String(tail)
+    }
+
+    /// Human-readable label for a model id, resolving ACP keys (`<clientId>::<model>`)
+    /// to the client's display name plus the underlying model id ("Default" when empty).
+    func modelDisplayLabel(_ model: String, provider: AgentProvider) -> String {
+        if provider == .acp, let parts = acpSelectionParts(for: model) {
+            guard let client = acpClients.first(where: { $0.id == parts.clientId }) else {
+                return parts.model.isEmpty ? "ACP · Default" : "ACP · \(parts.model)"
+            }
+            return "\(client.displayName) · \(acpModelDisplayName(client: client, model: parts.model))"
+        }
+        return Self.modelDisplayName(model, provider: provider)
     }
 
     static func modelDisplayName(_ model: String) -> String {
@@ -259,27 +360,28 @@ final class AppState {
         }
         let key: String
         switch model {
-        case "default":   key = "model.desc.default"
-        case "best":      key = "model.desc.best"
-        case "opus":      key = "model.desc.opus"
-        case "opus[1m]":  key = "model.desc.opus1m"
-        case "opusplan":  key = "model.desc.opusplan"
-        case "sonnet":    key = "model.desc.sonnet"
+        case "default": key = "model.desc.default"
+        case "best": key = "model.desc.best"
+        case "opus": key = "model.desc.opus"
+        case "opus[1m]": key = "model.desc.opus1m"
+        case "opusplan": key = "model.desc.opusplan"
+        case "sonnet": key = "model.desc.sonnet"
         case "sonnet[1m]": key = "model.desc.sonnet1m"
-        case "haiku":     key = "model.desc.haiku"
+        case "haiku": key = "model.desc.haiku"
         default: return ""
         }
         return NSLocalizedString(key, comment: "")
     }
+
     static let availableEfforts = ["low", "medium", "high", "xhigh", "max"]
 
     static func permissionModeDescription(_ mode: PermissionMode) -> String {
         let key: String
         switch mode {
-        case .default:           key = "perm.desc.default"
-        case .acceptEdits:       key = "perm.desc.acceptEdits"
-        case .plan:              key = "perm.desc.plan"
-        case .auto:              key = "perm.desc.auto"
+        case .default: key = "perm.desc.default"
+        case .acceptEdits: key = "perm.desc.acceptEdits"
+        case .plan: key = "perm.desc.plan"
+        case .auto: key = "perm.desc.auto"
         case .bypassPermissions: key = "perm.desc.bypassPermissions"
         }
         return NSLocalizedString(key, comment: "")
@@ -288,12 +390,12 @@ final class AppState {
     static func effortDescription(_ effort: String) -> String {
         let key: String
         switch effort {
-        case "auto":   key = "effort.desc.auto"
-        case "low":    key = "effort.desc.low"
+        case "auto": key = "effort.desc.auto"
+        case "low": key = "effort.desc.low"
         case "medium": key = "effort.desc.medium"
-        case "high":   key = "effort.desc.high"
-        case "xhigh":  key = "effort.desc.xhigh"
-        case "max":    key = "effort.desc.max"
+        case "high": key = "effort.desc.high"
+        case "xhigh": key = "effort.desc.xhigh"
+        case "max": key = "effort.desc.max"
         default: return ""
         }
         return NSLocalizedString(key, comment: "")
@@ -303,11 +405,24 @@ final class AppState {
         didSet { UserDefaults.standard.set(selectedModel, forKey: "selectedModel") }
     }
 
-    var selectedAgentProvider: AgentProvider = AgentProvider(rawValue: UserDefaults.standard.string(forKey: "selectedAgentProvider") ?? "") ?? .claudeCode {
+    var selectedAgentProvider: AgentProvider = .init(rawValue: UserDefaults.standard.string(forKey: "selectedAgentProvider") ?? "") ?? .claudeCode {
         didSet { UserDefaults.standard.set(selectedAgentProvider.rawValue, forKey: "selectedAgentProvider") }
     }
 
     var codexModels: [AgentModel] = []
+
+    // MARK: - ACP
+
+    /// User-installed ACP clients. Loaded from disk on init.
+    var acpClients: [ACPClientSpec] = []
+    /// Cached registry from `cdn.agentclientprotocol.com`. Refreshed hourly.
+    var acpRegistry: ACPRegistry?
+    var acpRegistryLoading: Bool = false
+
+    /// Selected default ACP client id (when `selectedAgentProvider == .acp`).
+    var selectedACPClientId: String = UserDefaults.standard.string(forKey: "selectedACPClientId") ?? "" {
+        didSet { UserDefaults.standard.set(selectedACPClientId, forKey: "selectedACPClientId") }
+    }
 
     var selectedEffort: String = UserDefaults.standard.string(forKey: "selectedEffort") ?? "auto" {
         didSet { UserDefaults.standard.set(selectedEffort, forKey: "selectedEffort") }
@@ -315,7 +430,7 @@ final class AppState {
 
     // MARK: - Summarization
 
-    var summarizationProvider: SummarizationProvider = SummarizationProvider(rawValue: UserDefaults.standard.string(forKey: "summarizationProvider") ?? "") ?? .selectedClient {
+    var summarizationProvider: SummarizationProvider = .init(rawValue: UserDefaults.standard.string(forKey: "summarizationProvider") ?? "") ?? .selectedClient {
         didSet { UserDefaults.standard.set(summarizationProvider.rawValue, forKey: "summarizationProvider") }
     }
 
@@ -396,7 +511,8 @@ final class AppState {
 
     var autoPreviewSettings: AttachmentAutoPreviewSettings = {
         guard let data = UserDefaults.standard.data(forKey: AppState.autoPreviewSettingsKey),
-              let settings = try? JSONDecoder().decode(AttachmentAutoPreviewSettings.self, from: data) else {
+              let settings = try? JSONDecoder().decode(AttachmentAutoPreviewSettings.self, from: data)
+        else {
             return AttachmentAutoPreviewSettings()
         }
         return settings
@@ -438,6 +554,8 @@ final class AppState {
             return latestRateLimitUsage
         case .codex:
             return latestCodexRateLimitUsage
+        case .acp:
+            return nil
         }
     }
 
@@ -458,6 +576,8 @@ final class AppState {
             case .codex:
                 guard self.codexInstalled else { return nil }
                 return await self.codex.fetchRateLimits(forceRefresh: forceRefresh)
+            case .acp:
+                return nil
             }
         }
         rateLimitUsageRefreshTasks[provider] = task
@@ -478,6 +598,8 @@ final class AppState {
             latestRateLimitUsage = usage
         case .codex:
             latestCodexRateLimitUsage = usage
+        case .acp:
+            break
         }
     }
 
@@ -497,6 +619,8 @@ final class AppState {
             await refreshRateLimitUsage(forceRefresh: forceRefresh)
         case .codex:
             await refreshCodexRateLimitUsage(forceRefresh: forceRefresh)
+        case .acp:
+            break
         }
     }
 
@@ -508,7 +632,8 @@ final class AppState {
             .first(where: { $0.provider == provider })?
             .models
             .first?
-            .id {
+            .id
+        {
             selectedModel = model
         }
     }
@@ -558,9 +683,14 @@ final class AppState {
         window.sessionAgentProvider = resolvedProvider
         window.sessionModel = model
         let key = window.currentSessionId ?? window.newSessionKey
+        let acpParts = resolvedProvider == .acp ? acpSelectionParts(for: model) : nil
+        if let acpParts {
+            selectedACPClientId = acpParts.clientId
+        }
         updateState(key) { state in
             state.agentProvider = resolvedProvider
             state.model = model
+            state.acpClientId = acpParts?.clientId
             // Drop the cached CLI-reported name so the status line reflects the
             // user's choice immediately; the next system event will refill it.
             state.activeModelName = nil
@@ -632,7 +762,7 @@ final class AppState {
         if let active = activeModelName(in: window) {
             return active
         }
-        return Self.modelDisplayName(model, provider: provider)
+        return modelDisplayLabel(model, provider: provider)
     }
 
     static func formatModelId(_ raw: String) -> String {
@@ -645,7 +775,8 @@ final class AppState {
 
         let parts = lower.components(separatedBy: CharacterSet(charactersIn: "-"))
         if let idx = parts.firstIndex(where: { $0 == family.lowercased() }),
-           idx + 1 < parts.count {
+           idx + 1 < parts.count
+        {
             let ver = parts[(idx + 1)...].prefix(2).filter { $0.allSatisfy(\.isNumber) }
             if !ver.isEmpty { return "\(family) \(ver.joined(separator: "."))" }
         }
@@ -699,6 +830,8 @@ final class AppState {
     let cliStore: CLISessionStore
     let claude: ClaudeService
     let codex: CodexAppServer
+    let acp: ACPService
+    let acpRegistryService = ACPRegistryService()
     let openAISummarization = OpenAISummarizationService()
     let persistence: PersistenceService
     let marketplace = MarketplaceService()
@@ -765,9 +898,172 @@ final class AppState {
         let claude = ClaudeService(cliStore: cliStore)
         self.claude = claude
         self.codex = CodexAppServer()
+        let acp = ACPService()
+        self.acp = acp
         self.persistence = PersistenceService(metaStore: metaStore, cliStore: cliStore)
         self.mcp = MCPService(claudeService: claude)
         self.threadStore = ThreadStore.make()
+
+        // Bridge ACP `session/request_permission` into the existing PermissionServer.
+        let permission = self.permission
+        Task { await acp.setPermissionServer(permission) }
+    }
+
+    // MARK: - ACP Actions
+
+    func loadACPClientsFromDisk() async {
+        let loaded = await persistence.loadACPClients()
+        acpClients = loaded
+    }
+
+    func saveACPClients() {
+        let clients = acpClients
+        Task { [persistence] in
+            try? await persistence.saveACPClients(clients)
+        }
+    }
+
+    func refreshACPRegistry(forceRefresh: Bool = false) async {
+        acpRegistryLoading = true
+        defer { acpRegistryLoading = false }
+        let snapshotURL = persistence.acpRegistrySnapshotURL()
+        if let reg = await acpRegistryService.fetchRegistry(forceRefresh: forceRefresh, snapshotURL: snapshotURL) {
+            acpRegistry = reg
+        }
+    }
+
+    func addACPClient(_ spec: ACPClientSpec) {
+        acpClients.append(spec)
+        saveACPClients()
+    }
+
+    func updateACPClient(_ spec: ACPClientSpec) {
+        guard let idx = acpClients.firstIndex(where: { $0.id == spec.id }) else { return }
+        acpClients[idx] = spec
+        saveACPClients()
+    }
+
+    func removeACPClient(id: String) {
+        if let removed = acpClients.first(where: { $0.id == id }) {
+            // Clean up the on-disk install if this client owns a binary
+            // under the installer's managed root.
+            if case .binary(let path, _, _) = removed.launch,
+               let registryId = removed.registryId,
+               ACPInstallerService.isManaged(path: path)
+            {
+                Task.detached { await ACPInstallerService.shared.uninstall(registryId: registryId) }
+            }
+        }
+        acpClients.removeAll { $0.id == id }
+        if selectedACPClientId == id { selectedACPClientId = "" }
+        saveACPClients()
+    }
+
+    /// Installs an ACP client from a registry entry. Tries the platform's
+    /// declared binary distribution first (downloading and extracting it),
+    /// then falls back to whatever else the registry declares (`npx`/`uvx`).
+    /// After install, probes the agent (`initialize` + `session/new`) to
+    /// populate the model picker from its advertised `configOptions`.
+    func installACPClient(from agent: ACPRegistryAgent) async throws -> ACPClientSpec {
+        let launch = try await resolveLaunch(for: agent)
+        let spec = ACPClientSpec(
+            registryId: agent.id,
+            displayName: agent.name,
+            launch: launch,
+            iconURL: agent.icon
+        )
+        return await probedSpec(spec, agentId: agent.id)
+    }
+
+    /// Re-probes an installed client and persists the result. If the probe
+    /// fails or the agent doesn't expose a model selector, the picker falls
+    /// back to the built-in defaults for known registry agents.
+    func refreshACPClientModels(id: String) async {
+        guard let idx = acpClients.firstIndex(where: { $0.id == id }) else { return }
+        let current = acpClients[idx]
+        let updated = await probedSpec(current, agentId: current.registryId ?? current.id)
+        if let liveIdx = acpClients.firstIndex(where: { $0.id == id }) {
+            acpClients[liveIdx] = updated
+            saveACPClients()
+        }
+    }
+
+    private func probedSpec(_ spec: ACPClientSpec, agentId: String) async -> ACPClientSpec {
+        var result = spec
+        let probeCwd = NSHomeDirectory()
+        do {
+            if let config = try await acp.probeModels(spec: spec, cwd: probeCwd) {
+                result.modelConfigId = config.configId
+                result.models = config.options.map { $0.value }
+                result.modelOptions = config.options
+                logger.info("[ACP] probed \(result.models.count) models from \(agentId, privacy: .public) configId=\(config.configId, privacy: .public) current=\(config.currentValue ?? "nil", privacy: .public) models=[\(Self.acpModelListDescription(config.options), privacy: .public)]")
+                return result
+            }
+            logger.info("[ACP] no model selector advertised by \(agentId, privacy: .public)")
+        } catch {
+            logger.warning("[ACP] model probe failed for \(agentId, privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
+
+        // Probe missed — leave the model list empty. The picker injects a
+        // synthetic "Default" entry so the client is still selectable; the
+        // agent uses whatever model it chooses internally.
+        result.modelConfigId = nil
+        result.models = []
+        result.modelOptions = nil
+        return result
+    }
+
+    /// Writes a freshly-discovered model list back to the matching client
+    /// spec. Called from the stream loop whenever `session/new` advertises
+    /// a model selector — keeps the picker in sync with what the agent
+    /// actually supports without requiring a settings round-trip.
+    private func applyDiscoveredACPModels(clientId: String, config: ACPModelConfig) {
+        guard let idx = acpClients.firstIndex(where: { $0.id == clientId }) else { return }
+        let newModels = config.options.map { $0.value }
+        var updated = acpClients[idx]
+        logger.info("[ACP] applying discovered models clientId=\(clientId, privacy: .public) configId=\(config.configId, privacy: .public) current=\(config.currentValue ?? "nil", privacy: .public) models=\(newModels.count) [\(Self.acpModelListDescription(config.options), privacy: .public)]")
+        guard updated.models != newModels || updated.modelOptions != config.options || updated.modelConfigId != config.configId else {
+            logger.info("[ACP] discovered models unchanged for clientId=\(clientId, privacy: .public)")
+            return
+        }
+        updated.models = newModels
+        updated.modelOptions = config.options
+        updated.modelConfigId = config.configId
+        acpClients[idx] = updated
+        saveACPClients()
+    }
+
+    private static func acpModelListDescription(_ options: [ACPModelOption]) -> String {
+        options.map { option in
+            option.name == option.value ? option.value : "\(option.value) (\(option.name))"
+        }.joined(separator: ", ")
+    }
+
+    private func resolveLaunch(for agent: ACPRegistryAgent) async throws -> ACPClientSpec.LaunchKind {
+        // Prefer the platform binary; on download/extract failure, fall through.
+        if let bin = agent.distribution.binary?[ACPPlatform.current] {
+            do {
+                let path = try await ACPInstallerService.shared.install(
+                    bin, registryId: agent.id, version: agent.version
+                )
+                return .binary(path: path, args: bin.args ?? [], env: bin.env ?? [:])
+            } catch {
+                if let npx = agent.distribution.npx {
+                    return .npx(package: npx.package, args: npx.args ?? [], env: npx.env ?? [:])
+                }
+                if let uvx = agent.distribution.uvx {
+                    return .uvx(package: uvx.package, args: uvx.args ?? [], env: uvx.env ?? [:])
+                }
+                throw error
+            }
+        }
+        if let npx = agent.distribution.npx {
+            return .npx(package: npx.package, args: npx.args ?? [], env: npx.env ?? [:])
+        }
+        if let uvx = agent.distribution.uvx {
+            return .uvx(package: uvx.package, args: uvx.args ?? [], env: uvx.env ?? [:])
+        }
+        throw ACPInstallError.noCompatibleDistribution
     }
 
     // MARK: - MCP Actions
@@ -855,7 +1151,8 @@ final class AppState {
         // Disconnect notification: only fire on the connected→failed edge so we
         // don't spam the user on every failed re-probe.
         if case .connected = (previousStatus ?? .unknown),
-           case .failed(let message) = newStatus {
+           case .failed(let message) = newStatus
+        {
             let notifyService = NotificationService.shared
             let serverName = name
             Task { @MainActor in
@@ -1050,7 +1347,8 @@ final class AppState {
 
     func todoProgress(forSessionId id: String) -> ChatTodoProgress? {
         if let messages = sessionStates[id]?.messages,
-           let todos = TodoExtractor.latest(in: messages) {
+           let todos = TodoExtractor.latest(in: messages)
+        {
             return ChatTodoProgress(todos: todos)
         }
 
@@ -1098,10 +1396,15 @@ final class AppState {
 
         persistedQueues = threadStore.loadAllQueues()
 
-        if (claudeInstalled || codexInstalled) && !onboardingCompleted {
+        if claudeInstalled || codexInstalled, !onboardingCompleted {
             onboardingCompleted = true
             UserDefaults.standard.set(true, forKey: "onboardingCompleted")
         }
+
+        // Hydrate ACP state (clients + cached registry) early so the model picker
+        // and Settings tab don't flash empty on first open.
+        await loadACPClientsFromDisk()
+        Task { await self.refreshACPRegistry(forceRefresh: false) }
 
         permissionMode = Self.readPermissionModeFromSettings()
 
@@ -1214,7 +1517,8 @@ final class AppState {
                     if toolName == "AskUserQuestion",
                        window.presentedPermissionId == nil,
                        let qSession = request.sessionId,
-                       qSession == window.currentSessionId {
+                       qSession == window.currentSessionId
+                    {
                         window.presentedPermissionId = request.id
                     }
                     Task { @MainActor in
@@ -1262,11 +1566,13 @@ final class AppState {
         }
 
         if let projectId = selectingProjectId,
-           let project = projects.first(where: { $0.id == projectId }) {
+           let project = projects.first(where: { $0.id == projectId })
+        {
             selectProject(project, in: window)
         } else if let savedId = UserDefaults.standard.string(forKey: "selectedProjectId"),
                   let uuid = UUID(uuidString: savedId),
-                  let project = projects.first(where: { $0.id == uuid }) {
+                  let project = projects.first(where: { $0.id == uuid })
+        {
             selectProject(project, in: window)
         } else if let first = projects.first {
             selectProject(first, in: window)
@@ -1421,7 +1727,8 @@ final class AppState {
         if (window.sessionAgentProvider ?? selectedAgentProvider) == .claudeCode,
            let sid = window.currentSessionId,
            let cwd = window.selectedProject?.path,
-           cliStore.detectExternalActivity(sid: sid, cwd: cwd, withinSeconds: 5) {
+           cliStore.detectExternalActivity(sid: sid, cwd: cwd, withinSeconds: 5)
+        {
             logger.warning("Session \(sid, privacy: .public) jsonl was modified within 5s — another claude process may be active")
         }
 
@@ -1505,7 +1812,7 @@ final class AppState {
     }
 
     func openTerminal(in window: WindowState) async {
-        if window.showInspector && window.inspectorTab == .terminal {
+        if window.showInspector, window.inspectorTab == .terminal {
             window.showInspector = false
         } else {
             window.inspectorTab = .terminal
@@ -1649,7 +1956,7 @@ final class AppState {
                 messages: [],
                 agentProvider: provider,
                 model: window.sessionModel ?? selectedModel,
-                origin: provider == .codex ? .codexAppServer : .cliBacked
+                origin: provider.defaultSessionOrigin
             )
             allSessionSummaries.insert(placeholder.summary, at: 0)
             threadStore.upsert(placeholder.summary)
@@ -1660,7 +1967,8 @@ final class AppState {
         // without waiting for the assistant to reply.
         if wasFirstUserMessage,
            !skipAppendingUserMessage,
-           !(sessionStates[sessionKey]?.titleGenerationTriggered ?? false) {
+           !(sessionStates[sessionKey]?.titleGenerationTriggered ?? false)
+        {
             updateState(sessionKey) { $0.titleGenerationTriggered = true }
             let titleKey = sessionKey
             Task { [weak self] in
@@ -1692,7 +2000,7 @@ final class AppState {
             ?? window.sessionAgentProvider
             ?? selectedAgentProvider
         var hookSettingsPath: String?
-        if launchAgentProvider == .claudeCode && !cliPermissionMode.skipsHookPipeline {
+        if launchAgentProvider == .claudeCode, !cliPermissionMode.skipsHookPipeline {
             do {
                 hookSettingsPath = try await permission.writeHookSettingsFile()
             } catch {
@@ -1861,6 +2169,42 @@ final class AppState {
                 mcpConfigOverrides: mcpConfigOverrides,
                 permissionServer: permission
             )
+        case .acp:
+            // `model` may be a composite `<clientId>::<model>` key (from the picker)
+            // or a bare model id (from a per-session override).
+            let split = acpSelectionParts(for: model)
+            let resolvedClientId = split?.clientId
+                ?? sessionStates[sessionKey]?.acpClientId
+                ?? selectedACPClientId
+            let resolvedModel = split?.model ?? model
+            guard let spec = acpClients.first(where: { $0.id == resolvedClientId && $0.enabled }) else {
+                logger.error("[ACP] no enabled client for id=\(resolvedClientId, privacy: .public)")
+                let placeholder = AsyncStream<StreamEvent> { c in
+                    c.yield(.user(UserMessage(
+                        toolUseId: nil,
+                        content: "No ACP client configured. Add one in Settings → ACP Clients.",
+                        isError: true
+                    )))
+                    c.yield(.result(ResultEvent(
+                        durationMs: nil, totalCostUsd: nil,
+                        sessionId: cliSessionId ?? sessionKey,
+                        isError: true, totalTurns: nil, usage: nil, contextWindow: nil
+                    )))
+                    c.finish()
+                }
+                stream = placeholder
+                break
+            }
+            stream = await acp.send(
+                streamId: streamId,
+                prompt: prompt,
+                cwd: cwd,
+                sessionId: cliSessionId,
+                model: resolvedModel,
+                spec: spec,
+                permissionMode: registerMode,
+                clientSessionKey: sessionKey
+            )
         }
 
         startFlushTimer(for: sessionKey)
@@ -1881,7 +2225,7 @@ final class AppState {
 
                 let ownsSession = stateForSession(sessionKey).activeStreamId == streamId
 
-                    if !ownsSession {
+                if !ownsSession {
                     if case .result(let resultEvent) = event {
                         logger.info("[Stream:UI] event #\(eventCount) .result received after losing ownership — saving to disk")
                         await finalizeAgentStream(agentProvider: agentProvider, streamId: streamId)
@@ -1937,7 +2281,8 @@ final class AppState {
 
                         let expectedPlaceholder = "pending-\(streamId.uuidString)"
                         if window.pendingPlaceholderIds.contains(expectedPlaceholder),
-                           let idx = allSessionSummaries.firstIndex(where: { $0.id == expectedPlaceholder }) {
+                           let idx = allSessionSummaries.firstIndex(where: { $0.id == expectedPlaceholder })
+                        {
                             let old = allSessionSummaries[idx]
                             // Preserve the placeholder's original timestamp so an empty
                             // session (no assistant content yet) doesn't leapfrog
@@ -1950,11 +2295,16 @@ final class AppState {
                                 messages: [],
                                 createdAt: old.createdAt,
                                 updatedAt: old.createdAt,
+                                isPinned: old.isPinned,
                                 agentProvider: old.agentProvider,
                                 model: old.model,
                                 effort: old.effort,
                                 permissionMode: old.permissionMode,
-                                origin: old.origin
+                                origin: old.origin,
+                                worktreePath: old.worktreePath,
+                                worktreeBranch: old.worktreeBranch,
+                                isArchived: old.isArchived,
+                                archivedAt: old.archivedAt
                             )
                             allSessionSummaries.removeAll { $0.id == expectedPlaceholder || $0.id == sid }
                             allSessionSummaries.insert(replacement.summary, at: 0)
@@ -1972,7 +2322,7 @@ final class AppState {
                             // so expectedPlaceholder won't match oldKey. Clean up the stale placeholder
                             // here to prevent the old entry from persisting as a duplicate in history.
                             let oldKey = sessionKey == sid ? internalSessionKey : sessionKey
-                            if oldKey != expectedPlaceholder && window.pendingPlaceholderIds.contains(oldKey) {
+                            if oldKey != expectedPlaceholder, window.pendingPlaceholderIds.contains(oldKey) {
                                 allSessionSummaries.removeAll { $0.id == oldKey }
                                 threadStore.delete(id: oldKey)
                                 window.removePendingPlaceholder(oldKey)
@@ -2011,7 +2361,9 @@ final class AppState {
                                             permissionMode: old.permissionMode,
                                             origin: old.origin,
                                             worktreePath: old.worktreePath,
-                                            worktreeBranch: old.worktreeBranch
+                                            worktreeBranch: old.worktreeBranch,
+                                            isArchived: old.isArchived,
+                                            archivedAt: old.archivedAt
                                         )
                                         allSessionSummaries.remove(at: idx)
                                         allSessionSummaries.removeAll { $0.id == to }
@@ -2031,7 +2383,7 @@ final class AppState {
                                         updatedAt: firstUserDate,
                                         isPinned: false,
                                         agentProvider: agentProvider,
-                                        origin: .cliBacked
+                                        origin: agentProvider.defaultSessionOrigin
                                     )
                                     allSessionSummaries.insert(inserted, at: 0)
                                     threadStore.upsert(inserted, cliSessionId: id)
@@ -2123,7 +2475,7 @@ final class AppState {
                     }
 
                     let isFg = (window.currentSessionId ?? window.newSessionKey) == sessionKey
-                    if !isFg && !resultEvent.isError {
+                    if !isFg, !resultEvent.isError {
                         updateState(sessionKey) { $0.hasUncheckedCompletion = true }
                     }
                     if isFg {
@@ -2158,7 +2510,7 @@ final class AppState {
                             }
                         }
 
-                        if notificationsEnabled && !NSApp.isActive {
+                        if notificationsEnabled, !NSApp.isActive {
                             let title = allSessionSummaries.first(where: { $0.id == resultEvent.sessionId })?.title ?? "New Session"
                             let firstSentence = stateForSession(sessionKey).messages
                                 .last(where: { $0.role == .assistant && !$0.isError })
@@ -2185,7 +2537,8 @@ final class AppState {
                 case .rateLimitEvent(let info):
                     logger.warning("[Stream:UI] event #\(eventCount) .rateLimitEvent (retrySec=\(info.retrySec ?? 0))")
                     if (window.currentSessionId ?? window.newSessionKey) == sessionKey,
-                       let retry = info.retrySec, retry > 0 {
+                       let retry = info.retrySec, retry > 0
+                    {
                         addErrorMessage("Rate limited. Retrying in \(Int(retry))s...", in: window)
                     }
 
@@ -2197,6 +2550,10 @@ final class AppState {
                         "[TodoSnapshot] session=\(targetSession, privacy: .public) total=\(snapshot.items.count) done=\(done) active=\(active, privacy: .public)"
                     )
                     threadStore.upsertTodoSnapshot(sessionId: targetSession, items: snapshot.items)
+
+                case .acpModelsDiscovered(let event):
+                    logger.info("[Stream:UI] event #\(eventCount) .acpModelsDiscovered clientId=\(event.clientId, privacy: .public) configId=\(event.config.configId, privacy: .public) models=\(event.config.options.count) [\(Self.acpModelListDescription(event.config.options), privacy: .public)]")
+                    applyDiscoveredACPModels(clientId: event.clientId, config: event.config)
 
                 case .unknown(let raw):
                     if eventCount <= 5 || eventCount % 100 == 0 {
@@ -2228,7 +2585,7 @@ final class AppState {
 
             let isStillOwner = stateForSession(sessionKey).activeStreamId == streamId
             let stillStreaming = stateForSession(sessionKey).isStreaming
-            if stillStreaming && isStillOwner {
+            if stillStreaming, isStillOwner {
                 logger.warning("[Stream:UI] isStreaming was still true at stream end — forcing cleanup")
                 finalizeStreamSession(for: sessionKey)
                 if (window.currentSessionId ?? window.newSessionKey) != sessionKey {
@@ -2250,7 +2607,7 @@ final class AppState {
                 if !msgs.isEmpty {
                     await saveSession(sessionId: sessionKey, projectId: projectId, messages: msgs)
                 }
-            } else if stillStreaming && !isStillOwner {
+            } else if stillStreaming, !isStillOwner {
                 let currentOwner = stateForSession(sessionKey).activeStreamId
                 if currentOwner == nil {
                     logger.warning("[Stream:UI] stream \(streamId) ended — no active owner for session, forcing cleanup")
@@ -2273,6 +2630,8 @@ final class AppState {
             await claude.finalize(streamId: streamId)
         case .codex:
             await codex.finalize(streamId: streamId)
+        case .acp:
+            await acp.finalize(streamId: streamId)
         }
     }
 
@@ -2282,6 +2641,8 @@ final class AppState {
             return await claude.consumeStderr(for: streamId)
         case .codex:
             return await codex.consumeStderr(for: streamId)
+        case .acp:
+            return await acp.consumeStderr(for: streamId)
         }
     }
 
@@ -2402,7 +2763,8 @@ final class AppState {
 
         let event: [String: Any]
         if let type = json["type"] as? String, type == "stream_event",
-           let nested = json["event"] as? [String: Any] {
+           let nested = json["event"] as? [String: Any]
+        {
             event = nested
         } else {
             event = json
@@ -2436,7 +2798,8 @@ final class AppState {
                         state.messages.append(ChatMessage(role: .assistant, isStreaming: true))
                     }
                     if let lastIndex = state.messages.indices.last,
-                       state.messages[lastIndex].role == .assistant {
+                       state.messages[lastIndex].role == .assistant
+                    {
                         state.messages[lastIndex].appendToolCall(toolCall)
                     }
                     // Ready to receive input_json_delta
@@ -2490,10 +2853,12 @@ final class AppState {
                       let parsed = try? JSONDecoder().decode([String: JSONValue].self, from: inputData) else { return }
 
                 if let msgIdx = state.messages.indices.reversed().first(where: { state.messages[$0].role == .assistant && state.messages[$0].isStreaming }),
-                   let blockIdx = state.messages[msgIdx].toolCallIndex(id: toolId) {
+                   let blockIdx = state.messages[msgIdx].toolCallIndex(id: toolId)
+                {
                     state.messages[msgIdx].blocks[blockIdx].toolCall?.input = parsed
                     if let toolName = state.messages[msgIdx].blocks[blockIdx].toolCall?.name,
-                       toolName.lowercased() == "todowrite" {
+                       toolName.lowercased() == "todowrite"
+                    {
                         let todos = TodoExtractor.parse(input: parsed)
                         let done = todos.filter { $0.status == .completed }.count
                         let active = todos.first(where: { $0.status == .inProgress })?.activeForm ?? "-"
@@ -2536,6 +2901,8 @@ final class AppState {
                 await claude.cancel(streamId: streamToCancel)
             case .codex:
                 await codex.cancel(streamId: streamToCancel)
+            case .acp:
+                await acp.cancel(streamId: streamToCancel)
             }
         }
 
@@ -2557,7 +2924,8 @@ final class AppState {
             if let lastIndex = state.messages.indices.last,
                state.messages[lastIndex].role == .assistant,
                !state.messages[lastIndex].isError,
-               !state.messages[lastIndex].isCompactBoundary {
+               !state.messages[lastIndex].isCompactBoundary
+            {
                 state.messages.remove(at: lastIndex)
             }
             // Restore the user message that triggered this stream into the input field —
@@ -2565,7 +2933,8 @@ final class AppState {
             // aren't silently dropped when the user stops a turn.
             if let lastIndex = state.messages.indices.last,
                state.messages[lastIndex].role == .user,
-               !state.messages[lastIndex].isCompactBoundary {
+               !state.messages[lastIndex].isCompactBoundary
+            {
                 let userText = state.messages[lastIndex].blocks.compactMap(\.text).joined()
                 state.messages.remove(at: lastIndex)
                 window.inputText = userText
@@ -2764,19 +3133,35 @@ final class AppState {
         }
     }
 
-    /// True when the assistant produced any content (text or tool calls) after the
-    /// given ExitPlanMode tool call in the current session — either as later blocks
-    /// in the same message or as subsequent messages. Used to suppress the hidden
-    /// "Proceed with the plan." continuation prompt when the CLI has already carried
-    /// the turn through to completion on its own.
+    /// True when the assistant actually *executed* the plan after the given
+    /// ExitPlanMode tool call — i.e. the CLI invoked at least one other tool
+    /// (Edit / Write / Bash / etc.) in the same turn, so a follow-up
+    /// "Proceed with the plan." would just spawn a redundant turn. Used to
+    /// gate the hidden continuation prompt.
+    ///
+    /// Text-only post-plan content (a brief preamble, or a recap of the plan
+    /// the model already wrote into a file) does NOT count — that's the stall
+    /// mode where the user is left waiting and we *do* want to inject the
+    /// nudge so implementation actually starts.
     private func turnContinuedAfterPlan(toolUseId: String, sessionKey: String) -> Bool {
         guard let messages = sessionStates[sessionKey]?.messages else { return false }
         for messageIdx in messages.indices.reversed() {
-            guard let blockIdx = messages[messageIdx].toolCallIndex(id: toolUseId) else {
+            guard let planBlockIdx = messages[messageIdx].toolCallIndex(id: toolUseId) else {
                 continue
             }
-            if blockIdx < messages[messageIdx].blocks.count - 1 { return true }
-            if messageIdx < messages.count - 1 { return true }
+            // Same message: any tool-call block after the plan block counts as work.
+            let trailingBlocks = messages[messageIdx].blocks.dropFirst(planBlockIdx + 1)
+            if trailingBlocks.contains(where: { $0.toolCall != nil }) {
+                return true
+            }
+            // Subsequent assistant messages: any tool-call block at all.
+            if messageIdx + 1 < messages.count {
+                for later in messages[(messageIdx + 1)...] where later.role == .assistant {
+                    if later.blocks.contains(where: { $0.toolCall != nil }) {
+                        return true
+                    }
+                }
+            }
             return false
         }
         return false
@@ -2833,21 +3218,28 @@ final class AppState {
         if let currentId = window.currentSessionId,
            let currentProject = window.selectedProject,
            let state = sessionStates[currentId],
-           !state.messages.isEmpty {
+           !state.messages.isEmpty
+        {
             let title = allSessionSummaries.first(where: { $0.id == currentId })?.title ?? "Session"
             let provider = state.agentProvider ?? allSessionSummaries.first(where: { $0.id == currentId })?.agentProvider ?? selectedAgentProvider
-            let origin = allSessionSummaries.first(where: { $0.id == currentId })?.origin ?? (provider == .codex ? .codexAppServer : .cliBacked)
+            let origin = allSessionSummaries.first(where: { $0.id == currentId })?.origin ?? provider.defaultSessionOrigin
+            let summary = allSessionSummaries.first(where: { $0.id == currentId })
             let session = ChatSession(
                 id: currentId,
                 projectId: currentProject.id,
                 title: title,
                 messages: state.messages,
                 updatedAt: lastResponseDate(from: state.messages),
+                isPinned: summary?.isPinned ?? false,
                 agentProvider: provider,
                 model: state.model,
                 effort: state.effort,
                 permissionMode: state.permissionMode,
-                origin: origin
+                origin: origin,
+                worktreePath: summary?.worktreePath,
+                worktreeBranch: summary?.worktreeBranch,
+                isArchived: summary?.isArchived ?? false,
+                archivedAt: summary?.archivedAt
             )
             Task {
                 do { try await self.persistence.saveSession(session) }
@@ -2950,7 +3342,8 @@ final class AppState {
             }
         } else if sessionStates[session.id]?.messages.isEmpty == true,
                   sessionStates[session.id]?.isStreaming != true,
-                  let project = window.selectedProject {
+                  let project = window.selectedProject
+        {
             if var state = sessionStates[session.id] {
                 if state.model == nil { state.model = session.model }
                 if state.agentProvider == nil { state.agentProvider = session.agentProvider }
@@ -2995,21 +3388,27 @@ final class AppState {
         Task { [weak self] in
             guard let self else { return }
             if !outgoingMessages.isEmpty, let project = window.selectedProject {
-                let title = allSessionSummaries.first(where: { $0.id == outgoingId })?.title ?? "Session"
+                let summary = allSessionSummaries.first(where: { $0.id == outgoingId })
+                let title = summary?.title ?? "Session"
                 let state = sessionStates[outgoingId]
-                let provider = state?.agentProvider ?? allSessionSummaries.first(where: { $0.id == outgoingId })?.agentProvider ?? selectedAgentProvider
-                let origin = allSessionSummaries.first(where: { $0.id == outgoingId })?.origin ?? (provider == .codex ? .codexAppServer : .cliBacked)
+                let provider = state?.agentProvider ?? summary?.agentProvider ?? selectedAgentProvider
+                let origin = summary?.origin ?? provider.defaultSessionOrigin
                 let outgoing = ChatSession(
                     id: outgoingId,
                     projectId: project.id,
                     title: title,
                     messages: outgoingMessages,
                     updatedAt: lastResponseDate(from: outgoingMessages),
+                    isPinned: summary?.isPinned ?? false,
                     agentProvider: provider,
                     model: state?.model,
                     effort: state?.effort,
                     permissionMode: state?.permissionMode,
-                    origin: origin
+                    origin: origin,
+                    worktreePath: summary?.worktreePath,
+                    worktreeBranch: summary?.worktreeBranch,
+                    isArchived: summary?.isArchived ?? false,
+                    archivedAt: summary?.archivedAt
                 )
                 do { try await persistence.saveSession(outgoing) }
                 catch { logger.error("Failed to save outgoing session: \(error.localizedDescription)") }
@@ -3164,7 +3563,16 @@ final class AppState {
             projectId: project.id,
             title: title,
             messages: sessionStates[currentId]?.messages ?? messages,
-            origin: stillPlaceholder.origin
+            isPinned: stillPlaceholder.isPinned,
+            agentProvider: stillPlaceholder.agentProvider,
+            model: stillPlaceholder.model,
+            effort: stillPlaceholder.effort,
+            permissionMode: stillPlaceholder.permissionMode,
+            origin: stillPlaceholder.origin,
+            worktreePath: stillPlaceholder.worktreePath,
+            worktreeBranch: stillPlaceholder.worktreeBranch,
+            isArchived: stillPlaceholder.isArchived,
+            archivedAt: stillPlaceholder.archivedAt
         )
         await renameSession(session, to: title)
     }
@@ -3192,6 +3600,9 @@ final class AppState {
             return await claude.generateSessionTitle(firstUserMessage: firstUserMessage, model: model ?? "haiku")
         case .codex:
             return await codex.generateSessionTitle(firstUserMessage: firstUserMessage, model: model)
+        case .acp:
+            // No standardized title-generation in ACP; fall back to the truncation logic upstream.
+            return nil
         }
     }
 
@@ -3279,6 +3690,7 @@ final class AppState {
     /// `persistTitle` should be true only for explicit user renames; pin and
     /// other non-title edits leave the sidecar title untouched so it stays
     /// in sync with the CLI's first-message-derived label.
+
     // MARK: - Worktree
 
     /// Create a Git worktree for the chat and remember it on the session.
@@ -3360,7 +3772,7 @@ final class AppState {
         var updated: ChatSession = switch summary.origin {
         case .cliBacked:
             summary.makeSession()
-        case .legacyRxCode, .codexAppServer:
+        case .legacyRxCode, .codexAppServer, .acpAgent:
             persistence.loadLegacySessionSync(projectId: session.projectId, sessionId: session.id) ?? session
         }
         mutate(&updated)
@@ -3485,11 +3897,15 @@ final class AppState {
 
         allSessionSummaries.removeAll { ids.contains($0.id) }
         if archivedOnly {
-            for id in ids { threadStore.delete(id: id) }
+            for id in ids {
+                threadStore.delete(id: id)
+            }
         } else {
             threadStore.deleteAll(projectId: projectId)
         }
-        for id in ids { sessionStates.removeValue(forKey: id) }
+        for id in ids {
+            sessionStates.removeValue(forKey: id)
+        }
     }
 
     func selectSession(id: String, in window: WindowState) {
@@ -3502,7 +3918,8 @@ final class AppState {
         window.cancelSessionSwitchTask()
 
         if let summary = allSessionSummaries.first(where: { $0.id == id }),
-           summary.projectId == window.selectedProject?.id {
+           summary.projectId == window.selectedProject?.id
+        {
             logger.info("[SelectSession] match in current project sid=\(id, privacy: .public) origin=\(String(describing: summary.origin), privacy: .public) title=\(summary.title, privacy: .public)")
             let session = summary.makeSession()
             switchToSession(session, in: window)
@@ -3516,7 +3933,8 @@ final class AppState {
 
         // If it's a session from another project, switch the project as well
         guard let summary = allSessionSummaries.first(where: { $0.id == id }),
-              let project = projects.first(where: { $0.id == summary.projectId }) else {
+              let project = projects.first(where: { $0.id == summary.projectId })
+        else {
             logger.error("[SelectSession] summary or project missing for sid=\(id, privacy: .public)")
             return
         }
@@ -3530,7 +3948,8 @@ final class AppState {
             if let s = allSessionSummaries.first(where: { $0.id == id }) {
                 let session = s.makeSession()
                 if sessionStates[session.id] == nil,
-                   let full = await persistence.loadFullSession(summary: s, cwd: project.path) {
+                   let full = await persistence.loadFullSession(summary: s, cwd: project.path)
+                {
                     logger.info("[SelectSession] cross-project preload ok sid=\(id, privacy: .public) messages=\(full.messages.count)")
                     switchToSession(full, messages: full.messages, in: window)
                 } else {
@@ -3617,7 +4036,7 @@ final class AppState {
         raw.compactMap { message in
             var msg = message
             msg.isStreaming = false
-            if msg.blocks.isEmpty && msg.role == .assistant { return nil }
+            if msg.blocks.isEmpty, msg.role == .assistant { return nil }
             return msg
         }
     }
@@ -3636,7 +4055,7 @@ final class AppState {
                 id: sessionId, projectId: projectId, title: "",
                 createdAt: Date(), updatedAt: Date(), isPinned: false,
                 agentProvider: sessionStates[sessionId]?.agentProvider ?? selectedAgentProvider,
-                origin: (sessionStates[sessionId]?.agentProvider ?? selectedAgentProvider) == .codex ? .codexAppServer : .cliBacked
+                origin: (sessionStates[sessionId]?.agentProvider ?? selectedAgentProvider).defaultSessionOrigin
             )
     }
 
@@ -3740,33 +4159,41 @@ final class AppState {
         // Preserve the existing title (which may have been renamed by the user or
         // generated by the LLM). Fall back to the default placeholder; the LLM
         // title generator replaces it once the first assistant reply arrives.
+        let summary = allSessionSummaries.first(where: { $0.id == sessionId })
         let title: String
-        if let existing = allSessionSummaries.first(where: { $0.id == sessionId }), !existing.title.isEmpty {
+        if let existing = summary, !existing.title.isEmpty {
             title = existing.title
         } else {
             title = ChatSession.defaultTitle
         }
 
         let sessionModel = sessionStates[sessionId]?.model
-            ?? allSessionSummaries.first(where: { $0.id == sessionId })?.model
+            ?? summary?.model
         let sessionAgentProvider = sessionStates[sessionId]?.agentProvider
-            ?? allSessionSummaries.first(where: { $0.id == sessionId })?.agentProvider
+            ?? summary?.agentProvider
             ?? selectedAgentProvider
         let sessionEffort = sessionStates[sessionId]?.effort
+            ?? summary?.effort
         let sessionPermissionMode = sessionStates[sessionId]?.permissionMode
-        let origin = allSessionSummaries.first(where: { $0.id == sessionId })?.origin
-            ?? (sessionAgentProvider == .codex ? .codexAppServer : .cliBacked)
+            ?? summary?.permissionMode
+        let origin = summary?.origin
+            ?? sessionAgentProvider.defaultSessionOrigin
         let session = ChatSession(
             id: sessionId,
             projectId: projectId,
             title: title,
             messages: messages,
             updatedAt: lastResponseDate(from: messages),
+            isPinned: summary?.isPinned ?? false,
             agentProvider: sessionAgentProvider,
             model: sessionModel,
             effort: sessionEffort,
             permissionMode: sessionPermissionMode,
-            origin: origin
+            origin: origin,
+            worktreePath: summary?.worktreePath,
+            worktreeBranch: summary?.worktreeBranch,
+            isArchived: summary?.isArchived ?? false,
+            archivedAt: summary?.archivedAt
         )
 
         do {
@@ -3781,7 +4208,8 @@ final class AppState {
             let summary = session.summary
             withAnimation(nil) {
                 while allSessionSummaries.filter({ $0.id == sessionId }).count > 1,
-                      let lastIdx = allSessionSummaries.lastIndex(where: { $0.id == sessionId }) {
+                      let lastIdx = allSessionSummaries.lastIndex(where: { $0.id == sessionId })
+                {
                     allSessionSummaries.remove(at: lastIdx)
                 }
                 if let index = allSessionSummaries.firstIndex(where: { $0.id == sessionId }) {
@@ -3963,7 +4391,7 @@ final class AppState {
         let currentPermissionMode = sessionStates[sessionKey]?.permissionMode ?? permissionMode
         let agentProvider = sessionStates[sessionKey]?.agentProvider ?? selectedAgentProvider
         var hookSettingsPath: String?
-        if agentProvider == .claudeCode && !currentPermissionMode.skipsHookPipeline {
+        if agentProvider == .claudeCode, !currentPermissionMode.skipsHookPipeline {
             do { hookSettingsPath = try await permission.writeHookSettingsFile() }
             catch { logger.error("Failed to write hook settings for background queue: \(error.localizedDescription)") }
         }
@@ -3988,7 +4416,9 @@ final class AppState {
                 projectId: projectId,
                 window: window
             )
-            for path in tempFilePaths { try? FileManager.default.removeItem(atPath: path) }
+            for path in tempFilePaths {
+                try? FileManager.default.removeItem(atPath: path)
+            }
         }
         sessionStates[sessionKey]?.streamTask = task
     }
@@ -4013,11 +4443,13 @@ final class AppState {
            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            let permissions = json["permissions"] as? [String: Any],
            let mode = permissions["defaultMode"] as? String,
-           let parsed = PermissionMode(rawValue: mode) {
+           let parsed = PermissionMode(rawValue: mode)
+        {
             return parsed
         }
         if let saved = UserDefaults.standard.string(forKey: "selectedPermissionMode"),
-           let parsed = PermissionMode(rawValue: saved) {
+           let parsed = PermissionMode(rawValue: saved)
+        {
             return parsed
         }
         return .default

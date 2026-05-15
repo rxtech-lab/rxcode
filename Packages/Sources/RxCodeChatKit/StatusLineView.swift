@@ -91,6 +91,7 @@ struct StatusLineView: View {
         switch chatBridge.agentProvider {
         case .claudeCode: return chatBridge.claudeVersion
         case .codex: return chatBridge.codexVersion
+        case .acp: return nil
         }
     }
 
@@ -98,6 +99,7 @@ struct StatusLineView: View {
         switch chatBridge.agentProvider {
         case .claudeCode: return "CC"
         case .codex: return "Codex"
+        case .acp: return "ACP"
         }
     }
 
@@ -176,6 +178,8 @@ struct StatusLineView: View {
                 title: "24-hour rate limit",
                 body: "Tracks usage against Codex's rolling 24-hour limit. Resets gradually as older requests age out."
             )
+        case .acp:
+            EmptyView()
         }
     }
 

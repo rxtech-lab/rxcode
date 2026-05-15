@@ -449,8 +449,8 @@ struct ChatToolbarControls: View {
     }
 
     private var effectiveMode: PermissionMode { windowState.sessionPermissionMode ?? appState.permissionMode }
-    private var effectiveModel: String { windowState.sessionModel ?? appState.selectedModel }
-    private var effectiveProvider: AgentProvider { windowState.sessionAgentProvider ?? appState.selectedAgentProvider }
+    private var effectiveModel: String { appState.effectiveModelSelection(in: windowState).model }
+    private var effectiveProvider: AgentProvider { appState.effectiveModelSelection(in: windowState).provider }
 
     var body: some View {
         HStack(spacing: placement == .composer ? 8 : 4) {
@@ -788,8 +788,8 @@ struct ModelPickerSheet: View {
     @State private var selectedIndex: Int = 0
     @FocusState private var isFocused: Bool
 
-    private var effectiveModel: String { windowState.sessionModel ?? appState.selectedModel }
-    private var effectiveProvider: AgentProvider { windowState.sessionAgentProvider ?? appState.selectedAgentProvider }
+    private var effectiveModel: String { appState.effectiveModelSelection(in: windowState).model }
+    private var effectiveProvider: AgentProvider { appState.effectiveModelSelection(in: windowState).provider }
     private var flatModels: [AgentModel] { appState.availableAgentModelSections().flatMap(\.models) }
 
     var body: some View {

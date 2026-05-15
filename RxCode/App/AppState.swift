@@ -661,6 +661,61 @@ final class AppState {
         (openProjectWindowCounts[projectId] ?? 0) > 0
     }
 
+    private func isModelAvailable(_ model: String, provider: AgentProvider) -> Bool {
+        availableAgentModelSections()
+            .flatMap(\.models)
+            .contains { $0.provider == provider && $0.id == model }
+    }
+
+    private func projectDefaultModelSelection(for project: Project?) -> (provider: AgentProvider, model: String)? {
+        guard let project,
+              let provider = project.lastAgentProvider,
+              let model = project.lastModel,
+              isModelAvailable(model, provider: provider)
+        else {
+            return nil
+        }
+        return (provider, model)
+    }
+
+    func defaultModelSelection(for project: Project?) -> (provider: AgentProvider, model: String) {
+        projectDefaultModelSelection(for: project) ?? (selectedAgentProvider, selectedModel)
+    }
+
+    func effectiveModelSelection(in window: WindowState) -> (provider: AgentProvider, model: String) {
+        if let provider = window.sessionAgentProvider, let model = window.sessionModel {
+            return (provider, model)
+        }
+        if let model = window.sessionModel {
+            return (window.sessionAgentProvider ?? selectedAgentProvider, model)
+        }
+        return defaultModelSelection(for: window.selectedProject)
+    }
+
+    private func rememberProjectModelSelection(_ model: String, provider: AgentProvider, in window: WindowState) {
+        guard let project = window.selectedProject,
+              let index = projects.firstIndex(where: { $0.id == project.id })
+        else {
+            return
+        }
+
+        guard projects[index].lastAgentProvider != provider || projects[index].lastModel != model else {
+            return
+        }
+
+        projects[index].lastAgentProvider = provider
+        projects[index].lastModel = model
+        window.selectedProject = projects[index]
+
+        Task {
+            do {
+                try await persistence.saveProjects(projects)
+            } catch {
+                logger.error("Failed to save project model selection: \(error.localizedDescription)")
+            }
+        }
+    }
+
     /// Routes a notification tap to the right window without spawning a new one.
     /// Hands off to an existing project window if one is open for that project;
     /// otherwise navigates the supplied main window in place.
@@ -687,6 +742,7 @@ final class AppState {
         if let acpParts {
             selectedACPClientId = acpParts.clientId
         }
+        rememberProjectModelSelection(model, provider: resolvedProvider, in: window)
         updateState(key) { state in
             state.agentProvider = resolvedProvider
             state.model = model
@@ -1659,8 +1715,9 @@ final class AppState {
                 bridge.streamingStartDate = state.streamingStartDate
                 bridge.liveOutputTokens = state.currentTurnOutputTokens
                 bridge.lastTurnContextUsedPercentage = state.lastTurnContextUsedPercentage
-                let provider = window.sessionAgentProvider ?? selectedAgentProvider
-                let currentModel = window.sessionModel ?? selectedModel
+                let selection = effectiveModelSelection(in: window)
+                let provider = selection.provider
+                let currentModel = selection.model
                 bridge.agentProvider = provider
                 bridge.modelDisplayName = modelDisplayName(for: currentModel, provider: provider, in: window)
                 bridge.sessionStats = ChatSessionStats(
@@ -1724,7 +1781,7 @@ final class AppState {
         // S2: warn (in logs) if another process touched the same jsonl very
         // recently — likely a `claude` running in the terminal on the same
         // session. We don't block, but the operator can spot it after the fact.
-        if (window.sessionAgentProvider ?? selectedAgentProvider) == .claudeCode,
+        if effectiveModelSelection(in: window).provider == .claudeCode,
            let sid = window.currentSessionId,
            let cwd = window.selectedProject?.path,
            cliStore.detectExternalActivity(sid: sid, cwd: cwd, withinSeconds: 5)
@@ -1912,8 +1969,11 @@ final class AppState {
             let tempId = "pending-\(streamId.uuidString)"
             window.currentSessionId = tempId
             window.insertPendingPlaceholder(tempId)
-            let snapProvider = window.sessionAgentProvider ?? selectedAgentProvider
-            let snapModel = window.sessionModel
+            let snapSelection = effectiveModelSelection(in: window)
+            let snapProvider = snapSelection.provider
+            let snapModel = snapSelection.model
+            window.sessionAgentProvider = snapProvider
+            window.sessionModel = snapModel
             let snapEffort = window.sessionEffort
             let snapPermission = window.sessionPermissionMode
             updateState(tempId) { state in
@@ -1948,14 +2008,15 @@ final class AppState {
         // otherwise race the insertion at line ~1168 and bail with "no summary".
         if isNewSession {
             let initialTitle = ChatSession.placeholderTitle(from: displayText ?? prompt)
-            let provider = window.sessionAgentProvider ?? selectedAgentProvider
+            let selection = effectiveModelSelection(in: window)
+            let provider = selection.provider
             let placeholder = ChatSession(
                 id: sessionKey,
                 projectId: project.id,
                 title: initialTitle,
                 messages: [],
                 agentProvider: provider,
-                model: window.sessionModel ?? selectedModel,
+                model: selection.model,
                 origin: provider.defaultSessionOrigin
             )
             allSessionSummaries.insert(placeholder.summary, at: 0)
@@ -2020,10 +2081,9 @@ final class AppState {
         let effectiveCwd = sessionStates[sessionKey]?.worktreePath
             ?? allSessionSummaries.first(where: { $0.id == sessionKey })?.worktreePath
             ?? project.path
-        let effectiveProvider = sessionStates[sessionKey]?.agentProvider
-            ?? window.sessionAgentProvider
-            ?? selectedAgentProvider
-        let effectiveModel = window.sessionModel ?? selectedModel
+        let selection = effectiveModelSelection(in: window)
+        let effectiveProvider = sessionStates[sessionKey]?.agentProvider ?? selection.provider
+        let effectiveModel = sessionStates[sessionKey]?.model ?? selection.model
 
         let task = Task { [weak self, window] in
             guard let self else { return }
@@ -2895,7 +2955,7 @@ final class AppState {
         sessionStates[key]?.activeStreamId = nil
 
         if let streamToCancel {
-            let provider = sessionStates[key]?.agentProvider ?? window.sessionAgentProvider ?? selectedAgentProvider
+            let provider = sessionStates[key]?.agentProvider ?? effectiveModelSelection(in: window).provider
             switch provider {
             case .claudeCode:
                 await claude.cancel(streamId: streamToCancel)
@@ -3717,10 +3777,11 @@ final class AppState {
         }
         // Persist via sidecar meta
         let snap = allSessionSummaries.first(where: { $0.id == sessionId })
+        let fallbackProvider = defaultModelSelection(for: project).provider
         let updated = (snap ?? ChatSession.Summary(
             id: sessionId, projectId: project.id, title: ChatSession.defaultTitle,
             createdAt: Date(), updatedAt: Date(), isPinned: false,
-            agentProvider: sessionStates[sessionId]?.agentProvider ?? selectedAgentProvider,
+            agentProvider: sessionStates[sessionId]?.agentProvider ?? fallbackProvider,
             worktreePath: info.path.path, worktreeBranch: info.branch
         )).makeSession()
         await updateSessionMetadata(updated) { s in
@@ -4050,12 +4111,13 @@ final class AppState {
     /// indexed yet (e.g. brand-new session whose `.result` arrived before the
     /// summary list refresh).
     private func summaryFor(sessionId: String, projectId: UUID) -> ChatSession.Summary {
-        allSessionSummaries.first(where: { $0.id == sessionId })
+        let fallbackProvider = defaultModelSelection(for: projects.first { $0.id == projectId }).provider
+        return allSessionSummaries.first(where: { $0.id == sessionId })
             ?? ChatSession.Summary(
                 id: sessionId, projectId: projectId, title: "",
                 createdAt: Date(), updatedAt: Date(), isPinned: false,
-                agentProvider: sessionStates[sessionId]?.agentProvider ?? selectedAgentProvider,
-                origin: (sessionStates[sessionId]?.agentProvider ?? selectedAgentProvider).defaultSessionOrigin
+                agentProvider: sessionStates[sessionId]?.agentProvider ?? fallbackProvider,
+                origin: (sessionStates[sessionId]?.agentProvider ?? fallbackProvider).defaultSessionOrigin
             )
     }
 
@@ -4389,7 +4451,8 @@ final class AppState {
         await permission.refreshRunToken()
 
         let currentPermissionMode = sessionStates[sessionKey]?.permissionMode ?? permissionMode
-        let agentProvider = sessionStates[sessionKey]?.agentProvider ?? selectedAgentProvider
+        let projectSelection = defaultModelSelection(for: projects.first { $0.id == projectId })
+        let agentProvider = sessionStates[sessionKey]?.agentProvider ?? projectSelection.provider
         var hookSettingsPath: String?
         if agentProvider == .claudeCode, !currentPermissionMode.skipsHookPipeline {
             do { hookSettingsPath = try await permission.writeHookSettingsFile() }
@@ -4398,7 +4461,7 @@ final class AppState {
 
         await permission.registerSession(sid: sessionKey, projectKey: cwd, mode: currentPermissionMode)
 
-        let model = sessionStates[sessionKey]?.model ?? selectedModel
+        let model = sessionStates[sessionKey]?.model ?? projectSelection.model
         let effort = sessionStates[sessionKey]?.effort ?? (selectedEffort == "auto" ? nil : selectedEffort)
         let task = Task { [weak self, window] in
             guard let self else { return }

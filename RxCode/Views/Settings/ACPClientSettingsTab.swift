@@ -1,9 +1,24 @@
 import SwiftUI
 import RxCodeCore
 
+private enum ACPClientSettingsPage: String, CaseIterable, Identifiable {
+    case installed
+    case registry
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .installed: return "Installed"
+        case .registry: return "Registry"
+        }
+    }
+}
+
 struct ACPClientSettingsTab: View {
     @Environment(AppState.self) private var appState
 
+    @State private var selectedPage: ACPClientSettingsPage = .installed
     @State private var pendingRemoval: ACPClientSpec?
     @State private var editingClient: ACPClientSpec?
     @State private var actionError: String?
@@ -14,18 +29,29 @@ struct ACPClientSettingsTab: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 header
+                pagePicker
                 Divider()
-                installedSection
-                Divider()
-                registrySection
+                switch selectedPage {
+                case .installed:
+                    installedSection
+                case .registry:
+                    registrySection
+                }
             }
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .task {
-            if appState.acpRegistry == nil && !appState.acpRegistryLoading {
+            if selectedPage == .registry && appState.acpRegistry == nil && !appState.acpRegistryLoading {
                 await appState.refreshACPRegistry()
             }
+        }
+        .onChange(of: selectedPage) { _, page in
+            guard page == .registry,
+                  appState.acpRegistry == nil,
+                  !appState.acpRegistryLoading
+            else { return }
+            Task { await appState.refreshACPRegistry() }
         }
         .sheet(item: $editingClient) { client in
             ACPClientEditorSheet(
@@ -69,6 +95,18 @@ struct ACPClientSettingsTab: View {
         }
     }
 
+    private var pagePicker: some View {
+        Picker("ACP page", selection: $selectedPage) {
+            ForEach(ACPClientSettingsPage.allCases) { page in
+                Text(page.title).tag(page)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .frame(width: 240)
+        .frame(maxWidth: .infinity, alignment: .center)
+    }
+
     // MARK: - Installed
 
     private var installedSection: some View {
@@ -77,7 +115,7 @@ struct ACPClientSettingsTab: View {
                 .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
 
             if appState.acpClients.isEmpty {
-                Text("No clients installed. Add one from the registry below.")
+                Text("No clients installed. Add one from the Registry tab.")
                     .font(.system(size: ClaudeTheme.size(11)))
                     .foregroundStyle(.secondary)
             } else {

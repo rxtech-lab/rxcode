@@ -59,7 +59,7 @@ actor PersistenceService {
                 )
             )
 
-        case .legacyRxCode, .codexAppServer:
+        case .legacyRxCode, .codexAppServer, .acpAgent:
             let dir = baseURL
                 .appendingPathComponent("sessions")
                 .appendingPathComponent(session.projectId.uuidString)
@@ -91,14 +91,18 @@ actor PersistenceService {
                 guard var summary = decode(ChatSession.Summary.self, from: url) else { return nil }
                 // Files saved before this change may decode as `.legacyRxCode`
                 // already (default), but be defensive.
-                if summary.origin != .legacyRxCode && summary.origin != .codexAppServer {
+                if summary.origin != .legacyRxCode && summary.origin != .codexAppServer && summary.origin != .acpAgent {
                     summary = ChatSession.Summary(
                         id: summary.id, projectId: summary.projectId, title: summary.title,
                         createdAt: summary.createdAt, updatedAt: summary.updatedAt,
                         isPinned: summary.isPinned, agentProvider: summary.agentProvider,
                         model: summary.model,
                         effort: summary.effort, permissionMode: summary.permissionMode,
-                        origin: .legacyRxCode
+                        origin: .legacyRxCode,
+                        worktreePath: summary.worktreePath,
+                        worktreeBranch: summary.worktreeBranch,
+                        isArchived: summary.isArchived,
+                        archivedAt: summary.archivedAt
                     )
                 }
                 return summary
@@ -150,7 +154,7 @@ actor PersistenceService {
             // it survives, the merge in AppState falls back to it after the
             // jsonl is gone and the entry resurrects on the next reload.
             try removeLegacySessionFile(projectId: projectId, sessionId: sessionId)
-        case .legacyRxCode, .codexAppServer:
+        case .legacyRxCode, .codexAppServer, .acpAgent:
             try removeLegacySessionFile(projectId: projectId, sessionId: sessionId)
         }
     }
@@ -168,7 +172,7 @@ actor PersistenceService {
 
     /// Loads the full message history. Routes by `origin`:
     /// - `.cliBacked` → CLI jsonl
-    /// - `.legacyRxCode` → RxCode's per-project json
+    /// - `.legacyRxCode` / `.codexAppServer` / `.acpAgent` → RxCode's per-project json
     func loadFullSession(summary: ChatSession.Summary, cwd: String) async -> ChatSession? {
         switch summary.origin {
         case .cliBacked:
@@ -177,7 +181,7 @@ actor PersistenceService {
                 cwd: cwd,
                 projectId: summary.projectId
             )
-        case .legacyRxCode, .codexAppServer:
+        case .legacyRxCode, .codexAppServer, .acpAgent:
             return loadLegacySessionSync(projectId: summary.projectId, sessionId: summary.id)
         }
     }
@@ -215,6 +219,24 @@ actor PersistenceService {
         baseURL
             .appendingPathComponent("run_profiles")
             .appendingPathComponent("\(projectId.uuidString).json")
+    }
+
+    // MARK: - ACP Clients
+
+    func saveACPClients(_ clients: [ACPClientSpec]) throws {
+        let url = baseURL.appendingPathComponent("acp_clients.json")
+        try encode(clients, to: url)
+    }
+
+    func loadACPClients() -> [ACPClientSpec] {
+        let url = baseURL.appendingPathComponent("acp_clients.json")
+        return decode([ACPClientSpec].self, from: url) ?? []
+    }
+
+    /// Returns the on-disk URL for the cached ACP registry snapshot. The
+    /// `ACPRegistryService` reads/writes this file directly.
+    nonisolated func acpRegistrySnapshotURL() -> URL {
+        AppSupport.bundleScopedURL.appendingPathComponent("acp_registry.json")
     }
 
     // MARK: - GitHub User Cache

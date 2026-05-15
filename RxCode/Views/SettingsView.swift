@@ -45,6 +45,12 @@ struct SettingsView: View {
                     Label("MCP", systemImage: "puzzlepiece.extension")
                 }
                 .tag(4)
+
+            ACPClientSettingsTab()
+                .tabItem {
+                    Label("ACP Clients", systemImage: "link.circle")
+                }
+                .tag(5)
         }
         .frame(width: 680, height: 620)
         .focusable(false)
@@ -571,8 +577,8 @@ struct ChatSettingsTab: View {
                 .foregroundStyle(.secondary)
 
             Picker("", selection: defaultModelKey) {
-                ForEach(appState.availableAgentModelSections(), id: \.provider) { section in
-                    Section(section.provider.displayName) {
+                ForEach(appState.availableAgentModelSections(), id: \.id) { section in
+                    Section(section.title) {
                         ForEach(section.models, id: \.key) { model in
                             Text(model.displayName).tag(model.key)
                         }
@@ -608,7 +614,7 @@ struct ChatSettingsTab: View {
         ?? AgentModel(
             provider: appState.selectedAgentProvider,
             id: appState.selectedModel,
-            displayName: AppState.modelDisplayName(appState.selectedModel, provider: appState.selectedAgentProvider),
+            displayName: appState.modelDisplayLabel(appState.selectedModel, provider: appState.selectedAgentProvider),
             description: AppState.modelDescription(appState.selectedModel, provider: appState.selectedAgentProvider)
         )
     }

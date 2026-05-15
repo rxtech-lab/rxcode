@@ -13,4 +13,11 @@ public enum SessionOrigin: String, Codable, Sendable {
     /// Backed by Codex app-server for execution. RxCode persists a local replay
     /// copy of the rendered messages while using the Codex thread id for turns.
     case codexAppServer
+
+    /// Backed by an Agent Client Protocol agent (OpenCode, Gemini CLI, etc.).
+    /// The agent owns its own session storage on disk, but RxCode also keeps a
+    /// local replay copy of the rendered messages — the agents do not expose
+    /// their logs in a format RxCode can read, so without this copy the chat
+    /// appears empty on reopen.
+    case acpAgent
 }

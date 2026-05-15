@@ -328,9 +328,10 @@ fileprivate func suppressPlanReadyFollowups(in messages: [ChatMessage]) -> [Chat
                 continue
             }
 
-            if hasRecentPlanCard && isPlanReadyFollowupMessage(message) {
-                continue
-            }
+            // Plan-ready follow-up messages (e.g. "Plan is ready at /…/plans/foo.md")
+            // are intentionally kept visible alongside the plan card so the user
+            // sees the summary while approval is pending.
+            _ = hasRecentPlanCard
 
             if PlanCardView.containsExitPlanMode(message) {
                 hasRecentPlanCard = true

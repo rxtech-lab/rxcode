@@ -9,7 +9,23 @@ public enum StreamEvent: Sendable {
     case result(ResultEvent)
     case rateLimitEvent(RateLimitInfo)
     case todoSnapshot(TodoSnapshotEvent)
+    case acpModelsDiscovered(ACPModelsDiscoveredEvent)
     case unknown(String)
+}
+
+// MARK: - ACP Models Discovered
+
+/// Emitted after `session/new` succeeds when the agent advertises a model
+/// selector. AppState writes the discovered list back to the matching
+/// `ACPClientSpec` so the picker stays in sync with the agent.
+public struct ACPModelsDiscoveredEvent: Sendable {
+    public let clientId: String
+    public let config: ACPModelConfig
+
+    public init(clientId: String, config: ACPModelConfig) {
+        self.clientId = clientId
+        self.config = config
+    }
 }
 
 // MARK: - System Event

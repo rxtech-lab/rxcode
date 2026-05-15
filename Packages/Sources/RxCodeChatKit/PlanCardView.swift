@@ -156,9 +156,10 @@ struct PlanCardView: View {
         allMessages: [ChatMessage] = []
     ) -> Bool {
         let hasExitPlanInMessage = containsExitPlanMode(message)
-        if let text = block.text {
-            return hasExitPlanInMessage && isPlanReadyFollowup(text)
-        }
+        // Text blocks (including the model's "Plan is ready at /path/foo.md"
+        // follow-up) are intentionally NOT hidden — they render alongside the
+        // plan card so the user sees the summary while approval is pending.
+        if block.text != nil { return false }
         guard let toolCall = block.toolCall, isPlanFileWrite(toolCall) else { return false }
         // Hide a plan-file Write when the ExitPlanMode card is present anywhere in
         // the same assistant run — not just in this exact message. Two cards otherwise

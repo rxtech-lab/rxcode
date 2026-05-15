@@ -135,6 +135,7 @@ private struct MenuBarLabel: View {
         switch provider {
         case .claudeCode: return "CC"
         case .codex: return "CODEX"
+        case .acp: return "ACP"
         }
     }
 
@@ -203,6 +204,7 @@ private struct MenuBarContentView: View {
         switch appState.selectedAgentProvider {
         case .claudeCode: return appState.latestRateLimitUsage
         case .codex: return appState.latestCodexRateLimitUsage
+        case .acp: return nil
         }
     }
 
@@ -210,6 +212,7 @@ private struct MenuBarContentView: View {
         switch appState.selectedAgentProvider {
         case .claudeCode: return "7-day limit"
         case .codex: return "24-hour limit"
+        case .acp: return "Usage"
         }
     }
 
@@ -217,6 +220,7 @@ private struct MenuBarContentView: View {
         switch appState.selectedAgentProvider {
         case .claudeCode: return selectedUsage?.sevenDayPercent
         case .codex: return selectedUsage?.twentyFourHourPercent
+        case .acp: return nil
         }
     }
 
@@ -224,6 +228,7 @@ private struct MenuBarContentView: View {
         switch appState.selectedAgentProvider {
         case .claudeCode: return selectedUsage?.sevenDayResetsAt
         case .codex: return selectedUsage?.twentyFourHourResetsAt
+        case .acp: return nil
         }
     }
 
@@ -312,6 +317,7 @@ private struct MenuBarContentView: View {
         switch appState.selectedAgentProvider {
         case .claudeCode: return "Sign in to Claude Code to see usage"
         case .codex: return "Sign in to Codex to see usage"
+        case .acp: return "Usage tracking not supported by ACP"
         }
     }
 

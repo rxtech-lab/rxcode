@@ -636,6 +636,7 @@ struct ComposerControlLabel: View {
 struct ChatDetailModifiers: ViewModifier {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
+    @Environment(ChatBridge.self) private var chatBridge
 
     private var presentedRequest: PermissionRequest? {
         guard let id = windowState.presentedPermissionId else { return nil }
@@ -655,6 +656,22 @@ struct ChatDetailModifiers: ViewModifier {
             set: { isPresented in
                 if !isPresented, presentedRequest?.toolName == "AskUserQuestion" {
                     windowState.presentedPermissionId = nil
+                }
+            }
+        )
+    }
+
+    private var presentedPlan: PendingPlan? {
+        guard let id = windowState.presentedPlanToolCallId else { return nil }
+        return chatBridge.pendingPlans.first { $0.toolCallId == id }
+    }
+
+    private var planSheetBinding: Binding<Bool> {
+        Binding(
+            get: { presentedPlan != nil },
+            set: { isPresented in
+                if !isPresented {
+                    windowState.presentedPlanToolCallId = nil
                 }
             }
         )
@@ -700,6 +717,33 @@ struct ChatDetailModifiers: ViewModifier {
             .onChange(of: windowState.pendingPermissions.map(\.id)) { _, newIds in
                 if let id = windowState.presentedPermissionId, !newIds.contains(id) {
                     windowState.presentedPermissionId = nil
+                }
+            }
+            .sheet(isPresented: planSheetBinding) {
+                if let plan = presentedPlan {
+                    PlanSheetView(
+                        plan: plan,
+                        remainingCount: max(0, chatBridge.pendingPlans.filter { !$0.isDecided }.count - 1),
+                        onSubmit: { toolCallId, action in
+                            windowState.planDecisionHandler?(toolCallId, action)
+                            // Decision recorded — close the sheet. The chip in chat
+                            // will reflect the new status once the result lands.
+                            windowState.presentedPlanToolCallId = nil
+                        },
+                        onClose: {
+                            // Just dismiss — the plan stays in the queue so the user
+                            // can re-open it from the banner or inline chip later.
+                            windowState.presentedPlanToolCallId = nil
+                        }
+                    )
+                    .environment(appState)
+                    .environment(windowState)
+                    .environment(chatBridge)
+                }
+            }
+            .onChange(of: chatBridge.pendingPlans.map(\.toolCallId)) { _, newIds in
+                if let id = windowState.presentedPlanToolCallId, !newIds.contains(id) {
+                    windowState.presentedPlanToolCallId = nil
                 }
             }
             .sheet(isPresented: Bindable(windowState).showModelPicker) {

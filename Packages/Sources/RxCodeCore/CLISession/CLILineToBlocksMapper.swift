@@ -48,6 +48,7 @@ public enum CLILineToBlocksMapper {
             let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { return }
             if CLIMetaEnvelope.isEnvelope(trimmed) { return }
+            if PlanDecisionAction.isContinuationPrompt(s) { return }
             messages.append(ChatMessage(
                 role: .user,
                 blocks: [.text(s)],
@@ -63,6 +64,7 @@ public enum CLILineToBlocksMapper {
                     let trimmed = t.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !trimmed.isEmpty else { continue }
                     if CLIMetaEnvelope.isEnvelope(trimmed) { continue }
+                    if PlanDecisionAction.isContinuationPrompt(t) { continue }
                     textsForNewMessage.append(t)
                 case .toolResult(let id, let content, let isError):
                     foldToolResult(id: id, result: content, isError: isError, into: &messages)
@@ -91,10 +93,26 @@ public enum CLILineToBlocksMapper {
         // Walk backwards — tool_result almost always pairs with the most recent
         // assistant tool_use, but a single assistant turn can have multiple.
         for i in messages.indices.reversed() {
-            if messages[i].toolCallIndex(id: id) != nil {
-                messages[i].setToolResult(id: id, result: result, isError: isError)
+            guard let blockIdx = messages[i].toolCallIndex(id: id),
+                  let call = messages[i].blocks[blockIdx].toolCall else { continue }
+
+            // Preserve user-authored ExitPlanMode decision summaries. The CLI
+            // writes its own tool_result for ExitPlanMode after the user
+            // approves ("User has approved your plan…"), and folding that back
+            // would erase the "Accepted with …" / "Rejected" summary that the
+            // plan chip and pending-plan banner rely on.
+            let isExitPlan: Bool = {
+                let n = call.name.lowercased()
+                return n == "exitplanmode" || n == "exit_plan_mode"
+            }()
+            if isExitPlan,
+               let existing = call.result,
+               PlanDecisionAction.isUserDecisionResult(existing) {
                 return
             }
+
+            messages[i].setToolResult(id: id, result: result, isError: isError)
+            return
         }
         // Orphan tool_result (assistant line missing) — drop it silently.
     }

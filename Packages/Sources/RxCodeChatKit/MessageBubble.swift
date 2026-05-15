@@ -68,6 +68,12 @@ struct MessageBubble: View {
                 } else {
                     // Assistant message: render blocks in order
                     let renderBlocks = assistantRenderBlocks()
+                    // While the model is paused on an undecided ExitPlanMode in this
+                    // same message, sibling tools without results are effectively
+                    // suspended — not running. Drop the streaming flag for those so
+                    // their spinner doesn't keep ticking until the user approves.
+                    let siblingsArePaused = messageHasPendingExitPlanMode
+                    let siblingStreaming = message.isStreaming && !siblingsArePaused
 
                     ForEach(renderBlocks) { block in
                         Group {
@@ -90,7 +96,7 @@ struct MessageBubble: View {
                                         externalPlanMarkdown: external
                                     )
                                 } else {
-                                    ToolResultView(toolCall: toolCall, isMessageStreaming: message.isStreaming)
+                                    ToolResultView(toolCall: toolCall, isMessageStreaming: siblingStreaming)
                                 }
                             case .transientTools(let id, let tools):
                                 transientToolSummary(groupId: id, tools: tools)
@@ -353,6 +359,24 @@ struct MessageBubble: View {
         return .asymmetric(insertion: insertion, removal: .identity)
     }
 
+    // MARK: - Plan Pause Helpers
+
+    /// True when this assistant message contains an `ExitPlanMode` tool call that
+    /// the user has not yet decided on. While true, the CLI is suspended on the
+    /// PreToolUse hook — sibling tool calls in the same message will never get
+    /// their `tool_result` delivered until the plan is approved/rejected, so the
+    /// "running" spinner on those siblings would otherwise tick forever.
+    private var messageHasPendingExitPlanMode: Bool {
+        for block in message.blocks {
+            guard let toolCall = block.toolCall,
+                  PlanCardView.isExitPlanMode(toolCall) else { continue }
+            if chatBridge.planDecisionSummaries[toolCall.id] != nil { continue }
+            if PlanCardView.isPlanDecided(toolCall) { continue }
+            return true
+        }
+        return false
+    }
+
     // MARK: - Transient Tool Helpers
 
     /// Read, Grep, Glob, Bash etc. are collapsed into a summary after streaming completes
@@ -393,7 +417,19 @@ struct MessageBubble: View {
             pendingTransientGroupStartId = nil
         }
 
-        for block in message.blocks {
+        // When the model emits an ExitPlanMode tool call together with a trailing
+        // narration text ("Plan written with 'hi'. Awaiting approval."), the API
+        // stream orders them tool-then-text. Lift sibling text blocks ahead of the
+        // plan chip so the user sees the description with the plan rather than
+        // dangling after a chip that's already been decided.
+        let orderedBlocks: [MessageBlock] = {
+            guard PlanCardView.containsExitPlanMode(message) else { return message.blocks }
+            let textBlocks = message.blocks.filter { $0.isText }
+            let nonTextBlocks = message.blocks.filter { !$0.isText }
+            return textBlocks + nonTextBlocks
+        }()
+
+        for block in orderedBlocks {
             if PlanCardView.shouldHideBlock(block, in: message, allMessages: chatBridge.messages) { continue }
             if block.isText {
                 flushTransientTools()

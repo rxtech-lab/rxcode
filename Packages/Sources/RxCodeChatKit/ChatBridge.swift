@@ -31,6 +31,13 @@ public final class ChatBridge {
     public var claudeVersion: String?
     public var codexVersion: String?
 
+    /// User decision summaries for `ExitPlanMode` tool calls in the current session,
+    /// keyed by `toolCallId`. Pushed by AppState from per-session state and persisted
+    /// SwiftData rows. Read by `PlanCardView` and `pendingPlans` so the chip surfaces
+    /// the user's decision even after the CLI's own follow-up tool_result has replaced
+    /// `ToolCall.result` (which happens on every reload of a CLI-backed session).
+    public var planDecisionSummaries: [String: String] = [:]
+
     // MARK: - Action Handlers (set up by the app target)
 
     public var sendHandler: (() async -> Void)?
@@ -120,15 +127,14 @@ public final class ChatBridge {
                 guard let toolCall = message.blocks[blockIdx].toolCall,
                       PlanCardView.isExitPlanMode(toolCall) else { continue }
 
+                if planDecisionSummaries[toolCall.id] != nil { return false }
                 if PlanCardView.isPlanDecided(toolCall) { return false }
 
                 // If anything came after this ExitPlanMode — later blocks in the
                 // same message, or any later message — the chat continued past
-                // it, so the user must have already acted on the plan. This
-                // covers CLI-backed sessions reloaded from disk: the CLI's
-                // recorded tool_result for ExitPlanMode does not match the UI's
-                // in-memory decision summary, so the result string alone is not
-                // a reliable signal once the session has been persisted.
+                // it, so the user must have already acted on the plan. Covers
+                // edge cases where neither the persisted decision nor the
+                // in-memory result has caught up yet (e.g. mid-reconcile).
                 let hasLaterBlock = blockIdx < message.blocks.count - 1
                 let hasLaterMessage = messageIdx < messages.count - 1
                 if hasLaterBlock || hasLaterMessage { return false }
@@ -137,5 +143,45 @@ public final class ChatBridge {
             }
         }
         return false
+    }
+
+    /// All `ExitPlanMode` tool calls in the current session, mapped to a
+    /// presentation-ready `PendingPlan`. Includes both undecided plans (banner
+    /// surfaces these) and decided plans (inline chip renders the outcome).
+    /// Superseded plans are excluded so a re-emitted plan replaces the prior one.
+    public var pendingPlans: [PendingPlan] {
+        var collected: [PendingPlan] = []
+        for message in messages {
+            for block in message.blocks {
+                guard let toolCall = block.toolCall,
+                      PlanCardView.isExitPlanMode(toolCall) else { continue }
+                if PlanCardView.isSupersededExitPlanMode(
+                    toolCall: toolCall,
+                    in: message,
+                    allMessages: messages
+                ) { continue }
+
+                let inlineMd = toolCall.input["plan"]?.stringValue ?? ""
+                let markdown: String = inlineMd.isEmpty
+                    ? (PlanCardView.fallbackPlanMarkdown(in: message)
+                        ?? PlanCardView.latestPriorPlanMarkdown(before: message, in: messages)
+                        ?? "")
+                    : inlineMd
+
+                let persistedSummary = planDecisionSummaries[toolCall.id]
+                let decided = persistedSummary != nil || PlanCardView.isPlanDecided(toolCall)
+                let summary: String? = persistedSummary
+                    ?? (PlanCardView.isPlanDecided(toolCall) ? toolCall.result : nil)
+                let isStreaming = message.isStreaming && markdown.isEmpty
+                collected.append(PendingPlan(
+                    toolCallId: toolCall.id,
+                    markdown: markdown,
+                    isStreaming: isStreaming,
+                    isDecided: decided,
+                    decisionSummary: summary
+                ))
+            }
+        }
+        return collected
     }
 }

@@ -2,10 +2,16 @@ import SwiftUI
 import RxCodeCore
 import AppKit
 
-/// Interactive UI for a Claude `ExitPlanMode` tool call, plus a fallback for plan
-/// markdown files written via `Write` to `~/.claude/plans/*.md`. Renders the plan as
-/// rich markdown and (when pending) shows action buttons for the user to accept
-/// or reject the plan.
+/// Compact inline status chip for a Claude `ExitPlanMode` tool call. Replaces the
+/// full markdown card that used to render here — the markdown body and decision
+/// buttons now live in `PlanSheetView`, opened by tapping the chip or the
+/// pending-plan banner above the input bar. The chip itself only communicates
+/// the basic status: "Plan ready" while pending, the decision summary once
+/// resolved, or a streaming placeholder while the call is still arriving.
+///
+/// The static helpers on this type are reused by `MessageBubble`,
+/// `ChatBridge.pendingPlans`, and `AppState` to identify and de-duplicate plan
+/// blocks across the chat history. They are unchanged from the original card.
 struct PlanCardView: View {
     let toolCall: ToolCall
     let planMarkdown: String
@@ -15,45 +21,41 @@ struct PlanCardView: View {
     /// the plan to `~/.claude/plans/*.md` in a previous turn before an
     /// `AskUserQuestion` split the assistant run).
     var externalPlanMarkdown: String? = nil
+    /// Optional override for the chip's tap behavior. When nil (production
+    /// default), the chip writes `toolCall.id` to `windowState.presentedPlanToolCallId`
+    /// to open the plan sheet. Tests inject a closure to capture the tap without
+    /// needing the SwiftUI environment.
+    var onOpen: ((String) -> Void)? = nil
 
     @Environment(WindowState.self) private var windowState
+    /// Optional so isolated test mounts (without a ChatBridge ancestor) don't
+    /// fatal on env lookup. Production hosts always inject one.
+    @Environment(ChatBridge.self) private var chatBridge: ChatBridge?
+    @State private var isHovered: Bool = false
 
     // Match the summary strings written by AppState.respondToPlanDecision. Any other
     // non-nil result (e.g., CLI-side "Exit plan mode?" responses) must not be treated
-    // as a user decision, otherwise the accept/reject buttons get hidden before the
-    // user has actually clicked one.
-    static let userDecisionPrefixes: [String] = [
-        "Accepted with Ask",
-        "Accepted with Edits",
-        "Accepted with Auto-approve",
-        "Rejected",
-    ]
+    // as a user decision, otherwise the chip flips to "decided" before the user has
+    // actually clicked anything.
+    static let userDecisionPrefixes: [String] = PlanDecisionAction.userDecisionResultPrefixes
 
     static func isPlanDecided(_ toolCall: ToolCall) -> Bool {
         guard let result = toolCall.result else { return false }
-        return userDecisionPrefixes.contains { result.hasPrefix($0) }
+        return PlanDecisionAction.isUserDecisionResult(result)
     }
-
-    @State private var isExpanded: Bool
-    @State private var showFullSheet: Bool = false
-    @State private var feedbackText: String = ""
-    @State private var isComposingFeedback: Bool = false
-    @State private var isResolving: Bool = false
 
     init(
         toolCall: ToolCall,
         planMarkdown: String,
         isMessageStreaming: Bool,
-        externalPlanMarkdown: String? = nil
+        externalPlanMarkdown: String? = nil,
+        onOpen: ((String) -> Void)? = nil
     ) {
         self.toolCall = toolCall
         self.planMarkdown = planMarkdown
         self.isMessageStreaming = isMessageStreaming
         self.externalPlanMarkdown = externalPlanMarkdown
-        // Start collapsed when the plan is already decided so reloaded history
-        // doesn't re-display the full plan body. The .onChange below handles
-        // collapsing for live decisions.
-        self._isExpanded = State(initialValue: !Self.isPlanDecided(toolCall))
+        self.onOpen = onOpen
     }
 
     /// Extract the plan markdown for a tool call, or nil if this isn't a plan-bearing call.
@@ -194,7 +196,7 @@ struct PlanCardView: View {
 
     /// True if this `ExitPlanMode` tool call is followed by another `ExitPlanMode`
     /// in the same assistant run (no user message between). Used to hide stale plan
-    /// cards when the model re-emits a fresh plan — only the latest is actionable.
+    /// chips when the model re-emits a fresh plan — only the latest is actionable.
     static func isSupersededExitPlanMode(
         toolCall: ToolCall,
         in message: ChatMessage,
@@ -220,20 +222,19 @@ struct PlanCardView: View {
         Self.isExitPlanMode(toolCall)
     }
 
-    private var isDecided: Bool {
-        Self.isPlanDecided(toolCall)
+    /// Decision summary sourced first from the persisted sidecar dict (survives
+    /// CLI-backed reloads), then falling back to `toolCall.result` for the
+    /// brief in-flight window before the persisted value has been read back
+    /// (and for non-CLI sessions where the dict is empty).
+    private var persistedDecisionSummary: String? {
+        if let s = chatBridge?.planDecisionSummaries[toolCall.id] { return s }
+        guard let result = toolCall.result,
+              PlanDecisionAction.isUserDecisionResult(result) else { return nil }
+        return result
     }
 
-    private var isStreaming: Bool {
-        // Spinner only while the parent assistant message is still streaming AND no
-        // plan content has arrived yet (including a prior-turn fallback). Once the
-        // message stops streaming, drop the spinner even if planMarkdown is still
-        // empty — otherwise the card stays stuck when input_json_delta never arrives
-        // or the parsed input lacks a `plan` key.
-        guard isMessageStreaming else { return false }
-        if !planMarkdown.isEmpty { return false }
-        if let external = externalPlanMarkdown, !external.isEmpty { return false }
-        return true
+    private var isDecided: Bool {
+        persistedDecisionSummary != nil
     }
 
     private var resolvedMarkdown: String {
@@ -241,379 +242,107 @@ struct PlanCardView: View {
         return externalPlanMarkdown ?? ""
     }
 
+    private var isStreaming: Bool {
+        guard isMessageStreaming else { return false }
+        return resolvedMarkdown.isEmpty
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            header
-
-            if isExpanded {
-                planBody
-
-                if isExitPlanMode {
-                    decisionArea
-                }
-            } else {
-                collapsedPreview
-            }
-        }
-        .bubbleStyle(.tool)
-        .sheet(isPresented: $showFullSheet) {
-            PlanFullSheet(markdown: resolvedMarkdown)
-        }
-        .onChange(of: isDecided) { _, newValue in
-            if newValue {
-                withAnimation(.easeInOut(duration: 0.2)) { isExpanded = false }
-            }
-        }
-    }
-
-    // MARK: - Header
-
-    @ViewBuilder
-    private var header: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "doc.text.fill")
-                .font(.system(size: ClaudeTheme.messageSize(13), weight: .medium))
-                .foregroundStyle(ClaudeTheme.accent)
-                .frame(width: 16, height: 16)
-
-            Text("Plan", bundle: .module)
-                .font(.system(size: ClaudeTheme.messageSize(13), weight: .semibold))
-                .foregroundStyle(ClaudeTheme.textPrimary)
-
-            Spacer()
-
-            if isDecided {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(ClaudeTheme.statusSuccess)
-                    .font(.caption)
-            }
-
-            headerIconButton(
-                systemName: "doc.on.doc",
-                help: String(localized: "Copy plan", bundle: .module)
-            ) {
-                copyMarkdown()
-            }
-
-            headerIconButton(
-                systemName: "arrow.up.left.and.arrow.down.right",
-                help: String(localized: "Open in full window", bundle: .module)
-            ) {
-                showFullSheet = true
-            }
-
-            headerIconButton(
-                systemName: isExpanded ? "chevron.up" : "chevron.down",
-                help: String(localized: isExpanded ? "Collapse" : "Expand", bundle: .module)
-            ) {
-                withAnimation(.easeInOut(duration: 0.18)) { isExpanded.toggle() }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func headerIconButton(systemName: String, help: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(ClaudeTheme.textSecondary)
-                .frame(width: 22, height: 22)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(help)
-    }
-
-    // MARK: - Body
-
-    @ViewBuilder
-    private var planBody: some View {
-        if isStreaming {
-            // Avoid markdown flicker while input_json_delta is still streaming — show
-            // a lightweight placeholder until the tool call completes.
-            HStack(spacing: 6) {
-                ProgressView().controlSize(.small)
-                Text("Drafting plan…", bundle: .module)
-                    .font(.system(size: ClaudeTheme.messageSize(12)))
-                    .foregroundStyle(ClaudeTheme.textSecondary)
-            }
-            .padding(.vertical, 4)
-        } else if resolvedMarkdown.isEmpty {
-            Text("Plan content unavailable.", bundle: .module)
-                .font(.system(size: ClaudeTheme.messageSize(12)))
-                .foregroundStyle(ClaudeTheme.textSecondary)
-                .padding(.vertical, 4)
-        } else {
-            MarkdownContentView(text: resolvedMarkdown)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical, 2)
-        }
-    }
-
-    @ViewBuilder
-    private var collapsedPreview: some View {
-        let firstLine = resolvedMarkdown
-            .split(whereSeparator: \.isNewline)
-            .first
-            .map(String.init)?
-            .replacingOccurrences(of: #"^#+\s*"#, with: "", options: .regularExpression)
-            ?? "(empty plan)"
-        VStack(alignment: .leading, spacing: 4) {
-            Text(firstLine)
-                .font(.system(size: ClaudeTheme.messageSize(12)))
-                .foregroundStyle(ClaudeTheme.textSecondary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-
-            if isDecided, let summary = toolCall.result, !summary.isEmpty {
-                HStack(spacing: 4) {
-                    Image(systemName: "checkmark.seal.fill")
-                        .foregroundStyle(ClaudeTheme.accent)
-                        .font(.system(size: 10, weight: .medium))
-                    Text(summary)
-                        .font(.system(size: ClaudeTheme.messageSize(11), weight: .medium))
-                        .foregroundStyle(ClaudeTheme.textSecondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
-            }
-        }
-    }
-
-    // MARK: - Decision Area
-
-    @ViewBuilder
-    private var decisionArea: some View {
-        if isDecided {
-            decidedRow
-        } else if isComposingFeedback {
-            feedbackComposer
-        } else if !isStreaming {
-            decisionButtons
-        }
-    }
-
-    @ViewBuilder
-    private var decidedRow: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "checkmark.seal.fill")
-                .foregroundStyle(ClaudeTheme.accent)
-                .font(.system(size: 11, weight: .medium))
-            Text(toolCall.result ?? "Decided")
-                .font(.system(size: ClaudeTheme.messageSize(12), weight: .medium))
-                .foregroundStyle(ClaudeTheme.textSecondary)
-                .lineLimit(2)
-        }
-        .padding(.top, 4)
-    }
-
-    @ViewBuilder
-    private var decisionButtons: some View {
-        VStack(spacing: 8) {
-            planButton(
-                title: String(localized: "Accept + Auto", bundle: .module),
-                systemImage: "wand.and.sparkles",
-                style: .primary,
-                fullWidth: true
-            ) {
-                submit(.acceptAutoApprove)
-            }
-
-            planButton(
-                title: String(localized: "Accept Edits", bundle: .module),
-                systemImage: "pencil.tip.crop.circle.badge.checkmark",
-                style: .secondary,
-                fullWidth: true
-            ) {
-                submit(.acceptWithEdits)
-            }
-
-            planButton(
-                title: String(localized: "Accept Ask", bundle: .module),
-                systemImage: "bolt.shield",
-                style: .secondary,
-                fullWidth: true
-            ) {
-                submit(.acceptAsk)
-            }
-
-            planButton(
-                title: String(localized: "Reject with Reason", bundle: .module),
-                systemImage: "text.bubble",
-                style: .secondary,
-                fullWidth: true
-            ) {
-                feedbackText = ""
-                withAnimation(.easeInOut(duration: 0.18)) { isComposingFeedback = true }
-            }
-
-            planButton(
-                title: String(localized: "Reject", bundle: .module),
-                systemImage: "xmark.circle",
-                style: .secondary,
-                fullWidth: true
-            ) {
-                submit(.reject)
-            }
-        }
-        .padding(.top, 4)
-        .disabled(isResolving)
-        .opacity(isResolving ? 0.6 : 1.0)
-    }
-
-    @ViewBuilder
-    private var feedbackComposer: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Tell Claude what to change", bundle: .module)
-                .font(.system(size: ClaudeTheme.messageSize(12), weight: .medium))
-                .foregroundStyle(ClaudeTheme.textSecondary)
-
-            TextField(
-                String(localized: "What would you like changed?", bundle: .module),
-                text: $feedbackText,
-                axis: .vertical
-            )
-            .textFieldStyle(.plain)
-            .lineLimit(2...5)
-            .font(.system(size: ClaudeTheme.messageSize(13)))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(ClaudeTheme.surfaceSecondary, in: RoundedRectangle(cornerRadius: 8))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(ClaudeTheme.borderSubtle, lineWidth: 1)
-            )
-            .onSubmit { submitFeedback() }
-
+        Button(action: openSheet) {
             HStack(spacing: 8) {
-                planButton(
-                    title: String(localized: "Cancel", bundle: .module),
-                    systemImage: "arrow.uturn.backward",
-                    style: .secondary
-                ) {
-                    withAnimation(.easeInOut(duration: 0.18)) { isComposingFeedback = false }
-                }
-                Spacer()
-                planButton(
-                    title: String(localized: "Send feedback", bundle: .module),
-                    systemImage: "paperplane.fill",
-                    style: .primary,
-                    isDisabled: feedbackText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                ) {
-                    submitFeedback()
+                statusIcon
+                statusText
+                Spacer(minLength: 8)
+                if !isStreaming {
+                    Text(actionLabel)
+                        .font(.system(size: ClaudeTheme.messageSize(11), weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(ClaudeTheme.accent, in: Capsule())
                 }
             }
-        }
-        .disabled(isResolving)
-        .opacity(isResolving ? 0.6 : 1.0)
-    }
-
-    private func submitFeedback() {
-        let trimmed = feedbackText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        submit(.rejectWithFeedback(reason: trimmed))
-    }
-
-    private func submit(_ action: PlanDecisionAction) {
-        guard !isResolving else { return }
-        isResolving = true
-        windowState.planDecisionHandler?(toolCall.id, action)
-    }
-
-    private func copyMarkdown() {
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(resolvedMarkdown, forType: .string)
-    }
-
-    // MARK: - Button helper
-
-    private enum PlanButtonStyle { case primary, secondary }
-
-    @ViewBuilder
-    private func planButton(
-        title: String,
-        systemImage: String,
-        style: PlanButtonStyle,
-        isDisabled: Bool = false,
-        fullWidth: Bool = false,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            HStack(spacing: 4) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 11, weight: .medium))
-                Text(title)
-                    .font(.system(size: ClaudeTheme.messageSize(12), weight: .medium))
-                    .lineLimit(1)
-            }
-            .frame(maxWidth: fullWidth ? .infinity : nil)
-            .foregroundStyle(style == .primary ? Color.white : ClaudeTheme.textPrimary)
-            .padding(.horizontal, 10)
+            .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(
-                style == .primary
-                    ? ClaudeTheme.accent
-                    : ClaudeTheme.surfaceSecondary
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(isDecided ? ClaudeTheme.surfaceSecondary : ClaudeTheme.accentSubtle)
             )
-            .clipShape(RoundedRectangle(cornerRadius: 8))
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: 10)
                     .strokeBorder(
-                        style == .primary ? Color.clear : ClaudeTheme.borderSubtle,
+                        isDecided
+                            ? ClaudeTheme.borderSubtle
+                            : ClaudeTheme.accent.opacity(isHovered ? 0.55 : 0.35),
                         lineWidth: 1
                     )
             )
-            .opacity(isDisabled ? 0.4 : 1.0)
+            .contentShape(RoundedRectangle(cornerRadius: 10))
         }
         .buttonStyle(.plain)
-        .disabled(isDisabled)
+        .pointerCursorOnHover()
+        .onHover { isHovered = $0 }
+        .disabled(isStreaming)
+        .help(helpText)
+        .animation(.easeInOut(duration: 0.12), value: isHovered)
     }
-}
 
-// MARK: - Full Sheet
-
-private struct PlanFullSheet: View {
-    let markdown: String
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                Image(systemName: "doc.text.fill")
-                    .foregroundStyle(ClaudeTheme.accent)
-                Text("Plan", bundle: .module)
-                    .font(.system(size: 14, weight: .semibold))
-                Spacer()
-                Button {
-                    let pb = NSPasteboard.general
-                    pb.clearContents()
-                    pb.setString(markdown, forType: .string)
-                } label: {
-                    Image(systemName: "doc.on.doc")
-                }
-                .buttonStyle(.plain)
-                .help(String(localized: "Copy", bundle: .module))
-
-                Button { dismiss() } label: {
-                    Image(systemName: "xmark")
-                }
-                .buttonStyle(.plain)
-                .help(String(localized: "Close", bundle: .module))
-                .keyboardShortcut(.escape, modifiers: [])
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(ClaudeTheme.surfaceSecondary)
-
-            Divider()
-
-            ScrollView(.vertical) {
-                MarkdownContentView(text: markdown)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(20)
-            }
+    @ViewBuilder
+    private var statusIcon: some View {
+        if isStreaming {
+            ProgressView().controlSize(.small)
+        } else if isDecided {
+            Image(systemName: "checkmark.seal.fill")
+                .font(.system(size: ClaudeTheme.messageSize(13), weight: .medium))
+                .foregroundStyle(ClaudeTheme.accent)
+        } else {
+            Image(systemName: "doc.text.fill")
+                .font(.system(size: ClaudeTheme.messageSize(13), weight: .medium))
+                .foregroundStyle(ClaudeTheme.accent)
         }
-        .frame(minWidth: 640, idealWidth: 760, minHeight: 480, idealHeight: 640)
+    }
+
+    @ViewBuilder
+    private var statusText: some View {
+        if isStreaming {
+            Text("Drafting plan…", bundle: .module)
+                .font(.system(size: ClaudeTheme.messageSize(12)))
+                .foregroundStyle(ClaudeTheme.textSecondary)
+        } else if let summary = persistedDecisionSummary, !summary.isEmpty {
+            Text(summary)
+                .font(.system(size: ClaudeTheme.messageSize(12), weight: .medium))
+                .foregroundStyle(ClaudeTheme.textPrimary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        } else {
+            Text("Plan ready", bundle: .module)
+                .font(.system(size: ClaudeTheme.messageSize(12), weight: .medium))
+                .foregroundStyle(ClaudeTheme.textPrimary)
+        }
+    }
+
+    private var actionLabel: String {
+        isDecided
+            ? String(localized: "View", bundle: .module)
+            : String(localized: "Review", bundle: .module)
+    }
+
+    private var helpText: String {
+        if isStreaming {
+            return String(localized: "Plan is still drafting…", bundle: .module)
+        }
+        if isDecided {
+            return String(localized: "Open the plan to review the decision", bundle: .module)
+        }
+        return String(localized: "Open the plan to accept or reject", bundle: .module)
+    }
+
+    private func openSheet() {
+        guard !isStreaming else { return }
+        if let onOpen {
+            onOpen(toolCall.id)
+        } else {
+            windowState.presentedPlanToolCallId = toolCall.id
+        }
     }
 }

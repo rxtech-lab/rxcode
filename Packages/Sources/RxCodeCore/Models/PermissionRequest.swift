@@ -90,8 +90,8 @@ public enum PermissionDecision: Sendable, Equatable {
 
 // MARK: - Plan Decision
 
-/// User's choice on a Claude `ExitPlanMode` tool call. Drives the plan card buttons on
-/// `PlanCardView` and is delivered to `AppState.respondToPlanDecision(...)` by the chat UI.
+/// User's choice on a Claude `ExitPlanMode` tool call. Drives the plan sheet buttons on
+/// `PlanSheetView` and is delivered to `AppState.respondToPlanDecision(...)` by the chat UI.
 public enum PlanDecisionAction: Sendable, Equatable {
     /// Allow the plan and switch the session to `.default` for the rest of the conversation.
     case acceptAsk
@@ -103,4 +103,78 @@ public enum PlanDecisionAction: Sendable, Equatable {
     case rejectWithFeedback(reason: String)
     /// Deny the plan without user-authored feedback.
     case reject
+
+    /// Prefixes of result strings written by `AppState.respondToPlanDecision`.
+    /// Anything starting with one of these is a user-authored decision and must
+    /// be preserved across CLI tool_result events and CLI-session reloads —
+    /// otherwise the plan chip would flip back to "Plan ready" once the CLI
+    /// records its own follow-up text (e.g., "User has approved your plan…").
+    public static let userDecisionResultPrefixes: [String] = [
+        "Accepted with Ask",
+        "Accepted with Edits",
+        "Accepted with Auto-approve",
+        "Rejected",
+    ]
+
+    /// True if `result` is a user-authored plan decision (vs. CLI-side text).
+    public static func isUserDecisionResult(_ result: String) -> Bool {
+        userDecisionResultPrefixes.contains { result.hasPrefix($0) }
+    }
+
+    /// Hidden follow-up user prompts that RxCode injects after a plan decision.
+    /// Kept here so the chat-bubble suppressor (live + reloaded sessions) and the
+    /// `AppState.continuationPrompt` producer share one source of truth — otherwise
+    /// the prompt re-appears as a user bubble when the CLI jsonl is re-parsed.
+    public static let continuationPromptPrefixes: [String] = [
+        "Proceed with the plan.",
+        "Revise the plan based on this feedback: ",
+    ]
+
+    /// True if `text` is an RxCode-injected plan-decision continuation prompt.
+    /// The CLI logs these to its jsonl just like a user-authored prompt, so the
+    /// reload path needs an explicit allow-list to drop them from the chat UI.
+    public static func isContinuationPrompt(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return continuationPromptPrefixes.contains { trimmed.hasPrefix($0) }
+    }
+}
+
+// MARK: - Pending Plan
+
+/// Denormalized view of an `ExitPlanMode` tool call for the input-bar banner and
+/// plan sheet. Sourced from `ChatBridge.pendingPlans` (computed from the current
+/// session's messages). Kept in `RxCodeCore` so both the banner (RxCode target)
+/// and the sheet (RxCodeChatKit) can consume it without depending on chat-view types.
+public struct PendingPlan: Identifiable, Equatable, Sendable {
+    /// The `ToolCall.id` of the underlying `ExitPlanMode` call. Used as the sheet's
+    /// presentation id and as the key for `windowState.planDecisionHandler`.
+    public let toolCallId: String
+    /// Plan markdown extracted from the tool-call input or fallback `Write` block.
+    public let markdown: String
+    /// True while the parent assistant message is still streaming AND no plan
+    /// markdown has arrived yet — banner suppresses these to avoid surfacing
+    /// an empty plan to "review".
+    public let isStreaming: Bool
+    /// True once `respondToPlanDecision` has written a decision summary. Decided
+    /// plans are excluded from the banner count but kept around so the inline
+    /// status chip can render the outcome.
+    public let isDecided: Bool
+    /// Decision summary string ("Accepted with Edits", etc.) when decided.
+    public let decisionSummary: String?
+
+    public init(
+        toolCallId: String,
+        markdown: String,
+        isStreaming: Bool,
+        isDecided: Bool,
+        decisionSummary: String?
+    ) {
+        self.toolCallId = toolCallId
+        self.markdown = markdown
+        self.isStreaming = isStreaming
+        self.isDecided = isDecided
+        self.decisionSummary = decisionSummary
+    }
+
+    public var id: String { toolCallId }
 }

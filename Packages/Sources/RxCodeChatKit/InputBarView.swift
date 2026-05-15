@@ -3,13 +3,15 @@ import UniformTypeIdentifiers
 import RxCodeCore
 
 struct InputBarView<Accessory: View, TopAccessory: View>: View {
-    @Environment(ChatBridge.self) private var chatBridge
-    @Environment(WindowState.self) private var windowState
+    @Environment(ChatBridge.self) private var environmentChatBridge: ChatBridge?
+    @Environment(WindowState.self) private var environmentWindowState: WindowState?
     @State private var isInputFocused: Bool = false
     @State private var inputFocusTrigger: UUID? = nil
 
     private let accessory: Accessory
     private let topAccessory: TopAccessory
+    private let injectedChatBridge: ChatBridge?
+    private let injectedWindowState: WindowState?
 
     @State private var showFilePicker = false
     @State private var showSlashPopup = false
@@ -28,6 +30,28 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
     init(accessory: Accessory, @ViewBuilder topAccessory: () -> TopAccessory) {
         self.accessory = accessory
         self.topAccessory = topAccessory()
+        self.injectedChatBridge = nil
+        self.injectedWindowState = nil
+    }
+
+    init(
+        windowState: WindowState,
+        chatBridge: ChatBridge,
+        accessory: Accessory,
+        @ViewBuilder topAccessory: () -> TopAccessory
+    ) {
+        self.accessory = accessory
+        self.topAccessory = topAccessory()
+        self.injectedChatBridge = chatBridge
+        self.injectedWindowState = windowState
+    }
+
+    private var chatBridge: ChatBridge {
+        injectedChatBridge ?? environmentChatBridge!
+    }
+
+    private var windowState: WindowState {
+        injectedWindowState ?? environmentWindowState!
     }
 
     var body: some View {
@@ -805,9 +829,20 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
 
     private func processNextQueued() {
         guard let next = chatBridge.dequeueNextForFlush() else { return }
+        let draftText = windowState.inputText
+        let draftAttachments = windowState.attachments
+        let shouldRestoreDraft = !draftText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !draftAttachments.isEmpty
+
         windowState.inputText = next.text
         windowState.attachments = next.attachments
-        Task { await chatBridge.send() }
+        Task {
+            await chatBridge.send()
+            if shouldRestoreDraft {
+                windowState.inputText = draftText
+                windowState.attachments = draftAttachments
+            }
+        }
     }
 
     private func handleReturnKey() {

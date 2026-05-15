@@ -12,6 +12,13 @@ struct SessionStreamState {
     // Messages
     var messages: [ChatMessage] = []
 
+    /// Full `Attachment` objects (including image data, text content, etc.)
+    /// for the most recent user turn. `ChatMessage.attachmentPaths` is lossy —
+    /// it only stores name/path/type, so we keep the originals here so
+    /// `cancelStreaming` can restore them into the input bar alongside the
+    /// rolled-back user text.
+    var inFlightUserAttachments: [Attachment] = []
+
     /// True while persisted messages are being loaded from disk into this session.
     /// MessageListView keeps the ScrollView hidden while this is true to avoid the
     /// empty → populated "blink" when switching to a session that isn't already in memory.
@@ -43,6 +50,13 @@ struct SessionStreamState {
     /// Per-session plan-mode toggle. When true, the CLI is launched with `--permission-mode plan`
     /// regardless of the user-selected permission mode. Cleared on session switch.
     var planMode: Bool = false
+    /// User decisions for `ExitPlanMode` tool calls, keyed by `toolCallId`. Sidecar
+    /// to `ToolCall.result` so the decision survives CLI-backed session reloads —
+    /// the CLI emits its own follow-up tool_result ("User has approved your plan…")
+    /// that we cannot prevent from overwriting `ToolCall.result` when the session
+    /// jsonl is parsed fresh from disk. Loaded from `ThreadStore` on session
+    /// activation, written through on every decision.
+    var planDecisionSummaries: [String: String] = [:]
     /// Override cwd for this session: when set, CLI runs in this Git worktree path
     /// instead of `project.path`. Persisted on `ChatSession.worktreePath`.
     var worktreePath: String?
@@ -1352,6 +1366,7 @@ final class AppState {
                     durationMs: state.durationMs,
                     turns: state.turns
                 )
+                bridge.planDecisionSummaries = state.planDecisionSummaries
             } onChange: {
                 Task { @MainActor in observeStream() }
             }
@@ -1617,6 +1632,7 @@ final class AppState {
                     content: displayText ?? prompt,
                     attachments: attachments
                 ))
+                state.inFlightUserAttachments = attachments
             }
         }
 
@@ -2544,14 +2560,18 @@ final class AppState {
                !state.messages[lastIndex].isCompactBoundary {
                 state.messages.remove(at: lastIndex)
             }
-            // Restore the user message that triggered this stream into the input field.
+            // Restore the user message that triggered this stream into the input field —
+            // both its text and the original attachment objects so images / pasted text
+            // aren't silently dropped when the user stops a turn.
             if let lastIndex = state.messages.indices.last,
                state.messages[lastIndex].role == .user,
                !state.messages[lastIndex].isCompactBoundary {
                 let userText = state.messages[lastIndex].blocks.compactMap(\.text).joined()
                 state.messages.remove(at: lastIndex)
                 window.inputText = userText
+                window.attachments = state.inFlightUserAttachments
             }
+            state.inFlightUserAttachments = []
         }
 
         window.showError = false
@@ -2685,6 +2705,10 @@ final class AppState {
 
         // Record the outcome on the tool block so `PlanCardView` flips from buttons to
         // a "decided" status row. This mirrors how AskUserQuestionView reads `toolCall.result`.
+        // Also write into a sidecar dict that survives CLI-backed session reloads —
+        // the CLI emits its own follow-up tool_result ("User has approved your plan…")
+        // that overwrites `ToolCall.result` once the session jsonl is parsed fresh
+        // from disk, so the in-memory result alone is not reliable.
         let key = window.currentSessionId ?? window.newSessionKey
         updateState(key) { state in
             for i in state.messages.indices.reversed() {
@@ -2693,7 +2717,9 @@ final class AppState {
                     break
                 }
             }
+            state.planDecisionSummaries[toolUseId] = summary
         }
+        threadStore.setPlanDecision(sessionId: key, toolCallId: toolUseId, summary: summary)
 
         // Plan-mode is one-shot — clear the pill so the next user turn isn't in plan mode.
         // This also triggers a permission re-register (no-op if there's no live CLI sid).
@@ -2715,15 +2741,20 @@ final class AppState {
 
         await permission.respond(toolUseId: toolUseId, decision: decision)
 
-        // In `--print` stream-json mode, ExitPlanMode is the model's last action of the
-        // plan-mode turn, so the CLI emits `.result` and exits. Without a follow-up
-        // prompt the chat just stops. Mirror the interactive CLI by sending a hidden
-        // continuation message that nudges the model to execute (or revise) the plan.
+        // When the CLI honors `allowAndSetMode` it continues the same turn — the model
+        // executes (or revises) the plan inline and the turn ends naturally. In that
+        // case sending a follow-up prompt would spawn a redundant second turn that
+        // reports "the work is already done". Only inject a continuation message when
+        // the turn actually ended without producing any post-plan content, mirroring
+        // the older CLI behavior where ExitPlanMode terminated the turn outright.
         let continuationPrompt = Self.continuationPrompt(for: action)
 
         if let continuationPrompt {
             if let task = sessionStates[key]?.streamTask {
                 _ = await task.value
+            }
+            if turnContinuedAfterPlan(toolUseId: toolUseId, sessionKey: key) {
+                return
             }
             await sendPrompt(
                 continuationPrompt,
@@ -2733,15 +2764,29 @@ final class AppState {
         }
     }
 
-    /// Prefixes of result strings written by `respondToPlanDecision`. Must stay in
-    /// sync with `PlanCardView.userDecisionPrefixes` — duplicated here so that
-    /// `AppState` can detect a decided plan without depending on a SwiftUI view type.
-    static let planDecisionResultPrefixes: [String] = [
-        "Accepted with Ask",
-        "Accepted with Edits",
-        "Accepted with Auto-approve",
-        "Rejected",
-    ]
+    /// True when the assistant produced any content (text or tool calls) after the
+    /// given ExitPlanMode tool call in the current session — either as later blocks
+    /// in the same message or as subsequent messages. Used to suppress the hidden
+    /// "Proceed with the plan." continuation prompt when the CLI has already carried
+    /// the turn through to completion on its own.
+    private func turnContinuedAfterPlan(toolUseId: String, sessionKey: String) -> Bool {
+        guard let messages = sessionStates[sessionKey]?.messages else { return false }
+        for messageIdx in messages.indices.reversed() {
+            guard let blockIdx = messages[messageIdx].toolCallIndex(id: toolUseId) else {
+                continue
+            }
+            if blockIdx < messages[messageIdx].blocks.count - 1 { return true }
+            if messageIdx < messages.count - 1 { return true }
+            return false
+        }
+        return false
+    }
+
+    /// Prefixes of result strings written by `respondToPlanDecision`. Sourced from
+    /// `PlanDecisionAction.userDecisionResultPrefixes` so the chip in chat, the
+    /// CLI-session reload guard, and the live-stream guard all share one source
+    /// of truth.
+    static let planDecisionResultPrefixes: [String] = PlanDecisionAction.userDecisionResultPrefixes
 
     static func isExitPlanModeCall(_ call: ToolCall) -> Bool {
         let n = call.name.lowercased()
@@ -2889,6 +2934,7 @@ final class AppState {
             state.permissionMode = session.permissionMode
             if let msgs = loadedMessages {
                 state.messages = cleanLoadedMessages(msgs)
+                state.planDecisionSummaries = threadStore.loadPlanDecisions(sessionId: session.id)
                 sessionStates[session.id] = state
                 logger.info("[SwitchToSession] applied preloaded messages sid=\(session.id, privacy: .public) cleaned=\(state.messages.count)")
             } else {
@@ -3669,10 +3715,11 @@ final class AppState {
                     return
                 }
                 state.messages = cleaned
+                state.planDecisionSummaries = self.threadStore.loadPlanDecisions(sessionId: sessionId)
                 if state.model == nil { state.model = full.model }
                 if state.effort == nil { state.effort = full.effort }
                 if state.permissionMode == nil { state.permissionMode = full.permissionMode }
-                self.logger.info("[LoadMessages] applied sid=\(sessionId, privacy: .public) messages=\(state.messages.count)")
+                self.logger.info("[LoadMessages] applied sid=\(sessionId, privacy: .public) messages=\(state.messages.count) planDecisions=\(state.planDecisionSummaries.count)")
             }
         }
     }
@@ -3809,6 +3856,10 @@ final class AppState {
         // Take a snapshot of remaining queue items so we can restore them after
         // `cancelStreaming` clobbers `window.inputText`/`window.attachments`.
         let remaining = window.messageQueue.filter { $0.id != id }
+        let draftText = window.inputText
+        let draftAttachments = window.attachments
+        let shouldRestoreDraft = !draftText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !draftAttachments.isEmpty
 
         // Clear the queue from memory + disk first, so the cancellation path
         // doesn't see the queued item we're about to send.
@@ -3835,6 +3886,10 @@ final class AppState {
         window.inputText = target.text
         window.attachments = target.attachments
         await send(in: window)
+        if shouldRestoreDraft {
+            window.inputText = draftText
+            window.attachments = draftAttachments
+        }
     }
 
     /// Concatenates every queued message (texts joined with a blank line,
@@ -3843,6 +3898,10 @@ final class AppState {
     func sendAllQueuedAsOne(in window: WindowState) async {
         guard !window.messageQueue.isEmpty else { return }
         let snapshot = window.messageQueue
+        let draftText = window.inputText
+        let draftAttachments = window.attachments
+        let shouldRestoreDraft = !draftText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !draftAttachments.isEmpty
 
         let key = queueKey(for: window)
         window.messageQueue.removeAll()
@@ -3862,6 +3921,10 @@ final class AppState {
         window.inputText = combinedText
         window.attachments = combinedAttachments
         await send(in: window)
+        if shouldRestoreDraft {
+            window.inputText = draftText
+            window.attachments = draftAttachments
+        }
     }
 
     /// Sends the next queued message for a background session (one the window is not currently displaying).
@@ -3886,6 +3949,7 @@ final class AppState {
 
         updateState(sessionKey) { state in
             state.messages.append(ChatMessage(role: .user, content: displayText, attachments: resolvedAttachments))
+            state.inFlightUserAttachments = resolvedAttachments
             state.isStreaming = true
             state.hasUncheckedCompletion = false
             state.activeStreamId = streamId

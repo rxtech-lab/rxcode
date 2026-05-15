@@ -78,7 +78,10 @@ struct MessageListView: View {
                     }
                 }
 
-                if chatBridge.isStreaming {
+                if chatBridge.isStreaming && !chatBridge.hasPendingPlanDecision {
+                    // Hide the spinner/dots while the CLI is paused waiting on the
+                    // user's plan decision — the model isn't actually generating
+                    // tokens, so showing "in progress" is misleading.
                     HStack(alignment: .top, spacing: 0) {
                         StreamingIndicatorView(
                             isThinking: chatBridge.isThinking,

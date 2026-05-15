@@ -211,6 +211,8 @@ public struct ClaudeSendButton: View {
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled)
+        .accessibilityLabel("Send message")
+        .accessibilityIdentifier("chat-send-button")
     }
 }
 
@@ -236,6 +238,8 @@ public struct ClaudeStopButton: View {
         }
         .buttonStyle(.plain)
         .help("Stop generating")
+        .accessibilityLabel("Stop generating")
+        .accessibilityIdentifier("chat-stop-button")
     }
 }
 

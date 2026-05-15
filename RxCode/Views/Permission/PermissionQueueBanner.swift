@@ -1,12 +1,15 @@
 import SwiftUI
 import RxCodeCore
+import RxCodeChatKit
 
 /// Compact pill displayed directly above the chat input bar whenever the CLI
-/// has pending permission requests. Tapping it surfaces the full
-/// `PermissionModal` for the first queued request — streaming/typing is never
+/// has pending permission requests, pending `AskUserQuestion` calls, or
+/// undecided `ExitPlanMode` plans. Tapping it surfaces the corresponding
+/// modal/sheet for the first queued item — streaming/typing is never
 /// interrupted until the user explicitly opens it.
 struct PermissionQueueBanner: View {
     @Environment(WindowState.self) private var windowState
+    @Environment(ChatBridge.self) private var chatBridge
     @State private var isHovered: Bool = false
 
     private var pendingRequests: [PermissionRequest] {
@@ -21,20 +24,44 @@ struct PermissionQueueBanner: View {
         pendingRequests.count - questionCount
     }
 
+    /// Plans awaiting a user decision. Decided plans are excluded (they only show
+    /// as the inline status chip in chat) and so are still-streaming plans whose
+    /// markdown hasn't arrived yet — surfacing those would let the user "Review"
+    /// an empty plan.
+    private var pendingPlans: [PendingPlan] {
+        chatBridge.pendingPlans.filter { !$0.isDecided && !$0.isStreaming }
+    }
+
+    private var planCount: Int { pendingPlans.count }
+
+    private var totalCount: Int {
+        pendingRequests.count + planCount
+    }
+
+    private var isEmpty: Bool { totalCount == 0 }
+
     private var bannerIcon: String {
-        permissionCount == 0 ? "questionmark.circle.fill" : "exclamationmark.shield.fill"
+        if planCount > 0 && permissionCount == 0 && questionCount == 0 {
+            return "doc.text.fill"
+        }
+        if permissionCount > 0 {
+            return "exclamationmark.shield.fill"
+        }
+        return "questionmark.circle.fill"
     }
 
     private var bannerText: String {
-        if questionCount > 0, permissionCount == 0 {
+        // Single-category messaging when only one kind is pending.
+        if planCount > 0, permissionCount == 0, questionCount == 0 {
+            return countText(planCount, singular: "plan pending", plural: "plans pending")
+        }
+        if questionCount > 0, permissionCount == 0, planCount == 0 {
             return countText(questionCount, singular: "question pending", plural: "questions pending")
         }
-
-        if permissionCount > 0, questionCount == 0 {
+        if permissionCount > 0, questionCount == 0, planCount == 0 {
             return countText(permissionCount, singular: "permission request pending", plural: "permission requests pending")
         }
-
-        return countText(pendingRequests.count, singular: "request pending", plural: "requests pending")
+        return countText(totalCount, singular: "request pending", plural: "requests pending")
     }
 
     private var actionText: String {
@@ -42,7 +69,7 @@ struct PermissionQueueBanner: View {
     }
 
     var body: some View {
-        if !pendingRequests.isEmpty {
+        if !isEmpty {
             content
                 .transition(.move(edge: .bottom).combined(with: .opacity))
         }
@@ -89,6 +116,13 @@ struct PermissionQueueBanner: View {
     }
 
     private func open() {
+        // Prefer surfacing pending plans first — they typically block forward
+        // progress on the conversation while questions/permissions are usually
+        // about a single in-flight tool call.
+        if let plan = pendingPlans.first {
+            windowState.presentedPlanToolCallId = plan.toolCallId
+            return
+        }
         windowState.presentedPermissionId = pendingRequests.first?.id
     }
 

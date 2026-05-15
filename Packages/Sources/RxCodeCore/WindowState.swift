@@ -111,9 +111,16 @@ public final class WindowState {
 
     // MARK: - Plan Decision Handler
 
-    /// Invoked by the plan card when the user picks Accept / Accept-with-edits /
-    /// Accept / reject decisions from the inline plan card. Set by `AppState` at window init.
+    /// Invoked by the plan sheet when the user picks Accept / Accept-with-edits /
+    /// Accept / reject decisions. Set by `AppState` at window init.
     public var planDecisionHandler: (@MainActor @Sendable (String, PlanDecisionAction) -> Void)?
+
+    /// `ToolCall.id` of the plan whose sheet is currently presented. Nil means the
+    /// sheet is closed (banner / inline chip may still be visible). Set by the
+    /// banner's tap action and the inline chip; cleared by the sheet's close
+    /// button / Esc / outside-tap. Closing the sheet is NOT a decline — the plan
+    /// remains pending until a decision is recorded via `planDecisionHandler`.
+    public var presentedPlanToolCallId: String?
 
     // MARK: - UI State
 

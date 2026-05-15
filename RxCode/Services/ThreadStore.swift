@@ -17,7 +17,7 @@ final class ThreadStore {
     /// Convenience initializer creating its own `ModelContainer` rooted at the
     /// app's Application Support directory.
     static func make() -> ThreadStore {
-        let schema = Schema([ChatThread.self, TodoSnapshot.self, ThreadFileEdit.self, QueuedMessageRecord.self])
+        let schema = Schema([ChatThread.self, TodoSnapshot.self, ThreadFileEdit.self, QueuedMessageRecord.self, PlanDecisionRecord.self])
         let url = Self.storeURL()
         let config = ModelConfiguration(schema: schema, url: url)
         do {
@@ -107,6 +107,7 @@ final class ThreadStore {
         renameTodoSnapshot(from: oldId, to: newId)
         renameFileEdits(from: oldId, to: newId)
         renameQueueKey(from: oldId, to: newId)
+        renamePlanDecisions(from: oldId, to: newId)
         save()
     }
 
@@ -145,6 +146,7 @@ final class ThreadStore {
         deleteTodoSnapshotRow(sessionId: id)
         deleteFileEditRows(sessionId: id)
         deleteQueueRows(sessionKey: id)
+        deletePlanDecisionRows(sessionId: id)
         save()
     }
 
@@ -163,6 +165,7 @@ final class ThreadStore {
                 deleteTodoSnapshotRow(sessionId: id)
                 deleteFileEditRows(sessionId: id)
                 deleteQueueRows(sessionKey: id)
+                deletePlanDecisionRows(sessionId: id)
             }
             if projectId == nil {
                 let allTodos = (try? context.fetch(FetchDescriptor<TodoSnapshot>())) ?? []
@@ -171,6 +174,8 @@ final class ThreadStore {
                 for row in allEdits { context.delete(row) }
                 let allQueues = (try? context.fetch(FetchDescriptor<QueuedMessageRecord>())) ?? []
                 for row in allQueues { context.delete(row) }
+                let allPlans = (try? context.fetch(FetchDescriptor<PlanDecisionRecord>())) ?? []
+                for row in allPlans { context.delete(row) }
             }
             save()
         } catch {
@@ -216,6 +221,62 @@ final class ThreadStore {
     private func deleteTodoSnapshotRow(sessionId: String) {
         guard let row = fetchTodoSnapshot(sessionId: sessionId) else { return }
         context.delete(row)
+    }
+
+    // MARK: - Plan Decisions
+
+    private func fetchPlanDecision(sessionId: String, toolCallId: String) -> PlanDecisionRecord? {
+        var descriptor = FetchDescriptor<PlanDecisionRecord>(
+            predicate: #Predicate { $0.sessionId == sessionId && $0.toolCallId == toolCallId }
+        )
+        descriptor.fetchLimit = 1
+        return (try? context.fetch(descriptor))?.first
+    }
+
+    func loadPlanDecisions(sessionId: String) -> [String: String] {
+        let descriptor = FetchDescriptor<PlanDecisionRecord>(
+            predicate: #Predicate { $0.sessionId == sessionId }
+        )
+        let rows = (try? context.fetch(descriptor)) ?? []
+        var map: [String: String] = [:]
+        for row in rows { map[row.toolCallId] = row.summary }
+        return map
+    }
+
+    func setPlanDecision(sessionId: String, toolCallId: String, summary: String) {
+        if let existing = fetchPlanDecision(sessionId: sessionId, toolCallId: toolCallId) {
+            existing.summary = summary
+            existing.updatedAt = .now
+        } else {
+            context.insert(PlanDecisionRecord(
+                sessionId: sessionId,
+                toolCallId: toolCallId,
+                summary: summary
+            ))
+        }
+        save()
+    }
+
+    private func planDecisions(sessionId: String) -> [PlanDecisionRecord] {
+        let descriptor = FetchDescriptor<PlanDecisionRecord>(
+            predicate: #Predicate { $0.sessionId == sessionId }
+        )
+        return (try? context.fetch(descriptor)) ?? []
+    }
+
+    func renamePlanDecisions(from oldId: String, to newId: String) {
+        guard oldId != newId else { return }
+        for row in planDecisions(sessionId: oldId) {
+            if fetchPlanDecision(sessionId: newId, toolCallId: row.toolCallId) != nil {
+                context.delete(row)
+            } else {
+                row.sessionId = newId
+            }
+        }
+    }
+
+    private func deletePlanDecisionRows(sessionId: String) {
+        for row in planDecisions(sessionId: sessionId) { context.delete(row) }
     }
 
     // MARK: - Thread File Edits

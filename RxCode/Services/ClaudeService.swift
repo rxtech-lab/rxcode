@@ -1038,3 +1038,24 @@ actor ClaudeCodeServer {
 }
 
 typealias ClaudeService = ClaudeCodeServer
+
+// MARK: - AgentBackend Conformance
+
+extension ClaudeCodeServer: AgentBackend {
+    nonisolated var provider: AgentProvider { .claudeCode }
+    nonisolated var staticCapabilities: CapabilitySet { AgentProvider.claudeCode.staticCapabilities }
+
+    func send(_ request: BackendSendRequest) -> AsyncStream<StreamEvent> {
+        send(
+            streamId: request.streamId,
+            prompt: request.prompt,
+            cwd: request.cwd,
+            sessionId: request.sessionId,
+            model: request.model,
+            effort: request.effort,
+            hookSettingsPath: request.hookSettingsPath,
+            mcpConfigPath: request.mcpClaudeConfigPath,
+            permissionMode: request.permissionMode
+        )
+    }
+}

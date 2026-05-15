@@ -85,9 +85,10 @@ actor ACPService {
         model: String?,
         spec: ACPClientSpec,
         permissionMode: PermissionMode,
-        clientSessionKey: String
+        clientSessionKey: String,
+        mcpServers: [JSONValue] = []
     ) -> AsyncStream<StreamEvent> {
-        logger.info("[ACP] send streamId=\(streamId.uuidString, privacy: .public) client=\(spec.displayName, privacy: .public) launch=\(spec.launch.displayKind, privacy: .public) model=\(model ?? "<default>", privacy: .public) sessionId=\(sessionId ?? "<new>", privacy: .public) mode=\(String(describing: permissionMode), privacy: .public) cwd=\(cwd, privacy: .public) clientKey=\(clientSessionKey, privacy: .public) promptLen=\(prompt.count)")
+        logger.info("[ACP] send streamId=\(streamId.uuidString, privacy: .public) client=\(spec.displayName, privacy: .public) launch=\(spec.launch.displayKind, privacy: .public) model=\(model ?? "<default>", privacy: .public) sessionId=\(sessionId ?? "<new>", privacy: .public) mode=\(String(describing: permissionMode), privacy: .public) cwd=\(cwd, privacy: .public) clientKey=\(clientSessionKey, privacy: .public) mcpServers=\(mcpServers.count) promptLen=\(prompt.count)")
         return AsyncStream<StreamEvent> { continuation in
             let task = Task {
                 await self.runTurn(
@@ -99,6 +100,7 @@ actor ACPService {
                     spec: spec,
                     permissionMode: permissionMode,
                     clientSessionKey: clientSessionKey,
+                    mcpServers: mcpServers,
                     continuation: continuation
                 )
             }
@@ -331,6 +333,7 @@ actor ACPService {
         spec: ACPClientSpec,
         permissionMode: PermissionMode,
         clientSessionKey: String,
+        mcpServers: [JSONValue] = [],
         continuation: AsyncStream<StreamEvent>.Continuation
     ) async {
         do {
@@ -374,6 +377,7 @@ actor ACPService {
                 model: model,
                 spec: spec,
                 permissionMode: permissionMode,
+                mcpServers: mcpServers,
                 continuation: continuation
             )
         } catch {
@@ -397,6 +401,7 @@ actor ACPService {
         model: String?,
         spec: ACPClientSpec,
         permissionMode: PermissionMode,
+        mcpServers: [JSONValue] = [],
         continuation: AsyncStream<StreamEvent>.Continuation
     ) async throws {
         let (process, stdin, stdout, stderr) = try await spawn(spec: spec, model: model, cwd: cwd)
@@ -467,7 +472,7 @@ actor ACPService {
         // persisted conversation as updates and would duplicate messages.
         let newParams: [String: JSONValue] = [
             "cwd": .string(cwd),
-            "mcpServers": .array([])
+            "mcpServers": .array(mcpServers)
         ]
         let newResult = try await sendRequest(key: bootstrapKey, method: "session/new", params: newParams)
         guard let agentSessionId = newResult.objectValue?["sessionId"]?.stringValue else {
@@ -1518,5 +1523,41 @@ extension JSONValue {
         case .bool(let b): return "\(b)"
         case .null: return "null"
         }
+    }
+}
+
+// MARK: - AgentBackend Conformance
+
+extension ACPService: AgentBackend {
+    nonisolated var provider: AgentProvider { .acp }
+    nonisolated var staticCapabilities: CapabilitySet { AgentProvider.acp.staticCapabilities }
+
+    func send(_ request: BackendSendRequest) -> AsyncStream<StreamEvent> {
+        guard let spec = request.acpSpec else {
+            return AsyncStream<StreamEvent> { c in
+                c.yield(.user(UserMessage(
+                    toolUseId: nil,
+                    content: "No ACP client configured. Add one in Settings → ACP Clients.",
+                    isError: true
+                )))
+                c.yield(.result(ResultEvent(
+                    durationMs: nil, totalCostUsd: nil,
+                    sessionId: request.sessionId ?? request.clientSessionKey,
+                    isError: true, totalTurns: nil, usage: nil, contextWindow: nil
+                )))
+                c.finish()
+            }
+        }
+        return send(
+            streamId: request.streamId,
+            prompt: request.prompt,
+            cwd: request.cwd,
+            sessionId: request.sessionId,
+            model: request.model,
+            spec: spec,
+            permissionMode: request.permissionMode,
+            clientSessionKey: request.clientSessionKey,
+            mcpServers: request.acpMCPServers
+        )
     }
 }

@@ -144,6 +144,58 @@ actor MCPService {
         }
     }
 
+    /// Build the `mcpServers` array passed to ACP's `session/new` RPC.
+    /// ACP v1 only specifies stdio transport; http/sse servers are silently
+    /// dropped. Disabled servers are filtered out. If `bridgeCommand` is
+    /// non-nil an additional entry `rxcode-ide` is prepended — that's the
+    /// local MCP polyfill server.
+    func acpMCPServers(
+        projectPath: String?,
+        bridgeCommand: (command: String, args: [String])? = nil
+    ) async -> [JSONValue] {
+        // IMPORTANT: do NOT add a `"type": "stdio"` field. The ACP spec's
+        // anyOf union uses presence of `type` as the stdio-vs-http/sse
+        // discriminator, and known agent implementations (OpenCode) bail
+        // into the HTTP parsing path if `type` is present at all.
+        var entries: [JSONValue] = []
+        if let bridge = bridgeCommand {
+            entries.append(.object([
+                "name": .string("rxcode-ide"),
+                "command": .string(bridge.command),
+                "args": .array(bridge.args.map { .string($0) }),
+                "env": .array([])
+            ]))
+        }
+        do {
+            let records = try enabledRecords(projectPath: projectPath)
+            let userEntries: [JSONValue] = records
+                .filter { $0.transport == .stdio }
+                .sorted { $0.name < $1.name }
+                .map { record -> JSONValue in
+                    let envPairs: [JSONValue] = record.env
+                        .sorted { $0.key < $1.key }
+                        .map { key, value in
+                            .object([
+                                "name": .string(key),
+                                "value": .string(value),
+                            ])
+                        }
+                    return .object([
+                        "name": .string(record.name),
+                        "command": .string(record.command ?? ""),
+                        "args": .array(record.args.map { .string($0) }),
+                        "env": .array(envPairs),
+                    ])
+                }
+            entries.append(contentsOf: userEntries)
+        } catch {
+            logger.warning("Failed to build ACP MCP servers: \(error.localizedDescription)")
+        }
+        let names = entries.compactMap { $0["name"]?.stringValue }.joined(separator: ", ")
+        logger.info("[ACP-MCP] built \(entries.count, privacy: .public) mcpServers entries for project=\(projectPath ?? "<nil>", privacy: .public) [\(names, privacy: .public)]")
+        return entries
+    }
+
     func codexConfigOverrides(projectPath: String?) async -> [String] {
         do {
             let config = try loadConfig()

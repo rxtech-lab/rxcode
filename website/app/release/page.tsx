@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import ReactMarkdown from "react-markdown";
 import {
   getAppReleaseNotes,
   formatPubDate,
@@ -216,11 +217,20 @@ function ReleaseCard({
       </header>
 
       <div className="p-7">
-        {release.releaseNotesHtml ? (
-          <div
-            className="release-notes max-w-none"
-            dangerouslySetInnerHTML={{ __html: release.releaseNotesHtml }}
-          />
+        {release.releaseNotesMarkdown ? (
+          <div className="release-notes max-w-none">
+            <ReactMarkdown
+              components={{
+                a: ({ href, children }) => (
+                  <a href={href} target="_blank" rel="noreferrer">
+                    {children}
+                  </a>
+                ),
+              }}
+            >
+              {release.releaseNotesMarkdown}
+            </ReactMarkdown>
+          </div>
         ) : (
           <p className="text-on-surface-variant">
             No release notes provided for this build.

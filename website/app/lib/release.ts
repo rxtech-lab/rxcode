@@ -99,6 +99,7 @@ export type SparkleRelease = SparkleItem & {
 export type AppReleaseNote = SparkleRelease & {
   tag: string;
   isPrerelease: boolean;
+  releaseNotesMarkdown: string | null;
 };
 
 function pickTag<T extends string>(xml: string, tag: T): string | null {
@@ -199,74 +200,6 @@ export async function getSparkleReleases(): Promise<SparkleRelease[]> {
   }
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-function inlineMarkdownToHtml(value: string): string {
-  return escapeHtml(value)
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/`([^`]+)`/g, "<code>$1</code>");
-}
-
-function releaseMarkdownToHtml(markdown: string): string {
-  const lines = markdown.split(/\r?\n/);
-  const html: string[] = [];
-  let inList = false;
-
-  const closeList = () => {
-    if (inList) {
-      html.push("</ul>");
-      inList = false;
-    }
-  };
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) {
-      closeList();
-      continue;
-    }
-
-    if (trimmed.startsWith("### ")) {
-      closeList();
-      html.push(`<h3>${inlineMarkdownToHtml(trimmed.slice(4))}</h3>`);
-      continue;
-    }
-
-    if (trimmed.startsWith("## ")) {
-      closeList();
-      html.push(`<h2>${inlineMarkdownToHtml(trimmed.slice(3))}</h2>`);
-      continue;
-    }
-
-    if (trimmed.startsWith("# ")) {
-      closeList();
-      html.push(`<h2>${inlineMarkdownToHtml(trimmed.slice(2))}</h2>`);
-      continue;
-    }
-
-    if (trimmed.startsWith("- ")) {
-      if (!inList) {
-        html.push("<ul>");
-        inList = true;
-      }
-      html.push(`<li>${inlineMarkdownToHtml(trimmed.slice(2))}</li>`);
-      continue;
-    }
-
-    closeList();
-    html.push(`<p>${inlineMarkdownToHtml(trimmed)}</p>`);
-  }
-
-  closeList();
-  return html.join("\n");
-}
-
 export async function getAppReleaseNotes(): Promise<AppReleaseNote[]> {
   try {
     const res = await fetch(RELEASES_API, {
@@ -299,9 +232,8 @@ export async function getAppReleaseNotes(): Promise<AppReleaseNote[]> {
           enclosureUrl: dmg?.browser_download_url ?? null,
           enclosureSize: dmg?.size ?? null,
           minimumSystemVersion: null,
-          releaseNotesHtml: release.body
-            ? releaseMarkdownToHtml(release.body)
-            : null,
+          releaseNotesHtml: null,
+          releaseNotesMarkdown: release.body?.trim() || null,
           isPrerelease: release.prerelease,
         };
       });

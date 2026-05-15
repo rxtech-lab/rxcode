@@ -4,7 +4,7 @@ export const OG_SIZE = { width: 1200, height: 630 };
 
 export function renderOgImage(
   title = "The Visual Command Center for AI Coding Agents",
-  description = "Native macOS · Claude Code & Codex · Free & Open Source"
+  description = "Native macOS · Claude Code, Codex & ACP clients · Free & Open Source"
 ): ImageResponse {
   return new ImageResponse(
     (

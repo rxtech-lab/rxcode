@@ -9,12 +9,23 @@ const FEATURE_CARDS = [
     eyebrow: "Agent Runtime",
     title: "Support multiple agents",
     description:
-      "Run Claude Code, Codex, and future agent runtimes from the same native workspace. Pick the client and model per session without changing how you manage projects.",
-    image: "/screenshot/screenshot1.png",
-    alt: "RxCode running a Codex session with model and usage controls visible",
-    width: 3714,
-    height: 2228,
-    className: "md:col-span-7",
+      "Run Claude Code, Codex, Gemini CLI, OpenCode, and any Agent Client Protocol runtime from the same native workspace. Pick the client and model per session without changing how you manage projects.",
+    image: "/screenshot/acp1.png",
+    alt: "RxCode running an ACP client session with model and usage controls visible",
+    width: 2014,
+    height: 1932,
+    className: "md:col-span-2",
+  },
+  {
+    eyebrow: "ACP Registry",
+    title: "Install ACP clients directly",
+    description:
+      "Browse the public ACP registry from Settings, install compatible clients in one step, and add registry agents to the chat model picker without manual setup.",
+    image: "/screenshot/acp2.png",
+    alt: "RxCode Settings window showing ACP client registry installation",
+    width: 1496,
+    height: 1564,
+    className: "md:col-span-1",
   },
   {
     eyebrow: "Native macOS",
@@ -25,18 +36,18 @@ const FEATURE_CARDS = [
     alt: "RxCode native macOS workspace with sidebar, prompt composer, and status bar",
     width: 3638,
     height: 2196,
-    className: "md:col-span-5",
+    className: "md:col-span-1",
   },
   {
-    eyebrow: "Menu Bar Extra",
-    title: "Track progress and usage at a glance",
+    eyebrow: "Run Profiles",
+    title: "Launch project workflows",
     description:
-      "Monitor active sessions, pending checks, and Claude Code or Codex usage limits from the menu bar without opening the main window.",
-    image: "/screenshot/menubar.png",
-    alt: "RxCode menu bar extra showing Codex usage limits and session progress",
-    width: 726,
-    height: 648,
-    className: "md:col-span-4",
+      "Create repeatable project tasks, run them from the toolbar, and inspect command output without leaving the app.",
+    image: "/screenshot/run-profile.png",
+    alt: "RxCode run profile controls and output inspector",
+    width: 3058,
+    height: 2048,
+    className: "md:col-span-2",
   },
   {
     eyebrow: "MCP",
@@ -47,18 +58,18 @@ const FEATURE_CARDS = [
     alt: "RxCode Settings window showing MCP server configuration",
     width: 1334,
     height: 1024,
-    className: "md:col-span-8",
+    className: "md:col-span-2",
   },
   {
-    eyebrow: "Thread Review",
-    title: "Track changes easily",
+    eyebrow: "Menu Bar Extra",
+    title: "Track progress and usage at a glance",
     description:
-      "See every file changed in a thread with additions and deletions summarized together, even while multiple sessions keep running in parallel.",
-    image: "/screenshot/changes-track.png",
-    alt: "RxCode thread review panel listing files changed by an agent session",
-    width: 1094,
-    height: 1850,
-    className: "md:col-span-7",
+      "Monitor active sessions, pending checks, and Claude Code or Codex usage limits from the menu bar without opening the main window.",
+    image: "/screenshot/menubar.png",
+    alt: "RxCode menu bar extra showing Codex usage limits and session progress",
+    width: 726,
+    height: 648,
+    className: "md:col-span-1",
   },
   {
     eyebrow: "Editor Handoff",
@@ -69,7 +80,18 @@ const FEATURE_CARDS = [
     alt: "RxCode editor menu with VS Code, Cursor, Zed, Finder, Terminal, and Xcode options",
     width: 346,
     height: 722,
-    className: "md:col-span-5",
+    className: "md:col-span-1",
+  },
+  {
+    eyebrow: "Thread Review",
+    title: "Track changes easily",
+    description:
+      "See every file changed in a thread with additions and deletions summarized together, even while multiple sessions keep running in parallel.",
+    image: "/screenshot/changes-track.png",
+    alt: "RxCode thread review panel listing files changed by an agent session",
+    width: 1094,
+    height: 1850,
+    className: "md:col-span-2",
   },
 ];
 
@@ -87,7 +109,7 @@ export default async function Home() {
         <FeatureBento />
         <CTA release={release} />
       </main>
-      <Footer release={release} />
+      <Footer />
     </>
   );
 }
@@ -117,14 +139,12 @@ function TopNav({
             >
               Supported Agents
             </a>
-            <a
-              href={release.releasePageUrl}
-              target="_blank"
-              rel="noreferrer"
+            <Link
+              href="/release"
               className="text-on-surface-variant hover:text-primary transition-colors"
             >
-              Changelog
-            </a>
+              Release Notes
+            </Link>
             <a
               href={GITHUB_REPO_URL}
               target="_blank"
@@ -158,8 +178,7 @@ function Hero({
       <div className="absolute inset-0 bg-grid opacity-60 [mask-image:radial-gradient(ellipse_at_top,black_30%,transparent_70%)]" />
       <div className="relative max-w-[var(--container-max)] mx-auto px-6 pt-20 pb-16 flex flex-col items-center text-center">
         <Link
-          href={release.releasePageUrl}
-          target="_blank"
+          href="/release"
           className="inline-flex items-center gap-2 px-3 py-1.5 border border-primary text-primary font-mono text-[11px] tracking-widest uppercase bg-primary/10 hover:bg-primary/20 transition-colors"
         >
           <span className="inline-block w-1.5 h-1.5 bg-primary rounded-full animate-pulse" />
@@ -245,7 +264,12 @@ function SupportedAgents() {
         </span>
         <span className="flex-1 h-px bg-surface-variant" />
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+      <p className="mb-8 max-w-3xl text-on-surface-variant leading-relaxed">
+        Claude Code and Codex are built in, and RxCode also supports every
+        client that speaks the Agent Client Protocol. Use the ACP registry to
+        add clients such as Gemini CLI and OpenCode directly from Settings.
+      </p>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         <AgentCard
           name="Claude Code"
           tagline="Anthropic"
@@ -254,7 +278,12 @@ function SupportedAgents() {
         <AgentCard
           name="Codex"
           tagline="OpenAI"
-          description="Run Codex inside the same interface. Switch between agents per project, with a unified session history and permission flow."
+          description="Run Codex inside the same interface. Switch between agents per project, with a unified session history, model picker, and permission flow."
+        />
+        <AgentCard
+          name="ACP Clients"
+          tagline="Protocol"
+          description="Install and run ACP-compatible clients such as Gemini CLI, OpenCode, and registry agents. All ACP clients use the same chat, approval, and project workflow."
         />
       </div>
     </section>
@@ -301,7 +330,7 @@ function FeatureBento() {
         </span>
         <span className="flex-1 h-px bg-surface-variant" />
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         {FEATURE_CARDS.map((feature) => (
           <FeatureCard key={feature.title} feature={feature} />
         ))}
@@ -336,10 +365,9 @@ function FeatureCard({
           width={feature.width}
           height={feature.height}
           sizes={
-            feature.className.includes("md:col-span-8") ||
-            feature.className.includes("md:col-span-7")
-              ? "(min-width: 768px) 720px, 100vw"
-              : "(min-width: 768px) 480px, 100vw"
+            feature.className.includes("md:col-span-2")
+              ? "(min-width: 768px) 760px, 100vw"
+              : "(min-width: 768px) 380px, 100vw"
           }
           className="block w-full h-auto"
         />
@@ -371,25 +399,19 @@ function CTA({
             <AppleIcon className="w-4 h-4" />
             Download RxCode {release.tag}
           </a>
-          <a
-            href={release.releasePageUrl}
-            target="_blank"
-            rel="noreferrer"
+          <Link
+            href="/release"
             className="inline-flex items-center justify-center gap-2 border border-outline text-on-surface px-8 py-3.5 font-mono text-xs tracking-widest uppercase hover:border-primary hover:text-primary transition-colors active:scale-95"
           >
             Release notes
-          </a>
+          </Link>
         </div>
       </div>
     </section>
   );
 }
 
-function Footer({
-  release,
-}: {
-  release: Awaited<ReturnType<typeof getLatestRelease>>;
-}) {
+function Footer() {
   const year = new Date().getFullYear();
   return (
     <footer className="w-full bg-surface border-t border-surface-variant">
@@ -411,14 +433,12 @@ function Footer({
           >
             GitHub
           </a>
-          <a
-            href={release.releasePageUrl}
-            target="_blank"
-            rel="noreferrer"
+          <Link
+            href="/release"
             className="text-on-surface-variant hover:text-primary transition-colors"
           >
-            Changelog
-          </a>
+            Release Notes
+          </Link>
           <a
             href="#features"
             className="text-on-surface-variant hover:text-primary transition-colors"

@@ -894,6 +894,7 @@ final class AppState {
     let mcp: MCPService
     let threadStore: ThreadStore
     let runService = RunService()
+    let ideMCPServer = IDEMCPServer()
 
     // MARK: - Run Profiles
 
@@ -960,9 +961,29 @@ final class AppState {
         self.mcp = MCPService(claudeService: claude)
         self.threadStore = ThreadStore.make()
 
-        // Bridge ACP `session/request_permission` into the existing PermissionServer.
+        // Bridge ACP `session/request_permission` and Codex in-band permission
+        // requests into the existing PermissionServer.
         let permission = self.permission
-        Task { await acp.setPermissionServer(permission) }
+        let codex = self.codex
+        let ideMCPServer = self.ideMCPServer
+        Task {
+            await acp.setPermissionServer(permission)
+            await codex.setPermissionServer(permission)
+            await ideMCPServer.setHandler(self)
+        }
+    }
+
+    // MARK: - Agent Backends
+
+    /// Looks up the `AgentBackend` for the given provider. Used by
+    /// `processStream`/`cancel`/`finalize` to dispatch via the unified
+    /// protocol instead of switching on the enum directly.
+    func backend(for provider: AgentProvider) -> any AgentBackend {
+        switch provider {
+        case .claudeCode: return claude
+        case .codex: return codex
+        case .acp: return acp
+        }
     }
 
     // MARK: - ACP Actions
@@ -2201,45 +2222,49 @@ final class AppState {
 
         var sessionKey = internalSessionKey
 
-        let stream: AsyncStream<StreamEvent>
+        // Resolve per-backend send-request fields (MCP injection, ACP client
+        // spec, model split) before dispatching through the unified protocol.
+        var mcpClaudeConfigPath: String? = nil
+        var mcpCodexOverrides: [String] = []
+        var acpMCPServers: [JSONValue] = []
+        var acpSpec: ACPClientSpec? = nil
+        var resolvedModel: String? = model
+        var resolvedSendMode: PermissionMode = permissionMode
+        var earlyStream: AsyncStream<StreamEvent>? = nil
+
         switch agentProvider {
         case .claudeCode:
-            let mcpConfigPath = await mcp.writeClaudeConfig(projectPath: cwd)
-            stream = await claude.send(
-                streamId: streamId,
-                prompt: prompt,
-                cwd: cwd,
-                sessionId: cliSessionId,
-                model: model,
-                effort: effort,
-                hookSettingsPath: hookSettingsPath,
-                mcpConfigPath: mcpConfigPath,
-                permissionMode: permissionMode
-            )
+            mcpClaudeConfigPath = await mcp.writeClaudeConfig(projectPath: cwd)
         case .codex:
-            let mcpConfigOverrides = await mcp.codexConfigOverrides(projectPath: cwd)
-            stream = await codex.send(
-                streamId: streamId,
-                prompt: prompt,
-                cwd: cwd,
-                threadId: cliSessionId,
-                model: model,
-                permissionMode: registerMode,
-                planMode: permissionMode == .plan,
-                mcpConfigOverrides: mcpConfigOverrides,
-                permissionServer: permission
-            )
+            mcpCodexOverrides = await mcp.codexConfigOverrides(projectPath: cwd)
+            resolvedSendMode = registerMode
         case .acp:
+            // Allocate a per-session IDE-MCP port so the ACP agent can call
+            // polyfill / introspection tools. The agent's MCP child is a
+            // perl one-liner that bridges its stdio to our TCP listener;
+            // the listener stays bound to this session for its lifetime.
+            let idePort = await ideMCPServer.allocate(
+                sessionKey: sessionKey,
+                capabilities: AgentProvider.acp.staticCapabilities
+            )
+            let bridge = idePort.map { IDEMCPServer.bridgeCommand(forPort: $0) }
+            acpMCPServers = await mcp.acpMCPServers(
+                projectPath: cwd,
+                bridgeCommand: bridge
+            )
             // `model` may be a composite `<clientId>::<model>` key (from the picker)
             // or a bare model id (from a per-session override).
             let split = acpSelectionParts(for: model)
             let resolvedClientId = split?.clientId
                 ?? sessionStates[sessionKey]?.acpClientId
                 ?? selectedACPClientId
-            let resolvedModel = split?.model ?? model
-            guard let spec = acpClients.first(where: { $0.id == resolvedClientId && $0.enabled }) else {
+            resolvedModel = split?.model ?? model
+            resolvedSendMode = registerMode
+            if let spec = acpClients.first(where: { $0.id == resolvedClientId && $0.enabled }) {
+                acpSpec = spec
+            } else {
                 logger.error("[ACP] no enabled client for id=\(resolvedClientId, privacy: .public)")
-                let placeholder = AsyncStream<StreamEvent> { c in
+                earlyStream = AsyncStream<StreamEvent> { c in
                     c.yield(.user(UserMessage(
                         toolUseId: nil,
                         content: "No ACP client configured. Add one in Settings → ACP Clients.",
@@ -2252,19 +2277,30 @@ final class AppState {
                     )))
                     c.finish()
                 }
-                stream = placeholder
-                break
             }
-            stream = await acp.send(
+        }
+
+        let stream: AsyncStream<StreamEvent>
+        if let earlyStream {
+            stream = earlyStream
+        } else {
+            let request = BackendSendRequest(
                 streamId: streamId,
                 prompt: prompt,
                 cwd: cwd,
                 sessionId: cliSessionId,
                 model: resolvedModel,
-                spec: spec,
-                permissionMode: registerMode,
+                effort: effort,
+                permissionMode: resolvedSendMode,
+                planMode: permissionMode == .plan,
+                hookSettingsPath: hookSettingsPath,
+                mcpClaudeConfigPath: mcpClaudeConfigPath,
+                mcpCodexOverrides: mcpCodexOverrides,
+                acpMCPServers: acpMCPServers,
+                acpSpec: acpSpec,
                 clientSessionKey: sessionKey
             )
+            stream = await backend(for: agentProvider).send(request)
         }
 
         startFlushTimer(for: sessionKey)
@@ -2483,18 +2519,70 @@ final class AppState {
                             logger.info("[Stream:UI] Codex usage applied messageId=\(assistantMessage.id ?? "<nil>", privacy: .public) output=\(liveOutput) total=\(total)")
                         }
                     }
-                    // Extract text only when no text_delta has been received in the current turn.
-                    // Normally content_block_delta(text_delta) is the primary path, so this branch rarely executes.
+                    // ACP-style providers deliver fully-formed tool_use blocks inside .assistant
+                    // events (no content_block_start raw stream). Commit any buffered text first
+                    // so tool bubbles appear after — and not in the middle of — the prior text.
+                    let hasToolUse = assistantMessage.content.contains {
+                        if case .toolUse = $0 { return true }
+                        return false
+                    }
+                    if hasToolUse {
+                        flushPendingUpdates(for: sessionKey)
+                    }
+
                     updateState(sessionKey) { state in
-                        guard state.textDeltaBuffer.isEmpty else { return }
-                        let afterLastUser = (state.messages.lastIndex(where: { $0.role == .user }).map { $0 + 1 }) ?? 0
-                        let hasStreamedText = state.messages.suffix(from: afterLastUser).contains {
-                            $0.role == .assistant && $0.blocks.contains(where: \.isText)
-                        }
-                        guard !hasStreamedText else { return }
+                        // Text fallback: only buffer text when no text_delta has been received in
+                        // this turn. Normally content_block_delta(text_delta) is the primary path.
+                        let canBufferText: Bool = {
+                            guard state.textDeltaBuffer.isEmpty else { return false }
+                            let afterLastUser = (state.messages.lastIndex(where: { $0.role == .user }).map { $0 + 1 }) ?? 0
+                            return !state.messages.suffix(from: afterLastUser).contains {
+                                $0.role == .assistant && $0.blocks.contains(where: \.isText)
+                            }
+                        }()
+
                         for block in assistantMessage.content {
-                            if case .text(let text) = block, !text.isEmpty {
-                                state.textDeltaBuffer += text
+                            switch block {
+                            case .text(let text):
+                                if canBufferText, !text.isEmpty {
+                                    state.textDeltaBuffer += text
+                                }
+                            case .toolUse(let id, let name, let input):
+                                state.isThinking = false
+                                // Merge updates by id: ACP agents may re-emit the same toolUse
+                                // with additional input (e.g. diff content arriving via a
+                                // follow-up tool_call_update). Patch the existing block in
+                                // place so the live edit info reaches `flushPendingUpdates`
+                                // when the result lands.
+                                if let existingMsgIdx = state.messages.indices.reversed().first(where: {
+                                    state.messages[$0].toolCallIndex(id: id) != nil
+                                }),
+                                   let existingBlockIdx = state.messages[existingMsgIdx].toolCallIndex(id: id) {
+                                    var merged = state.messages[existingMsgIdx].blocks[existingBlockIdx].toolCall?.input ?? [:]
+                                    for (key, value) in input { merged[key] = value }
+                                    state.messages[existingMsgIdx].blocks[existingBlockIdx].toolCall?.input = merged
+                                } else {
+                                    if state.needsNewMessage {
+                                        if let idx = state.messages.indices.reversed().first(where: {
+                                            state.messages[$0].role == .assistant && state.messages[$0].isStreaming
+                                        }) {
+                                            state.messages[idx].isStreaming = false
+                                            state.messages[idx].finalizeToolCalls()
+                                            Self.stripNoOpText(at: idx, in: &state.messages)
+                                        }
+                                        state.messages.append(ChatMessage(role: .assistant, isStreaming: true))
+                                        state.needsNewMessage = false
+                                    } else if state.messages.last?.role != .assistant
+                                                || !(state.messages.last?.isStreaming ?? false) {
+                                        state.messages.append(ChatMessage(role: .assistant, isStreaming: true))
+                                    }
+                                    if let lastIndex = state.messages.indices.last,
+                                       state.messages[lastIndex].role == .assistant {
+                                        state.messages[lastIndex].appendToolCall(ToolCall(id: id, name: name, input: input))
+                                    }
+                                }
+                            case .thinking:
+                                state.isThinking = true
                             }
                         }
                     }
@@ -2684,15 +2772,18 @@ final class AppState {
     }
 
     private func finalizeAgentStream(agentProvider: AgentProvider, streamId: UUID) async {
-        switch agentProvider {
-        case .claudeCode:
+        // Claude needs an explicit stdin close before finalize so the CLI
+        // sees EOF; other backends manage stdin internally.
+        if agentProvider == .claudeCode {
             await claude.closeStdin(streamId: streamId)
-            await claude.finalize(streamId: streamId)
-        case .codex:
-            await codex.finalize(streamId: streamId)
-        case .acp:
-            await acp.finalize(streamId: streamId)
         }
+        await backend(for: agentProvider).finalize(streamId: streamId)
+    }
+
+    /// Release the per-session IDE-MCP listener allocated for ACP turns.
+    /// Safe to call for non-ACP providers (no-op).
+    private func releaseIDESession(sessionKey: String) async {
+        await ideMCPServer.release(sessionKey: sessionKey)
     }
 
     private func consumeAgentStderr(agentProvider: AgentProvider, streamId: UUID) async -> String? {
@@ -2956,14 +3047,7 @@ final class AppState {
 
         if let streamToCancel {
             let provider = sessionStates[key]?.agentProvider ?? effectiveModelSelection(in: window).provider
-            switch provider {
-            case .claudeCode:
-                await claude.cancel(streamId: streamToCancel)
-            case .codex:
-                await codex.cancel(streamId: streamToCancel)
-            case .acp:
-                await acp.cancel(streamId: streamToCancel)
-            }
+            await backend(for: provider).cancel(streamId: streamToCancel)
         }
 
         flushPendingUpdates(for: key)

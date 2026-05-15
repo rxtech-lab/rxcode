@@ -376,12 +376,11 @@ private struct ProjectChatsList: View {
     @State private var showsAllThreads = false
 
     private var sessions: [ChatSession.Summary] {
-        appState.allSessionSummaries
-            .filter { $0.projectId == project.id }
-            .sorted { a, b in
-                if a.isPinned != b.isPinned { return a.isPinned }
-                return a.updatedAt > b.updatedAt
-            }
+        HistoryListView.filteredSummaries(
+            from: appState.allSessionSummaries,
+            projectId: project.id,
+            showArchived: false
+        )
     }
 
     private var visibleSessions: [ChatSession.Summary] {

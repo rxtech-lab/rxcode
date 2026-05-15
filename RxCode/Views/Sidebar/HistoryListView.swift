@@ -261,7 +261,7 @@ struct HistoryListView: View {
 
     // MARK: - Display Model
 
-    private struct DisplaySession: Identifiable, Equatable {
+    struct DisplaySession: Identifiable, Equatable {
         let id: String
         let projectId: UUID
         let title: String
@@ -279,30 +279,55 @@ struct HistoryListView: View {
         }
     }
 
-    private static func sessionOrder(
+    static func sessionOrder(
         _ a: ChatSession.Summary, _ b: ChatSession.Summary
     ) -> Bool {
         if a.isPinned != b.isPinned { return a.isPinned }
         return a.updatedAt > b.updatedAt
     }
 
+    /// Filter + sort the summary feed for the History sidebar.
+    ///
+    /// `projectId == nil` returns the all-projects feed (deduplicated by id).
+    /// `projectId != nil` returns sessions scoped to that project. In either
+    /// mode the result includes ONLY summaries whose `isArchived` matches
+    /// `showArchived`, so archived chats never leak into the active list and
+    /// active chats never leak into the Archived view.
+    static func filteredSummaries(
+        from summaries: [ChatSession.Summary],
+        projectId: UUID?,
+        showArchived: Bool
+    ) -> [ChatSession.Summary] {
+        if let projectId {
+            return summaries
+                .filter { $0.projectId == projectId && $0.isArchived == showArchived }
+                .sorted { sessionOrder($0, $1) }
+        }
+        var seen = Set<String>()
+        return summaries
+            .filter { $0.isArchived == showArchived }
+            .sorted { sessionOrder($0, $1) }
+            .filter { seen.insert($0.id).inserted }
+    }
+
     private var currentProjectSessions: [DisplaySession] {
         guard let projectId = windowState.selectedProject?.id else { return [] }
         let streamingIds = appState.backgroundStreamingSessionIds(in: windowState)
-        return appState.allSessionSummaries
-            .filter { $0.projectId == projectId && $0.isArchived == showArchived }
-            .sorted { Self.sessionOrder($0, $1) }
-            .map { summary in
-                DisplaySession(
-                    id: summary.id,
-                    projectId: summary.projectId,
-                    title: summary.title,
-                    updatedAt: summary.updatedAt,
-                    isPinned: summary.isPinned,
-                    isBackgroundStreaming: streamingIds.contains(summary.id),
-                    projectName: nil
-                )
-            }
+        return Self.filteredSummaries(
+            from: appState.allSessionSummaries,
+            projectId: projectId,
+            showArchived: showArchived
+        ).map { summary in
+            DisplaySession(
+                id: summary.id,
+                projectId: summary.projectId,
+                title: summary.title,
+                updatedAt: summary.updatedAt,
+                isPinned: summary.isPinned,
+                isBackgroundStreaming: streamingIds.contains(summary.id),
+                projectName: nil
+            )
+        }
     }
 
     private var allProjectSessions: [DisplaySession] {
@@ -310,22 +335,21 @@ struct HistoryListView: View {
             uniqueKeysWithValues: appState.projects.map { ($0.id, $0.name) }
         )
         let streamingIds = appState.backgroundStreamingSessionIds(in: windowState)
-        var seen = Set<String>()
-        return appState.allSessionSummaries
-            .filter { $0.isArchived == showArchived }
-            .sorted { Self.sessionOrder($0, $1) }
-            .filter { seen.insert($0.id).inserted }
-            .map { summary in
-                DisplaySession(
-                    id: summary.id,
-                    projectId: summary.projectId,
-                    title: summary.title,
-                    updatedAt: summary.updatedAt,
-                    isPinned: summary.isPinned,
-                    isBackgroundStreaming: streamingIds.contains(summary.id),
-                    projectName: projectNames[summary.projectId]
-                )
-            }
+        return Self.filteredSummaries(
+            from: appState.allSessionSummaries,
+            projectId: nil,
+            showArchived: showArchived
+        ).map { summary in
+            DisplaySession(
+                id: summary.id,
+                projectId: summary.projectId,
+                title: summary.title,
+                updatedAt: summary.updatedAt,
+                isPinned: summary.isPinned,
+                isBackgroundStreaming: streamingIds.contains(summary.id),
+                projectName: projectNames[summary.projectId]
+            )
+        }
     }
 
     // MARK: - Helpers

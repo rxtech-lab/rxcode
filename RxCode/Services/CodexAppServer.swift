@@ -37,6 +37,14 @@ actor CodexAppServer {
     private var rateLimitsFetchTask: Task<RateLimitUsage?, Never>?
     private let rateLimitsCacheTTL: TimeInterval = 300
     private var notificationMethodCounts: [String: Int] = [:]
+    /// Reference to the permission server for in-band permission requests.
+    /// Wired once at app init; the `AgentBackend.send(_:)` adapter pulls it
+    /// from here so callers don't have to pass it on every turn.
+    private weak var permissionServer: PermissionServer?
+
+    func setPermissionServer(_ server: PermissionServer) {
+        self.permissionServer = server
+    }
 
     private static var candidatePaths: [String] {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
@@ -1194,5 +1202,42 @@ private enum AppStateModelFormatter {
                 part.uppercased().hasPrefix("GPT") ? part.uppercased() : part.capitalized
             }
             .joined(separator: " ")
+    }
+}
+
+// MARK: - AgentBackend Conformance
+
+extension CodexAppServer: AgentBackend {
+    nonisolated var provider: AgentProvider { .codex }
+    nonisolated var staticCapabilities: CapabilitySet { AgentProvider.codex.staticCapabilities }
+
+    func send(_ request: BackendSendRequest) -> AsyncStream<StreamEvent> {
+        guard let permissionServer else {
+            logger.error("[Codex] send called before setPermissionServer wired")
+            return AsyncStream<StreamEvent> { c in
+                c.yield(.user(UserMessage(
+                    toolUseId: nil,
+                    content: "Codex backend not initialized (missing permission server).",
+                    isError: true
+                )))
+                c.yield(.result(ResultEvent(
+                    durationMs: nil, totalCostUsd: nil,
+                    sessionId: request.sessionId ?? request.clientSessionKey,
+                    isError: true, totalTurns: nil, usage: nil, contextWindow: nil
+                )))
+                c.finish()
+            }
+        }
+        return send(
+            streamId: request.streamId,
+            prompt: request.prompt,
+            cwd: request.cwd,
+            threadId: request.sessionId,
+            model: request.model,
+            permissionMode: request.permissionMode,
+            planMode: request.planMode,
+            mcpConfigOverrides: request.mcpCodexOverrides,
+            permissionServer: permissionServer
+        )
     }
 }

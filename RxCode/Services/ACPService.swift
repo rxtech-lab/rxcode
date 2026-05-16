@@ -457,6 +457,7 @@ actor ACPService {
         )
         heartbeat.cancel()
         logger.info("[ACP] initialize ok for \(spec.displayName, privacy: .public): \(initResult.shortDescription, privacy: .public)")
+        let filteredMCPServers = supportedMCPServers(mcpServers, initResult: initResult)
 
         continuation.yield(.system(SystemEvent(
             subtype: "init",
@@ -472,7 +473,7 @@ actor ACPService {
         // persisted conversation as updates and would duplicate messages.
         let newParams: [String: JSONValue] = [
             "cwd": .string(cwd),
-            "mcpServers": .array(mcpServers)
+            "mcpServers": .array(filteredMCPServers)
         ]
         let newResult = try await sendRequest(key: bootstrapKey, method: "session/new", params: newParams)
         guard let agentSessionId = newResult.objectValue?["sessionId"]?.stringValue else {
@@ -1236,6 +1237,37 @@ actor ACPService {
 
     private func agentSupportsLoadSession(_ initResult: JSONValue) -> Bool {
         initResult.objectValue?["agentCapabilities"]?.objectValue?["loadSession"]?.boolValue ?? false
+    }
+
+    private func agentSupportsMCPTransport(_ transport: String, initResult: JSONValue) -> Bool {
+        guard transport == "http" || transport == "sse" else { return true }
+        return initResult
+            .objectValue?["agentCapabilities"]?
+            .objectValue?["mcpCapabilities"]?
+            .objectValue?[transport]?
+            .boolValue ?? false
+    }
+
+    private func supportedMCPServers(_ servers: [JSONValue], initResult: JSONValue) -> [JSONValue] {
+        var supported: [JSONValue] = []
+        var dropped: [String] = []
+
+        for server in servers {
+            let obj = server.objectValue
+            let transport = obj?["type"]?.stringValue ?? "stdio"
+            if agentSupportsMCPTransport(transport, initResult: initResult) {
+                supported.append(server)
+            } else {
+                let name = obj?["name"]?.stringValue ?? "<unnamed>"
+                dropped.append("\(name):\(transport)")
+            }
+        }
+
+        if !dropped.isEmpty {
+            logger.info("[ACP-MCP] dropping unsupported MCP transports: \(dropped.joined(separator: ", "), privacy: .public)")
+        }
+        logger.info("[ACP-MCP] passing \(supported.count, privacy: .public)/\(servers.count, privacy: .public) mcpServers after initialize capability check")
+        return supported
     }
 
     /// Scans a `session/new` (or `session/load`) response for the first

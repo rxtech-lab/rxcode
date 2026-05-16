@@ -36,8 +36,10 @@ struct TodoProgressToolbarItem: View {
             }
             .buttonStyle(.plain)
             .help("Todos (\(done)/\(todos.count))")
+            .accessibilityIdentifier("todo-progress-button")
             .popover(isPresented: $showPopover, arrowEdge: .bottom) {
                 TodoListPopoverView(todos: todos)
+                    .accessibilityIdentifier("todo-progress-popover")
             }
         }
     }

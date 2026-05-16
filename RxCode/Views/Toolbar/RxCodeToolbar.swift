@@ -82,6 +82,7 @@ struct RxCodeToolbarContent: ToolbarContent {
             }
             .help("Toggle Inspector")
             .keyboardShortcut("4", modifiers: .command)
+            .accessibilityIdentifier("toggle-inspector-button")
 
             Button {
                 openSettings()
@@ -89,6 +90,7 @@ struct RxCodeToolbarContent: ToolbarContent {
                 Image(systemName: "gearshape")
             }
             .help("Settings")
+            .accessibilityIdentifier("settings-button")
         }
     }
 }

@@ -1,0 +1,40 @@
+{
+  "configurations" : [
+    {
+      "id" : "5C12EB1C-119F-45F2-8C22-0B1274C2A4B3",
+      "name" : "Local UI Acceptance",
+      "options" : {
+        "environmentVariableEntries" : [
+          {
+            "isEnabled" : true,
+            "key" : "RXCODE_LOCAL_MCP_SERVER",
+            "value" : "$(SRCROOT)/scripts/mcp_echo_server.py"
+          },
+          {
+            "isEnabled" : true,
+            "key" : "RXCODE_SKIP_LOCAL_AI_UI_TESTS",
+            "value" : "0"
+          }
+        ]
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "targetForVariableExpansion" : {
+      "containerPath" : "container:RxCode.xcodeproj",
+      "identifier" : "E67335372F7356F600FD26C7",
+      "name" : "RxCode"
+    },
+    "testTimeoutsEnabled" : true
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:RxCode.xcodeproj",
+        "identifier" : "6E17B0062FC8000100A10001",
+        "name" : "RxCodeUITests"
+      }
+    }
+  ],
+  "version" : 1
+}

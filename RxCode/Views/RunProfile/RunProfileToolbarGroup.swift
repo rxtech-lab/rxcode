@@ -96,6 +96,7 @@ struct RunProfileToolbarGroup: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .help("Select Run Profile")
+        .accessibilityIdentifier("run-profile-menu")
     }
 
     // MARK: - Run button
@@ -115,6 +116,7 @@ struct RunProfileToolbarGroup: View {
             ? "\(selectedProfile?.name ?? "") is already running"
             : "Run \(selectedProfile?.name ?? "")")
         .disabled(selectedProfile == nil || project == nil || isSelectedProfileRunning)
+        .accessibilityIdentifier("run-profile-run-button")
     }
 
     // MARK: - Stop button
@@ -128,6 +130,7 @@ struct RunProfileToolbarGroup: View {
                 stopIcon
             }
             .help("Stop \(only.profile.name)")
+            .accessibilityIdentifier("run-profile-stop-button")
         } else {
             Menu {
                 ForEach(activeTasks) { task in
@@ -149,6 +152,7 @@ struct RunProfileToolbarGroup: View {
             .fixedSize()
             .help("Stop running tasks")
             .padding(.trailing, 4)
+            .accessibilityIdentifier("run-profile-stop-menu")
         }
     }
 

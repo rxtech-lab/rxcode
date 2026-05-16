@@ -6,6 +6,11 @@ import Foundation
 /// `RxCode.<suffix>` so alternate builds never share state with production.
 public enum AppSupport {
     public static let bundleScopedURL: URL = {
+        if let override = ProcessInfo.processInfo.environment["RXCODE_APP_SUPPORT_DIR"],
+           !override.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return URL(fileURLWithPath: override, isDirectory: true)
+        }
+
         let root = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)
             .first!

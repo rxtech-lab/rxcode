@@ -285,6 +285,7 @@ struct PlanCardView: View {
         .onHover { isHovered = $0 }
         .disabled(isStreaming)
         .help(helpText)
+        .accessibilityIdentifier("plan-card-button")
         .animation(.easeInOut(duration: 0.12), value: isHovered)
     }
 

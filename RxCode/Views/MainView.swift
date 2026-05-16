@@ -91,6 +91,8 @@ struct MainView: View {
                 .toolbar(removing: .title)
                 .toolbarBackground(.hidden, for: .windowToolbar)
                 .background(UnifiedTitleBarAccessor())
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("rxcode-main-view")
                 .toolbar {
                     if columnVisibility != .detailOnly {
                         ToolbarItem(placement: .navigation) {
@@ -480,6 +482,7 @@ struct ChatToolbarControls: View {
             .menuStyle(.borderlessButton)
             .fixedSize()
             .help("Permission mode: \(effectiveMode.displayName)")
+            .accessibilityIdentifier("permission-mode-menu")
 
             Menu {
                 Section("Model Picker") {
@@ -517,6 +520,7 @@ struct ChatToolbarControls: View {
             .menuStyle(.borderlessButton)
             .fixedSize()
             .help("Model: \(effectiveProvider.displayName) · \(appState.modelDisplayLabel(effectiveModel, provider: effectiveProvider))")
+            .accessibilityIdentifier("provider-model-menu")
 
             Menu {
                 Section("Effort Picker") {
@@ -547,6 +551,7 @@ struct ChatToolbarControls: View {
             .menuStyle(.borderlessButton)
             .fixedSize()
             .help("Effort level: \(windowState.sessionEffort.map { effortDisplayName($0) } ?? "Auto Effort")")
+            .accessibilityIdentifier("effort-menu")
         }
         .frame(maxWidth: placement == .composer ? .infinity : nil, alignment: .leading)
     }

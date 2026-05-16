@@ -52,6 +52,7 @@ struct IMETextView: NSViewRepresentable {
         textView.isAutomaticTextReplacementEnabled = false
         textView.isAutomaticSpellingCorrectionEnabled = false
         textView.smartInsertDeleteEnabled = false
+        textView.setAccessibilityIdentifier("chat-input-text-view")
         textView.textContainerInset = .zero
         textView.isHorizontallyResizable = false
         textView.isVerticallyResizable = true

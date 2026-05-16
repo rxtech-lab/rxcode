@@ -353,5 +353,15 @@ public struct PlanSheetView: View {
         }
         .buttonStyle(.plain)
         .disabled(isDisabled)
+        .accessibilityIdentifier("plan-button-\(accessibilityIDComponent(from: title))")
+    }
+
+    private func accessibilityIDComponent(from title: String) -> String {
+        title
+            .lowercased()
+            .map { $0.isLetter || $0.isNumber ? String($0) : "-" }
+            .joined()
+            .split(separator: "-")
+            .joined(separator: "-")
     }
 }

@@ -253,6 +253,7 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .help(windowState.sessionPlanMode ? "Plan mode is on — Add menu" : "Add — attach file or toggle plan mode")
+        .accessibilityIdentifier("composer-add-menu")
         .fileImporter(
             isPresented: $showFilePicker,
             allowedContentTypes: [.item],
@@ -289,6 +290,7 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
         }
         .buttonStyle(.plain)
         .help(String(localized: "Turn off plan mode", bundle: .module))
+        .accessibilityIdentifier("plan-mode-chip")
     }
 
     /// Mirrors `windowState.sessionPlanMode` into a Binding so the Menu's `Toggle`
@@ -321,6 +323,7 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
             onImageChipTap: handleImageChipTap
         )
         .id(textFieldLayoutID)
+        .accessibilityIdentifier("chat-input")
         .onChange(of: windowState.inputText) { oldValue, newValue in
             handleInputTextChange(oldValue: oldValue, newValue: newValue)
         }

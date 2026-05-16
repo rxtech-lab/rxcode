@@ -84,6 +84,12 @@ final class ExternalEditorService {
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
     }
 
+    func gitHubURL(for project: Project) -> URL? {
+        let ownerRepo = project.gitHubRepo ?? detectGitHubOwnerRepo(at: project.path)
+        guard let ownerRepo else { return nil }
+        return gitHubWebURL(forOwnerRepo: ownerRepo)
+    }
+
     private func which(_ command: String) -> String? {
         let candidates = [
             "/opt/homebrew/bin/\(command)",
@@ -135,6 +141,14 @@ struct ExternalEditorMenu: View {
                 }
             }
             Divider()
+            if let project = windowState.selectedProject,
+               let gitHubURL = ExternalEditorService.shared.gitHubURL(for: project) {
+                Button {
+                    NSWorkspace.shared.open(gitHubURL)
+                } label: {
+                    Label("Open in GitHub", systemImage: "globe")
+                }
+            }
             Button {
                 if let path = windowState.selectedProject?.path {
                     ExternalEditorService.shared.revealInFinder(path)

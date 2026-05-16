@@ -43,4 +43,9 @@ struct GitURLHelpersTests {
     func oneComponent() {
         #expect(parseGitHubOwnerRepo(from: "https://github.com/owner") == nil)
     }
+
+    @Test("Owner repo builds GitHub web URL")
+    func ownerRepoBuildsWebURL() {
+        #expect(gitHubWebURL(forOwnerRepo: "owner/repo")?.absoluteString == "https://github.com/owner/repo")
+    }
 }

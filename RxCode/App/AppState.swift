@@ -3407,34 +3407,8 @@ final class AppState {
 
     func addProjectFromFolder(_ url: URL, in window: WindowState) async {
         let isGitRepo = FileManager.default.fileExists(atPath: url.appendingPathComponent(".git").path)
-        let gitHubRepo = isGitRepo ? detectGitHubRepo(at: url.path) : nil
+        let gitHubRepo = isGitRepo ? detectGitHubOwnerRepo(at: url.path) : nil
         await addAndSelectProject(name: url.lastPathComponent, path: url.path, gitHubRepo: gitHubRepo, in: window)
-    }
-
-    private nonisolated func detectGitHubRepo(at path: String) -> String? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = ["remote", "get-url", "origin"]
-        process.currentDirectoryURL = URL(fileURLWithPath: path)
-
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
-
-        do {
-            try process.run()
-            process.waitUntilExit()
-        } catch {
-            return nil
-        }
-
-        guard process.terminationStatus == 0 else { return nil }
-
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        guard let urlString = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !urlString.isEmpty else { return nil }
-
-        return parseGitHubOwnerRepo(from: urlString)
     }
 
     private func addAndSelectProject(name: String, path: String, gitHubRepo: String? = nil, in window: WindowState) async {

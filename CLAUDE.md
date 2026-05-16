@@ -23,7 +23,7 @@ xcodebuild -project RxCode.xcodeproj -scheme RxCode -configuration Debug build
 xcodebuild -project RxCode.xcodeproj -scheme RxCode -configuration Release build
 ```
 
-- Minimum deployment target: macOS 15.0+
+- Minimum deployment target: macOS 26.0+
 - No test suite (UI app)
 - Bundle ID: `com.idealapp.RxCode`
 - External dependencies: SwiftTerm (terminal emulation), Sparkle (auto-update)

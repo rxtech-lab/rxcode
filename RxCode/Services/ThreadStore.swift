@@ -35,9 +35,7 @@ final class ThreadStore {
 
     private static func storeURL() -> URL {
         let fm = FileManager.default
-        let appSupport = (try? fm.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true))
-            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
-        let dir = appSupport.appendingPathComponent("RxCode", isDirectory: true)
+        let dir = AppSupport.bundleScopedURL
         try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("threads.store")
     }

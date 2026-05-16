@@ -1,0 +1,24 @@
+{
+  "configurations" : [
+    {
+      "id" : "BC843CAB-645B-4D89-BAE0-34BE9DFE9D04",
+      "name" : "Configuration 1",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "testTimeoutsEnabled" : true
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:RxCode.xcodeproj",
+        "identifier" : "5D74FE7B782850D23F8D9BF7",
+        "name" : "RxCodeTests"
+      }
+    }
+  ],
+  "version" : 1
+}

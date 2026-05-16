@@ -7,7 +7,7 @@ set -euo pipefail
 
 RELEASES_URL="https://github.com/rxtech-lab/rxcode/releases"
 DOWNLOAD_URL_PREFIX="${RELEASES_URL}/download/${VERSION}/"
-EXPECTED_MINIMUM_SYSTEM_VERSION="${EXPECTED_MINIMUM_SYSTEM_VERSION:-15.0}"
+EXPECTED_MINIMUM_SYSTEM_VERSION="${EXPECTED_MINIMUM_SYSTEM_VERSION:-26.0}"
 
 # Write SPARKLE_KEY to sparkle.key
 echo "$SPARKLE_KEY" > sparkle.key

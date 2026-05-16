@@ -84,7 +84,7 @@ Same agents, no terminal required.
 
 ## Requirements
 
-- **macOS 15.0** or later
+- **macOS 26.0** or later
 - At least one supported agent runtime installed and authenticated:
   - **[Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code)**
   - **Codex CLI**
@@ -99,9 +99,9 @@ Same agents, no terminal required.
 2. Unzip and move `RxCode.app` to your `Applications` folder.
 3. Launch `RxCode.app`.
 
-### First Launch on macOS 15 (Sequoia)
+### First Launch on macOS 26
 
-macOS Sequoia blocks the first launch of any downloaded app, even notarized ones, and routes approval through System Settings instead of the old right-click -> Open flow.
+macOS 26 blocks the first launch of any downloaded app, even notarized ones, and routes approval through System Settings instead of the old right-click -> Open flow.
 
 When you see **"Apple could not verify 'RxCode.app' is free of malware..."**:
 

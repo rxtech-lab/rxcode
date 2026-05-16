@@ -221,7 +221,7 @@ function Hero({
         </div>
 
         <p className="mt-6 text-xs text-on-surface-variant/70 font-mono uppercase tracking-widest">
-          macOS 15+ · Apple Silicon &amp; Intel
+          macOS 26+ · Apple Silicon
         </p>
       </div>
     </section>

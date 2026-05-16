@@ -457,7 +457,12 @@ actor ACPService {
         )
         heartbeat.cancel()
         logger.info("[ACP] initialize ok for \(spec.displayName, privacy: .public): \(initResult.shortDescription, privacy: .public)")
+        logger.info("[ACP-MCP] runFreshTurn received \(mcpServers.count, privacy: .public) candidate mcpServers from caller")
         let filteredMCPServers = supportedMCPServers(mcpServers, initResult: initResult)
+        if let data = try? JSONEncoder().encode(JSONValue.array(filteredMCPServers)),
+           let json = String(data: data, encoding: .utf8) {
+            logger.info("[ACP-MCP] session/new mcpServers payload=\(json, privacy: .public)")
+        }
 
         continuation.yield(.system(SystemEvent(
             subtype: "init",
@@ -547,6 +552,7 @@ actor ACPService {
         let modelConfigId = sessions[poolKey]?.modelConfigId
         let spec = sessions[poolKey]!.spec
         logger.info("[ACP] reusing pooled session key=\(poolKey, privacy: .public) agentSid=\(agentSessionId, privacy: .public) client=\(spec.displayName, privacy: .public)")
+        logger.info("[ACP-MCP] reused turn — NOT re-sending mcpServers; agent already has whatever was registered at initial session/new")
 
         // Reset per-turn state and adopt the new streamId/continuation.
         mutateSession(poolKey) { e in
@@ -1048,7 +1054,8 @@ actor ACPService {
         let kind = update["kind"]?.stringValue
         let rawInput = update["rawInput"]?.objectValue ?? [:]
         let normalized = Self.normalizeToolCall(kind: kind, title: title, update: update, rawInput: rawInput)
-        logger.info("[ACP] ⟵ tool_call id=\(toolCallId, privacy: .public) name=\(normalized.name, privacy: .public) kind=\(kind ?? "<nil>", privacy: .public) inputKeys=[\(normalized.input.keys.sorted().joined(separator: ","), privacy: .public)]")
+        let mcpTag = (normalized.name.contains("context7") || normalized.name.contains("mcp_") || title.contains("MCP")) ? " [MCP]" : ""
+        logger.info("[ACP] ⟵ tool_call\(mcpTag, privacy: .public) id=\(toolCallId, privacy: .public) name=\(normalized.name, privacy: .public) title=\(title, privacy: .public) kind=\(kind ?? "<nil>", privacy: .public) inputKeys=[\(normalized.input.keys.sorted().joined(separator: ","), privacy: .public)]")
 
         mutateSession(key) { $0.liveToolCalls.insert(toolCallId) }
 
@@ -1249,16 +1256,21 @@ actor ACPService {
     }
 
     private func supportedMCPServers(_ servers: [JSONValue], initResult: JSONValue) -> [JSONValue] {
+        let mcpCaps = initResult.objectValue?["agentCapabilities"]?.objectValue?["mcpCapabilities"]
+        logger.info("[ACP-MCP] agent advertised mcpCapabilities=\(mcpCaps?.shortDescription ?? "<nil>", privacy: .public) (http=\(mcpCaps?.objectValue?["http"]?.boolValue == true) sse=\(mcpCaps?.objectValue?["sse"]?.boolValue == true))")
+
         var supported: [JSONValue] = []
         var dropped: [String] = []
 
         for server in servers {
             let obj = server.objectValue
             let transport = obj?["type"]?.stringValue ?? "stdio"
+            let name = obj?["name"]?.stringValue ?? "<unnamed>"
             if agentSupportsMCPTransport(transport, initResult: initResult) {
+                logger.info("[ACP-MCP] passing entry name=\(name, privacy: .public) transport=\(transport, privacy: .public)")
                 supported.append(server)
             } else {
-                let name = obj?["name"]?.stringValue ?? "<unnamed>"
+                logger.info("[ACP-MCP] dropping entry name=\(name, privacy: .public) transport=\(transport, privacy: .public) — agent doesn't advertise capability")
                 dropped.append("\(name):\(transport)")
             }
         }

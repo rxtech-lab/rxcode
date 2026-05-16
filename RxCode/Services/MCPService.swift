@@ -176,6 +176,12 @@ actor MCPService {
         }
         let names = entries.compactMap { $0["name"]?.stringValue }.joined(separator: ", ")
         logger.info("[ACP-MCP] built \(entries.count, privacy: .public) mcpServers entries for project=\(projectPath ?? "<nil>", privacy: .public) [\(names, privacy: .public)]")
+        // Dump the full JSON payload so a comparison against a known-good
+        // Python repro is one log line away.
+        if let data = try? JSONEncoder().encode(JSONValue.array(entries)),
+           let json = String(data: data, encoding: .utf8) {
+            logger.info("[ACP-MCP] payload=\(json, privacy: .public)")
+        }
         return entries
     }
 

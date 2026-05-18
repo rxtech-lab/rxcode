@@ -470,6 +470,8 @@ final class AppState {
     var openAISummarizationModels: [String] = []
     var openAISummarizationModelsError: String?
     var isLoadingOpenAISummarizationModels = false
+    var threadSummaryRevision = 0
+    var branchBriefingRevision = 0
 
     // MARK: - Notifications
 
@@ -893,6 +895,7 @@ final class AppState {
     let marketplace = MarketplaceService()
     let mcp: MCPService
     let threadStore: ThreadStore
+    let searchService = ThreadSearchService()
     let runService = RunService()
     let ideMCPServer = IDEMCPServer()
 
@@ -970,6 +973,23 @@ final class AppState {
             await acp.setPermissionServer(permission)
             await codex.setPermissionServer(permission)
             await ideMCPServer.setHandler(self)
+        }
+
+        // Boot the on-device thread search index in the background. The actor
+        // loads cached chunks on `start`, then kicks off a one-time backfill
+        // of any threads that don't have chunks yet.
+        let searchService = self.searchService
+        let threadStore = self.threadStore
+        let persistence = self.persistence
+        Task.detached(priority: .utility) { [weak self] in
+            await searchService.start(threadStore: threadStore)
+            await searchService.backfillIfNeeded(
+                loadAll: { @MainActor in threadStore.loadAllSummaries() },
+                loadFull: { @MainActor summary -> ChatSession? in
+                    let cwd = self?.projects.first(where: { $0.id == summary.projectId })?.path ?? ""
+                    return await persistence.loadFullSession(summary: summary, cwd: cwd)
+                }
+            )
         }
     }
 
@@ -1470,6 +1490,7 @@ final class AppState {
         // it does not drive thread discovery.
         allSessionSummaries = threadStore.loadAllSummaries()
         autoArchiveExpiredSessionsIfNeeded()
+        purgeStaleBranchBriefingsIfNeeded()
 
         persistedQueues = threadStore.loadAllQueues()
 
@@ -1816,7 +1837,7 @@ final class AppState {
         }
 
         window.inputText = ""
-        window.draftTexts.removeValue(forKey: window.currentSessionId ?? "new")
+        window.draftTexts.removeValue(forKey: draftKey(for: window))
         window.attachments = []
 
         let (resolvedAttachments, tempFilePaths) = AttachmentFactory.resolvingClipboardImages(currentAttachments)
@@ -2362,6 +2383,7 @@ final class AppState {
                             if let state = sessionStates.removeValue(forKey: previousSessionKey) {
                                 sessionStates[sid] = state
                             }
+                            renameDraftState(from: previousSessionKey, to: sid, in: window)
                             sessionIdRedirect[previousSessionKey] = sid
                             sessionKey = sid
                             startFlushTimer(for: sid)
@@ -2659,21 +2681,27 @@ final class AppState {
                         }
 
                         if notificationsEnabled, !NSApp.isActive {
-                            let title = allSessionSummaries.first(where: { $0.id == resultEvent.sessionId })?.title ?? "New Session"
-                            let firstSentence = stateForSession(sessionKey).messages
-                                .last(where: { $0.role == .assistant && !$0.isError })
-                                .flatMap { msg -> String? in
-                                    let text = msg.content.trimmingCharacters(in: .whitespacesAndNewlines)
-                                    guard !text.isEmpty else { return nil }
-                                    let sentence = text.components(separatedBy: CharacterSet(charactersIn: ".!?\n")).first ?? text
-                                    return sentence.trimmingCharacters(in: .whitespaces)
-                                } ?? ""
+                            let summary = allSessionSummaries.first(where: { $0.id == resultEvent.sessionId })
+                            let title = summary?.title ?? "New Session"
+                            let responseText = lastAssistantResponseText(in: stateForSession(sessionKey).messages)
+                            let fallbackBody = responseNotificationFallback(from: responseText)
                             let pid = projectId
                             let sid = resultEvent.sessionId
-                            Task { @MainActor in
-                                await NotificationService.shared.postResponseComplete(title: title, body: firstSentence, projectId: pid, sessionId: sid)
+                            Task { [weak self] in
+                                var body = fallbackBody
+                                if let self, let summary {
+                                    body = await self.generateResponseNotificationSummary(responseText: responseText, summary: summary) ?? fallbackBody
+                                }
+                                await NotificationService.shared.postResponseComplete(title: title, body: body, projectId: pid, sessionId: sid)
                             }
                         }
+
+                        scheduleThreadSummaryUpdate(
+                            sessionId: resultEvent.sessionId,
+                            projectId: projectId,
+                            cwd: cwd,
+                            messages: stateForSession(sessionKey).messages
+                        )
 
                         // If this session is running in the background, automatically process any queued messages.
                         // Foreground sessions are handled by InputBarView via isStreaming onChange.
@@ -3102,6 +3130,7 @@ final class AppState {
         if let sid = window.currentSessionId, window.pendingPlaceholderIds.contains(sid) {
             allSessionSummaries.removeAll { $0.id == sid }
             threadStore.delete(id: sid)
+            Task.detached(priority: .utility) { [searchService] in await searchService.removeThread(id: sid) }
             window.removePendingPlaceholder(sid)
             sessionStates.removeValue(forKey: sid)
             window.currentSessionId = nil
@@ -3355,6 +3384,9 @@ final class AppState {
     func selectProject(_ project: Project, in window: WindowState) {
         guard window.selectedProject?.id != project.id else { return }
 
+        saveDraft(in: window)
+        saveQueue(in: window)
+
         if isStreaming(in: window) {
             detachCurrentStream(in: window)
         }
@@ -3394,10 +3426,10 @@ final class AppState {
         // animation: nil — all mutations land in the same frame; sessionStates.filter fires
         // one @Observable notification instead of N removeValue calls.
         withAnimation(nil) {
+            window.showingBriefing = false
             window.selectedProject = project
             sessionStates = sessionStates.filter { $0.value.isStreaming }
-            window.currentSessionId = nil
-            startNewChat(in: window)
+            resetToNewChat(in: window)
         }
 
         activeProjectPath = project.path
@@ -3482,6 +3514,7 @@ final class AppState {
 
         updateState(session.id) { $0.hasUncheckedCompletion = false }
 
+        window.showingBriefing = false
         window.currentSessionId = session.id
         window.sessionAgentProvider = sessionStates[session.id]?.agentProvider ?? session.agentProvider
         window.sessionModel = sessionStates[session.id]?.model ?? session.model
@@ -3612,6 +3645,11 @@ final class AppState {
         saveDraft(in: window)
         saveQueue(in: window)
         releaseOutgoingSession(window.currentSessionId, in: window)
+        resetToNewChat(in: window)
+    }
+
+    private func resetToNewChat(in window: WindowState) {
+        window.showingBriefing = false
         window.currentSessionId = nil
         window.sessionAgentProvider = nil
         window.sessionModel = nil
@@ -3619,8 +3657,8 @@ final class AppState {
         window.sessionPermissionMode = nil
         window.sessionPlanMode = false
         sessionStates.removeValue(forKey: window.newSessionKey)
-        window.inputText = window.draftTexts["new"] ?? ""
-        window.messageQueue = window.draftQueues["new"] ?? []
+        window.inputText = window.draftTexts[newDraftKey(for: window)] ?? ""
+        window.messageQueue = window.draftQueues[newDraftKey(for: window)] ?? []
         window.requestInputFocus = true
     }
 
@@ -3712,6 +3750,149 @@ final class AppState {
         }
     }
 
+    private func generateResponseNotificationSummary(responseText: String, summary: ChatSession.Summary) async -> String? {
+        let trimmedResponse = responseText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedResponse.isEmpty else { return nil }
+
+        switch summarizationProvider {
+        case .selectedClient:
+            let provider = summary.agentProvider
+            let model = summary.model ?? selectedSummarizationModel(for: provider)
+            return await generateResponseNotificationSummary(responseText: trimmedResponse, provider: provider, model: model)
+        case .openAI:
+            guard !openAISummarizationModel.isEmpty else { return nil }
+            return await openAISummarization.generateResponseNotificationSummary(
+                responseText: trimmedResponse,
+                endpoint: openAISummarizationEndpoint,
+                apiKey: openAISummarizationAPIKey,
+                model: openAISummarizationModel
+            )
+        }
+    }
+
+    private func scheduleThreadSummaryUpdate(
+        sessionId: String,
+        projectId: UUID,
+        cwd: String,
+        messages: [ChatMessage]
+    ) {
+        let userMessage = lastUserMessageText(in: messages)
+        let finalResponse = lastAssistantResponseText(in: messages)
+        guard !userMessage.isEmpty, !finalResponse.isEmpty else { return }
+
+        let summary = allSessionSummaries.first(where: { $0.id == sessionId })
+            ?? summaryFor(sessionId: sessionId, projectId: projectId)
+
+        Task { [weak self] in
+            guard let self else { return }
+            await self.updateStoredThreadSummary(
+                sessionId: sessionId,
+                projectId: projectId,
+                cwd: cwd,
+                userMessage: userMessage,
+                finalResponse: finalResponse,
+                summary: summary
+            )
+        }
+    }
+
+    private func updateStoredThreadSummary(
+        sessionId: String,
+        projectId: UUID,
+        cwd: String,
+        userMessage: String,
+        finalResponse: String,
+        summary: ChatSession.Summary
+    ) async {
+        let previousSummary = threadStore.threadSummaryItem(sessionId: sessionId)?.summary
+        guard let threadSummary = await generateThreadSummary(
+            previousSummary: previousSummary,
+            userMessage: userMessage,
+            finalResponse: finalResponse,
+            summary: summary
+        ) else { return }
+
+        let branchPath = summary.worktreePath ?? cwd
+        let currentBranch = await GitHelper.currentBranch(at: branchPath)
+        let branch = summary.worktreeBranch ?? currentBranch ?? "unknown"
+        let title = summary.title.isEmpty ? ChatSession.defaultTitle : summary.title
+
+        threadStore.upsertThreadSummary(
+            sessionId: sessionId,
+            projectId: projectId,
+            branch: branch,
+            title: title,
+            summary: threadSummary
+        )
+        threadSummaryRevision &+= 1
+
+        let allThreadSummaries = threadStore
+            .threadSummaryItems(projectId: projectId, branch: branch)
+            .map { (title: $0.title, summary: $0.summary) }
+        guard let briefing = await generateBranchBriefing(
+            threadSummaries: allThreadSummaries,
+            summary: summary
+        ) else { return }
+
+        threadStore.upsertBranchBriefing(projectId: projectId, branch: branch, briefing: briefing)
+        branchBriefingRevision &+= 1
+    }
+
+    private func generateThreadSummary(
+        previousSummary: String?,
+        userMessage: String,
+        finalResponse: String,
+        summary: ChatSession.Summary
+    ) async -> String? {
+        switch summarizationProvider {
+        case .selectedClient:
+            let provider = summary.agentProvider
+            let model = summary.model ?? selectedSummarizationModel(for: provider)
+            return await generateThreadSummary(
+                previousSummary: previousSummary,
+                userMessage: userMessage,
+                finalResponse: finalResponse,
+                provider: provider,
+                model: model
+            )
+        case .openAI:
+            guard !openAISummarizationModel.isEmpty else { return nil }
+            return await openAISummarization.generateThreadSummary(
+                previousSummary: previousSummary,
+                userMessage: userMessage,
+                finalResponse: finalResponse,
+                endpoint: openAISummarizationEndpoint,
+                apiKey: openAISummarizationAPIKey,
+                model: openAISummarizationModel
+            )
+        }
+    }
+
+    private func generateBranchBriefing(
+        threadSummaries: [(title: String, summary: String)],
+        summary: ChatSession.Summary
+    ) async -> String? {
+        guard !threadSummaries.isEmpty else { return nil }
+        switch summarizationProvider {
+        case .selectedClient:
+            let provider = summary.agentProvider
+            let model = summary.model ?? selectedSummarizationModel(for: provider)
+            return await generateBranchBriefing(
+                threadSummaries: threadSummaries,
+                provider: provider,
+                model: model
+            )
+        case .openAI:
+            guard !openAISummarizationModel.isEmpty else { return nil }
+            return await openAISummarization.generateBranchBriefing(
+                threadSummaries: threadSummaries,
+                endpoint: openAISummarizationEndpoint,
+                apiKey: openAISummarizationAPIKey,
+                model: openAISummarizationModel
+            )
+        }
+    }
+
     private func generateSessionTitle(firstUserMessage: String, provider: AgentProvider, model: String?) async -> String? {
         switch provider {
         case .claudeCode:
@@ -3722,6 +3903,88 @@ final class AppState {
             // No standardized title-generation in ACP; fall back to the truncation logic upstream.
             return nil
         }
+    }
+
+    private func generateThreadSummary(
+        previousSummary: String?,
+        userMessage: String,
+        finalResponse: String,
+        provider: AgentProvider,
+        model: String?
+    ) async -> String? {
+        switch provider {
+        case .claudeCode:
+            return await claude.generateThreadSummary(
+                previousSummary: previousSummary,
+                userMessage: userMessage,
+                finalResponse: finalResponse,
+                model: model ?? "haiku"
+            )
+        case .codex:
+            return await codex.generateThreadSummary(
+                previousSummary: previousSummary,
+                userMessage: userMessage,
+                finalResponse: finalResponse,
+                model: model
+            )
+        case .acp:
+            return nil
+        }
+    }
+
+    private func generateBranchBriefing(
+        threadSummaries: [(title: String, summary: String)],
+        provider: AgentProvider,
+        model: String?
+    ) async -> String? {
+        switch provider {
+        case .claudeCode:
+            return await claude.generateBranchBriefing(
+                threadSummaries: threadSummaries,
+                model: model ?? "haiku"
+            )
+        case .codex:
+            return await codex.generateBranchBriefing(
+                threadSummaries: threadSummaries,
+                model: model
+            )
+        case .acp:
+            return nil
+        }
+    }
+
+    private func generateResponseNotificationSummary(responseText: String, provider: AgentProvider, model: String?) async -> String? {
+        switch provider {
+        case .claudeCode:
+            return await claude.generateResponseNotificationSummary(responseText: responseText, model: model ?? "haiku")
+        case .codex:
+            return await codex.generateResponseNotificationSummary(responseText: responseText, model: model)
+        case .acp:
+            // No standardized one-shot generation in ACP; keep the local preview fallback.
+            return nil
+        }
+    }
+
+    private func lastAssistantResponseText(in messages: [ChatMessage]) -> String {
+        guard let message = messages.last(where: { $0.role == .assistant && !$0.isError }) else {
+            return ""
+        }
+        return message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func lastUserMessageText(in messages: [ChatMessage]) -> String {
+        guard let message = messages.last(where: { $0.role == .user && !$0.isError }) else {
+            return ""
+        }
+        return ChatSession.stripAttachmentMarkers(from: message.content)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func responseNotificationFallback(from responseText: String) -> String {
+        let text = responseText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return "" }
+        let sentence = text.components(separatedBy: CharacterSet(charactersIn: ".!?\n")).first ?? text
+        return sentence.trimmingCharacters(in: .whitespaces)
     }
 
     private func selectedSummarizationModel(for provider: AgentProvider) -> String? {
@@ -3780,6 +4043,32 @@ final class AppState {
             s.isArchived = archived
             s.archivedAt = archived ? now : nil
         }
+    }
+
+    /// Retention window (days) after which a branch briefing is purged if its
+    /// branch hasn't been observed locally or remotely. A branch deleted both
+    /// places will simply stop being touched and age out.
+    private static let branchBriefingRetentionDays = 30
+
+    /// Mark a branch as still alive on disk so its briefing isn't garbage-
+    /// collected. Called from views that have just observed the branch via
+    /// `git symbolic-ref` or similar.
+    func touchBranchBriefing(projectId: UUID, branch: String) {
+        threadStore.touchBranchBriefing(projectId: projectId, branch: branch)
+    }
+
+    /// Delete branch briefings for branches that haven't been seen for the
+    /// retention window. Run once at app launch.
+    func purgeStaleBranchBriefingsIfNeeded() {
+        let cutoff = Calendar.current.date(
+            byAdding: .day,
+            value: -Self.branchBriefingRetentionDays,
+            to: Date()
+        ) ?? Date()
+        let purged = threadStore.purgeStaleBranchBriefings(olderThan: cutoff)
+        guard !purged.isEmpty else { return }
+        branchBriefingRevision &+= 1
+        logger.info("Purged \(purged.count) stale branch briefings older than \(Self.branchBriefingRetentionDays) days")
     }
 
     /// Apply the auto-archive policy: archive non-pinned chats whose `updatedAt`
@@ -3945,6 +4234,8 @@ final class AppState {
 
         // Remove all in-memory session summaries for this project
         threadStore.deleteAll(projectId: project.id)
+        let projectId = project.id
+        Task.detached(priority: .utility) { [searchService] in await searchService.removeProject(id: projectId) }
         allSessionSummaries.removeAll { $0.projectId == project.id }
 
         // Remove from projects list and persist
@@ -3976,6 +4267,8 @@ final class AppState {
         }
         allSessionSummaries.removeAll { $0.id == session.id }
         threadStore.delete(id: session.id)
+        let deletedId = session.id
+        Task.detached(priority: .utility) { [searchService] in await searchService.removeThread(id: deletedId) }
         sessionStates.removeValue(forKey: session.id)
     }
 
@@ -4019,8 +4312,20 @@ final class AppState {
             for id in ids {
                 threadStore.delete(id: id)
             }
+            let snapshotIds = ids
+            Task.detached(priority: .utility) { [searchService] in
+                for id in snapshotIds { await searchService.removeThread(id: id) }
+            }
         } else {
             threadStore.deleteAll(projectId: projectId)
+            if let projectId {
+                Task.detached(priority: .utility) { [searchService] in await searchService.removeProject(id: projectId) }
+            } else {
+                let snapshotIds = ids
+                Task.detached(priority: .utility) { [searchService] in
+                    for id in snapshotIds { await searchService.removeThread(id: id) }
+                }
+            }
         }
         for id in ids {
             sessionStates.removeValue(forKey: id)
@@ -4339,6 +4644,13 @@ final class AppState {
                 }
             }
             threadStore.upsert(summary)
+
+            // Update the on-device semantic index. Skipped while streaming so
+            // we only embed a thread once it has settled.
+            let snapshot = session
+            Task.detached(priority: .utility) { [searchService] in
+                await searchService.indexThread(snapshot)
+            }
         }
 
         // Update the project's lastSessionId
@@ -4353,7 +4665,7 @@ final class AppState {
     }
 
     private func saveDraft(in window: WindowState) {
-        let key = window.currentSessionId ?? "new"
+        let key = draftKey(for: window)
         let trimmed = window.inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { window.draftTexts.removeValue(forKey: key) }
         else { window.draftTexts[key] = window.inputText }
@@ -4366,10 +4678,35 @@ final class AppState {
     }
 
     /// Persistence key used for both the in-memory `draftQueues` mirror and the
-    /// SwiftData `QueuedMessageRecord.sessionKey` column. Matches the legacy
-    /// keying used by `saveQueue` so existing in-memory state migrates without churn.
+    /// SwiftData `QueuedMessageRecord.sessionKey` column.
     private func queueKey(for window: WindowState) -> String {
-        window.currentSessionId ?? "new"
+        draftKey(for: window)
+    }
+
+    private func draftKey(for window: WindowState) -> String {
+        window.currentSessionId ?? newDraftKey(for: window)
+    }
+
+    private func newDraftKey(for window: WindowState) -> String {
+        guard let projectId = window.selectedProject?.id else { return "new" }
+        return "new:\(projectId.uuidString)"
+    }
+
+    private func renameDraftState(from oldKey: String, to newKey: String, in window: WindowState) {
+        guard oldKey != newKey else { return }
+
+        if let text = window.draftTexts.removeValue(forKey: oldKey),
+           window.draftTexts[newKey] == nil {
+            window.draftTexts[newKey] = text
+        }
+
+        guard let queue = window.draftQueues.removeValue(forKey: oldKey) else { return }
+        if var existing = window.draftQueues[newKey] {
+            existing.append(contentsOf: queue)
+            window.draftQueues[newKey] = existing
+        } else {
+            window.draftQueues[newKey] = queue
+        }
     }
 
     // MARK: - Message Queue (persisted)

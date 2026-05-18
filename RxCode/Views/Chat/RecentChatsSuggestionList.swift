@@ -1,10 +1,12 @@
 import SwiftUI
 import RxCodeCore
+import RxCodeChatKit
 
 /// Shown below the input box on empty state so the user can quickly resume a recent chat.
 struct RecentChatsSuggestionList: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
+    @Environment(ChatBridge.self) private var chatBridge
 
     @State private var renamingSession: ChatSession?
     @State private var renameText = ""
@@ -134,19 +136,30 @@ struct RecentChatsSuggestionList: View {
     private var shouldShow: Bool {
         guard windowState.selectedProject != nil else { return false }
         guard windowState.currentSessionId == nil else { return false }
+        // Mirror ChatView.isEmptyState: avoid showing the suggestion list under
+        // an active conversation when messages briefly outlive the session id
+        // (e.g. just after a streaming session ends and currentSessionId resets).
+        guard chatBridge.messages.isEmpty, !chatBridge.isStreaming else { return false }
         return !suggestions.isEmpty
     }
 
     private var suggestions: [ChatSession.Summary] {
         guard let projectId = windowState.selectedProject?.id else { return [] }
-        return appState.allSessionSummaries
+        let scoped = appState.allSessionSummaries
             .filter { $0.projectId == projectId && !$0.isArchived }
-            .sorted { a, b in
-                if a.isPinned != b.isPinned { return a.isPinned }
-                return a.updatedAt > b.updatedAt
-            }
-            .prefix(5)
-            .map { $0 }
+        let pinned = scoped
+            .filter { $0.isPinned }
+            .sorted { $0.updatedAt > $1.updatedAt }
+            .prefix(6)
+        // Always surface at least 4 unpinned suggestions; when pinned fill
+        // fewer than 6 slots, expand the unpinned section to keep the total
+        // at 6.
+        let unpinnedLimit = max(4, 6 - pinned.count)
+        let unpinned = scoped
+            .filter { !$0.isPinned }
+            .sorted { $0.updatedAt > $1.updatedAt }
+            .prefix(unpinnedLimit)
+        return Array(pinned) + Array(unpinned)
     }
 
     private var isDeletingSessionBinding: Binding<Bool> {

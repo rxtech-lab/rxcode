@@ -139,7 +139,11 @@ public final class WindowState {
     public var inspectorReviewTab: InspectorReviewTab = .thisThread
     public var inspectorFile: PreviewFile?
     public var diffFile: PreviewFile?
+    public var showingBriefing = true
     public var showMarketplace = false
+    /// Whether the global thread-search overlay is presented. Toggled by the
+    /// toolbar magnifier button and the Cmd+K shortcut.
+    public var showGlobalSearch = false
     public var showModelPicker = false
     public var showEffortPicker = false
     /// Per-session model override. When set, this model is used instead of the global default.

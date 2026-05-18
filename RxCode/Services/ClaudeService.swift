@@ -311,6 +311,100 @@ actor ClaudeCodeServer {
         }
     }
 
+    func generateResponseNotificationSummary(responseText: String, model: String = "claude-haiku-4-5-20251001") async -> String? {
+        guard let binary = await findClaudeBinary() else { return nil }
+        let trimmedResponse = String(responseText.prefix(4000))
+        let prompt = """
+        Summarize the following assistant response for a macOS notification. \
+        Reply with one concise sentence under 180 characters. Mention the outcome and the most important result. \
+        No markdown.
+
+        \(trimmedResponse)
+        """
+        let emptyMCPConfigPath = writeEmptyMCPConfig()
+        var args: [String] = ["-p", prompt, "--output-format", "text", "--model", model]
+        if let emptyMCPConfigPath {
+            args.append(contentsOf: ["--strict-mcp-config", "--mcp-config", emptyMCPConfigPath])
+        }
+        do {
+            let output = try await runShellCommand(binary, arguments: args)
+            let cleaned = output
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
+            guard !cleaned.isEmpty else { return nil }
+            let lower = cleaned.lowercased()
+            let errorPrefixes = ["api error", "error:", "execution error", "request failed", "claude error"]
+            if errorPrefixes.contains(where: { lower.hasPrefix($0) }) {
+                logger.warning("Notification summary produced an error string; ignoring: \(cleaned.prefix(120))")
+                return nil
+            }
+            return String(cleaned.prefix(180))
+        } catch {
+            logger.warning("Notification summary generation failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    func generateThreadSummary(
+        previousSummary: String?,
+        userMessage: String,
+        finalResponse: String,
+        model: String = "claude-haiku-4-5-20251001"
+    ) async -> String? {
+        let previous = previousSummary?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let prompt = """
+        Update the stored summary for one project thread. Use the previous summary, latest user request, and final assistant response.
+        Keep it factual and concise, 3-6 bullet points max. Include completed work, important decisions, files or areas touched, and unresolved follow-ups.
+        Reply with only the updated summary.
+
+        Previous summary:
+        \((previous?.isEmpty == false) ? previous! : "None")
+
+        Latest user request:
+        \(String(userMessage.prefix(2000)))
+
+        Final assistant response:
+        \(String(finalResponse.prefix(4000)))
+        """
+        return await generatePlainSummary(prompt: prompt, model: model, limit: 1800)
+    }
+
+    func generateBranchBriefing(
+        threadSummaries: [(title: String, summary: String)],
+        model: String = "claude-haiku-4-5-20251001"
+    ) async -> String? {
+        guard !threadSummaries.isEmpty else { return nil }
+        let prompt = OpenAISummarizationService.branchBriefingPrompt(threadSummaries: threadSummaries)
+        return await generatePlainSummary(prompt: prompt, model: model, limit: 1800)
+    }
+
+    private func generatePlainSummary(prompt: String, model: String, limit: Int) async -> String? {
+        guard let binary = await findClaudeBinary() else { return nil }
+        let emptyMCPConfigPath = writeEmptyMCPConfig()
+        var args: [String] = ["-p", prompt, "--output-format", "text", "--model", model]
+        if let emptyMCPConfigPath {
+            args.append(contentsOf: ["--strict-mcp-config", "--mcp-config", emptyMCPConfigPath])
+        }
+        do {
+            let output = try await runShellCommand(binary, arguments: args)
+            return cleanGeneratedSummary(output, limit: limit)
+        } catch {
+            logger.warning("Summary generation failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    private func cleanGeneratedSummary(_ raw: String, limit: Int) -> String? {
+        let cleaned = raw
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
+        guard !cleaned.isEmpty else { return nil }
+        let lower = cleaned.lowercased()
+        let errorPrefixes = ["api error", "error:", "execution error", "request failed", "claude error"]
+        guard !errorPrefixes.contains(where: { lower.hasPrefix($0) }) else { return nil }
+        return String(cleaned.prefix(limit))
+    }
+
     /// Write a one-off MCP config file (with no servers) used by the title-generation
     /// call so it doesn't inherit user-level MCP servers. Returns nil on I/O failure;
     /// caller falls back to the default config.

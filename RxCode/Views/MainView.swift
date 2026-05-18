@@ -33,6 +33,9 @@ struct MainView: View {
     }
 
     private var navigationTitleText: String {
+        if windowState.showingBriefing {
+            return "Briefing"
+        }
         if let id = windowState.currentSessionId,
            let title = appState.allSessionSummaries.first(where: { $0.id == id })?.title,
            !title.isEmpty
@@ -77,6 +80,32 @@ struct MainView: View {
                                 ))
                         }
                     }
+                }
+                .overlay {
+                    if windowState.showGlobalSearch {
+                        ZStack {
+                            Color.black.opacity(0.3)
+                                .ignoresSafeArea()
+                                .onTapGesture {
+                                    withAnimation(.spring(response: 0.25, dampingFraction: 0.9)) {
+                                        windowState.showGlobalSearch = false
+                                    }
+                                }
+                            GlobalSearchOverlay()
+                                .transition(.asymmetric(
+                                    insertion: .scale(scale: 0.97).combined(with: .opacity),
+                                    removal: .opacity
+                                ))
+                        }
+                        .animation(.spring(response: 0.25, dampingFraction: 0.9), value: windowState.showGlobalSearch)
+                    }
+                }
+                .background {
+                    Button("") {
+                        windowState.showGlobalSearch.toggle()
+                    }
+                    .keyboardShortcut("k", modifiers: .command)
+                    .hidden()
                 }
                 .id(appState.themeRevision)
                 .onChange(of: windowState.showInspector) { _, isShowing in
@@ -125,6 +154,15 @@ struct MainView: View {
                         }
 
                         ToolbarItem(placement: .navigation) {
+                            Button {
+                                windowState.showGlobalSearch = true
+                            } label: {
+                                Image(systemName: "magnifyingglass")
+                            }
+                            .help("Search Threads (⌘K)")
+                        }
+
+                        ToolbarItem(placement: .navigation) {
                             Text(navigationTitleText)
                                 .padding(.trailing)
                         }
@@ -157,7 +195,9 @@ struct MainView: View {
 
     private var detailContent: some View {
         Group {
-            if windowState.selectedProject != nil {
+            if windowState.showingBriefing {
+                BriefingView()
+            } else if windowState.selectedProject != nil {
                 VStack(spacing: 0) {
                     ChatView(inputAccessory: {
                         HStack(spacing: 8) {
@@ -177,21 +217,7 @@ struct MainView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(ClaudeTheme.background)
             } else {
-                VStack(spacing: 16) {
-                    Image(systemName: "sparkle")
-                        .font(.system(size: ClaudeTheme.size(48)))
-                        .foregroundStyle(ClaudeTheme.accent)
-
-                    Text("Select a Project")
-                        .font(.title2.weight(.semibold))
-                        .foregroundStyle(ClaudeTheme.textPrimary)
-
-                    Text("Select a project from the sidebar or add a new one.")
-                        .font(.subheadline)
-                        .foregroundStyle(ClaudeTheme.textSecondary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(ClaudeTheme.background)
+                EmptyProjectStateView()
             }
         }
         .sheet(item: Bindable(windowState).inspectorFile) { file in

@@ -6,16 +6,42 @@ import RxCodeCore
 /// Right-side panel with two modes:
 /// - Review: This thread / Unstaged / Staged / Branch tabs.
 /// - Inspector: Memo / Terminal tabs.
+/// Per-terminal instance state. A thread can have multiple of these.
+struct InspectorTerminal: Identifiable {
+    let id: UUID
+    let process: TerminalProcess
+    var resetID: UUID
+    /// User-set title. When nil, the UI falls back to "Terminal N".
+    var customTitle: String?
+}
+
 struct RightInspectorPanel: View {
     @Environment(WindowState.self) private var windowState
 
-    // Inspector-mode state lives here so reset/clear buttons in the header
-    // can drive the embedded views.
-    @State private var inspectorProcess = TerminalProcess()
-    @State private var terminalResetID = UUID()
+    // Per-thread terminal storage. Each session/thread can have multiple
+    // terminals; all stay alive across thread switches.
+    @State private var terminalsBySession: [String: [InspectorTerminal]] = [:]
+    @State private var activeTerminalIdBySession: [String: UUID] = [:]
     @State private var memoClearID: UUID? = nil
     @State private var terminalFocusID: UUID? = nil
     @State private var memoFocusID: UUID? = nil
+
+    private var currentSessionKey: String {
+        windowState.currentSessionId ?? windowState.newSessionKey
+    }
+
+    private var currentTerminals: [InspectorTerminal] {
+        terminalsBySession[currentSessionKey] ?? []
+    }
+
+    private var activeTerminalId: UUID? {
+        activeTerminalIdBySession[currentSessionKey]
+    }
+
+    private var activeTerminal: InspectorTerminal? {
+        guard let id = activeTerminalId else { return nil }
+        return currentTerminals.first { $0.id == id }
+    }
 
     private func bumpFocus(for tab: InspectorTab) {
         switch tab {
@@ -23,6 +49,75 @@ struct RightInspectorPanel: View {
         case .memo: memoFocusID = UUID()
         case .run: break
         }
+    }
+
+    private func ensureTerminal(for key: String) {
+        if (terminalsBySession[key]?.isEmpty ?? true) {
+            let t = InspectorTerminal(id: UUID(), process: TerminalProcess(), resetID: UUID())
+            terminalsBySession[key] = [t]
+            activeTerminalIdBySession[key] = t.id
+        } else if activeTerminalIdBySession[key] == nil,
+                  let first = terminalsBySession[key]?.first {
+            activeTerminalIdBySession[key] = first.id
+        }
+    }
+
+    private func addTerminalToCurrent() {
+        let key = currentSessionKey
+        let t = InspectorTerminal(id: UUID(), process: TerminalProcess(), resetID: UUID())
+        terminalsBySession[key, default: []].append(t)
+        activeTerminalIdBySession[key] = t.id
+        terminalFocusID = UUID()
+    }
+
+    private func selectTerminal(_ id: UUID) {
+        activeTerminalIdBySession[currentSessionKey] = id
+        terminalFocusID = UUID()
+    }
+
+    private func closeTerminal(_ id: UUID) {
+        let key = currentSessionKey
+        guard var list = terminalsBySession[key],
+              let idx = list.firstIndex(where: { $0.id == id }) else { return }
+        list[idx].process.terminate()
+        list.remove(at: idx)
+        if list.isEmpty {
+            let t = InspectorTerminal(id: UUID(), process: TerminalProcess(), resetID: UUID())
+            list.append(t)
+            activeTerminalIdBySession[key] = t.id
+        } else if activeTerminalIdBySession[key] == id {
+            let newActive = list[max(0, idx - 1)]
+            activeTerminalIdBySession[key] = newActive.id
+        }
+        terminalsBySession[key] = list
+    }
+
+    private func resetActiveTerminal() {
+        let key = currentSessionKey
+        guard var list = terminalsBySession[key],
+              let id = activeTerminalIdBySession[key],
+              let idx = list.firstIndex(where: { $0.id == id }) else { return }
+        list[idx].process.terminate()
+        list[idx] = InspectorTerminal(
+            id: list[idx].id,
+            process: TerminalProcess(),
+            resetID: UUID(),
+            customTitle: list[idx].customTitle
+        )
+        terminalsBySession[key] = list
+    }
+
+    private func clearActiveTerminal() {
+        activeTerminal?.process.clear()
+    }
+
+    private func renameTerminal(_ id: UUID, title: String) {
+        let key = currentSessionKey
+        guard var list = terminalsBySession[key],
+              let idx = list.firstIndex(where: { $0.id == id }) else { return }
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        list[idx].customTitle = trimmed.isEmpty ? nil : trimmed
+        terminalsBySession[key] = list
     }
 
     var body: some View {
@@ -35,11 +130,16 @@ struct RightInspectorPanel: View {
                     reviewContent
                 case .inspector:
                     InspectorContentView(
-                        inspectorProcess: $inspectorProcess,
-                        terminalResetID: terminalResetID,
+                        terminalsBySession: terminalsBySession,
+                        currentSessionKey: currentSessionKey,
+                        activeTerminalId: activeTerminalId,
                         memoClearID: memoClearID,
                         terminalFocusID: terminalFocusID,
-                        memoFocusID: memoFocusID
+                        memoFocusID: memoFocusID,
+                        onSelectTerminal: selectTerminal,
+                        onCloseTerminal: closeTerminal,
+                        onAddTerminal: addTerminalToCurrent,
+                        onRenameTerminal: renameTerminal
                     )
                 }
             }
@@ -57,6 +157,14 @@ struct RightInspectorPanel: View {
         )
         .opacity(windowState.showInspector ? 1 : 0)
         .clipped()
+        .background(terminalShortcuts)
+        .task(id: currentSessionKey) {
+            ensureTerminal(for: currentSessionKey)
+            // Always open the terminal for the current thread.
+            windowState.inspectorMode = .inspector
+            windowState.inspectorTab = .terminal
+            windowState.showInspector = true
+        }
         .onChange(of: windowState.inspectorTab) { _, newTab in
             if windowState.inspectorMode == .inspector { bumpFocus(for: newTab) }
         }
@@ -69,6 +177,25 @@ struct RightInspectorPanel: View {
             if isShowing, windowState.inspectorMode == .inspector {
                 bumpFocus(for: windowState.inspectorTab)
             }
+        }
+    }
+
+    /// Hidden buttons that register keyboard shortcuts (Cmd+K clear, Cmd+T new)
+    /// scoped to when the inspector is showing the terminal tab.
+    @ViewBuilder
+    private var terminalShortcuts: some View {
+        if windowState.showInspector,
+           windowState.inspectorMode == .inspector,
+           windowState.inspectorTab == .terminal {
+            ZStack {
+                Button("Clear Terminal", action: clearActiveTerminal)
+                    .keyboardShortcut("k", modifiers: .command)
+                Button("New Terminal", action: addTerminalToCurrent)
+                    .keyboardShortcut("t", modifiers: .command)
+            }
+            .frame(width: 0, height: 0)
+            .opacity(0)
+            .accessibilityHidden(true)
         }
     }
 
@@ -93,10 +220,14 @@ struct RightInspectorPanel: View {
 
             if windowState.inspectorMode == .inspector {
                 if windowState.inspectorTab == .terminal {
+                    HeaderIconButton(systemImage: "plus", help: "New Terminal (⌘T)") {
+                        addTerminalToCurrent()
+                    }
+                    HeaderIconButton(systemImage: "eraser", help: "Clear Terminal (⌘K)") {
+                        clearActiveTerminal()
+                    }
                     HeaderIconButton(systemImage: "arrow.counterclockwise", help: "Reset Terminal") {
-                        inspectorProcess.terminate()
-                        inspectorProcess = TerminalProcess()
-                        terminalResetID = UUID()
+                        resetActiveTerminal()
                     }
                 } else if windowState.inspectorTab == .memo {
                     HeaderIconButton(systemImage: "trash", help: "Clear Memo") {

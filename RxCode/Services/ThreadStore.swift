@@ -17,7 +17,16 @@ final class ThreadStore {
     /// Convenience initializer creating its own `ModelContainer` rooted at the
     /// app's Application Support directory.
     static func make() -> ThreadStore {
-        let schema = Schema([ChatThread.self, TodoSnapshot.self, ThreadFileEdit.self, QueuedMessageRecord.self, PlanDecisionRecord.self])
+        let schema = Schema([
+            ChatThread.self,
+            TodoSnapshot.self,
+            ThreadFileEdit.self,
+            QueuedMessageRecord.self,
+            PlanDecisionRecord.self,
+            ThreadSummaryRecord.self,
+            BranchBriefingRecord.self,
+            ThreadEmbeddingChunk.self
+        ])
         let url = Self.storeURL()
         let config = ModelConfiguration(schema: schema, url: url)
         do {
@@ -65,6 +74,37 @@ final class ThreadStore {
         fetch(id: id)?.cliSessionId
     }
 
+    func fetchThreadSummary(sessionId: String) -> ThreadSummaryRecord? {
+        var descriptor = FetchDescriptor<ThreadSummaryRecord>(
+            predicate: #Predicate { $0.sessionId == sessionId }
+        )
+        descriptor.fetchLimit = 1
+        return (try? context.fetch(descriptor))?.first
+    }
+
+    func threadSummaryItem(sessionId: String) -> ThreadSummaryItem? {
+        fetchThreadSummary(sessionId: sessionId)?.toItem()
+    }
+
+    func threadSummaryItems(projectId: UUID, branch: String) -> [ThreadSummaryItem] {
+        let descriptor = FetchDescriptor<ThreadSummaryRecord>(
+            predicate: #Predicate { $0.projectId == projectId && $0.branch == branch },
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+        )
+        return ((try? context.fetch(descriptor)) ?? []).map { $0.toItem() }
+    }
+
+    func branchBriefingItem(projectId: UUID, branch: String) -> BranchBriefingItem? {
+        fetchBranchBriefing(projectId: projectId, branch: branch)?.toItem()
+    }
+
+    func allBranchBriefingItems() -> [BranchBriefingItem] {
+        let descriptor = FetchDescriptor<BranchBriefingRecord>(
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+        )
+        return ((try? context.fetch(descriptor)) ?? []).map { $0.toItem() }
+    }
+
     // MARK: - Writes
 
     /// Insert or update a thread row from a summary.
@@ -76,6 +116,69 @@ final class ThreadStore {
             context.insert(ChatThread.from(summary, cliSessionId: cliSessionId))
         }
         save()
+    }
+
+    func upsertThreadSummary(
+        sessionId: String,
+        projectId: UUID,
+        branch: String,
+        title: String,
+        summary: String,
+        updatedAt: Date = .now
+    ) {
+        if let existing = fetchThreadSummary(sessionId: sessionId) {
+            existing.apply(projectId: projectId, branch: branch, title: title, summary: summary, updatedAt: updatedAt)
+        } else {
+            context.insert(ThreadSummaryRecord(
+                sessionId: sessionId,
+                projectId: projectId,
+                branch: branch,
+                title: title,
+                summary: summary,
+                updatedAt: updatedAt
+            ))
+        }
+        save()
+    }
+
+    func upsertBranchBriefing(projectId: UUID, branch: String, briefing: String, updatedAt: Date = .now) {
+        if let existing = fetchBranchBriefing(projectId: projectId, branch: branch) {
+            existing.apply(briefing: briefing, updatedAt: updatedAt)
+        } else {
+            context.insert(BranchBriefingRecord(
+                projectId: projectId,
+                branch: branch,
+                briefing: briefing,
+                updatedAt: updatedAt,
+                lastSeenAt: updatedAt
+            ))
+        }
+        save()
+    }
+
+    /// Mark a branch's briefing as recently observed, resetting the TTL used by
+    /// `purgeStaleBranchBriefings`. No-op if no record exists.
+    func touchBranchBriefing(projectId: UUID, branch: String, at date: Date = .now) {
+        guard let row = fetchBranchBriefing(projectId: projectId, branch: branch) else { return }
+        row.touch(at: date)
+        save()
+    }
+
+    /// Delete branch briefings whose `lastSeenAt` is older than `cutoff` — i.e.
+    /// branches that haven't been observed for the retention window and have
+    /// presumably been deleted both locally and remotely. Returns the deleted
+    /// record ids.
+    @discardableResult
+    func purgeStaleBranchBriefings(olderThan cutoff: Date) -> [String] {
+        let descriptor = FetchDescriptor<BranchBriefingRecord>(
+            predicate: #Predicate { $0.lastSeenAt < cutoff }
+        )
+        let rows = (try? context.fetch(descriptor)) ?? []
+        guard !rows.isEmpty else { return [] }
+        let ids = rows.map(\.id)
+        for row in rows { context.delete(row) }
+        save()
+        return ids
     }
 
     /// Set `cliSessionId` on the thread row (used when the CLI assigns a session id mid-stream).
@@ -106,6 +209,7 @@ final class ThreadStore {
         renameFileEdits(from: oldId, to: newId)
         renameQueueKey(from: oldId, to: newId)
         renamePlanDecisions(from: oldId, to: newId)
+        renameThreadSummary(from: oldId, to: newId)
         save()
     }
 
@@ -145,6 +249,8 @@ final class ThreadStore {
         deleteFileEditRows(sessionId: id)
         deleteQueueRows(sessionKey: id)
         deletePlanDecisionRows(sessionId: id)
+        deleteThreadSummaryRow(sessionId: id)
+        deleteEmbeddingChunkRows(threadId: id)
         save()
     }
 
@@ -164,6 +270,8 @@ final class ThreadStore {
                 deleteFileEditRows(sessionId: id)
                 deleteQueueRows(sessionKey: id)
                 deletePlanDecisionRows(sessionId: id)
+                deleteThreadSummaryRow(sessionId: id)
+                deleteEmbeddingChunkRows(threadId: id)
             }
             if projectId == nil {
                 let allTodos = (try? context.fetch(FetchDescriptor<TodoSnapshot>())) ?? []
@@ -174,11 +282,54 @@ final class ThreadStore {
                 for row in allQueues { context.delete(row) }
                 let allPlans = (try? context.fetch(FetchDescriptor<PlanDecisionRecord>())) ?? []
                 for row in allPlans { context.delete(row) }
+                let allSummaries = (try? context.fetch(FetchDescriptor<ThreadSummaryRecord>())) ?? []
+                for row in allSummaries { context.delete(row) }
+                let allBriefings = (try? context.fetch(FetchDescriptor<BranchBriefingRecord>())) ?? []
+                for row in allBriefings { context.delete(row) }
+                let allChunks = (try? context.fetch(FetchDescriptor<ThreadEmbeddingChunk>())) ?? []
+                for row in allChunks { context.delete(row) }
+            } else if let projectId {
+                let briefingDescriptor = FetchDescriptor<BranchBriefingRecord>(
+                    predicate: #Predicate { $0.projectId == projectId }
+                )
+                let briefings = (try? context.fetch(briefingDescriptor)) ?? []
+                for row in briefings { context.delete(row) }
+                let chunkDescriptor = FetchDescriptor<ThreadEmbeddingChunk>(
+                    predicate: #Predicate { $0.projectId == projectId }
+                )
+                let chunks = (try? context.fetch(chunkDescriptor)) ?? []
+                for row in chunks { context.delete(row) }
             }
             save()
         } catch {
             logger.error("deleteAll failed: \(error.localizedDescription)")
         }
+    }
+
+    // MARK: - Thread Summaries
+
+    private func renameThreadSummary(from oldId: String, to newId: String) {
+        guard oldId != newId else { return }
+        guard let row = fetchThreadSummary(sessionId: oldId) else { return }
+        if fetchThreadSummary(sessionId: newId) != nil {
+            context.delete(row)
+        } else {
+            row.sessionId = newId
+        }
+    }
+
+    private func deleteThreadSummaryRow(sessionId: String) {
+        guard let row = fetchThreadSummary(sessionId: sessionId) else { return }
+        context.delete(row)
+    }
+
+    private func fetchBranchBriefing(projectId: UUID, branch: String) -> BranchBriefingRecord? {
+        let id = BranchBriefingRecord.makeId(projectId: projectId, branch: branch)
+        var descriptor = FetchDescriptor<BranchBriefingRecord>(
+            predicate: #Predicate { $0.id == id }
+        )
+        descriptor.fetchLimit = 1
+        return (try? context.fetch(descriptor))?.first
     }
 
     // MARK: - Todo Snapshots
@@ -421,6 +572,44 @@ final class ThreadStore {
     private func deleteQueueRows(sessionKey: String) {
         let descriptor = FetchDescriptor<QueuedMessageRecord>(
             predicate: #Predicate { $0.sessionKey == sessionKey }
+        )
+        let rows = (try? context.fetch(descriptor)) ?? []
+        for row in rows { context.delete(row) }
+    }
+
+    // MARK: - Thread Embedding Chunks
+
+    func loadAllEmbeddingChunks() -> [ThreadEmbeddingChunk] {
+        let descriptor = FetchDescriptor<ThreadEmbeddingChunk>()
+        return (try? context.fetch(descriptor)) ?? []
+    }
+
+    func loadEmbeddingChunks(threadId: String) -> [ThreadEmbeddingChunk] {
+        let descriptor = FetchDescriptor<ThreadEmbeddingChunk>(
+            predicate: #Predicate { $0.threadId == threadId },
+            sortBy: [SortDescriptor(\.chunkIndex, order: .forward)]
+        )
+        return (try? context.fetch(descriptor)) ?? []
+    }
+
+    /// Replace all chunks for a thread atomically. Old rows are deleted first
+    /// so re-indexing cannot leave orphans behind.
+    func replaceEmbeddingChunks(threadId: String, chunks: [ThreadEmbeddingChunk]) {
+        deleteEmbeddingChunkRows(threadId: threadId)
+        for chunk in chunks {
+            context.insert(chunk)
+        }
+        save()
+    }
+
+    func deleteEmbeddingChunks(threadId: String) {
+        deleteEmbeddingChunkRows(threadId: threadId)
+        save()
+    }
+
+    private func deleteEmbeddingChunkRows(threadId: String) {
+        let descriptor = FetchDescriptor<ThreadEmbeddingChunk>(
+            predicate: #Predicate { $0.threadId == threadId }
         )
         let rows = (try? context.fetch(descriptor)) ?? []
         for row in rows { context.delete(row) }

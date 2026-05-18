@@ -7,7 +7,7 @@ import SwiftData
 @Model
 public final class QueuedMessageRecord {
     @Attribute(.unique) public var id: UUID
-    /// Either a real session id, or "new" for the not-yet-started chat bucket.
+    /// Either a real session id or a project-scoped new-chat key.
     /// Matches the keying scheme used by `WindowState.draftQueues`.
     public var sessionKey: String
     public var order: Int

@@ -14,6 +14,7 @@ struct RunConfigurationsView: View {
 
     @State private var draft: [RunProfile] = []
     @State private var selectedId: UUID?
+    @State private var detected: DetectedRunnables = .init()
 
     private var selectedIndex: Int? {
         guard let id = selectedId else { return nil }
@@ -38,6 +39,9 @@ struct RunConfigurationsView: View {
             draft = appState.runProfiles(for: project.id)
             selectedId = windowState.selectedRunProfileId ?? draft.first?.id
         }
+        .task {
+            detected = await RunProfileDetector().detect(in: project.path)
+        }
     }
 
     // MARK: - Sections
@@ -55,12 +59,7 @@ struct RunConfigurationsView: View {
     private var profileList: some View {
         VStack(spacing: 0) {
             HStack(spacing: 4) {
-                Button {
-                    addProfile()
-                } label: {
-                    Image(systemName: "plus")
-                }
-                .help("Add Profile")
+                addMenu
                 Button {
                     deleteSelected()
                 } label: {
@@ -146,14 +145,67 @@ struct RunConfigurationsView: View {
         .padding(.vertical, 10)
     }
 
+    // MARK: - Add menu (detected runnables)
+
+    private var addMenu: some View {
+        Menu {
+            Button("Empty Bash Configuration") { addProfile() }
+
+            if !detected.xcode.isEmpty {
+                Divider()
+                Section("Xcode Schemes") {
+                    ForEach(detected.xcode) { runnable in
+                        Button {
+                            addProfile(from: runnable)
+                        } label: {
+                            Label(runnable.displayName, systemImage: "hammer.fill")
+                        }
+                    }
+                }
+            }
+
+            if !detected.npm.isEmpty {
+                Divider()
+                Section("npm Scripts") {
+                    ForEach(detected.npm) { runnable in
+                        Button {
+                            addProfile(from: runnable)
+                        } label: {
+                            Label(runnable.displayName, systemImage: "shippingbox.fill")
+                        }
+                    }
+                }
+            }
+
+            if !detected.make.isEmpty {
+                Divider()
+                Section("Makefile Targets") {
+                    ForEach(detected.make) { runnable in
+                        Button {
+                            addProfile(from: runnable)
+                        } label: {
+                            Label(runnable.displayName, systemImage: "wrench.and.screwdriver.fill")
+                        }
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "plus")
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Add Profile")
+    }
+
     // MARK: - Actions
 
-    private func addProfile() {
+    private func addProfile(from runnable: DetectedRunnable? = nil) {
         let now = Date()
         let new = RunProfile(
             projectId: project.id,
-            name: "New Bash Configuration",
-            bash: BashRunConfig(),
+            name: runnable?.displayName ?? "New Bash Configuration",
+            bash: BashRunConfig(command: runnable?.command ?? ""),
             createdAt: now,
             updatedAt: now
         )

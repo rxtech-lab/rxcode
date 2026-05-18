@@ -123,10 +123,13 @@ struct ProjectChatRow: View {
 
             if case .streaming = status {
                 CompactSessionProgressView(progress: todoProgress)
+                    .frame(width: 28, alignment: .trailing)
             } else {
                 Text(Self.compactElapsedTime(since: summary.updatedAt))
                     .font(.system(size: ClaudeTheme.size(11)))
                     .foregroundStyle(ClaudeTheme.textTertiary)
+                    .monospacedDigit()
+                    .frame(width: 28, alignment: .trailing)
             }
         }
         .padding(.leading, 18)

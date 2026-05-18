@@ -10,6 +10,9 @@ struct ProjectWindowView: View {
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     private var navigationTitleText: String {
+        if windowState.showingBriefing {
+            return "Briefing"
+        }
         if let id = windowState.currentSessionId,
            let title = appState.allSessionSummaries.first(where: { $0.id == id })?.title,
            !title.isEmpty {
@@ -121,7 +124,9 @@ struct ProjectWindowView: View {
 
     private var detailContent: some View {
         Group {
-            if windowState.selectedProject != nil {
+            if windowState.showingBriefing {
+                BriefingView()
+            } else if windowState.selectedProject != nil {
                 VStack(spacing: 0) {
                     chatToolbarArea
                     ClaudeThemeDivider()

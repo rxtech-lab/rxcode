@@ -111,9 +111,72 @@ final class AppStateProjectSwitchTests: XCTestCase {
         XCTAssertNotNil(appState.sessionStates["live"])
     }
 
+    // MARK: - selectProject: queued message ownership
+
+    func testSelectProject_preservesQueuedMessagesForOutgoingSession() {
+        let projectA = makeProject("A")
+        let projectB = makeProject("B")
+        appState.projects = [projectA, projectB]
+        window.selectedProject = projectA
+        window.currentSessionId = "session-a"
+        window.messageQueue = [
+            QueuedMessage(text: "queued for session A", attachments: [])
+        ]
+
+        appState.selectProject(projectB, in: window)
+
+        XCTAssertEqual(
+            window.draftQueues["session-a"]?.map(\.text),
+            ["queued for session A"],
+            "Switching projects should keep queued messages attached to the outgoing thread."
+        )
+        XCTAssertEqual(
+            window.messageQueue.map(\.text),
+            [],
+            "The destination project's new chat should not show the outgoing thread's queue."
+        )
+        XCTAssertNil(window.draftQueues[newChatKey(for: projectB)])
+    }
+
+    func testSelectProject_keepsNewChatQueuedMessagesProjectScoped() {
+        let projectA = makeProject("A")
+        let projectB = makeProject("B")
+        appState.projects = [projectA, projectB]
+        window.selectedProject = projectA
+        window.currentSessionId = nil
+        window.messageQueue = [
+            QueuedMessage(text: "queued before first send in A", attachments: [])
+        ]
+
+        appState.selectProject(projectB, in: window)
+
+        XCTAssertEqual(
+            window.draftQueues[newChatKey(for: projectA)]?.map(\.text),
+            ["queued before first send in A"],
+            "A not-yet-started chat queue should stay with its source project."
+        )
+        XCTAssertEqual(
+            window.messageQueue.map(\.text),
+            [],
+            "Project B should start with its own empty new-chat queue."
+        )
+
+        appState.selectProject(projectA, in: window)
+
+        XCTAssertEqual(
+            window.messageQueue.map(\.text),
+            ["queued before first send in A"],
+            "Returning to project A should restore project A's new-chat queue."
+        )
+    }
+
     // MARK: - Helpers
 
     private func makeProject(_ name: String) -> Project {
         Project(name: name, path: "/tmp/\(name.lowercased())", gitHubRepo: nil)
+    }
+
+    private func newChatKey(for project: Project) -> String {
+        "new:\(project.id.uuidString)"
     }
 }

@@ -1,5 +1,5 @@
-import SwiftUI
 import RxCodeCore
+import SwiftUI
 
 struct HistoryListView: View {
     @Environment(AppState.self) private var appState

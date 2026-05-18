@@ -16,6 +16,13 @@ final class TerminalProcess {
         terminalView = nil
     }
 
+    /// Clears the visible screen and scrollback without killing the running shell.
+    func clear() {
+        guard let tv = terminalView else { return }
+        tv.getTerminal().resetToInitialState()
+        tv.needsDisplay = true
+    }
+
     deinit {
         terminalView?.terminate()
     }

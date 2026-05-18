@@ -136,10 +136,17 @@ public final class WindowState {
     public var showRunConfigurations: Bool = false
     /// Which active run task the Run inspector tab is currently displaying.
     public var selectedRunTaskId: UUID?
+    /// Bumped to request the active inspector terminal to clear its buffer.
+    /// Observed by `RightInspectorPanel`; the value itself is meaningless — only the change matters.
+    public var clearTerminalRequest: UUID?
     public var inspectorReviewTab: InspectorReviewTab = .thisThread
     public var inspectorFile: PreviewFile?
     public var diffFile: PreviewFile?
+    public var showingBriefing = true
     public var showMarketplace = false
+    /// Whether the global thread-search overlay is presented. Toggled by the
+    /// toolbar magnifier button and the Cmd+K shortcut.
+    public var showGlobalSearch = false
     public var showModelPicker = false
     public var showEffortPicker = false
     /// Per-session model override. When set, this model is used instead of the global default.

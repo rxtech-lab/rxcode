@@ -24,6 +24,12 @@ struct ProjectTreeView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            SummarySidebarSection()
+                .padding(.top, 8)
+
+            ClaudeThemeDivider()
+                .padding(.vertical, 4)
+
             header
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
@@ -129,10 +135,54 @@ struct ProjectTreeView: View {
             }
             .buttonStyle(.borderless)
             .help("Show all chats")
+    }
+}
+
+// MARK: - SummarySidebarSection
+
+private struct SummarySidebarSection: View {
+    @Environment(WindowState.self) private var windowState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("General")
+                .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+                .textCase(.uppercase)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 2)
+
+            Button {
+                windowState.showingBriefing = true
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "text.page")
+                        .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+                        .frame(width: 18, height: 18)
+
+                    Text("Briefing")
+                        .font(.system(size: ClaudeTheme.size(13), weight: .medium))
+                        .lineLimit(1)
+
+                    Spacer(minLength: 4)
+                }
+                .foregroundStyle(windowState.showingBriefing ? ClaudeTheme.accent : ClaudeTheme.textSecondary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(
+                    RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
+                        .fill(windowState.showingBriefing ? ClaudeTheme.accent.opacity(0.10) : Color.clear)
+                )
+                .padding(.horizontal, 8)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Open project branch briefing")
         }
     }
+}
 
-    // MARK: - Empty State
+// MARK: - Empty State
 
     private var emptyState: some View {
         VStack(spacing: 8) {
@@ -162,8 +212,10 @@ struct ProjectTreeView: View {
                         isExpanded: Binding(
                             get: { expandedProjectIds.contains(project.id) },
                             set: { newValue in
-                                if newValue { expandedProjectIds.insert(project.id) }
-                                else { expandedProjectIds.remove(project.id) }
+                                withAnimation(.easeInOut(duration: 0.18)) {
+                                    if newValue { expandedProjectIds.insert(project.id) }
+                                    else { expandedProjectIds.remove(project.id) }
+                                }
                             }
                         ),
                         isSelected: windowState.selectedProject?.id == project.id,
@@ -197,10 +249,15 @@ struct ProjectTreeView: View {
                                 deleteSession = session
                             }
                         )
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .top).combined(with: .opacity),
+                            removal: .move(edge: .top).combined(with: .opacity)
+                        ))
                     }
                 }
             }
             .padding(.bottom, 8)
+            .animation(.easeInOut(duration: 0.18), value: expandedProjectIds)
         }
     }
 }
@@ -383,13 +440,24 @@ private struct ProjectChatsList: View {
         )
     }
 
+    private var collapsedVisibleCount: Int {
+        let pinnedCount = sessions.prefix(while: { $0.isPinned }).count
+        // Cap pinned slots at 6, then guarantee at least 4 unpinned rows so
+        // recent unpinned threads remain visible even when pinned threads
+        // would otherwise fill the collapsed list.
+        let pinnedShown = min(pinnedCount, 6)
+        let unpinnedShown = max(4, 6 - pinnedShown)
+        let dynamic = pinnedShown + unpinnedShown
+        return max(Self.defaultVisibleThreadCount, dynamic)
+    }
+
     private var visibleSessions: [ChatSession.Summary] {
         guard !showsAllThreads else { return sessions }
-        return Array(sessions.prefix(Self.defaultVisibleThreadCount))
+        return Array(sessions.prefix(collapsedVisibleCount))
     }
 
     private var hiddenThreadCount: Int {
-        max(0, sessions.count - Self.defaultVisibleThreadCount)
+        max(0, sessions.count - collapsedVisibleCount)
     }
 
     var body: some View {
@@ -403,13 +471,20 @@ private struct ProjectChatsList: View {
             } else {
                 ForEach(visibleSessions) { summary in
                     chatRow(for: summary)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .top).combined(with: .opacity),
+                            removal: .move(edge: .top).combined(with: .opacity)
+                        ))
                 }
 
                 if hiddenThreadCount > 0 {
                     threadLimitToggle
+                        .transition(.opacity)
                 }
             }
         }
+        .clipped()
+        .animation(.easeInOut(duration: 0.18), value: showsAllThreads)
     }
 
     private var threadLimitToggle: some View {
@@ -451,7 +526,7 @@ private struct ProjectChatsList: View {
 
         return ProjectChatRow(
             summary: summary,
-            isCurrent: windowState.currentSessionId == sessionId,
+            isCurrent: !windowState.showingBriefing && windowState.currentSessionId == sessionId,
             status: status,
             todoProgress: progress,
             onSelect: { onSelectSession(sessionId) },

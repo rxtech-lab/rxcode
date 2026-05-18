@@ -114,13 +114,98 @@ public enum RunTaskExecutor {
             lines.append("")
         }
 
-        let main = profile.bash.command.trimmingCharacters(in: .whitespaces)
-        if !main.isEmpty {
+        let mainLines = mainCommandLines(for: profile)
+        if !mainLines.isEmpty {
             lines.append("# --- main ---")
-            lines.append(main)
+            lines.append(contentsOf: mainLines)
         }
 
         return lines.joined(separator: "\n") + "\n"
+    }
+
+    /// Produce the script lines for the profile's main command. For `.bash`
+    /// this is just the user-typed string; for `.xcode` we synthesize the
+    /// appropriate `xcodebuild` invocation (and, for `.run`, locate the built
+    /// `.app` from build settings and `open` it); for `.make` we synthesize
+    /// a `make` invocation against the configured Makefile and target.
+    static func mainCommandLines(for profile: RunProfile) -> [String] {
+        switch profile.type {
+        case .bash:
+            let cmd = profile.bash.command.trimmingCharacters(in: .whitespaces)
+            return cmd.isEmpty ? [] : [cmd]
+        case .xcode:
+            guard let xcode = profile.xcode,
+                  !xcode.container.isEmpty,
+                  !xcode.scheme.isEmpty
+            else { return [] }
+            return xcodeScriptLines(xcode)
+        case .make:
+            guard let make = profile.make else { return [] }
+            return makeScriptLines(make)
+        }
+    }
+
+    private static func xcodeScriptLines(_ cfg: XcodeRunConfig) -> [String] {
+        let containerFlag = cfg.isWorkspace ? "-workspace" : "-project"
+        let container = shellEscape(cfg.container)
+        let scheme = shellEscape(cfg.scheme)
+        let configuration = shellEscape(cfg.configuration)
+        let destination = cfg.destination.trimmingCharacters(in: .whitespaces)
+
+        var base = "xcodebuild \(containerFlag) \(container) -scheme \(scheme) -configuration \(configuration)"
+        if !destination.isEmpty {
+            base += " -destination \(shellEscape(destination))"
+        }
+
+        switch cfg.action {
+        case .build:
+            return ["\(base) build"]
+        case .clean:
+            return ["\(base) clean"]
+        case .test:
+            return ["\(base) test"]
+        case .run:
+            // Build, then resolve BUILT_PRODUCTS_DIR / FULL_PRODUCT_NAME from
+            // `-showBuildSettings` and `open` the resulting bundle. `-n`
+            // forces a fresh instance — without it, `open` just activates an
+            // already-running copy (common when iterating on an app you
+            // launched a moment ago), making Run feel like a no-op.
+            return [
+                "\(base) build",
+                "__rxcode_settings=$(\(base) -showBuildSettings 2>/dev/null)",
+                "__rxcode_build_dir=$(printf '%s\\n' \"$__rxcode_settings\" | awk -F' = ' '/^[[:space:]]*BUILT_PRODUCTS_DIR =/ {print $2; exit}')",
+                "__rxcode_product=$(printf '%s\\n' \"$__rxcode_settings\" | awk -F' = ' '/^[[:space:]]*FULL_PRODUCT_NAME =/ {print $2; exit}')",
+                "if [ -n \"$__rxcode_build_dir\" ] && [ -n \"$__rxcode_product\" ]; then",
+                "  printf '[rxcode] launching %s\\n' \"$__rxcode_build_dir/$__rxcode_product\"",
+                "  open -n \"$__rxcode_build_dir/$__rxcode_product\"",
+                "else",
+                "  printf '[rxcode] could not resolve built product to launch\\n' 1>&2",
+                "  exit 1",
+                "fi",
+            ]
+        }
+    }
+
+    private static func makeScriptLines(_ cfg: MakeRunConfig) -> [String] {
+        let makefile = cfg.makefile.trimmingCharacters(in: .whitespaces)
+        let target = cfg.target.trimmingCharacters(in: .whitespaces)
+        let args = cfg.arguments.trimmingCharacters(in: .whitespaces)
+        // An untouched profile has nothing to run; skip the main command so
+        // we don't shell out to a default `make` and surprise the user.
+        if makefile.isEmpty && target.isEmpty && args.isEmpty { return [] }
+
+        var parts: [String] = ["make"]
+        if !makefile.isEmpty {
+            parts.append("-f")
+            parts.append(shellEscape(makefile))
+        }
+        if !target.isEmpty {
+            parts.append(shellEscape(target))
+        }
+        if !args.isEmpty {
+            parts.append(args)
+        }
+        return [parts.joined(separator: " ")]
     }
 
     /// Escapes a path for safe inclusion as a single-quoted bash literal.

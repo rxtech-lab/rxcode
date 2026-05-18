@@ -94,6 +94,8 @@ struct GeneralSettingsTab: View {
                 Divider()
                 menuBarSection
                 Divider()
+                searchIndexSection
+                Divider()
                 VStack(alignment: .leading, spacing: 8) {
                     skillMarketSection
                     onboardingSection
@@ -103,6 +105,44 @@ struct GeneralSettingsTab: View {
             }
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    // MARK: - Search Index Section
+
+    private var searchIndexSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Search Index")
+                .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
+
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Reindex all threads")
+                        .font(.system(size: ClaudeTheme.size(13)))
+                    Text("Wipe cached embeddings and re-embed every thread for semantic search. Use this if global search results look stale or empty.")
+                        .font(.system(size: ClaudeTheme.size(11)))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                Button {
+                    Task { await appState.reindexAllThreads() }
+                } label: {
+                    if let progress = appState.reindexProgress {
+                        HStack(spacing: 6) {
+                            ProgressView().controlSize(.small)
+                            if progress.total > 0 {
+                                Text(verbatim: "\(progress.done)/\(progress.total)")
+                                    .font(.system(size: ClaudeTheme.size(12)))
+                                    .monospacedDigit()
+                            }
+                        }
+                    } else {
+                        Text("Reindex Now")
+                    }
+                }
+                .disabled(appState.reindexProgress != nil)
+            }
         }
     }
 

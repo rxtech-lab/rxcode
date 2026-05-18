@@ -231,6 +231,46 @@ struct RunTaskExecutorTests {
         #expect(script.contains("cd '/tmp/it'\\''s a path'"))
     }
 
+    // MARK: - Make profile
+
+    @Test("Make profile with target only emits `make <target>`")
+    func makeProfileTargetOnly() {
+        var profile = RunProfile(
+            projectId: UUID(),
+            name: "build",
+            type: .make,
+            make: MakeRunConfig(target: "build")
+        )
+        profile.bash.workingDirectory = ""
+        let script = RunTaskExecutor.buildWrapperScript(profile: profile, projectPath: "/p")
+        #expect(script.contains("make 'build'"))
+        #expect(!script.contains("-f"))
+    }
+
+    @Test("Make profile with non-default Makefile passes -f")
+    func makeProfileCustomMakefile() {
+        let profile = RunProfile(
+            projectId: UUID(),
+            name: "build",
+            type: .make,
+            make: MakeRunConfig(makefile: "BuildScripts/release.mk", target: "all", arguments: "VAR=1 -j4")
+        )
+        let script = RunTaskExecutor.buildWrapperScript(profile: profile, projectPath: "/p")
+        #expect(script.contains("make -f 'BuildScripts/release.mk' 'all' VAR=1 -j4"))
+    }
+
+    @Test("Make profile with empty config emits no main command")
+    func makeProfileEmpty() {
+        let profile = RunProfile(
+            projectId: UUID(),
+            name: "empty",
+            type: .make,
+            make: MakeRunConfig()
+        )
+        let script = RunTaskExecutor.buildWrapperScript(profile: profile, projectPath: "/p")
+        #expect(!script.contains("# --- main ---"))
+    }
+
     // MARK: - Model round-trip
 
     @Test("RunProfile JSON round-trips")

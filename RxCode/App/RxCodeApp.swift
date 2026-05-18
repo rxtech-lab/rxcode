@@ -515,7 +515,7 @@ struct ProjectWindowRoot: View {
     var body: some View {
         ZStack {
             if appState.isInitialized {
-                ProjectWindowView()
+                MainView()
                     .environment(appState)
                     .environment(windowState)
                     .environment(chatBridge)
@@ -534,6 +534,11 @@ struct ProjectWindowRoot: View {
             }
         }
         .animation(.easeInOut(duration: 0.3), value: appState.isInitialized)
+        .onAppear {
+            windowState.isProjectWindow = true
+            appState.registerOpenProjectWindow(projectId)
+        }
+        .onDisappear { appState.unregisterOpenProjectWindow(projectId) }
         .task {
             // Wait for the main window's AppState.initialize() to finish before
             // running per-window setup. State-restoration can spawn this window
@@ -541,6 +546,7 @@ struct ProjectWindowRoot: View {
             while !appState.isInitialized {
                 try? await Task.sleep(nanoseconds: 50_000_000)
             }
+            windowState.isProjectWindow = true
             appState.setupChatBridge(chatBridge, for: windowState)
             await appState.initializeWindow(windowState, selectingProjectId: projectId)
             // Apply pending notification navigation (new window case)
@@ -548,14 +554,12 @@ struct ProjectWindowRoot: View {
                 windowState.currentSessionId = sessionId
             }
         }
-            .onAppear { appState.registerOpenProjectWindow(projectId) }
-            .onDisappear { appState.unregisterOpenProjectWindow(projectId) }
-            // Apply pending notification navigation (already-open window case)
-            .onChange(of: appState.pendingNotificationSession[projectId]) { _, sessionId in
-                guard let sessionId else { return }
-                windowState.currentSessionId = sessionId
-                appState.pendingNotificationSession.removeValue(forKey: projectId)
-            }
+        // Apply pending notification navigation (already-open window case)
+        .onChange(of: appState.pendingNotificationSession[projectId]) { _, sessionId in
+            guard let sessionId else { return }
+            windowState.currentSessionId = sessionId
+            appState.pendingNotificationSession.removeValue(forKey: projectId)
+        }
     }
 }
 

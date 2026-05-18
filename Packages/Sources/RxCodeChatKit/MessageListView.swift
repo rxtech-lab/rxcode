@@ -15,56 +15,14 @@ struct MessageListView: View {
     /// (which also writes to `scrollTask`) can't cancel the session-ready flip.
     @State private var readyTask: Task<Void, Never>?
     @State private var anchor = AutoScrollAnchor()
-    @State private var isOlderCollapsed = true
     @State private var isSessionReady = false
 
-    private let foldThreshold = 30
     private static let log = Logger(subsystem: "com.claudework", category: "MessageListView")
 
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                // Fold older messages when count exceeds threshold
-                if settledItems.count > foldThreshold {
-                    let hiddenCount = settledItems.count - foldThreshold
-
-                    // Expanded state: show older messages
-                    if !isOlderCollapsed {
-                        messageRows(settledItems.prefix(hiddenCount))
-                    }
-
-                    // Fold toggle button
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.25)) {
-                            isOlderCollapsed.toggle()
-                        }
-                    } label: {
-                        HStack(spacing: 6) {
-                            Group {
-                                if isOlderCollapsed {
-                                    Text(String(format: String(localized: "Show %lld earlier messages", bundle: .module), hiddenCount))
-                                } else {
-                                    Text("Collapse earlier messages", bundle: .module)
-                                }
-                            }
-                            .font(.system(size: ClaudeTheme.size(12), weight: .medium))
-                            Image(systemName: isOlderCollapsed ? "chevron.down" : "chevron.up")
-                                .font(.system(size: ClaudeTheme.size(10), weight: .medium))
-                        }
-                        .foregroundStyle(ClaudeTheme.textTertiary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
-                                .fill(ClaudeTheme.surfacePrimary.opacity(0.6))
-                        )
-                    }
-                    .buttonStyle(.plain)
-
-                    messageRows(settledItems.suffix(foldThreshold))
-                } else {
-                    messageRows(settledItems[...])
-                }
+                messageRows(settledItems[...])
             }
             .padding(.horizontal, 20)
             .padding(.top, 16)
@@ -139,7 +97,6 @@ struct MessageListView: View {
             isSessionReady = false
             scrollTask?.cancel()
             readyTask?.cancel()
-            isOlderCollapsed = true
             scrollPosition = ScrollPosition()
             rebuildSettledItems()
             Self.log.info("[MessageList.task] post-rebuild settled=\(settledItems.count) sid=\(sid, privacy: .public) isLoadingFromDisk=\(chatBridge.isLoadingFromDisk)")

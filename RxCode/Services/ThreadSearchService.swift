@@ -61,7 +61,7 @@ actor ThreadSearchService {
     /// but quality degrades for very long passages.
     private let chunkSize = 480
     /// Backfill version sentinel. Bump when chunking or embedding model changes.
-    private let backfillVersion = 1
+    private let backfillVersion = 2
     private let backfillKey = "com.idealapp.RxCode.searchIndex.backfillVersion"
 
     init() {}
@@ -70,11 +70,15 @@ actor ThreadSearchService {
 
     /// Load any existing chunk rows into memory. Cheap: ~2KB per chunk.
     func start(threadStore: ThreadStore) async {
-        guard !didStart else { return }
+        guard !didStart else {
+            logger.info("start() called again — already initialised, ignoring")
+            return
+        }
         didStart = true
         self.threadStore = threadStore
         embedder = NLEmbedding.sentenceEmbedding(for: .english)
         wordEmbedder = NLEmbedding.wordEmbedding(for: .english)
+        logger.info("start(): sentenceEmbedder=\(self.embedder != nil), wordEmbedder=\(self.wordEmbedder != nil)")
         if embedder == nil && wordEmbedder == nil {
             logger.error("Both sentence and word embeddings unavailable; search disabled")
             return
@@ -100,10 +104,18 @@ actor ThreadSearchService {
     /// Index a thread's content. Replaces any prior chunks for that thread.
     /// Safe to call multiple times — re-indexing is idempotent.
     func indexThread(_ session: ChatSession) async {
-        guard let store = threadStore else { return }
+        guard let store = threadStore else {
+            logger.info("Skip index \(session.id, privacy: .public): threadStore not set (start() not called?)")
+            return
+        }
+        guard embedder != nil || wordEmbedder != nil else {
+            logger.info("Skip index \(session.id, privacy: .public): no embedder available")
+            return
+        }
         // Skip threads with no real content (placeholder rows, empty new chats).
         let texts = chunkTexts(for: session)
         guard !texts.isEmpty else {
+            logger.info("Skip index \(session.id, privacy: .public): no chunkable content (messages=\(session.messages.count), title=\"\(session.title, privacy: .public)\")")
             await MainActor.run { store.deleteEmbeddingChunks(threadId: session.id) }
             index.removeValue(forKey: session.id)
             return
@@ -111,8 +123,12 @@ actor ThreadSearchService {
 
         var newChunks: [Chunk] = []
         var rows: [ThreadEmbeddingChunk] = []
+        var embedFailures = 0
         for (i, text) in texts.enumerated() {
-            guard let vec = embed(text) else { continue }
+            guard let vec = embed(text) else {
+                embedFailures += 1
+                continue
+            }
             newChunks.append(Chunk(index: i, projectId: session.projectId, text: text, vector: vec))
             rows.append(ThreadEmbeddingChunk(
                 id: ThreadEmbeddingChunk.makeId(threadId: session.id, index: i),
@@ -126,13 +142,55 @@ actor ThreadSearchService {
             ))
         }
 
+        if newChunks.isEmpty {
+            logger.error("Failed to index \(session.id, privacy: .public): all \(texts.count) chunk(s) failed to embed")
+            return
+        }
+
         index[session.id] = newChunks
         let threadId = session.id
         let snapshot = rows
         await MainActor.run {
             store.replaceEmbeddingChunks(threadId: threadId, chunks: snapshot)
         }
-        logger.debug("Indexed thread \(session.id, privacy: .public): \(newChunks.count) chunks")
+        logger.info("Indexed thread \(session.id, privacy: .public): \(newChunks.count) chunks (\(embedFailures) embed failures, \(session.messages.count) messages)")
+    }
+
+    /// Force a full reindex of every thread. Clears the in-memory index, wipes
+    /// persisted chunks, resets the backfill sentinel, and re-embeds everything.
+    /// Reports progress via the optional callback so the UI can show a spinner.
+    func reindexAll(
+        loadAll: @MainActor @Sendable () -> [ChatSession.Summary],
+        loadFull: @MainActor @Sendable (ChatSession.Summary) async -> ChatSession?,
+        progress: (@Sendable (_ done: Int, _ total: Int) -> Void)? = nil
+    ) async {
+        guard let store = threadStore else {
+            logger.error("Reindex aborted: threadStore not set")
+            return
+        }
+        logger.info("Reindex starting: clearing index and embedding chunk store")
+        index.removeAll()
+        await MainActor.run { store.deleteAllEmbeddingChunks() }
+        UserDefaults.standard.removeObject(forKey: backfillKey)
+
+        let summaries = await MainActor.run { loadAll() }
+        let total = summaries.count
+        logger.info("Reindex: \(total) thread summaries to embed")
+        var done = 0
+        var loadFailed = 0
+        for summary in summaries {
+            if let full = await loadFull(summary) {
+                await indexThread(full)
+            } else {
+                loadFailed += 1
+                logger.info("Reindex: failed to load full session \(summary.id, privacy: .public)")
+            }
+            done += 1
+            progress?(done, total)
+            if done % 8 == 0 { await Task.yield() }
+        }
+        UserDefaults.standard.set(backfillVersion, forKey: backfillKey)
+        logger.info("Reindex complete: processed=\(done), loadFailed=\(loadFailed), total=\(total)")
     }
 
     func removeThread(id: String) async {
@@ -205,22 +263,38 @@ actor ThreadSearchService {
         loadAll: @MainActor @Sendable () -> [ChatSession.Summary],
         loadFull: @MainActor @Sendable (ChatSession.Summary) async -> ChatSession?
     ) async {
-        guard threadStore != nil else { return }
+        guard threadStore != nil else {
+            logger.info("Backfill skipped: threadStore not set")
+            return
+        }
         let stored = UserDefaults.standard.integer(forKey: backfillKey)
-        guard stored < backfillVersion else { return }
+        guard stored < backfillVersion else {
+            logger.info("Backfill skipped: already ran at version \(stored) (current=\(self.backfillVersion))")
+            return
+        }
 
         let summaries = await MainActor.run { loadAll() }
+        logger.info("Backfill starting: \(summaries.count) thread summaries to evaluate")
         var done = 0
+        var alreadyIndexed = 0
+        var loadFailed = 0
         for summary in summaries {
-            if !index[summary.id, default: []].isEmpty { continue }
-            guard let full = await loadFull(summary) else { continue }
+            if !index[summary.id, default: []].isEmpty {
+                alreadyIndexed += 1
+                continue
+            }
+            guard let full = await loadFull(summary) else {
+                loadFailed += 1
+                logger.info("Backfill: failed to load full session \(summary.id, privacy: .public)")
+                continue
+            }
             await indexThread(full)
             done += 1
             // Yield occasionally so we don't starve the cooperative pool.
             if done % 8 == 0 { await Task.yield() }
         }
         UserDefaults.standard.set(backfillVersion, forKey: backfillKey)
-        logger.info("Search backfill complete: indexed \(done) threads")
+        logger.info("Search backfill complete: indexed=\(done), alreadyIndexed=\(alreadyIndexed), loadFailed=\(loadFailed), total=\(summaries.count)")
     }
 
     // MARK: - Chunking

@@ -1,4 +1,5 @@
 import Foundation
+import RxCodeCore
 
 /// Source of an auto-detected runnable shown in the "+" picker of the Run
 /// Configurations dialog.
@@ -8,14 +9,37 @@ enum RunnableSource: String, Sendable, Hashable {
     case make
 }
 
-/// A single auto-detected runnable. Pre-fills the bash command and display
-/// name when the user picks it from the "+" menu. Not persisted on its own —
-/// selecting one materializes a normal `RunProfile`.
+/// A single auto-detected runnable. Pre-fills either a bash command (npm,
+/// make) or a structured Xcode config (when `xcode` is non-nil) when the user
+/// picks it from the "+" menu. Not persisted on its own — selecting one
+/// materializes a normal `RunProfile`.
 struct DetectedRunnable: Identifiable, Hashable, Sendable {
     let id: String
     let source: RunnableSource
     let displayName: String
     let command: String
+    /// Present when `source == .xcode`. The dialog materializes these as
+    /// `.xcode`-typed profiles instead of bash configurations.
+    let xcode: XcodeRunConfig?
+    /// Present when `source == .make`. The dialog materializes these as
+    /// `.make`-typed profiles instead of bash configurations.
+    let make: MakeRunConfig?
+
+    init(
+        id: String,
+        source: RunnableSource,
+        displayName: String,
+        command: String,
+        xcode: XcodeRunConfig? = nil,
+        make: MakeRunConfig? = nil
+    ) {
+        self.id = id
+        self.source = source
+        self.displayName = displayName
+        self.command = command
+        self.xcode = xcode
+        self.make = make
+    }
 }
 
 struct DetectedRunnables: Sendable, Hashable {
@@ -78,13 +102,22 @@ final class RunProfileDetector {
         guard let parsed = try? JSONDecoder().decode(XcodeList.self, from: data) else { return [] }
         let schemes = parsed.workspace?.schemes ?? parsed.project?.schemes ?? []
 
+        let isWorkspace = (flag == "-workspace")
         return schemes.map { name in
             let cmd = "xcodebuild \(flag) \"\(container)\" -scheme \"\(name)\" build"
+            let xcode = XcodeRunConfig(
+                container: container,
+                isWorkspace: isWorkspace,
+                scheme: name,
+                configuration: "Debug",
+                action: .run
+            )
             return DetectedRunnable(
                 id: "xcode:\(name)",
                 source: .xcode,
                 displayName: name,
-                command: cmd
+                command: cmd,
+                xcode: xcode
             )
         }
     }
@@ -130,12 +163,17 @@ final class RunProfileDetector {
         else { return [] }
 
         let targets = parseMakeTargets(content)
+        // Default Makefile lookup (`make`) finds the same file we picked here,
+        // so leave `makefile` empty unless the user picked a non-default name.
+        let isDefaultName = (chosen == "Makefile" || chosen == "makefile" || chosen == "GNUmakefile")
+        let makefileName = isDefaultName ? "" : chosen
         return targets.map { name in
             DetectedRunnable(
                 id: "make:\(name)",
                 source: .make,
                 displayName: name,
-                command: "make \(name)"
+                command: "make \(name)",
+                make: MakeRunConfig(makefile: makefileName, target: name)
             )
         }
     }

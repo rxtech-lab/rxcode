@@ -94,6 +94,13 @@ final class ThreadStore {
         return ((try? context.fetch(descriptor)) ?? []).map { $0.toItem() }
     }
 
+    func allThreadSummaryItems() -> [ThreadSummaryItem] {
+        let descriptor = FetchDescriptor<ThreadSummaryRecord>(
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+        )
+        return ((try? context.fetch(descriptor)) ?? []).map { $0.toItem() }
+    }
+
     func branchBriefingItem(projectId: UUID, branch: String) -> BranchBriefingItem? {
         fetchBranchBriefing(projectId: projectId, branch: branch)?.toItem()
     }
@@ -604,6 +611,14 @@ final class ThreadStore {
 
     func deleteEmbeddingChunks(threadId: String) {
         deleteEmbeddingChunkRows(threadId: threadId)
+        save()
+    }
+
+    /// Wipe every persisted embedding chunk across all threads.
+    func deleteAllEmbeddingChunks() {
+        let descriptor = FetchDescriptor<ThreadEmbeddingChunk>()
+        let rows = (try? context.fetch(descriptor)) ?? []
+        for row in rows { context.delete(row) }
         save()
     }
 

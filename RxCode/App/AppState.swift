@@ -896,6 +896,8 @@ final class AppState {
     let mcp: MCPService
     let threadStore: ThreadStore
     let searchService = ThreadSearchService()
+    /// Live progress for a user-triggered full reindex. `nil` when idle.
+    var reindexProgress: (done: Int, total: Int)? = nil
     let runService = RunService()
     let ideMCPServer = IDEMCPServer()
 
@@ -991,6 +993,28 @@ final class AppState {
                 }
             )
         }
+    }
+
+    /// User-triggered full reindex of every thread. Wipes cached embeddings,
+    /// then re-embeds every thread. Updates `reindexProgress` so the UI can
+    /// render a counter.
+    func reindexAllThreads() async {
+        guard reindexProgress == nil else { return }
+        reindexProgress = (0, 0)
+        let searchService = self.searchService
+        let threadStore = self.threadStore
+        let persistence = self.persistence
+        await searchService.reindexAll(
+            loadAll: { @MainActor in threadStore.loadAllSummaries() },
+            loadFull: { @MainActor [weak self] summary -> ChatSession? in
+                let cwd = self?.projects.first(where: { $0.id == summary.projectId })?.path ?? ""
+                return await persistence.loadFullSession(summary: summary, cwd: cwd)
+            },
+            progress: { [weak self] done, total in
+                Task { @MainActor in self?.reindexProgress = (done, total) }
+            }
+        )
+        reindexProgress = nil
     }
 
     // MARK: - Agent Backends
@@ -1675,6 +1699,11 @@ final class AppState {
         } else if let first = projects.first {
             selectProject(first, in: window)
         }
+
+        // Show the briefing as the landing view on launch, even after restoring a project.
+        // `selectProject` clears `showingBriefing` for normal switches; re-enable here so the
+        // user lands on the briefing dashboard rather than a fresh chat.
+        window.showingBriefing = true
 
         window.isInitialized = true
     }
@@ -4335,7 +4364,13 @@ final class AppState {
     func selectSession(id: String, in window: WindowState) {
         logger.info("[SelectSession] click sid=\(id, privacy: .public) currentSid=\(window.currentSessionId ?? "<nil>", privacy: .public) selectedProject=\(window.selectedProject?.id.uuidString ?? "<nil>", privacy: .public) summariesCount=\(self.allSessionSummaries.count)")
         guard window.currentSessionId != id else {
-            logger.info("[SelectSession] no-op: already current sid=\(id, privacy: .public)")
+            if window.showingBriefing {
+                window.showingBriefing = false
+                window.requestInputFocus = true
+                logger.info("[SelectSession] same sid, leaving briefing sid=\(id, privacy: .public)")
+            } else {
+                logger.info("[SelectSession] no-op: already current sid=\(id, privacy: .public)")
+            }
             return
         }
 

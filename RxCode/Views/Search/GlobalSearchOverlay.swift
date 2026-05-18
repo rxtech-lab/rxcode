@@ -13,7 +13,25 @@ struct GlobalSearchOverlay: View {
     @State private var inThreadHits: [ThreadSearchService.InThreadHit] = []
     @State private var isSearching: Bool = false
     @State private var hasSearched: Bool = false
+    @State private var selectedIndex: Int = 0
     @FocusState private var inputFocused: Bool
+
+    /// Flattened selectable rows in display order. Drives arrow-key navigation
+    /// and Enter activation; recomputed on every render so it stays in sync
+    /// with the current results.
+    private enum SelectableRow: Hashable {
+        case inThread(UUID)
+        case thread(String)
+    }
+
+    private var flatRows: [SelectableRow] {
+        var rows: [SelectableRow] = []
+        for hit in inThreadHits { rows.append(.inThread(hit.id)) }
+        for group in groups {
+            for hit in group.hits { rows.append(.thread(hit.threadId)) }
+        }
+        return rows
+    }
 
     private var hasResults: Bool {
         !groups.isEmpty || !inThreadHits.isEmpty
@@ -47,9 +65,24 @@ struct GlobalSearchOverlay: View {
             close()
             return .handled
         }
+        .onKeyPress(.downArrow) {
+            moveSelection(by: 1)
+            return .handled
+        }
+        .onKeyPress(.upArrow) {
+            moveSelection(by: -1)
+            return .handled
+        }
+        .onKeyPress(.return) {
+            activateSelection()
+            return .handled
+        }
         .task(id: query) {
             await runSearch()
         }
+        .onChange(of: query) { _, _ in selectedIndex = 0 }
+        .onChange(of: inThreadHits) { _, _ in clampSelection() }
+        .onChange(of: groups) { _, _ in clampSelection() }
     }
 
     // MARK: - Search field
@@ -100,17 +133,25 @@ struct GlobalSearchOverlay: View {
                 subtitle: "Try a different phrasing, or wait — the backfill may still be indexing older threads."
             )
         } else {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 12) {
-                    if !inThreadHits.isEmpty {
-                        currentThreadSection
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 12) {
+                        if !inThreadHits.isEmpty {
+                            currentThreadSection
+                        }
+                        ForEach(groups, id: \.projectId) { group in
+                            projectSection(group)
+                        }
                     }
-                    ForEach(groups, id: \.projectId) { group in
-                        projectSection(group)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 12)
+                }
+                .onChange(of: selectedIndex) { _, _ in
+                    guard let row = currentSelection() else { return }
+                    withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                        proxy.scrollTo(row, anchor: .center)
                     }
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 12)
             }
         }
     }
@@ -150,7 +191,9 @@ struct GlobalSearchOverlay: View {
     }
 
     private func inThreadRow(hit: ThreadSearchService.InThreadHit) -> some View {
-        Button {
+        let row: SelectableRow = .inThread(hit.id)
+        let isSelected = currentSelection() == row
+        return Button {
             close()
         } label: {
             HStack(alignment: .top, spacing: 10) {
@@ -177,13 +220,11 @@ struct GlobalSearchOverlay: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
-                    .fill(ClaudeTheme.surfacePrimary)
-            )
+            .background(rowBackground(isSelected: isSelected))
             .contentShape(RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
         }
         .buttonStyle(.plain)
+        .id(row)
     }
 
     private func highlightedSnippet(hit: ThreadSearchService.InThreadHit) -> AttributedString {
@@ -248,6 +289,8 @@ struct GlobalSearchOverlay: View {
         let snippet = displaySnippet(hit: hit, title: title)
         let threadSummary = appState.threadStore.threadSummaryItem(sessionId: hit.threadId)?.summary
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        let row: SelectableRow = .thread(hit.threadId)
+        let isSelected = currentSelection() == row
         return Button {
             select(hit: hit)
         } label: {
@@ -294,13 +337,20 @@ struct GlobalSearchOverlay: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
-                    .fill(ClaudeTheme.surfacePrimary)
-            )
+            .background(rowBackground(isSelected: isSelected))
             .contentShape(RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
         }
         .buttonStyle(.plain)
+        .id(row)
+    }
+
+    private func rowBackground(isSelected: Bool) -> some View {
+        RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
+            .fill(isSelected ? ClaudeTheme.accent.opacity(0.14) : ClaudeTheme.surfacePrimary)
+            .overlay(
+                RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
+                    .strokeBorder(isSelected ? ClaudeTheme.accent.opacity(0.55) : .clear, lineWidth: 1)
+            )
     }
 
     /// Show the cosine similarity as a 0–100 chip. Negative scores clamp to 0;
@@ -361,6 +411,45 @@ struct GlobalSearchOverlay: View {
 
     private func close() {
         windowState.showGlobalSearch = false
+    }
+
+    private func currentSelection() -> SelectableRow? {
+        let rows = flatRows
+        guard !rows.isEmpty else { return nil }
+        let clamped = max(0, min(selectedIndex, rows.count - 1))
+        return rows[clamped]
+    }
+
+    private func moveSelection(by delta: Int) {
+        let rows = flatRows
+        guard !rows.isEmpty else { return }
+        let next = selectedIndex + delta
+        selectedIndex = max(0, min(next, rows.count - 1))
+    }
+
+    private func clampSelection() {
+        let rows = flatRows
+        if rows.isEmpty {
+            selectedIndex = 0
+        } else if selectedIndex >= rows.count {
+            selectedIndex = rows.count - 1
+        } else if selectedIndex < 0 {
+            selectedIndex = 0
+        }
+    }
+
+    private func activateSelection() {
+        guard let row = currentSelection() else { return }
+        switch row {
+        case .inThread:
+            close()
+        case .thread(let threadId):
+            let id = threadId
+            close()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                appState.selectSession(id: id, in: windowState)
+            }
+        }
     }
 
     private func select(hit: ThreadSearchService.Hit) {

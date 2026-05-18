@@ -150,7 +150,11 @@ struct ProjectWindowView: View {
             }
         }
         .toolbarBackground(.hidden, for: .windowToolbar)
+        .toolbar(removing: .title)
         .toolbar {
+            ToolbarItem(placement: .navigation) {
+                ThreadTitlePopoverButton(title: navigationTitleText)
+            }
             RxCodeToolbarContent()
         }
         .background(UnifiedTitleBarAccessor())

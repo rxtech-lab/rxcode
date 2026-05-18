@@ -95,14 +95,29 @@ struct RunConfigurationsView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List(selection: $selectedId) {
-                    Section("Bash") {
-                        ForEach(draft) { profile in
-                            HStack {
-                                Image(systemName: "terminal")
-                                    .foregroundStyle(ClaudeTheme.accent)
-                                Text(profile.name.isEmpty ? "Untitled" : profile.name)
+                    let xcodeProfiles = draft.filter { $0.type == .xcode }
+                    let makeProfiles = draft.filter { $0.type == .make }
+                    let bashProfiles = draft.filter { $0.type == .bash }
+
+                    if !xcodeProfiles.isEmpty {
+                        Section("Xcode") {
+                            ForEach(xcodeProfiles) { profile in
+                                profileRow(profile)
                             }
-                            .tag(profile.id)
+                        }
+                    }
+                    if !makeProfiles.isEmpty {
+                        Section("Make") {
+                            ForEach(makeProfiles) { profile in
+                                profileRow(profile)
+                            }
+                        }
+                    }
+                    if !bashProfiles.isEmpty {
+                        Section("Bash") {
+                            ForEach(bashProfiles) { profile in
+                                profileRow(profile)
+                            }
                         }
                     }
                 }
@@ -145,47 +160,69 @@ struct RunConfigurationsView: View {
         .padding(.vertical, 10)
     }
 
+    @ViewBuilder
+    private func profileRow(_ profile: RunProfile) -> some View {
+        HStack {
+            Image(systemName: iconName(for: profile.type))
+                .foregroundStyle(ClaudeTheme.accent)
+            Text(profile.name.isEmpty ? "Untitled" : profile.name)
+        }
+        .tag(profile.id)
+    }
+
+    private func iconName(for type: RunProfileType) -> String {
+        switch type {
+        case .xcode: return "hammer.fill"
+        case .make: return "wrench.and.screwdriver.fill"
+        case .bash: return "terminal"
+        }
+    }
+
     // MARK: - Add menu (detected runnables)
 
     private var addMenu: some View {
         Menu {
-            Button("Empty Bash Configuration") { addProfile() }
-
-            if !detected.xcode.isEmpty {
-                Divider()
-                Section("Xcode Schemes") {
-                    ForEach(detected.xcode) { runnable in
-                        Button {
-                            addProfile(from: runnable)
-                        } label: {
-                            Label(runnable.displayName, systemImage: "hammer.fill")
-                        }
+            Section("Xcode") {
+                Button {
+                    addXcodeProfile()
+                } label: {
+                    Label("Empty Xcode Configuration", systemImage: "hammer.fill")
+                }
+                ForEach(detected.xcode) { runnable in
+                    Button {
+                        addProfile(from: runnable)
+                    } label: {
+                        Label(runnable.displayName, systemImage: "hammer.fill")
                     }
                 }
             }
 
-            if !detected.npm.isEmpty {
-                Divider()
-                Section("npm Scripts") {
-                    ForEach(detected.npm) { runnable in
-                        Button {
-                            addProfile(from: runnable)
-                        } label: {
-                            Label(runnable.displayName, systemImage: "shippingbox.fill")
-                        }
+            Section("Make") {
+                Button {
+                    addMakeProfile()
+                } label: {
+                    Label("Empty Make Configuration", systemImage: "wrench.and.screwdriver.fill")
+                }
+                ForEach(detected.make) { runnable in
+                    Button {
+                        addProfile(from: runnable)
+                    } label: {
+                        Label(runnable.displayName, systemImage: "wrench.and.screwdriver.fill")
                     }
                 }
             }
 
-            if !detected.make.isEmpty {
-                Divider()
-                Section("Makefile Targets") {
-                    ForEach(detected.make) { runnable in
-                        Button {
-                            addProfile(from: runnable)
-                        } label: {
-                            Label(runnable.displayName, systemImage: "wrench.and.screwdriver.fill")
-                        }
+            Section("Bash") {
+                Button {
+                    addProfile()
+                } label: {
+                    Label("Empty Bash Configuration", systemImage: "terminal")
+                }
+                ForEach(detected.npm) { runnable in
+                    Button {
+                        addProfile(from: runnable)
+                    } label: {
+                        Label(runnable.displayName, systemImage: "shippingbox.fill")
                     }
                 }
             }
@@ -202,10 +239,66 @@ struct RunConfigurationsView: View {
 
     private func addProfile(from runnable: DetectedRunnable? = nil) {
         let now = Date()
+        if let xcode = runnable?.xcode {
+            let new = RunProfile(
+                projectId: project.id,
+                name: runnable?.displayName ?? "New Xcode Configuration",
+                type: .xcode,
+                xcode: xcode,
+                createdAt: now,
+                updatedAt: now
+            )
+            draft.append(new)
+            selectedId = new.id
+            return
+        }
+        if let make = runnable?.make {
+            let new = RunProfile(
+                projectId: project.id,
+                name: runnable?.displayName ?? "New Make Configuration",
+                type: .make,
+                make: make,
+                createdAt: now,
+                updatedAt: now
+            )
+            draft.append(new)
+            selectedId = new.id
+            return
+        }
         let new = RunProfile(
             projectId: project.id,
             name: runnable?.displayName ?? "New Bash Configuration",
             bash: BashRunConfig(command: runnable?.command ?? ""),
+            createdAt: now,
+            updatedAt: now
+        )
+        draft.append(new)
+        selectedId = new.id
+    }
+
+    private func addXcodeProfile() {
+        let now = Date()
+        let firstDetected = detected.xcode.first?.xcode
+        let new = RunProfile(
+            projectId: project.id,
+            name: "New Xcode Configuration",
+            type: .xcode,
+            xcode: firstDetected ?? XcodeRunConfig(),
+            createdAt: now,
+            updatedAt: now
+        )
+        draft.append(new)
+        selectedId = new.id
+    }
+
+    private func addMakeProfile() {
+        let now = Date()
+        let firstDetected = detected.make.first?.make
+        let new = RunProfile(
+            projectId: project.id,
+            name: "New Make Configuration",
+            type: .make,
+            make: firstDetected ?? MakeRunConfig(),
             createdAt: now,
             updatedAt: now
         )
@@ -260,43 +353,33 @@ private struct RunProfileDetailForm: View {
         Form {
             Section {
                 TextField("Name", text: $profile.name)
-                Picker("Type", selection: $profile.type) {
+                Picker("Type", selection: Binding(
+                    get: { profile.type },
+                    set: { newValue in
+                        profile.type = newValue
+                        if newValue == .xcode, profile.xcode == nil {
+                            profile.xcode = XcodeRunConfig()
+                        }
+                        if newValue == .make, profile.make == nil {
+                            profile.make = MakeRunConfig()
+                        }
+                    }
+                )) {
                     ForEach(RunProfileType.allCases, id: \.self) { type in
                         Text(type.rawValue.capitalized).tag(type)
                     }
                 }
             } header: {
                 Text("Configuration")
-            } footer: {
-                Text("Only Bash is supported for now.")
             }
 
-            Section {
-                TextEditor(text: $profile.bash.command)
-                    .font(.system(.body, design: .monospaced))
-                    .frame(minHeight: 60, maxHeight: 100)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .strokeBorder(ClaudeTheme.borderSubtle, lineWidth: 0.5)
-                    )
-                HStack {
-                    TextField("Working Directory", text: $profile.bash.workingDirectory, prompt: Text(project.path))
-                    Button("Browse…") {
-                        pickDirectory { picked in
-                            profile.bash.workingDirectory = picked
-                        }
-                    }
-                    Button {
-                        profile.bash.workingDirectory = ""
-                    } label: {
-                        Image(systemName: "arrow.uturn.backward")
-                    }
-                    .help("Reset to project root")
-                }
-            } header: {
-                Text("Command")
-            } footer: {
-                Text("Absolute or project-relative path. Leave empty to use the project root.")
+            switch profile.type {
+            case .bash:
+                bashCommandSection
+            case .xcode:
+                xcodeCommandSection
+            case .make:
+                makeCommandSection
             }
 
             environmentsSection
@@ -312,6 +395,166 @@ private struct RunProfileDetailForm: View {
             )
         }
         .formStyle(.grouped)
+    }
+
+    // MARK: - Command sections
+
+    @ViewBuilder
+    private var bashCommandSection: some View {
+        Section {
+            TextEditor(text: $profile.bash.command)
+                .font(.system(.body, design: .monospaced))
+                .frame(minHeight: 60, maxHeight: 100)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(ClaudeTheme.borderSubtle, lineWidth: 0.5)
+                )
+            HStack {
+                TextField("Working Directory", text: $profile.bash.workingDirectory, prompt: Text(project.path))
+                Button("Browse…") {
+                    pickDirectory { picked in
+                        profile.bash.workingDirectory = picked
+                    }
+                }
+                Button {
+                    profile.bash.workingDirectory = ""
+                } label: {
+                    Image(systemName: "arrow.uturn.backward")
+                }
+                .help("Reset to project root")
+            }
+        } header: {
+            Text("Command")
+        } footer: {
+            Text("Absolute or project-relative path. Leave empty to use the project root.")
+        }
+    }
+
+    @ViewBuilder
+    private var xcodeCommandSection: some View {
+        Section {
+            let xcode = Binding(
+                get: { profile.xcode ?? XcodeRunConfig() },
+                set: { profile.xcode = $0 }
+            )
+            HStack {
+                TextField(
+                    "Project / Workspace",
+                    text: xcode.container,
+                    prompt: Text("RxCode.xcodeproj")
+                )
+                .font(.system(.body, design: .monospaced))
+                Button("Browse…") {
+                    pickXcodeContainer { name, isWorkspace in
+                        var c = xcode.wrappedValue
+                        c.container = name
+                        c.isWorkspace = isWorkspace
+                        xcode.wrappedValue = c
+                    }
+                }
+            }
+            Toggle("Use Workspace (.xcworkspace)", isOn: xcode.isWorkspace)
+            TextField("Scheme", text: xcode.scheme, prompt: Text("RxCode"))
+                .font(.system(.body, design: .monospaced))
+            TextField("Configuration", text: xcode.configuration, prompt: Text("Debug"))
+                .font(.system(.body, design: .monospaced))
+            Picker("Action", selection: xcode.action) {
+                ForEach(XcodeAction.allCases, id: \.self) { action in
+                    Text(action.rawValue.capitalized).tag(action)
+                }
+            }
+            TextField(
+                "Destination (optional)",
+                text: xcode.destination,
+                prompt: Text("platform=macOS")
+            )
+            .font(.system(.body, design: .monospaced))
+        } header: {
+            Text("Xcode")
+        } footer: {
+            Text("Build runs `xcodebuild build`. Run builds, then launches the produced .app. Working directory is always the project root.")
+        }
+    }
+
+    @ViewBuilder
+    private var makeCommandSection: some View {
+        Section {
+            let make = Binding(
+                get: { profile.make ?? MakeRunConfig() },
+                set: { profile.make = $0 }
+            )
+            HStack {
+                TextField(
+                    "Makefile (optional)",
+                    text: make.makefile,
+                    prompt: Text("Makefile")
+                )
+                .font(.system(.body, design: .monospaced))
+                Button("Browse…") {
+                    pickFile { picked in
+                        var c = make.wrappedValue
+                        c.makefile = picked
+                        make.wrappedValue = c
+                    }
+                }
+                Button {
+                    var c = make.wrappedValue
+                    c.makefile = ""
+                    make.wrappedValue = c
+                } label: {
+                    Image(systemName: "arrow.uturn.backward")
+                }
+                .help("Use default Makefile lookup")
+            }
+            TextField("Target", text: make.target, prompt: Text("build"))
+                .font(.system(.body, design: .monospaced))
+            TextField(
+                "Arguments (optional)",
+                text: make.arguments,
+                prompt: Text("VAR=value -j8")
+            )
+            .font(.system(.body, design: .monospaced))
+            HStack {
+                TextField("Working Directory", text: $profile.bash.workingDirectory, prompt: Text(project.path))
+                Button("Browse…") {
+                    pickDirectory { picked in
+                        profile.bash.workingDirectory = picked
+                    }
+                }
+                Button {
+                    profile.bash.workingDirectory = ""
+                } label: {
+                    Image(systemName: "arrow.uturn.backward")
+                }
+                .help("Reset to project root")
+            }
+        } header: {
+            Text("Make")
+        } footer: {
+            Text("Runs `make [-f <Makefile>] <target> [arguments]`. Leave Makefile empty to use the default lookup (Makefile / makefile / GNUmakefile).")
+        }
+    }
+
+    private func pickXcodeContainer(onPick: @escaping (String, Bool) -> Void) {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = URL(fileURLWithPath: project.path)
+        panel.allowedContentTypes = [
+            UTType(filenameExtension: "xcodeproj") ?? .package,
+            UTType(filenameExtension: "xcworkspace") ?? .package,
+        ]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let name: String
+        let root = (project.path as NSString).standardizingPath
+        let std = (url.path as NSString).standardizingPath
+        if std.hasPrefix(root + "/") {
+            name = String(std.dropFirst(root.count + 1))
+        } else {
+            name = std
+        }
+        onPick(name, url.pathExtension == "xcworkspace")
     }
 
     // MARK: - Environments

@@ -6,88 +6,125 @@ struct BriefingView: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
 
-    @State private var currentBranch: String?
+    /// Selected project ids for filtering. Empty = show every project.
+    @State private var selectedProjectIds: Set<UUID> = []
 
-    private var project: Project? {
-        windowState.selectedProject
+    private struct BriefingGroup: Identifiable {
+        let projectId: UUID
+        let branch: String
+        let briefing: BranchBriefingItem?
+        let threadSummaries: [ThreadSummaryItem]
+        let updatedAt: Date
+        var id: String { "\(projectId.uuidString)::\(branch)" }
     }
 
-    private var briefing: BranchBriefingItem? {
+    private var projectsById: [UUID: Project] {
+        Dictionary(uniqueKeysWithValues: appState.projects.map { ($0.id, $0) })
+    }
+
+    private var groups: [BriefingGroup] {
         _ = appState.branchBriefingRevision
-        guard let project, let currentBranch else { return nil }
-        return appState.threadStore.branchBriefingItem(projectId: project.id, branch: currentBranch)
+        _ = appState.threadSummaryRevision
+
+        let briefings = appState.threadStore.allBranchBriefingItems()
+        let summaries = appState.threadStore.allThreadSummaryItems()
+
+        struct Bucket {
+            var projectId: UUID
+            var branch: String
+            var briefing: BranchBriefingItem?
+            var threads: [ThreadSummaryItem]
+            var updated: Date
+        }
+
+        var bucket: [String: Bucket] = [:]
+        for b in briefings {
+            let key = "\(b.projectId.uuidString)::\(b.branch)"
+            var entry = bucket[key] ?? Bucket(projectId: b.projectId, branch: b.branch, briefing: nil, threads: [], updated: .distantPast)
+            entry.briefing = b
+            if b.updatedAt > entry.updated { entry.updated = b.updatedAt }
+            bucket[key] = entry
+        }
+        for s in summaries {
+            let key = "\(s.projectId.uuidString)::\(s.branch)"
+            var entry = bucket[key] ?? Bucket(projectId: s.projectId, branch: s.branch, briefing: nil, threads: [], updated: .distantPast)
+            entry.threads.append(s)
+            if s.updatedAt > entry.updated { entry.updated = s.updatedAt }
+            bucket[key] = entry
+        }
+
+        let all = bucket.values
+            .map {
+                BriefingGroup(
+                    projectId: $0.projectId,
+                    branch: $0.branch,
+                    briefing: $0.briefing,
+                    threadSummaries: $0.threads.sorted { $0.updatedAt > $1.updatedAt },
+                    updatedAt: $0.updated
+                )
+            }
+            .sorted { $0.updatedAt > $1.updatedAt }
+
+        if selectedProjectIds.isEmpty {
+            return all
+        }
+        return all.filter { selectedProjectIds.contains($0.projectId) }
     }
 
-    private var threadSummaries: [ThreadSummaryItem] {
+    /// Projects that actually have at least one briefing or summary recorded.
+    private var projectsWithData: [Project] {
+        _ = appState.branchBriefingRevision
         _ = appState.threadSummaryRevision
-        guard let project, let currentBranch else { return [] }
-        return appState.threadStore.threadSummaryItems(projectId: project.id, branch: currentBranch)
+        let ids = Set(
+            appState.threadStore.allBranchBriefingItems().map(\.projectId)
+            + appState.threadStore.allThreadSummaryItems().map(\.projectId)
+        )
+        return appState.projects.filter { ids.contains($0.id) }
     }
 
     var body: some View {
         Group {
-            if let project {
-                projectBriefing(project)
-            } else {
+            if groups.isEmpty {
                 emptyState(
-                    icon: "folder",
-                    title: "Select a Project",
-                    message: "Choose a project to view its branch briefing."
+                    icon: "text.page",
+                    title: "No Briefings Yet",
+                    message: "Briefings appear after a thread finishes on a project branch."
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                content
             }
         }
         .background(ClaudeTheme.background)
-        .task(id: project?.path) {
-            while !Task.isCancelled {
-                await refreshBranch()
-                try? await Task.sleep(nanoseconds: 5_000_000_000)
-            }
-        }
     }
 
-    private func projectBriefing(_ project: Project) -> some View {
+    private var content: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                hero(project)
+                hero
+                filterBar
 
-                if currentBranch == nil {
-                    emptyState(
-                        icon: "arrow.triangle.branch",
-                        title: "No Git Branch",
-                        message: "This project does not have a detectable current branch."
-                    )
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 24)
-                } else if briefing == nil, threadSummaries.isEmpty {
-                    emptyState(
-                        icon: "text.page",
-                        title: "No Briefing Yet",
-                        message: "Briefing updates after a thread finishes on this branch."
-                    )
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 24)
-                } else {
-                    if let briefing {
-                        briefingCard(briefing)
-                    }
-
-                    if !threadSummaries.isEmpty {
-                        threadSection(threadSummaries)
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 380, maximum: 560), spacing: 16, alignment: .top)],
+                    alignment: .leading,
+                    spacing: 16
+                ) {
+                    ForEach(groups) { group in
+                        groupCard(group)
                     }
                 }
             }
             .padding(.horizontal, 28)
             .padding(.top, 24)
             .padding(.bottom, 40)
-            .frame(maxWidth: 1200, alignment: .leading)
+            .frame(maxWidth: 1400, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
     }
 
     // MARK: - Hero
 
-    private func hero(_ project: Project) -> some View {
+    private var hero: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .center, spacing: 12) {
                 ZStack {
@@ -100,70 +137,220 @@ struct BriefingView: View {
                 .frame(width: 38, height: 38)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    HStack(alignment: .center, spacing: 10) {
-                        Text(project.name)
-                            .font(.system(size: 22, weight: .semibold))
-                            .foregroundStyle(ClaudeTheme.textPrimary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-
-                        startNewChatButton(for: project)
-                    }
-                    Text("A running summary of work on this branch.")
+                    Text("Briefings")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(ClaudeTheme.textPrimary)
+                    Text(heroSubtitle)
                         .font(.system(size: 12))
                         .foregroundStyle(ClaudeTheme.textTertiary)
                 }
 
                 Spacer(minLength: 0)
             }
+        }
+    }
 
-            HStack(spacing: 8) {
-                chip(icon: "folder.fill", text: project.name)
-                if let currentBranch {
-                    chip(icon: "arrow.triangle.branch", text: currentBranch, accented: true)
-                } else {
-                    chip(icon: "arrow.triangle.branch", text: "No branch")
+    private var heroSubtitle: String {
+        let count = groups.count
+        let branches = count == 1 ? "branch" : "branches"
+        let projectCount = Set(groups.map(\.projectId)).count
+        let projects = projectCount == 1 ? "project" : "projects"
+        if selectedProjectIds.isEmpty {
+            return "\(count) \(branches) across \(projectCount) \(projects)."
+        }
+        return "\(count) \(branches) across \(projectCount) selected \(projects)."
+    }
+
+    // MARK: - Filter bar
+
+    private var filterBar: some View {
+        let projects = projectsWithData
+        return Group {
+            if projects.count > 1 {
+                Menu {
+                    Button {
+                        selectedProjectIds.removeAll()
+                    } label: {
+                        Label("All projects", systemImage: selectedProjectIds.isEmpty ? "checkmark" : "")
+                    }
+                    Divider()
+                    ForEach(projects) { project in
+                        Button {
+                            toggleProject(project.id)
+                        } label: {
+                            Label(
+                                project.name,
+                                systemImage: selectedProjectIds.contains(project.id) ? "checkmark" : ""
+                            )
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "line.3.horizontal.decrease.circle")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text(filterMenuLabel(projects: projects))
+                            .font(.system(size: 11, weight: .semibold))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 9, weight: .semibold))
+                    }
+                    .foregroundStyle(selectedProjectIds.isEmpty ? ClaudeTheme.textSecondary : ClaudeTheme.textOnAccent)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(selectedProjectIds.isEmpty ? ClaudeTheme.surfaceSecondary : ClaudeTheme.accent)
+                    )
+                    .overlay(
+                        Capsule(style: .continuous)
+                            .strokeBorder(
+                                selectedProjectIds.isEmpty
+                                    ? ClaudeTheme.border.opacity(0.6)
+                                    : ClaudeTheme.accent.opacity(0.4),
+                                lineWidth: 0.5
+                            )
+                    )
                 }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
             }
         }
     }
 
-    private func startNewChatButton(for project: Project) -> some View {
-        Button {
-            if windowState.selectedProject?.id != project.id {
-                appState.selectProject(project, in: windowState)
-            }
-            appState.startNewChat(in: windowState)
-        } label: {
-            HStack(spacing: 5) {
-                Image(systemName: "plus.bubble.fill")
-                    .font(.system(size: 11, weight: .semibold))
-                Text("Start New Chat")
-                    .font(.system(size: 12, weight: .semibold))
-            }
-            .foregroundStyle(ClaudeTheme.textOnAccent)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(
-                Capsule(style: .continuous).fill(ClaudeTheme.accent)
-            )
+    private func filterMenuLabel(projects: [Project]) -> String {
+        if selectedProjectIds.isEmpty {
+            return "All projects"
         }
-        .buttonStyle(.plain)
-        .help("Start a new chat in \(project.name)")
+        if selectedProjectIds.count == 1, let id = selectedProjectIds.first {
+            return projectsById[id]?.name ?? "1 project"
+        }
+        return "\(selectedProjectIds.count) projects"
+    }
+
+    private func toggleProject(_ id: UUID) {
+        if selectedProjectIds.contains(id) {
+            selectedProjectIds.remove(id)
+        } else {
+            selectedProjectIds.insert(id)
+        }
+    }
+
+    // MARK: - Group card
+
+    private func groupCard(_ group: BriefingGroup) -> some View {
+        let project = projectsById[group.projectId]
+        return VStack(alignment: .leading, spacing: 12) {
+            groupCardHeader(group, project: project)
+
+            if let briefing = group.briefing {
+                Divider().opacity(0.4)
+                BriefingMarkdownView(text: briefing.briefing, fontSize: 12.5)
+            }
+
+            if !group.threadSummaries.isEmpty {
+                Divider().opacity(0.4)
+                threadList(group.threadSummaries)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusLarge, style: .continuous)
+                .fill(ClaudeTheme.surfacePrimary)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusLarge, style: .continuous)
+                .strokeBorder(ClaudeTheme.border.opacity(0.6), lineWidth: 0.5)
+        )
+        .shadow(color: Color.black.opacity(0.03), radius: 2, x: 0, y: 1)
+    }
+
+    private func groupCardHeader(_ group: BriefingGroup, project: Project?) -> some View {
+        HStack(alignment: .center, spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(ClaudeTheme.accent.opacity(0.12))
+                Image(systemName: "folder.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(ClaudeTheme.accent)
+            }
+            .frame(width: 28, height: 28)
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(project?.name ?? "Unknown project")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(ClaudeTheme.textPrimary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+
+                    chip(icon: "arrow.triangle.branch", text: group.branch, accented: true)
+                }
+                Text("Updated \(Self.compactDate(group.updatedAt))")
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(ClaudeTheme.textTertiary)
+            }
+
+            Spacer(minLength: 0)
+
+            if let project {
+                cardMenu(for: project)
+            }
+        }
+    }
+
+    private func cardMenu(for project: Project) -> some View {
+        Menu {
+            Button {
+                if windowState.selectedProject?.id != project.id {
+                    appState.selectProject(project, in: windowState)
+                }
+                appState.startNewChat(in: windowState)
+            } label: {
+                Label("Start New Chat", systemImage: "plus.bubble.fill")
+            }
+
+            Button {
+                if windowState.selectedProject?.id != project.id {
+                    appState.selectProject(project, in: windowState)
+                }
+            } label: {
+                Label("Open Project", systemImage: "folder")
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(ClaudeTheme.textSecondary)
+                .frame(width: 24, height: 22)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(ClaudeTheme.surfaceSecondary)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .strokeBorder(ClaudeTheme.border.opacity(0.6), lineWidth: 0.5)
+                )
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Actions for \(project.name)")
     }
 
     private func chip(icon: String, text: String, accented: Bool = false) -> some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 4) {
             Image(systemName: icon)
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 9, weight: .semibold))
             Text(text)
-                .font(.system(size: 11, weight: .medium))
+                .font(.system(size: 10.5, weight: .medium))
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
         .foregroundStyle(accented ? ClaudeTheme.accent : ClaudeTheme.textSecondary)
-        .padding(.horizontal, 9)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 2)
         .background(
             Capsule(style: .continuous)
                 .fill(accented ? ClaudeTheme.accent.opacity(0.12) : ClaudeTheme.surfaceSecondary)
@@ -174,126 +361,64 @@ struct BriefingView: View {
         )
     }
 
-    // MARK: - Briefing Card
+    // MARK: - Thread list (compact rows)
 
-    private func briefingCard(_ item: BranchBriefingItem) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .center, spacing: 8) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(ClaudeTheme.accent)
-                Text("General")
-                    .font(.system(size: 11, weight: .semibold))
+    private func threadList(_ items: [ThreadSummaryItem]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Text("Threads")
+                    .font(.system(size: 10.5, weight: .semibold))
                     .foregroundStyle(ClaudeTheme.textTertiary)
                     .textCase(.uppercase)
                     .tracking(0.6)
-
-                Spacer()
-
-                Text("Updated \(Self.compactDate(item.updatedAt))")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(ClaudeTheme.textTertiary)
-            }
-
-            BriefingMarkdownView(text: item.briefing, fontSize: 13.5)
-        }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusLarge, style: .continuous)
-                .fill(ClaudeTheme.surfacePrimary)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusLarge, style: .continuous)
-                .strokeBorder(ClaudeTheme.border.opacity(0.6), lineWidth: 0.5)
-        )
-    }
-
-    // MARK: - Thread Summaries
-
-    private func threadSection(_ items: [ThreadSummaryItem]) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("Thread Summaries")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(ClaudeTheme.textTertiary)
-                    .textCase(.uppercase)
-                    .tracking(0.6)
-
                 Text("\(items.count)")
-                    .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                    .font(.system(size: 10.5, weight: .semibold).monospacedDigit())
                     .foregroundStyle(ClaudeTheme.textTertiary)
-                    .padding(.horizontal, 6)
+                    .padding(.horizontal, 5)
                     .padding(.vertical, 1)
-                    .background(
-                        Capsule().fill(ClaudeTheme.surfaceSecondary)
-                    )
-
+                    .background(Capsule().fill(ClaudeTheme.surfaceSecondary))
                 Spacer()
             }
-            .padding(.horizontal, 2)
+            .padding(.bottom, 2)
 
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 320, maximum: 480), spacing: 12, alignment: .top)],
-                alignment: .leading,
-                spacing: 12
-            ) {
-                ForEach(items) { item in
-                    threadCard(item)
-                }
+            ForEach(items) { item in
+                threadRow(item)
             }
         }
     }
 
-    private func threadCard(_ item: ThreadSummaryItem) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 8) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(ClaudeTheme.accent.opacity(0.12))
-                    Image(systemName: "bubble.left.and.text.bubble.right")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(ClaudeTheme.accent)
-                }
-                .frame(width: 22, height: 22)
+    private func threadRow(_ item: ThreadSummaryItem) -> some View {
+        Button {
+            appState.selectSession(id: item.sessionId, in: windowState)
+        } label: {
+            HStack(alignment: .center, spacing: 8) {
+                Image(systemName: "bubble.left.and.text.bubble.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(ClaudeTheme.accent)
+                    .frame(width: 14)
 
                 Text(item.title)
-                    .font(.system(size: 13.5, weight: .semibold))
+                    .font(.system(size: 12.5, weight: .medium))
                     .foregroundStyle(ClaudeTheme.textPrimary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
                     .frame(maxWidth: .infinity, alignment: .leading)
-            }
 
-            Divider()
-                .opacity(0.4)
-
-            BriefingMarkdownView(text: item.summary, fontSize: 12.5)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            Spacer(minLength: 0)
-
-            HStack(spacing: 6) {
-                Image(systemName: "clock")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(ClaudeTheme.textTertiary)
                 Text(Self.compactDate(item.updatedAt))
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 10.5, weight: .medium))
                     .foregroundStyle(ClaudeTheme.textTertiary)
-                Spacer()
+                    .lineLimit(1)
             }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 5)
+            .contentShape(Rectangle())
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(ClaudeTheme.surfaceSecondary.opacity(0.4))
+            )
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, minHeight: 180, alignment: .topLeading)
-        .background(
-            RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusMedium, style: .continuous)
-                .fill(ClaudeTheme.surfacePrimary)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusMedium, style: .continuous)
-                .strokeBorder(ClaudeTheme.border.opacity(0.55), lineWidth: 0.5)
-        )
-        .shadow(color: Color.black.opacity(0.03), radius: 2, x: 0, y: 1)
+        .buttonStyle(.plain)
+        .help("Open thread")
     }
 
     // MARK: - Empty State
@@ -318,20 +443,6 @@ struct BriefingView: View {
                 .frame(maxWidth: 320)
         }
         .padding(.vertical, 60)
-    }
-
-    private func refreshBranch() async {
-        guard let project else {
-            await MainActor.run { currentBranch = nil }
-            return
-        }
-        let branch = await GitHelper.currentBranch(at: project.path)
-        await MainActor.run {
-            currentBranch = branch
-            if let branch {
-                appState.touchBranchBriefing(projectId: project.id, branch: branch)
-            }
-        }
     }
 
     private static func compactDate(_ date: Date) -> String {

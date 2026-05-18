@@ -160,9 +160,15 @@ struct RightInspectorPanel: View {
         .background(terminalShortcuts)
         .task(id: currentSessionKey) {
             ensureTerminal(for: currentSessionKey)
-            // Always open the terminal for the current thread.
+            // Default the inspector to the terminal tab on a thread switch,
+            // but don't clobber a user-driven focus on the Run tab — pressing
+            // the Run button sets `inspectorTab = .run` and we want that to
+            // stick even if the .task body runs after (first mount race) or
+            // the session key happens to change in the same tick.
             windowState.inspectorMode = .inspector
-            windowState.inspectorTab = .terminal
+            if windowState.inspectorTab != .run {
+                windowState.inspectorTab = .terminal
+            }
             windowState.showInspector = true
         }
         .onChange(of: windowState.inspectorTab) { _, newTab in
@@ -178,24 +184,28 @@ struct RightInspectorPanel: View {
                 bumpFocus(for: windowState.inspectorTab)
             }
         }
+        .onChange(of: windowState.clearTerminalRequest) { _, _ in
+            // Routed from the global Cmd+K handler in MainView when the terminal
+            // tab is the active inspector tab. Avoids a duplicate keyboardShortcut
+            // collision with the global-search shortcut.
+            clearActiveTerminal()
+        }
     }
 
-    /// Hidden buttons that register keyboard shortcuts (Cmd+K clear, Cmd+T new)
-    /// scoped to when the inspector is showing the terminal tab.
+    /// Hidden button that registers the Cmd+T new-terminal shortcut, scoped to
+    /// when the inspector is showing the terminal tab. Cmd+K is intentionally
+    /// not registered here — it's routed via `WindowState.clearTerminalRequest`
+    /// from the single global Cmd+K handler in MainView.
     @ViewBuilder
     private var terminalShortcuts: some View {
         if windowState.showInspector,
            windowState.inspectorMode == .inspector,
            windowState.inspectorTab == .terminal {
-            ZStack {
-                Button("Clear Terminal", action: clearActiveTerminal)
-                    .keyboardShortcut("k", modifiers: .command)
-                Button("New Terminal", action: addTerminalToCurrent)
-                    .keyboardShortcut("t", modifiers: .command)
-            }
-            .frame(width: 0, height: 0)
-            .opacity(0)
-            .accessibilityHidden(true)
+            Button("New Terminal", action: addTerminalToCurrent)
+                .keyboardShortcut("t", modifiers: .command)
+                .frame(width: 0, height: 0)
+                .opacity(0)
+                .accessibilityHidden(true)
         }
     }
 

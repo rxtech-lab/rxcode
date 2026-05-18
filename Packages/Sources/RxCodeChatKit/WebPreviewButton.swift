@@ -20,7 +20,7 @@ struct WebPreviewButton: View {
                     Text("View Result", bundle: .module)
                     Text(url.absoluteString)
                         .font(.caption)
-                        .foregroundStyle(ClaudeTheme.textSecondary)
+                        .foregroundStyle(.white.opacity(0.85))
                 }
                 .font(.subheadline)
             }

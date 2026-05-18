@@ -49,64 +49,13 @@ struct MainView: View {
         if !appState.onboardingCompleted {
             OnboardingView()
         } else {
-            HSplitView {
-                NavigationSplitView(columnVisibility: $columnVisibility) {
-                    sidebarContent
-                } detail: {
-                    detailContent
-                }
-                .background {
-                    Button("") {
-                        columnVisibility = (columnVisibility == .all) ? .detailOnly : .all
-                    }
-                    .keyboardShortcut("3", modifiers: .command)
-                    .hidden()
-                }
-                .overlay {
-                    if windowState.showMarketplace {
-                        ZStack {
-                            Color.black.opacity(0.3)
-                                .ignoresSafeArea()
-                                .onTapGesture {
-                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                                        windowState.showMarketplace = false
-                                    }
-                                }
-                            SkillMarketView()
-                                .focusable(false)
-                                .transition(.asymmetric(
-                                    insertion: .move(edge: .bottom).combined(with: .opacity),
-                                    removal: .opacity
-                                ))
-                        }
-                    }
-                }
-                .overlay {
-                    if windowState.showGlobalSearch {
-                        ZStack {
-                            Color.black.opacity(0.3)
-                                .ignoresSafeArea()
-                                .onTapGesture {
-                                    withAnimation(.spring(response: 0.25, dampingFraction: 0.9)) {
-                                        windowState.showGlobalSearch = false
-                                    }
-                                }
-                            GlobalSearchOverlay()
-                                .transition(.asymmetric(
-                                    insertion: .scale(scale: 0.97).combined(with: .opacity),
-                                    removal: .opacity
-                                ))
-                        }
-                        .animation(.spring(response: 0.25, dampingFraction: 0.9), value: windowState.showGlobalSearch)
-                    }
-                }
-                .background {
-                    Button("") {
-                        windowState.showGlobalSearch.toggle()
-                    }
-                    .keyboardShortcut("k", modifiers: .command)
-                    .hidden()
-                }
+            mainContent
+        }
+    }
+
+    private var mainContent: some View {
+        HSplitView {
+            navigationContent
                 .id(appState.themeRevision)
                 .onChange(of: windowState.showInspector) { _, isShowing in
                     if isShowing, !inspectorStarted { inspectorStarted = true }
@@ -123,55 +72,136 @@ struct MainView: View {
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("rxcode-main-view")
                 .toolbar {
-                    if columnVisibility != .detailOnly {
-                        ToolbarItem(placement: .navigation) {
-                            Button {
-                                showGitHubSheet = true
-                            } label: {
-                                Image("GitHubMark")
-                                    .renderingMode(.template)
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: 16, height: 16)
-                            }
-                            .help(appState.isLoggedIn ? "Manage GitHub Repos" : "Connect GitHub")
-                        }
+                    toolbarContent
+                }
 
-                        ToolbarItem(placement: .navigation) {
-                            Button {
-                                showFilePicker = true
-                            } label: {
-                                Image(systemName: "plus")
-                            }
-                            .help("Add Project")
-                            .fileImporter(
-                                isPresented: $showFilePicker,
-                                allowedContentTypes: [.folder],
-                                allowsMultipleSelection: false
-                            ) { result in
-                                handleFolderSelection(result)
-                            }
-                        }
+            if inspectorStarted {
+                RightInspectorPanel()
+            }
+        }
+    }
 
-                        ToolbarItem(placement: .navigation) {
-                            Button {
-                                windowState.showGlobalSearch = true
-                            } label: {
-                                Image(systemName: "magnifyingglass")
-                            }
-                            .help("Search Threads (⌘K)")
-                        }
+    private var navigationContent: some View {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            sidebarContent
+        } detail: {
+            detailContent
+        }
+        .background {
+            Button("") {
+                columnVisibility = (columnVisibility == .all) ? .detailOnly : .all
+            }
+            .keyboardShortcut("3", modifiers: .command)
+            .hidden()
+        }
+        .overlay {
+            marketplaceOverlay
+        }
+        .overlay {
+            globalSearchOverlay
+        }
+        .background {
+            Button("") {
+                // Cmd+K is context-sensitive: when the inspector terminal tab
+                // is active, clear the terminal; otherwise open global search.
+                if windowState.showInspector,
+                   windowState.inspectorMode == .inspector,
+                   windowState.inspectorTab == .terminal {
+                    windowState.clearTerminalRequest = UUID()
+                } else {
+                    windowState.showGlobalSearch.toggle()
+                }
+            }
+            .keyboardShortcut("k", modifiers: .command)
+            .hidden()
+        }
+    }
 
-                        ToolbarItem(placement: .navigation) {
-                            Text(navigationTitleText)
-                                .padding(.trailing)
+    @ViewBuilder
+    private var marketplaceOverlay: some View {
+        if windowState.showMarketplace {
+            ZStack {
+                Color.black.opacity(0.3)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                            windowState.showMarketplace = false
                         }
                     }
-                }
+                SkillMarketView()
+                    .focusable(false)
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .bottom).combined(with: .opacity),
+                        removal: .opacity
+                    ))
+            }
+        }
+    }
 
-                if inspectorStarted {
-                    RightInspectorPanel()
+    @ViewBuilder
+    private var globalSearchOverlay: some View {
+        if windowState.showGlobalSearch {
+            ZStack {
+                Color.black.opacity(0.3)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.25, dampingFraction: 0.9)) {
+                            windowState.showGlobalSearch = false
+                        }
+                    }
+                GlobalSearchOverlay()
+                    .transition(.asymmetric(
+                        insertion: .scale(scale: 0.97).combined(with: .opacity),
+                        removal: .opacity
+                    ))
+            }
+            .animation(.spring(response: 0.25, dampingFraction: 0.9), value: windowState.showGlobalSearch)
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        if columnVisibility != .detailOnly {
+            ToolbarItem(placement: .navigation) {
+                Button {
+                    showGitHubSheet = true
+                } label: {
+                    Image("GitHubMark")
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 16, height: 16)
                 }
+                .help(appState.isLoggedIn ? "Manage GitHub Repos" : "Connect GitHub")
+            }
+
+            ToolbarItem(placement: .navigation) {
+                Button {
+                    showFilePicker = true
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .help("Add Project")
+                .fileImporter(
+                    isPresented: $showFilePicker,
+                    allowedContentTypes: [.folder],
+                    allowsMultipleSelection: false
+                ) { result in
+                    handleFolderSelection(result)
+                }
+            }
+
+            ToolbarItem(placement: .navigation) {
+                Button {
+                    windowState.showGlobalSearch = true
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                }
+                .help("Search Threads (⌘K)")
+            }
+
+            ToolbarItem(placement: .navigation) {
+                ThreadTitlePopoverButton(title: navigationTitleText)
             }
         }
     }
@@ -183,7 +213,7 @@ struct MainView: View {
             ProjectTreeView()
         }
         .background(ClaudeTheme.sidebarBackground.ignoresSafeArea())
-        .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 360)
+        .navigationSplitViewColumnWidth(min: 300, ideal: 320, max: 400)
         .sheet(isPresented: $showGitHubSheet) {
             GitHubSheet()
         }
@@ -234,6 +264,13 @@ struct MainView: View {
             )
             .frame(minWidth: 1000, idealWidth: 1400, maxWidth: 1920,
                    minHeight: 600, idealHeight: 1000, maxHeight: 1200)
+        }
+        .sheet(isPresented: Bindable(windowState).showRunConfigurations) {
+            if let project = windowState.selectedProject {
+                RunConfigurationsView(project: project)
+                    .environment(appState)
+                    .environment(windowState)
+            }
         }
         .alert("Error", isPresented: Bindable(windowState).showError) {
             Button("OK", role: .cancel) {}
@@ -799,13 +836,6 @@ struct ChatDetailModifiers: ViewModifier {
             }
             .sheet(item: Bindable(windowState).interactiveTerminal) { terminal in
                 InteractiveTerminalPopup(state: terminal)
-            }
-            .sheet(isPresented: Bindable(windowState).showRunConfigurations) {
-                if let project = windowState.selectedProject {
-                    RunConfigurationsView(project: project)
-                        .environment(appState)
-                        .environment(windowState)
-                }
             }
     }
 }

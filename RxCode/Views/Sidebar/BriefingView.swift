@@ -1,6 +1,7 @@
 import SwiftUI
 import Foundation
 import RxCodeCore
+import WaterfallGrid
 
 struct BriefingView: View {
     @Environment(AppState.self) private var appState
@@ -8,6 +9,19 @@ struct BriefingView: View {
 
     /// Selected project ids for filtering. Empty = show every project.
     @State private var selectedProjectIds: Set<UUID> = []
+
+    /// When false (default), only show briefings for each project's current branch.
+    @State private var showAllBranches: Bool = false
+
+    /// Cached current branch per project path, refreshed when the project list changes.
+    @State private var currentBranchByProject: [UUID: String] = [:]
+    @State private var branchRefreshTask: Task<Void, Never>?
+
+    /// Group id whose copy button most recently fired; used for transient checkmark feedback.
+    @State private var recentlyCopiedGroupId: String?
+
+    /// Container width tracked from the scroll content; drives the waterfall column count.
+    @State private var availableWidth: CGFloat = 800
 
     private struct BriefingGroup: Identifiable {
         let projectId: UUID
@@ -65,10 +79,24 @@ struct BriefingView: View {
             }
             .sorted { $0.updatedAt > $1.updatedAt }
 
+        let projectFiltered: [BriefingGroup]
         if selectedProjectIds.isEmpty {
-            return all
+            projectFiltered = all
+        } else {
+            projectFiltered = all.filter { selectedProjectIds.contains($0.projectId) }
         }
-        return all.filter { selectedProjectIds.contains($0.projectId) }
+
+        if showAllBranches {
+            return projectFiltered
+        }
+        return projectFiltered.filter { group in
+            guard let branch = currentBranchByProject[group.projectId] else {
+                // Branch not yet resolved — keep the group so the user isn't shown
+                // an empty state while git is still being queried.
+                return true
+            }
+            return group.branch == branch
+        }
     }
 
     /// Projects that actually have at least one briefing or summary recorded.
@@ -84,18 +112,48 @@ struct BriefingView: View {
 
     var body: some View {
         Group {
-            if groups.isEmpty {
+            if hasAnyData {
+                content
+            } else {
                 emptyState(
                     icon: "text.page",
                     title: "No Briefings Yet",
                     message: "Briefings appear after a thread finishes on a project branch."
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                content
             }
         }
         .background(ClaudeTheme.background)
+        .task(id: projectPathsKey) {
+            await refreshCurrentBranches()
+        }
+    }
+
+    /// True when there is at least one briefing or thread summary persisted, regardless
+    /// of the active filters. Used to decide whether the filter bar should be shown.
+    private var hasAnyData: Bool {
+        _ = appState.branchBriefingRevision
+        _ = appState.threadSummaryRevision
+        return !appState.threadStore.allBranchBriefingItems().isEmpty
+            || !appState.threadStore.allThreadSummaryItems().isEmpty
+    }
+
+    private var projectPathsKey: String {
+        appState.projects
+            .map { "\($0.id.uuidString):\($0.path)" }
+            .joined(separator: "|")
+    }
+
+    private func refreshCurrentBranches() async {
+        var resolved: [UUID: String] = [:]
+        for project in appState.projects {
+            if let branch = await GitHelper.currentBranch(at: project.path) {
+                resolved[project.id] = branch
+            }
+        }
+        await MainActor.run {
+            currentBranchByProject = resolved
+        }
     }
 
     private var content: some View {
@@ -104,14 +162,10 @@ struct BriefingView: View {
                 hero
                 filterBar
 
-                LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 380, maximum: 560), spacing: 16, alignment: .top)],
-                    alignment: .leading,
-                    spacing: 16
-                ) {
-                    ForEach(groups) { group in
-                        groupCard(group)
-                    }
+                if groups.isEmpty {
+                    filteredEmptyState
+                } else {
+                    waterfall
                 }
             }
             .padding(.horizontal, 28)
@@ -119,7 +173,40 @@ struct BriefingView: View {
             .padding(.bottom, 40)
             .frame(maxWidth: 1400, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .topLeading)
+            .background(
+                GeometryReader { proxy in
+                    Color.clear
+                        .onChange(of: proxy.size.width, initial: true) { _, newValue in
+                            availableWidth = newValue
+                        }
+                }
+            )
         }
+    }
+
+    private var waterfall: some View {
+        WaterfallGrid(groups) { group in
+            groupCard(group)
+        }
+        .gridStyle(
+            columns: max(1, min(4, Int(availableWidth / 420))),
+            spacing: 16,
+            animation: .easeInOut(duration: 0.25)
+        )
+        .scrollOptions(direction: .vertical)
+    }
+
+    private var filteredEmptyState: some View {
+        let message = showAllBranches
+            ? "No briefings match the selected projects."
+            : "No briefings for the current branch. Switch to All branches to see other branches."
+        return emptyState(
+            icon: "line.3.horizontal.decrease.circle",
+            title: "Nothing to Show",
+            message: message
+        )
+        .frame(maxWidth: .infinity)
+        .padding(.top, 24)
     }
 
     // MARK: - Hero
@@ -165,9 +252,62 @@ struct BriefingView: View {
 
     private var filterBar: some View {
         let projects = projectsWithData
-        return Group {
-            if projects.count > 1 {
-                Menu {
+        return HStack(spacing: 8) {
+            branchScopeChip
+            projectFilterMenu(projects: projects)
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var branchScopeChip: some View {
+        Menu {
+            Button {
+                showAllBranches = false
+            } label: {
+                Label("Current branch", systemImage: showAllBranches ? "" : "checkmark")
+            }
+            Button {
+                showAllBranches = true
+            } label: {
+                Label("All branches", systemImage: showAllBranches ? "checkmark" : "")
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: showAllBranches ? "arrow.triangle.branch" : "arrow.triangle.branch.fill")
+                    .font(.system(size: 11, weight: .semibold))
+                Text(showAllBranches ? "All branches" : "Current branch")
+                    .font(.system(size: 11, weight: .semibold))
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+            }
+            .foregroundStyle(showAllBranches ? ClaudeTheme.textOnAccent : ClaudeTheme.textSecondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(showAllBranches ? ClaudeTheme.accent : ClaudeTheme.surfaceSecondary)
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .strokeBorder(
+                        showAllBranches
+                            ? ClaudeTheme.accent.opacity(0.4)
+                            : ClaudeTheme.border.opacity(0.6),
+                        lineWidth: 0.5
+                    )
+            )
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Choose which branches to show briefings for.")
+    }
+
+    @ViewBuilder
+    private func projectFilterMenu(projects: [Project]) -> some View {
+        if projects.count > 1 {
+            Menu {
                     Button {
                         selectedProjectIds.removeAll()
                     } label: {
@@ -215,7 +355,6 @@ struct BriefingView: View {
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
                 .fixedSize()
-            }
         }
     }
 
@@ -295,10 +434,74 @@ struct BriefingView: View {
 
             Spacer(minLength: 0)
 
+            copyButton(for: group)
+
             if let project {
                 cardMenu(for: project)
             }
         }
+    }
+
+    private func copyButton(for group: BriefingGroup) -> some View {
+        let copied = recentlyCopiedGroupId == group.id
+        return Button {
+            copyBriefing(group)
+        } label: {
+            Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(copied ? ClaudeTheme.accent : ClaudeTheme.textSecondary)
+                .frame(width: 24, height: 22)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(ClaudeTheme.surfaceSecondary)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .strokeBorder(ClaudeTheme.border.opacity(0.6), lineWidth: 0.5)
+                )
+                .contentTransition(.symbolEffect(.replace))
+        }
+        .buttonStyle(.plain)
+        .help(copied ? "Copied" : "Copy briefing text")
+        .disabled(group.briefing == nil && group.threadSummaries.isEmpty)
+    }
+
+    private func copyBriefing(_ group: BriefingGroup) {
+        let text = renderBriefingText(group)
+        guard !text.isEmpty else { return }
+
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+
+        let id = group.id
+        recentlyCopiedGroupId = id
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            if recentlyCopiedGroupId == id {
+                recentlyCopiedGroupId = nil
+            }
+        }
+    }
+
+    private func renderBriefingText(_ group: BriefingGroup) -> String {
+        var lines: [String] = []
+        let projectName = projectsById[group.projectId]?.name ?? "Unknown project"
+        lines.append("# \(projectName) — \(group.branch)")
+        lines.append("")
+
+        if let briefing = group.briefing {
+            lines.append(briefing.briefing.trimmingCharacters(in: .whitespacesAndNewlines))
+            lines.append("")
+        }
+
+        if !group.threadSummaries.isEmpty {
+            lines.append("## Threads")
+            for thread in group.threadSummaries {
+                lines.append("- \(thread.title)")
+            }
+        }
+
+        return lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func cardMenu(for project: Project) -> some View {

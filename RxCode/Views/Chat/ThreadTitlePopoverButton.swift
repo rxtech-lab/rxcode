@@ -26,26 +26,29 @@ struct ThreadTitlePopoverButton: View {
 
     var body: some View {
         let hasSummary = !trimmedSummary.isEmpty
-        Button {
-            if hasSummary { showingPopover.toggle() }
-        } label: {
-            HStack(spacing: 4) {
-                Text(title)
-                    .foregroundStyle(ClaudeTheme.textPrimary)
-                if hasSummary {
+        if hasSummary {
+            Button {
+                showingPopover.toggle()
+            } label: {
+                HStack(spacing: 4) {
+                    Text(title)
+                        .foregroundStyle(ClaudeTheme.textPrimary)
                     Image(systemName: "chevron.down")
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(ClaudeTheme.textTertiary)
                 }
+                .padding(.trailing)
+                .contentShape(Rectangle())
             }
-            .padding(.trailing)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(!hasSummary)
-        .help(hasSummary ? "Show thread summary" : "")
-        .popover(isPresented: $showingPopover, arrowEdge: .bottom) {
-            ThreadSummaryPopoverContent(item: summaryItem)
+            .buttonStyle(.plain)
+            .help("Show thread summary")
+            .popover(isPresented: $showingPopover, arrowEdge: .bottom) {
+                ThreadSummaryPopoverContent(item: summaryItem)
+            }
+        } else {
+            Text(title)
+                .foregroundStyle(ClaudeTheme.textPrimary)
+                .padding(.trailing)
         }
     }
 }

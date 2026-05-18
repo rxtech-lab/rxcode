@@ -672,7 +672,7 @@ struct ChatSettingsTab: View {
                 .foregroundStyle(.secondary)
 
             Picker("Provider", selection: $appState.summarizationProvider) {
-                ForEach(SummarizationProvider.allCases) { provider in
+                ForEach(SummarizationProvider.availableCases) { provider in
                     Text(provider.displayName).tag(provider)
                 }
             }
@@ -690,6 +690,22 @@ struct ChatSettingsTab: View {
                     .foregroundStyle(.secondary)
             case .openAI:
                 openAISummarizationForm
+            case .appleFoundationModel:
+                appleFoundationModelStatus
+            }
+        }
+    }
+
+    private var appleFoundationModelStatus: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Runs on-device with Apple Intelligence. Private, free, and offline.")
+                .font(.system(size: ClaudeTheme.size(11)))
+                .foregroundStyle(.secondary)
+            if let reason = FoundationModelSummarizationService.unavailabilityReason {
+                Text(reason)
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(ClaudeTheme.statusError)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

@@ -97,6 +97,7 @@ struct SessionStreamState {
 enum SummarizationProvider: String, CaseIterable, Identifiable {
     case selectedClient
     case openAI
+    case appleFoundationModel
 
     var id: String { rawValue }
 
@@ -104,6 +105,22 @@ enum SummarizationProvider: String, CaseIterable, Identifiable {
         switch self {
         case .selectedClient: return "Thread Model"
         case .openAI: return "OpenAI-Compatible Endpoint"
+        case .appleFoundationModel: return "Apple Foundation Model"
+        }
+    }
+
+    /// Returns the providers that should be offered to the user right now.
+    /// Apple Foundation Model is hidden when the device doesn't support it
+    /// (non-Apple-Silicon Mac, Apple Intelligence disabled, etc.).
+    @MainActor
+    static var availableCases: [SummarizationProvider] {
+        allCases.filter { provider in
+            switch provider {
+            case .appleFoundationModel:
+                return FoundationModelSummarizationService.isAvailable
+            case .selectedClient, .openAI:
+                return true
+            }
         }
     }
 }
@@ -430,7 +447,13 @@ final class AppState {
 
     // MARK: - Summarization
 
-    var summarizationProvider: SummarizationProvider = .init(rawValue: UserDefaults.standard.string(forKey: "summarizationProvider") ?? "") ?? .selectedClient {
+    var summarizationProvider: SummarizationProvider = {
+        let stored = SummarizationProvider(rawValue: UserDefaults.standard.string(forKey: "summarizationProvider") ?? "") ?? .selectedClient
+        if stored == .appleFoundationModel, !FoundationModelSummarizationService.isAvailable {
+            return .selectedClient
+        }
+        return stored
+    }() {
         didSet { UserDefaults.standard.set(summarizationProvider.rawValue, forKey: "summarizationProvider") }
     }
 
@@ -891,6 +914,7 @@ final class AppState {
     let acp: ACPService
     let acpRegistryService = ACPRegistryService()
     let openAISummarization = OpenAISummarizationService()
+    let foundationModelSummarization = FoundationModelSummarizationService()
     let persistence: PersistenceService
     let marketplace = MarketplaceService()
     let mcp: MCPService
@@ -3776,6 +3800,8 @@ final class AppState {
                 apiKey: openAISummarizationAPIKey,
                 model: openAISummarizationModel
             )
+        case .appleFoundationModel:
+            return await foundationModelSummarization.generateSessionTitle(firstUserMessage: firstUserMessage)
         }
     }
 
@@ -3796,6 +3822,8 @@ final class AppState {
                 apiKey: openAISummarizationAPIKey,
                 model: openAISummarizationModel
             )
+        case .appleFoundationModel:
+            return await foundationModelSummarization.generateResponseNotificationSummary(responseText: trimmedResponse)
         }
     }
 
@@ -3894,6 +3922,12 @@ final class AppState {
                 apiKey: openAISummarizationAPIKey,
                 model: openAISummarizationModel
             )
+        case .appleFoundationModel:
+            return await foundationModelSummarization.generateThreadSummary(
+                previousSummary: previousSummary,
+                userMessage: userMessage,
+                finalResponse: finalResponse
+            )
         }
     }
 
@@ -3919,6 +3953,8 @@ final class AppState {
                 apiKey: openAISummarizationAPIKey,
                 model: openAISummarizationModel
             )
+        case .appleFoundationModel:
+            return await foundationModelSummarization.generateBranchBriefing(threadSummaries: threadSummaries)
         }
     }
 

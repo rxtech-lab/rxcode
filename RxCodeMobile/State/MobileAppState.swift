@@ -3,6 +3,8 @@ import Combine
 import CryptoKit
 import RxCodeCore
 import RxCodeSync
+import UIKit
+import os.log
 
 /// Single source of truth for the mobile app. Owns the `SyncClient`, the
 /// decoded projects/sessions/messages mirrored from the paired desktop, and
@@ -24,12 +26,16 @@ final class MobileAppState: ObservableObject {
 
     @Published var projects: [Project] = []
     @Published var sessions: [SessionSummary] = []
+    @Published var branchBriefings: [MobileBranchBriefing] = []
+    @Published var threadSummaries: [MobileThreadSummary] = []
+    @Published var desktopSettings: MobileSettingsSnapshot?
     @Published var messagesBySession: [String: [ChatMessage]] = [:]
     @Published var activeSessionID: String?
     @Published var pendingPermission: PermissionRequestPayload?
 
     private let identity: DeviceIdentity
-    private let client: SyncClient
+    private var client: SyncClient
+    private let logger = Logger(subsystem: "com.idealapp.RxCodeMobile", category: "MobileAppState")
     private var eventTask: Task<Void, Never>?
     private var pairingTimeoutTask: Task<Void, Never>?
     private var apnsTokenHex: String?
@@ -81,24 +87,28 @@ final class MobileAppState: ObservableObject {
 
     func start() {
         Task { @MainActor in
-            if !pairedDesktopPubkey.isEmpty {
-                try? await client.addPeer(pairedDesktopPubkey)
+            await startClient()
+        }
+    }
+
+    private func startClient() async {
+        if !pairedDesktopPubkey.isEmpty {
+            try? await client.addPeer(pairedDesktopPubkey)
+        }
+        let events = await client.events()
+        eventTask?.cancel()
+        eventTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            for await event in events {
+                self.handle(event)
             }
-            await client.start()
-            let events = await client.events()
-            eventTask?.cancel()
-            eventTask = Task { @MainActor [weak self] in
-                guard let self else { return }
-                for await event in events {
-                    self.handle(event)
-                }
-            }
-            // Re-request snapshot on every (re)start so we don't show stale state.
-            if isPaired {
-                let payload = RequestSnapshotPayload(activeSessionID: activeSessionID)
-                try? await client.send(.requestSnapshot(payload), toHex: pairedDesktopPubkey)
-                await reportAPNsTokenIfPending()
-            }
+        }
+        await client.start()
+        // Re-request snapshot on every (re)start so we don't show stale state.
+        if isPaired {
+            let payload = RequestSnapshotPayload(activeSessionID: activeSessionID)
+            try? await client.send(.requestSnapshot(payload), toHex: pairedDesktopPubkey)
+            await reportAPNsTokenIfPending()
         }
     }
 
@@ -107,16 +117,23 @@ final class MobileAppState: ObservableObject {
     func pair(with token: PairingToken, displayName: String) async {
         guard !token.isExpired,
               let desktopKey = token.desktopPublicKey else {
-            pairingStatus = .failed("Invalid or expired pairing code.")
+            failPairing("Invalid or expired pairing code.")
             return
         }
         pairingStatus = .inProgress
         let desktopHex = token.desktopPubkeyHex
-        try? await client.addPeer(desktopHex)
+        logger.info("pairing with relayURL=\(token.relayURL, privacy: .public)")
         // Persist the relay URL we just learned from the QR.
         if let url = URL(string: token.relayURL) {
-            UserDefaults.standard.set(url.absoluteString, forKey: "mobileSync.relayURL")
-            relayURL = url
+            await updateRelayForPairingIfNeeded(url)
+        } else {
+            logger.error("pairing token has invalid relayURL=\(token.relayURL, privacy: .public)")
+        }
+        try? await client.addPeer(desktopHex)
+        guard await waitForRelayConnection() else {
+            logger.error("pairing relay connection timed out relay=\(self.relayURL.absoluteString, privacy: .public)")
+            failPairing("Couldn't connect to the relay from the QR code. Check the relay address and try again.")
+            return
         }
         let req = PairRequestPayload(
             mobilePubkeyHex: identity.publicKeyHex,
@@ -125,13 +142,54 @@ final class MobileAppState: ObservableObject {
             appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
         )
         do {
+            logger.info("sending pair request via relay=\(self.relayURL.absoluteString, privacy: .public)")
             try await client.send(.pairRequest(req), toHex: desktopHex)
         } catch {
-            pairingStatus = .failed("Couldn't reach the relay. Check your network and try again.")
+            logger.error("pair request send failed: \(error.localizedDescription, privacy: .public)")
+            failPairing("Couldn't reach the relay. Check your network and try again.")
             return
         }
         _ = desktopKey  // silence unused
         startPairingTimeout()
+    }
+
+    func pair(from url: URL, displayName: String) async {
+        do {
+            let token = try PairingToken.parse(url.absoluteString)
+            await pair(with: token, displayName: displayName)
+        } catch {
+            logger.error("pairing deeplink parse failed: \(error.localizedDescription, privacy: .public)")
+            failPairing("Unrecognized pairing link. Generate a new QR code on your Mac.")
+        }
+    }
+
+    private func updateRelayForPairingIfNeeded(_ url: URL) async {
+        UserDefaults.standard.set(url.absoluteString, forKey: "mobileSync.relayURL")
+        guard url != relayURL else {
+            logger.info("pairing relay already configured as \(url.absoluteString, privacy: .public)")
+            return
+        }
+
+        logger.info("switching pairing relay to \(url.absoluteString, privacy: .public)")
+        let oldClient = client
+        eventTask?.cancel()
+        eventTask = nil
+        client = SyncClient(identity: identity, relayURL: url)
+        relayURL = url
+        connectionState = .disconnected
+        await oldClient.stop()
+        await startClient()
+    }
+
+    private func waitForRelayConnection(timeoutSeconds: Double = 8) async -> Bool {
+        logger.info("waiting for relay connection state=\(String(describing: self.connectionState), privacy: .public) relay=\(self.relayURL.absoluteString, privacy: .public)")
+        if connectionState == .connected { return true }
+        let deadline = Date().addingTimeInterval(timeoutSeconds)
+        while Date() < deadline {
+            try? await Task.sleep(nanoseconds: 100_000_000)
+            if connectionState == .connected { return true }
+        }
+        return false
     }
 
     func cancelPairing() {
@@ -153,7 +211,7 @@ final class MobileAppState: ObservableObject {
             await MainActor.run {
                 guard let self else { return }
                 guard !self.isPaired else { return }
-                self.pairingStatus = .failed(
+                self.failPairing(
                     "Your Mac didn't respond. Make sure RxCode is open and connected, then try again."
                 )
             }
@@ -192,6 +250,16 @@ final class MobileAppState: ObservableObject {
         pendingPermission = nil
     }
 
+    func updateDesktopSettings(_ update: MobileSettingsUpdatePayload) async {
+        guard isPaired else { return }
+        applySettingsUpdateLocally(update)
+        try? await client.send(.settingsUpdate(update), toHex: pairedDesktopPubkey)
+    }
+
+    func refreshSnapshot() async {
+        await requestSnapshot()
+    }
+
     func reportAPNsToken(hex: String, environment: String) {
         apnsTokenHex = hex
         apnsEnvironment = environment
@@ -199,12 +267,28 @@ final class MobileAppState: ObservableObject {
     }
 
     func unpair() async {
-        if !pairedDesktopPubkey.isEmpty {
-            await client.removePeer(pairedDesktopPubkey)
+        let desktopHex = pairedDesktopPubkey
+        if !desktopHex.isEmpty {
+            try? await client.send(.unpair(UnpairPayload(reason: "mobile")), toHex: desktopHex)
+        }
+        await clearPairing(removePeerHex: desktopHex)
+    }
+
+    private func clearPairing(removePeerHex hex: String?) async {
+        if let hex, !hex.isEmpty {
+            await client.removePeer(hex)
         }
         pairedDesktopPubkey = ""
         pairedDesktopName = ""
         isPaired = false
+        projects = []
+        sessions = []
+        branchBriefings = []
+        threadSummaries = []
+        desktopSettings = nil
+        messagesBySession = [:]
+        activeSessionID = nil
+        pendingPermission = nil
         savePairedDesktop()
         try? DeviceIdentity.reset(
             accessGroup: Self.keychainAccessGroup
@@ -216,7 +300,10 @@ final class MobileAppState: ObservableObject {
     private func handle(_ event: RelayClient.Event) {
         switch event {
         case .stateChanged(let state):
+            logger.info("relay connection state changed: \(String(describing: state), privacy: .public)")
+            let previous = connectionState
             connectionState = state
+            triggerConnectionFeedback(from: previous, to: state)
             if case .connected = state, isPaired {
                 Task { await self.requestSnapshot() }
             }
@@ -237,6 +324,7 @@ final class MobileAppState: ObservableObject {
                 pairedDesktopName = ack.desktopName
                 isPaired = true
                 pairingStatus = .idle
+                MobileHaptics.connected()
                 savePairedDesktop()
                 Task {
                     await self.requestSnapshot()
@@ -244,11 +332,17 @@ final class MobileAppState: ObservableObject {
                 }
             } else {
                 isPaired = false
-                pairingStatus = .failed("Your Mac declined the pairing request.")
+                failPairing("Your Mac declined the pairing request.")
             }
+        case .unpair:
+            guard inbound.fromHex == pairedDesktopPubkey else { return }
+            Task { await self.clearPairing(removePeerHex: inbound.fromHex) }
         case .snapshot(let snap):
             projects = snap.projects
             sessions = snap.sessions
+            branchBriefings = snap.branchBriefings ?? []
+            threadSummaries = snap.threadSummaries ?? []
+            desktopSettings = snap.settings
             if let active = snap.activeSessionID, let messages = snap.activeSessionMessages {
                 messagesBySession[active] = messages
                 activeSessionID = active
@@ -293,12 +387,63 @@ final class MobileAppState: ObservableObject {
         try? await client.send(.requestSnapshot(payload), toHex: pairedDesktopPubkey)
     }
 
+    private func failPairing(_ message: String) {
+        pairingStatus = .failed(message)
+        MobileHaptics.connectionError()
+    }
+
+    private func triggerConnectionFeedback(
+        from previous: RelayClient.ConnectionState,
+        to next: RelayClient.ConnectionState
+    ) {
+        guard previous != next else { return }
+        guard isPaired, pairingStatus != .inProgress else { return }
+
+        switch next {
+        case .connected:
+            if case .reconnecting = previous {
+                MobileHaptics.connected()
+            }
+        case .reconnecting:
+            if previous == .connected {
+                MobileHaptics.connectionError()
+            }
+        case .disconnected:
+            if previous == .connected {
+                MobileHaptics.connectionError()
+            }
+        case .connecting:
+            break
+        }
+    }
+
     private func reportAPNsTokenIfPending() async {
         guard isPaired,
               let tokenHex = apnsTokenHex,
               let env = apnsEnvironment else { return }
         let payload = APNsTokenPayload(tokenHex: tokenHex, environment: env)
         try? await client.send(.apnsToken(payload), toHex: pairedDesktopPubkey)
+    }
+
+    private func applySettingsUpdateLocally(_ update: MobileSettingsUpdatePayload) {
+        guard let current = desktopSettings else { return }
+        desktopSettings = MobileSettingsSnapshot(
+            selectedAgentProvider: update.selectedAgentProvider ?? current.selectedAgentProvider,
+            selectedModel: update.selectedModel ?? current.selectedModel,
+            selectedACPClientId: update.selectedACPClientId ?? current.selectedACPClientId,
+            selectedEffort: update.selectedEffort ?? current.selectedEffort,
+            permissionMode: update.permissionMode ?? current.permissionMode,
+            summarizationProvider: current.summarizationProvider,
+            summarizationProviderDisplayName: current.summarizationProviderDisplayName,
+            openAISummarizationEndpoint: current.openAISummarizationEndpoint,
+            openAISummarizationModel: current.openAISummarizationModel,
+            notificationsEnabled: update.notificationsEnabled ?? current.notificationsEnabled,
+            focusMode: update.focusMode ?? current.focusMode,
+            autoArchiveEnabled: update.autoArchiveEnabled ?? current.autoArchiveEnabled,
+            archiveRetentionDays: update.archiveRetentionDays ?? current.archiveRetentionDays,
+            autoPreviewSettings: update.autoPreviewSettings ?? current.autoPreviewSettings,
+            availableEfforts: current.availableEfforts
+        )
     }
 
     // MARK: - Persistence
@@ -315,6 +460,21 @@ final class MobileAppState: ObservableObject {
     }
 }
 
-#if canImport(UIKit)
-import UIKit
-#endif
+@MainActor
+enum MobileHaptics {
+    static func buttonTap() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+
+    static func qrScanned() {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+    }
+
+    static func connected() {
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+    }
+
+    static func connectionError() {
+        UINotificationFeedbackGenerator().notificationOccurred(.error)
+    }
+}

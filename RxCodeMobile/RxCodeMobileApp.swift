@@ -13,6 +13,20 @@ struct RxCodeMobileApp: App {
                     appDelegate.mobileState = state
                     state.start()
                 }
+                .onOpenURL { url in
+                    handlePairingURL(url)
+                }
+                .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+                    guard let url = activity.webpageURL else { return }
+                    handlePairingURL(url)
+                }
+        }
+    }
+
+    private func handlePairingURL(_ url: URL) {
+        MobileHaptics.buttonTap()
+        Task {
+            await state.pair(from: url, displayName: UIDevice.current.name)
         }
     }
 }

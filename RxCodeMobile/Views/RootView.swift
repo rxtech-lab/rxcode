@@ -7,6 +7,7 @@ struct RootView: View {
     @EnvironmentObject private var state: MobileAppState
     @State private var selectedProject: UUID?
     @State private var selectedSession: String?
+    @State private var showingBriefing = true
     @State private var showSettings = false
 
     var body: some View {
@@ -25,7 +26,7 @@ struct RootView: View {
 
     private var paired: some View {
         NavigationSplitView {
-            ProjectsSidebar(selected: $selectedProject)
+            ProjectsSidebar(selected: $selectedProject, showingBriefing: $showingBriefing)
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button { showSettings = true } label: {
@@ -34,14 +35,16 @@ struct RootView: View {
                     }
                 }
         } content: {
-            if let projectID = selectedProject {
+            if showingBriefing {
+                MobileBriefingView()
+            } else if let projectID = selectedProject {
                 SessionsList(projectID: projectID, selected: $selectedSession)
             } else {
                 Text("Select a project")
                     .foregroundStyle(.secondary)
             }
         } detail: {
-            if let sessionID = selectedSession {
+            if !showingBriefing, let sessionID = selectedSession {
                 MobileChatView(sessionID: sessionID)
                     .id(sessionID)
             } else {
@@ -56,6 +59,11 @@ struct RootView: View {
         }
         .onChange(of: selectedSession) { _, newValue in
             Task { await state.subscribe(to: newValue) }
+        }
+        .onChange(of: selectedProject) { _, newValue in
+            if newValue != nil {
+                showingBriefing = false
+            }
         }
     }
 }

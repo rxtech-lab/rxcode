@@ -184,11 +184,12 @@ final class MobileSyncService: ObservableObject {
         pairingContinuation = nil
     }
 
-    /// Remove a paired device. The mobile loses access immediately on the
-    /// next message — desktop simply forgets its pubkey.
+    /// Remove a paired device and notify it before forgetting its pubkey.
     func unpair(_ device: PairedDevice) async {
+        try? await client.send(.unpair(UnpairPayload(reason: "desktop")), toHex: device.pubkeyHex)
         pairedDevices.removeAll { $0.pubkeyHex == device.pubkeyHex }
         savePairedDevices()
+        subscribedSessions.removeValue(forKey: device.pubkeyHex)
         await client.removePeer(device.pubkeyHex)
     }
 
@@ -241,6 +242,8 @@ final class MobileSyncService: ObservableObject {
         case .pairRequest(let req):
             pendingPairing = req
             Task { try? await client.addPeer(req.mobilePubkeyHex) }
+        case .unpair:
+            handleRemoteUnpair(pubkeyHex: inbound.fromHex)
         case .apnsToken(let t):
             if let idx = pairedDevices.firstIndex(where: { $0.pubkeyHex == inbound.fromHex }) {
                 pairedDevices[idx].apnsToken = t.tokenHex
@@ -248,13 +251,21 @@ final class MobileSyncService: ObservableObject {
                 pairedDevices[idx].lastSeen = .now
                 savePairedDevices()
             }
-        case .requestSnapshot:
+        case .requestSnapshot(let req):
             // AppState owns the data; it observes pendingSnapshotRequests
             // and replies. Stub for now — wired up by AppState bridge.
+            var userInfo: [String: Any] = ["from": inbound.fromHex]
+            userInfo["activeSessionID"] = req.activeSessionID
             NotificationCenter.default.post(
                 name: .mobileSyncSnapshotRequested,
                 object: nil,
-                userInfo: ["from": inbound.fromHex]
+                userInfo: userInfo
+            )
+        case .settingsUpdate(let update):
+            NotificationCenter.default.post(
+                name: .mobileSyncSettingsUpdateReceived,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": update]
             )
         case .userMessage(let msg):
             NotificationCenter.default.post(
@@ -270,6 +281,13 @@ final class MobileSyncService: ObservableObject {
             )
         case .subscribeSession(let sub):
             subscribedSessions[inbound.fromHex] = sub.sessionID ?? ""
+            var userInfo: [String: Any] = ["from": inbound.fromHex]
+            userInfo["activeSessionID"] = sub.sessionID
+            NotificationCenter.default.post(
+                name: .mobileSyncSnapshotRequested,
+                object: nil,
+                userInfo: userInfo
+            )
         case .permissionResponse(let resp):
             NotificationCenter.default.post(
                 name: .mobileSyncPermissionResponse,
@@ -281,6 +299,19 @@ final class MobileSyncService: ObservableObject {
         default:
             break
         }
+    }
+
+    private func handleRemoteUnpair(pubkeyHex: String) {
+        guard pairedDevices.contains(where: { $0.pubkeyHex == pubkeyHex }) else {
+            Task { await client.removePeer(pubkeyHex) }
+            return
+        }
+
+        pairedDevices.removeAll { $0.pubkeyHex == pubkeyHex }
+        savePairedDevices()
+        subscribedSessions.removeValue(forKey: pubkeyHex)
+        logger.info("[MobileSync] removed paired device after remote unpair")
+        Task { await client.removePeer(pubkeyHex) }
     }
 
     /// Send a payload to a single peer (used by AppState when replying to
@@ -319,5 +350,6 @@ extension Notification.Name {
     static let mobileSyncSnapshotRequested = Notification.Name("mobileSync.snapshotRequested")
     static let mobileSyncUserMessageReceived = Notification.Name("mobileSync.userMessageReceived")
     static let mobileSyncNewSessionRequested = Notification.Name("mobileSync.newSessionRequested")
+    static let mobileSyncSettingsUpdateReceived = Notification.Name("mobileSync.settingsUpdateReceived")
     static let mobileSyncPermissionResponse = Notification.Name("mobileSync.permissionResponse")
 }

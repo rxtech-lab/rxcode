@@ -1,7 +1,7 @@
 import Foundation
 
 /// Per-type flags that control whether pasted content is auto-converted to an attachment preview chip.
-public struct AttachmentAutoPreviewSettings: Codable, Sendable {
+public struct AttachmentAutoPreviewSettings: Codable, Sendable, Equatable {
     public var url: Bool = true
     public var filePath: Bool = true
     public var image: Bool = true

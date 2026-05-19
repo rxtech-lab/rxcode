@@ -145,6 +145,7 @@ private struct PairingSheet: View {
     @ObservedObject var sync: MobileSyncService
     @State private var token: PairingToken?
     @State private var qrImage: NSImage?
+    @State private var autoReloadTask: Task<Void, Never>?
 
     var body: some View {
         VStack(spacing: 18) {
@@ -172,13 +173,30 @@ private struct PairingSheet: View {
         .frame(width: 360)
         .padding(24)
         .onAppear { startPairing() }
+        .onDisappear {
+            autoReloadTask?.cancel()
+            autoReloadTask = nil
+        }
     }
 
     private func startPairing() {
+        autoReloadTask?.cancel()
         let fresh = sync.beginPairing()
         token = fresh
+        qrImage = nil
         if let qrString = try? fresh.qrString() {
             qrImage = generateQRCode(from: qrString)
+        }
+        scheduleAutoReload(for: fresh)
+    }
+
+    private func scheduleAutoReload(for token: PairingToken) {
+        autoReloadTask = Task { @MainActor in
+            let delay = max(0, token.expiresAt.timeIntervalSinceNow)
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            guard sync.pendingPairing == nil else { return }
+            startPairing()
         }
     }
 
@@ -196,6 +214,12 @@ private struct PairingSheet: View {
             if let token {
                 expirationLabel(for: token)
             }
+            Button {
+                startPairing()
+            } label: {
+                Label("Force reload", systemImage: "arrow.clockwise")
+            }
+            .buttonStyle(.bordered)
         }
     }
 
@@ -211,7 +235,7 @@ private struct PairingSheet: View {
                 .font(.caption)
                 .foregroundStyle(remaining < 30 ? Color.red : Color.secondary)
             } else {
-                Text("Expired — close and reopen to regenerate")
+                Text("Expired — generating a new QR code")
                     .font(.caption)
                     .foregroundStyle(.red)
             }

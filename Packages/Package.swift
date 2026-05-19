@@ -48,5 +48,10 @@ let package = Package(
             ],
             path: "Tests/RxCodeChatKitTests"
         ),
+        .testTarget(
+            name: "RxCodeSyncTests",
+            dependencies: ["RxCodeSync"],
+            path: "Tests/RxCodeSyncTests"
+        ),
     ]
 )

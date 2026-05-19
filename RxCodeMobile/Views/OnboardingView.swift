@@ -52,12 +52,14 @@ struct OnboardingView: View {
             titleVisibility: .visible
         ) {
             Button {
+                MobileHaptics.buttonTap()
                 showScanner = true
             } label: {
                 Label("Scan with Camera", systemImage: "camera.viewfinder")
             }
 
             Button {
+                MobileHaptics.buttonTap()
                 // Trigger photo picker by toggling state in next runloop tick
                 // so the dialog can dismiss first.
                 DispatchQueue.main.async { presentPhotoPicker() }
@@ -85,6 +87,7 @@ struct OnboardingView: View {
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
                         Button {
+                            MobileHaptics.buttonTap()
                             showScanner = false
                         } label: {
                             Image(systemName: "xmark")
@@ -204,6 +207,7 @@ struct OnboardingView: View {
 
     private var scanButton: some View {
         Button {
+            MobileHaptics.buttonTap()
             showScanOptions = true
         } label: {
             Label("Scan QR Code", systemImage: "qrcode.viewfinder")
@@ -225,6 +229,7 @@ struct OnboardingView: View {
                 .foregroundStyle(.primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button {
+                MobileHaptics.buttonTap()
                 pairingError = nil
                 state.dismissPairingError()
             } label: {
@@ -261,6 +266,7 @@ struct OnboardingView: View {
                         .multilineTextAlignment(.center)
                 }
                 Button {
+                    MobileHaptics.buttonTap()
                     onboardingLogger.info("user cancelled pairing")
                     state.cancelPairing()
                 } label: {
@@ -282,10 +288,12 @@ struct OnboardingView: View {
     // MARK: - Scan handling
 
     private func handleScan(_ value: String) {
+        MobileHaptics.qrScanned()
         onboardingLogger.info("handleScan received payload length=\(value.count, privacy: .public)")
         do {
             let token = try PairingToken.parse(value)
             onboardingLogger.info("parsed token expired=\(token.isExpired, privacy: .public)")
+            onboardingLogger.info("parsed token relayURL=\(token.relayURL, privacy: .public)")
             guard !token.isExpired else {
                 pairingError = "This QR has expired. Generate a new one on your Mac."
                 return

@@ -49,20 +49,63 @@ public struct PairingToken: Codable, Sendable {
 
     // MARK: - QR encoding
 
+    public static let deeplinkHost = "code.rxlab.app"
+    public static let deeplinkPath = "/pair"
+    public static let legacySchemePrefix = "rxcode-pair:"
+
     public func qrString() throws -> String {
+        try deeplinkString()
+    }
+
+    public func deeplinkString() throws -> String {
+        let token = try encodedToken()
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = Self.deeplinkHost
+        components.path = Self.deeplinkPath
+        components.queryItems = [
+            URLQueryItem(name: "token", value: token),
+            URLQueryItem(name: "relay", value: relayURL),
+        ]
+        guard let url = components.url else { throw PairingError.malformed }
+        return url.absoluteString
+    }
+
+    public func legacyQRString() throws -> String {
+        Self.legacySchemePrefix + (try encodedToken())
+    }
+
+    private func encodedToken() throws -> String {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         let data = try encoder.encode(self)
-        return "rxcode-pair:" + data.base64EncodedString(options: .init())
+        return data.base64EncodedString(options: .init())
     }
 
     public static func parse(_ qrString: String) throws -> PairingToken {
-        guard qrString.hasPrefix("rxcode-pair:") else { throw PairingError.malformed }
-        let b64 = String(qrString.dropFirst("rxcode-pair:".count))
+        let b64: String
+        if qrString.hasPrefix(Self.legacySchemePrefix) {
+            b64 = String(qrString.dropFirst(Self.legacySchemePrefix.count))
+        } else if let token = deeplinkToken(from: qrString) {
+            b64 = token
+        } else {
+            throw PairingError.malformed
+        }
         guard let data = Data(base64Encoded: b64) else { throw PairingError.malformed }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return try decoder.decode(PairingToken.self, from: data)
+    }
+
+    private static func deeplinkToken(from qrString: String) -> String? {
+        guard let url = URL(string: qrString),
+              url.scheme == "https",
+              url.host?.lowercased() == deeplinkHost,
+              url.path == deeplinkPath,
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return nil
+        }
+        return components.queryItems?.first(where: { $0.name == "token" })?.value
     }
 
     public static func makeOneTimeSecret() -> String {

@@ -9,9 +9,11 @@ import RxCodeCore
 public enum Payload: Sendable {
     case pairRequest(PairRequestPayload)
     case pairAck(PairAckPayload)
+    case unpair(UnpairPayload)
     case apnsToken(APNsTokenPayload)
     case requestSnapshot(RequestSnapshotPayload)
     case snapshot(SnapshotPayload)
+    case settingsUpdate(MobileSettingsUpdatePayload)
     case sessionUpdate(SessionUpdatePayload)
     case subscribeSession(SubscribeSessionPayload)
     case userMessage(UserMessagePayload)
@@ -50,6 +52,13 @@ public struct PairAckPayload: Codable, Sendable {
     }
 }
 
+public struct UnpairPayload: Codable, Sendable {
+    public let reason: String?
+    public init(reason: String? = nil) {
+        self.reason = reason
+    }
+}
+
 public struct APNsTokenPayload: Codable, Sendable {
     public let tokenHex: String
     public let environment: String
@@ -69,18 +78,159 @@ public struct RequestSnapshotPayload: Codable, Sendable {
 public struct SnapshotPayload: Codable, Sendable {
     public let projects: [Project]
     public let sessions: [SessionSummary]
+    public let branchBriefings: [MobileBranchBriefing]?
+    public let threadSummaries: [MobileThreadSummary]?
+    public let settings: MobileSettingsSnapshot?
     public let activeSessionID: String?
     public let activeSessionMessages: [ChatMessage]?
     public init(
         projects: [Project],
         sessions: [SessionSummary],
+        branchBriefings: [MobileBranchBriefing]? = nil,
+        threadSummaries: [MobileThreadSummary]? = nil,
+        settings: MobileSettingsSnapshot? = nil,
         activeSessionID: String? = nil,
         activeSessionMessages: [ChatMessage]? = nil
     ) {
         self.projects = projects
         self.sessions = sessions
+        self.branchBriefings = branchBriefings
+        self.threadSummaries = threadSummaries
+        self.settings = settings
         self.activeSessionID = activeSessionID
         self.activeSessionMessages = activeSessionMessages
+    }
+}
+
+public struct MobileBranchBriefing: Codable, Sendable, Identifiable, Equatable {
+    public var id: String { "\(projectId.uuidString)::\(branch)" }
+
+    public let projectId: UUID
+    public let branch: String
+    public let briefing: String
+    public let updatedAt: Date
+
+    public init(projectId: UUID, branch: String, briefing: String, updatedAt: Date) {
+        self.projectId = projectId
+        self.branch = branch
+        self.briefing = briefing
+        self.updatedAt = updatedAt
+    }
+}
+
+public struct MobileThreadSummary: Codable, Sendable, Identifiable, Equatable {
+    public var id: String { sessionId }
+
+    public let sessionId: String
+    public let projectId: UUID
+    public let branch: String
+    public let title: String
+    public let summary: String
+    public let updatedAt: Date
+
+    public init(
+        sessionId: String,
+        projectId: UUID,
+        branch: String,
+        title: String,
+        summary: String,
+        updatedAt: Date
+    ) {
+        self.sessionId = sessionId
+        self.projectId = projectId
+        self.branch = branch
+        self.title = title
+        self.summary = summary
+        self.updatedAt = updatedAt
+    }
+}
+
+public struct MobileSettingsSnapshot: Codable, Sendable, Equatable {
+    public let selectedAgentProvider: AgentProvider
+    public let selectedModel: String
+    public let selectedACPClientId: String
+    public let selectedEffort: String
+    public let permissionMode: PermissionMode
+    public let summarizationProvider: String
+    public let summarizationProviderDisplayName: String
+    public let openAISummarizationEndpoint: String
+    public let openAISummarizationModel: String
+    public let notificationsEnabled: Bool
+    public let focusMode: Bool
+    public let autoArchiveEnabled: Bool
+    public let archiveRetentionDays: Int
+    public let autoPreviewSettings: AttachmentAutoPreviewSettings
+    public let availableEfforts: [String]
+
+    public init(
+        selectedAgentProvider: AgentProvider,
+        selectedModel: String,
+        selectedACPClientId: String,
+        selectedEffort: String,
+        permissionMode: PermissionMode,
+        summarizationProvider: String,
+        summarizationProviderDisplayName: String,
+        openAISummarizationEndpoint: String,
+        openAISummarizationModel: String,
+        notificationsEnabled: Bool,
+        focusMode: Bool,
+        autoArchiveEnabled: Bool,
+        archiveRetentionDays: Int,
+        autoPreviewSettings: AttachmentAutoPreviewSettings,
+        availableEfforts: [String]
+    ) {
+        self.selectedAgentProvider = selectedAgentProvider
+        self.selectedModel = selectedModel
+        self.selectedACPClientId = selectedACPClientId
+        self.selectedEffort = selectedEffort
+        self.permissionMode = permissionMode
+        self.summarizationProvider = summarizationProvider
+        self.summarizationProviderDisplayName = summarizationProviderDisplayName
+        self.openAISummarizationEndpoint = openAISummarizationEndpoint
+        self.openAISummarizationModel = openAISummarizationModel
+        self.notificationsEnabled = notificationsEnabled
+        self.focusMode = focusMode
+        self.autoArchiveEnabled = autoArchiveEnabled
+        self.archiveRetentionDays = archiveRetentionDays
+        self.autoPreviewSettings = autoPreviewSettings
+        self.availableEfforts = availableEfforts
+    }
+}
+
+public struct MobileSettingsUpdatePayload: Codable, Sendable {
+    public let selectedAgentProvider: AgentProvider?
+    public let selectedModel: String?
+    public let selectedACPClientId: String?
+    public let selectedEffort: String?
+    public let permissionMode: PermissionMode?
+    public let notificationsEnabled: Bool?
+    public let focusMode: Bool?
+    public let autoArchiveEnabled: Bool?
+    public let archiveRetentionDays: Int?
+    public let autoPreviewSettings: AttachmentAutoPreviewSettings?
+
+    public init(
+        selectedAgentProvider: AgentProvider? = nil,
+        selectedModel: String? = nil,
+        selectedACPClientId: String? = nil,
+        selectedEffort: String? = nil,
+        permissionMode: PermissionMode? = nil,
+        notificationsEnabled: Bool? = nil,
+        focusMode: Bool? = nil,
+        autoArchiveEnabled: Bool? = nil,
+        archiveRetentionDays: Int? = nil,
+        autoPreviewSettings: AttachmentAutoPreviewSettings? = nil
+    ) {
+        self.selectedAgentProvider = selectedAgentProvider
+        self.selectedModel = selectedModel
+        self.selectedACPClientId = selectedACPClientId
+        self.selectedEffort = selectedEffort
+        self.permissionMode = permissionMode
+        self.notificationsEnabled = notificationsEnabled
+        self.focusMode = focusMode
+        self.autoArchiveEnabled = autoArchiveEnabled
+        self.archiveRetentionDays = archiveRetentionDays
+        self.autoPreviewSettings = autoPreviewSettings
     }
 }
 
@@ -233,9 +383,11 @@ extension Payload: Codable {
     enum TypeKey: String {
         case pairRequest = "pair_request"
         case pairAck = "pair_ack"
+        case unpair
         case apnsToken = "apns_token"
         case requestSnapshot = "request_snapshot"
         case snapshot
+        case settingsUpdate = "settings_update"
         case sessionUpdate = "session_update"
         case subscribeSession = "subscribe_session"
         case userMessage = "user_message"
@@ -257,9 +409,11 @@ extension Payload: Codable {
         switch kind {
         case .pairRequest: self = .pairRequest(try container.decode(PairRequestPayload.self, forKey: .data))
         case .pairAck: self = .pairAck(try container.decode(PairAckPayload.self, forKey: .data))
+        case .unpair: self = .unpair(try container.decode(UnpairPayload.self, forKey: .data))
         case .apnsToken: self = .apnsToken(try container.decode(APNsTokenPayload.self, forKey: .data))
         case .requestSnapshot: self = .requestSnapshot(try container.decode(RequestSnapshotPayload.self, forKey: .data))
         case .snapshot: self = .snapshot(try container.decode(SnapshotPayload.self, forKey: .data))
+        case .settingsUpdate: self = .settingsUpdate(try container.decode(MobileSettingsUpdatePayload.self, forKey: .data))
         case .sessionUpdate: self = .sessionUpdate(try container.decode(SessionUpdatePayload.self, forKey: .data))
         case .subscribeSession: self = .subscribeSession(try container.decode(SubscribeSessionPayload.self, forKey: .data))
         case .userMessage: self = .userMessage(try container.decode(UserMessagePayload.self, forKey: .data))
@@ -277,9 +431,11 @@ extension Payload: Codable {
         switch self {
         case .pairRequest(let p): try container.encode(TypeKey.pairRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .pairAck(let p): try container.encode(TypeKey.pairAck.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .unpair(let p): try container.encode(TypeKey.unpair.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .apnsToken(let p): try container.encode(TypeKey.apnsToken.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .requestSnapshot(let p): try container.encode(TypeKey.requestSnapshot.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .snapshot(let p): try container.encode(TypeKey.snapshot.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .settingsUpdate(let p): try container.encode(TypeKey.settingsUpdate.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .sessionUpdate(let p): try container.encode(TypeKey.sessionUpdate.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .subscribeSession(let p): try container.encode(TypeKey.subscribeSession.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .userMessage(let p): try container.encode(TypeKey.userMessage.rawValue, forKey: .type); try container.encode(p, forKey: .data)

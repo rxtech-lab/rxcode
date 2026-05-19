@@ -2,6 +2,7 @@ import Foundation
 import os
 import RxCodeChatKit
 import RxCodeCore
+import RxCodeSync
 import SwiftUI
 
 // MARK: - Per-Session Stream State
@@ -938,6 +939,8 @@ final class AppState {
     var reindexProgress: (done: Int, total: Int)? = nil
     let runService = RunService()
     let ideMCPServer = IDEMCPServer()
+    private var mobileSyncObservers: [NSObjectProtocol] = []
+    private var mobileSnapshotBroadcastTask: Task<Void, Never>?
 
     // MARK: - Run Profiles
 
@@ -1031,6 +1034,218 @@ final class AppState {
                 }
             )
         }
+
+        setupMobileSyncBridge()
+    }
+
+    private func setupMobileSyncBridge() {
+        let center = NotificationCenter.default
+        let snapshotObserver = center.addObserver(
+            forName: .mobileSyncSnapshotRequested,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let fromHex = notification.userInfo?["from"] as? String else { return }
+            let activeSessionID = notification.userInfo?["activeSessionID"] as? String
+            Task { @MainActor [weak self] in
+                await self?.sendMobileSnapshot(toHex: fromHex, activeSessionID: activeSessionID)
+            }
+        }
+        mobileSyncObservers.append(snapshotObserver)
+
+        let settingsObserver = center.addObserver(
+            forName: .mobileSyncSettingsUpdateReceived,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let fromHex = notification.userInfo?["from"] as? String,
+                  let update = notification.userInfo?["payload"] as? MobileSettingsUpdatePayload
+            else { return }
+            Task { @MainActor [weak self] in
+                self?.applyMobileSettingsUpdate(update)
+                await self?.sendMobileSnapshot(toHex: fromHex, activeSessionID: nil)
+            }
+        }
+        mobileSyncObservers.append(settingsObserver)
+
+        observeMobileSnapshotInputs()
+    }
+
+    private func observeMobileSnapshotInputs() {
+        withObservationTracking {
+            _ = selectedAgentProvider
+            _ = selectedModel
+            _ = selectedACPClientId
+            _ = selectedEffort
+            _ = permissionMode
+            _ = notificationsEnabled
+            _ = focusMode
+            _ = autoArchiveEnabled
+            _ = archiveRetentionDays
+            _ = autoPreviewSettings
+            _ = branchBriefingRevision
+            _ = threadSummaryRevision
+            _ = projects.count
+            _ = allSessionSummaries.count
+        } onChange: {
+            Task { @MainActor [weak self] in
+                self?.scheduleMobileSnapshotBroadcast()
+                self?.observeMobileSnapshotInputs()
+            }
+        }
+    }
+
+    private func scheduleMobileSnapshotBroadcast() {
+        mobileSnapshotBroadcastTask?.cancel()
+        mobileSnapshotBroadcastTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            guard !Task.isCancelled else { return }
+            await self?.broadcastMobileSnapshots()
+        }
+    }
+
+    private func broadcastMobileSnapshots() async {
+        for device in MobileSyncService.shared.pairedDevices {
+            await sendMobileSnapshot(toHex: device.pubkeyHex, activeSessionID: nil)
+        }
+    }
+
+    private func sendMobileSnapshot(toHex hex: String, activeSessionID: String?) async {
+        let active = await mobileActiveSessionPayload(for: activeSessionID)
+        let payload = SnapshotPayload(
+            projects: projects,
+            sessions: mobileSessionSummaries(),
+            branchBriefings: mobileBranchBriefings(),
+            threadSummaries: mobileThreadSummaries(),
+            settings: mobileSettingsSnapshot(),
+            activeSessionID: active.id,
+            activeSessionMessages: active.messages
+        )
+        await MobileSyncService.shared.send(.snapshot(payload), toHex: hex)
+        logger.info(
+            "[MobileSync] sent snapshot projects=\(self.projects.count, privacy: .public) sessions=\(payload.sessions.count, privacy: .public) active=\(active.id ?? "<nil>", privacy: .public)"
+        )
+    }
+
+    private func mobileSessionSummaries() -> [RxCodeSync.SessionSummary] {
+        let knownProjectIds = Set(projects.map(\.id))
+        return allSessionSummaries
+            .filter { knownProjectIds.contains($0.projectId) }
+            .sorted { lhs, rhs in
+                if lhs.isPinned != rhs.isPinned { return lhs.isPinned && !rhs.isPinned }
+                return lhs.updatedAt > rhs.updatedAt
+            }
+            .map {
+                RxCodeSync.SessionSummary(
+                    id: $0.id,
+                    projectId: $0.projectId,
+                    title: $0.title,
+                    updatedAt: $0.updatedAt,
+                    isPinned: $0.isPinned,
+                    isArchived: $0.isArchived
+                )
+            }
+    }
+
+    private func mobileBranchBriefings() -> [MobileBranchBriefing] {
+        let knownProjectIds = Set(projects.map(\.id))
+        return threadStore.allBranchBriefingItems()
+            .filter { knownProjectIds.contains($0.projectId) }
+            .map {
+                MobileBranchBriefing(
+                    projectId: $0.projectId,
+                    branch: $0.branch,
+                    briefing: $0.briefing,
+                    updatedAt: $0.updatedAt
+                )
+            }
+    }
+
+    private func mobileThreadSummaries() -> [MobileThreadSummary] {
+        let knownProjectIds = Set(projects.map(\.id))
+        return threadStore.allThreadSummaryItems()
+            .filter { knownProjectIds.contains($0.projectId) }
+            .map {
+                MobileThreadSummary(
+                    sessionId: $0.sessionId,
+                    projectId: $0.projectId,
+                    branch: $0.branch,
+                    title: $0.title,
+                    summary: $0.summary,
+                    updatedAt: $0.updatedAt
+                )
+            }
+    }
+
+    private func mobileSettingsSnapshot() -> MobileSettingsSnapshot {
+        MobileSettingsSnapshot(
+            selectedAgentProvider: selectedAgentProvider,
+            selectedModel: selectedModel,
+            selectedACPClientId: selectedACPClientId,
+            selectedEffort: selectedEffort,
+            permissionMode: permissionMode,
+            summarizationProvider: summarizationProvider.rawValue,
+            summarizationProviderDisplayName: summarizationProvider.displayName,
+            openAISummarizationEndpoint: openAISummarizationEndpoint,
+            openAISummarizationModel: openAISummarizationModel,
+            notificationsEnabled: notificationsEnabled,
+            focusMode: focusMode,
+            autoArchiveEnabled: autoArchiveEnabled,
+            archiveRetentionDays: archiveRetentionDays,
+            autoPreviewSettings: autoPreviewSettings,
+            availableEfforts: ["auto"] + Self.availableEfforts
+        )
+    }
+
+    private func applyMobileSettingsUpdate(_ update: MobileSettingsUpdatePayload) {
+        if let provider = update.selectedAgentProvider {
+            selectedAgentProvider = provider
+        }
+        if let model = update.selectedModel {
+            selectedModel = model
+        }
+        if let clientId = update.selectedACPClientId {
+            selectedACPClientId = clientId
+        }
+        if let effort = update.selectedEffort, effort == "auto" || Self.availableEfforts.contains(effort) {
+            selectedEffort = effort
+        }
+        if let mode = update.permissionMode {
+            permissionMode = mode
+        }
+        if let enabled = update.notificationsEnabled {
+            notificationsEnabled = enabled
+        }
+        if let enabled = update.focusMode {
+            focusMode = enabled
+        }
+        if let enabled = update.autoArchiveEnabled {
+            autoArchiveEnabled = enabled
+        }
+        if let days = update.archiveRetentionDays {
+            archiveRetentionDays = max(1, min(365, days))
+        }
+        if let previews = update.autoPreviewSettings {
+            autoPreviewSettings = previews
+        }
+    }
+
+    private func mobileActiveSessionPayload(for requestedID: String?) async -> (id: String?, messages: [ChatMessage]?) {
+        guard let requestedID else { return (nil, nil) }
+        let resolvedID = resolveCurrentSessionId(requestedID)
+
+        if let state = sessionStates[resolvedID] {
+            return (resolvedID, cleanLoadedMessages(state.messages))
+        }
+
+        guard let summary = allSessionSummaries.first(where: { $0.id == resolvedID }),
+              let project = projects.first(where: { $0.id == summary.projectId }),
+              let full = await persistence.loadFullSession(summary: summary, cwd: project.path)
+        else {
+            return (nil, nil)
+        }
+
+        return (resolvedID, cleanLoadedMessages(full.messages))
     }
 
     /// User-triggered full reindex of every thread. Wipes cached embeddings,

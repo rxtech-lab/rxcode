@@ -114,8 +114,7 @@ public actor RelayClient {
             handleSocketFailure(error: RelayError.invalidURL)
             return
         }
-        let basePath = components.path
-        components.path = basePath.isEmpty ? "/ws" : basePath + "/ws"
+        components.path = Self.webSocketPath(from: components.path)
         components.queryItems = [URLQueryItem(name: "pubkey", value: identity.publicKeyHex)]
         guard let url = components.url else {
             handleSocketFailure(error: RelayError.invalidURL)
@@ -132,6 +131,13 @@ public actor RelayClient {
         startReceiveLoop()
         sendPing()
         startPingLoop()
+    }
+
+    private static func webSocketPath(from basePath: String) -> String {
+        let trimmed = basePath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard !trimmed.isEmpty else { return "/ws" }
+        guard trimmed.split(separator: "/").last != "ws" else { return "/" + trimmed }
+        return "/" + trimmed + "/ws"
     }
 
     private func markConnected() {

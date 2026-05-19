@@ -50,15 +50,19 @@ struct BranchPickerChip: View {
     }
 
     private var sessionWorktreePath: String? {
-        guard let sid = windowState.currentSessionId else { return nil }
-        return appState.sessionStates[sid]?.worktreePath
-            ?? appState.allSessionSummaries.first(where: { $0.id == sid })?.worktreePath
+        if let sid = windowState.currentSessionId {
+            return appState.sessionStates[sid]?.worktreePath
+                ?? appState.allSessionSummaries.first(where: { $0.id == sid })?.worktreePath
+        }
+        return windowState.pendingWorktreePath
     }
 
     private var sessionWorktreeBranch: String? {
-        guard let sid = windowState.currentSessionId else { return nil }
-        return appState.sessionStates[sid]?.worktreeBranch
-            ?? appState.allSessionSummaries.first(where: { $0.id == sid })?.worktreeBranch
+        if let sid = windowState.currentSessionId {
+            return appState.sessionStates[sid]?.worktreeBranch
+                ?? appState.allSessionSummaries.first(where: { $0.id == sid })?.worktreeBranch
+        }
+        return windowState.pendingWorktreeBranch
     }
 
     private var displayName: String {

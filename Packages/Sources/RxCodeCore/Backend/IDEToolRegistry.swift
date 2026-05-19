@@ -111,19 +111,59 @@ public enum IDEToolRegistry {
             ])
         ),
         IDETool(
+            name: "ide__get_projects",
+            description: "List every project registered in RxCode. Use to discover sibling projects you may want to read threads from or chat with.",
+            visibility: .alwaysIDEOnly,
+            inputSchema: .object([
+                "type": .string("object"),
+                "properties": .object([:]),
+            ])
+        ),
+        IDETool(
             name: "ide__get_threads",
-            description: "List chat threads in the current project (or all projects if none specified).",
+            description: "List or natural-language search chat threads. With `query`, results are ranked by the same on-device embedding search the global search overlay uses and include matched snippets + scores. Without `query`, returns recent threads sorted by updatedAt. Each result includes the AI-generated summary when available.",
             visibility: .alwaysIDEOnly,
             inputSchema: .object([
                 "type": .string("object"),
                 "properties": .object([
-                    "project_id": .object(["type": .string("string")]),
+                    "project_id": .object([
+                        "type": .string("string"),
+                        "description": .string("Optional UUID to restrict results to a single project. Applied after ranking when `query` is set."),
+                    ]),
+                    "query": .object([
+                        "type": .string("string"),
+                        "description": .string("Optional natural-language query. When set, results are ranked by semantic similarity using on-device embeddings."),
+                    ]),
+                    "limit": .object([
+                        "type": .string("integer"),
+                        "description": .string("Maximum number of threads to return. Default 50, capped at 200."),
+                    ]),
                 ]),
             ])
         ),
         IDETool(
+            name: "ide__get_thread_messages",
+            description: "Fetch the message history of a specific thread by id. Hydrates the full ChatSession (CLI-backed history or RxCode JSON) and returns role+text per message.",
+            visibility: .alwaysIDEOnly,
+            inputSchema: .object([
+                "type": .string("object"),
+                "properties": .object([
+                    "thread_id": .object(["type": .string("string")]),
+                    "limit": .object([
+                        "type": .string("integer"),
+                        "description": .string("Most recent N messages to return. Default 200, capped at 1000."),
+                    ]),
+                    "include_tool_calls": .object([
+                        "type": .string("boolean"),
+                        "description": .string("When true, include tool-call blocks in the messages array. Default false — only user/assistant text is returned."),
+                    ]),
+                ]),
+                "required": .array([.string("thread_id")]),
+            ])
+        ),
+        IDETool(
             name: "ide__get_thread_detail",
-            description: "Fetch the message history of a specific thread by id.",
+            description: "Deprecated alias for ide__get_thread_messages. Prefer ide__get_thread_messages.",
             visibility: .alwaysIDEOnly,
             inputSchema: .object([
                 "type": .string("object"),
@@ -131,6 +171,53 @@ public enum IDEToolRegistry {
                     "thread_id": .object(["type": .string("string")]),
                 ]),
                 "required": .array([.string("thread_id")]),
+            ])
+        ),
+        IDETool(
+            name: "ide__send_to_thread",
+            description: "Send a chat prompt to a thread in any project — continue an existing thread by `thread_id`, or start a brand-new thread by passing `project_id`. Triggers a real agent run that may consume tokens. Returns the assistant's reply text (waits up to `timeout_seconds`).",
+            visibility: .alwaysIDEOnly,
+            inputSchema: .object([
+                "type": .string("object"),
+                "properties": .object([
+                    "prompt": .object([
+                        "type": .string("string"),
+                        "description": .string("The user message to send to the target agent."),
+                    ]),
+                    "thread_id": .object([
+                        "type": .string("string"),
+                        "description": .string("Continue this existing thread. Mutually exclusive with `project_id`."),
+                    ]),
+                    "project_id": .object([
+                        "type": .string("string"),
+                        "description": .string("Start a brand-new thread in this project. Mutually exclusive with `thread_id`."),
+                    ]),
+                    "model": .object([
+                        "type": .string("string"),
+                        "description": .string("Optional model override for a new thread."),
+                    ]),
+                    "agent_provider": .object([
+                        "type": .string("string"),
+                        "description": .string("Optional agent provider override for a new thread (e.g. 'claude_code', 'codex', 'acp')."),
+                    ]),
+                    "effort": .object([
+                        "type": .string("string"),
+                        "description": .string("Optional effort override for a new thread."),
+                    ]),
+                    "permission_mode": .object([
+                        "type": .string("string"),
+                        "description": .string("Optional permission mode override for a new thread."),
+                    ]),
+                    "wait_for_response": .object([
+                        "type": .string("boolean"),
+                        "description": .string("If true (default), block until the assistant finishes or `timeout_seconds` elapses. If false, return immediately with the new thread id."),
+                    ]),
+                    "timeout_seconds": .object([
+                        "type": .string("number"),
+                        "description": .string("How long to wait for the assistant's reply. Default 120, capped at 600. On timeout the call returns the partial text with `done: false` — the caller can poll via ide__get_thread_messages."),
+                    ]),
+                ]),
+                "required": .array([.string("prompt")]),
             ])
         ),
         IDETool(

@@ -62,6 +62,16 @@ public final class WindowState {
     public var selectedProject: Project?
     public var currentSessionId: String?
 
+    // MARK: - Pending Worktree (new-chat view)
+
+    /// Filesystem path of a worktree the user created before sending the first
+    /// message. Transferred onto the session state when `sendPrompt` allocates
+    /// a session id; cleared when the new-chat view is reset or a different
+    /// session is selected.
+    public var pendingWorktreePath: String?
+    /// Branch name companion to `pendingWorktreePath`.
+    public var pendingWorktreeBranch: String?
+
     // MARK: - Placeholder Tracking
 
     public private(set) var pendingPlaceholderIds: Set<String> = []

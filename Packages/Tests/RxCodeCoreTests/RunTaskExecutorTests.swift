@@ -271,6 +271,177 @@ struct RunTaskExecutorTests {
         #expect(!script.contains("# --- main ---"))
     }
 
+    // MARK: - Xcode profile
+
+    @Test("Xcode .build emits a single xcodebuild build invocation")
+    func xcodeBuildAction() {
+        let profile = RunProfile(
+            projectId: UUID(),
+            name: "Build",
+            type: .xcode,
+            xcode: XcodeRunConfig(container: "App.xcodeproj", scheme: "App", action: .build)
+        )
+        let script = RunTaskExecutor.buildWrapperScript(profile: profile, projectPath: "/p")
+        #expect(script.contains("xcodebuild -project 'App.xcodeproj' -scheme 'App' -configuration 'Debug' build"))
+        #expect(!script.contains("xcrun simctl"))
+        #expect(!script.contains("open -n"))
+    }
+
+    @Test("Xcode .run with no destination falls back to macOS open -n launcher")
+    func xcodeRunNoDestinationUsesMacLauncher() {
+        let profile = RunProfile(
+            projectId: UUID(),
+            name: "Run",
+            type: .xcode,
+            xcode: XcodeRunConfig(container: "App.xcodeproj", scheme: "App", action: .run)
+        )
+        let script = RunTaskExecutor.buildWrapperScript(profile: profile, projectPath: "/p")
+        #expect(script.contains("xcodebuild -project 'App.xcodeproj' -scheme 'App' -configuration 'Debug' build"))
+        #expect(script.contains("open -n \"$__rxcode_app\""))
+        #expect(!script.contains("xcrun simctl"))
+    }
+
+    @Test("Xcode .run with iOS Simulator destination installs and launches via simctl")
+    func xcodeRunSimulatorUsesSimctl() {
+        let destination = XcodeDestination(
+            kind: .iosSimulator,
+            platform: "iOS Simulator",
+            name: "iPhone 16",
+            udid: "ABCD-1234",
+            os: "18.0"
+        )
+        let profile = RunProfile(
+            projectId: UUID(),
+            name: "Run on iPhone 16",
+            type: .xcode,
+            xcode: XcodeRunConfig(
+                container: "App.xcodeproj",
+                scheme: "App",
+                action: .run,
+                selectedDestination: destination
+            )
+        )
+        let script = RunTaskExecutor.buildWrapperScript(profile: profile, projectPath: "/p")
+        #expect(script.contains("-destination 'platform=iOS Simulator,id=ABCD-1234'"))
+        #expect(script.contains("xcrun simctl boot \"$__rxcode_udid\""))
+        #expect(script.contains("open -a Simulator"))
+        #expect(script.contains("xcrun simctl install \"$__rxcode_udid\" \"$__rxcode_app\""))
+        #expect(script.contains("xcrun simctl launch --console-pty \"$__rxcode_udid\" \"$__rxcode_bundle_id\""))
+        #expect(!script.contains("open -n \"$__rxcode_app\""))
+    }
+
+    @Test("Xcode .run with physical iOS device emits clear unsupported error")
+    func xcodeRunDeviceIsUnsupported() {
+        let destination = XcodeDestination(
+            kind: .iosDevice,
+            platform: "iOS",
+            name: "My iPhone",
+            udid: "ABCD-DEVICE"
+        )
+        let profile = RunProfile(
+            projectId: UUID(),
+            name: "Run on device",
+            type: .xcode,
+            xcode: XcodeRunConfig(
+                container: "App.xcodeproj",
+                scheme: "App",
+                action: .run,
+                selectedDestination: destination
+            )
+        )
+        let script = RunTaskExecutor.buildWrapperScript(profile: profile, projectPath: "/p")
+        #expect(script.contains("is not yet supported"))
+        #expect(script.contains("xcodebuild -project 'App.xcodeproj' -scheme 'App' -configuration 'Debug' -destination 'platform=iOS,id=ABCD-DEVICE' build"))
+        #expect(!script.contains("xcrun simctl"))
+    }
+
+    @Test("Legacy free-text destination is still honored when no structured pick")
+    func xcodeRunLegacyDestinationHonored() {
+        let profile = RunProfile(
+            projectId: UUID(),
+            name: "Legacy",
+            type: .xcode,
+            xcode: XcodeRunConfig(
+                container: "App.xcodeproj",
+                scheme: "App",
+                action: .run,
+                destination: "platform=macOS,arch=arm64"
+            )
+        )
+        let script = RunTaskExecutor.buildWrapperScript(profile: profile, projectPath: "/p")
+        #expect(script.contains("-destination 'platform=macOS,arch=arm64'"))
+        #expect(script.contains("open -n \"$__rxcode_app\""))
+    }
+
+    // MARK: - XcodeDestination
+
+    @Test("XcodeDestination prefers id over name in xcodebuild argument")
+    func xcodeDestinationPrefersId() {
+        let d = XcodeDestination(
+            kind: .iosSimulator,
+            platform: "iOS Simulator",
+            name: "iPhone 16",
+            udid: "ABCD-1234",
+            os: "18.0"
+        )
+        #expect(d.xcodebuildArgument == "platform=iOS Simulator,id=ABCD-1234")
+    }
+
+    @Test("XcodeDestination falls back to name+OS when udid missing")
+    func xcodeDestinationFallsBackToName() {
+        let d = XcodeDestination(
+            kind: .iosSimulator,
+            platform: "iOS Simulator",
+            name: "iPhone 16",
+            os: "18.0"
+        )
+        #expect(d.xcodebuildArgument == "platform=iOS Simulator,name=iPhone 16,OS=18.0")
+    }
+
+    // MARK: - XcodeDestinationParser
+
+    @Test("Parser extracts destinations from the Available section only")
+    func parserSkipsIneligible() {
+        let output = """
+        Available destinations for the "App" scheme:
+        \t{ platform:macOS, arch:arm64, id:00006001-001435262693801E, name:My Mac }
+        \t{ platform:iOS Simulator, id:ABCD-1234, OS:18.0, name:iPhone 16 }
+
+        Ineligible destinations for the "App" scheme:
+        \t{ platform:iOS, name:Generic iOS Device, error:Whatever }
+        """
+        let parsed = XcodeDestinationParser.parse(output)
+        #expect(parsed.count == 2)
+        #expect(parsed[0].platform == "macOS")
+        #expect(parsed[0].name == "My Mac")
+        #expect(parsed[0].arch == "arm64")
+        #expect(parsed[1].platform == "iOS Simulator")
+        #expect(parsed[1].udid == "ABCD-1234")
+        #expect(parsed[1].os == "18.0")
+    }
+
+    @Test("Parser classifies Mac Catalyst via variant")
+    func parserClassifiesMacCatalyst() {
+        let output = """
+        Available destinations for the "App" scheme:
+        \t{ platform:macOS, arch:arm64, variant:Mac Catalyst, id:XYZ, name:My Mac }
+        """
+        let parsed = XcodeDestinationParser.parse(output)
+        #expect(parsed.count == 1)
+        #expect(parsed[0].kind == .macCatalyst)
+    }
+
+    @Test("Parser dedupes by stable id")
+    func parserDedupes() {
+        let output = """
+        Available destinations for the "App" scheme:
+        \t{ platform:iOS Simulator, id:ABCD, OS:18.0, name:iPhone 16 }
+        \t{ platform:iOS Simulator, id:ABCD, OS:18.0, name:iPhone 16 }
+        """
+        let parsed = XcodeDestinationParser.parse(output)
+        #expect(parsed.count == 1)
+    }
+
     // MARK: - Model round-trip
 
     @Test("RunProfile JSON round-trips")

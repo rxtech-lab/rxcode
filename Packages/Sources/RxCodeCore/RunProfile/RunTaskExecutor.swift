@@ -150,11 +150,11 @@ public enum RunTaskExecutor {
         let container = shellEscape(cfg.container)
         let scheme = shellEscape(cfg.scheme)
         let configuration = shellEscape(cfg.configuration)
-        let destination = cfg.destination.trimmingCharacters(in: .whitespaces)
+        let destinationArg = cfg.resolvedDestinationArgument
 
         var base = "xcodebuild \(containerFlag) \(container) -scheme \(scheme) -configuration \(configuration)"
-        if !destination.isEmpty {
-            base += " -destination \(shellEscape(destination))"
+        if let destinationArg {
+            base += " -destination \(shellEscape(destinationArg))"
         }
 
         switch cfg.action {
@@ -165,25 +165,85 @@ public enum RunTaskExecutor {
         case .test:
             return ["\(base) test"]
         case .run:
-            // Build, then resolve BUILT_PRODUCTS_DIR / FULL_PRODUCT_NAME from
-            // `-showBuildSettings` and `open` the resulting bundle. `-n`
-            // forces a fresh instance — without it, `open` just activates an
-            // already-running copy (common when iterating on an app you
-            // launched a moment ago), making Run feel like a no-op.
+            return runLauncherLines(base: base, destination: cfg.selectedDestination)
+        }
+    }
+
+    /// Compose the build-and-launch script. Branches on destination kind so
+    /// macOS uses `open -n` while iOS-family simulators install + launch via
+    /// `xcrun simctl`. Physical devices fail fast with a clear message —
+    /// supporting them needs Xcode's `devicectl` plumbing we don't have.
+    private static func runLauncherLines(base: String, destination: XcodeDestination?) -> [String] {
+        let kind = destination?.kind ?? .macOS  // no destination → assume macOS, matches old behavior
+        if let destination, !destination.isLaunchable {
             return [
+                "printf '[rxcode] launching on %s destinations is not yet supported. Build will run; the produced bundle is at BUILT_PRODUCTS_DIR.\\n' \(shellEscape(destination.groupLabel)) 1>&2",
                 "\(base) build",
-                "__rxcode_settings=$(\(base) -showBuildSettings 2>/dev/null)",
-                "__rxcode_build_dir=$(printf '%s\\n' \"$__rxcode_settings\" | awk -F' = ' '/^[[:space:]]*BUILT_PRODUCTS_DIR =/ {print $2; exit}')",
-                "__rxcode_product=$(printf '%s\\n' \"$__rxcode_settings\" | awk -F' = ' '/^[[:space:]]*FULL_PRODUCT_NAME =/ {print $2; exit}')",
-                "if [ -n \"$__rxcode_build_dir\" ] && [ -n \"$__rxcode_product\" ]; then",
-                "  printf '[rxcode] launching %s\\n' \"$__rxcode_build_dir/$__rxcode_product\"",
-                "  open -n \"$__rxcode_build_dir/$__rxcode_product\"",
-                "else",
-                "  printf '[rxcode] could not resolve built product to launch\\n' 1>&2",
-                "  exit 1",
-                "fi",
+                "exit 1",
             ]
         }
+
+        // Shared prelude: build, then capture BUILT_PRODUCTS_DIR,
+        // FULL_PRODUCT_NAME, and PRODUCT_BUNDLE_IDENTIFIER from
+        // `-showBuildSettings`. Bundle id is only needed for simctl launch
+        // but it's cheap to extract once.
+        var lines: [String] = [
+            "\(base) build",
+            "__rxcode_settings=$(\(base) -showBuildSettings 2>/dev/null)",
+            "__rxcode_build_dir=$(printf '%s\\n' \"$__rxcode_settings\" | awk -F' = ' '/^[[:space:]]*BUILT_PRODUCTS_DIR =/ {print $2; exit}')",
+            "__rxcode_product=$(printf '%s\\n' \"$__rxcode_settings\" | awk -F' = ' '/^[[:space:]]*FULL_PRODUCT_NAME =/ {print $2; exit}')",
+            "__rxcode_bundle_id=$(printf '%s\\n' \"$__rxcode_settings\" | awk -F' = ' '/^[[:space:]]*PRODUCT_BUNDLE_IDENTIFIER =/ {print $2; exit}')",
+            "if [ -z \"$__rxcode_build_dir\" ] || [ -z \"$__rxcode_product\" ]; then",
+            "  printf '[rxcode] could not resolve built product to launch\\n' 1>&2",
+            "  exit 1",
+            "fi",
+            "__rxcode_app=\"$__rxcode_build_dir/$__rxcode_product\"",
+        ]
+
+        switch kind {
+        case .macOS, .macCatalyst, .other:
+            // `open -n` forces a fresh instance — without it, `open` just
+            // activates an already-running copy (common when iterating on an
+            // app you launched a moment ago), making Run feel like a no-op.
+            lines.append(contentsOf: [
+                "printf '[rxcode] launching %s\\n' \"$__rxcode_app\"",
+                "open -n \"$__rxcode_app\"",
+            ])
+        case .iosSimulator, .tvSimulator, .watchSimulator, .visionSimulator:
+            let udidLiteral: String
+            if let udid = destination?.udid, !udid.isEmpty {
+                udidLiteral = shellEscape(udid)
+            } else {
+                // No UDID — caller picked a generic destination by name. Use
+                // `booted` to target whatever's already running; simctl will
+                // error usefully if nothing is.
+                udidLiteral = "'booted'"
+            }
+            lines.append(contentsOf: [
+                "__rxcode_udid=\(udidLiteral)",
+                "if [ -z \"$__rxcode_bundle_id\" ]; then",
+                "  __rxcode_bundle_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' \"$__rxcode_app/Info.plist\" 2>/dev/null)",
+                "fi",
+                "if [ -z \"$__rxcode_bundle_id\" ]; then",
+                "  printf '[rxcode] could not resolve bundle identifier\\n' 1>&2",
+                "  exit 1",
+                "fi",
+                "if [ \"$__rxcode_udid\" != 'booted' ]; then",
+                "  xcrun simctl boot \"$__rxcode_udid\" 2>/dev/null || true",
+                "fi",
+                "open -a Simulator",
+                "printf '[rxcode] installing %s to %s\\n' \"$__rxcode_app\" \"$__rxcode_udid\"",
+                "xcrun simctl install \"$__rxcode_udid\" \"$__rxcode_app\"",
+                "printf '[rxcode] launching %s on %s\\n' \"$__rxcode_bundle_id\" \"$__rxcode_udid\"",
+                "xcrun simctl launch --console-pty \"$__rxcode_udid\" \"$__rxcode_bundle_id\"",
+            ])
+        case .iosDevice, .tvDevice, .watchDevice, .visionDevice:
+            // Unreachable — guarded by `isLaunchable` above.
+            lines.append("printf '[rxcode] device launch is not implemented\\n' 1>&2")
+            lines.append("exit 1")
+        }
+
+        return lines
     }
 
     private static func makeScriptLines(_ cfg: MakeRunConfig) -> [String] {

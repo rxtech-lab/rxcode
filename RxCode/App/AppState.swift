@@ -148,6 +148,20 @@ final class AppState {
     /// id after the swap that happens mid-stream in `processStream`.
     private var sessionIdRedirect: [String: String] = [:]
 
+    // MARK: - Stream Completion Tracking (cross-project MCP)
+
+    /// Result of a finished stream. Used by `ide__send_to_thread` to surface
+    /// the assistant's reply back through the MCP tool call.
+    struct StreamCompletion: Sendable {
+        let sessionId: String
+        let assistantText: String
+        let error: String?
+    }
+
+    /// Completed streams whose owners (callers of `awaitStreamCompletion`)
+    /// have not yet picked up the result. Keyed by `streamId`.
+    private var pendingStreamCompletions: [UUID: StreamCompletion] = [:]
+
     // MARK: - Session Summaries (shared — lightweight metadata for all projects)
 
     var allSessionSummaries: [ChatSession.Summary] = []
@@ -2037,6 +2051,7 @@ final class AppState {
 
     // MARK: - Shared Send Logic
 
+    @discardableResult
     private func sendPrompt(
         _ prompt: String,
         displayText: String? = nil,
@@ -2045,10 +2060,10 @@ final class AppState {
         initialMessages: [ChatMessage]? = nil,
         tempFilePaths: [String] = [],
         in window: WindowState
-    ) async {
+    ) async -> UUID? {
         guard let project = window.selectedProject else {
             handleError(AppError.noProjectSelected, in: window)
-            return
+            return nil
         }
 
         if isStreaming(in: window) {
@@ -2071,12 +2086,18 @@ final class AppState {
             window.sessionModel = snapModel
             let snapEffort = window.sessionEffort
             let snapPermission = window.sessionPermissionMode
+            let pendingWorktreePath = window.pendingWorktreePath
+            let pendingWorktreeBranch = window.pendingWorktreeBranch
             updateState(tempId) { state in
                 state.agentProvider = snapProvider
                 state.model = snapModel
                 state.effort = snapEffort
                 state.permissionMode = snapPermission
+                state.worktreePath = pendingWorktreePath
+                state.worktreeBranch = pendingWorktreeBranch
             }
+            window.pendingWorktreePath = nil
+            window.pendingWorktreeBranch = nil
         }
 
         let sessionKey = window.currentSessionId!
@@ -2112,7 +2133,9 @@ final class AppState {
                 messages: [],
                 agentProvider: provider,
                 model: selection.model,
-                origin: provider.defaultSessionOrigin
+                origin: provider.defaultSessionOrigin,
+                worktreePath: sessionStates[sessionKey]?.worktreePath,
+                worktreeBranch: sessionStates[sessionKey]?.worktreeBranch
             )
             allSessionSummaries.insert(placeholder.summary, at: 0)
             threadStore.upsert(placeholder.summary)
@@ -2202,6 +2225,7 @@ final class AppState {
             }
         }
         sessionStates[sessionKey, default: SessionStreamState()].streamTask = task
+        return streamId
     }
 
     // MARK: - Stream Processing
@@ -2253,6 +2277,187 @@ final class AppState {
                 Self.stripNoOpText(at: idx, in: &state.messages)
             }
             state.streamingStartDate = nil
+        }
+    }
+
+    // MARK: - Stream Completion (cross-project MCP)
+
+    /// Record that the stream `streamId` finished. Stored in
+    /// `pendingStreamCompletions` for any `awaitStreamCompletion(...)` caller
+    /// (currently `ide__send_to_thread`) to pick up. Latest call wins, except
+    /// we don't overwrite a success with an error from the fallback path.
+    private func recordStreamCompletion(
+        streamId: UUID,
+        sessionId: String,
+        assistantText: String,
+        error: String?
+    ) {
+        pendingStreamCompletions[streamId] = StreamCompletion(
+            sessionId: sessionId,
+            assistantText: assistantText,
+            error: error
+        )
+    }
+
+    /// Wait up to `timeout` seconds for the stream identified by `streamId`
+    /// to record a completion. Polls every 100ms — MainActor serialization
+    /// means the recorder fires between sleeps. Returns the completion if
+    /// one arrived in time, otherwise `nil`.
+    func awaitStreamCompletion(streamId: UUID, timeout: TimeInterval) async -> StreamCompletion? {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if let completion = pendingStreamCompletions.removeValue(forKey: streamId) {
+                return completion
+            }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+        return pendingStreamCompletions.removeValue(forKey: streamId)
+    }
+
+    /// Discard a recorded completion. Called by long-running `wait_for_response=false`
+    /// MCP sends so the dictionary doesn't grow unbounded with abandoned results.
+    func discardStreamCompletion(streamId: UUID) {
+        pendingStreamCompletions.removeValue(forKey: streamId)
+    }
+
+    // MARK: - Cross-Project Send (used by ide__send_to_thread)
+
+    struct CrossProjectSendResult: Sendable {
+        let threadId: String
+        let projectId: UUID
+        let done: Bool
+        let assistantText: String
+        let error: String?
+    }
+
+    enum CrossProjectSendError: Error, LocalizedError {
+        case unknownProject(UUID)
+        case unknownThread(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .unknownProject(let id): return "No project with id \(id.uuidString)"
+            case .unknownThread(let id):  return "No thread with id \(id)"
+            }
+        }
+    }
+
+    /// Send a prompt to a thread in any project. The send runs through the
+    /// normal `sendPrompt` pipeline via a synthetic `WindowState`, so all the
+    /// usual side-effects (title generation, briefing updates, persistence)
+    /// still fire and any UI windows currently bound to the same session see
+    /// the assistant tokens live via the shared `sessionStates` dictionary.
+    func sendCrossProject(
+        projectId: UUID?,
+        threadId: String?,
+        prompt: String,
+        agentProvider: AgentProvider? = nil,
+        model: String? = nil,
+        effort: String? = nil,
+        permissionMode: PermissionMode? = nil,
+        waitForResponse: Bool = true,
+        timeoutSeconds: TimeInterval = 120
+    ) async throws -> CrossProjectSendResult {
+        // Resolve target project + thread.
+        let resolvedProject: Project
+        let resolvedThreadId: String?
+
+        if let threadId {
+            guard let summary = allSessionSummaries.first(where: { $0.id == threadId })
+                ?? threadStore.fetch(id: threadId).map({ $0.toSummary() })
+            else {
+                throw CrossProjectSendError.unknownThread(threadId)
+            }
+            guard let proj = projects.first(where: { $0.id == summary.projectId }) else {
+                throw CrossProjectSendError.unknownProject(summary.projectId)
+            }
+            resolvedProject = proj
+            resolvedThreadId = threadId
+        } else if let projectId {
+            guard let proj = projects.first(where: { $0.id == projectId }) else {
+                throw CrossProjectSendError.unknownProject(projectId)
+            }
+            resolvedProject = proj
+            resolvedThreadId = nil
+        } else {
+            throw CrossProjectSendError.unknownProject(UUID())
+        }
+
+        // Build a synthetic WindowState. AppState.sessionStates is shared across
+        // windows, so the message + stream are visible to any real window that
+        // happens to also be viewing this session.
+        let window = WindowState()
+        window.selectedProject = resolvedProject
+        window.currentSessionId = resolvedThreadId
+
+        // Carry over per-session overrides for a new thread; for an existing
+        // thread we leave the session's own stored values alone (the resume
+        // path in sendPrompt reads from `sessionStates[sessionKey]`).
+        if resolvedThreadId == nil {
+            if let agentProvider {
+                window.sessionAgentProvider = agentProvider
+            }
+            if let model {
+                window.sessionModel = model
+            }
+            if let effort {
+                window.sessionEffort = effort
+            }
+            if let permissionMode {
+                window.sessionPermissionMode = permissionMode
+            }
+        }
+
+        guard let streamId = await sendPrompt(prompt, displayText: prompt, in: window) else {
+            return CrossProjectSendResult(
+                threadId: resolvedThreadId ?? "",
+                projectId: resolvedProject.id,
+                done: false,
+                assistantText: "",
+                error: "Send failed: no session could be allocated."
+            )
+        }
+
+        // After sendPrompt returns, window.currentSessionId is the (possibly
+        // pending-) key the stream is bound to. The CLI may rename it to its
+        // own sid mid-stream; we surface whichever id the completion lands on.
+        let postSendThreadId = window.currentSessionId ?? resolvedThreadId ?? ""
+
+        if !waitForResponse {
+            // Don't leak the result in the dictionary — the caller is
+            // fire-and-forget. Drop it once it lands.
+            Task { [weak self] in
+                _ = await self?.awaitStreamCompletion(streamId: streamId, timeout: timeoutSeconds)
+            }
+            return CrossProjectSendResult(
+                threadId: postSendThreadId,
+                projectId: resolvedProject.id,
+                done: false,
+                assistantText: "",
+                error: nil
+            )
+        }
+
+        let completion = await awaitStreamCompletion(streamId: streamId, timeout: timeoutSeconds)
+        if let completion {
+            return CrossProjectSendResult(
+                threadId: completion.sessionId,
+                projectId: resolvedProject.id,
+                done: completion.error == nil,
+                assistantText: completion.assistantText,
+                error: completion.error
+            )
+        } else {
+            // Timed out. Surface the partial assistant text we have so far so
+            // the caller can decide whether to poll back via get_thread_messages.
+            let partial = lastAssistantResponseText(in: stateForSession(window.currentSessionId ?? "").messages)
+            return CrossProjectSendResult(
+                threadId: window.currentSessionId ?? postSendThreadId,
+                projectId: resolvedProject.id,
+                done: false,
+                assistantText: partial,
+                error: nil
+            )
         }
     }
 
@@ -2697,6 +2902,13 @@ final class AppState {
                         }
                     }
 
+                    recordStreamCompletion(
+                        streamId: streamId,
+                        sessionId: resultEvent.sessionId,
+                        assistantText: lastAssistantResponseText(in: stateForSession(sessionKey).messages),
+                        error: resultEvent.isError ? "Agent reported an error result." : nil
+                    )
+
                     let isFg = (window.currentSessionId ?? window.newSessionKey) == sessionKey
                     if !isFg, !resultEvent.isError {
                         updateState(sessionKey) { $0.hasUncheckedCompletion = true }
@@ -2848,6 +3060,24 @@ final class AppState {
                 } else {
                     logger.info("[Stream:UI] stream \(streamId) ended but newer stream \(currentOwner!) owns session — skipping cleanup")
                 }
+            }
+
+            // Fallback completion record: covers cancellations, no-events errors,
+            // and any path where `.result` was not received. The `.result` case
+            // already records a completion before reaching here — recordStreamCompletion
+            // is idempotent (it overwrites with the latest), but if a prior call set a
+            // successful completion we don't want to clobber it with an error.
+            if pendingStreamCompletions[streamId] == nil {
+                let assistantText = lastAssistantResponseText(in: stateForSession(sessionKey).messages)
+                let errorMsg: String? = eventCount == 0
+                    ? (stderrOutput ?? "Stream ended with no events.")
+                    : (Task.isCancelled ? "Stream was cancelled." : nil)
+                recordStreamCompletion(
+                    streamId: streamId,
+                    sessionId: sessionKey,
+                    assistantText: assistantText,
+                    error: errorMsg
+                )
             }
         }
     }
@@ -3568,6 +3798,8 @@ final class AppState {
         updateState(session.id) { $0.hasUncheckedCompletion = false }
 
         window.showingBriefing = false
+        window.pendingWorktreePath = nil
+        window.pendingWorktreeBranch = nil
         window.currentSessionId = session.id
         window.sessionAgentProvider = sessionStates[session.id]?.agentProvider ?? session.agentProvider
         window.sessionModel = sessionStates[session.id]?.model ?? session.model
@@ -3709,6 +3941,8 @@ final class AppState {
         window.sessionEffort = nil
         window.sessionPermissionMode = nil
         window.sessionPlanMode = false
+        window.pendingWorktreePath = nil
+        window.pendingWorktreeBranch = nil
         sessionStates.removeValue(forKey: window.newSessionKey)
         window.inputText = window.draftTexts[newDraftKey(for: window)] ?? ""
         window.messageQueue = window.draftQueues[newDraftKey(for: window)] ?? []
@@ -4171,14 +4405,20 @@ final class AppState {
         guard let project = window.selectedProject else {
             throw AppError.noProjectSelected
         }
-        guard let sessionId = window.currentSessionId else {
-            throw AppError.streamFailed("No active chat. Send a message first or pick a chat.")
-        }
         let baseRepo = URL(fileURLWithPath: project.path)
         let info = try await GitWorktreeService.shared.createWorktree(
             baseRepo: baseRepo,
             branch: branch
         )
+
+        // New-chat view: no session yet. Park the worktree on the window so
+        // it gets applied when sendPrompt allocates a session id.
+        guard let sessionId = window.currentSessionId else {
+            window.pendingWorktreePath = info.path.path
+            window.pendingWorktreeBranch = info.branch
+            return
+        }
+
         // Update in-memory state
         sessionStates[sessionId, default: SessionStreamState()].worktreePath = info.path.path
         sessionStates[sessionId, default: SessionStreamState()].worktreeBranch = info.branch

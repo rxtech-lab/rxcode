@@ -463,16 +463,28 @@ private struct RunProfileDetailForm: View {
                     Text(action.rawValue.capitalized).tag(action)
                 }
             }
-            TextField(
-                "Destination (optional)",
-                text: xcode.destination,
-                prompt: Text("platform=macOS")
-            )
-            .font(.system(.body, design: .monospaced))
+            LabeledContent("Destination") {
+                HStack(spacing: 6) {
+                    Text(xcode.wrappedValue.selectedDestination?.displayName ?? "Any Mac (default)")
+                        .foregroundStyle(.secondary)
+                    if xcode.wrappedValue.selectedDestination != nil {
+                        Button {
+                            var c = xcode.wrappedValue
+                            c.selectedDestination = nil
+                            xcode.wrappedValue = c
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.tertiary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Clear destination — pick again from the toolbar")
+                    }
+                }
+            }
         } header: {
             Text("Xcode")
         } footer: {
-            Text("Build runs `xcodebuild build`. Run builds, then launches the produced .app. Working directory is always the project root.")
+            Text("Build runs `xcodebuild build`. Run builds, then launches the produced .app (macOS) or installs + launches on the selected simulator. Pick the destination from the Run toolbar.")
         }
     }
 

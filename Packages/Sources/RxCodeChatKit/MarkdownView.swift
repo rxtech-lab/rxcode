@@ -1,4 +1,5 @@
 import SwiftUI
+#if os(macOS)
 import AppKit
 import RxCodeCore
 
@@ -544,6 +545,164 @@ private func parseInlineMarkdown(_ content: String) -> AttributedString {
 
 nonisolated(unsafe) private let inlineCodeBackgroundAttribute = NSAttributedString.Key("rxcode.inlineCodeBackground")
 
+struct NativeChatTextView: NSViewRepresentable {
+    let content: Content
+    var font: NSFont
+    var color: NSColor
+    var lineSpacing: CGFloat
+    var maximumNumberOfLines: Int?
+    var openURL: ((URL) -> Bool)?
+
+    enum Content: Equatable {
+        case plain(String)
+        case attributed(AttributedString)
+    }
+
+    init(
+        _ text: String,
+        font: NSFont = NSFont.systemFont(ofSize: ClaudeTheme.messageSize(14)),
+        color: NSColor = NSColor(ClaudeTheme.textPrimary),
+        lineSpacing: CGFloat = 0,
+        maximumNumberOfLines: Int? = nil,
+        openURL: ((URL) -> Bool)? = nil
+    ) {
+        self.content = .plain(text)
+        self.font = font
+        self.color = color
+        self.lineSpacing = lineSpacing
+        self.maximumNumberOfLines = maximumNumberOfLines
+        self.openURL = openURL
+    }
+
+    init(
+        attributed content: AttributedString,
+        font: NSFont = NSFont.systemFont(ofSize: ClaudeTheme.messageSize(14)),
+        color: NSColor = NSColor(ClaudeTheme.textPrimary),
+        lineSpacing: CGFloat = 0,
+        maximumNumberOfLines: Int? = nil,
+        openURL: ((URL) -> Bool)? = nil
+    ) {
+        self.content = .attributed(content)
+        self.font = font
+        self.color = color
+        self.lineSpacing = lineSpacing
+        self.maximumNumberOfLines = maximumNumberOfLines
+        self.openURL = openURL
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(openURL: openURL)
+    }
+
+    func makeNSView(context: Context) -> InlineCodeTextView {
+        let textView = InlineCodeTextView()
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.drawsBackground = false
+        textView.backgroundColor = .clear
+        textView.textContainerInset = .zero
+        textView.textContainer?.lineFragmentPadding = 0
+        textView.textContainer?.widthTracksTextView = true
+        textView.textContainer?.heightTracksTextView = false
+        textView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.delegate = context.coordinator
+        textView.linkTextAttributes = [
+            .foregroundColor: NSColor(ClaudeTheme.accent),
+            .underlineStyle: NSUnderlineStyle.single.rawValue
+        ]
+        return textView
+    }
+
+    func updateNSView(_ textView: InlineCodeTextView, context: Context) {
+        context.coordinator.openURL = openURL
+        textView.textContainer?.maximumNumberOfLines = maximumNumberOfLines ?? 0
+        textView.textContainer?.lineBreakMode = maximumNumberOfLines == nil ? .byWordWrapping : .byTruncatingTail
+        textView.textStorage?.setAttributedString(Self.nsAttributedString(
+            from: content,
+            font: font,
+            color: color,
+            lineSpacing: lineSpacing
+        ))
+        textView.invalidateIntrinsicContentSize()
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView textView: InlineCodeTextView, context: Context) -> CGSize? {
+        guard let layoutManager = textView.layoutManager,
+              let textContainer = textView.textContainer else {
+            return CGSize(width: proposal.width ?? 0, height: 0)
+        }
+        textContainer.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        layoutManager.ensureLayout(for: textContainer)
+        let idealWidth = ceil(layoutManager.usedRect(for: textContainer).width)
+
+        let resolvedWidth: CGFloat
+        if let proposed = proposal.width, proposed.isFinite {
+            resolvedWidth = min(proposed, idealWidth)
+        } else {
+            resolvedWidth = idealWidth
+        }
+
+        textContainer.containerSize = NSSize(width: resolvedWidth, height: CGFloat.greatestFiniteMagnitude)
+        layoutManager.ensureLayout(for: textContainer)
+        let usedRect = layoutManager.usedRect(for: textContainer)
+        return CGSize(width: resolvedWidth, height: ceil(usedRect.height))
+    }
+
+    private static func nsAttributedString(
+        from content: Content,
+        font: NSFont,
+        color: NSColor,
+        lineSpacing: CGFloat
+    ) -> NSAttributedString {
+        let result: NSMutableAttributedString
+        switch content {
+        case .plain(let text):
+            result = NSMutableAttributedString(string: text)
+        case .attributed(let attributed):
+            result = NSMutableAttributedString(attributed)
+        }
+        guard result.length > 0 else { return result }
+
+        let fullRange = NSRange(location: 0, length: result.length)
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineSpacing = lineSpacing
+        paragraphStyle.lineBreakMode = .byWordWrapping
+        result.addAttribute(.paragraphStyle, value: paragraphStyle, range: fullRange)
+        result.enumerateAttribute(.font, in: fullRange) { value, range, _ in
+            guard value == nil else { return }
+            result.addAttribute(.font, value: font, range: range)
+        }
+        result.enumerateAttribute(.foregroundColor, in: fullRange) { value, range, _ in
+            guard value == nil else { return }
+            result.addAttribute(.foregroundColor, value: color, range: range)
+        }
+        return result
+    }
+
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        var openURL: ((URL) -> Bool)?
+
+        init(openURL: ((URL) -> Bool)?) {
+            self.openURL = openURL
+        }
+
+        func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
+            let url: URL?
+            if let linkedURL = link as? URL {
+                url = linkedURL
+            } else if let raw = link as? String {
+                url = URL(string: raw)
+            } else {
+                url = nil
+            }
+            guard let url else { return false }
+            return openURL?(url) ?? false
+        }
+    }
+}
+
 private struct MarkdownAttributedTextView: NSViewRepresentable {
     let content: AttributedString
     var showsTrailingCursor: Bool = false
@@ -692,7 +851,7 @@ private final class InlineCodeLayoutManager: NSLayoutManager, @unchecked Sendabl
     }
 }
 
-private final class InlineCodeTextView: NSTextView {
+final class InlineCodeTextView: NSTextView {
     init() {
         let storage = NSTextStorage()
         let layoutManager = InlineCodeLayoutManager()
@@ -971,3 +1130,4 @@ private extension String {
     .frame(width: 500, height: 600)
     .background(ClaudeTheme.background)
 }
+#endif

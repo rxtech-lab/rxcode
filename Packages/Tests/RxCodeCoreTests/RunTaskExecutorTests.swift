@@ -256,7 +256,9 @@ struct RunTaskExecutorTests {
             make: MakeRunConfig(makefile: "BuildScripts/release.mk", target: "all", arguments: "VAR=1 -j4")
         )
         let script = RunTaskExecutor.buildWrapperScript(profile: profile, projectPath: "/p")
-        #expect(script.contains("make -f 'BuildScripts/release.mk' 'all' VAR=1 -j4"))
+        // Project-relative Makefile paths are resolved against the project root
+        // so `make -f` doesn't re-resolve them against a subdir working directory.
+        #expect(script.contains("make -f '/p/BuildScripts/release.mk' 'all' VAR=1 -j4"))
     }
 
     @Test("Make profile with empty config emits no main command")

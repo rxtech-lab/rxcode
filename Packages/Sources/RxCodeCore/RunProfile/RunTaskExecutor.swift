@@ -114,7 +114,7 @@ public enum RunTaskExecutor {
             lines.append("")
         }
 
-        let mainLines = mainCommandLines(for: profile)
+        let mainLines = mainCommandLines(for: profile, projectPath: projectPath)
         if !mainLines.isEmpty {
             lines.append("# --- main ---")
             lines.append(contentsOf: mainLines)
@@ -128,7 +128,7 @@ public enum RunTaskExecutor {
     /// appropriate `xcodebuild` invocation (and, for `.run`, locate the built
     /// `.app` from build settings and `open` it); for `.make` we synthesize
     /// a `make` invocation against the configured Makefile and target.
-    static func mainCommandLines(for profile: RunProfile) -> [String] {
+    static func mainCommandLines(for profile: RunProfile, projectPath: String) -> [String] {
         switch profile.type {
         case .bash:
             let cmd = profile.bash.command.trimmingCharacters(in: .whitespaces)
@@ -141,7 +141,7 @@ public enum RunTaskExecutor {
             return xcodeScriptLines(xcode)
         case .make:
             guard let make = profile.make else { return [] }
-            return makeScriptLines(make)
+            return makeScriptLines(make, projectPath: projectPath)
         }
     }
 
@@ -246,7 +246,7 @@ public enum RunTaskExecutor {
         return lines
     }
 
-    private static func makeScriptLines(_ cfg: MakeRunConfig) -> [String] {
+    private static func makeScriptLines(_ cfg: MakeRunConfig, projectPath: String) -> [String] {
         let makefile = cfg.makefile.trimmingCharacters(in: .whitespaces)
         let target = cfg.target.trimmingCharacters(in: .whitespaces)
         let args = cfg.arguments.trimmingCharacters(in: .whitespaces)
@@ -256,8 +256,13 @@ public enum RunTaskExecutor {
 
         var parts: [String] = ["make"]
         if !makefile.isEmpty {
+            // Resolve project-relative Makefile paths to absolute. `make -f`
+            // otherwise resolves them against the working directory, which
+            // breaks profiles whose working dir is a subfolder (e.g. Makefile
+            // `./relay-server/Makefile` + working dir `./relay-server`).
+            let resolved = resolveWorkingDirectory(makefile, projectPath: projectPath)
             parts.append("-f")
-            parts.append(shellEscape(makefile))
+            parts.append(shellEscape(resolved))
         }
         if !target.isEmpty {
             parts.append(shellEscape(target))

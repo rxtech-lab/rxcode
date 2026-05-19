@@ -1,4 +1,5 @@
 import SwiftUI
+#if os(macOS)
 import AppKit
 import RxCodeCore
 
@@ -407,3 +408,4 @@ fileprivate final class _IMETextView: NSTextView {
         insertText(composing, replacementRange: range)
     }
 }
+#endif

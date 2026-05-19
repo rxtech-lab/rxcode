@@ -2,6 +2,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 import RxCodeCore
 
+#if os(macOS)
+
 struct InputBarView<Accessory: View, TopAccessory: View>: View {
     @Environment(ChatBridge.self) private var environmentChatBridge: ChatBridge?
     @Environment(WindowState.self) private var environmentWindowState: WindowState?
@@ -127,21 +129,11 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
         }
         .onChange(of: windowState.currentSessionId) { _, _ in
             historyIndex = -1
-            // Defer to next MainActor iteration so the bridge observation has time to
-            // update isStreaming to reflect the newly-active session before we check it.
-            Task { @MainActor in
-                if !chatBridge.isStreaming {
-                    processNextQueued()
-                }
-            }
+            // Queue auto-flush is owned by AppState (`flushNextQueuedMessageIfNeeded`)
+            // so the macOS and mobile paths share one arbiter — no duplicate sends.
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(300))
                 inputFocusTrigger = UUID()
-            }
-        }
-        .onChange(of: chatBridge.isStreaming) { _, isStreaming in
-            if !isStreaming {
-                processNextQueued()
             }
         }
         .onAppear {
@@ -830,24 +822,6 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
         resetIMEState()
     }
 
-    private func processNextQueued() {
-        guard let next = chatBridge.dequeueNextForFlush() else { return }
-        let draftText = windowState.inputText
-        let draftAttachments = windowState.attachments
-        let shouldRestoreDraft = !draftText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || !draftAttachments.isEmpty
-
-        windowState.inputText = next.text
-        windowState.attachments = next.attachments
-        Task {
-            await chatBridge.send()
-            if shouldRestoreDraft {
-                windowState.inputText = draftText
-                windowState.attachments = draftAttachments
-            }
-        }
-    }
-
     private func handleReturnKey() {
         // IMETextView dispatches doCommand(insertNewline:) only after the IME has finalized any
         // composing text, so windowState.inputText is already up-to-date here.
@@ -961,3 +935,4 @@ private struct InputHeightMeasurer: View {
         return capped.hasSuffix("\n") ? capped + " " : capped
     }
 }
+#endif

@@ -1,5 +1,6 @@
 import Foundation
 
+#if os(macOS)
 public enum GitHelper {
     /// Environment for `/usr/bin/git` subprocesses. Augments PATH with the
     /// standard Homebrew and system bin directories so git can locate
@@ -247,3 +248,5 @@ public enum GitHelper {
             .filter { !$0.isEmpty }
     }
 }
+
+#endif

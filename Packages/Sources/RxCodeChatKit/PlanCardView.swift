@@ -1,5 +1,6 @@
 import SwiftUI
 import RxCodeCore
+#if os(macOS)
 import AppKit
 
 /// Compact inline status chip for a Claude `ExitPlanMode` tool call. Replaces the
@@ -348,3 +349,4 @@ struct PlanCardView: View {
         }
     }
 }
+#endif

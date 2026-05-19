@@ -52,6 +52,7 @@ struct ToolResultView: View {
             if isCardTool {
                 cardBody
                     .bubbleStyle(toolCall.isError ? .toolError : .tool)
+                    .padding(.vertical, 6)
                     .transition(.asymmetric(
                         insertion: .opacity
                             .combined(with: .move(edge: .top))
@@ -135,8 +136,7 @@ struct ToolResultView: View {
                     }
                     .animation(.spring(response: 0.35, dampingFraction: 0.7), value: statusIconID)
 
-                    inputSummaryView
-                        .lineLimit(isExpanded ? nil : 1)
+                    inputSummaryView(maximumNumberOfLines: isExpanded ? nil : 1)
                 }
                 .contentShape(Rectangle())
             }
@@ -161,11 +161,13 @@ struct ToolResultView: View {
                             ClaudeThemeDivider()
 
                             ScrollView {
-                                Text(result)
-                                    .font(.system(.caption, design: .monospaced))
-                                    .foregroundStyle(toolCall.isError ? ClaudeTheme.statusError : ClaudeTheme.textPrimary)
-                                    .textSelection(.enabled)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                ChatTextContentView(
+                                    result,
+                                    size: ClaudeTheme.messageSize(12),
+                                    design: .monospaced,
+                                    color: toolCall.isError ? ClaudeTheme.statusError : ClaudeTheme.textPrimary
+                                )
+                                .frame(maxWidth: .infinity, alignment: .leading)
                             }
                             .frame(maxHeight: 200)
                         }
@@ -215,9 +217,7 @@ struct ToolResultView: View {
                             .frame(width: 14, height: 14)
                     }
 
-                    inputSummaryView
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                    inputSummaryView(maximumNumberOfLines: 1)
 
                     if toolCall.result == nil && isMessageStreaming {
                         ProgressView()
@@ -233,11 +233,13 @@ struct ToolResultView: View {
 
             if isExpanded, !isBashTool, let result = toolCall.result, !result.isEmpty {
                 ScrollView {
-                    Text(result)
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(toolCall.isError ? ClaudeTheme.statusError : ClaudeTheme.textSecondary)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    ChatTextContentView(
+                        result,
+                        size: ClaudeTheme.messageSize(12),
+                        design: .monospaced,
+                        color: toolCall.isError ? ClaudeTheme.statusError : ClaudeTheme.textSecondary
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(maxHeight: 200)
                 .padding(.leading, 20)
@@ -293,9 +295,12 @@ struct ToolResultView: View {
         return VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(visibleLines.enumerated()), id: \.offset) { idx, item in
                 let (prefix, text, isAdded) = item
-                Text(prefix + " " + text)
-                    .font(.system(size: ClaudeTheme.messageSize(12), design: .monospaced))
-                    .foregroundStyle(isAdded ? ClaudeTheme.statusSuccess : ClaudeTheme.statusError)
+                ChatTextContentView(
+                    prefix + " " + text,
+                    size: ClaudeTheme.messageSize(12),
+                    design: .monospaced,
+                    color: isAdded ? ClaudeTheme.statusSuccess : ClaudeTheme.statusError
+                )
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 1)
@@ -368,9 +373,12 @@ struct ToolResultView: View {
 
         return VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(visibleLines.enumerated()), id: \.offset) { _, line in
-                Text(line.isEmpty ? " " : line)
-                    .font(.system(size: ClaudeTheme.messageSize(12), design: .monospaced))
-                    .foregroundStyle(diffLineColor(line))
+                ChatTextContentView(
+                    line.isEmpty ? " " : line,
+                    size: ClaudeTheme.messageSize(12),
+                    design: .monospaced,
+                    color: diffLineColor(line)
+                )
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 1)
@@ -462,7 +470,7 @@ struct ToolResultView: View {
     }
 
     @ViewBuilder
-    private var inputSummaryView: some View {
+    private func inputSummaryView(maximumNumberOfLines: Int? = nil) -> some View {
         if isEditTool || toolNameLower == "write",
            let filePath = toolCall.editedFilePath {
             let fileName = URL(fileURLWithPath: filePath).lastPathComponent
@@ -491,12 +499,16 @@ struct ToolResultView: View {
                         .transition(.opacity.combined(with: .scale(scale: 0.85, anchor: .leading)))
                     }
                 }
+                Spacer(minLength: 0)
             }
             .animation(.easeOut(duration: 0.25), value: toolCall.result != nil)
         } else {
-            Text(inputSummary)
-                .font(.system(size: ClaudeTheme.messageSize(12)))
-                .foregroundStyle(ClaudeTheme.textSecondary)
+            ChatTextContentView(
+                inputSummary,
+                size: ClaudeTheme.messageSize(12),
+                color: ClaudeTheme.textSecondary,
+                maximumNumberOfLines: maximumNumberOfLines
+            )
         }
     }
 

@@ -1,5 +1,7 @@
 import Foundation
 
+#if os(macOS)
+
 // MARK: - GitWorktreeService
 
 public actor GitWorktreeService {
@@ -253,3 +255,5 @@ public actor GitWorktreeService {
         return result
     }
 }
+
+#endif

@@ -1,5 +1,6 @@
 import AppKit
 import UserNotifications
+import RxCodeSync
 import os.log
 
 /// Thin wrapper around UNUserNotificationCenter for "response complete" banners.
@@ -36,6 +37,14 @@ final class NotificationService: NSObject {
     /// Post a "permission needed" notification when the CLI queues a tool approval.
     /// Silently no-ops if the user hasn't granted notification permission.
     func postPermissionNeeded(toolName: String, projectName: String?, projectId: UUID?, sessionId: String?) async {
+        let projectSuffixForMirror: String = projectName.map { " — \($0)" } ?? ""
+        await fanoutToMobile(.init(
+            kind: .permissionNeeded,
+            title: "Permission needed\(projectSuffixForMirror)",
+            body: "Approve to run \(toolName)",
+            sessionID: sessionId,
+            projectID: projectId
+        ))
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         switch settings.authorizationStatus {
         case .authorized, .provisional:
@@ -78,6 +87,14 @@ final class NotificationService: NSObject {
     /// Post a "question needed" notification when the CLI invokes AskUserQuestion.
     /// Silently no-ops if the user hasn't granted notification permission.
     func postQuestionNeeded(projectName: String?, projectId: UUID?, sessionId: String?) async {
+        let projectSuffixForMirror: String = projectName.map { " — \($0)" } ?? ""
+        await fanoutToMobile(.init(
+            kind: .questionNeeded,
+            title: "Assistant has a question\(projectSuffixForMirror)",
+            body: "Tap to answer",
+            sessionID: sessionId,
+            projectID: projectId
+        ))
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         switch settings.authorizationStatus {
         case .authorized, .provisional:
@@ -120,6 +137,15 @@ final class NotificationService: NSObject {
     /// transitions a server from connected to failed. Silently no-ops if the user
     /// hasn't granted notification permission.
     func postMCPDisconnected(name: String, error: String?) async {
+        let detailForMirror = (error?.trimmingCharacters(in: .whitespacesAndNewlines))
+            .flatMap { $0.isEmpty ? nil : $0 } ?? "connection lost"
+        await fanoutToMobile(.init(
+            kind: .mcpDisconnected,
+            title: "MCP server disconnected",
+            body: "\(name) — \(detailForMirror)",
+            sessionID: nil,
+            projectID: nil
+        ))
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         switch settings.authorizationStatus {
         case .authorized, .provisional:
@@ -157,7 +183,17 @@ final class NotificationService: NSObject {
     }
 
     /// Post a "response complete" notification. Silently no-ops if unauthorized.
-    func postResponseComplete(title: String, body: String, projectId: UUID, sessionId: String) async {
+    /// Mobile fan-out always runs; the local macOS banner is skipped when
+    /// `postLocalBanner` is false (e.g. the desktop app is foregrounded).
+    func postResponseComplete(title: String, body: String, projectId: UUID, sessionId: String, postLocalBanner: Bool = true) async {
+        await fanoutToMobile(.init(
+            kind: .responseComplete,
+            title: title,
+            body: body.isEmpty ? "Response complete" : body,
+            sessionID: sessionId,
+            projectID: projectId
+        ))
+        guard postLocalBanner else { return }
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         switch settings.authorizationStatus {
         case .authorized, .provisional:
@@ -185,6 +221,13 @@ final class NotificationService: NSObject {
         } catch {
             logger.error("Failed to post notification: \(error.localizedDescription)")
         }
+    }
+
+    /// Forward the notification to every paired mobile device. Best-effort —
+    /// devices that are offline simply miss the live channel and fall back to
+    /// the APNs path (when configured).
+    private func fanoutToMobile(_ payload: NotificationPayload) async {
+        MobileSyncService.shared.broadcastNotification(payload)
     }
 }
 

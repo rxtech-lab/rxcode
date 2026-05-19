@@ -2,6 +2,8 @@ import Combine
 import SwiftUI
 import RxCodeCore
 
+#if os(macOS)
+
 public struct ChatView<InputAccessory: View, BottomAccessory: View, AboveInputAccessory: View>: View {
     @Environment(WindowState.self) private var windowState
     @Environment(ChatBridge.self) private var chatBridge
@@ -172,3 +174,4 @@ public extension ChatView where AboveInputAccessory == EmptyView {
         self.init(inputAccessory: inputAccessory, bottomAccessory: bottomAccessory, aboveInputAccessory: { EmptyView() })
     }
 }
+#endif

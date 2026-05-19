@@ -1,5 +1,10 @@
 import SwiftUI
 import RxCodeCore
+#if os(macOS)
+import AppKit
+#elseif os(iOS)
+import UIKit
+#endif
 
 /// Terminal-styled sheet that surfaces the output of a completed `Bash` tool call.
 /// Mirrors the look of the interactive terminal popup (dark background, monospaced
@@ -122,8 +127,12 @@ struct BashTerminalSheet: View {
     }
 
     private func copyResult() {
+#if os(macOS)
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(resultText, forType: .string)
+#elseif os(iOS)
+        UIPasteboard.general.string = resultText
+#endif
     }
 }

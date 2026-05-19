@@ -51,6 +51,12 @@ struct SettingsView: View {
                     Label("ACP Clients", systemImage: "link.circle")
                 }
                 .tag(5)
+
+            MobileSettingsTab()
+                .tabItem {
+                    Label("Mobile", systemImage: "iphone.gen3")
+                }
+                .tag(6)
         }
         .frame(width: 680, height: 620)
         .focusable(false)

@@ -1,5 +1,9 @@
 import SwiftUI
+#if os(macOS)
 import AppKit
+#elseif os(iOS)
+import UIKit
+#endif
 
 // MARK: - Claude Theme Colors
 
@@ -77,10 +81,18 @@ public enum ClaudeTheme {
 
 extension Color {
     public init(light: Color, dark: Color) {
+#if os(macOS)
         self.init(nsColor: NSColor(name: nil) { appearance in
             let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
             return isDark ? NSColor(dark) : NSColor(light)
         })
+#elseif os(iOS)
+        self.init(uiColor: UIColor { traits in
+            traits.userInterfaceStyle == .dark ? UIColor(dark) : UIColor(light)
+        })
+#else
+        self = light
+#endif
     }
 }
 
@@ -111,11 +123,24 @@ extension Color {
     }
 
     public var hexString: String {
+#if os(macOS)
         guard let c = NSColor(self).usingColorSpace(.sRGB) else { return "#0000FF" }
         let r = Int((c.redComponent * 255).rounded())
         let g = Int((c.greenComponent * 255).rounded())
         let b = Int((c.blueComponent * 255).rounded())
         return String(format: "#%02X%02X%02X", r, g, b)
+#elseif os(iOS)
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        UIColor(self).getRed(&r, green: &g, blue: &b, alpha: &a)
+        return String(
+            format: "#%02X%02X%02X",
+            Int((r * 255).rounded()),
+            Int((g * 255).rounded()),
+            Int((b * 255).rounded())
+        )
+#else
+        return "#0000FF"
+#endif
     }
 }
 
@@ -123,9 +148,13 @@ extension Color {
 
 extension View {
     public func pointerCursorOnHover() -> some View {
+#if os(macOS)
         self.onHover { hovering in
             if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
         }
+#else
+        self
+#endif
     }
 
     public func claudeCard() -> some View {

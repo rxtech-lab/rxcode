@@ -1,6 +1,8 @@
 import Foundation
 import os
 
+#if os(macOS)
+
 /// Rewrites Claude Code session jsonl files so that RxCode-spawned sessions
 /// appear in the interactive `claude --resume` picker.
 ///
@@ -99,3 +101,5 @@ public enum PickerExposer {
         }
     }
 }
+
+#endif

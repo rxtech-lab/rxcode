@@ -2,6 +2,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 import RxCodeCore
 
+#if os(macOS)
+
 // MARK: - Slash Command Manager View
 
 public struct SlashCommandManagerView: View {
@@ -618,3 +620,4 @@ struct SlashCommandEditView: View {
         }
     }
 }
+#endif

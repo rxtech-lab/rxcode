@@ -2,6 +2,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 import RxCodeCore
 
+#if os(macOS)
+
 // MARK: - Shortcut Manager View
 
 public struct ShortcutManagerView: View {
@@ -424,3 +426,4 @@ struct ShortcutEditView: View {
         }
     }
 }
+#endif

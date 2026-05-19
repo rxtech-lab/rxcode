@@ -1,5 +1,7 @@
 import Foundation
 
+#if os(macOS)
+
 /// Extracts "owner/repo" from a GitHub remote URL.
 /// Supports HTTPS and SSH formats.
 /// Returns nil for non-GitHub URLs.
@@ -46,3 +48,5 @@ public func detectGitHubOwnerRepo(at path: String) -> String? {
 
     return parseGitHubOwnerRepo(from: urlString)
 }
+
+#endif

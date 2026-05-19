@@ -487,6 +487,7 @@ struct MainWindowRoot: View {
             NotificationService.shared.onNotificationTapped = { projectId, sessionId in
                 appState.handleNotificationTap(projectId: projectId, sessionId: sessionId, mainWindow: windowState)
             }
+            MobileSyncService.shared.start()
         }
     }
 }

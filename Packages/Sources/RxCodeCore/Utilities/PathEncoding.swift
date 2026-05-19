@@ -26,7 +26,11 @@ extension String {
 public enum CLIProjectsDirectory {
     /// `~/.claude/projects`. Created lazily by the CLI; may not exist yet.
     public static var url: URL {
+#if os(macOS)
         let home = FileManager.default.homeDirectoryForCurrentUser
+#else
+        let home = URL.homeDirectory
+#endif
         return home.appendingPathComponent(".claude/projects", isDirectory: true)
     }
 

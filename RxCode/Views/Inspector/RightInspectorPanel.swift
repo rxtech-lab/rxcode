@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import RxCodeCore
 
@@ -1052,9 +1053,17 @@ private struct ChangeSection: View {
                                 ChangeFileRow(
                                     file: file,
                                     isSelected: selection.contains(file.displayPath),
-                                    onToggle: {
+                                    onPrimarySelect: {
                                         onFocus()
-                                        toggle(file)
+                                        selectOnly(file)
+                                    },
+                                    onSecondarySelect: { isCommandPressed in
+                                        onFocus()
+                                        if isCommandPressed {
+                                            toggle(file)
+                                        } else {
+                                            selectOnly(file)
+                                        }
                                     }
                                 )
                             }
@@ -1115,6 +1124,10 @@ private struct ChangeSection: View {
             selection.insert(file.displayPath)
         }
     }
+
+    private func selectOnly(_ file: GitChangeFile) {
+        selection = [file.displayPath]
+    }
 }
 
 // MARK: - ChangeFileRow
@@ -1122,7 +1135,8 @@ private struct ChangeSection: View {
 private struct ChangeFileRow: View {
     let file: GitChangeFile
     let isSelected: Bool
-    let onToggle: () -> Void
+    let onPrimarySelect: () -> Void
+    let onSecondarySelect: (_ isCommandPressed: Bool) -> Void
 
     @Environment(WindowState.self) private var windowState
     @State private var isHovering = false
@@ -1169,12 +1183,16 @@ private struct ChangeFileRow: View {
                 .fill(rowFill)
         )
         .contentShape(Rectangle())
-        .onTapGesture { onToggle() }
-        .contextMenu {
-            Button("Show Diff") { openDiff() }
+        .onTapGesture { onPrimarySelect() }
+        .overlay {
+            ChangeFileRightClickOverlay(
+                onRightClick: onSecondarySelect,
+                onShowDiff: openDiff
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onHover { isHovering = $0 }
-        .help("Click to select · Right-click for Show Diff")
+        .help("Click to select · Command-right-click to add or remove · Right-click for Show Diff")
     }
 
     private func openDiff() {
@@ -1216,6 +1234,54 @@ private struct ChangeFileRow: View {
     private var badgeLabel: String {
         if file.isUntracked { return "?" }
         return String(file.statusChar)
+    }
+}
+
+private struct ChangeFileRightClickOverlay: NSViewRepresentable {
+    let onRightClick: (_ isCommandPressed: Bool) -> Void
+    let onShowDiff: () -> Void
+
+    func makeNSView(context: Context) -> RightClickSelectionView {
+        let view = RightClickSelectionView()
+        view.onRightClick = onRightClick
+        view.onShowDiff = onShowDiff
+        return view
+    }
+
+    func updateNSView(_ nsView: RightClickSelectionView, context: Context) {
+        nsView.onRightClick = onRightClick
+        nsView.onShowDiff = onShowDiff
+    }
+}
+
+private final class RightClickSelectionView: NSView {
+    var onRightClick: ((_ isCommandPressed: Bool) -> Void)?
+    var onShowDiff: (() -> Void)?
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard let event = window?.currentEvent,
+              event.type == .rightMouseDown else {
+            return nil
+        }
+        return self
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        onRightClick?(modifiers.contains(.command))
+        showMenu(for: event)
+    }
+
+    private func showMenu(for event: NSEvent) {
+        let menu = NSMenu()
+        let showDiffItem = NSMenuItem(title: "Show Diff", action: #selector(showDiff), keyEquivalent: "")
+        showDiffItem.target = self
+        menu.addItem(showDiffItem)
+        menu.popUp(positioning: showDiffItem, at: convert(event.locationInWindow, from: nil), in: self)
+    }
+
+    @objc private func showDiff() {
+        onShowDiff?()
     }
 }
 

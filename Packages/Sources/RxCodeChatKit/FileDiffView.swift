@@ -1,4 +1,5 @@
 import SwiftUI
+#if os(macOS)
 import AppKit
 import RxCodeCore
 
@@ -232,21 +233,6 @@ struct DiffLine {
 
     let text: String
     let kind: Kind
-}
-
-// MARK: - Shared Indent Utility
-
-nonisolated func stripCommonIndent(old: [String], new: [String]) -> (old: [String], new: [String]) {
-    let combined = old + new
-    let commonIndent = combined
-        .filter { !$0.allSatisfy(\.isWhitespace) }
-        .map { $0.prefix(while: { $0 == " " || $0 == "\t" }).count }
-        .min() ?? 0
-    guard commonIndent > 0 else { return (old, new) }
-    func strip(_ line: String) -> String {
-        line.count >= commonIndent ? String(line.dropFirst(commonIndent)) : line
-    }
-    return (old.map(strip), new.map(strip))
 }
 
 // MARK: - NSTextView-based Renderer (TextKit2)
@@ -487,3 +473,4 @@ private struct DiffTextRenderer: NSViewRepresentable {
         }
     }
 }
+#endif

@@ -32,3 +32,9 @@ sparkle.key
 release_notes.html
 release_notes.md
 
+relay-server/rxcode-relay
+
+# Relay env files and APNs auth keys (contain secrets)
+relay-server/.env
+relay-server/.env.*
+relay-server/*.p8

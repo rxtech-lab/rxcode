@@ -1,4 +1,5 @@
 import SwiftUI
+#if os(macOS)
 import AppKit
 import RxCodeCore
 
@@ -41,7 +42,7 @@ struct MessageBubble: View {
                 Spacer(minLength: 80)
             }
 
-            VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 8) {
+            VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 14) {
                 // Show attachments
                 if !message.attachmentPaths.isEmpty {
                     attachmentPreview
@@ -142,9 +143,13 @@ struct MessageBubble: View {
             Image(systemName: "arrow.trianglehead.2.clockwise")
                 .font(.system(size: ClaudeTheme.messageSize(12), weight: .medium))
                 .foregroundStyle(ClaudeTheme.textTertiary)
-            Text(message.content)
-                .font(.system(size: ClaudeTheme.messageSize(13), weight: .medium))
-                .foregroundStyle(ClaudeTheme.textTertiary)
+            ChatTextContentView(
+                message.content,
+                size: ClaudeTheme.messageSize(13),
+                weight: .medium,
+                color: ClaudeTheme.textTertiary
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
@@ -166,10 +171,12 @@ struct MessageBubble: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: ClaudeTheme.messageSize(13)))
                 .foregroundStyle(ClaudeTheme.statusWarning)
-            Text(message.content)
-                .font(.system(size: ClaudeTheme.messageSize(14)))
-                .foregroundStyle(ClaudeTheme.textPrimary)
-                .textSelection(.enabled)
+            ChatTextContentView(
+                message.content,
+                size: ClaudeTheme.messageSize(14),
+                color: ClaudeTheme.textPrimary
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .bubbleStyle(.error)
     }
@@ -221,25 +228,25 @@ struct MessageBubble: View {
         } else {
             VStack(alignment: .leading, spacing: 6) {
                 let isLong = displayText.count > Self.longTextThreshold
-                Text(chipifiedAttributedString(displayText))
-                    .font(.system(size: ClaudeTheme.messageSize(14)))
-                    .foregroundStyle(ClaudeTheme.userBubbleText)
-                    .textSelection(.enabled)
-                    .multilineTextAlignment(.leading)
-                    .lineLimit(isLong && !isLongTextExpanded ? 5 : nil)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .environment(\.openURL, OpenURLAction { url in
-                        // Intercept the synthetic `rxcode-image://<index>` link
-                        // emitted by chipifiedAttributedString — open the matching
-                        // image in the preview sheet rather than the system browser.
-                        guard url.scheme == "rxcode-image",
-                              let index = Int(url.host ?? ""),
-                              let path = imagePath(forChipIndex: index) else {
-                            return .systemAction
-                        }
-                        previewImagePath = path
-                        return .handled
-                    })
+                ChatTextContentView(
+                    attributed: chipifiedAttributedString(displayText),
+                    size: ClaudeTheme.messageSize(14),
+                    color: ClaudeTheme.userBubbleText,
+                    maximumNumberOfLines: isLong && !isLongTextExpanded ? 5 : nil
+                ) { url in
+                    // Intercept the synthetic `rxcode-image://<index>` link emitted
+                    // by chipifiedAttributedString and open the matching image in the
+                    // preview sheet rather than the system browser.
+                    guard url.scheme == "rxcode-image",
+                          let index = Int(url.host ?? ""),
+                          let path = imagePath(forChipIndex: index) else {
+                        return false
+                    }
+                    previewImagePath = path
+                    return true
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
                 if isLong {
                     Button {
                         withAnimation(.easeInOut(duration: 0.2)) {
@@ -471,7 +478,7 @@ struct MessageBubble: View {
     @State private var expandedTransientGroupIds: Set<String> = []
 
     private func transientToolSummary(groupId: String, tools: [ToolCall]) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 14) {
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     if expandedTransientGroupIds.contains(groupId) {
@@ -482,18 +489,19 @@ struct MessageBubble: View {
                 }
             } label: {
                 let isExpanded = expandedTransientGroupIds.contains(groupId)
-                HStack(spacing: 6) {
+                HStack(spacing: 8) {
                     Image(systemName: "eye.slash")
-                        .font(.system(size: ClaudeTheme.messageSize(11)))
+                        .font(.system(size: ClaudeTheme.messageSize(13)))
                         .foregroundStyle(ClaudeTheme.textTertiary)
                     Text(String(format: String(localized: "%lld tools executed", bundle: .module), tools.count))
-                        .font(.system(size: ClaudeTheme.messageSize(12)))
+                        .font(.system(size: ClaudeTheme.messageSize(13), weight: .medium))
                         .foregroundStyle(ClaudeTheme.textTertiary)
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.system(size: ClaudeTheme.messageSize(9)))
+                        .font(.system(size: ClaudeTheme.messageSize(10), weight: .medium))
                         .foregroundStyle(ClaudeTheme.textTertiary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 6)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -701,3 +709,4 @@ private struct MessageImagePreviewSheet: View {
         .background(ClaudeTheme.surfacePrimary)
     }
 }
+#endif

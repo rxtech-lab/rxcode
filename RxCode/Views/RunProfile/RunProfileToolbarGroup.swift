@@ -1,13 +1,19 @@
 import RxCodeCore
 import SwiftUI
 
-/// Single combined toolbar pill containing: profile picker · run button ·
-/// stop button (the stop button is hidden entirely when no task is active).
-/// Wrapped in its own subview so its body re-renders independently of the
-/// rest of the toolbar.
+/// Single combined toolbar pill containing: profile picker · (optional)
+/// destination picker · run button · stop button (the stop button is hidden
+/// entirely when no task is active). Wrapped in its own subview so its body
+/// re-renders independently of the rest of the toolbar.
 struct RunProfileToolbarGroup: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
+
+    /// Destinations cached per (container, scheme). Loaded on demand when
+    /// the picker first appears or the refresh button is tapped.
+    @State private var destinations: [XcodeDestination] = []
+    @State private var isLoadingDestinations = false
+    @State private var lastLoadedKey: String?
 
     private var project: Project? { windowState.selectedProject }
 
@@ -32,10 +38,26 @@ struct RunProfileToolbarGroup: View {
         }
     }
 
+    /// Stable key for the destination cache lookup. Changes when the user
+    /// switches profile or edits the container/scheme.
+    private var destinationCacheKey: String? {
+        guard let profile = selectedProfile,
+              profile.type == .xcode,
+              let xcode = profile.xcode,
+              !xcode.container.isEmpty,
+              !xcode.scheme.isEmpty else { return nil }
+        return "\(xcode.container)::\(xcode.scheme)"
+    }
+
     var body: some View {
         HStack(spacing: 2) {
             profilePicker
                 .padding(.leading, 4)
+
+            if shouldShowDestinationPicker {
+                Divider().frame(height: 14)
+                destinationPicker
+            }
 
             Divider().frame(height: 14)
 
@@ -49,6 +71,14 @@ struct RunProfileToolbarGroup: View {
         .task(id: project?.id) {
             if let project { await appState.ensureRunProfilesLoaded(for: project.id) }
         }
+        .task(id: destinationCacheKey) {
+            await loadDestinationsIfNeeded(force: false)
+        }
+    }
+
+    private var shouldShowDestinationPicker: Bool {
+        guard let profile = selectedProfile else { return false }
+        return profile.type == .xcode && profile.xcode != nil
     }
 
     // MARK: - Profile picker
@@ -179,5 +209,129 @@ struct RunProfileToolbarGroup: View {
         windowState.inspectorTab = .run
         windowState.showInspector = true
         windowState.selectedRunTaskId = appState.runService.activeTasks.first?.id
+    }
+
+    // MARK: - Destination picker
+
+    private var destinationPicker: some View {
+        Menu {
+            if isLoadingDestinations && destinations.isEmpty {
+                Text("Loading destinations…").foregroundStyle(.secondary)
+            } else if destinations.isEmpty {
+                Text("No destinations found").foregroundStyle(.secondary)
+                Text("Check the scheme and container path.")
+                    .foregroundStyle(.secondary)
+                    .font(.system(size: 11))
+            } else {
+                let grouped = Dictionary(grouping: destinations, by: { $0.groupLabel })
+                let order = ["macOS", "Mac Catalyst", "iOS Simulators", "iOS Devices",
+                             "tvOS Simulators", "tvOS Devices",
+                             "watchOS Simulators", "watchOS Devices",
+                             "visionOS Simulators", "visionOS Devices", "Other"]
+                let presentGroups = order.filter { grouped[$0] != nil }
+                ForEach(presentGroups, id: \.self) { group in
+                    Section(group) {
+                        ForEach(grouped[group] ?? []) { destination in
+                            Button {
+                                selectDestination(destination)
+                            } label: {
+                                HStack {
+                                    Text(destination.displayName)
+                                    if destination.id == currentDestination?.id {
+                                        Image(systemName: "checkmark")
+                                    }
+                                    if !destination.isLaunchable {
+                                        Text("(build only)")
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Divider()
+            Button {
+                Task { await loadDestinationsIfNeeded(force: true) }
+            } label: {
+                Label("Refresh", systemImage: "arrow.clockwise")
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: destinationIconName)
+                    .font(.system(size: 11))
+                Text(currentDestination?.displayName ?? "Any Mac")
+                    .font(.system(size: 12, weight: .medium))
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 10)
+            .frame(maxWidth: 220)
+            .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Select Run Destination")
+        .accessibilityIdentifier("run-profile-destination-menu")
+    }
+
+    private var currentDestination: XcodeDestination? {
+        selectedProfile?.xcode?.selectedDestination
+    }
+
+    private var destinationIconName: String {
+        switch currentDestination?.kind {
+        case .iosSimulator, .iosDevice: return "iphone"
+        case .tvSimulator, .tvDevice: return "tv"
+        case .watchSimulator, .watchDevice: return "applewatch"
+        case .visionSimulator, .visionDevice: return "visionpro"
+        case .macCatalyst: return "ipad.and.iphone"
+        case .macOS, .other, nil: return "desktopcomputer"
+        }
+    }
+
+    private func selectDestination(_ destination: XcodeDestination) {
+        guard let project, let profile = selectedProfile, profile.type == .xcode else { return }
+        var updated = profiles
+        guard let idx = updated.firstIndex(where: { $0.id == profile.id }) else { return }
+        var newProfile = updated[idx]
+        var xcode = newProfile.xcode ?? XcodeRunConfig()
+        xcode.selectedDestination = destination
+        // Clear the legacy free-text override so it doesn't shadow the new
+        // structured selection on the next run.
+        xcode.destination = ""
+        newProfile.xcode = xcode
+        newProfile.updatedAt = Date()
+        updated[idx] = newProfile
+        appState.setRunProfiles(updated, for: project.id)
+    }
+
+    private func loadDestinationsIfNeeded(force: Bool) async {
+        guard let key = destinationCacheKey,
+              let project,
+              let xcode = selectedProfile?.xcode else {
+            destinations = []
+            return
+        }
+        if !force && lastLoadedKey == key && !destinations.isEmpty { return }
+
+        isLoadingDestinations = true
+        defer { isLoadingDestinations = false }
+
+        let loaded = await XcodeDestinationService.shared.destinations(
+            projectPath: project.path,
+            container: xcode.container,
+            isWorkspace: xcode.isWorkspace,
+            scheme: xcode.scheme,
+            forceRefresh: force
+        )
+        // Guard against late returns after the user switched profiles.
+        if destinationCacheKey == key {
+            destinations = loaded
+            lastLoadedKey = key
+        }
     }
 }

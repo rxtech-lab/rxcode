@@ -21,8 +21,7 @@ public enum InspectorTab: String, CaseIterable {
 
 public enum InspectorReviewTab: String, CaseIterable, Sendable {
     case thisThread = "This thread"
-    case unstaged = "Unstaged"
-    case staged = "Staged"
+    case changes = "Changes"
     case branch = "Branch"
 }
 
@@ -61,6 +60,16 @@ public final class WindowState {
 
     public var selectedProject: Project?
     public var currentSessionId: String?
+
+    // MARK: - Pending Worktree (new-chat view)
+
+    /// Filesystem path of a worktree the user created before sending the first
+    /// message. Transferred onto the session state when `sendPrompt` allocates
+    /// a session id; cleared when the new-chat view is reset or a different
+    /// session is selected.
+    public var pendingWorktreePath: String?
+    /// Branch name companion to `pendingWorktreePath`.
+    public var pendingWorktreeBranch: String?
 
     // MARK: - Placeholder Tracking
 
@@ -126,8 +135,28 @@ public final class WindowState {
 
     public var interactiveTerminal: InteractiveTerminalState?
     public var showInspector: Bool = false
-    public var inspectorMode: InspectorMode = .review
-    public var inspectorTab: InspectorTab = .memo
+    /// Persisted to UserDefaults so the inspector remembers whether the user
+    /// last looked at Review or Inspector. Defaults to Review on first launch.
+    public var inspectorMode: InspectorMode = WindowState.loadInspectorMode() {
+        didSet { UserDefaults.standard.set(inspectorMode.rawValue, forKey: WindowState.inspectorModeKey) }
+    }
+    /// Persisted to UserDefaults. Defaults to Terminal so the Cmd+T workflow
+    /// keeps working out of the box when the user opens Inspector mode.
+    public var inspectorTab: InspectorTab = WindowState.loadInspectorTab() {
+        didSet { UserDefaults.standard.set(inspectorTab.rawValue, forKey: WindowState.inspectorTabKey) }
+    }
+    private static let inspectorModeKey = "inspectorMode"
+    private static let inspectorTabKey = "inspectorTab"
+    private static func loadInspectorMode() -> InspectorMode {
+        guard let raw = UserDefaults.standard.string(forKey: inspectorModeKey),
+              let mode = InspectorMode(rawValue: raw) else { return .review }
+        return mode
+    }
+    private static func loadInspectorTab() -> InspectorTab {
+        guard let raw = UserDefaults.standard.string(forKey: inspectorTabKey),
+              let tab = InspectorTab(rawValue: raw) else { return .terminal }
+        return tab
+    }
     /// Currently-selected run profile in the toolbar picker. Persisted only in
     /// memory — re-selecting on relaunch is fine. Per-window so two windows
     /// can target different profiles in the same project.
@@ -139,7 +168,15 @@ public final class WindowState {
     /// Bumped to request the active inspector terminal to clear its buffer.
     /// Observed by `RightInspectorPanel`; the value itself is meaningless — only the change matters.
     public var clearTerminalRequest: UUID?
-    public var inspectorReviewTab: InspectorReviewTab = .thisThread
+    public var inspectorReviewTab: InspectorReviewTab = WindowState.loadInspectorReviewTab() {
+        didSet { UserDefaults.standard.set(inspectorReviewTab.rawValue, forKey: WindowState.inspectorReviewTabKey) }
+    }
+    private static let inspectorReviewTabKey = "inspectorReviewTab"
+    private static func loadInspectorReviewTab() -> InspectorReviewTab {
+        guard let raw = UserDefaults.standard.string(forKey: inspectorReviewTabKey),
+              let tab = InspectorReviewTab(rawValue: raw) else { return .thisThread }
+        return tab
+    }
     public var inspectorFile: PreviewFile?
     public var diffFile: PreviewFile?
     public var showingBriefing = true

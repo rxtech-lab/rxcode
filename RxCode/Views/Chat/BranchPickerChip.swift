@@ -10,11 +10,37 @@ struct BranchPickerChip: View {
     @Environment(WindowState.self) private var windowState
     @State private var showCreateSheet = false
     @State private var currentBranch: String?
+    @State private var branches: [String] = []
+    @State private var switchingTo: String?
     @State private var refreshTask: Task<Void, Never>?
 
     var body: some View {
-        Button {
-            showCreateSheet = true
+        Menu {
+            if !branches.isEmpty {
+                Section("Switch branch") {
+                    ForEach(branches, id: \.self) { name in
+                        Button {
+                            switchToBranch(name)
+                        } label: {
+                            HStack {
+                                if name == activeBranch {
+                                    Image(systemName: "checkmark")
+                                } else {
+                                    Image(systemName: "arrow.triangle.branch")
+                                }
+                                Text(name)
+                            }
+                        }
+                        .disabled(switchingTo != nil)
+                    }
+                }
+                Divider()
+            }
+            Button {
+                showCreateSheet = true
+            } label: {
+                Label("Create new branch…", systemImage: "plus")
+            }
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: "arrow.triangle.branch")
@@ -30,7 +56,9 @@ struct BranchPickerChip: View {
             .padding(.vertical, 4)
             .background(ClaudeTheme.surfaceSecondary, in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
         }
-        .buttonStyle(.plain)
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
         .help(workingDirectoryHint)
         .sheet(isPresented: $showCreateSheet) {
             CreateBranchSheet(currentBranch: currentBranch) {
@@ -43,6 +71,25 @@ struct BranchPickerChip: View {
         .onChange(of: refreshKey) { _, _ in refresh() }
     }
 
+    private var activeBranch: String? {
+        sessionWorktreeBranch ?? currentBranch
+    }
+
+    private func switchToBranch(_ branch: String) {
+        guard switchingTo == nil, branch != activeBranch else { return }
+        switchingTo = branch
+        Task {
+            do {
+                try await appState.switchToExistingBranch(branch, in: windowState)
+            } catch {
+                // Surface failures through the existing logging path; the chip
+                // simply reverts to the prior state on the next refresh.
+            }
+            switchingTo = nil
+            refresh()
+        }
+    }
+
     private var refreshKey: String {
         let project = windowState.selectedProject?.path ?? ""
         let session = windowState.currentSessionId ?? "__new__"
@@ -50,15 +97,19 @@ struct BranchPickerChip: View {
     }
 
     private var sessionWorktreePath: String? {
-        guard let sid = windowState.currentSessionId else { return nil }
-        return appState.sessionStates[sid]?.worktreePath
-            ?? appState.allSessionSummaries.first(where: { $0.id == sid })?.worktreePath
+        if let sid = windowState.currentSessionId {
+            return appState.sessionStates[sid]?.worktreePath
+                ?? appState.allSessionSummaries.first(where: { $0.id == sid })?.worktreePath
+        }
+        return windowState.pendingWorktreePath
     }
 
     private var sessionWorktreeBranch: String? {
-        guard let sid = windowState.currentSessionId else { return nil }
-        return appState.sessionStates[sid]?.worktreeBranch
-            ?? appState.allSessionSummaries.first(where: { $0.id == sid })?.worktreeBranch
+        if let sid = windowState.currentSessionId {
+            return appState.sessionStates[sid]?.worktreeBranch
+                ?? appState.allSessionSummaries.first(where: { $0.id == sid })?.worktreeBranch
+        }
+        return windowState.pendingWorktreeBranch
     }
 
     private var displayName: String {
@@ -81,10 +132,16 @@ struct BranchPickerChip: View {
         let path = sessionWorktreePath ?? windowState.selectedProject?.path
         guard let path else {
             currentBranch = nil
+            branches = []
             return
         }
         let branch = await GitHelper.currentBranch(at: path)
-        if !Task.isCancelled { currentBranch = branch }
+        let listPath = windowState.selectedProject?.path ?? path
+        let list = await GitHelper.listLocalBranches(at: listPath)
+        if !Task.isCancelled {
+            currentBranch = branch
+            branches = list
+        }
     }
 }
 

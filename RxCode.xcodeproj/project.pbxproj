@@ -14,13 +14,13 @@
 		DF06CCD12FB4CAB5005991E1 /* ViewInspector in Frameworks */ = {isa = PBXBuildFile; productRef = DF06CCD02FB4CAB5005991E1 /* ViewInspector */; };
 		DF06DCC72FB8552B005991E1 /* UnitTestPlan.xctestplan in Resources */ = {isa = PBXBuildFile; fileRef = DF06DCC62FB8552B005991E1 /* UnitTestPlan.xctestplan */; };
 		DF23F7362FB8C3EC008929A6 /* icon.icon in Resources */ = {isa = PBXBuildFile; fileRef = DF23F7352FB8C3EC008929A6 /* icon.icon */; };
+		DF23FF1D2FBB42F7008929A6 /* WaterfallGrid in Frameworks */ = {isa = PBXBuildFile; productRef = DF23FF1C2FBB42F7008929A6 /* WaterfallGrid */; };
 		DFA0CCD12FB4CC01005991E1 /* PlanDecisionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA0CCC02FB4CC01005991E1 /* PlanDecisionTests.swift */; };
 		DFA0CCD22FB4CC01005991E1 /* PlanCardViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA0CCC12FB4CC01005991E1 /* PlanCardViewTests.swift */; };
 		DFA0CCD42FB4CC01005991E1 /* RxCodeChatKit in Frameworks */ = {isa = PBXBuildFile; productRef = DFA0CCC32FB4CC01005991E1 /* RxCodeChatKit */; };
 		DFA0CCE12FB4CC02005991E1 /* HistoryListArchiveFilterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA0CCD52FB4CC02005991E1 /* HistoryListArchiveFilterTests.swift */; };
 		E6821AC12F7CEE7200829FC9 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = E6A001012F8A000100000001 /* SwiftTerm */; };
 		E6C001022F9B000100000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = E6C001012F9B000100000001 /* Sparkle */; };
-		DF23FF1D2FBB42F7008929A6 /* WaterfallGrid in Frameworks */ = {isa = PBXBuildFile; productRef = DF23FF1C2FBB42F7008929A6 /* WaterfallGrid */; };
 		E6D001032FA0000100000001 /* RxCodeCore in Frameworks */ = {isa = PBXBuildFile; productRef = E6D001012FA0000100000001 /* RxCodeCore */; };
 		E6D001042FA0000100000001 /* RxCodeChatKit in Frameworks */ = {isa = PBXBuildFile; productRef = E6D001022FA0000100000001 /* RxCodeChatKit */; };
 /* End PBXBuildFile section */
@@ -544,7 +544,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.2.5;
-				PRODUCT_BUNDLE_IDENTIFIER = com.idealapp.RxCode;
+				PRODUCT_BUNDLE_IDENTIFIER = com.rxlab.RxCode;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -578,7 +578,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.2.5;
-				PRODUCT_BUNDLE_IDENTIFIER = com.idealapp.RxCode;
+				PRODUCT_BUNDLE_IDENTIFIER = com.rxlab.RxCode;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -647,6 +647,14 @@
 				minimumVersion = 0.10.3;
 			};
 		};
+		DF23FF1B2FBB42F7008929A6 /* XCRemoteSwiftPackageReference "WaterfallGrid" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/paololeonardi/WaterfallGrid";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.1.0;
+			};
+		};
 		E6A001002F8A000100000001 /* XCRemoteSwiftPackageReference "SwiftTerm" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/migueldeicaza/SwiftTerm.git";
@@ -663,14 +671,6 @@
 				minimumVersion = 2.0.0;
 			};
 		};
-		DF23FF1B2FBB42F7008929A6 /* XCRemoteSwiftPackageReference "WaterfallGrid" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/paololeonardi/WaterfallGrid";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 1.1.0;
-			};
-		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -682,6 +682,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = DF06CCCF2FB4CAB5005991E1 /* XCRemoteSwiftPackageReference "ViewInspector" */;
 			productName = ViewInspector;
+		};
+		DF23FF1C2FBB42F7008929A6 /* WaterfallGrid */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DF23FF1B2FBB42F7008929A6 /* XCRemoteSwiftPackageReference "WaterfallGrid" */;
+			productName = WaterfallGrid;
 		};
 		DFA0CCC32FB4CC01005991E1 /* RxCodeChatKit */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -696,11 +701,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = E6C001002F9B000100000001 /* XCRemoteSwiftPackageReference "Sparkle" */;
 			productName = Sparkle;
-		};
-		DF23FF1C2FBB42F7008929A6 /* WaterfallGrid */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = DF23FF1B2FBB42F7008929A6 /* XCRemoteSwiftPackageReference "WaterfallGrid" */;
-			productName = WaterfallGrid;
 		};
 		E6D001012FA0000100000001 /* RxCodeCore */ = {
 			isa = XCSwiftPackageProductDependency;

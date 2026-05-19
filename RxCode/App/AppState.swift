@@ -148,6 +148,20 @@ final class AppState {
     /// id after the swap that happens mid-stream in `processStream`.
     private var sessionIdRedirect: [String: String] = [:]
 
+    // MARK: - Stream Completion Tracking (cross-project MCP)
+
+    /// Result of a finished stream. Used by `ide__send_to_thread` to surface
+    /// the assistant's reply back through the MCP tool call.
+    struct StreamCompletion: Sendable {
+        let sessionId: String
+        let assistantText: String
+        let error: String?
+    }
+
+    /// Completed streams whose owners (callers of `awaitStreamCompletion`)
+    /// have not yet picked up the result. Keyed by `streamId`.
+    private var pendingStreamCompletions: [UUID: StreamCompletion] = [:]
+
     // MARK: - Session Summaries (shared — lightweight metadata for all projects)
 
     var allSessionSummaries: [ChatSession.Summary] = []
@@ -2037,6 +2051,7 @@ final class AppState {
 
     // MARK: - Shared Send Logic
 
+    @discardableResult
     private func sendPrompt(
         _ prompt: String,
         displayText: String? = nil,
@@ -2045,10 +2060,10 @@ final class AppState {
         initialMessages: [ChatMessage]? = nil,
         tempFilePaths: [String] = [],
         in window: WindowState
-    ) async {
+    ) async -> UUID? {
         guard let project = window.selectedProject else {
             handleError(AppError.noProjectSelected, in: window)
-            return
+            return nil
         }
 
         if isStreaming(in: window) {
@@ -2071,12 +2086,18 @@ final class AppState {
             window.sessionModel = snapModel
             let snapEffort = window.sessionEffort
             let snapPermission = window.sessionPermissionMode
+            let pendingWorktreePath = window.pendingWorktreePath
+            let pendingWorktreeBranch = window.pendingWorktreeBranch
             updateState(tempId) { state in
                 state.agentProvider = snapProvider
                 state.model = snapModel
                 state.effort = snapEffort
                 state.permissionMode = snapPermission
+                state.worktreePath = pendingWorktreePath
+                state.worktreeBranch = pendingWorktreeBranch
             }
+            window.pendingWorktreePath = nil
+            window.pendingWorktreeBranch = nil
         }
 
         let sessionKey = window.currentSessionId!
@@ -2112,7 +2133,9 @@ final class AppState {
                 messages: [],
                 agentProvider: provider,
                 model: selection.model,
-                origin: provider.defaultSessionOrigin
+                origin: provider.defaultSessionOrigin,
+                worktreePath: sessionStates[sessionKey]?.worktreePath,
+                worktreeBranch: sessionStates[sessionKey]?.worktreeBranch
             )
             allSessionSummaries.insert(placeholder.summary, at: 0)
             threadStore.upsert(placeholder.summary)
@@ -2202,6 +2225,7 @@ final class AppState {
             }
         }
         sessionStates[sessionKey, default: SessionStreamState()].streamTask = task
+        return streamId
     }
 
     // MARK: - Stream Processing
@@ -2253,6 +2277,187 @@ final class AppState {
                 Self.stripNoOpText(at: idx, in: &state.messages)
             }
             state.streamingStartDate = nil
+        }
+    }
+
+    // MARK: - Stream Completion (cross-project MCP)
+
+    /// Record that the stream `streamId` finished. Stored in
+    /// `pendingStreamCompletions` for any `awaitStreamCompletion(...)` caller
+    /// (currently `ide__send_to_thread`) to pick up. Latest call wins, except
+    /// we don't overwrite a success with an error from the fallback path.
+    private func recordStreamCompletion(
+        streamId: UUID,
+        sessionId: String,
+        assistantText: String,
+        error: String?
+    ) {
+        pendingStreamCompletions[streamId] = StreamCompletion(
+            sessionId: sessionId,
+            assistantText: assistantText,
+            error: error
+        )
+    }
+
+    /// Wait up to `timeout` seconds for the stream identified by `streamId`
+    /// to record a completion. Polls every 100ms — MainActor serialization
+    /// means the recorder fires between sleeps. Returns the completion if
+    /// one arrived in time, otherwise `nil`.
+    func awaitStreamCompletion(streamId: UUID, timeout: TimeInterval) async -> StreamCompletion? {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if let completion = pendingStreamCompletions.removeValue(forKey: streamId) {
+                return completion
+            }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+        return pendingStreamCompletions.removeValue(forKey: streamId)
+    }
+
+    /// Discard a recorded completion. Called by long-running `wait_for_response=false`
+    /// MCP sends so the dictionary doesn't grow unbounded with abandoned results.
+    func discardStreamCompletion(streamId: UUID) {
+        pendingStreamCompletions.removeValue(forKey: streamId)
+    }
+
+    // MARK: - Cross-Project Send (used by ide__send_to_thread)
+
+    struct CrossProjectSendResult: Sendable {
+        let threadId: String
+        let projectId: UUID
+        let done: Bool
+        let assistantText: String
+        let error: String?
+    }
+
+    enum CrossProjectSendError: Error, LocalizedError {
+        case unknownProject(UUID)
+        case unknownThread(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .unknownProject(let id): return "No project with id \(id.uuidString)"
+            case .unknownThread(let id):  return "No thread with id \(id)"
+            }
+        }
+    }
+
+    /// Send a prompt to a thread in any project. The send runs through the
+    /// normal `sendPrompt` pipeline via a synthetic `WindowState`, so all the
+    /// usual side-effects (title generation, briefing updates, persistence)
+    /// still fire and any UI windows currently bound to the same session see
+    /// the assistant tokens live via the shared `sessionStates` dictionary.
+    func sendCrossProject(
+        projectId: UUID?,
+        threadId: String?,
+        prompt: String,
+        agentProvider: AgentProvider? = nil,
+        model: String? = nil,
+        effort: String? = nil,
+        permissionMode: PermissionMode? = nil,
+        waitForResponse: Bool = true,
+        timeoutSeconds: TimeInterval = 120
+    ) async throws -> CrossProjectSendResult {
+        // Resolve target project + thread.
+        let resolvedProject: Project
+        let resolvedThreadId: String?
+
+        if let threadId {
+            guard let summary = allSessionSummaries.first(where: { $0.id == threadId })
+                ?? threadStore.fetch(id: threadId).map({ $0.toSummary() })
+            else {
+                throw CrossProjectSendError.unknownThread(threadId)
+            }
+            guard let proj = projects.first(where: { $0.id == summary.projectId }) else {
+                throw CrossProjectSendError.unknownProject(summary.projectId)
+            }
+            resolvedProject = proj
+            resolvedThreadId = threadId
+        } else if let projectId {
+            guard let proj = projects.first(where: { $0.id == projectId }) else {
+                throw CrossProjectSendError.unknownProject(projectId)
+            }
+            resolvedProject = proj
+            resolvedThreadId = nil
+        } else {
+            throw CrossProjectSendError.unknownProject(UUID())
+        }
+
+        // Build a synthetic WindowState. AppState.sessionStates is shared across
+        // windows, so the message + stream are visible to any real window that
+        // happens to also be viewing this session.
+        let window = WindowState()
+        window.selectedProject = resolvedProject
+        window.currentSessionId = resolvedThreadId
+
+        // Carry over per-session overrides for a new thread; for an existing
+        // thread we leave the session's own stored values alone (the resume
+        // path in sendPrompt reads from `sessionStates[sessionKey]`).
+        if resolvedThreadId == nil {
+            if let agentProvider {
+                window.sessionAgentProvider = agentProvider
+            }
+            if let model {
+                window.sessionModel = model
+            }
+            if let effort {
+                window.sessionEffort = effort
+            }
+            if let permissionMode {
+                window.sessionPermissionMode = permissionMode
+            }
+        }
+
+        guard let streamId = await sendPrompt(prompt, displayText: prompt, in: window) else {
+            return CrossProjectSendResult(
+                threadId: resolvedThreadId ?? "",
+                projectId: resolvedProject.id,
+                done: false,
+                assistantText: "",
+                error: "Send failed: no session could be allocated."
+            )
+        }
+
+        // After sendPrompt returns, window.currentSessionId is the (possibly
+        // pending-) key the stream is bound to. The CLI may rename it to its
+        // own sid mid-stream; we surface whichever id the completion lands on.
+        let postSendThreadId = window.currentSessionId ?? resolvedThreadId ?? ""
+
+        if !waitForResponse {
+            // Don't leak the result in the dictionary — the caller is
+            // fire-and-forget. Drop it once it lands.
+            Task { [weak self] in
+                _ = await self?.awaitStreamCompletion(streamId: streamId, timeout: timeoutSeconds)
+            }
+            return CrossProjectSendResult(
+                threadId: postSendThreadId,
+                projectId: resolvedProject.id,
+                done: false,
+                assistantText: "",
+                error: nil
+            )
+        }
+
+        let completion = await awaitStreamCompletion(streamId: streamId, timeout: timeoutSeconds)
+        if let completion {
+            return CrossProjectSendResult(
+                threadId: completion.sessionId,
+                projectId: resolvedProject.id,
+                done: completion.error == nil,
+                assistantText: completion.assistantText,
+                error: completion.error
+            )
+        } else {
+            // Timed out. Surface the partial assistant text we have so far so
+            // the caller can decide whether to poll back via get_thread_messages.
+            let partial = lastAssistantResponseText(in: stateForSession(window.currentSessionId ?? "").messages)
+            return CrossProjectSendResult(
+                threadId: window.currentSessionId ?? postSendThreadId,
+                projectId: resolvedProject.id,
+                done: false,
+                assistantText: partial,
+                error: nil
+            )
         }
     }
 
@@ -2697,6 +2902,13 @@ final class AppState {
                         }
                     }
 
+                    recordStreamCompletion(
+                        streamId: streamId,
+                        sessionId: resultEvent.sessionId,
+                        assistantText: lastAssistantResponseText(in: stateForSession(sessionKey).messages),
+                        error: resultEvent.isError ? "Agent reported an error result." : nil
+                    )
+
                     let isFg = (window.currentSessionId ?? window.newSessionKey) == sessionKey
                     if !isFg, !resultEvent.isError {
                         updateState(sessionKey) { $0.hasUncheckedCompletion = true }
@@ -2848,6 +3060,24 @@ final class AppState {
                 } else {
                     logger.info("[Stream:UI] stream \(streamId) ended but newer stream \(currentOwner!) owns session — skipping cleanup")
                 }
+            }
+
+            // Fallback completion record: covers cancellations, no-events errors,
+            // and any path where `.result` was not received. The `.result` case
+            // already records a completion before reaching here — recordStreamCompletion
+            // is idempotent (it overwrites with the latest), but if a prior call set a
+            // successful completion we don't want to clobber it with an error.
+            if pendingStreamCompletions[streamId] == nil {
+                let assistantText = lastAssistantResponseText(in: stateForSession(sessionKey).messages)
+                let errorMsg: String? = eventCount == 0
+                    ? (stderrOutput ?? "Stream ended with no events.")
+                    : (Task.isCancelled ? "Stream was cancelled." : nil)
+                recordStreamCompletion(
+                    streamId: streamId,
+                    sessionId: sessionKey,
+                    assistantText: assistantText,
+                    error: errorMsg
+                )
             }
         }
     }
@@ -3144,49 +3374,31 @@ final class AppState {
             state.activeToolInputBuffer = ""
             state.textDeltaBuffer = ""
             state.pendingToolResults.removeAll()
+            if let idx = state.messages.indices.reversed().first(where: {
+                state.messages[$0].role == .assistant && state.messages[$0].isStreaming
+            }) {
+                state.messages[idx].isStreaming = false
+                state.messages[idx].finalizeToolCalls()
+                if let start = state.streamingStartDate {
+                    state.messages[idx].duration = Date().timeIntervalSince(start)
+                }
+                Self.stripNoOpText(at: idx, in: &state.messages)
+            }
             state.streamingStartDate = nil
-            // Drop the in-progress assistant bubble so it doesn't reappear on the next turn.
-            if let lastIndex = state.messages.indices.last,
-               state.messages[lastIndex].role == .assistant,
-               !state.messages[lastIndex].isError,
-               !state.messages[lastIndex].isCompactBoundary
-            {
-                state.messages.remove(at: lastIndex)
-            }
-            // Restore the user message that triggered this stream into the input field —
-            // both its text and the original attachment objects so images / pasted text
-            // aren't silently dropped when the user stops a turn.
-            if let lastIndex = state.messages.indices.last,
-               state.messages[lastIndex].role == .user,
-               !state.messages[lastIndex].isCompactBoundary
-            {
-                let userText = state.messages[lastIndex].blocks.compactMap(\.text).joined()
-                state.messages.remove(at: lastIndex)
-                window.inputText = userText
-                window.attachments = state.inFlightUserAttachments
-            }
             state.inFlightUserAttachments = []
         }
 
         window.showError = false
         window.errorMessage = nil
 
-        // Save messages accumulated up to the point of cancellation to disk (prevent data loss)
+        // Save messages accumulated up to the point of cancellation to disk (prevent data loss).
+        // The placeholder session (if any) is left in place so partial messages remain visible;
+        // it will be promoted to the real CLI session id on the next user turn.
         if let project = window.selectedProject {
             let messages = stateForSession(key).messages
             if !messages.isEmpty {
                 await saveSession(sessionId: key, projectId: project.id, messages: messages)
             }
-        }
-
-        // Clean up placeholder session on cancellation
-        if let sid = window.currentSessionId, window.pendingPlaceholderIds.contains(sid) {
-            allSessionSummaries.removeAll { $0.id == sid }
-            threadStore.delete(id: sid)
-            Task.detached(priority: .utility) { [searchService] in await searchService.removeThread(id: sid) }
-            window.removePendingPlaceholder(sid)
-            sessionStates.removeValue(forKey: sid)
-            window.currentSessionId = nil
         }
     }
 
@@ -3568,6 +3780,8 @@ final class AppState {
         updateState(session.id) { $0.hasUncheckedCompletion = false }
 
         window.showingBriefing = false
+        window.pendingWorktreePath = nil
+        window.pendingWorktreeBranch = nil
         window.currentSessionId = session.id
         window.sessionAgentProvider = sessionStates[session.id]?.agentProvider ?? session.agentProvider
         window.sessionModel = sessionStates[session.id]?.model ?? session.model
@@ -3709,6 +3923,8 @@ final class AppState {
         window.sessionEffort = nil
         window.sessionPermissionMode = nil
         window.sessionPlanMode = false
+        window.pendingWorktreePath = nil
+        window.pendingWorktreeBranch = nil
         sessionStates.removeValue(forKey: window.newSessionKey)
         window.inputText = window.draftTexts[newDraftKey(for: window)] ?? ""
         window.messageQueue = window.draftQueues[newDraftKey(for: window)] ?? []
@@ -3958,6 +4174,175 @@ final class AppState {
         }
     }
 
+    /// Generates a commit message for the staged changes in the given project.
+    /// Routes through the configured `summarizationProvider`. Returns nil on
+    /// failure or when no provider is configured. Public so the Changes view
+    /// can invoke it from the UI thread.
+    ///
+    /// `diff` and `stat` should come from `GitHelper.stagedDiff` /
+    /// `GitHelper.stagedStat`. We compact them per-provider so very large
+    /// patches don't blow past the model's context window — the small
+    /// on-device Foundation Model gets a much tighter budget than the
+    /// cloud-hosted providers.
+    func generateCommitMessage(
+        diff: String,
+        stat: String,
+        fileSummary: String
+    ) async -> String? {
+        let raw: String?
+        switch summarizationProvider {
+        case .appleFoundationModel:
+            let context = Self.buildCommitContext(diff: diff, stat: stat, budget: 2_500)
+            raw = await foundationModelSummarization.generateCommitMessage(
+                diff: context,
+                fileSummary: fileSummary
+            )
+        case .openAI:
+            if openAISummarizationModel.isEmpty {
+                if FoundationModelSummarizationService.isAvailable {
+                    let context = Self.buildCommitContext(diff: diff, stat: stat, budget: 2_500)
+                    raw = await foundationModelSummarization.generateCommitMessage(
+                        diff: context,
+                        fileSummary: fileSummary
+                    )
+                } else {
+                    raw = nil
+                }
+            } else {
+                let context = Self.buildCommitContext(diff: diff, stat: stat, budget: 16_000)
+                raw = await openAISummarization.generateCommitMessage(
+                    diff: context,
+                    fileSummary: fileSummary,
+                    endpoint: openAISummarizationEndpoint,
+                    apiKey: openAISummarizationAPIKey,
+                    model: openAISummarizationModel
+                )
+            }
+        case .selectedClient:
+            if FoundationModelSummarizationService.isAvailable {
+                let context = Self.buildCommitContext(diff: diff, stat: stat, budget: 2_500)
+                raw = await foundationModelSummarization.generateCommitMessage(
+                    diff: context,
+                    fileSummary: fileSummary
+                )
+            } else {
+                let context = Self.buildCommitContext(diff: diff, stat: stat, budget: 16_000)
+                raw = await claude.generateCommitMessage(diff: context, fileSummary: fileSummary)
+            }
+        }
+        return Self.sanitizeCommitMessage(raw)
+    }
+
+    /// Builds a compact diff context that fits within `budget` characters.
+    /// When the raw diff fits, returns it as-is (prefixed with the stat).
+    /// When it doesn't, splits by `diff --git` boundaries and gives each file
+    /// a fair share of the remaining budget — keeping the header plus the
+    /// leading lines of the patch so the model still sees what changed in
+    /// each file, even if deeper context is dropped.
+    static func buildCommitContext(diff: String, stat: String, budget: Int) -> String {
+        let statBlock: String = {
+            let trimmed = stat.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? "" : "Diff stat:\n\(trimmed)\n\n"
+        }()
+
+        let trimmedDiff = diff.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedDiff.isEmpty {
+            return statBlock + "Full diff:\n(none)"
+        }
+
+        // Fast path — total fits within budget.
+        if statBlock.count + trimmedDiff.count <= budget {
+            return statBlock + "Full diff:\n" + trimmedDiff
+        }
+
+        // Split by file boundaries. The first chunk before any "diff --git" is
+        // ignored (git always starts file blocks with that marker).
+        let marker = "\ndiff --git "
+        var fileBlocks: [String] = []
+        var remaining = "\n" + trimmedDiff
+        while let range = remaining.range(of: marker) {
+            let nextStart = remaining.index(range.lowerBound, offsetBy: 1) // drop leading "\n"
+            if let next = remaining.range(of: marker, range: range.upperBound..<remaining.endIndex) {
+                fileBlocks.append(String(remaining[nextStart..<next.lowerBound]))
+                remaining = String(remaining[next.lowerBound..<remaining.endIndex])
+            } else {
+                fileBlocks.append(String(remaining[nextStart..<remaining.endIndex]))
+                remaining = ""
+            }
+        }
+        if fileBlocks.isEmpty {
+            // No "diff --git" markers found — fall back to a head clip.
+            let clipped = String(trimmedDiff.prefix(max(0, budget - statBlock.count - 64)))
+            return statBlock + "Full diff (truncated):\n" + clipped + "\n…[truncated]"
+        }
+
+        let budgetForDiffs = max(0, budget - statBlock.count - 64)
+        let perFile = max(300, budgetForDiffs / fileBlocks.count)
+        var assembled = ""
+        for block in fileBlocks {
+            if block.count <= perFile {
+                assembled += block
+            } else {
+                let head = String(block.prefix(perFile))
+                assembled += head + "\n…[file diff truncated]\n"
+            }
+            if assembled.count >= budgetForDiffs { break }
+        }
+
+        return statBlock + "Truncated diff (file-by-file):\n" + assembled
+    }
+
+    /// Strips markdown wrappers and ensures the message starts with a
+    /// Conventional Commits `type:` line. Defends against models that add
+    /// headings, code fences, or quoted text despite explicit prompts.
+    private static func sanitizeCommitMessage(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.isEmpty { return nil }
+
+        // Strip fenced code blocks: ```...``` (any language tag).
+        if text.hasPrefix("```") {
+            var lines = text.components(separatedBy: "\n")
+            if !lines.isEmpty { lines.removeFirst() }
+            if let last = lines.last?.trimmingCharacters(in: .whitespaces), last == "```" {
+                lines.removeLast()
+            }
+            text = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        // Strip surrounding quotes/backticks if the whole message is wrapped.
+        if let first = text.first, let last = text.last,
+           "\"'`".contains(first), first == last, text.count > 1 {
+            text = String(text.dropFirst().dropLast())
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        // Drop leading lines that look like markdown headings or empty lines
+        // until we reach a Conventional Commits subject (or any plain text).
+        let conventionalPrefixes = [
+            "feat", "fix", "docs", "style", "refactor", "perf",
+            "test", "build", "ci", "chore", "revert"
+        ]
+        var lines = text.components(separatedBy: "\n")
+        while let first = lines.first {
+            let trimmed = first.trimmingCharacters(in: .whitespaces)
+            let isHeading = trimmed.hasPrefix("#")
+            let isEmpty = trimmed.isEmpty
+            let startsWithType = conventionalPrefixes.contains { type in
+                trimmed.lowercased().hasPrefix(type + ":") ||
+                trimmed.lowercased().hasPrefix(type + "(")
+            }
+            if startsWithType { break }
+            if isHeading || isEmpty {
+                lines.removeFirst()
+                continue
+            }
+            break
+        }
+        text = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? nil : text
+    }
+
     private func generateSessionTitle(firstUserMessage: String, provider: AgentProvider, model: String?) async -> String? {
         switch provider {
         case .claudeCode:
@@ -4171,14 +4556,20 @@ final class AppState {
         guard let project = window.selectedProject else {
             throw AppError.noProjectSelected
         }
-        guard let sessionId = window.currentSessionId else {
-            throw AppError.streamFailed("No active chat. Send a message first or pick a chat.")
-        }
         let baseRepo = URL(fileURLWithPath: project.path)
         let info = try await GitWorktreeService.shared.createWorktree(
             baseRepo: baseRepo,
             branch: branch
         )
+
+        // New-chat view: no session yet. Park the worktree on the window so
+        // it gets applied when sendPrompt allocates a session id.
+        guard let sessionId = window.currentSessionId else {
+            window.pendingWorktreePath = info.path.path
+            window.pendingWorktreeBranch = info.branch
+            return
+        }
+
         // Update in-memory state
         sessionStates[sessionId, default: SessionStreamState()].worktreePath = info.path.path
         sessionStates[sessionId, default: SessionStreamState()].worktreeBranch = info.branch
@@ -4199,6 +4590,60 @@ final class AppState {
         await updateSessionMetadata(updated) { s in
             s.worktreePath = info.path.path
             s.worktreeBranch = info.branch
+        }
+    }
+
+    /// Switch the chat to an existing branch.
+    ///
+    /// If the branch is already attached to a linked worktree, point the
+    /// session at that worktree. Otherwise run `git checkout` in the project
+    /// root and clear the session's worktree pointer.
+    func switchToExistingBranch(_ branch: String, in window: WindowState) async throws {
+        guard let project = window.selectedProject else {
+            throw AppError.noProjectSelected
+        }
+        let baseRepo = URL(fileURLWithPath: project.path)
+
+        let existingWorktree: GitWorktreeService.WorktreeInfo? = await {
+            guard let list = try? await GitWorktreeService.shared.listWorktrees(baseRepo: baseRepo) else {
+                return nil
+            }
+            // The main repo also appears in `worktree list`; skip it so the
+            // project root takes the plain-checkout path.
+            return list.first { $0.branch == branch && $0.path.standardizedFileURL != baseRepo.standardizedFileURL }
+        }()
+
+        let newPath: String?
+        let newBranch: String?
+        if let existingWorktree {
+            newPath = existingWorktree.path.path
+            newBranch = existingWorktree.branch
+        } else {
+            if let err = await GitHelper.checkout(branch: branch, at: project.path) {
+                throw GitWorktreeService.WorktreeError.gitFailed(err)
+            }
+            newPath = nil
+            newBranch = nil
+        }
+
+        guard let sessionId = window.currentSessionId else {
+            window.pendingWorktreePath = newPath
+            window.pendingWorktreeBranch = newBranch
+            return
+        }
+
+        sessionStates[sessionId, default: SessionStreamState()].worktreePath = newPath
+        sessionStates[sessionId, default: SessionStreamState()].worktreeBranch = newBranch
+        if let idx = allSessionSummaries.firstIndex(where: { $0.id == sessionId }) {
+            allSessionSummaries[idx].worktreePath = newPath
+            allSessionSummaries[idx].worktreeBranch = newBranch
+            threadStore.upsert(allSessionSummaries[idx])
+        }
+        if let snap = allSessionSummaries.first(where: { $0.id == sessionId }) {
+            await updateSessionMetadata(snap.makeSession()) { s in
+                s.worktreePath = newPath
+                s.worktreeBranch = newBranch
+            }
         }
     }
 

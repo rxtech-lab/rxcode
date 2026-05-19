@@ -9,6 +9,8 @@ struct MobileSettingsTab: View {
     @StateObject private var sync = MobileSyncService.shared
     @State private var showPairingSheet = false
     @State private var relayURLText: String = MobileSyncService.shared.relayURL.absoluteString
+    @State private var testNotificationDeviceID: String?
+    @State private var testNotificationAlert: TestNotificationAlert?
 
     var body: some View {
         ScrollView {
@@ -22,6 +24,13 @@ struct MobileSettingsTab: View {
         }
         .sheet(isPresented: $showPairingSheet) {
             PairingSheet(sync: sync)
+        }
+        .alert(item: $testNotificationAlert) { alert in
+            Alert(
+                title: Text(alert.title),
+                message: Text(alert.message),
+                dismissButton: .default(Text("OK"))
+            )
         }
     }
 
@@ -126,6 +135,7 @@ struct MobileSettingsTab: View {
                 }
             }
             Spacer()
+            testNotificationButton(for: device)
             Button(role: .destructive) {
                 Task { await sync.unpair(device) }
             } label: {
@@ -136,6 +146,60 @@ struct MobileSettingsTab: View {
         .padding(12)
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
     }
+
+    @ViewBuilder
+    private func testNotificationButton(for device: PairedDevice) -> some View {
+        if testNotificationDeviceID == device.id {
+            ProgressView()
+                .controlSize(.small)
+                .frame(width: 28, height: 28)
+        } else {
+            Button {
+                sendTestNotification(to: device)
+            } label: {
+                Label("Send test notification", systemImage: "bell.badge")
+                    .labelStyle(.iconOnly)
+            }
+            .buttonStyle(.borderless)
+            .disabled(device.apnsToken?.isEmpty ?? true || sync.connectionState != .connected)
+            .help(testNotificationHelp(for: device))
+        }
+    }
+
+    private func sendTestNotification(to device: PairedDevice) {
+        testNotificationDeviceID = device.id
+        Task { @MainActor in
+            defer { testNotificationDeviceID = nil }
+            do {
+                try await sync.sendTestNotification(to: device)
+                testNotificationAlert = TestNotificationAlert(
+                    title: "Test notification sent",
+                    message: "Check \(device.displayName) for the RxCode notification."
+                )
+            } catch {
+                testNotificationAlert = TestNotificationAlert(
+                    title: "Test notification failed",
+                    message: error.localizedDescription
+                )
+            }
+        }
+    }
+
+    private func testNotificationHelp(for device: PairedDevice) -> String {
+        if device.apnsToken?.isEmpty ?? true {
+            return "Open RxCode Mobile on this device once so it can register for push notifications."
+        }
+        if sync.connectionState != .connected {
+            return "Connect to the relay before sending a test notification."
+        }
+        return "Send a push notification to \(device.displayName)."
+    }
+}
+
+private struct TestNotificationAlert: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
 }
 
 // MARK: - Pairing sheet

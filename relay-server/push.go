@@ -134,9 +134,28 @@ func pushHandler(sender *PushSender) http.HandlerFunc {
 
 		res, err := sender.client.Push(notif)
 		if err != nil {
-			log.Printf("apns push error: %v", err)
+			log.Printf(
+				"apns push transport error: %v device=%s category=%q collapse_id=%q collapse_len=%d",
+				err,
+				short(req.DeviceToken),
+				req.Category,
+				req.CollapseID,
+				len(req.CollapseID),
+			)
 			http.Error(w, "apns push failed", http.StatusBadGateway)
 			return
+		}
+		if !res.Sent() {
+			log.Printf(
+				"apns push rejected: status=%d reason=%q apns_id=%s device=%s category=%q collapse_id=%q collapse_len=%d",
+				res.StatusCode,
+				res.Reason,
+				res.ApnsID,
+				short(req.DeviceToken),
+				req.Category,
+				req.CollapseID,
+				len(req.CollapseID),
+			)
 		}
 		resp := map[string]any{
 			"status_code": res.StatusCode,

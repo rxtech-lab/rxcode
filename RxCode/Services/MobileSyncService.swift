@@ -28,6 +28,29 @@ enum PairingOutcome: Sendable {
     case cancelled
 }
 
+enum MobilePushError: LocalizedError {
+    case missingDeviceToken
+    case unknownPeer
+    case invalidRelayURL
+    case relayRejected(status: Int, body: String)
+    case apnsRejected(status: Int, reason: String)
+
+    var errorDescription: String? {
+        switch self {
+        case .missingDeviceToken:
+            "This device has not registered a push token yet."
+        case .unknownPeer:
+            "This device is not available in the encrypted peer list."
+        case .invalidRelayURL:
+            "The relay URL cannot be converted to a push endpoint."
+        case .relayRejected(let status, let body):
+            "Relay rejected the push request (\(status)): \(body)"
+        case .apnsRejected(let status, let reason):
+            "APNs rejected the notification (\(status)): \(reason)"
+        }
+    }
+}
+
 /// Bridges the desktop app to paired mobile devices over the E2E-encrypted
 /// relay channel. Owns the long-term `DeviceIdentity`, the `SyncClient`, and
 /// the persistent paired-device list.
@@ -206,6 +229,61 @@ final class MobileSyncService: ObservableObject {
         }
     }
 
+    /// Send one APNs-backed test notification to a paired device.
+    func sendTestNotification(to device: PairedDevice) async throws {
+        guard let token = device.apnsToken, !token.isEmpty else {
+            throw MobilePushError.missingDeviceToken
+        }
+        guard let peer = await client.peer(forHex: device.pubkeyHex) else {
+            throw MobilePushError.unknownPeer
+        }
+        guard let pushURL = Self.pushEndpointURL(from: relayURL) else {
+            throw MobilePushError.invalidRelayURL
+        }
+
+        let plaintext = AlertPlaintext(
+            title: "RxCode test notification",
+            body: "Notifications are working for \(device.displayName).",
+            kind: NotificationPayload.Kind.generic.rawValue
+        )
+        let encrypted = try APNsCrypto.seal(
+            plaintext: plaintext,
+            sender: identity.privateKey,
+            recipient: peer
+        )
+        let encryptedAlertData = try JSONEncoder().encode(encrypted)
+        let body = APNsPushRequest(
+            deviceToken: token,
+            encryptedAlert: encryptedAlertData.base64EncodedString(),
+            category: "test_notification",
+            collapseID: Self.testNotificationCollapseID(for: device)
+        )
+
+        var request = URLRequest(url: pushURL)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(body)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw MobilePushError.relayRejected(status: -1, body: "No HTTP response")
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            throw MobilePushError.relayRejected(
+                status: http.statusCode,
+                body: Self.responseBodyString(data)
+            )
+        }
+
+        let pushResponse = try JSONDecoder().decode(APNsPushResponse.self, from: data)
+        guard (200..<300).contains(pushResponse.statusCode) else {
+            throw MobilePushError.apnsRejected(
+                status: pushResponse.statusCode,
+                reason: pushResponse.reason
+            )
+        }
+    }
+
     // MARK: - Streaming hooks
 
     /// Called by AppState's streaming loop after each StreamEvent is folded
@@ -343,6 +421,72 @@ final class MobileSyncService: ObservableObject {
         } catch {
             logger.error("save paired_devices.json: \(error.localizedDescription)")
         }
+    }
+
+    private static func pushEndpointURL(from relayURL: URL) -> URL? {
+        guard var components = URLComponents(url: relayURL, resolvingAgainstBaseURL: false) else {
+            return nil
+        }
+        switch components.scheme?.lowercased() {
+        case "ws":
+            components.scheme = "http"
+        case "wss":
+            components.scheme = "https"
+        case "http", "https":
+            break
+        default:
+            return nil
+        }
+
+        var path = components.path
+        if path.isEmpty || path == "/" {
+            path = "/push"
+        } else {
+            let trimmed = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            let base = trimmed.split(separator: "/").last == "ws"
+                ? trimmed.split(separator: "/").dropLast().joined(separator: "/")
+                : trimmed
+            path = "/" + ([base, "push"].filter { !$0.isEmpty }.joined(separator: "/"))
+        }
+        components.path = path
+        components.queryItems = nil
+        return components.url
+    }
+
+    private static func responseBodyString(_ data: Data) -> String {
+        let raw = String(data: data, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return raw.isEmpty ? "Empty response" : raw
+    }
+
+    private static func testNotificationCollapseID(for device: PairedDevice) -> String {
+        "rxcode-test-\(device.pubkeyHex.prefix(32))"
+    }
+}
+
+private struct APNsPushRequest: Codable {
+    let deviceToken: String
+    let encryptedAlert: String
+    let category: String?
+    let collapseID: String?
+
+    enum CodingKeys: String, CodingKey {
+        case deviceToken = "device_token"
+        case encryptedAlert = "encrypted_alert"
+        case category
+        case collapseID = "collapse_id"
+    }
+}
+
+private struct APNsPushResponse: Codable {
+    let statusCode: Int
+    let reason: String
+    let apnsID: String?
+
+    enum CodingKeys: String, CodingKey {
+        case statusCode = "status_code"
+        case reason
+        case apnsID = "apns_id"
     }
 }
 

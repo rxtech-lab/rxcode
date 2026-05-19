@@ -58,9 +58,12 @@ final class MobileAppState: ObservableObject {
                 accessGroup: Self.keychainAccessGroup
             )
         } catch {
+            Logger(subsystem: "com.idealapp.RxCodeMobile", category: "MobileAppState")
+                .error("[MobileIdentity] load failed accessGroup=\(Self.keychainAccessGroup, privacy: .public): \(error.localizedDescription, privacy: .public)")
             fatalError("Failed to load mobile device identity: \(error)")
         }
         self.client = SyncClient(identity: identity, relayURL: initial)
+        logger.info("[MobileIdentity] loaded publicKey=\(String(self.identity.publicKeyHex.prefix(12)), privacy: .public) accessGroup=\(Self.keychainAccessGroup, privacy: .public)")
         loadPairedDesktop()
     }
 
@@ -261,6 +264,7 @@ final class MobileAppState: ObservableObject {
     }
 
     func reportAPNsToken(hex: String, environment: String) {
+        logger.info("[APNs] received token from app delegate tokenPrefix=\(String(hex.prefix(12)), privacy: .public) environment=\(environment, privacy: .public)")
         apnsTokenHex = hex
         apnsEnvironment = environment
         Task { await reportAPNsTokenIfPending() }
@@ -324,6 +328,7 @@ final class MobileAppState: ObservableObject {
                 pairedDesktopName = ack.desktopName
                 isPaired = true
                 pairingStatus = .idle
+                logger.info("[Pairing] accepted desktop=\(ack.desktopName, privacy: .public) desktopKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
                 MobileHaptics.connected()
                 savePairedDesktop()
                 Task {
@@ -418,11 +423,25 @@ final class MobileAppState: ObservableObject {
     }
 
     private func reportAPNsTokenIfPending() async {
-        guard isPaired,
-              let tokenHex = apnsTokenHex,
-              let env = apnsEnvironment else { return }
+        guard isPaired else {
+            logger.info("[APNs] token report pending: mobile is not paired")
+            return
+        }
+        guard let tokenHex = apnsTokenHex else {
+            logger.info("[APNs] token report pending: no APNs token yet")
+            return
+        }
+        guard let env = apnsEnvironment else {
+            logger.info("[APNs] token report pending: no APNs environment yet")
+            return
+        }
         let payload = APNsTokenPayload(tokenHex: tokenHex, environment: env)
-        try? await client.send(.apnsToken(payload), toHex: pairedDesktopPubkey)
+        do {
+            try await client.send(.apnsToken(payload), toHex: pairedDesktopPubkey)
+            logger.info("[APNs] token reported to desktop tokenPrefix=\(String(tokenHex.prefix(12)), privacy: .public) environment=\(env, privacy: .public) desktopKey=\(String(pairedDesktopPubkey.prefix(12)), privacy: .public)")
+        } catch {
+            logger.error("[APNs] token report failed desktopKey=\(String(pairedDesktopPubkey.prefix(12)), privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     private func applySettingsUpdateLocally(_ update: MobileSettingsUpdatePayload) {

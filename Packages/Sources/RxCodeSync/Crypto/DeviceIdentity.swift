@@ -42,6 +42,70 @@ public struct DeviceIdentity: Sendable {
     ) throws {
         try Keychain.delete(service: service, accessGroup: accessGroup)
     }
+
+    /// Resolve the fully-qualified keychain access group at runtime.
+    ///
+    /// The entitlement is written as `$(AppIdentifierPrefix)foo.bar` and the
+    /// build system expands it to `TEAMID.foo.bar`. On iOS, `SecItem*` requires
+    /// the **prefixed** form at runtime — passing the bare suffix yields
+    /// `errSecMissingEntitlement` (-34018).
+    ///
+    /// We discover the team prefix by writing a probe keychain item with no
+    /// access group specified (the system then assigns the default, which is
+    /// the first entry from the entitlement's `keychain-access-groups` — fully
+    /// prefixed) and reading back `kSecAttrAccessGroup`. Result is cached.
+    public static func resolveAccessGroup(suffix: String) -> String {
+        if let cached = cachedPrefix {
+            return cached + suffix
+        }
+        if let prefix = discoverTeamPrefix() {
+            cachedPrefix = prefix
+            return prefix + suffix
+        }
+        // Unsigned macOS dev builds or sandbox-less contexts: fall back to the
+        // bare suffix (macOS is lenient; iOS isn't, but at that point there's
+        // nothing we can do).
+        return suffix
+    }
+
+    // The prefix is deterministic for the process lifetime, so a benign race
+    // where two callers both discover it yields the same value.
+    private nonisolated(unsafe) static var cachedPrefix: String?
+
+    private static func discoverTeamPrefix() -> String? {
+        let probeService = "rxcode.devid.prefixprobe"
+        let baseQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: probeService,
+            kSecAttrAccount as String: "probe",
+        ]
+        // Try to read; if not present, add it (system will assign default
+        // access group). Then re-read attributes.
+        var readQuery = baseQuery
+        readQuery[kSecReturnAttributes as String] = true
+        readQuery[kSecMatchLimit as String] = kSecMatchLimitOne
+
+        var item: CFTypeRef?
+        var status = SecItemCopyMatching(readQuery as CFDictionary, &item)
+        if status == errSecItemNotFound {
+            var addAttrs = baseQuery
+            addAttrs[kSecValueData as String] = Data([0])
+            addAttrs[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+            status = SecItemAdd(addAttrs as CFDictionary, nil)
+            guard status == errSecSuccess || status == errSecDuplicateItem else {
+                return nil
+            }
+            status = SecItemCopyMatching(readQuery as CFDictionary, &item)
+        }
+        guard status == errSecSuccess,
+              let dict = item as? [String: Any],
+              let group = dict[kSecAttrAccessGroup as String] as? String,
+              let dot = group.firstIndex(of: ".")
+        else {
+            return nil
+        }
+        return String(group[..<group.index(after: dot)])  // includes trailing dot
+    }
 }
 
 enum Keychain {

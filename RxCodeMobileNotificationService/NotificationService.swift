@@ -22,7 +22,9 @@ final class NotificationService: UNNotificationServiceExtension {
               let raw = Data(base64Encoded: encB64),
               let envelope = try? JSONDecoder().decode(EncryptedAlert.self, from: raw),
               let identity = try? DeviceIdentity.loadOrCreate(
-                accessGroup: "$(AppIdentifierPrefix)com.idealapp.RxCode.Mobile.shared"
+                accessGroup: DeviceIdentity.resolveAccessGroup(
+                    suffix: "app.rxlab.rxcodemobile.shared"
+                )
               ),
               let senderRaw = Data(hexString: envelope.from),
               let senderKey = try? Curve25519.KeyAgreement.PublicKey(rawRepresentation: senderRaw),

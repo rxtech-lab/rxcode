@@ -349,6 +349,9 @@ private struct RunProfileDetailForm: View {
     @Binding var profile: RunProfile
     let project: Project
 
+    @State private var detectedMakeTargets: [String] = []
+    private static let customTargetSentinel = "__rxcode_custom_target__"
+
     var body: some View {
         Form {
             Section {
@@ -518,8 +521,7 @@ private struct RunProfileDetailForm: View {
                 }
                 .help("Use default Makefile lookup")
             }
-            TextField("Target", text: make.target, prompt: Text("build"))
-                .font(.system(.body, design: .monospaced))
+            targetField(make: make)
             TextField(
                 "Arguments (optional)",
                 text: make.arguments,
@@ -544,6 +546,93 @@ private struct RunProfileDetailForm: View {
             Text("Make")
         } footer: {
             Text("Runs `make [-f <Makefile>] <target> [arguments]`. Leave Makefile empty to use the default lookup (Makefile / makefile / GNUmakefile).")
+        }
+        .task(id: makeDetectionKey) {
+            detectedMakeTargets = await refreshMakeTargets()
+        }
+    }
+
+    /// Cache key for re-parsing the Makefile when its path or the working
+    /// directory changes.
+    private var makeDetectionKey: String {
+        "\(profile.id.uuidString)|\(profile.make?.makefile ?? "")|\(profile.bash.workingDirectory)"
+    }
+
+    private func refreshMakeTargets() async -> [String] {
+        let projectRoot = project.path
+        let makefile = profile.make?.makefile ?? ""
+        let workingDirRaw = profile.bash.workingDirectory
+        return await Task.detached { () -> [String] in
+            let fm = FileManager.default
+            func resolve(_ p: String, against base: String) -> String {
+                if p.isEmpty { return base }
+                if p.hasPrefix("/") { return p }
+                return (base as NSString).appendingPathComponent(p)
+            }
+            let workingDir = workingDirRaw.isEmpty
+                ? projectRoot
+                : resolve(workingDirRaw, against: projectRoot)
+
+            if !makefile.isEmpty {
+                // Picker produces project-relative paths; the executor resolves
+                // relative to working dir. Try both so the dropdown works
+                // regardless of which the user typed.
+                let candidates = [
+                    resolve(makefile, against: projectRoot),
+                    resolve(makefile, against: workingDir),
+                ]
+                for path in candidates where fm.fileExists(atPath: path) {
+                    return RunProfileDetector.makeTargets(atPath: path)
+                }
+                return []
+            }
+            if let result = RunProfileDetector.defaultMakeTargets(inDirectory: workingDir) {
+                return result.targets
+            }
+            return RunProfileDetector.defaultMakeTargets(inDirectory: projectRoot)?.targets ?? []
+        }.value
+    }
+
+    @ViewBuilder
+    private func targetField(make: Binding<MakeRunConfig>) -> some View {
+        let current = make.wrappedValue.target
+        let targets = detectedMakeTargets
+        let isCustom = !targets.isEmpty && !current.isEmpty && !targets.contains(current)
+
+        if targets.isEmpty {
+            TextField("Target", text: make.target, prompt: Text("build"))
+                .font(.system(.body, design: .monospaced))
+        } else {
+            Picker("Target", selection: Binding(
+                get: {
+                    if current.isEmpty { return "" }
+                    return isCustom ? Self.customTargetSentinel : current
+                },
+                set: { newValue in
+                    var c = make.wrappedValue
+                    if newValue == Self.customTargetSentinel {
+                        if targets.contains(c.target) { c.target = "" }
+                    } else {
+                        c.target = newValue
+                    }
+                    make.wrappedValue = c
+                }
+            )) {
+                if current.isEmpty {
+                    Text("Select a target…").tag("")
+                }
+                ForEach(targets, id: \.self) { t in
+                    Text(t).tag(t)
+                }
+                Divider()
+                Text("Custom…").tag(Self.customTargetSentinel)
+            }
+            .font(.system(.body, design: .monospaced))
+
+            if isCustom {
+                TextField("Custom target", text: make.target, prompt: Text("build"))
+                    .font(.system(.body, design: .monospaced))
+            }
         }
     }
 

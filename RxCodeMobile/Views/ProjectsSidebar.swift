@@ -1,4 +1,5 @@
 import SwiftUI
+import RxCodeCore
 
 struct ProjectsSidebar: View {
     @EnvironmentObject private var state: MobileAppState

@@ -83,6 +83,8 @@ struct MobileSettingsTab: View {
                     Label("Pair new device", systemImage: "plus.circle.fill")
                 }
                 .buttonStyle(.borderedProminent)
+                .disabled(sync.connectionState != .connected)
+                .help(sync.connectionState == .connected ? "" : "Connect to the relay before pairing a device.")
             }
 
             if sync.pairedDevices.isEmpty {
@@ -191,7 +193,24 @@ private struct PairingSheet: View {
                 .font(.callout)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
-            if let token, token.isExpired {
+            if let token {
+                expirationLabel(for: token)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func expirationLabel(for token: PairingToken) -> some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let remaining = Int(token.expiresAt.timeIntervalSince(context.date).rounded(.down))
+            if remaining > 0 {
+                Label(
+                    String(format: "Expires in %d:%02d", remaining / 60, remaining % 60),
+                    systemImage: "clock"
+                )
+                .font(.caption)
+                .foregroundStyle(remaining < 30 ? Color.red : Color.secondary)
+            } else {
                 Text("Expired — close and reopen to regenerate")
                     .font(.caption)
                     .foregroundStyle(.red)

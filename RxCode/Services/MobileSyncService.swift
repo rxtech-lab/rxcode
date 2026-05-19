@@ -44,7 +44,7 @@ final class MobileSyncService: ObservableObject {
 
     private let logger = Logger(subsystem: "com.idealapp.RxCode", category: "MobileSync")
     private let identity: DeviceIdentity
-    private let client: SyncClient
+    private var client: SyncClient
     private var subscribedSessions: [String: String] = [:]
     private var eventTask: Task<Void, Never>?
     private var pairingToken: PairingToken?
@@ -82,19 +82,19 @@ final class MobileSyncService: ObservableObject {
     /// Begin (or resume) the relay connection. Safe to call multiple times.
     func start() {
         Task { @MainActor in
-            do {
-                for device in pairedDevices {
-                    try? await client.addPeer(device.pubkeyHex)
-                }
-                await client.start()
-                let events = await client.events()
-                eventTask?.cancel()
-                eventTask = Task { @MainActor in
-                    for await event in events {
-                        self.handle(event: event)
-                    }
+            for device in pairedDevices {
+                try? await client.addPeer(device.pubkeyHex)
+            }
+            // Subscribe to events BEFORE calling start() so we don't miss the
+            // initial .connecting / .connected state transitions.
+            let events = await client.events()
+            eventTask?.cancel()
+            eventTask = Task { @MainActor in
+                for await event in events {
+                    self.handle(event: event)
                 }
             }
+            await client.start()
         }
     }
 
@@ -106,11 +106,16 @@ final class MobileSyncService: ObservableObject {
 
     /// Update the configured relay URL, persist it, and reconnect.
     func updateRelay(url: URL) {
+        guard url != relayURL else { return }
         UserDefaults.standard.set(url.absoluteString, forKey: "mobileSync.relayURL")
         relayURL = url
-        // SyncClient holds its URL at init time. The simplest restart is to
-        // recreate the service on next launch — for now we just reset peers.
-        // (A full hot-swap is left for a future refactor.)
+        eventTask?.cancel()
+        eventTask = nil
+        let oldClient = client
+        client = SyncClient(identity: identity, relayURL: url)
+        connectionState = .disconnected
+        Task { await oldClient.stop() }
+        start()
     }
 
     // MARK: - Pairing

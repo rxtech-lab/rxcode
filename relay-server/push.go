@@ -20,13 +20,25 @@ type PushSender struct {
 }
 
 // NewPushSender loads the APNs auth key and prepares the HTTP/2 client.
-func NewPushSender(keyPath, keyID, teamID, topic string, production bool) (*PushSender, error) {
+//
+// Exactly one of `keyPath` or `keyPEM` must be non-empty. `keyPEM` is the raw
+// `.p8` contents (already base64-decoded if it was wrapped for env transport).
+func NewPushSender(keyPath string, keyPEM []byte, keyID, teamID, topic string, production bool) (*PushSender, error) {
 	if keyID == "" || teamID == "" || topic == "" {
 		return nil, fmt.Errorf("apns key id, team id, and topic are required")
 	}
-	keyBytes, err := os.ReadFile(keyPath)
-	if err != nil {
-		return nil, fmt.Errorf("read apns key: %w", err)
+	var keyBytes []byte
+	switch {
+	case len(keyPEM) > 0:
+		keyBytes = keyPEM
+	case keyPath != "":
+		b, err := os.ReadFile(keyPath)
+		if err != nil {
+			return nil, fmt.Errorf("read apns key: %w", err)
+		}
+		keyBytes = b
+	default:
+		return nil, fmt.Errorf("apns key not provided (set APNS_KEY_B64 or -apns-key)")
 	}
 	authKey, err := token.AuthKeyFromBytes(keyBytes)
 	if err != nil {

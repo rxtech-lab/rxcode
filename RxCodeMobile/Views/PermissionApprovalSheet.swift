@@ -1,6 +1,12 @@
 import SwiftUI
 import RxCodeSync
 
+/// Makes the wire payload usable with SwiftUI's `.sheet(item:)`. The relay
+/// guarantees `requestID` is unique per outstanding permission prompt.
+extension PermissionRequestPayload: Identifiable {
+    public var id: String { requestID }
+}
+
 struct PermissionApprovalSheet: View {
     @EnvironmentObject private var state: MobileAppState
     @Environment(\.dismiss) private var dismiss

@@ -126,13 +126,19 @@ public actor RelayClient {
         task = newTask
         newTask.resume()
 
-        // The URLSessionWebSocketTask only confirms connection on first
-        // successful send/receive. We optimistically transition to .connected
-        // and let the receive loop demote on error.
-        updateState(.connected)
-        reconnectAttempt = 0
-        startPingLoop()
+        // URLSessionWebSocketTask reports success only via receive/ping. Stay
+        // in .connecting and let the first successful ping flip us to
+        // .connected, so the UI reflects the real handshake outcome.
         startReceiveLoop()
+        sendPing()
+        startPingLoop()
+    }
+
+    private func markConnected() {
+        if state != .connected {
+            reconnectAttempt = 0
+            updateState(.connected)
+        }
     }
 
     private func startPingLoop() {
@@ -148,8 +154,10 @@ public actor RelayClient {
 
     private func sendPing() {
         task?.sendPing { [weak self] error in
-            if error != nil {
-                Task { await self?.handleSocketFailure(error: error ?? RelayError.notConnected) }
+            if let error {
+                Task { await self?.handleSocketFailure(error: error) }
+            } else {
+                Task { await self?.markConnected() }
             }
         }
     }

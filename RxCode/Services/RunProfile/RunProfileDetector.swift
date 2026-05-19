@@ -162,7 +162,7 @@ final class RunProfileDetector {
               let content = try? String(contentsOfFile: path.appendingPathComponent(chosen), encoding: .utf8)
         else { return [] }
 
-        let targets = parseMakeTargets(content)
+        let targets = Self.parseMakeTargets(content)
         // Default Makefile lookup (`make`) finds the same file we picked here,
         // so leave `makefile` empty unless the user picked a non-default name.
         let isDefaultName = (chosen == "Makefile" || chosen == "makefile" || chosen == "GNUmakefile")
@@ -178,7 +178,29 @@ final class RunProfileDetector {
         }
     }
 
-    private func parseMakeTargets(_ content: String) -> [String] {
+    /// Parse the `make` targets from a Makefile at `path`. Returns an empty
+    /// array if the file is missing or unreadable.
+    static func makeTargets(atPath path: String) -> [String] {
+        guard let content = try? String(contentsOfFile: path, encoding: .utf8) else { return [] }
+        return parseMakeTargets(content)
+    }
+
+    /// Try the standard Makefile names inside `root` and parse the first one
+    /// that exists. Returns the resolved path alongside the targets.
+    static func defaultMakeTargets(inDirectory root: String) -> (path: String, targets: [String])? {
+        let fm = FileManager.default
+        let candidates = ["Makefile", "makefile", "GNUmakefile"]
+        let dir = root as NSString
+        for name in candidates {
+            let full = dir.appendingPathComponent(name)
+            if fm.fileExists(atPath: full) {
+                return (full, makeTargets(atPath: full))
+            }
+        }
+        return nil
+    }
+
+    static func parseMakeTargets(_ content: String) -> [String] {
         // Target lines look like `name:` or `name: deps` at column 0 (no leading
         // tab/space — those are recipe lines). Skip pattern rules (`%.o:`),
         // special targets (`.PHONY:`), variable assignments (`X := y`).

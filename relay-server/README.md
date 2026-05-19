@@ -34,32 +34,76 @@ go mod tidy
 go run . -addr :8787
 ```
 
-To also enable APNs:
+## Configuration
+
+Every option can be set via CLI flag **or** environment variable. At startup
+the binary loads `.env` (via [`godotenv`](https://github.com/joho/godotenv))
+from the current directory, then reads the process environment, then applies
+any explicit CLI flags. So precedence is: flag > env > `.env` file.
+
+Override the env file path with `RELAY_ENV_FILE=/path/to/file go run .`. A
+missing file is non-fatal — the relay just uses whatever's in the process env.
+
+
+| Flag                | Env var            | Purpose                                              |
+| ------------------- | ------------------ | ---------------------------------------------------- |
+| `-addr`             | `RELAY_ADDR`       | Listen address (default `:8787`).                    |
+| `-apns-key`         | `APNS_KEY_PATH`    | Path to a `.p8` auth key file on disk.               |
+| *(none)*            | `APNS_KEY_B64`     | `.p8` contents base64-encoded — preferred for env.   |
+| `-apns-key-id`      | `APNS_KEY_ID`      | 10-char Key ID from the Apple developer portal.      |
+| `-apns-team-id`     | `APNS_TEAM_ID`     | 10-char Team ID.                                     |
+| `-apns-topic`       | `APNS_TOPIC`       | iOS app bundle identifier (e.g. `app.rxlab.rxcodemobile`). |
+| `-apns-production`  | `APNS_PRODUCTION`  | `true` for production endpoint, else sandbox.        |
+
+`APNS_KEY_B64` wins over `APNS_KEY_PATH` when both are set. Both standard and
+URL-safe base64 are accepted, and embedded whitespace/newlines are stripped —
+so `cat AuthKey.p8 | base64` works as-is.
+
+### Run with a `.env` file
+
+Create `relay-server/.env` (or anywhere — point to it with `RELAY_ENV_FILE`):
+
+```dotenv
+RELAY_ADDR=:8787
+APNS_KEY_B64=MIGTAgEAMBM...                # base64 of your .p8 file
+APNS_KEY_ID=ABCDE12345
+APNS_TEAM_ID=YYYYYYYYYY
+APNS_TOPIC=app.rxlab.rxcodemobile
+APNS_PRODUCTION=false
+```
+
+Encode the `.p8` ready for the file:
 
 ```bash
-go run . \
-  -addr :8787 \
-  -apns-key ./AuthKey_ABCDE12345.p8 \
-  -apns-key-id ABCDE12345 \
-  -apns-team-id YYYYYYYYYY \
-  -apns-topic com.idealapp.RxCode.Mobile \
-  -apns-production=false
+make encode-key KEY=./AuthKey_ABCDE12345.p8
 ```
+
+Then run:
+
+```bash
+make run-env                   # uses ./.env
+make run-env ENV_FILE=staging.env
+# …or directly:
+go run .                       # auto-loads ./.env if present
+RELAY_ENV_FILE=staging.env go run .
+```
+
+`.env` should be `.gitignore`d.
 
 ## Docker
 
 ```bash
 docker build -t rxcode-relay .
 docker run -p 8787:8787 \
-  -v $(pwd)/AuthKey_ABCDE12345.p8:/keys/apns.p8:ro \
-  rxcode-relay \
-  -addr :8787 \
-  -apns-key /keys/apns.p8 \
-  -apns-key-id ABCDE12345 \
-  -apns-team-id YYYYYYYYYY \
-  -apns-topic com.idealapp.RxCode.Mobile \
-  -apns-production=true
+  -e APNS_KEY_B64="$(base64 < ./AuthKey_ABCDE12345.p8 | tr -d '\n')" \
+  -e APNS_KEY_ID=ABCDE12345 \
+  -e APNS_TEAM_ID=YYYYYYYYYY \
+  -e APNS_TOPIC=app.rxlab.rxcodemobile \
+  -e APNS_PRODUCTION=true \
+  rxcode-relay
 ```
+
+No bind-mount needed — the key lives only in the container environment.
 
 ## APNs setup notes
 

@@ -1,5 +1,6 @@
 import SwiftUI
 import RxCodeCore
+import RxCodeSync
 
 /// Read-write chat view. User messages are forwarded to the desktop and the
 /// desktop agent's stream is mirrored back as `session_update` payloads.
@@ -21,6 +22,7 @@ struct MobileChatView: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
                 }
+                .scrollDismissesKeyboard(.interactively)
                 .onChange(of: messages.last?.id) { _, _ in
                     if let last = messages.last?.id {
                         withAnimation { proxy.scrollTo(last, anchor: .bottom) }

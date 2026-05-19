@@ -1,4 +1,5 @@
 import SwiftUI
+import RxCodeSync
 
 struct MobileSettingsView: View {
     @EnvironmentObject private var state: MobileAppState
@@ -17,15 +18,6 @@ struct MobileSettingsView: View {
                         Text("Connection")
                         Spacer()
                         connectionLabel
-                    }
-                    HStack {
-                        Text("Relay")
-                        Spacer()
-                        Text(state.relayURL.absoluteString)
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
                     }
                 }
 
@@ -65,8 +57,8 @@ struct MobileSettingsView: View {
             Label("Connecting…", systemImage: "circle.dotted")
         case .disconnected:
             Label("Disconnected", systemImage: "circle.slash").foregroundStyle(.secondary)
-        case .reconnecting:
-            Label("Reconnecting…", systemImage: "arrow.clockwise.circle").foregroundStyle(.orange)
+        case .reconnecting(let seconds):
+            Label("Reconnecting in \(seconds)s", systemImage: "arrow.clockwise.circle").foregroundStyle(.orange)
         }
     }
 }

@@ -9,11 +9,18 @@ import RxCodeSync
 /// the pairing flow.
 @MainActor
 final class MobileAppState: ObservableObject {
+    enum PairingStatus: Equatable {
+        case idle
+        case inProgress
+        case failed(String)
+    }
+
     @Published var isPaired: Bool = false
     @Published var pairedDesktopName: String = ""
     @Published var pairedDesktopPubkey: String = ""
     @Published var connectionState: RelayClient.ConnectionState = .disconnected
     @Published var relayURL: URL
+    @Published var pairingStatus: PairingStatus = .idle
 
     @Published var projects: [Project] = []
     @Published var sessions: [SessionSummary] = []
@@ -24,24 +31,50 @@ final class MobileAppState: ObservableObject {
     private let identity: DeviceIdentity
     private let client: SyncClient
     private var eventTask: Task<Void, Never>?
+    private var pairingTimeoutTask: Task<Void, Never>?
     private var apnsTokenHex: String?
     private var apnsEnvironment: String?
 
+    static let pairingTimeoutSeconds: UInt64 = 25
+
     init() {
         let stored = UserDefaults.standard.string(forKey: "mobileSync.relayURL")
-        let initial = URL(string: stored ?? "wss://example.invalid") ?? URL(string: "wss://example.invalid")!
+        let initial = URL(string: stored ?? Self.defaultRelayURLString)
+            ?? URL(string: Self.defaultRelayURLString)!
         self.relayURL = initial
         do {
             // Shared access group lets the Notification Service Extension
-            // read the private key for decrypting APNs alerts.
+            // read the private key for decrypting APNs alerts. The bare group
+            // suffix is matched against the (already-expanded) entitlement —
+            // never pass the literal `$(AppIdentifierPrefix)…` here, that's a
+            // build-time substitution and is meaningless at runtime.
             self.identity = try DeviceIdentity.loadOrCreate(
-                accessGroup: "$(AppIdentifierPrefix)com.idealapp.RxCode.Mobile.shared"
+                accessGroup: Self.keychainAccessGroup
             )
         } catch {
             fatalError("Failed to load mobile device identity: \(error)")
         }
         self.client = SyncClient(identity: identity, relayURL: initial)
         loadPairedDesktop()
+    }
+
+    /// Bare suffix as declared (post-`$(AppIdentifierPrefix)`) in
+    /// `RxCodeMobile.entitlements` and the NSE entitlements file.
+    static let keychainAccessGroupSuffix = "app.rxlab.rxcodemobile.shared"
+
+    /// Fully-qualified access group resolved at runtime (e.g.
+    /// `T7GYB573Y6.app.rxlab.rxcodemobile.shared`). iOS requires the prefixed
+    /// form when calling `SecItem*`.
+    static var keychainAccessGroup: String {
+        DeviceIdentity.resolveAccessGroup(suffix: keychainAccessGroupSuffix)
+    }
+
+    static var defaultRelayURLString: String {
+        #if DEBUG
+        return "ws://localhost:8787/ws"
+        #else
+        return "wss://relay.rxlab.app/ws"
+        #endif
     }
 
     var localPublicKeyHex: String { identity.publicKeyHex }
@@ -73,7 +106,11 @@ final class MobileAppState: ObservableObject {
 
     func pair(with token: PairingToken, displayName: String) async {
         guard !token.isExpired,
-              let desktopKey = token.desktopPublicKey else { return }
+              let desktopKey = token.desktopPublicKey else {
+            pairingStatus = .failed("Invalid or expired pairing code.")
+            return
+        }
+        pairingStatus = .inProgress
         let desktopHex = token.desktopPubkeyHex
         try? await client.addPeer(desktopHex)
         // Persist the relay URL we just learned from the QR.
@@ -87,8 +124,40 @@ final class MobileAppState: ObservableObject {
             platform: UIDevice.current.userInterfaceIdiom == .pad ? "iPadOS" : "iOS",
             appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
         )
-        try? await client.send(.pairRequest(req), toHex: desktopHex)
+        do {
+            try await client.send(.pairRequest(req), toHex: desktopHex)
+        } catch {
+            pairingStatus = .failed("Couldn't reach the relay. Check your network and try again.")
+            return
+        }
         _ = desktopKey  // silence unused
+        startPairingTimeout()
+    }
+
+    func cancelPairing() {
+        pairingTimeoutTask?.cancel()
+        pairingTimeoutTask = nil
+        if !isPaired { pairingStatus = .idle }
+    }
+
+    func dismissPairingError() {
+        if case .failed = pairingStatus { pairingStatus = .idle }
+    }
+
+    private func startPairingTimeout() {
+        pairingTimeoutTask?.cancel()
+        pairingTimeoutTask = Task { [weak self] in
+            let seconds = Self.pairingTimeoutSeconds
+            try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard let self else { return }
+                guard !self.isPaired else { return }
+                self.pairingStatus = .failed(
+                    "Your Mac didn't respond. Make sure RxCode is open and connected, then try again."
+                )
+            }
+        }
     }
 
     // MARK: - User intents
@@ -138,7 +207,7 @@ final class MobileAppState: ObservableObject {
         isPaired = false
         savePairedDesktop()
         try? DeviceIdentity.reset(
-            accessGroup: "$(AppIdentifierPrefix)com.idealapp.RxCode.Mobile.shared"
+            accessGroup: Self.keychainAccessGroup
         )
     }
 
@@ -161,10 +230,13 @@ final class MobileAppState: ObservableObject {
     private func handleInbound(_ inbound: RelayClient.Inbound) {
         switch inbound.payload {
         case .pairAck(let ack):
+            pairingTimeoutTask?.cancel()
+            pairingTimeoutTask = nil
             if ack.accepted {
                 pairedDesktopPubkey = inbound.fromHex
                 pairedDesktopName = ack.desktopName
                 isPaired = true
+                pairingStatus = .idle
                 savePairedDesktop()
                 Task {
                     await self.requestSnapshot()
@@ -172,6 +244,7 @@ final class MobileAppState: ObservableObject {
                 }
             } else {
                 isPaired = false
+                pairingStatus = .failed("Your Mac declined the pairing request.")
             }
         case .snapshot(let snap):
             projects = snap.projects

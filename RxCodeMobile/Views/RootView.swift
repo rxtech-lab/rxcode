@@ -1,4 +1,5 @@
 import SwiftUI
+import RxCodeSync
 
 /// Mobile app root. On iPad / wide screens this uses NavigationSplitView; on
 /// iPhone it auto-collapses to a stack.

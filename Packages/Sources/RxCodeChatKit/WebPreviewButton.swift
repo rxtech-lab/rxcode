@@ -2,6 +2,8 @@ import SwiftUI
 import WebKit
 import RxCodeCore
 
+#if os(macOS)
+
 /// Detects localhost URLs and shows a "View Result" button that,
 /// when clicked, provides an in-app web view preview.
 struct WebPreviewButton: View {
@@ -146,3 +148,4 @@ struct WebViewWrapper: NSViewRepresentable {
     ])
     .padding()
 }
+#endif

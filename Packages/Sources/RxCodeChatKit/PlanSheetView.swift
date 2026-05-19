@@ -1,5 +1,6 @@
 import SwiftUI
 import RxCodeCore
+#if os(macOS)
 import AppKit
 import Combine
 
@@ -365,3 +366,4 @@ public struct PlanSheetView: View {
             .joined(separator: "-")
     }
 }
+#endif

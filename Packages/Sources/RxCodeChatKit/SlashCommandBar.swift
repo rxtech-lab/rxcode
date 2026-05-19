@@ -1,6 +1,8 @@
 import SwiftUI
 import RxCodeCore
 
+#if os(macOS)
+
 // MARK: - Slash Command Data
 
 public struct SlashCommand: Identifiable, Codable, Hashable {
@@ -1063,3 +1065,4 @@ enum AtFileSearch {
         return results
     }
 }
+#endif

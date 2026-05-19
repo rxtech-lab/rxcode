@@ -1,5 +1,9 @@
 import SwiftUI
+#if os(macOS)
 import AppKit
+#elseif os(iOS)
+import UIKit
+#endif
 
 // MARK: - Syntax Highlighter
 
@@ -8,6 +12,7 @@ public enum SyntaxHighlighter {
         let normalized = normalizeLanguage(language)
         let tokens = tokenize(code, language: normalized)
         let result = NSMutableAttributedString()
+#if os(macOS)
         let regularFont = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         let mediumFont = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .medium)
         for token in tokens {
@@ -17,6 +22,17 @@ public enum SyntaxHighlighter {
                 .foregroundColor: NSColor(color(for: token.kind)),
             ]))
         }
+#elseif os(iOS)
+        let regularFont = UIFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        let mediumFont = UIFont.monospacedSystemFont(ofSize: fontSize, weight: .medium)
+        for token in tokens {
+            let font = (token.kind == .keyword || token.kind == .builtinType) ? mediumFont : regularFont
+            result.append(NSAttributedString(string: token.text, attributes: [
+                .font: font,
+                .foregroundColor: UIColor(color(for: token.kind)),
+            ]))
+        }
+#endif
         return result
     }
 

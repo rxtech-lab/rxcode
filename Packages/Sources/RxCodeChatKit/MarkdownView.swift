@@ -1,4 +1,5 @@
 import SwiftUI
+#if os(macOS)
 import AppKit
 import RxCodeCore
 
@@ -971,3 +972,4 @@ private extension String {
     .frame(width: 500, height: 600)
     .background(ClaudeTheme.background)
 }
+#endif

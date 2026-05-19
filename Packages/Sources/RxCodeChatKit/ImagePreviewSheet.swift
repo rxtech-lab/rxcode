@@ -1,4 +1,5 @@
 import SwiftUI
+#if os(macOS)
 import AppKit
 import RxCodeCore
 
@@ -58,3 +59,4 @@ struct ImagePreviewSheet: View {
         .background(ClaudeTheme.surfaceElevated)
     }
 }
+#endif

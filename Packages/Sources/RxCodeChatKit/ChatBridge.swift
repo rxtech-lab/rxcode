@@ -125,10 +125,10 @@ public final class ChatBridge {
             let message = messages[messageIdx]
             for blockIdx in message.blocks.indices.reversed() {
                 guard let toolCall = message.blocks[blockIdx].toolCall,
-                      PlanCardView.isExitPlanMode(toolCall) else { continue }
+                      PlanLogic.isExitPlanMode(toolCall) else { continue }
 
                 if planDecisionSummaries[toolCall.id] != nil { return false }
-                if PlanCardView.isPlanDecided(toolCall) { return false }
+                if PlanLogic.isPlanDecided(toolCall) { return false }
 
                 // If anything came after this ExitPlanMode — later blocks in the
                 // same message, or any later message — the chat continued past
@@ -154,8 +154,8 @@ public final class ChatBridge {
         for message in messages {
             for block in message.blocks {
                 guard let toolCall = block.toolCall,
-                      PlanCardView.isExitPlanMode(toolCall) else { continue }
-                if PlanCardView.isSupersededExitPlanMode(
+                      PlanLogic.isExitPlanMode(toolCall) else { continue }
+                if PlanLogic.isSupersededExitPlanMode(
                     toolCall: toolCall,
                     in: message,
                     allMessages: messages
@@ -163,15 +163,15 @@ public final class ChatBridge {
 
                 let inlineMd = toolCall.input["plan"]?.stringValue ?? ""
                 let markdown: String = inlineMd.isEmpty
-                    ? (PlanCardView.fallbackPlanMarkdown(in: message)
-                        ?? PlanCardView.latestPriorPlanMarkdown(before: message, in: messages)
+                    ? (PlanLogic.fallbackPlanMarkdown(in: message)
+                        ?? PlanLogic.latestPriorPlanMarkdown(before: message, in: messages)
                         ?? "")
                     : inlineMd
 
                 let persistedSummary = planDecisionSummaries[toolCall.id]
-                let decided = persistedSummary != nil || PlanCardView.isPlanDecided(toolCall)
+                let decided = persistedSummary != nil || PlanLogic.isPlanDecided(toolCall)
                 let summary: String? = persistedSummary
-                    ?? (PlanCardView.isPlanDecided(toolCall) ? toolCall.result : nil)
+                    ?? (PlanLogic.isPlanDecided(toolCall) ? toolCall.result : nil)
                 let isStreaming = message.isStreaming && markdown.isEmpty
                 collected.append(PendingPlan(
                     toolCallId: toolCall.id,

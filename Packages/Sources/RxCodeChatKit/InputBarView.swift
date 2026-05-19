@@ -2,6 +2,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 import RxCodeCore
 
+#if os(macOS)
+
 struct InputBarView<Accessory: View, TopAccessory: View>: View {
     @Environment(ChatBridge.self) private var environmentChatBridge: ChatBridge?
     @Environment(WindowState.self) private var environmentWindowState: WindowState?
@@ -961,3 +963,4 @@ private struct InputHeightMeasurer: View {
         return capped.hasSuffix("\n") ? capped + " " : capped
     }
 }
+#endif

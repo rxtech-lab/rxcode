@@ -1,4 +1,5 @@
 import SwiftUI
+#if os(macOS)
 import AppKit
 import RxCodeCore
 
@@ -701,3 +702,4 @@ private struct MessageImagePreviewSheet: View {
         .background(ClaudeTheme.surfacePrimary)
     }
 }
+#endif

@@ -2,6 +2,8 @@ import SwiftUI
 import LinkPresentation
 import RxCodeCore
 
+#if os(macOS)
+
 /// Attachment preview item — tall rectangular card
 /// Shows an X button overlay on mouse hover
 struct AttachmentPreviewItem: View {
@@ -242,3 +244,4 @@ struct AttachmentPreviewItem: View {
         }
     }
 }
+#endif

@@ -1,6 +1,8 @@
-import CoreServices
 import Foundation
 import os
+
+#if os(macOS)
+import CoreServices
 
 /// Watches one or more directories for filesystem changes using FSEventStream
 /// with `kFSEventStreamCreateFlagFileEvents`. Push-based: the kernel notifies
@@ -131,3 +133,5 @@ public actor DirectoryWatcher {
         onChange()
     }
 }
+
+#endif

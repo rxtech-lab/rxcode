@@ -3,6 +3,8 @@ import Combine
 import RxCodeCore
 import os
 
+#if os(macOS)
+
 /// Message scroll area — extracted from ChatView to isolate @Observable dependencies on `messages`.
 struct MessageListView: View {
     @Environment(ChatBridge.self) private var chatBridge
@@ -277,11 +279,11 @@ fileprivate func suppressPlanReadyFollowups(in messages: [ChatMessage]) -> [Chat
 
     func flushAssistantRun() {
         guard !assistantRun.isEmpty else { return }
-        let hasExitPlan = assistantRun.contains { PlanCardView.containsExitPlanMode($0) }
+        let hasExitPlan = assistantRun.contains { PlanLogic.containsExitPlanMode($0) }
         var hasRecentPlanCard = false
 
         for message in assistantRun {
-            if hasExitPlan && PlanCardView.isPurePlanFileWriteMessage(message) {
+            if hasExitPlan && PlanLogic.isPurePlanFileWriteMessage(message) {
                 continue
             }
 
@@ -290,7 +292,7 @@ fileprivate func suppressPlanReadyFollowups(in messages: [ChatMessage]) -> [Chat
             // sees the summary while approval is pending.
             _ = hasRecentPlanCard
 
-            if PlanCardView.containsExitPlanMode(message) {
+            if PlanLogic.containsExitPlanMode(message) {
                 hasRecentPlanCard = true
             }
             result.append(message)
@@ -323,7 +325,7 @@ fileprivate func isPlanReadyFollowupMessage(_ message: ChatMessage) -> Bool {
     }
     return message.blocks.allSatisfy { block in
         guard let text = block.text else { return false }
-        return PlanCardView.isPlanReadyFollowup(text)
+        return PlanLogic.isPlanReadyFollowup(text)
     }
 }
 
@@ -651,3 +653,4 @@ struct ElapsedTimeView: View {
             }
     }
 }
+#endif

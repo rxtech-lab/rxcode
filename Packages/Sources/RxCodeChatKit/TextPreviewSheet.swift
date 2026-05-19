@@ -1,5 +1,10 @@
 import SwiftUI
 import RxCodeCore
+#if os(macOS)
+import AppKit
+#elseif os(iOS)
+import UIKit
+#endif
 
 /// Detail preview sheet for text attachments
 struct TextPreviewSheet: View {
@@ -20,8 +25,12 @@ struct TextPreviewSheet: View {
 
                 Button {
                     if let text = attachment.textContent {
+#if os(macOS)
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(text, forType: .string)
+#elseif os(iOS)
+                        UIPasteboard.general.string = text
+#endif
                     }
                 } label: {
                     Image(systemName: "doc.on.doc")

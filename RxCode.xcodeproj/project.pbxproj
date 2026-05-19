@@ -13,6 +13,12 @@
 		DCA8CF4A05C959C4A6EB391F /* RxCodeCore in Frameworks */ = {isa = PBXBuildFile; productRef = CCDF9594876099576D4FD46E /* RxCodeCore */; };
 		DF06CCD12FB4CAB5005991E1 /* ViewInspector in Frameworks */ = {isa = PBXBuildFile; productRef = DF06CCD02FB4CAB5005991E1 /* ViewInspector */; };
 		DF06DCC72FB8552B005991E1 /* UnitTestPlan.xctestplan in Resources */ = {isa = PBXBuildFile; fileRef = DF06DCC62FB8552B005991E1 /* UnitTestPlan.xctestplan */; };
+		DF230B992FBC738D008929A6 /* RxCodeChatKit in Frameworks */ = {isa = PBXBuildFile; productRef = DF230B982FBC738D008929A6 /* RxCodeChatKit */; };
+		DF230B9B2FBC738D008929A6 /* RxCodeCore in Frameworks */ = {isa = PBXBuildFile; productRef = DF230B9A2FBC738D008929A6 /* RxCodeCore */; };
+		DF230B9D2FBC738D008929A6 /* RxCodeSync in Frameworks */ = {isa = PBXBuildFile; productRef = DF230B9C2FBC738D008929A6 /* RxCodeSync */; };
+		DF230B9F2FBC73BA008929A6 /* RxCodeChatKit in Frameworks */ = {isa = PBXBuildFile; productRef = DF230B9E2FBC73BA008929A6 /* RxCodeChatKit */; };
+		DF230BA12FBC73BA008929A6 /* RxCodeCore in Frameworks */ = {isa = PBXBuildFile; productRef = DF230BA02FBC73BA008929A6 /* RxCodeCore */; };
+		DF230BA32FBC73BA008929A6 /* RxCodeSync in Frameworks */ = {isa = PBXBuildFile; productRef = DF230BA22FBC73BA008929A6 /* RxCodeSync */; };
 		DF23F7362FB8C3EC008929A6 /* icon.icon in Resources */ = {isa = PBXBuildFile; fileRef = DF23F7352FB8C3EC008929A6 /* icon.icon */; };
 		DF23FF1D2FBB42F7008929A6 /* WaterfallGrid in Frameworks */ = {isa = PBXBuildFile; productRef = DF23FF1C2FBB42F7008929A6 /* WaterfallGrid */; };
 		DFA0CCD12FB4CC01005991E1 /* PlanDecisionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA0CCC02FB4CC01005991E1 /* PlanDecisionTests.swift */; };
@@ -23,6 +29,7 @@
 		E6C001022F9B000100000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = E6C001012F9B000100000001 /* Sparkle */; };
 		E6D001032FA0000100000001 /* RxCodeCore in Frameworks */ = {isa = PBXBuildFile; productRef = E6D001012FA0000100000001 /* RxCodeCore */; };
 		E6D001042FA0000100000001 /* RxCodeChatKit in Frameworks */ = {isa = PBXBuildFile; productRef = E6D001022FA0000100000001 /* RxCodeChatKit */; };
+		E6D001072FA0000100000001 /* RxCodeSync in Frameworks */ = {isa = PBXBuildFile; productRef = E6D001062FA0000100000001 /* RxCodeSync */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -40,6 +47,20 @@
 			remoteGlobalIDString = E67335372F7356F600FD26C7;
 			remoteInfo = RxCode;
 		};
+		DF230B602FBC7368008929A6 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E67335302F7356F600FD26C7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DF230B4E2FBC7367008929A6;
+			remoteInfo = RxCodeMobile;
+		};
+		DF230B6A2FBC7368008929A6 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E67335302F7356F600FD26C7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DF230B4E2FBC7367008929A6;
+			remoteInfo = RxCodeMobile;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
@@ -50,6 +71,9 @@
 		7321B5E8B81AAB1A2DC0593B /* RxCodeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RxCodeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A9993BB72A5307039A88B729 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
 		DF06DCC62FB8552B005991E1 /* UnitTestPlan.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = UnitTestPlan.xctestplan; sourceTree = "<group>"; };
+		DF230B4F2FBC7367008929A6 /* RxCodeMobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RxCodeMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		DF230B5F2FBC7368008929A6 /* RxCodeMobileTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RxCodeMobileTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		DF230B692FBC7368008929A6 /* RxCodeMobileUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RxCodeMobileUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		DF23F7352FB8C3EC008929A6 /* icon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = icon.icon; sourceTree = "<group>"; };
 		DFA0CCC02FB4CC01005991E1 /* PlanDecisionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlanDecisionTests.swift; sourceTree = "<group>"; };
 		DFA0CCC12FB4CC01005991E1 /* PlanCardViewTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlanCardViewTests.swift; sourceTree = "<group>"; };
@@ -57,7 +81,35 @@
 		E67335382F7356F600FD26C7 /* RxCode.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RxCode.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		DF230B772FBC7368008929A6 /* Exceptions for "RxCodeMobile" folder in "RxCodeMobile" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = DF230B4E2FBC7367008929A6 /* RxCodeMobile */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		DF230B502FBC7367008929A6 /* RxCodeMobile */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				DF230B772FBC7368008929A6 /* Exceptions for "RxCodeMobile" folder in "RxCodeMobile" target */,
+			);
+			path = RxCodeMobile;
+			sourceTree = "<group>";
+		};
+		DF230B622FBC7368008929A6 /* RxCodeMobileTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = RxCodeMobileTests;
+			sourceTree = "<group>";
+		};
+		DF230B6C2FBC7368008929A6 /* RxCodeMobileUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = RxCodeMobileUITests;
+			sourceTree = "<group>";
+		};
 		E673353A2F7356F600FD26C7 /* RxCode */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = RxCode;
@@ -84,6 +136,33 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		DF230B4C2FBC7367008929A6 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DF230BA32FBC73BA008929A6 /* RxCodeSync in Frameworks */,
+				DF230BA12FBC73BA008929A6 /* RxCodeCore in Frameworks */,
+				DF230B9F2FBC73BA008929A6 /* RxCodeChatKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DF230B5C2FBC7368008929A6 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DF230B662FBC7368008929A6 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DF230B9D2FBC738D008929A6 /* RxCodeSync in Frameworks */,
+				DF230B9B2FBC738D008929A6 /* RxCodeCore in Frameworks */,
+				DF230B992FBC738D008929A6 /* RxCodeChatKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		E67335352F7356F600FD26C7 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -92,6 +171,7 @@
 				E6C001022F9B000100000001 /* Sparkle in Frameworks */,
 				E6D001032FA0000100000001 /* RxCodeCore in Frameworks */,
 				E6D001042FA0000100000001 /* RxCodeChatKit in Frameworks */,
+				E6D001072FA0000100000001 /* RxCodeSync in Frameworks */,
 				DF23FF1D2FBB42F7008929A6 /* WaterfallGrid in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -142,6 +222,9 @@
 				6E17B00D2FC8000100A10001 /* UITestplan.xctestplan */,
 				E673353A2F7356F600FD26C7 /* RxCode */,
 				6E17B0042FC8000100A10001 /* RxCodeUITests */,
+				DF230B502FBC7367008929A6 /* RxCodeMobile */,
+				DF230B622FBC7368008929A6 /* RxCodeMobileTests */,
+				DF230B6C2FBC7368008929A6 /* RxCodeMobileUITests */,
 				E67335392F7356F600FD26C7 /* Products */,
 				609E8EE085862BD7D5B4012F /* Frameworks */,
 				1525FE6BFB6F06A3F00B92D3 /* RxCodeTests */,
@@ -154,6 +237,9 @@
 				E67335382F7356F600FD26C7 /* RxCode.app */,
 				7321B5E8B81AAB1A2DC0593B /* RxCodeTests.xctest */,
 				6E17B0032FC8000100A10001 /* RxCodeUITests.xctest */,
+				DF230B4F2FBC7367008929A6 /* RxCodeMobile.app */,
+				DF230B5F2FBC7368008929A6 /* RxCodeMobileTests.xctest */,
+				DF230B692FBC7368008929A6 /* RxCodeMobileUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -204,6 +290,80 @@
 			productReference = 6E17B0032FC8000100A10001 /* RxCodeUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		DF230B4E2FBC7367008929A6 /* RxCodeMobile */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DF230B782FBC7368008929A6 /* Build configuration list for PBXNativeTarget "RxCodeMobile" */;
+			buildPhases = (
+				DF230B4B2FBC7367008929A6 /* Sources */,
+				DF230B4C2FBC7367008929A6 /* Frameworks */,
+				DF230B4D2FBC7367008929A6 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				DF230B502FBC7367008929A6 /* RxCodeMobile */,
+			);
+			name = RxCodeMobile;
+			packageProductDependencies = (
+				DF230B9E2FBC73BA008929A6 /* RxCodeChatKit */,
+				DF230BA02FBC73BA008929A6 /* RxCodeCore */,
+				DF230BA22FBC73BA008929A6 /* RxCodeSync */,
+			);
+			productName = RxCodeMobile;
+			productReference = DF230B4F2FBC7367008929A6 /* RxCodeMobile.app */;
+			productType = "com.apple.product-type.application.on-demand-install-capable";
+		};
+		DF230B5E2FBC7368008929A6 /* RxCodeMobileTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DF230B792FBC7368008929A6 /* Build configuration list for PBXNativeTarget "RxCodeMobileTests" */;
+			buildPhases = (
+				DF230B5B2FBC7368008929A6 /* Sources */,
+				DF230B5C2FBC7368008929A6 /* Frameworks */,
+				DF230B5D2FBC7368008929A6 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				DF230B612FBC7368008929A6 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				DF230B622FBC7368008929A6 /* RxCodeMobileTests */,
+			);
+			name = RxCodeMobileTests;
+			packageProductDependencies = (
+			);
+			productName = RxCodeMobileTests;
+			productReference = DF230B5F2FBC7368008929A6 /* RxCodeMobileTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		DF230B682FBC7368008929A6 /* RxCodeMobileUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DF230B7A2FBC7368008929A6 /* Build configuration list for PBXNativeTarget "RxCodeMobileUITests" */;
+			buildPhases = (
+				DF230B652FBC7368008929A6 /* Sources */,
+				DF230B662FBC7368008929A6 /* Frameworks */,
+				DF230B672FBC7368008929A6 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				DF230B6B2FBC7368008929A6 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				DF230B6C2FBC7368008929A6 /* RxCodeMobileUITests */,
+			);
+			name = RxCodeMobileUITests;
+			packageProductDependencies = (
+				DF230B982FBC738D008929A6 /* RxCodeChatKit */,
+				DF230B9A2FBC738D008929A6 /* RxCodeCore */,
+				DF230B9C2FBC738D008929A6 /* RxCodeSync */,
+			);
+			productName = RxCodeMobileUITests;
+			productReference = DF230B692FBC7368008929A6 /* RxCodeMobileUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 		E67335372F7356F600FD26C7 /* RxCode */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = E67335432F7356F700FD26C7 /* Build configuration list for PBXNativeTarget "RxCode" */;
@@ -225,6 +385,7 @@
 				E6C001012F9B000100000001 /* Sparkle */,
 				E6D001012FA0000100000001 /* RxCodeCore */,
 				E6D001022FA0000100000001 /* RxCodeChatKit */,
+				E6D001062FA0000100000001 /* RxCodeSync */,
 				DF23FF1C2FBB42F7008929A6 /* WaterfallGrid */,
 			);
 			productName = RxCode;
@@ -241,6 +402,17 @@
 				LastSwiftUpdateCheck = 2630;
 				LastUpgradeCheck = 2630;
 				TargetAttributes = {
+					DF230B4E2FBC7367008929A6 = {
+						CreatedOnToolsVersion = 26.3;
+					};
+					DF230B5E2FBC7368008929A6 = {
+						CreatedOnToolsVersion = 26.3;
+						TestTargetID = DF230B4E2FBC7367008929A6;
+					};
+					DF230B682FBC7368008929A6 = {
+						CreatedOnToolsVersion = 26.3;
+						TestTargetID = DF230B4E2FBC7367008929A6;
+					};
 					E67335372F7356F600FD26C7 = {
 						CreatedOnToolsVersion = 26.3;
 					};
@@ -271,6 +443,9 @@
 				E67335372F7356F600FD26C7 /* RxCode */,
 				5D74FE7B782850D23F8D9BF7 /* RxCodeTests */,
 				6E17B0062FC8000100A10001 /* RxCodeUITests */,
+				DF230B4E2FBC7367008929A6 /* RxCodeMobile */,
+				DF230B5E2FBC7368008929A6 /* RxCodeMobileTests */,
+				DF230B682FBC7368008929A6 /* RxCodeMobileUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -284,6 +459,27 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		AB14AE27D09CB3D7C28C9888 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DF230B4D2FBC7367008929A6 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DF230B5D2FBC7368008929A6 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DF230B672FBC7368008929A6 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -321,6 +517,27 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		DF230B4B2FBC7367008929A6 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DF230B5B2FBC7368008929A6 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DF230B652FBC7368008929A6 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		E67335342F7356F600FD26C7 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -342,6 +559,16 @@
 			name = RxCode;
 			target = E67335372F7356F600FD26C7 /* RxCode */;
 			targetProxy = 35C1B17CDEF83F212F648418 /* PBXContainerItemProxy */;
+		};
+		DF230B612FBC7368008929A6 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DF230B4E2FBC7367008929A6 /* RxCodeMobile */;
+			targetProxy = DF230B602FBC7368008929A6 /* PBXContainerItemProxy */;
+		};
+		DF230B6B2FBC7368008929A6 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DF230B4E2FBC7367008929A6 /* RxCodeMobile */;
+			targetProxy = DF230B6A2FBC7368008929A6 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -399,6 +626,173 @@
 				SDKROOT = macosx;
 				SWIFT_VERSION = 6.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/RxCode.app/Contents/MacOS/RxCode";
+			};
+			name = Release;
+		};
+		DF230B712FBC7368008929A6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = RxCodeMobile/RxCodeMobile.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = P9KK452K8P;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RxCodeMobile/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "___ASSOCIATEDTARGET_bundleDisplayName___";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = rxlab.Clip;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		DF230B722FBC7368008929A6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = RxCodeMobile/RxCodeMobile.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = P9KK452K8P;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RxCodeMobile/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "___ASSOCIATEDTARGET_bundleDisplayName___";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = rxlab.Clip;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		DF230B732FBC7368008929A6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = P9KK452K8P;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = rxlab.RxCodeMobileTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/RxCodeMobile.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/RxCodeMobile";
+			};
+			name = Debug;
+		};
+		DF230B742FBC7368008929A6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = P9KK452K8P;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = rxlab.RxCodeMobileTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/RxCodeMobile.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/RxCodeMobile";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		DF230B752FBC7368008929A6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = P9KK452K8P;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = rxlab.RxCodeMobileUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = RxCodeMobile;
+			};
+			name = Debug;
+		};
+		DF230B762FBC7368008929A6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = P9KK452K8P;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = rxlab.RxCodeMobileUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = RxCodeMobile;
+				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
 		};
@@ -611,6 +1005,33 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		DF230B782FBC7368008929A6 /* Build configuration list for PBXNativeTarget "RxCodeMobile" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DF230B712FBC7368008929A6 /* Debug */,
+				DF230B722FBC7368008929A6 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		DF230B792FBC7368008929A6 /* Build configuration list for PBXNativeTarget "RxCodeMobileTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DF230B732FBC7368008929A6 /* Debug */,
+				DF230B742FBC7368008929A6 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		DF230B7A2FBC7368008929A6 /* Build configuration list for PBXNativeTarget "RxCodeMobileUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DF230B752FBC7368008929A6 /* Debug */,
+				DF230B762FBC7368008929A6 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		E67335332F7356F600FD26C7 /* Build configuration list for PBXProject "RxCode" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -683,6 +1104,36 @@
 			package = DF06CCCF2FB4CAB5005991E1 /* XCRemoteSwiftPackageReference "ViewInspector" */;
 			productName = ViewInspector;
 		};
+		DF230B982FBC738D008929A6 /* RxCodeChatKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E6D001002FA0000100000001 /* XCLocalSwiftPackageReference "Packages" */;
+			productName = RxCodeChatKit;
+		};
+		DF230B9A2FBC738D008929A6 /* RxCodeCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E6D001002FA0000100000001 /* XCLocalSwiftPackageReference "Packages" */;
+			productName = RxCodeCore;
+		};
+		DF230B9C2FBC738D008929A6 /* RxCodeSync */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E6D001002FA0000100000001 /* XCLocalSwiftPackageReference "Packages" */;
+			productName = RxCodeSync;
+		};
+		DF230B9E2FBC73BA008929A6 /* RxCodeChatKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E6D001002FA0000100000001 /* XCLocalSwiftPackageReference "Packages" */;
+			productName = RxCodeChatKit;
+		};
+		DF230BA02FBC73BA008929A6 /* RxCodeCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E6D001002FA0000100000001 /* XCLocalSwiftPackageReference "Packages" */;
+			productName = RxCodeCore;
+		};
+		DF230BA22FBC73BA008929A6 /* RxCodeSync */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E6D001002FA0000100000001 /* XCLocalSwiftPackageReference "Packages" */;
+			productName = RxCodeSync;
+		};
 		DF23FF1C2FBB42F7008929A6 /* WaterfallGrid */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = DF23FF1B2FBB42F7008929A6 /* XCRemoteSwiftPackageReference "WaterfallGrid" */;
@@ -711,6 +1162,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = E6D001002FA0000100000001 /* XCLocalSwiftPackageReference "Packages" */;
 			productName = RxCodeChatKit;
+		};
+		E6D001062FA0000100000001 /* RxCodeSync */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E6D001002FA0000100000001 /* XCLocalSwiftPackageReference "Packages" */;
+			productName = RxCodeSync;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

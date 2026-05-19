@@ -3374,49 +3374,31 @@ final class AppState {
             state.activeToolInputBuffer = ""
             state.textDeltaBuffer = ""
             state.pendingToolResults.removeAll()
+            if let idx = state.messages.indices.reversed().first(where: {
+                state.messages[$0].role == .assistant && state.messages[$0].isStreaming
+            }) {
+                state.messages[idx].isStreaming = false
+                state.messages[idx].finalizeToolCalls()
+                if let start = state.streamingStartDate {
+                    state.messages[idx].duration = Date().timeIntervalSince(start)
+                }
+                Self.stripNoOpText(at: idx, in: &state.messages)
+            }
             state.streamingStartDate = nil
-            // Drop the in-progress assistant bubble so it doesn't reappear on the next turn.
-            if let lastIndex = state.messages.indices.last,
-               state.messages[lastIndex].role == .assistant,
-               !state.messages[lastIndex].isError,
-               !state.messages[lastIndex].isCompactBoundary
-            {
-                state.messages.remove(at: lastIndex)
-            }
-            // Restore the user message that triggered this stream into the input field —
-            // both its text and the original attachment objects so images / pasted text
-            // aren't silently dropped when the user stops a turn.
-            if let lastIndex = state.messages.indices.last,
-               state.messages[lastIndex].role == .user,
-               !state.messages[lastIndex].isCompactBoundary
-            {
-                let userText = state.messages[lastIndex].blocks.compactMap(\.text).joined()
-                state.messages.remove(at: lastIndex)
-                window.inputText = userText
-                window.attachments = state.inFlightUserAttachments
-            }
             state.inFlightUserAttachments = []
         }
 
         window.showError = false
         window.errorMessage = nil
 
-        // Save messages accumulated up to the point of cancellation to disk (prevent data loss)
+        // Save messages accumulated up to the point of cancellation to disk (prevent data loss).
+        // The placeholder session (if any) is left in place so partial messages remain visible;
+        // it will be promoted to the real CLI session id on the next user turn.
         if let project = window.selectedProject {
             let messages = stateForSession(key).messages
             if !messages.isEmpty {
                 await saveSession(sessionId: key, projectId: project.id, messages: messages)
             }
-        }
-
-        // Clean up placeholder session on cancellation
-        if let sid = window.currentSessionId, window.pendingPlaceholderIds.contains(sid) {
-            allSessionSummaries.removeAll { $0.id == sid }
-            threadStore.delete(id: sid)
-            Task.detached(priority: .utility) { [searchService] in await searchService.removeThread(id: sid) }
-            window.removePendingPlaceholder(sid)
-            sessionStates.removeValue(forKey: sid)
-            window.currentSessionId = nil
         }
     }
 
@@ -4439,6 +4421,60 @@ final class AppState {
         await updateSessionMetadata(updated) { s in
             s.worktreePath = info.path.path
             s.worktreeBranch = info.branch
+        }
+    }
+
+    /// Switch the chat to an existing branch.
+    ///
+    /// If the branch is already attached to a linked worktree, point the
+    /// session at that worktree. Otherwise run `git checkout` in the project
+    /// root and clear the session's worktree pointer.
+    func switchToExistingBranch(_ branch: String, in window: WindowState) async throws {
+        guard let project = window.selectedProject else {
+            throw AppError.noProjectSelected
+        }
+        let baseRepo = URL(fileURLWithPath: project.path)
+
+        let existingWorktree: GitWorktreeService.WorktreeInfo? = await {
+            guard let list = try? await GitWorktreeService.shared.listWorktrees(baseRepo: baseRepo) else {
+                return nil
+            }
+            // The main repo also appears in `worktree list`; skip it so the
+            // project root takes the plain-checkout path.
+            return list.first { $0.branch == branch && $0.path.standardizedFileURL != baseRepo.standardizedFileURL }
+        }()
+
+        let newPath: String?
+        let newBranch: String?
+        if let existingWorktree {
+            newPath = existingWorktree.path.path
+            newBranch = existingWorktree.branch
+        } else {
+            if let err = await GitHelper.checkout(branch: branch, at: project.path) {
+                throw GitWorktreeService.WorktreeError.gitFailed(err)
+            }
+            newPath = nil
+            newBranch = nil
+        }
+
+        guard let sessionId = window.currentSessionId else {
+            window.pendingWorktreePath = newPath
+            window.pendingWorktreeBranch = newBranch
+            return
+        }
+
+        sessionStates[sessionId, default: SessionStreamState()].worktreePath = newPath
+        sessionStates[sessionId, default: SessionStreamState()].worktreeBranch = newBranch
+        if let idx = allSessionSummaries.firstIndex(where: { $0.id == sessionId }) {
+            allSessionSummaries[idx].worktreePath = newPath
+            allSessionSummaries[idx].worktreeBranch = newBranch
+            threadStore.upsert(allSessionSummaries[idx])
+        }
+        if let snap = allSessionSummaries.first(where: { $0.id == sessionId }) {
+            await updateSessionMetadata(snap.makeSession()) { s in
+                s.worktreePath = newPath
+                s.worktreeBranch = newBranch
+            }
         }
     }
 

@@ -61,6 +61,16 @@ public actor GitWorktreeService {
         guard let mainGitDir else { throw WorktreeError.notARepo }
         let mainRepo = mainGitDir.deletingLastPathComponent()
 
+        // If the branch is already checked out in an existing worktree (including
+        // the main repo), reuse it — `git worktree add` would otherwise refuse
+        // with "branch is already checked out at …", breaking back-and-forth
+        // branch switching in chat.
+        if let output = await runGit(["worktree", "list", "--porcelain"], at: mainRepo.path),
+           let existing = parseWorktreeList(output).first(where: { $0.branch == normalizedBranch })
+        {
+            return existing
+        }
+
         let baseDir = defaultBaseDir(for: mainRepo)
         try ensureDirectory(baseDir)
 

@@ -4,10 +4,10 @@ import SwiftUI
 /// (cursor moving right→left) and then typing the new value left→right.
 /// No animation runs on the first appearance — the initial value is shown immediately.
 public struct TypewriterTitleText: View {
-    let title: String
-    var charInterval: Duration = .milliseconds(18)
-    var pauseBetween: Duration = .milliseconds(120)
-    var holdAfter: Duration = .milliseconds(180)
+    public let title: String
+    public var charInterval: Duration = .milliseconds(18)
+    public var pauseBetween: Duration = .milliseconds(120)
+    public var holdAfter: Duration = .milliseconds(180)
 
     @State private var displayed: String = ""
     @State private var isAnimating: Bool = false

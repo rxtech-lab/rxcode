@@ -160,15 +160,9 @@ struct RightInspectorPanel: View {
         .background(terminalShortcuts)
         .task(id: currentSessionKey) {
             ensureTerminal(for: currentSessionKey)
-            // Default the inspector to the terminal tab on a thread switch,
-            // but don't clobber a user-driven focus on the Run tab — pressing
-            // the Run button sets `inspectorTab = .run` and we want that to
-            // stick even if the .task body runs after (first mount race) or
-            // the session key happens to change in the same tick.
-            windowState.inspectorMode = .inspector
-            if windowState.inspectorTab != .run {
-                windowState.inspectorTab = .terminal
-            }
+            // Keep the user's last-chosen inspector mode/tab (persisted in
+            // WindowState). Just make sure the panel is visible and the
+            // terminal process exists for this session.
             windowState.showInspector = true
         }
         .onChange(of: windowState.inspectorTab) { _, newTab in
@@ -597,6 +591,11 @@ struct BranchInfoView: View {
 /// bottom, with multi-select Stage/Unstage actions and a commit composer at
 /// the bottom. Generates commit messages via the configured summarization
 /// provider.
+enum ChangeSectionFocus: Hashable {
+    case unstaged
+    case staged
+}
+
 struct ChangesView: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
@@ -609,10 +608,13 @@ struct ChangesView: View {
     @State private var isLoading = true
     @State private var isBusy = false
     @State private var isGenerating = false
+    @State private var isPushing = false
     @State private var errorMessage: String?
+    @State private var upstream: GitHelper.UpstreamStatus?
     @State private var headWatcher: (any DispatchSourceFileSystemObject)?
     @State private var indexWatcher: (any DispatchSourceFileSystemObject)?
     @State private var refreshTask: Task<Void, Never>?
+    @FocusState private var focusedSection: ChangeSectionFocus?
 
     var body: some View {
         if let project = windowState.selectedProject {
@@ -647,8 +649,12 @@ struct ChangesView: View {
                 selection: $selectedUnstaged,
                 emptyMessage: "Working tree matches the index.",
                 isBusy: isBusy,
-                onAction: { await stageSelected(at: projectPath) }
+                onAction: { await stageSelected(at: projectPath) },
+                onFocus: { focusedSection = .unstaged },
+                onEmptyTap: clearAllSelections
             )
+            .focusable()
+            .focused($focusedSection, equals: .unstaged)
 
             Divider()
 
@@ -659,8 +665,12 @@ struct ChangesView: View {
                 selection: $selectedStaged,
                 emptyMessage: "Nothing in the index.",
                 isBusy: isBusy,
-                onAction: { await unstageSelected(at: projectPath) }
+                onAction: { await unstageSelected(at: projectPath) },
+                onFocus: { focusedSection = .staged },
+                onEmptyTap: clearAllSelections
             )
+            .focusable()
+            .focused($focusedSection, equals: .staged)
 
             Divider()
 
@@ -669,6 +679,44 @@ struct ChangesView: View {
         .overlay(alignment: .top) {
             if isLoading && unstaged.isEmpty && staged.isEmpty {
                 ProgressView().controlSize(.small).padding(.top, 20)
+            }
+        }
+        .background(selectAllShortcut)
+    }
+
+    /// Cmd+A hooks up to whichever section is currently focused. Hidden button
+    /// avoids stealing focus from the visible UI.
+    @ViewBuilder
+    private var selectAllShortcut: some View {
+        Button("Select All in Section") {
+            selectAllInFocusedSection()
+        }
+        .keyboardShortcut("a", modifiers: .command)
+        .frame(width: 0, height: 0)
+        .opacity(0)
+        .accessibilityHidden(true)
+    }
+
+    private func clearAllSelections() {
+        selectedUnstaged.removeAll()
+        selectedStaged.removeAll()
+    }
+
+    private func selectAllInFocusedSection() {
+        switch focusedSection {
+        case .unstaged:
+            selectedUnstaged = Set(unstaged.map { $0.displayPath })
+        case .staged:
+            selectedStaged = Set(staged.map { $0.displayPath })
+        case .none:
+            // No section focused — default to whichever has files, preferring
+            // unstaged. Keeps Cmd+A useful right after the view appears.
+            if !unstaged.isEmpty {
+                selectedUnstaged = Set(unstaged.map { $0.displayPath })
+                focusedSection = .unstaged
+            } else if !staged.isEmpty {
+                selectedStaged = Set(staged.map { $0.displayPath })
+                focusedSection = .staged
             }
         }
     }
@@ -722,8 +770,28 @@ struct ChangesView: View {
                     .lineLimit(3)
             }
 
-            HStack {
+            HStack(spacing: 8) {
+                upstreamStatusLabel
                 Spacer()
+                Button {
+                    Task { await push(at: projectPath) }
+                } label: {
+                    HStack(spacing: 4) {
+                        if isPushing {
+                            ProgressView().controlSize(.mini)
+                        } else {
+                            Image(systemName: pushIconName)
+                        }
+                        Text(pushLabel)
+                            .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                }
+                .buttonStyle(.bordered)
+                .disabled(isBusy || isPushing || !canPush)
+                .help(pushHelp)
+
                 Button {
                     Task { await commit(at: projectPath) }
                 } label: {
@@ -744,6 +812,71 @@ struct ChangesView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
+    }
+
+    @ViewBuilder
+    private var upstreamStatusLabel: some View {
+        if let upstream {
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.triangle.branch")
+                    .font(.system(size: ClaudeTheme.size(10)))
+                Text(upstream.branch)
+                    .font(.system(size: ClaudeTheme.size(11), weight: .medium, design: .monospaced))
+                Text("·")
+                    .foregroundStyle(ClaudeTheme.textTertiary)
+                Text(upstreamSummary(upstream))
+                    .font(.system(size: ClaudeTheme.size(11)))
+            }
+            .foregroundStyle(ClaudeTheme.textTertiary)
+            .lineLimit(1)
+            .truncationMode(.tail)
+        }
+    }
+
+    private func upstreamSummary(_ status: GitHelper.UpstreamStatus) -> String {
+        if status.upstream == nil {
+            return status.remotes.isEmpty ? "no remote" : "no upstream"
+        }
+        switch (status.ahead, status.behind) {
+        case (0, 0): return "up to date"
+        case (let a, 0): return "↑\(a)"
+        case (0, let b): return "↓\(b)"
+        case (let a, let b): return "↑\(a) ↓\(b)"
+        }
+    }
+
+    private var canPush: Bool {
+        guard let upstream else { return false }
+        if upstream.upstream == nil {
+            // Need at least one remote to create an upstream.
+            return !upstream.remotes.isEmpty
+        }
+        return upstream.ahead > 0
+    }
+
+    private var pushLabel: String {
+        guard let upstream else { return "Push" }
+        return upstream.upstream == nil ? "Publish" : "Push"
+    }
+
+    private var pushIconName: String {
+        guard let upstream else { return "arrow.up" }
+        return upstream.upstream == nil ? "icloud.and.arrow.up" : "arrow.up"
+    }
+
+    private var pushHelp: String {
+        guard let upstream else { return "Push the current branch" }
+        if upstream.upstream == nil {
+            if upstream.remotes.isEmpty {
+                return "No remote configured. Add one with `git remote add origin <url>`."
+            }
+            let remote = upstream.remotes.contains("origin") ? "origin" : (upstream.remotes.first ?? "origin")
+            return "Push and track \(remote)/\(upstream.branch)"
+        }
+        if upstream.ahead == 0 {
+            return "Nothing to push — local matches \(upstream.upstream ?? "upstream")"
+        }
+        return "Push \(upstream.ahead) commit\(upstream.ahead == 1 ? "" : "s") to \(upstream.upstream ?? "upstream")"
     }
 
     // MARK: - Actions
@@ -791,13 +924,39 @@ struct ChangesView: View {
         }
     }
 
+    private func push(at projectPath: String) async {
+        guard let upstream else { return }
+        isPushing = true
+        errorMessage = nil
+        let setUpstream = upstream.upstream == nil
+        let remote = upstream.remotes.contains("origin") ? "origin" : (upstream.remotes.first ?? "origin")
+        let err = await GitHelper.push(
+            at: projectPath,
+            remote: remote,
+            branch: upstream.branch,
+            setUpstream: setUpstream
+        )
+        isPushing = false
+        if let err {
+            errorMessage = err
+        } else {
+            await refresh(at: projectPath)
+        }
+    }
+
     private func generateMessage(at projectPath: String) async {
         guard !staged.isEmpty else { return }
         isGenerating = true
         errorMessage = nil
-        let diff = await GitHelper.stagedDiff(at: projectPath)
+        async let diffTask = GitHelper.stagedDiff(at: projectPath)
+        async let statTask = GitHelper.stagedStat(at: projectPath)
+        let (diff, stat) = await (diffTask, statTask)
         let fileSummary = staged.map { "\($0.statusChar) \($0.displayPath)" }.joined(separator: "\n")
-        let result = await appState.generateCommitMessage(diff: diff, fileSummary: fileSummary)
+        let result = await appState.generateCommitMessage(
+            diff: diff,
+            stat: stat,
+            fileSummary: fileSummary
+        )
         isGenerating = false
         if let result, !result.isEmpty {
             commitMessage = result
@@ -815,12 +974,17 @@ struct ChangesView: View {
 
     private func refresh(at projectPath: String) async {
         isLoading = true
-        let result = await Task.detached(priority: .userInitiated) {
+        async let filesTask = Task.detached(priority: .userInitiated) {
             await loadAllChangedFiles(at: projectPath)
         }.value
+        async let upstreamTask = Task.detached(priority: .userInitiated) {
+            await GitHelper.upstreamStatus(at: projectPath)
+        }.value
+        let (result, upstreamResult) = await (filesTask, upstreamTask)
         guard !Task.isCancelled else { return }
         unstaged = result.unstaged
         staged = result.staged
+        upstream = upstreamResult
         // Drop selections for files that no longer appear.
         let unstagedPaths = Set(unstaged.map { $0.displayPath })
         let stagedPaths = Set(staged.map { $0.displayPath })
@@ -868,6 +1032,8 @@ private struct ChangeSection: View {
     let emptyMessage: String
     let isBusy: Bool
     let onAction: () async -> Void
+    let onFocus: () -> Void
+    let onEmptyTap: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -886,7 +1052,10 @@ private struct ChangeSection: View {
                                 ChangeFileRow(
                                     file: file,
                                     isSelected: selection.contains(file.displayPath),
-                                    onToggle: { toggle(file) }
+                                    onToggle: {
+                                        onFocus()
+                                        toggle(file)
+                                    }
                                 )
                             }
                         }
@@ -898,6 +1067,15 @@ private struct ChangeSection: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            // Tapping the empty area inside a section focuses it and clears
+            // all selections (both unstaged and staged). Taps on rows are
+            // intercepted by the row's own gesture, so this only fires on
+            // the background.
+            onFocus()
+            onEmptyTap()
+        }
     }
 
     @ViewBuilder
@@ -991,16 +1169,20 @@ private struct ChangeFileRow: View {
                 .fill(rowFill)
         )
         .contentShape(Rectangle())
-        .onTapGesture(count: 2) {
-            windowState.diffFile = PreviewFile(
-                path: file.path,
-                name: file.name,
-                gitDiffMode: file.diffMode
-            )
-        }
         .onTapGesture { onToggle() }
+        .contextMenu {
+            Button("Show Diff") { openDiff() }
+        }
         .onHover { isHovering = $0 }
-        .help("Click to select · Double-click to view diff")
+        .help("Click to select · Right-click for Show Diff")
+    }
+
+    private func openDiff() {
+        windowState.diffFile = PreviewFile(
+            path: file.path,
+            name: file.name,
+            gitDiffMode: file.diffMode
+        )
     }
 
     private var rowFill: Color {

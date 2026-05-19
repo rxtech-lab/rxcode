@@ -213,7 +213,7 @@ struct MainView: View {
             ProjectTreeView()
         }
         .background(ClaudeTheme.sidebarBackground.ignoresSafeArea())
-        .navigationSplitViewColumnWidth(min: 300, ideal: 320, max: 400)
+        .navigationSplitViewColumnWidth(min: 450, ideal: 450, max: 500)
         .sheet(isPresented: $showGitHubSheet) {
             GitHubSheet()
         }

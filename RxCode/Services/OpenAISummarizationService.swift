@@ -164,6 +164,57 @@ actor OpenAISummarizationService {
         return await generateSummary(prompt: prompt, endpoint: endpoint, apiKey: apiKey, model: model, maxTokens: 384)
     }
 
+    func generateCommitMessage(
+        diff: String,
+        fileSummary: String,
+        endpoint: String,
+        apiKey: String,
+        model: String
+    ) async -> String? {
+        let trimmedDiff = String(diff.prefix(8000))
+        let prompt = """
+        Write a Git commit message for the staged changes below. Use the Conventional Commits style: a single subject line under 72 characters (type: summary), optionally followed by a blank line and a short body of 1-3 bullet points or sentences explaining the why. Reply with only the commit message — no quotes, no markdown fences.
+
+        Staged files:
+        \(fileSummary)
+
+        Staged diff:
+        \(trimmedDiff)
+        """
+
+        let body: JSONValue = .object([
+            "model": .string(model),
+            "messages": .array([
+                .object([
+                    "role": .string("system"),
+                    "content": .string("You write clear, conventional Git commit messages.")
+                ]),
+                .object([
+                    "role": .string("user"),
+                    "content": .string(prompt)
+                ])
+            ]),
+            "temperature": .number(0.2),
+            "max_tokens": .number(384)
+        ])
+
+        do {
+            var request = try makeRequest(endpoint: endpoint, path: "/chat/completions", apiKey: apiKey)
+            request.httpMethod = "POST"
+            request.httpBody = try JSONEncoder().encode(body)
+
+            let value = try await send(request)
+            let content = value.objectValue?["choices"]?.arrayValue?.first?
+                .objectValue?["message"]?.objectValue?["content"]?.stringValue
+                ?? value.objectValue?["choices"]?.arrayValue?.first?
+                    .objectValue?["text"]?.stringValue
+            return cleanSummary(content, limit: 1000)
+        } catch {
+            logger.warning("OpenAI commit message generation failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
     static func branchBriefingPrompt(threadSummaries: [(title: String, summary: String)]) -> String {
         let joined = threadSummaries.map { item -> String in
             let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)

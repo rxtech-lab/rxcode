@@ -4174,6 +4174,48 @@ final class AppState {
         }
     }
 
+    /// Generates a commit message for the staged changes in the given project.
+    /// Routes through the configured `summarizationProvider`. Returns nil on
+    /// failure or when no provider is configured. Public so the Changes view
+    /// can invoke it from the UI thread.
+    func generateCommitMessage(diff: String, fileSummary: String) async -> String? {
+        switch summarizationProvider {
+        case .appleFoundationModel:
+            return await foundationModelSummarization.generateCommitMessage(
+                diff: diff,
+                fileSummary: fileSummary
+            )
+        case .openAI:
+            guard !openAISummarizationModel.isEmpty else {
+                // Fall back to foundation model when OpenAI isn't configured.
+                if FoundationModelSummarizationService.isAvailable {
+                    return await foundationModelSummarization.generateCommitMessage(
+                        diff: diff,
+                        fileSummary: fileSummary
+                    )
+                }
+                return nil
+            }
+            return await openAISummarization.generateCommitMessage(
+                diff: diff,
+                fileSummary: fileSummary,
+                endpoint: openAISummarizationEndpoint,
+                apiKey: openAISummarizationAPIKey,
+                model: openAISummarizationModel
+            )
+        case .selectedClient:
+            // No per-session context for commits; prefer the on-device model,
+            // then fall back to Claude Haiku via the CLI.
+            if FoundationModelSummarizationService.isAvailable {
+                return await foundationModelSummarization.generateCommitMessage(
+                    diff: diff,
+                    fileSummary: fileSummary
+                )
+            }
+            return await claude.generateCommitMessage(diff: diff, fileSummary: fileSummary)
+        }
+    }
+
     private func generateSessionTitle(firstUserMessage: String, provider: AgentProvider, model: String?) async -> String? {
         switch provider {
         case .claudeCode:

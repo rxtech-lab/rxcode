@@ -152,7 +152,7 @@ struct RightInspectorPanel: View {
                 .frame(width: 0.5)
         }
         .frame(
-            minWidth: windowState.showInspector ? 340 : 0,
+            minWidth: windowState.showInspector ? 420 : 0,
             maxWidth: windowState.showInspector ? .infinity : 0
         )
         .opacity(windowState.showInspector ? 1 : 0)
@@ -268,10 +268,8 @@ struct RightInspectorPanel: View {
         switch windowState.inspectorReviewTab {
         case .thisThread:
             ThisThreadDiffView()
-        case .unstaged:
-            UnstagedChangesView()
-        case .staged:
-            StagedChangesView()
+        case .changes:
+            ChangesView()
         case .branch:
             BranchInfoView()
         }
@@ -578,32 +576,6 @@ private struct ThisThreadFileRow: View {
     }
 }
 
-// MARK: - Unstaged / Staged tabs — list actual files
-
-struct UnstagedChangesView: View {
-    @Environment(WindowState.self) private var windowState
-
-    var body: some View {
-        if let project = windowState.selectedProject {
-            GitChangeListView(projectPath: project.path, mode: .unstaged)
-        } else {
-            InspectorEmptyState(title: "No project selected", message: "Select a project to see unstaged changes.")
-        }
-    }
-}
-
-struct StagedChangesView: View {
-    @Environment(WindowState.self) private var windowState
-
-    var body: some View {
-        if let project = windowState.selectedProject {
-            GitChangeListView(projectPath: project.path, mode: .staged)
-        } else {
-            InspectorEmptyState(title: "No project selected", message: "Select a project to see staged changes.")
-        }
-    }
-}
-
 struct BranchInfoView: View {
     @Environment(WindowState.self) private var windowState
 
@@ -619,204 +591,422 @@ struct BranchInfoView: View {
     }
 }
 
-// MARK: - Git Change List
+// MARK: - Changes (combined Unstaged + Staged + commit composer)
 
-private enum GitChangeListMode {
-    case unstaged
-    case staged
-}
-
-private struct GitChangeFile: Identifiable, Hashable {
-    let id = UUID()
-    let path: String       // absolute path
-    let displayPath: String // path relative to repo
-    let statusChar: Character
-    let isUntracked: Bool
-    let diffMode: PreviewFile.GitDiffMode
-
-    var name: String {
-        (displayPath as NSString).lastPathComponent
-    }
-
-    var parentDirectory: String {
-        (displayPath as NSString).deletingLastPathComponent
-    }
-}
-
-private struct GitChangeListView: View {
-    let projectPath: String
-    let mode: GitChangeListMode
-
+/// Combined view that lists unstaged files on top and staged files at the
+/// bottom, with multi-select Stage/Unstage actions and a commit composer at
+/// the bottom. Generates commit messages via the configured summarization
+/// provider.
+struct ChangesView: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
-    @State private var files: [GitChangeFile] = []
+
+    @State private var unstaged: [GitChangeFile] = []
+    @State private var staged: [GitChangeFile] = []
+    @State private var selectedUnstaged: Set<String> = []
+    @State private var selectedStaged: Set<String> = []
+    @State private var commitMessage: String = ""
     @State private var isLoading = true
+    @State private var isBusy = false
+    @State private var isGenerating = false
+    @State private var errorMessage: String?
     @State private var headWatcher: (any DispatchSourceFileSystemObject)?
+    @State private var indexWatcher: (any DispatchSourceFileSystemObject)?
     @State private var refreshTask: Task<Void, Never>?
 
     var body: some View {
-        Group {
-            if isLoading {
-                VStack {
-                    Spacer()
-                    ProgressView().controlSize(.small)
-                    Spacer()
+        if let project = windowState.selectedProject {
+            content(projectPath: project.path)
+                .task(id: project.path) { await refresh(at: project.path) }
+                .onChange(of: appState.isStreaming(in: windowState)) { old, new in
+                    if old && !new { triggerRefresh(at: project.path) }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if files.isEmpty {
-                InspectorEmptyState(
-                    title: emptyTitle,
-                    message: emptyMessage
-                )
-            } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 4) {
-                        ForEach(files) { file in
-                            GitChangeFileRow(file: file)
-                        }
+                .onAppear { startWatching(at: project.path) }
+                .onDisappear { stopWatching() }
+                .onChange(of: project.path) { _, newPath in
+                    Task { @MainActor in
+                        stopWatching()
+                        startWatching(at: newPath)
                     }
-                    .padding(12)
                 }
+        } else {
+            InspectorEmptyState(
+                title: "No project selected",
+                message: "Select a project to review changes."
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func content(projectPath: String) -> some View {
+        VStack(spacing: 0) {
+            ChangeSection(
+                title: "Unstaged",
+                actionTitle: "Stage",
+                files: unstaged,
+                selection: $selectedUnstaged,
+                emptyMessage: "Working tree matches the index.",
+                isBusy: isBusy,
+                onAction: { await stageSelected(at: projectPath) }
+            )
+
+            Divider()
+
+            ChangeSection(
+                title: "Staged",
+                actionTitle: "Unstage",
+                files: staged,
+                selection: $selectedStaged,
+                emptyMessage: "Nothing in the index.",
+                isBusy: isBusy,
+                onAction: { await unstageSelected(at: projectPath) }
+            )
+
+            Divider()
+
+            commitComposer(projectPath: projectPath)
+        }
+        .overlay(alignment: .top) {
+            if isLoading && unstaged.isEmpty && staged.isEmpty {
+                ProgressView().controlSize(.small).padding(.top, 20)
             }
         }
-        .task(id: "\(projectPath)|\(modeKey)") {
-            await refresh()
-        }
-        .onChange(of: appState.isStreaming(in: windowState)) { old, new in
-            if old && !new { triggerRefresh() }
-        }
-        .onAppear { startWatchingHEAD() }
-        .onDisappear { stopWatchingHEAD() }
-        .onChange(of: projectPath) { _, _ in
-            Task { @MainActor in
-                stopWatchingHEAD()
-                startWatchingHEAD()
+    }
+
+    // MARK: - Commit composer
+
+    @ViewBuilder
+    private func commitComposer(projectPath: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text("Commit message")
+                    .font(.system(size: ClaudeTheme.size(11), weight: .semibold))
+                    .foregroundStyle(ClaudeTheme.textTertiary)
+                Spacer()
+                Button {
+                    Task { await generateMessage(at: projectPath) }
+                } label: {
+                    HStack(spacing: 4) {
+                        if isGenerating {
+                            ProgressView().controlSize(.mini)
+                        } else {
+                            Image(systemName: "sparkles")
+                        }
+                        Text("Generate")
+                    }
+                    .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+                }
+                .buttonStyle(.borderless)
+                .disabled(isGenerating || staged.isEmpty)
+                .help("Generate a commit message from the staged diff")
+            }
+
+            TextEditor(text: $commitMessage)
+                .font(.system(size: ClaudeTheme.size(12), design: .monospaced))
+                .scrollContentBackground(.hidden)
+                .frame(minHeight: 60, maxHeight: 120)
+                .padding(6)
+                .background(
+                    RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
+                        .fill(ClaudeTheme.surfaceSecondary.opacity(0.5))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
+                        .strokeBorder(ClaudeTheme.borderSubtle.opacity(0.6), lineWidth: 0.5)
+                )
+
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(ClaudeTheme.statusError)
+                    .lineLimit(3)
+            }
+
+            HStack {
+                Spacer()
+                Button {
+                    Task { await commit(at: projectPath) }
+                } label: {
+                    HStack(spacing: 4) {
+                        if isBusy {
+                            ProgressView().controlSize(.mini)
+                        }
+                        Text("Commit \(staged.count > 0 ? "(\(staged.count))" : "")")
+                            .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(ClaudeTheme.accent)
+                .disabled(isBusy || staged.isEmpty || commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
     }
 
-    private var modeKey: String {
-        switch mode {
-        case .unstaged: return "unstaged"
-        case .staged: return "staged"
+    // MARK: - Actions
+
+    private func stageSelected(at projectPath: String) async {
+        let paths = selectedUnstaged.sorted()
+        guard !paths.isEmpty else { return }
+        isBusy = true
+        errorMessage = nil
+        let err = await GitHelper.stage(paths: paths, at: projectPath)
+        isBusy = false
+        if let err {
+            errorMessage = err
+        } else {
+            selectedUnstaged.removeAll()
+            await refresh(at: projectPath)
         }
     }
 
-    private var emptyTitle: String {
-        switch mode {
-        case .unstaged: return "No unstaged changes"
-        case .staged: return "No staged changes"
+    private func unstageSelected(at projectPath: String) async {
+        let paths = selectedStaged.sorted()
+        guard !paths.isEmpty else { return }
+        isBusy = true
+        errorMessage = nil
+        let err = await GitHelper.unstage(paths: paths, at: projectPath)
+        isBusy = false
+        if let err {
+            errorMessage = err
+        } else {
+            selectedStaged.removeAll()
+            await refresh(at: projectPath)
         }
     }
 
-    private var emptyMessage: String {
-        switch mode {
-        case .unstaged: return "Working tree matches the index."
-        case .staged: return "Nothing in the index waiting to be committed."
+    private func commit(at projectPath: String) async {
+        isBusy = true
+        errorMessage = nil
+        let err = await GitHelper.commit(message: commitMessage, at: projectPath)
+        isBusy = false
+        if let err {
+            errorMessage = err
+        } else {
+            commitMessage = ""
+            await refresh(at: projectPath)
         }
     }
 
-    private func triggerRefresh() {
+    private func generateMessage(at projectPath: String) async {
+        guard !staged.isEmpty else { return }
+        isGenerating = true
+        errorMessage = nil
+        let diff = await GitHelper.stagedDiff(at: projectPath)
+        let fileSummary = staged.map { "\($0.statusChar) \($0.displayPath)" }.joined(separator: "\n")
+        let result = await appState.generateCommitMessage(diff: diff, fileSummary: fileSummary)
+        isGenerating = false
+        if let result, !result.isEmpty {
+            commitMessage = result
+        } else {
+            errorMessage = "Commit message generation is unavailable. Configure a summarization provider in Settings."
+        }
+    }
+
+    // MARK: - Refresh + watching
+
+    private func triggerRefresh(at projectPath: String) {
         refreshTask?.cancel()
-        refreshTask = Task { await refresh() }
+        refreshTask = Task { await refresh(at: projectPath) }
     }
 
-    private func refresh() async {
+    private func refresh(at projectPath: String) async {
         isLoading = true
-        let path = projectPath
-        let m = mode
         let result = await Task.detached(priority: .userInitiated) {
-            await loadChangedFiles(at: path, mode: m)
+            await loadAllChangedFiles(at: projectPath)
         }.value
         guard !Task.isCancelled else { return }
-        files = result
+        unstaged = result.unstaged
+        staged = result.staged
+        // Drop selections for files that no longer appear.
+        let unstagedPaths = Set(unstaged.map { $0.displayPath })
+        let stagedPaths = Set(staged.map { $0.displayPath })
+        selectedUnstaged.formIntersection(unstagedPaths)
+        selectedStaged.formIntersection(stagedPaths)
         isLoading = false
     }
 
-    private func startWatchingHEAD() {
-        let headPath = projectPath + "/.git/HEAD"
-        let fd = open(headPath, O_EVTONLY)
-        guard fd != -1 else { return }
+    private func startWatching(at projectPath: String) {
+        headWatcher = makeWatcher(path: projectPath + "/.git/HEAD", projectPath: projectPath)
+        indexWatcher = makeWatcher(path: projectPath + "/.git/index", projectPath: projectPath)
+    }
+
+    private func stopWatching() {
+        headWatcher?.cancel()
+        indexWatcher?.cancel()
+        headWatcher = nil
+        indexWatcher = nil
+    }
+
+    private func makeWatcher(path: String, projectPath: String) -> (any DispatchSourceFileSystemObject)? {
+        let fd = open(path, O_EVTONLY)
+        guard fd != -1 else { return nil }
         let source = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: fd,
             eventMask: [.write, .delete, .rename, .attrib],
             queue: .main
         )
-        source.setEventHandler { [weak source] in
-            let data = source?.data ?? []
-            triggerRefresh()
-            if !data.intersection([.delete, .rename]).isEmpty {
-                stopWatchingHEAD()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    startWatchingHEAD()
-                }
-            }
+        source.setEventHandler {
+            triggerRefresh(at: projectPath)
         }
         source.setCancelHandler { close(fd) }
         source.resume()
-        headWatcher = source
-    }
-
-    private func stopWatchingHEAD() {
-        headWatcher?.cancel()
-        headWatcher = nil
+        return source
     }
 }
 
-private struct GitChangeFileRow: View {
+// MARK: - ChangeSection
+
+private struct ChangeSection: View {
+    let title: String
+    let actionTitle: String
+    let files: [GitChangeFile]
+    @Binding var selection: Set<String>
+    let emptyMessage: String
+    let isBusy: Bool
+    let onAction: () async -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            Group {
+                if files.isEmpty {
+                    Text(emptyMessage)
+                        .font(.system(size: ClaudeTheme.size(11)))
+                        .foregroundStyle(ClaudeTheme.textTertiary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .padding()
+                } else {
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 2) {
+                            ForEach(files) { file in
+                                ChangeFileRow(
+                                    file: file,
+                                    isSelected: selection.contains(file.displayPath),
+                                    onToggle: { toggle(file) }
+                                )
+                            }
+                        }
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 6)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private var header: some View {
+        HStack(spacing: 8) {
+            Text(LocalizedStringKey(title))
+                .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
+                .foregroundStyle(ClaudeTheme.textPrimary)
+            Text("\(files.count)")
+                .font(.system(size: ClaudeTheme.size(10), weight: .semibold, design: .monospaced))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1)
+                .background(ClaudeTheme.surfaceSecondary, in: Capsule())
+            Spacer()
+            Button {
+                Task { await onAction() }
+            } label: {
+                Text(LocalizedStringKey(actionTitle))
+                    .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 3)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(selection.isEmpty || isBusy)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(ClaudeTheme.surfaceSecondary.opacity(0.4))
+    }
+
+    private func toggle(_ file: GitChangeFile) {
+        if selection.contains(file.displayPath) {
+            selection.remove(file.displayPath)
+        } else {
+            selection.insert(file.displayPath)
+        }
+    }
+}
+
+// MARK: - ChangeFileRow
+
+private struct ChangeFileRow: View {
     let file: GitChangeFile
+    let isSelected: Bool
+    let onToggle: () -> Void
+
     @Environment(WindowState.self) private var windowState
     @State private var isHovering = false
 
     var body: some View {
-        Button {
+        HStack(spacing: 8) {
+            Image(systemName: iconName)
+                .font(.system(size: ClaudeTheme.size(11)))
+                .foregroundStyle(iconColor)
+                .frame(width: 14)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(file.name)
+                    .font(.system(size: ClaudeTheme.size(12), weight: .medium, design: .monospaced))
+                    .foregroundStyle(isSelected ? ClaudeTheme.textOnAccent : ClaudeTheme.textPrimary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                if !file.parentDirectory.isEmpty {
+                    Text(file.parentDirectory)
+                        .font(.system(size: ClaudeTheme.size(10)))
+                        .foregroundStyle(isSelected ? ClaudeTheme.textOnAccent.opacity(0.8) : ClaudeTheme.textTertiary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+
+            Spacer(minLength: 4)
+
+            Text(badgeLabel)
+                .font(.system(size: ClaudeTheme.size(9), weight: .semibold, design: .monospaced))
+                .foregroundStyle(isSelected ? ClaudeTheme.textOnAccent : iconColor)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1)
+                .background(
+                    (isSelected ? ClaudeTheme.textOnAccent.opacity(0.2) : iconColor.opacity(0.15)),
+                    in: Capsule()
+                )
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
+                .fill(rowFill)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) {
             windowState.diffFile = PreviewFile(
                 path: file.path,
                 name: file.name,
                 gitDiffMode: file.diffMode
             )
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: iconName)
-                    .font(.system(size: ClaudeTheme.size(12)))
-                    .foregroundStyle(iconColor)
-                    .frame(width: 16)
-
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(file.name)
-                        .font(.system(size: ClaudeTheme.size(13), weight: .medium, design: .monospaced))
-                        .foregroundStyle(ClaudeTheme.textPrimary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    if !file.parentDirectory.isEmpty {
-                        Text(file.parentDirectory)
-                            .font(.system(size: ClaudeTheme.size(11)))
-                            .foregroundStyle(ClaudeTheme.textTertiary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                }
-
-                Spacer(minLength: 6)
-
-                Text(badgeLabel)
-                    .font(.system(size: ClaudeTheme.size(10), weight: .semibold, design: .monospaced))
-                    .foregroundStyle(iconColor)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(iconColor.opacity(0.15), in: Capsule())
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
-                    .fill(isHovering ? ClaudeTheme.surfaceSecondary : Color.clear)
-            )
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .onTapGesture { onToggle() }
         .onHover { isHovering = $0 }
+        .help("Click to select · Double-click to view diff")
+    }
+
+    private var rowFill: Color {
+        if isSelected { return ClaudeTheme.accent }
+        if isHovering { return ClaudeTheme.surfaceSecondary }
+        return .clear
     }
 
     private var iconName: String {
@@ -847,21 +1037,43 @@ private struct GitChangeFileRow: View {
     }
 }
 
-private func loadChangedFiles(at projectPath: String, mode: GitChangeListMode) async -> [GitChangeFile] {
-    guard let raw = await GitHelper.run(["status", "--porcelain=v1", "-z"], at: projectPath) else {
-        return []
+// MARK: - Loading
+
+struct GitChangeFile: Identifiable, Hashable {
+    let id = UUID()
+    let path: String        // absolute path
+    let displayPath: String // path relative to repo
+    let statusChar: Character
+    let isUntracked: Bool
+    let diffMode: PreviewFile.GitDiffMode
+
+    var name: String {
+        (displayPath as NSString).lastPathComponent
     }
-    return parsePorcelainZ(raw, mode: mode, projectPath: projectPath)
+
+    var parentDirectory: String {
+        (displayPath as NSString).deletingLastPathComponent
+    }
 }
 
-/// Parses `git status --porcelain=v1 -z` output.
-/// Entries are NUL-terminated; renames have an extra NUL-terminated "old path" record.
-private func parsePorcelainZ(
-    _ raw: String,
-    mode: GitChangeListMode,
-    projectPath: String
-) -> [GitChangeFile] {
-    var result: [GitChangeFile] = []
+private struct GitChangesSnapshot {
+    let unstaged: [GitChangeFile]
+    let staged: [GitChangeFile]
+}
+
+private func loadAllChangedFiles(at projectPath: String) async -> GitChangesSnapshot {
+    guard let raw = await GitHelper.run(["status", "--porcelain=v1", "-z"], at: projectPath) else {
+        return GitChangesSnapshot(unstaged: [], staged: [])
+    }
+    return parsePorcelainZ(raw, projectPath: projectPath)
+}
+
+/// Parses `git status --porcelain=v1 -z` output into both unstaged and staged
+/// file lists. Entries are NUL-terminated; renames have an extra NUL-terminated
+/// "old path" record.
+private func parsePorcelainZ(_ raw: String, projectPath: String) -> GitChangesSnapshot {
+    var unstaged: [GitChangeFile] = []
+    var staged: [GitChangeFile] = []
     let tokens = raw.split(separator: "\0", omittingEmptySubsequences: false).map(String.init)
     var i = 0
     while i < tokens.count {
@@ -874,41 +1086,39 @@ private func parsePorcelainZ(
         let displayPath = String(entry.dropFirst(3))
 
         let isUntracked = (indexChar == "?" && worktreeChar == "?")
-
         let isRename = indexChar == "R" || worktreeChar == "R"
         if isRename, i < tokens.count {
-            i += 1 // skip the rename "from" path
+            i += 1
         }
 
-        let include: Bool
-        let statusChar: Character
-        switch mode {
-        case .unstaged:
-            include = isUntracked || (worktreeChar != " " && worktreeChar != "?")
-            statusChar = isUntracked ? "?" : worktreeChar
-        case .staged:
-            include = !isUntracked && indexChar != " " && indexChar != "?"
-            statusChar = indexChar
-        }
-
-        guard include else { continue }
         let absolute = (projectPath as NSString).appendingPathComponent(displayPath)
-        let diffMode: PreviewFile.GitDiffMode
-        if isUntracked {
-            diffMode = .untracked
-        } else {
-            switch mode {
-            case .unstaged: diffMode = .unstaged
-            case .staged:   diffMode = .staged
-            }
+
+        // Unstaged includes untracked files and any worktree-side change.
+        if isUntracked || (worktreeChar != " " && worktreeChar != "?") {
+            let statusChar: Character = isUntracked ? "?" : worktreeChar
+            let diffMode: PreviewFile.GitDiffMode = isUntracked ? .untracked : .unstaged
+            unstaged.append(GitChangeFile(
+                path: absolute,
+                displayPath: displayPath,
+                statusChar: statusChar,
+                isUntracked: isUntracked,
+                diffMode: diffMode
+            ))
         }
-        result.append(GitChangeFile(
-            path: absolute,
-            displayPath: displayPath,
-            statusChar: statusChar,
-            isUntracked: isUntracked && mode == .unstaged,
-            diffMode: diffMode
-        ))
+
+        // Staged: anything with an index-side change other than '?'.
+        if !isUntracked, indexChar != " " {
+            staged.append(GitChangeFile(
+                path: absolute,
+                displayPath: displayPath,
+                statusChar: indexChar,
+                isUntracked: false,
+                diffMode: .staged
+            ))
+        }
     }
-    return result.sorted { $0.displayPath.localizedStandardCompare($1.displayPath) == .orderedAscending }
+    let sort: ([GitChangeFile]) -> [GitChangeFile] = { files in
+        files.sorted { $0.displayPath.localizedStandardCompare($1.displayPath) == .orderedAscending }
+    }
+    return GitChangesSnapshot(unstaged: sort(unstaged), staged: sort(staged))
 }

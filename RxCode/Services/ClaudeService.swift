@@ -378,6 +378,24 @@ actor ClaudeCodeServer {
         return await generatePlainSummary(prompt: prompt, model: model, limit: 1800)
     }
 
+    func generateCommitMessage(
+        diff: String,
+        fileSummary: String,
+        model: String = "claude-haiku-4-5-20251001"
+    ) async -> String? {
+        let trimmedDiff = String(diff.prefix(8000))
+        let prompt = """
+        Write a Git commit message for the staged changes below. Use the Conventional Commits style: a single subject line under 72 characters (type: summary), optionally followed by a blank line and a short body of 1-3 bullet points or sentences explaining the why. Reply with only the commit message — no quotes, no markdown fences.
+
+        Staged files:
+        \(fileSummary)
+
+        Staged diff:
+        \(trimmedDiff)
+        """
+        return await generatePlainSummary(prompt: prompt, model: model, limit: 1000)
+    }
+
     private func generatePlainSummary(prompt: String, model: String, limit: Int) async -> String? {
         guard let binary = await findClaudeBinary() else { return nil }
         let emptyMCPConfigPath = writeEmptyMCPConfig()

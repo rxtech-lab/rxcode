@@ -118,6 +118,24 @@ actor FoundationModelSummarizationService {
         return cleanSummary(raw, limit: 1800)
     }
 
+    func generateCommitMessage(diff: String, fileSummary: String) async -> String? {
+        let trimmedDiff = String(diff.prefix(8000))
+        let prompt = """
+        Write a Git commit message for the staged changes below. Use the Conventional Commits style: a single subject line under 72 characters (type: summary), optionally followed by a blank line and a short body of 1-3 bullet points or sentences explaining the why. Reply with only the commit message — no quotes, no markdown fences.
+
+        Staged files:
+        \(fileSummary)
+
+        Staged diff:
+        \(trimmedDiff)
+        """
+        let raw = await respond(
+            instructions: "You write clear, conventional Git commit messages.",
+            prompt: prompt
+        )
+        return cleanSummary(raw, limit: 1000)
+    }
+
     private func respond(instructions: String, prompt: String) async -> String? {
         guard Self.isAvailable else { return nil }
         do {

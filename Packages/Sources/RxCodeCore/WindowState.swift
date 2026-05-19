@@ -21,8 +21,7 @@ public enum InspectorTab: String, CaseIterable {
 
 public enum InspectorReviewTab: String, CaseIterable, Sendable {
     case thisThread = "This thread"
-    case unstaged = "Unstaged"
-    case staged = "Staged"
+    case changes = "Changes"
     case branch = "Branch"
 }
 

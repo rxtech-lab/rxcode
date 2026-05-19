@@ -52,6 +52,7 @@ struct ToolResultView: View {
             if isCardTool {
                 cardBody
                     .bubbleStyle(toolCall.isError ? .toolError : .tool)
+                    .padding(.vertical, 6)
                     .transition(.asymmetric(
                         insertion: .opacity
                             .combined(with: .move(edge: .top))

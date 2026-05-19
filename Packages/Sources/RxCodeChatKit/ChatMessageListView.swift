@@ -34,7 +34,7 @@ public struct ChatMessageListView: View {
 
 extension View {
     func chatMessageListRowStyle() -> some View {
-        listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 16, trailing: 20))
+        listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 24, trailing: 20))
             .listRowSeparator(.hidden)
             .listRowBackground(Color.clear)
     }
@@ -60,24 +60,25 @@ struct ChatTransientToolSummaryView: View {
     @State private var isExpanded = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 14) {
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     isExpanded.toggle()
                 }
             } label: {
-                HStack(spacing: 6) {
+                HStack(spacing: 8) {
                     Image(systemName: "eye.slash")
-                        .font(.system(size: ClaudeTheme.messageSize(11)))
+                        .font(.system(size: ClaudeTheme.messageSize(13)))
                         .foregroundStyle(ClaudeTheme.textTertiary)
                     Text(String(format: String(localized: "%lld tools executed", bundle: .module), tools.count))
-                        .font(.system(size: ClaudeTheme.messageSize(12)))
+                        .font(.system(size: ClaudeTheme.messageSize(13), weight: .medium))
                         .foregroundStyle(ClaudeTheme.textTertiary)
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.system(size: ClaudeTheme.messageSize(9)))
+                        .font(.system(size: ClaudeTheme.messageSize(10), weight: .medium))
                         .foregroundStyle(ClaudeTheme.textTertiary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 6)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)

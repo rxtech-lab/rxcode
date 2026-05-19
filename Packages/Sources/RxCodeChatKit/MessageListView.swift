@@ -9,7 +9,6 @@ import os
 struct MessageListView: View {
     @Environment(ChatBridge.self) private var chatBridge
     @Environment(WindowState.self) private var windowState
-    @State private var scrollPosition = ScrollPosition()
     @State private var settledItems: [ChatMessage] = []
     @State private var scrollTask: Task<Void, Never>?
     /// Separate handle from `scrollTask`. Owns the fade-in / scroll-on-switch
@@ -20,54 +19,56 @@ struct MessageListView: View {
     @State private var isSessionReady = false
 
     private static let log = Logger(subsystem: "com.claudework", category: "MessageListView")
+    private static let bottomAnchorID = "message-list-bottom-anchor"
 
     var body: some View {
-        List {
-            messageRows(settledItems[...])
+        ScrollViewReader { proxy in
+            List {
+                messageRows(settledItems[...])
 
-            // Streaming view is outside VStack — text deltas don't affect settled layout
-            if !windowState.focusMode {
-                StreamingMessageView {
-                    rebuildSettledItems()
-                    if anchor.isNearBottom { scrollToBottomDebounced() }
+                // Streaming view is outside VStack — text deltas don't affect settled layout
+                if !windowState.focusMode {
+                    StreamingMessageView {
+                        rebuildSettledItems()
+                        if anchor.isNearBottom { scrollToBottomDebounced(proxy) }
+                    }
+                    // Suppress layout animations when switching sessions so the pulse indicator
+                    // doesn't visually jump as StreamingMessageView changes height.
+                    .animation(.none, value: windowState.currentSessionId)
+                    .chatMessageListRowStyle()
                 }
-                // Suppress layout animations when switching sessions so the pulse indicator
-                // doesn't visually jump as StreamingMessageView changes height.
-                .animation(.none, value: windowState.currentSessionId)
-                .chatMessageListRowStyle()
-            }
 
-            if chatBridge.isStreaming && !chatBridge.hasPendingPlanDecision {
-                // Hide the spinner/dots while the CLI is paused waiting on the
-                // user's plan decision — the model isn't actually generating
-                // tokens, so showing "in progress" is misleading.
-                HStack(alignment: .top, spacing: 0) {
-                    StreamingIndicatorView(
-                        isThinking: chatBridge.isThinking,
-                        startDate: chatBridge.streamingStartDate,
-                        agentProvider: chatBridge.agentProvider,
-                        outputTokens: chatBridge.liveOutputTokens
-                    )
-                    Spacer(minLength: 40)
+                if chatBridge.isStreaming && !chatBridge.hasPendingPlanDecision {
+                    // Hide the spinner/dots while the CLI is paused waiting on the
+                    // user's plan decision — the model isn't actually generating
+                    // tokens, so showing "in progress" is misleading.
+                    HStack(alignment: .top, spacing: 0) {
+                        StreamingIndicatorView(
+                            isThinking: chatBridge.isThinking,
+                            startDate: chatBridge.streamingStartDate,
+                            agentProvider: chatBridge.agentProvider,
+                            outputTokens: chatBridge.liveOutputTokens
+                        )
+                        Spacer(minLength: 40)
+                    }
+                    .chatMessageListRowStyle()
                 }
-                .chatMessageListRowStyle()
-            }
 
-            if !chatBridge.isStreaming && !settledItems.isEmpty {
-                WebPreviewButton(messages: settledItems)
-                    .id("web-preview")
+                if !chatBridge.isStreaming && !settledItems.isEmpty {
+                    WebPreviewButton(messages: settledItems)
+                        .id("web-preview")
+                        .chatMessageListRowStyle()
+                }
+
+                Color.clear.frame(height: 1)
+                    .id(Self.bottomAnchorID)
                     .chatMessageListRowStyle()
             }
-
-            Color.clear.frame(height: 1)
-                .chatMessageListRowStyle()
-        }
         .listStyle(.plain)
         .contentMargins(.top, 16, for: .scrollContent)
         .scrollContentBackground(.hidden)
         .environment(\.defaultMinListRowHeight, 0)
         .opacity(isSessionReady ? 1 : 0)
-        .scrollPosition($scrollPosition)
         .defaultScrollAnchor(.bottom)
         .onScrollGeometryChange(for: ScrollSample.self) { geo in
             ScrollSample(contentHeight: geo.contentSize.height, visibleMaxY: geo.visibleRect.maxY)
@@ -78,7 +79,7 @@ struct MessageListView: View {
             // happened while anchored, the anchor asks us to scroll.
             let decision = anchor.apply(contentHeight: sample.contentHeight, visibleMaxY: sample.visibleMaxY)
             if decision == .scrollToBottom {
-                scrollToBottomDebounced()
+                scrollToBottomDebounced(proxy)
             }
         }
         .task(id: windowState.currentSessionId) {
@@ -99,7 +100,6 @@ struct MessageListView: View {
             isSessionReady = false
             scrollTask?.cancel()
             readyTask?.cancel()
-            scrollPosition = ScrollPosition()
             rebuildSettledItems()
             Self.log.info("[MessageList.task] post-rebuild settled=\(settledItems.count) sid=\(sid, privacy: .public) isLoadingFromDisk=\(chatBridge.isLoadingFromDisk)")
             // Skip scroll/fade delay for empty sessions — appear instantly,
@@ -116,7 +116,7 @@ struct MessageListView: View {
                 return
             }
             try? await Task.sleep(for: .milliseconds(16))  // 1 frame: scroll after VStack layout is committed
-            scrollPosition.scrollTo(edge: .bottom)
+            scrollToBottom(proxy)
             // Pre-set isNearBottom so streaming messages that arrive before onScrollGeometryChange
             // fires still trigger scrollToBottomDebounced(), keeping the pulse pinned to the bottom.
             anchor.resetToBottom()
@@ -142,7 +142,7 @@ struct MessageListView: View {
             readyTask = Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(16))
                 guard !Task.isCancelled else { return }
-                scrollPosition.scrollTo(edge: .bottom)
+                scrollToBottom(proxy)
                 anchor.resetToBottom()
                 guard !isSessionReady else { return }
                 try? await Task.sleep(for: .milliseconds(32))
@@ -154,7 +154,7 @@ struct MessageListView: View {
             // Only update when streaming ends — settled list doesn't change at start, so skip
             if old && !new {
                 rebuildSettledItems()
-                scrollToBottomDebounced()
+                scrollToBottomDebounced(proxy)
             }
         }
         .onChange(of: isSessionReady) { _, new in
@@ -168,6 +168,7 @@ struct MessageListView: View {
                 EmptySessionView()
                     .allowsHitTesting(false)
             }
+        }
         }
     }
 
@@ -206,12 +207,16 @@ struct MessageListView: View {
         return chatSuppressPlanReadyFollowups(in: settled)
     }
 
-    private func scrollToBottomDebounced() {
+    private func scrollToBottom(_ proxy: ScrollViewProxy) {
+        proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom)
+    }
+
+    private func scrollToBottomDebounced(_ proxy: ScrollViewProxy) {
         scrollTask?.cancel()
         scrollTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(50))
             guard !Task.isCancelled else { return }
-            scrollPosition.scrollTo(edge: .bottom)
+            scrollToBottom(proxy)
         }
     }
 }

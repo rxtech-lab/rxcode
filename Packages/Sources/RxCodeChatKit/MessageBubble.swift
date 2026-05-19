@@ -42,7 +42,7 @@ struct MessageBubble: View {
                 Spacer(minLength: 80)
             }
 
-            VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 8) {
+            VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 14) {
                 // Show attachments
                 if !message.attachmentPaths.isEmpty {
                     attachmentPreview
@@ -478,7 +478,7 @@ struct MessageBubble: View {
     @State private var expandedTransientGroupIds: Set<String> = []
 
     private func transientToolSummary(groupId: String, tools: [ToolCall]) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 14) {
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     if expandedTransientGroupIds.contains(groupId) {
@@ -489,18 +489,19 @@ struct MessageBubble: View {
                 }
             } label: {
                 let isExpanded = expandedTransientGroupIds.contains(groupId)
-                HStack(spacing: 6) {
+                HStack(spacing: 8) {
                     Image(systemName: "eye.slash")
-                        .font(.system(size: ClaudeTheme.messageSize(11)))
+                        .font(.system(size: ClaudeTheme.messageSize(13)))
                         .foregroundStyle(ClaudeTheme.textTertiary)
                     Text(String(format: String(localized: "%lld tools executed", bundle: .module), tools.count))
-                        .font(.system(size: ClaudeTheme.messageSize(12)))
+                        .font(.system(size: ClaudeTheme.messageSize(13), weight: .medium))
                         .foregroundStyle(ClaudeTheme.textTertiary)
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.system(size: ClaudeTheme.messageSize(9)))
+                        .font(.system(size: ClaudeTheme.messageSize(10), weight: .medium))
                         .foregroundStyle(ClaudeTheme.textTertiary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 6)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)

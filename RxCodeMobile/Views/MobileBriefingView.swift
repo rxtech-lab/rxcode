@@ -16,32 +16,65 @@ struct MobileBriefingView: View {
     }
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 14) {
-                if groups.isEmpty {
-                    ContentUnavailableView(
-                        "No Briefings Yet",
-                        systemImage: "doc.text.magnifyingglass",
-                        description: Text("Briefings appear here after threads finish on your Mac.")
-                    )
-                    .frame(maxWidth: .infinity, minHeight: 280)
-                } else {
-                    ForEach(groups) { group in
-                        briefingCard(group)
+        GeometryReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if groups.isEmpty {
+                        ContentUnavailableView(
+                            "No Briefings Yet",
+                            systemImage: "doc.text.magnifyingglass",
+                            description: Text("Briefings appear here after threads finish on your Mac.")
+                        )
+                        .frame(maxWidth: .infinity, minHeight: 320)
+                    } else {
+                        LazyVGrid(
+                            columns: gridColumns(for: proxy.size.width),
+                            alignment: .leading,
+                            spacing: 16
+                        ) {
+                            ForEach(groups) { group in
+                                briefingCard(group)
+                            }
+                        }
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .padding(.horizontal, horizontalPadding(for: proxy.size.width))
+                .padding(.vertical, 20)
             }
-            .padding()
         }
         .navigationTitle("Briefing")
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    Task { await state.refreshSnapshot() }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                }
-            }
+        .refreshable {
+            await state.refreshSnapshot()
+        }
+    }
+
+    private func gridColumns(for width: CGFloat) -> [GridItem] {
+        let minimumWidth: CGFloat
+        if width >= 980 {
+            minimumWidth = 360
+        } else if width >= 700 {
+            minimumWidth = 320
+        } else {
+            minimumWidth = max(260, width - (horizontalPadding(for: width) * 2))
+        }
+
+        return [
+            GridItem(
+                .adaptive(minimum: minimumWidth, maximum: 560),
+                spacing: 16,
+                alignment: .top
+            )
+        ]
+    }
+
+    private func horizontalPadding(for width: CGFloat) -> CGFloat {
+        if width >= 900 {
+            return 24
+        } else if width >= 600 {
+            return 20
+        } else {
+            return 16
         }
     }
 

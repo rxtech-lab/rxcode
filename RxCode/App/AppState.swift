@@ -172,6 +172,10 @@ final class AppState {
     /// `threadFileEdits(in:)` fetch after a new Edit/Write tool call lands.
     var threadFileEditsRevision: Int = 0
 
+    /// Pending permission/question prompts keyed by hook id. This mirrors the
+    /// per-window queues so mobile thread rows can show the same attention state.
+    private var mobilePendingRequests: [String: PermissionRequest] = [:]
+
     // MARK: - Theme
 
     var selectedTheme: AppTheme = .init(rawValue: UserDefaults.standard.string(forKey: "selectedTheme") ?? "") ?? .claude {
@@ -1068,6 +1072,34 @@ final class AppState {
         }
         mobileSyncObservers.append(settingsObserver)
 
+        let userMessageObserver = center.addObserver(
+            forName: .mobileSyncUserMessageReceived,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let fromHex = notification.userInfo?["from"] as? String,
+                  let message = notification.userInfo?["payload"] as? UserMessagePayload
+            else { return }
+            Task { @MainActor [weak self] in
+                await self?.handleMobileUserMessage(message, fromHex: fromHex)
+            }
+        }
+        mobileSyncObservers.append(userMessageObserver)
+
+        let newSessionObserver = center.addObserver(
+            forName: .mobileSyncNewSessionRequested,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let fromHex = notification.userInfo?["from"] as? String,
+                  let request = notification.userInfo?["payload"] as? NewSessionRequestPayload
+            else { return }
+            Task { @MainActor [weak self] in
+                await self?.handleMobileNewSessionRequest(request, fromHex: fromHex)
+            }
+        }
+        mobileSyncObservers.append(newSessionObserver)
+
         observeMobileSnapshotInputs()
     }
 
@@ -1093,6 +1125,103 @@ final class AppState {
                 self?.observeMobileSnapshotInputs()
             }
         }
+    }
+
+    private func handleMobileNewSessionRequest(_ request: NewSessionRequestPayload, fromHex: String) async {
+        guard let project = projects.first(where: { $0.id == request.projectID }) else {
+            logger.error("[MobileSync] new thread requested for unknown project=\(request.projectID.uuidString, privacy: .public)")
+            await sendMobileSnapshot(toHex: fromHex, activeSessionID: nil)
+            return
+        }
+
+        let initialText = request.initialText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !initialText.isEmpty else {
+            let sessionID = createMobilePlaceholderSession(project: project, requestID: request.clientRequestID)
+            await sendMobileSnapshot(toHex: fromHex, activeSessionID: sessionID)
+            return
+        }
+
+        let window = WindowState()
+        window.selectedProject = project
+        _ = await sendPrompt(initialText, displayText: initialText, in: window)
+        await sendMobileSnapshot(toHex: fromHex, activeSessionID: window.currentSessionId)
+    }
+
+    private func handleMobileUserMessage(_ message: UserMessagePayload, fromHex: String) async {
+        let text = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+
+        let sessionID = resolveCurrentSessionId(message.sessionID)
+        guard let summary = allSessionSummaries.first(where: { $0.id == sessionID }),
+              let project = projects.first(where: { $0.id == summary.projectId })
+        else {
+            logger.error("[MobileSync] user message for unknown thread=\(message.sessionID, privacy: .public)")
+            await sendMobileSnapshot(toHex: fromHex, activeSessionID: nil)
+            return
+        }
+
+        await hydrateMobileSessionIfNeeded(summary: summary, project: project)
+        updateMobilePlaceholderTitleIfNeeded(sessionID: sessionID, firstUserMessage: text)
+
+        let window = WindowState()
+        window.selectedProject = project
+        window.currentSessionId = sessionID
+        if sessionID.hasPrefix("pending-mobile-") {
+            window.insertPendingPlaceholder(sessionID)
+        }
+        _ = await sendPrompt(text, displayText: text, in: window)
+        await sendMobileSnapshot(toHex: fromHex, activeSessionID: window.currentSessionId)
+    }
+
+    private func createMobilePlaceholderSession(project: Project, requestID: UUID) -> String {
+        let sessionID = "pending-mobile-\(requestID.uuidString)"
+        if allSessionSummaries.contains(where: { $0.id == sessionID }) {
+            return sessionID
+        }
+
+        let selection = defaultModelSelection(for: project)
+        let session = ChatSession(
+            id: sessionID,
+            projectId: project.id,
+            title: ChatSession.defaultTitle,
+            agentProvider: selection.provider,
+            model: selection.model,
+            origin: selection.provider.defaultSessionOrigin
+        )
+        allSessionSummaries.insert(session.summary, at: 0)
+        threadStore.upsert(session.summary)
+        updateState(sessionID) { state in
+            state.agentProvider = selection.provider
+            state.model = selection.model
+        }
+        return sessionID
+    }
+
+    private func hydrateMobileSessionIfNeeded(summary: ChatSession.Summary, project: Project) async {
+        if sessionStates[summary.id] == nil,
+           let full = await persistence.loadFullSession(summary: summary, cwd: project.path) {
+            updateState(summary.id) { state in
+                state.messages = full.messages
+            }
+        }
+
+        updateState(summary.id) { state in
+            if state.agentProvider == nil { state.agentProvider = summary.agentProvider }
+            if state.model == nil { state.model = summary.model }
+            if state.effort == nil { state.effort = summary.effort }
+            if state.permissionMode == nil { state.permissionMode = summary.permissionMode }
+            if state.worktreePath == nil { state.worktreePath = summary.worktreePath }
+            if state.worktreeBranch == nil { state.worktreeBranch = summary.worktreeBranch }
+        }
+    }
+
+    private func updateMobilePlaceholderTitleIfNeeded(sessionID: String, firstUserMessage: String) {
+        guard let index = allSessionSummaries.firstIndex(where: { $0.id == sessionID }) else { return }
+        let current = allSessionSummaries[index]
+        guard current.title == ChatSession.defaultTitle || current.title.isEmpty else { return }
+        allSessionSummaries[index].title = ChatSession.placeholderTitle(from: firstUserMessage)
+        allSessionSummaries[index].updatedAt = Date()
+        threadStore.upsert(allSessionSummaries[index])
     }
 
     private func scheduleMobileSnapshotBroadcast() {
@@ -1136,15 +1265,89 @@ final class AppState {
                 return lhs.updatedAt > rhs.updatedAt
             }
             .map {
-                RxCodeSync.SessionSummary(
-                    id: $0.id,
-                    projectId: $0.projectId,
-                    title: $0.title,
-                    updatedAt: $0.updatedAt,
-                    isPinned: $0.isPinned,
-                    isArchived: $0.isArchived
-                )
+                mobileSessionSummary(from: $0)
             }
+    }
+
+    private func mobileSessionSummary(for sessionID: String) -> RxCodeSync.SessionSummary? {
+        guard let summary = allSessionSummaries.first(where: { $0.id == sessionID }) else {
+            return nil
+        }
+        return mobileSessionSummary(from: summary)
+    }
+
+    private func mobileSessionSummary(from summary: ChatSession.Summary) -> RxCodeSync.SessionSummary {
+        let progress = mobileProgressSnapshot(forSessionId: summary.id)
+        return RxCodeSync.SessionSummary(
+            id: summary.id,
+            projectId: summary.projectId,
+            title: summary.title,
+            updatedAt: summary.updatedAt,
+            isPinned: summary.isPinned,
+            isArchived: summary.isArchived,
+            isStreaming: sessionStates[summary.id]?.isStreaming ?? false,
+            attention: mobileAttentionKind(forSessionId: summary.id),
+            progress: progress
+        )
+    }
+
+    private func mobileProgressSnapshot(forSessionId id: String) -> SessionProgressSnapshot? {
+        if let messages = sessionStates[id]?.messages,
+           let todos = TodoExtractor.latest(in: messages)
+        {
+            return SessionProgressSnapshot(
+                done: todos.filter { $0.status == .completed }.count,
+                total: todos.count,
+                inProgress: todos.contains { $0.status == .inProgress }
+            )
+        }
+
+        guard let snapshot = threadStore.fetchTodoSnapshot(sessionId: id), snapshot.total > 0 else {
+            return nil
+        }
+
+        return SessionProgressSnapshot(
+            done: snapshot.done,
+            total: snapshot.total,
+            inProgress: snapshot.inProgress > 0
+        )
+    }
+
+    private func mobileAttentionKind(forSessionId id: String) -> SessionAttentionKind? {
+        let requests = mobilePendingRequests.values.filter { $0.sessionId == id }
+        if requests.contains(where: { $0.toolName == "AskUserQuestion" }) {
+            return .question
+        }
+        if !requests.isEmpty {
+            return .permission
+        }
+        return nil
+    }
+
+    private func broadcastMobileSessionStatus(sessionID: String, kind: SessionUpdatePayload.Kind = .statusChanged) {
+        guard let summary = mobileSessionSummary(for: sessionID) else { return }
+        MobileSyncService.shared.broadcastSessionUpdate(
+            sessionID: sessionID,
+            kind: kind,
+            message: nil,
+            isStreaming: summary.isStreaming,
+            summary: summary
+        )
+    }
+
+    private func broadcastMobileSessionRedirect(from previousSessionID: String, to sessionID: String) {
+        guard previousSessionID != sessionID,
+              let summary = mobileSessionSummary(for: sessionID)
+        else { return }
+        MobileSyncService.shared.broadcastSessionUpdate(
+            sessionID: sessionID,
+            kind: .statusChanged,
+            message: nil,
+            isStreaming: summary.isStreaming,
+            summary: summary,
+            previousSessionID: previousSessionID
+        )
+        scheduleMobileSnapshotBroadcast()
     }
 
     private func mobileBranchBriefings() -> [MobileBranchBriefing] {
@@ -1882,10 +2085,14 @@ final class AppState {
                 guard let window else { break }
                 if !window.pendingPermissions.contains(where: { $0.id == request.id }) {
                     window.pendingPermissions.append(request)
+                    mobilePendingRequests[request.id] = request
                     let projectName = window.selectedProject?.name
                     let projectId = window.selectedProject?.id
                     let sessionId = window.currentSessionId
                     let toolName = request.toolName
+                    if let requestSessionId = request.sessionId {
+                        broadcastMobileSessionStatus(sessionID: requestSessionId)
+                    }
                     // Auto-present the question sheet only when the user is actively viewing
                     // the thread the question belongs to. Otherwise it stays in the queue
                     // (yellow dot in sidebar + banner) so the user can decide when to answer.
@@ -2379,6 +2586,7 @@ final class AppState {
             state.currentTurnOutputTokensByMessage.removeAll(keepingCapacity: true)
             state.currentTurnOutputTokensUnkeyed = 0
         }
+        broadcastMobileSessionStatus(sessionID: sessionKey, kind: .streamingStarted)
         await permission.refreshRunToken()
 
         let basePermissionMode = window.sessionPermissionMode ?? permissionMode
@@ -2493,6 +2701,7 @@ final class AppState {
             }
             state.streamingStartDate = nil
         }
+        broadcastMobileSessionStatus(sessionID: sessionKey, kind: .streamingFinished)
     }
 
     // MARK: - Stream Completion (cross-project MCP)
@@ -2981,6 +3190,9 @@ final class AppState {
                                 }
                             }
                         }
+                        if previousSessionKey != sid {
+                            broadcastMobileSessionRedirect(from: previousSessionKey, to: sid)
+                        }
                     }
 
                     if systemEvent.subtype == "compact_boundary" {
@@ -3206,6 +3418,7 @@ final class AppState {
                         "[TodoSnapshot] session=\(targetSession, privacy: .public) total=\(snapshot.items.count) done=\(done) active=\(active, privacy: .public)"
                     )
                     threadStore.upsertTodoSnapshot(sessionId: targetSession, items: snapshot.items)
+                    broadcastMobileSessionStatus(sessionID: targetSession)
 
                 case .acpModelsDiscovered(let event):
                     logger.info("[Stream:UI] event #\(eventCount) .acpModelsDiscovered clientId=\(event.clientId, privacy: .public) configId=\(event.config.configId, privacy: .public) models=\(event.config.options.count) [\(Self.acpModelListDescription(event.config.options), privacy: .public)]")
@@ -3633,6 +3846,10 @@ final class AppState {
     func respondToPermission(_ request: PermissionRequest, decision: PermissionDecision, in window: WindowState) async {
         await permission.respond(toolUseId: request.id, decision: decision)
         window.pendingPermissions.removeAll { $0.id == request.id }
+        mobilePendingRequests.removeValue(forKey: request.id)
+        if let sessionId = request.sessionId {
+            broadcastMobileSessionStatus(sessionID: sessionId)
+        }
     }
 
     // MARK: - AskUserQuestion Response
@@ -3673,8 +3890,12 @@ final class AppState {
         }
 
         window.pendingPermissions.removeAll { $0.id == toolUseId }
+        let requestSessionId = mobilePendingRequests.removeValue(forKey: toolUseId)?.sessionId
         if window.presentedPermissionId == toolUseId {
             window.presentedPermissionId = nil
+        }
+        if let requestSessionId {
+            broadcastMobileSessionStatus(sessionID: requestSessionId)
         }
 
         await permission.respondAskUserQuestion(toolUseId: toolUseId, updatedInput: updatedInput)
@@ -3684,8 +3905,12 @@ final class AppState {
     /// the CLI does not block, and clear the pending entry from the window queue.
     func skipAskUserQuestion(toolUseId: String, in window: WindowState) async {
         window.pendingPermissions.removeAll { $0.id == toolUseId }
+        let requestSessionId = mobilePendingRequests.removeValue(forKey: toolUseId)?.sessionId
         if window.presentedPermissionId == toolUseId {
             window.presentedPermissionId = nil
+        }
+        if let requestSessionId {
+            broadcastMobileSessionStatus(sessionID: requestSessionId)
         }
         await permission.respond(toolUseId: toolUseId, decision: .deny)
     }
@@ -4152,6 +4377,7 @@ final class AppState {
             threadStore.upsert(allSessionSummaries[si])
         }
         await updateSessionMetadata(session, persistTitle: true) { $0.title = newTitle }
+        broadcastMobileSessionStatus(sessionID: session.id)
     }
 
     /// True if `currentTitle` looks like our auto-derived placeholder (matches what
@@ -4669,6 +4895,7 @@ final class AppState {
         let newIsPinned = allSessionSummaries[si].isPinned
         threadStore.upsert(allSessionSummaries[si])
         await updateSessionMetadata(session) { $0.isPinned = newIsPinned }
+        scheduleMobileSnapshotBroadcast()
     }
 
     // MARK: - Archive
@@ -4708,6 +4935,7 @@ final class AppState {
             s.isArchived = archived
             s.archivedAt = archived ? now : nil
         }
+        scheduleMobileSnapshotBroadcast()
     }
 
     /// Retention window (days) after which a branch briefing is purged if its

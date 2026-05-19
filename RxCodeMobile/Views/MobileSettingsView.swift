@@ -5,9 +5,14 @@ import RxCodeSync
 struct MobileSettingsView: View {
     @EnvironmentObject private var state: MobileAppState
     @Environment(\.dismiss) private var dismiss
+    let showsDoneButton: Bool
     @State private var showUnpairConfirm = false
     @State private var modelDraft = ""
     @State private var acpClientDraft = ""
+
+    init(showsDoneButton: Bool = true) {
+        self.showsDoneButton = showsDoneButton
+    }
 
     var body: some View {
         NavigationStack {
@@ -47,9 +52,14 @@ struct MobileSettingsView: View {
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
+            .refreshable {
+                await state.refreshSnapshot()
+            }
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
+                if showsDoneButton {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Done") { dismiss() }
+                    }
                 }
             }
             .alert("Unpair this device?", isPresented: $showUnpairConfirm) {

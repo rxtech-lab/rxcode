@@ -33,13 +33,14 @@ final class MobileAppState: ObservableObject {
     @Published var activeSessionID: String?
     @Published var pendingPermission: PermissionRequestPayload?
 
-    private let identity: DeviceIdentity
+    private var identity: DeviceIdentity
     private var client: SyncClient
     private let logger = Logger(subsystem: "com.idealapp.RxCodeMobile", category: "MobileAppState")
     private var eventTask: Task<Void, Never>?
     private var pairingTimeoutTask: Task<Void, Never>?
     private var apnsTokenHex: String?
     private var apnsEnvironment: String?
+    private var clientStarted = false
 
     static let pairingTimeoutSeconds: UInt64 = 25
 
@@ -95,6 +96,7 @@ final class MobileAppState: ObservableObject {
     }
 
     private func startClient() async {
+        clientStarted = true
         if !pairedDesktopPubkey.isEmpty {
             try? await client.addPeer(pairedDesktopPubkey)
         }
@@ -131,6 +133,9 @@ final class MobileAppState: ObservableObject {
             await updateRelayForPairingIfNeeded(url)
         } else {
             logger.error("pairing token has invalid relayURL=\(token.relayURL, privacy: .public)")
+        }
+        if !clientStarted {
+            await startClient()
         }
         try? await client.addPeer(desktopHex)
         guard await waitForRelayConnection() else {
@@ -294,9 +299,7 @@ final class MobileAppState: ObservableObject {
         activeSessionID = nil
         pendingPermission = nil
         savePairedDesktop()
-        try? DeviceIdentity.reset(
-            accessGroup: Self.keychainAccessGroup
-        )
+        await resetIdentityAndClient()
     }
 
     // MARK: - Inbound events
@@ -328,7 +331,7 @@ final class MobileAppState: ObservableObject {
                 pairedDesktopName = ack.desktopName
                 isPaired = true
                 pairingStatus = .idle
-                logger.info("[Pairing] accepted desktop=\(ack.desktopName, privacy: .public) desktopKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+                logger.info("[Pairing] accepted desktop=\(ack.desktopName, privacy: .public) desktopKey=\(String(inbound.fromHex.prefix(12)), privacy: .public) mobileKey=\(String(self.identity.publicKeyHex.prefix(12)), privacy: .public)")
                 MobileHaptics.connected()
                 savePairedDesktop()
                 Task {
@@ -348,8 +351,12 @@ final class MobileAppState: ObservableObject {
             branchBriefings = snap.branchBriefings ?? []
             threadSummaries = snap.threadSummaries ?? []
             desktopSettings = snap.settings
-            if let active = snap.activeSessionID, let messages = snap.activeSessionMessages {
-                messagesBySession[active] = messages
+            if let active = snap.activeSessionID {
+                if let messages = snap.activeSessionMessages {
+                    messagesBySession[active] = messages
+                } else if messagesBySession[active] == nil {
+                    messagesBySession[active] = []
+                }
                 activeSessionID = active
             }
         case .sessionUpdate(let update):
@@ -368,6 +375,22 @@ final class MobileAppState: ObservableObject {
     }
 
     private func applySessionUpdate(_ update: SessionUpdatePayload) {
+        if let previous = update.previousSessionID, previous != update.sessionID {
+            if let messages = messagesBySession.removeValue(forKey: previous),
+               messagesBySession[update.sessionID] == nil {
+                messagesBySession[update.sessionID] = messages
+            }
+            if activeSessionID == previous {
+                activeSessionID = update.sessionID
+            }
+        }
+
+        if let summary = update.summary {
+            upsertSessionSummary(summary)
+        } else if let isStreaming = update.isStreaming {
+            updateSessionStreamingFlag(sessionID: update.sessionID, isStreaming: isStreaming)
+        }
+
         switch update.kind {
         case .messageAppended:
             if let m = update.message {
@@ -384,6 +407,34 @@ final class MobileAppState: ObservableObject {
             // Surface as a flag on the relevant session row.
             break
         }
+    }
+
+    private func upsertSessionSummary(_ summary: SessionSummary) {
+        if let index = sessions.firstIndex(where: { $0.id == summary.id }) {
+            sessions[index] = summary
+        } else {
+            sessions.append(summary)
+        }
+        sessions.sort { lhs, rhs in
+            if lhs.isPinned != rhs.isPinned { return lhs.isPinned && !rhs.isPinned }
+            return lhs.updatedAt > rhs.updatedAt
+        }
+    }
+
+    private func updateSessionStreamingFlag(sessionID: String, isStreaming: Bool) {
+        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        let current = sessions[index]
+        sessions[index] = SessionSummary(
+            id: current.id,
+            projectId: current.projectId,
+            title: current.title,
+            updatedAt: current.updatedAt,
+            isPinned: current.isPinned,
+            isArchived: current.isArchived,
+            isStreaming: isStreaming,
+            attention: current.attention,
+            progress: current.progress
+        )
     }
 
     private func requestSnapshot() async {
@@ -438,9 +489,9 @@ final class MobileAppState: ObservableObject {
         let payload = APNsTokenPayload(tokenHex: tokenHex, environment: env)
         do {
             try await client.send(.apnsToken(payload), toHex: pairedDesktopPubkey)
-            logger.info("[APNs] token reported to desktop tokenPrefix=\(String(tokenHex.prefix(12)), privacy: .public) environment=\(env, privacy: .public) desktopKey=\(String(pairedDesktopPubkey.prefix(12)), privacy: .public)")
+            logger.info("[APNs] token reported to desktop tokenPrefix=\(String(tokenHex.prefix(12)), privacy: .public) environment=\(env, privacy: .public) desktopKey=\(String(self.pairedDesktopPubkey.prefix(12)), privacy: .public) mobileKey=\(String(self.identity.publicKeyHex.prefix(12)), privacy: .public)")
         } catch {
-            logger.error("[APNs] token report failed desktopKey=\(String(pairedDesktopPubkey.prefix(12)), privacy: .public): \(error.localizedDescription, privacy: .public)")
+            logger.error("[APNs] token report failed desktopKey=\(String(self.pairedDesktopPubkey.prefix(12)), privacy: .public) mobileKey=\(String(self.identity.publicKeyHex.prefix(12)), privacy: .public): \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -470,12 +521,51 @@ final class MobileAppState: ObservableObject {
     private func loadPairedDesktop() {
         pairedDesktopPubkey = UserDefaults.standard.string(forKey: "mobileSync.desktopPubkey") ?? ""
         pairedDesktopName = UserDefaults.standard.string(forKey: "mobileSync.desktopName") ?? ""
+        let savedMobilePubkey = UserDefaults.standard.string(forKey: "mobileSync.mobilePubkey")
+        if let savedMobilePubkey,
+           !savedMobilePubkey.isEmpty,
+           savedMobilePubkey != identity.publicKeyHex {
+            logger.warning("[Pairing] clearing stale saved desktop pairing savedMobileKey=\(String(savedMobilePubkey.prefix(12)), privacy: .public) currentMobileKey=\(String(self.identity.publicKeyHex.prefix(12)), privacy: .public)")
+            pairedDesktopPubkey = ""
+            pairedDesktopName = ""
+            savePairedDesktop()
+        }
         isPaired = !pairedDesktopPubkey.isEmpty
     }
 
     private func savePairedDesktop() {
-        UserDefaults.standard.set(pairedDesktopPubkey, forKey: "mobileSync.desktopPubkey")
-        UserDefaults.standard.set(pairedDesktopName, forKey: "mobileSync.desktopName")
+        if pairedDesktopPubkey.isEmpty {
+            UserDefaults.standard.removeObject(forKey: "mobileSync.desktopPubkey")
+            UserDefaults.standard.removeObject(forKey: "mobileSync.desktopName")
+            UserDefaults.standard.removeObject(forKey: "mobileSync.mobilePubkey")
+        } else {
+            UserDefaults.standard.set(pairedDesktopPubkey, forKey: "mobileSync.desktopPubkey")
+            UserDefaults.standard.set(pairedDesktopName, forKey: "mobileSync.desktopName")
+            UserDefaults.standard.set(identity.publicKeyHex, forKey: "mobileSync.mobilePubkey")
+        }
+    }
+
+    private func resetIdentityAndClient() async {
+        let oldClient = client
+        eventTask?.cancel()
+        eventTask = nil
+        await oldClient.stop()
+
+        do {
+            try DeviceIdentity.reset(accessGroup: Self.keychainAccessGroup)
+            identity = try DeviceIdentity.loadOrCreate(accessGroup: Self.keychainAccessGroup)
+            client = SyncClient(identity: identity, relayURL: relayURL)
+            connectionState = .disconnected
+            logger.info("[MobileIdentity] regenerated publicKey=\(String(self.identity.publicKeyHex.prefix(12)), privacy: .public) accessGroup=\(Self.keychainAccessGroup, privacy: .public)")
+        } catch {
+            logger.error("[MobileIdentity] reset failed accessGroup=\(Self.keychainAccessGroup, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            client = SyncClient(identity: identity, relayURL: relayURL)
+            connectionState = .disconnected
+        }
+
+        if clientStarted {
+            await startClient()
+        }
     }
 }
 

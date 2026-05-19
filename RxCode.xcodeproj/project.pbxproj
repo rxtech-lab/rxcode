@@ -19,6 +19,8 @@
 		DF230B9F2FBC73BA008929A6 /* RxCodeChatKit in Frameworks */ = {isa = PBXBuildFile; productRef = DF230B9E2FBC73BA008929A6 /* RxCodeChatKit */; };
 		DF230BA12FBC73BA008929A6 /* RxCodeCore in Frameworks */ = {isa = PBXBuildFile; productRef = DF230BA02FBC73BA008929A6 /* RxCodeCore */; };
 		DF230BA32FBC73BA008929A6 /* RxCodeSync in Frameworks */ = {isa = PBXBuildFile; productRef = DF230BA22FBC73BA008929A6 /* RxCodeSync */; };
+		DF230BB32FBC9001008929A6 /* RxCodeSync in Frameworks */ = {isa = PBXBuildFile; productRef = DF230BB22FBC9001008929A6 /* RxCodeSync */; };
+		DF230BB42FBC9001008929A6 /* RxCodeMobileNotificationService.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = DF230BAB2FBC9001008929A6 /* RxCodeMobileNotificationService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		DF23F7362FB8C3EC008929A6 /* icon.icon in Resources */ = {isa = PBXBuildFile; fileRef = DF23F7352FB8C3EC008929A6 /* icon.icon */; };
 		DF23FF1D2FBB42F7008929A6 /* WaterfallGrid in Frameworks */ = {isa = PBXBuildFile; productRef = DF23FF1C2FBB42F7008929A6 /* WaterfallGrid */; };
 		DF31D3DC2FBC8143005D518E /* icon.icon in Resources */ = {isa = PBXBuildFile; fileRef = DF23F7352FB8C3EC008929A6 /* icon.icon */; };
@@ -62,7 +64,28 @@
 			remoteGlobalIDString = DF230B4E2FBC7367008929A6;
 			remoteInfo = RxCodeMobile;
 		};
+		DF230BB62FBC9001008929A6 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E67335302F7356F600FD26C7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DF230BA42FBC9001008929A6;
+			remoteInfo = RxCodeMobileNotificationService;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		DF230BB52FBC9001008929A6 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				DF230BB42FBC9001008929A6 /* RxCodeMobileNotificationService.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		4381E755142272EB2DAA9C96 /* AppStateProjectSwitchTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppStateProjectSwitchTests.swift; sourceTree = "<group>"; };
@@ -75,6 +98,7 @@
 		DF230B4F2FBC7367008929A6 /* RxCodeMobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RxCodeMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DF230B5F2FBC7368008929A6 /* RxCodeMobileTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RxCodeMobileTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		DF230B692FBC7368008929A6 /* RxCodeMobileUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RxCodeMobileUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		DF230BAB2FBC9001008929A6 /* RxCodeMobileNotificationService.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RxCodeMobileNotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		DF23F7352FB8C3EC008929A6 /* icon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = icon.icon; sourceTree = "<group>"; };
 		DFA0CCC02FB4CC01005991E1 /* PlanDecisionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlanDecisionTests.swift; sourceTree = "<group>"; };
 		DFA0CCC12FB4CC01005991E1 /* PlanCardViewTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlanCardViewTests.swift; sourceTree = "<group>"; };
@@ -89,6 +113,13 @@
 				Info.plist,
 			);
 			target = DF230B4E2FBC7367008929A6 /* RxCodeMobile */;
+		};
+		DF230BAA2FBC9001008929A6 /* Exceptions for "RxCodeMobileNotificationService" folder in "RxCodeMobileNotificationService" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = DF230BA42FBC9001008929A6 /* RxCodeMobileNotificationService */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -109,6 +140,14 @@
 		DF230B6C2FBC7368008929A6 /* RxCodeMobileUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = RxCodeMobileUITests;
+			sourceTree = "<group>";
+		};
+		DF230BA92FBC9001008929A6 /* RxCodeMobileNotificationService */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				DF230BAA2FBC9001008929A6 /* Exceptions for "RxCodeMobileNotificationService" folder in "RxCodeMobileNotificationService" target */,
+			);
+			path = RxCodeMobileNotificationService;
 			sourceTree = "<group>";
 		};
 		E673353A2F7356F600FD26C7 /* RxCode */ = {
@@ -161,6 +200,14 @@
 				DF230B9D2FBC738D008929A6 /* RxCodeSync in Frameworks */,
 				DF230B9B2FBC738D008929A6 /* RxCodeCore in Frameworks */,
 				DF230B992FBC738D008929A6 /* RxCodeChatKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DF230BA62FBC9001008929A6 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DF230BB32FBC9001008929A6 /* RxCodeSync in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -224,6 +271,7 @@
 				E673353A2F7356F600FD26C7 /* RxCode */,
 				6E17B0042FC8000100A10001 /* RxCodeUITests */,
 				DF230B502FBC7367008929A6 /* RxCodeMobile */,
+				DF230BA92FBC9001008929A6 /* RxCodeMobileNotificationService */,
 				DF230B622FBC7368008929A6 /* RxCodeMobileTests */,
 				DF230B6C2FBC7368008929A6 /* RxCodeMobileUITests */,
 				E67335392F7356F600FD26C7 /* Products */,
@@ -239,6 +287,7 @@
 				7321B5E8B81AAB1A2DC0593B /* RxCodeTests.xctest */,
 				6E17B0032FC8000100A10001 /* RxCodeUITests.xctest */,
 				DF230B4F2FBC7367008929A6 /* RxCodeMobile.app */,
+				DF230BAB2FBC9001008929A6 /* RxCodeMobileNotificationService.appex */,
 				DF230B5F2FBC7368008929A6 /* RxCodeMobileTests.xctest */,
 				DF230B692FBC7368008929A6 /* RxCodeMobileUITests.xctest */,
 			);
@@ -298,10 +347,12 @@
 				DF230B4B2FBC7367008929A6 /* Sources */,
 				DF230B4C2FBC7367008929A6 /* Frameworks */,
 				DF230B4D2FBC7367008929A6 /* Resources */,
+				DF230BB52FBC9001008929A6 /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				DF230BB72FBC9001008929A6 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				DF230B502FBC7367008929A6 /* RxCodeMobile */,
@@ -365,6 +416,29 @@
 			productReference = DF230B692FBC7368008929A6 /* RxCodeMobileUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		DF230BA42FBC9001008929A6 /* RxCodeMobileNotificationService */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DF230BAE2FBC9001008929A6 /* Build configuration list for PBXNativeTarget "RxCodeMobileNotificationService" */;
+			buildPhases = (
+				DF230BA52FBC9001008929A6 /* Sources */,
+				DF230BA62FBC9001008929A6 /* Frameworks */,
+				DF230BA72FBC9001008929A6 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				DF230BA92FBC9001008929A6 /* RxCodeMobileNotificationService */,
+			);
+			name = RxCodeMobileNotificationService;
+			packageProductDependencies = (
+				DF230BB22FBC9001008929A6 /* RxCodeSync */,
+			);
+			productName = RxCodeMobileNotificationService;
+			productReference = DF230BAB2FBC9001008929A6 /* RxCodeMobileNotificationService.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		E67335372F7356F600FD26C7 /* RxCode */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = E67335432F7356F700FD26C7 /* Build configuration list for PBXNativeTarget "RxCode" */;
@@ -414,6 +488,9 @@
 						CreatedOnToolsVersion = 26.3;
 						TestTargetID = DF230B4E2FBC7367008929A6;
 					};
+					DF230BA42FBC9001008929A6 = {
+						CreatedOnToolsVersion = 26.3;
+					};
 					E67335372F7356F600FD26C7 = {
 						CreatedOnToolsVersion = 26.3;
 					};
@@ -445,6 +522,7 @@
 				5D74FE7B782850D23F8D9BF7 /* RxCodeTests */,
 				6E17B0062FC8000100A10001 /* RxCodeUITests */,
 				DF230B4E2FBC7367008929A6 /* RxCodeMobile */,
+				DF230BA42FBC9001008929A6 /* RxCodeMobileNotificationService */,
 				DF230B5E2FBC7368008929A6 /* RxCodeMobileTests */,
 				DF230B682FBC7368008929A6 /* RxCodeMobileUITests */,
 			);
@@ -482,6 +560,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		DF230B672FBC7368008929A6 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DF230BA72FBC9001008929A6 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -540,6 +625,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		DF230BA52FBC9001008929A6 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		E67335342F7356F600FD26C7 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -571,6 +663,11 @@
 			isa = PBXTargetDependency;
 			target = DF230B4E2FBC7367008929A6 /* RxCodeMobile */;
 			targetProxy = DF230B6A2FBC7368008929A6 /* PBXContainerItemProxy */;
+		};
+		DF230BB72FBC9001008929A6 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DF230BA42FBC9001008929A6 /* RxCodeMobileNotificationService */;
+			targetProxy = DF230BB62FBC9001008929A6 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -794,6 +891,69 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_TARGET_NAME = RxCodeMobile;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		DF230BAC2FBC9001008929A6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = RxCodeMobileNotificationService/RxCodeMobileNotificationService.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = T7GYB573Y6;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = RxCodeMobileNotificationService/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.rxlab.rxcodemobile.NotificationService;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		DF230BAD2FBC9001008929A6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = RxCodeMobileNotificationService/RxCodeMobileNotificationService.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = T7GYB573Y6;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = RxCodeMobileNotificationService/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.rxlab.rxcodemobile.NotificationService;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
 				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
@@ -1034,6 +1194,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		DF230BAE2FBC9001008929A6 /* Build configuration list for PBXNativeTarget "RxCodeMobileNotificationService" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DF230BAC2FBC9001008929A6 /* Debug */,
+				DF230BAD2FBC9001008929A6 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		E67335332F7356F600FD26C7 /* Build configuration list for PBXProject "RxCode" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -1132,6 +1301,11 @@
 			productName = RxCodeCore;
 		};
 		DF230BA22FBC73BA008929A6 /* RxCodeSync */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E6D001002FA0000100000001 /* XCLocalSwiftPackageReference "Packages" */;
+			productName = RxCodeSync;
+		};
+		DF230BB22FBC9001008929A6 /* RxCodeSync */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = E6D001002FA0000100000001 /* XCLocalSwiftPackageReference "Packages" */;
 			productName = RxCodeSync;

@@ -22,50 +22,50 @@ struct MessageListView: View {
     private static let log = Logger(subsystem: "com.claudework", category: "MessageListView")
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                messageRows(settledItems[...])
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 16)
+        List {
+            messageRows(settledItems[...])
 
             // Streaming view is outside VStack — text deltas don't affect settled layout
-            VStack(spacing: 16) {
-                if !windowState.focusMode {
-                    StreamingMessageView {
-                        rebuildSettledItems()
-                        if anchor.isNearBottom { scrollToBottomDebounced() }
-                    }
+            if !windowState.focusMode {
+                StreamingMessageView {
+                    rebuildSettledItems()
+                    if anchor.isNearBottom { scrollToBottomDebounced() }
                 }
-
-                if chatBridge.isStreaming && !chatBridge.hasPendingPlanDecision {
-                    // Hide the spinner/dots while the CLI is paused waiting on the
-                    // user's plan decision — the model isn't actually generating
-                    // tokens, so showing "in progress" is misleading.
-                    HStack(alignment: .top, spacing: 0) {
-                        StreamingIndicatorView(
-                            isThinking: chatBridge.isThinking,
-                            startDate: chatBridge.streamingStartDate,
-                            agentProvider: chatBridge.agentProvider,
-                            outputTokens: chatBridge.liveOutputTokens
-                        )
-                        Spacer(minLength: 40)
-                    }
-                }
-
-                if !chatBridge.isStreaming && !settledItems.isEmpty {
-                    WebPreviewButton(messages: settledItems)
-                        .id("web-preview")
-                }
+                // Suppress layout animations when switching sessions so the pulse indicator
+                // doesn't visually jump as StreamingMessageView changes height.
+                .animation(.none, value: windowState.currentSessionId)
+                .chatMessageListRowStyle()
             }
-            .padding(.horizontal, 20)
-            // Suppress layout animations when switching sessions so the pulse indicator
-            // doesn't visually jump as StreamingMessageView changes height.
-            .animation(.none, value: windowState.currentSessionId)
+
+            if chatBridge.isStreaming && !chatBridge.hasPendingPlanDecision {
+                // Hide the spinner/dots while the CLI is paused waiting on the
+                // user's plan decision — the model isn't actually generating
+                // tokens, so showing "in progress" is misleading.
+                HStack(alignment: .top, spacing: 0) {
+                    StreamingIndicatorView(
+                        isThinking: chatBridge.isThinking,
+                        startDate: chatBridge.streamingStartDate,
+                        agentProvider: chatBridge.agentProvider,
+                        outputTokens: chatBridge.liveOutputTokens
+                    )
+                    Spacer(minLength: 40)
+                }
+                .chatMessageListRowStyle()
+            }
+
+            if !chatBridge.isStreaming && !settledItems.isEmpty {
+                WebPreviewButton(messages: settledItems)
+                    .id("web-preview")
+                    .chatMessageListRowStyle()
+            }
 
             Color.clear.frame(height: 1)
-                .padding(.bottom, 16)
+                .chatMessageListRowStyle()
         }
+        .listStyle(.plain)
+        .contentMargins(.top, 16, for: .scrollContent)
+        .scrollContentBackground(.hidden)
+        .environment(\.defaultMinListRowHeight, 0)
         .opacity(isSessionReady ? 1 : 0)
         .scrollPosition($scrollPosition)
         .defaultScrollAnchor(.bottom)
@@ -175,23 +175,7 @@ struct MessageListView: View {
 
     @ViewBuilder
     private func messageRows(_ messages: some RandomAccessCollection<ChatMessage>) -> some View {
-        let groups = groupMessages(Array(messages))
-        ForEach(groups) { group in
-            if group.isTransientGroup {
-                TransientGroupSummaryView(messages: group.messages)
-                    .id(group.id)
-                    .transition(messageFadeTransition(role: .assistant))
-            } else if let message = group.messages.first {
-                MessageBubble(message: message)
-                    .id(message.id)
-                    .transition(messageFadeTransition(role: message.role))
-            }
-        }
-    }
-
-    private func messageFadeTransition(role: Role) -> AnyTransition {
-        let anchor: UnitPoint = role == .user ? .bottomTrailing : .bottomLeading
-        return .opacity.combined(with: .scale(scale: 0.97, anchor: anchor))
+        ChatMessageListView(messages: Array(messages))
     }
 
     // MARK: - Message Grouping
@@ -211,7 +195,7 @@ struct MessageListView: View {
     private func settledOnlyMessages(from messages: [ChatMessage]) -> [ChatMessage] {
         var settled: [ChatMessage]
         if messages.last?.isStreaming == true {
-            let boundary = streamingBoundaryIndex(in: messages)
+            let boundary = chatStreamingBoundaryIndex(in: messages)
             settled = Array(messages[..<boundary]).filter { !$0.isStreaming }
         } else {
             settled = messages.filter { !$0.isStreaming }
@@ -219,7 +203,7 @@ struct MessageListView: View {
         if windowState.focusMode {
             settled = settled.filter { $0.role == .user || $0.isResponseComplete || $0.isCompactBoundary }
         }
-        return suppressPlanReadyFollowups(in: settled)
+        return chatSuppressPlanReadyFollowups(in: settled)
     }
 
     private func scrollToBottomDebounced() {
@@ -232,152 +216,6 @@ struct MessageListView: View {
     }
 }
 
-// MARK: - Message Grouping Helpers
-
-/// Single-pass partition of messages into (settled, streaming) without scanning the array twice.
-fileprivate func partitionByStreaming(_ messages: [ChatMessage]) -> (settled: [ChatMessage], streaming: [ChatMessage]) {
-    var settled: [ChatMessage] = []
-    var streaming: [ChatMessage] = []
-    for m in messages { if m.isStreaming { streaming.append(m) } else { settled.append(m) } }
-    return (settled, streaming)
-}
-
-
-fileprivate struct MessageGroup: Identifiable {
-    let id: UUID
-    let messages: [ChatMessage]
-    let isTransientGroup: Bool
-}
-
-/// Returns true if the message would render only a transient tool summary (no visible text or non-transient tools).
-fileprivate func isPureTransientMessage(_ message: ChatMessage) -> Bool {
-    guard message.role == .assistant, !message.isError, !message.isCompactBoundary else { return false }
-    // Whitespace-only text is treated as invisible so it doesn't break transient grouping.
-    let hasVisibleText = message.blocks.contains {
-        guard let text = $0.text else { return false }
-        return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-    if hasVisibleText { return false }
-    let toolCalls = message.blocks.compactMap(\.toolCall)
-    guard !toolCalls.isEmpty else { return false }
-    let hasNonTransient = toolCalls.contains { !ToolCategory(toolName: $0.name).isTransient }
-    if hasNonTransient { return false }
-    return true
-}
-
-/// Returns true if the message has no renderable content — all tool calls were removed
-/// (e.g. empty bash output stripped by setToolResult) and there is no text.
-/// These messages are invisible in the UI and should not break transient-tool grouping.
-fileprivate func isInvisibleMessage(_ message: ChatMessage) -> Bool {
-    guard message.role == .assistant, !message.isError, !message.isCompactBoundary, !message.isStreaming else { return false }
-    return message.blocks.isEmpty
-}
-
-fileprivate func suppressPlanReadyFollowups(in messages: [ChatMessage]) -> [ChatMessage] {
-    var result: [ChatMessage] = []
-    var assistantRun: [ChatMessage] = []
-
-    func flushAssistantRun() {
-        guard !assistantRun.isEmpty else { return }
-        let hasExitPlan = assistantRun.contains { PlanLogic.containsExitPlanMode($0) }
-        var hasRecentPlanCard = false
-
-        for message in assistantRun {
-            if hasExitPlan && PlanLogic.isPurePlanFileWriteMessage(message) {
-                continue
-            }
-
-            // Plan-ready follow-up messages (e.g. "Plan is ready at /…/plans/foo.md")
-            // are intentionally kept visible alongside the plan card so the user
-            // sees the summary while approval is pending.
-            _ = hasRecentPlanCard
-
-            if PlanLogic.containsExitPlanMode(message) {
-                hasRecentPlanCard = true
-            }
-            result.append(message)
-        }
-
-        assistantRun.removeAll(keepingCapacity: true)
-    }
-
-    for message in messages {
-        if message.role == .user {
-            flushAssistantRun()
-            result.append(message)
-            continue
-        }
-
-        assistantRun.append(message)
-    }
-    flushAssistantRun()
-
-    return result
-}
-
-fileprivate func isPlanReadyFollowupMessage(_ message: ChatMessage) -> Bool {
-    guard message.role == .assistant,
-          !message.isError,
-          !message.isCompactBoundary,
-          !message.isStreaming,
-          !message.blocks.isEmpty else {
-        return false
-    }
-    return message.blocks.allSatisfy { block in
-        guard let text = block.text else { return false }
-        return PlanLogic.isPlanReadyFollowup(text)
-    }
-}
-
-/// Groups consecutive pure-transient assistant messages into combined groups.
-/// - Parameter minGroupSize: Minimum number of transient messages required to collapse into a group.
-///   Pass 1 (streaming context) to hide even a single completed tool call the moment the next message starts.
-///   Pass 2 (settled list) to keep lone tool calls visible after streaming ends.
-fileprivate func groupMessages(_ messages: [ChatMessage], minGroupSize: Int = 2) -> [MessageGroup] {
-    var result: [MessageGroup] = []
-    var accumulator: [ChatMessage] = []
-
-    func flushAccumulator() {
-        guard !accumulator.isEmpty else { return }
-        if accumulator.count >= minGroupSize {
-            result.append(MessageGroup(id: accumulator[0].id, messages: accumulator, isTransientGroup: true))
-        } else {
-            for m in accumulator {
-                result.append(MessageGroup(id: m.id, messages: [m], isTransientGroup: false))
-            }
-        }
-        accumulator = []
-    }
-
-    for message in messages {
-        if isPureTransientMessage(message) {
-            accumulator.append(message)
-        } else if isInvisibleMessage(message) {
-            // Skip invisible messages (e.g. all tool calls removed due to empty results).
-            // They render nothing in the UI and must not break consecutive transient grouping.
-            continue
-        } else {
-            flushAccumulator()
-            result.append(MessageGroup(id: message.id, messages: [message], isTransientGroup: false))
-        }
-    }
-    flushAccumulator()
-
-    return result
-}
-
-// MARK: - Shared Helper
-
-/// Returns the start index of the last consecutive non-error assistant sequence.
-/// Used to distinguish the settled (previous) / active (streaming) boundary.
-private func streamingBoundaryIndex(in messages: [ChatMessage]) -> Int {
-    var idx = messages.count - 1
-    while idx >= 0 && messages[idx].role == .assistant && !messages[idx].isError {
-        idx -= 1
-    }
-    return idx + 1
-}
-
 // MARK: - Streaming Message (isolated view — chatBridge.messages dependency confined to this view)
 
 struct StreamingMessageView: View {
@@ -388,21 +226,21 @@ struct StreamingMessageView: View {
     var body: some View {
         let messages = chatBridge.messages
         let activeMessages = activeResponseMessages(from: messages)
-        let (settledActive, streamingActive) = partitionByStreaming(activeMessages)
+        let (settledActive, streamingActive) = chatPartitionByStreaming(activeMessages)
         Group {
             if !activeMessages.isEmpty {
 
                 if !streamingActive.isEmpty {
                     // Collapse completed transient tool calls (even a single one) the moment
                     // the next streaming message begins, so only the current message stays visible.
-                    let groups = groupMessages(settledActive, minGroupSize: 1)
+                    let groups = chatMessageGroups(settledActive, minGroupSize: 1)
                     ForEach(groups) { group in
                         if group.isTransientGroup {
-                            TransientGroupSummaryView(messages: group.messages)
+                            ChatTransientGroupSummaryView(messages: group.messages)
                                 .id(group.id)
                                 .transition(streamFadeTransition(role: .assistant))
                         } else if let message = group.messages.first {
-                            MessageBubble(message: message)
+                            ChatMessageBubble(message: message)
                                 .id(message.id)
                                 .transition(streamFadeTransition(role: message.role))
                         }
@@ -410,14 +248,14 @@ struct StreamingMessageView: View {
                 } else {
                     // Nothing streaming yet — show each settled message individually.
                     ForEach(settledActive, id: \.id) { message in
-                        MessageBubble(message: message)
+                        ChatMessageBubble(message: message)
                             .id(message.id)
                             .transition(streamFadeTransition(role: message.role))
                     }
                 }
 
                 ForEach(streamingActive, id: \.id) { message in
-                    MessageBubble(message: message)
+                    ChatMessageBubble(message: message)
                         .id(message.id)
                         .transition(streamFadeTransition(role: .assistant))
                 }
@@ -439,52 +277,7 @@ struct StreamingMessageView: View {
     /// Returns an empty array when not streaming so StreamingMessageView renders nothing.
     private func activeResponseMessages(from messages: [ChatMessage]) -> [ChatMessage] {
         guard messages.last?.isStreaming == true else { return [] }
-        return suppressPlanReadyFollowups(in: Array(messages[streamingBoundaryIndex(in: messages)...]))
-    }
-}
-
-// MARK: - Transient Group Summary
-
-struct TransientGroupSummaryView: View {
-    let messages: [ChatMessage]
-    @State private var isExpanded = false
-
-    private var allToolCalls: [ToolCall] {
-        messages.flatMap { $0.blocks.compactMap(\.toolCall) }
-    }
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 0) {
-            VStack(alignment: .leading, spacing: 6) {
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        isExpanded.toggle()
-                    }
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "eye.slash")
-                            .font(.system(size: ClaudeTheme.size(11)))
-                            .foregroundStyle(ClaudeTheme.textTertiary)
-                        Text(String(format: String(localized: "%lld tools executed", bundle: .module), allToolCalls.count))
-                            .font(.system(size: ClaudeTheme.size(12)))
-                            .foregroundStyle(ClaudeTheme.textTertiary)
-                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                            .font(.system(size: ClaudeTheme.size(9)))
-                            .foregroundStyle(ClaudeTheme.textTertiary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-
-                if isExpanded {
-                    ForEach(allToolCalls, id: \.id) { toolCall in
-                        ToolResultView(toolCall: toolCall, isMessageStreaming: false)
-                    }
-                }
-            }
-            Spacer(minLength: 40)
-        }
+        return chatSuppressPlanReadyFollowups(in: Array(messages[chatStreamingBoundaryIndex(in: messages)...]))
     }
 }
 

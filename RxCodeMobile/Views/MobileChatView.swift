@@ -1,5 +1,6 @@
 import SwiftUI
 import RxCodeCore
+import RxCodeChatKit
 import RxCodeSync
 
 /// Read-write chat view. User messages are forwarded to the desktop and the
@@ -8,31 +9,36 @@ struct MobileChatView: View {
     @EnvironmentObject private var state: MobileAppState
     let sessionID: String
     @State private var composer: String = ""
+    @State private var submittedDraft = false
 
     var body: some View {
         VStack(spacing: 0) {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 12) {
-                        ForEach(messages, id: \.id) { message in
-                            MobileMessageBubble(message: message)
-                                .id(message.id)
-                        }
+                        ChatMessageListView(messages: messages)
+                        Color.clear
+                            .frame(height: 1)
+                            .id("message-list-bottom")
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .onChange(of: messages.last?.id) { _, _ in
-                    if let last = messages.last?.id {
-                        withAnimation { proxy.scrollTo(last, anchor: .bottom) }
-                    }
+                    withAnimation { proxy.scrollTo("message-list-bottom", anchor: .bottom) }
                 }
             }
             Divider()
             MobileInputBar(text: $composer) { trimmed in
                 Task {
-                    await state.sendUserMessage(trimmed, sessionID: sessionID)
+                    if let projectID = draftProjectID {
+                        guard !submittedDraft else { return }
+                        submittedDraft = true
+                        await state.requestNewSession(projectID: projectID, initialText: trimmed)
+                    } else {
+                        await state.sendUserMessage(trimmed, sessionID: sessionID)
+                    }
                     composer = ""
                 }
             }
@@ -41,9 +47,16 @@ struct MobileChatView: View {
         .navigationTitle(title)
     }
 
-    private var messages: [ChatMessage] { state.messagesBySession[sessionID] ?? [] }
+    private var messages: [ChatMessage] {
+        draftProjectID == nil ? state.messagesBySession[sessionID] ?? [] : []
+    }
 
     private var title: String {
-        state.sessions.first(where: { $0.id == sessionID })?.title ?? "Thread"
+        if draftProjectID != nil { return "New Thread" }
+        return state.sessions.first(where: { $0.id == sessionID })?.title ?? "Thread"
+    }
+
+    private var draftProjectID: UUID? {
+        MobileDraftSessionID.projectID(from: sessionID)
     }
 }

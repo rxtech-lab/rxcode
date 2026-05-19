@@ -241,6 +241,7 @@ final class MobileSyncService: ObservableObject {
             throw MobilePushError.invalidRelayURL
         }
 
+        logger.info("[APNs] sending test push deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public) tokenPrefix=\(String(token.prefix(12)), privacy: .public) environment=\(device.apnsEnvironment ?? "<nil>", privacy: .public) sender=\(String(self.identity.publicKeyHex.prefix(12)), privacy: .public)")
         let plaintext = AlertPlaintext(
             title: "RxCode test notification",
             body: "Notifications are working for \(device.displayName).",
@@ -288,13 +289,22 @@ final class MobileSyncService: ObservableObject {
 
     /// Called by AppState's streaming loop after each StreamEvent is folded
     /// into local state.
-    func broadcastSessionUpdate(sessionID: String, kind: SessionUpdatePayload.Kind, message: ChatMessage?, isStreaming: Bool?) {
+    func broadcastSessionUpdate(
+        sessionID: String,
+        kind: SessionUpdatePayload.Kind,
+        message: ChatMessage?,
+        isStreaming: Bool?,
+        summary: RxCodeSync.SessionSummary? = nil,
+        previousSessionID: String? = nil
+    ) {
         Task {
             let payload = SessionUpdatePayload(
                 sessionID: sessionID,
                 kind: kind,
                 message: message,
-                isStreaming: isStreaming
+                isStreaming: isStreaming,
+                summary: summary,
+                previousSessionID: previousSessionID
             )
             await client.broadcast(.sessionUpdate(payload))
         }
@@ -321,15 +331,25 @@ final class MobileSyncService: ObservableObject {
             pendingPairing = req
             Task { try? await client.addPeer(req.mobilePubkeyHex) }
         case .unpair:
+            guard isPairedPeer(inbound.fromHex) else { return }
             handleRemoteUnpair(pubkeyHex: inbound.fromHex)
         case .apnsToken(let t):
             if let idx = pairedDevices.firstIndex(where: { $0.pubkeyHex == inbound.fromHex }) {
+                logger.info("[APNs] token received mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public) tokenPrefix=\(String(t.tokenHex.prefix(12)), privacy: .public) environment=\(t.environment, privacy: .public)")
                 pairedDevices[idx].apnsToken = t.tokenHex
                 pairedDevices[idx].apnsEnvironment = t.environment
                 pairedDevices[idx].lastSeen = .now
+                for staleIdx in pairedDevices.indices where staleIdx != idx && pairedDevices[staleIdx].apnsToken == t.tokenHex {
+                    logger.warning("[APNs] clearing duplicate token from stale mobileKey=\(String(self.pairedDevices[staleIdx].pubkeyHex.prefix(12)), privacy: .public) currentMobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public) tokenPrefix=\(String(t.tokenHex.prefix(12)), privacy: .public)")
+                    pairedDevices[staleIdx].apnsToken = nil
+                    pairedDevices[staleIdx].apnsEnvironment = nil
+                }
                 savePairedDevices()
+            } else {
+                logger.warning("[APNs] token received for unknown mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public) tokenPrefix=\(String(t.tokenHex.prefix(12)), privacy: .public) environment=\(t.environment, privacy: .public)")
             }
         case .requestSnapshot(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "request_snapshot") else { return }
             // AppState owns the data; it observes pendingSnapshotRequests
             // and replies. Stub for now — wired up by AppState bridge.
             var userInfo: [String: Any] = ["from": inbound.fromHex]
@@ -340,24 +360,28 @@ final class MobileSyncService: ObservableObject {
                 userInfo: userInfo
             )
         case .settingsUpdate(let update):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "settings_update") else { return }
             NotificationCenter.default.post(
                 name: .mobileSyncSettingsUpdateReceived,
                 object: nil,
                 userInfo: ["from": inbound.fromHex, "payload": update]
             )
         case .userMessage(let msg):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "user_message") else { return }
             NotificationCenter.default.post(
                 name: .mobileSyncUserMessageReceived,
                 object: nil,
                 userInfo: ["from": inbound.fromHex, "payload": msg]
             )
         case .newSessionRequest(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "new_session_request") else { return }
             NotificationCenter.default.post(
                 name: .mobileSyncNewSessionRequested,
                 object: nil,
                 userInfo: ["from": inbound.fromHex, "payload": req]
             )
         case .subscribeSession(let sub):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "subscribe_session") else { return }
             subscribedSessions[inbound.fromHex] = sub.sessionID ?? ""
             var userInfo: [String: Any] = ["from": inbound.fromHex]
             userInfo["activeSessionID"] = sub.sessionID
@@ -367,16 +391,35 @@ final class MobileSyncService: ObservableObject {
                 userInfo: userInfo
             )
         case .permissionResponse(let resp):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "permission_response") else { return }
             NotificationCenter.default.post(
                 name: .mobileSyncPermissionResponse,
                 object: nil,
                 userInfo: ["payload": resp]
             )
         case .ping:
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "ping") else { return }
             Task { try? await client.send(.pong(PongPayload()), toHex: inbound.fromHex) }
         default:
             break
         }
+    }
+
+    private func isPairedPeer(_ pubkeyHex: String) -> Bool {
+        pairedDevices.contains { $0.pubkeyHex == pubkeyHex }
+    }
+
+    private func acceptPairedOnlyPayload(from pubkeyHex: String, type: String) -> Bool {
+        guard isPairedPeer(pubkeyHex) else {
+            logger.warning("[MobileSync] rejecting \(type, privacy: .public) from unknown mobileKey=\(String(pubkeyHex.prefix(12)), privacy: .public)")
+            Task {
+                try? await client.addPeer(pubkeyHex)
+                try? await client.send(.unpair(UnpairPayload(reason: "unknown_peer")), toHex: pubkeyHex)
+                await client.removePeer(pubkeyHex)
+            }
+            return false
+        }
+        return true
     }
 
     private func handleRemoteUnpair(pubkeyHex: String) {

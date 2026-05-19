@@ -55,7 +55,7 @@ final class NotificationService: UNNotificationServiceExtension {
             contentHandler(attempt)
             return
         }
-        guard let senderRaw = Data(hexString: envelope.from) else {
+        guard let senderRaw = Data(rxcodeHexString: envelope.from) else {
             logger.error("[NSE] sender public key is not hex sender=\(String(envelope.from.prefix(12)), privacy: .public)")
             contentHandler(attempt)
             return
@@ -93,5 +93,23 @@ final class NotificationService: UNNotificationServiceExtension {
             logger.error("[NSE] service extension time will expire; returning best attempt title=\(attempt.title, privacy: .public)")
             handler(attempt)
         }
+    }
+}
+
+private extension Data {
+    init?(rxcodeHexString: String) {
+        let chars = Array(rxcodeHexString)
+        guard chars.count % 2 == 0 else { return nil }
+        var bytes: [UInt8] = []
+        bytes.reserveCapacity(chars.count / 2)
+        var index = 0
+        while index < chars.count {
+            guard let byte = UInt8(String(chars[index..<index + 2]), radix: 16) else {
+                return nil
+            }
+            bytes.append(byte)
+            index += 2
+        }
+        self = Data(bytes)
     }
 }

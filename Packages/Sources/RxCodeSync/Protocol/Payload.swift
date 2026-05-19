@@ -234,6 +234,23 @@ public struct MobileSettingsUpdatePayload: Codable, Sendable {
     }
 }
 
+public struct SessionProgressSnapshot: Codable, Sendable, Equatable {
+    public let done: Int
+    public let total: Int
+    public let inProgress: Bool
+
+    public init(done: Int, total: Int, inProgress: Bool) {
+        self.done = done
+        self.total = total
+        self.inProgress = inProgress
+    }
+}
+
+public enum SessionAttentionKind: String, Codable, Sendable, Equatable {
+    case permission
+    case question
+}
+
 public struct SessionSummary: Codable, Sendable, Identifiable {
     public let id: String
     public let projectId: UUID
@@ -241,13 +258,20 @@ public struct SessionSummary: Codable, Sendable, Identifiable {
     public let updatedAt: Date
     public let isPinned: Bool
     public let isArchived: Bool
+    public let isStreaming: Bool
+    public let attention: SessionAttentionKind?
+    public let progress: SessionProgressSnapshot?
+
     public init(
         id: String,
         projectId: UUID,
         title: String,
         updatedAt: Date,
         isPinned: Bool,
-        isArchived: Bool
+        isArchived: Bool,
+        isStreaming: Bool = false,
+        attention: SessionAttentionKind? = nil,
+        progress: SessionProgressSnapshot? = nil
     ) {
         self.id = id
         self.projectId = projectId
@@ -255,6 +279,26 @@ public struct SessionSummary: Codable, Sendable, Identifiable {
         self.updatedAt = updatedAt
         self.isPinned = isPinned
         self.isArchived = isArchived
+        self.isStreaming = isStreaming
+        self.attention = attention
+        self.progress = progress
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, projectId, title, updatedAt, isPinned, isArchived, isStreaming, attention, progress
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        projectId = try container.decode(UUID.self, forKey: .projectId)
+        title = try container.decode(String.self, forKey: .title)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+        isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
+        isArchived = try container.decodeIfPresent(Bool.self, forKey: .isArchived) ?? false
+        isStreaming = try container.decodeIfPresent(Bool.self, forKey: .isStreaming) ?? false
+        attention = try container.decodeIfPresent(SessionAttentionKind.self, forKey: .attention)
+        progress = try container.decodeIfPresent(SessionProgressSnapshot.self, forKey: .progress)
     }
 }
 
@@ -270,16 +314,23 @@ public struct SessionUpdatePayload: Codable, Sendable {
     public let kind: Kind
     public let message: ChatMessage?
     public let isStreaming: Bool?
+    public let summary: SessionSummary?
+    public let previousSessionID: String?
+
     public init(
         sessionID: String,
         kind: Kind,
         message: ChatMessage? = nil,
-        isStreaming: Bool? = nil
+        isStreaming: Bool? = nil,
+        summary: SessionSummary? = nil,
+        previousSessionID: String? = nil
     ) {
         self.sessionID = sessionID
         self.kind = kind
         self.message = message
         self.isStreaming = isStreaming
+        self.summary = summary
+        self.previousSessionID = previousSessionID
     }
 }
 

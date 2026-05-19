@@ -1,14 +1,23 @@
 import SwiftUI
 import RxCodeSync
 
-/// Mobile app root. On iPad / wide screens this uses NavigationSplitView; on
-/// iPhone it auto-collapses to a stack.
+private enum MobileRootTab: Hashable {
+    case briefing
+    case projects
+    case settings
+}
+
+/// Mobile app root. iPad / wide screens use NavigationSplitView; iPhone uses
+/// bottom navigation with independent NavigationStack tabs.
 struct RootView: View {
+    @Environment(\.horizontalSizeClass) private var compactClass
     @EnvironmentObject private var state: MobileAppState
     @State private var selectedProject: UUID?
     @State private var selectedSession: String?
     @State private var showingBriefing = true
     @State private var showSettings = false
+    @State private var selectedTab: MobileRootTab = .briefing
+    @State private var projectsPath = NavigationPath()
 
     var body: some View {
         Group {
@@ -22,34 +31,79 @@ struct RootView: View {
             PermissionApprovalSheet(request: req)
                 .environmentObject(state)
         }
+        .mobileDismissesKeyboardOnScroll()
     }
 
     private var paired: some View {
-        NavigationSplitView {
-            ProjectsSidebar(selected: $selectedProject, showingBriefing: $showingBriefing)
-                .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button { showSettings = true } label: {
-                            Image(systemName: "gear")
-                        }
-                    }
-                }
-        } content: {
-            if showingBriefing {
-                MobileBriefingView()
-            } else if let projectID = selectedProject {
-                SessionsList(projectID: projectID, selected: $selectedSession)
+        Group {
+            if compactClass == .compact {
+                phoneTabs
             } else {
-                Text("Select a project")
-                    .foregroundStyle(.secondary)
+                ipadSplitView
             }
-        } detail: {
-            if !showingBriefing, let sessionID = selectedSession {
-                MobileChatView(sessionID: sessionID)
-                    .id(sessionID)
+        }
+        .task {
+            await state.refreshSnapshot()
+        }
+        .onChange(of: state.activeSessionID) { _, newValue in
+            openActiveSession(newValue)
+        }
+        .onChange(of: selectedSession) { _, newValue in
+            guard compactClass == .compact,
+                  let newValue,
+                  MobileDraftSessionID.isDraft(newValue)
+            else { return }
+            projectsPath.append(newValue)
+        }
+    }
+
+    private var phoneTabs: some View {
+        TabView(selection: $selectedTab) {
+            NavigationStack {
+                MobileBriefingView()
+            }
+            .tabItem {
+                Label("Briefing", systemImage: "doc.text")
+            }
+            .tag(MobileRootTab.briefing)
+
+            NavigationStack(path: $projectsPath) {
+                ProjectsSidebar(
+                    selected: $selectedProject,
+                    showingBriefing: $showingBriefing,
+                    showsBriefingItem: false,
+                    usesSelection: false
+                )
+                .navigationDestination(for: UUID.self) { projectID in
+                    SessionsList(
+                        projectID: projectID,
+                        selected: $selectedSession,
+                        usesSelection: false
+                    )
+                }
+                .navigationDestination(for: String.self) { sessionID in
+                    chatDestination(sessionID)
+                }
+            }
+            .tabItem {
+                Label("Projects", systemImage: "folder")
+            }
+            .tag(MobileRootTab.projects)
+
+            MobileSettingsView(showsDoneButton: false)
+                .tabItem {
+                    Label("Settings", systemImage: "gear")
+                }
+                .tag(MobileRootTab.settings)
+        }
+    }
+
+    private var ipadSplitView: some View {
+        Group {
+            if showingBriefing {
+                briefingSplitView
             } else {
-                Text("Select a thread")
-                    .foregroundStyle(.secondary)
+                projectSplitView
             }
         }
         .navigationSplitViewStyle(.balanced)
@@ -57,13 +111,78 @@ struct RootView: View {
             MobileSettingsView()
                 .environmentObject(state)
         }
-        .onChange(of: selectedSession) { _, newValue in
-            Task { await state.subscribe(to: newValue) }
-        }
         .onChange(of: selectedProject) { _, newValue in
             if newValue != nil {
+                selectedSession = nil
                 showingBriefing = false
             }
+        }
+    }
+
+    private var briefingSplitView: some View {
+        NavigationSplitView {
+            projectSidebar
+        } detail: {
+            MobileBriefingView()
+        }
+    }
+
+    private var projectSplitView: some View {
+        NavigationSplitView {
+            projectSidebar
+        } content: {
+            if let projectID = selectedProject {
+                SessionsList(projectID: projectID, selected: $selectedSession)
+            } else {
+                Text("Select a project")
+                    .foregroundStyle(.secondary)
+            }
+        } detail: {
+            if !showingBriefing, let sessionID = selectedSession {
+                chatDestination(sessionID)
+            } else {
+                Text("Select a thread")
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var projectSidebar: some View {
+        ProjectsSidebar(selected: $selectedProject, showingBriefing: $showingBriefing)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showSettings = true } label: {
+                        Image(systemName: "gear")
+                    }
+                }
+            }
+    }
+
+    private func chatDestination(_ sessionID: String) -> some View {
+        MobileChatView(sessionID: sessionID)
+            .id(sessionID)
+            .task(id: sessionID) {
+                if !MobileDraftSessionID.isDraft(sessionID) {
+                    await state.subscribe(to: sessionID)
+                }
+            }
+    }
+
+    private func openActiveSession(_ sessionID: String?) {
+        guard let sessionID,
+              let session = state.sessions.first(where: { $0.id == sessionID })
+        else { return }
+
+        selectedTab = .projects
+        selectedProject = session.projectId
+        selectedSession = sessionID
+        showingBriefing = false
+
+        if compactClass == .compact {
+            var path = NavigationPath()
+            path.append(session.projectId)
+            path.append(sessionID)
+            projectsPath = path
         }
     }
 }

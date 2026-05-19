@@ -135,8 +135,7 @@ struct ToolResultView: View {
                     }
                     .animation(.spring(response: 0.35, dampingFraction: 0.7), value: statusIconID)
 
-                    inputSummaryView
-                        .lineLimit(isExpanded ? nil : 1)
+                    inputSummaryView(maximumNumberOfLines: isExpanded ? nil : 1)
                 }
                 .contentShape(Rectangle())
             }
@@ -161,11 +160,13 @@ struct ToolResultView: View {
                             ClaudeThemeDivider()
 
                             ScrollView {
-                                Text(result)
-                                    .font(.system(.caption, design: .monospaced))
-                                    .foregroundStyle(toolCall.isError ? ClaudeTheme.statusError : ClaudeTheme.textPrimary)
-                                    .textSelection(.enabled)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                ChatTextContentView(
+                                    result,
+                                    size: ClaudeTheme.messageSize(12),
+                                    design: .monospaced,
+                                    color: toolCall.isError ? ClaudeTheme.statusError : ClaudeTheme.textPrimary
+                                )
+                                .frame(maxWidth: .infinity, alignment: .leading)
                             }
                             .frame(maxHeight: 200)
                         }
@@ -215,9 +216,7 @@ struct ToolResultView: View {
                             .frame(width: 14, height: 14)
                     }
 
-                    inputSummaryView
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                    inputSummaryView(maximumNumberOfLines: 1)
 
                     if toolCall.result == nil && isMessageStreaming {
                         ProgressView()
@@ -233,11 +232,13 @@ struct ToolResultView: View {
 
             if isExpanded, !isBashTool, let result = toolCall.result, !result.isEmpty {
                 ScrollView {
-                    Text(result)
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(toolCall.isError ? ClaudeTheme.statusError : ClaudeTheme.textSecondary)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    ChatTextContentView(
+                        result,
+                        size: ClaudeTheme.messageSize(12),
+                        design: .monospaced,
+                        color: toolCall.isError ? ClaudeTheme.statusError : ClaudeTheme.textSecondary
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(maxHeight: 200)
                 .padding(.leading, 20)
@@ -293,9 +294,12 @@ struct ToolResultView: View {
         return VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(visibleLines.enumerated()), id: \.offset) { idx, item in
                 let (prefix, text, isAdded) = item
-                Text(prefix + " " + text)
-                    .font(.system(size: ClaudeTheme.messageSize(12), design: .monospaced))
-                    .foregroundStyle(isAdded ? ClaudeTheme.statusSuccess : ClaudeTheme.statusError)
+                ChatTextContentView(
+                    prefix + " " + text,
+                    size: ClaudeTheme.messageSize(12),
+                    design: .monospaced,
+                    color: isAdded ? ClaudeTheme.statusSuccess : ClaudeTheme.statusError
+                )
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 1)
@@ -368,9 +372,12 @@ struct ToolResultView: View {
 
         return VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(visibleLines.enumerated()), id: \.offset) { _, line in
-                Text(line.isEmpty ? " " : line)
-                    .font(.system(size: ClaudeTheme.messageSize(12), design: .monospaced))
-                    .foregroundStyle(diffLineColor(line))
+                ChatTextContentView(
+                    line.isEmpty ? " " : line,
+                    size: ClaudeTheme.messageSize(12),
+                    design: .monospaced,
+                    color: diffLineColor(line)
+                )
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 1)
@@ -462,14 +469,16 @@ struct ToolResultView: View {
     }
 
     @ViewBuilder
-    private var inputSummaryView: some View {
+    private func inputSummaryView(maximumNumberOfLines: Int? = nil) -> some View {
         if isEditTool || toolNameLower == "write",
            let filePath = toolCall.editedFilePath {
             let fileName = URL(fileURLWithPath: filePath).lastPathComponent
             HStack(spacing: 0) {
-                Text("\(toolDescriptionPrefix) — ")
-                    .font(.system(size: ClaudeTheme.messageSize(12)))
-                    .foregroundStyle(ClaudeTheme.textSecondary)
+                ChatTextContentView(
+                    "\(toolDescriptionPrefix) — ",
+                    size: ClaudeTheme.messageSize(12),
+                    color: ClaudeTheme.textSecondary
+                )
                 fileActionLink(label: fileName, color: ClaudeTheme.accent) {
                     windowState.inspectorFile = PreviewFile(path: filePath, name: fileName)
                 }
@@ -477,9 +486,11 @@ struct ToolResultView: View {
                     let hunks = editHunksFromToolInput()
                     if !hunks.isEmpty {
                         HStack(spacing: 0) {
-                            Text(" · ")
-                                .font(.system(size: ClaudeTheme.messageSize(12)))
-                                .foregroundStyle(ClaudeTheme.textTertiary)
+                            ChatTextContentView(
+                                " · ",
+                                size: ClaudeTheme.messageSize(12),
+                                color: ClaudeTheme.textTertiary
+                            )
                             fileActionLink(label: "diff") {
                                 windowState.diffFile = PreviewFile(
                                     path: filePath,
@@ -494,9 +505,12 @@ struct ToolResultView: View {
             }
             .animation(.easeOut(duration: 0.25), value: toolCall.result != nil)
         } else {
-            Text(inputSummary)
-                .font(.system(size: ClaudeTheme.messageSize(12)))
-                .foregroundStyle(ClaudeTheme.textSecondary)
+            ChatTextContentView(
+                inputSummary,
+                size: ClaudeTheme.messageSize(12),
+                color: ClaudeTheme.textSecondary,
+                maximumNumberOfLines: maximumNumberOfLines
+            )
         }
     }
 

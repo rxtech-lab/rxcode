@@ -148,48 +148,14 @@ struct HistoryListView: View {
     }
 
     private func sessionRow(_ session: DisplaySession) -> some View {
-        return HStack(spacing: 4) {
-            VStack(alignment: .leading, spacing: 3) {
-                TypewriterTitleText(title: session.title.prefix(1).uppercased() + session.title.dropFirst())
-                    .font(.system(size: ClaudeTheme.size(13)))
-                    .foregroundStyle(.primary.opacity(0.8))
-                    .lineLimit(1)
-                    .contentTransition(.opacity)
-                    .animation(.easeInOut(duration: 0.25), value: session.title)
-
-                HStack(spacing: 4) {
-                    if showAllProjects && !windowState.isProjectWindow, let projectName = session.projectName {
-                        Text(projectName)
-                            .font(.system(size: ClaudeTheme.size(10), weight: .medium))
-                            .foregroundStyle(ClaudeTheme.accent.opacity(0.8))
-                            .lineLimit(1)
-
-                        Text("·")
-                            .font(.system(size: ClaudeTheme.size(10)))
-                            .foregroundStyle(.tertiary)
-                    }
-
-                    Text(formattedDate(session.updatedAt))
-                        .font(.system(size: ClaudeTheme.size(11)))
-                        .foregroundStyle(.tertiary)
-                }
-            }
-
-            Spacer()
-
-            if session.isBackgroundStreaming {
-                ProgressView()
-                    .controlSize(.mini)
-                    .help("Response in progress in the background")
-            }
-
-            if session.isPinned {
-                Image(systemName: "pin.fill")
-                    .font(.system(size: ClaudeTheme.size(9)))
-                    .foregroundStyle(ClaudeTheme.textTertiary)
-            }
-        }
-        .padding(.vertical, 2)
+        let projectName = (showAllProjects && !windowState.isProjectWindow) ? session.projectName : nil
+        return SessionSidebarRow(
+            title: session.title,
+            projectName: projectName,
+            updatedAt: session.updatedAt,
+            isPinned: session.isPinned,
+            isBackgroundStreaming: session.isBackgroundStreaming
+        )
         .onLongPressGesture(minimumDuration: 0, maximumDistance: 10, pressing: { pressing in
             if pressing {
                 appState.selectSession(id: session.id, in: windowState)
@@ -368,28 +334,6 @@ struct HistoryListView: View {
         )
     }
 
-    private func formattedDate(_ date: Date) -> String {
-        Self.compactElapsedTime(since: date)
-    }
-
-    private static func compactElapsedTime(since date: Date, now: Date = Date()) -> String {
-        let seconds = max(0, Int(now.timeIntervalSince(date)))
-        if seconds < 60 { return "0m" }
-
-        let minutes = seconds / 60
-        if minutes < 60 { return "\(minutes)m" }
-
-        let hours = minutes / 60
-        if hours < 24 { return "\(hours)h" }
-
-        let days = hours / 24
-        if days < 7 { return "\(days)d" }
-
-        let weeks = days / 7
-        if weeks < 52 { return "\(weeks)w" }
-
-        return "\(days / 365)y"
-    }
 }
 
 #Preview {

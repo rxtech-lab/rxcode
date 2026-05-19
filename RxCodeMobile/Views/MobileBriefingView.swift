@@ -1,24 +1,31 @@
 import SwiftUI
 import RxCodeCore
+import RxCodeChatKit
 import RxCodeSync
+
+struct BriefingGroupKey: Hashable {
+    let projectId: UUID
+    let branch: String
+}
+
+struct GroupedBriefing: Identifiable {
+    let projectId: UUID
+    let branch: String
+    let briefing: MobileBranchBriefing?
+    let threads: [MobileThreadSummary]
+    let updatedAt: Date
+
+    var id: String { "\(projectId.uuidString)::\(branch)" }
+    var key: BriefingGroupKey { BriefingGroupKey(projectId: projectId, branch: branch) }
+}
 
 struct MobileBriefingView: View {
     @EnvironmentObject private var state: MobileAppState
 
-    private struct GroupedBriefing: Identifiable {
-        let projectId: UUID
-        let branch: String
-        let briefing: MobileBranchBriefing?
-        let threads: [MobileThreadSummary]
-        let updatedAt: Date
-
-        var id: String { "\(projectId.uuidString)::\(branch)" }
-    }
-
     var body: some View {
         GeometryReader { proxy in
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 12) {
                     if groups.isEmpty {
                         ContentUnavailableView(
                             "No Briefings Yet",
@@ -30,22 +37,37 @@ struct MobileBriefingView: View {
                         LazyVGrid(
                             columns: gridColumns(for: proxy.size.width),
                             alignment: .leading,
-                            spacing: 16
+                            spacing: 12
                         ) {
                             ForEach(groups) { group in
-                                briefingCard(group)
+                                NavigationLink(value: group.key) {
+                                    briefingRow(group)
+                                }
+                                .buttonStyle(.plain)
                             }
                         }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .padding(.horizontal, horizontalPadding(for: proxy.size.width))
-                .padding(.vertical, 20)
+                .padding(.vertical, 16)
             }
         }
         .navigationTitle("Briefing")
         .refreshable {
             await state.refreshSnapshot()
+        }
+        .navigationDestination(for: BriefingGroupKey.self) { key in
+            MobileBriefingDetailView(groupKey: key)
+        }
+        .navigationDestination(for: String.self) { sessionID in
+            MobileChatView(sessionID: sessionID)
+                .id(sessionID)
+                .task(id: sessionID) {
+                    if !MobileDraftSessionID.isDraft(sessionID) {
+                        await state.subscribe(to: sessionID)
+                    }
+                }
         }
     }
 
@@ -62,7 +84,7 @@ struct MobileBriefingView: View {
         return [
             GridItem(
                 .adaptive(minimum: minimumWidth, maximum: 560),
-                spacing: 16,
+                spacing: 12,
                 alignment: .top
             )
         ]
@@ -83,41 +105,31 @@ struct MobileBriefingView: View {
     }
 
     private var groups: [GroupedBriefing] {
-        var buckets: [String: GroupedBriefing] = [:]
-
-        for briefing in state.branchBriefings {
-            let key = "\(briefing.projectId.uuidString)::\(briefing.branch)"
-            buckets[key] = GroupedBriefing(
-                projectId: briefing.projectId,
-                branch: briefing.branch,
-                briefing: briefing,
-                threads: buckets[key]?.threads ?? [],
-                updatedAt: max(briefing.updatedAt, buckets[key]?.updatedAt ?? .distantPast)
-            )
-        }
-
-        for thread in state.threadSummaries {
-            let key = "\(thread.projectId.uuidString)::\(thread.branch)"
-            let existing = buckets[key]
-            var threads = existing?.threads ?? []
-            threads.append(thread)
-            buckets[key] = GroupedBriefing(
-                projectId: thread.projectId,
-                branch: thread.branch,
-                briefing: existing?.briefing,
-                threads: threads.sorted { $0.updatedAt > $1.updatedAt },
-                updatedAt: max(thread.updatedAt, existing?.updatedAt ?? .distantPast)
-            )
-        }
-
-        return buckets.values.sorted { $0.updatedAt > $1.updatedAt }
+        groupBriefings(briefings: state.branchBriefings, threads: state.threadSummaries)
     }
 
-    private func briefingCard(_ group: GroupedBriefing) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
+    private func briefingRow(_ group: GroupedBriefing) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(projectsById[group.projectId]?.name ?? "Unknown Project")
                     .font(.headline)
+                    .foregroundStyle(.primary)
+
+                if let summary = group.briefing?.briefing, !summary.isEmpty {
+                    ChatTextContentView(
+                        markdown: summary,
+                        size: 14,
+                        color: .secondary,
+                        lineSpacing: 2,
+                        maximumNumberOfLines: 3
+                    )
+                } else {
+                    Text("No summary yet")
+                        .font(.subheadline)
+                        .foregroundStyle(.tertiary)
+                        .italic()
+                }
+
                 HStack(spacing: 8) {
                     Label(group.branch, systemImage: "arrow.triangle.branch")
                     Text(group.updatedAt.formatted(.relative(presentation: .named)))
@@ -126,23 +138,12 @@ struct MobileBriefingView: View {
                 .foregroundStyle(.secondary)
             }
 
-            if let briefing = group.briefing?.briefing, !briefing.isEmpty {
-                Text(briefing)
-                    .font(.body)
-                    .textSelection(.enabled)
-            }
+            Spacer(minLength: 0)
 
-            if !group.threads.isEmpty {
-                Divider()
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Threads")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    ForEach(group.threads) { thread in
-                        threadRow(thread)
-                    }
-                }
-            }
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
+                .padding(.top, 4)
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -152,26 +153,40 @@ struct MobileBriefingView: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
         )
+        .contentShape(Rectangle())
+    }
+}
+
+func groupBriefings(
+    briefings: [MobileBranchBriefing],
+    threads: [MobileThreadSummary]
+) -> [GroupedBriefing] {
+    var buckets: [String: GroupedBriefing] = [:]
+
+    for briefing in briefings {
+        let key = "\(briefing.projectId.uuidString)::\(briefing.branch)"
+        buckets[key] = GroupedBriefing(
+            projectId: briefing.projectId,
+            branch: briefing.branch,
+            briefing: briefing,
+            threads: buckets[key]?.threads ?? [],
+            updatedAt: max(briefing.updatedAt, buckets[key]?.updatedAt ?? .distantPast)
+        )
     }
 
-    private func threadRow(_ thread: MobileThreadSummary) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack {
-                Text(thread.title.isEmpty ? "Untitled" : thread.title)
-                    .font(.subheadline.weight(.medium))
-                    .lineLimit(1)
-                Spacer()
-                Text(thread.updatedAt.formatted(.relative(presentation: .named)))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-            if !thread.summary.isEmpty {
-                Text(thread.summary)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(3)
-            }
-        }
-        .textSelection(.enabled)
+    for thread in threads {
+        let key = "\(thread.projectId.uuidString)::\(thread.branch)"
+        let existing = buckets[key]
+        var existingThreads = existing?.threads ?? []
+        existingThreads.append(thread)
+        buckets[key] = GroupedBriefing(
+            projectId: thread.projectId,
+            branch: thread.branch,
+            briefing: existing?.briefing,
+            threads: existingThreads.sorted { $0.updatedAt > $1.updatedAt },
+            updatedAt: max(thread.updatedAt, existing?.updatedAt ?? .distantPast)
+        )
     }
+
+    return buckets.values.sorted { $0.updatedAt > $1.updatedAt }
 }

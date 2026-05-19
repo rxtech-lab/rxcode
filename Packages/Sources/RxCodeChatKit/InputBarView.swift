@@ -129,21 +129,11 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
         }
         .onChange(of: windowState.currentSessionId) { _, _ in
             historyIndex = -1
-            // Defer to next MainActor iteration so the bridge observation has time to
-            // update isStreaming to reflect the newly-active session before we check it.
-            Task { @MainActor in
-                if !chatBridge.isStreaming {
-                    processNextQueued()
-                }
-            }
+            // Queue auto-flush is owned by AppState (`flushNextQueuedMessageIfNeeded`)
+            // so the macOS and mobile paths share one arbiter — no duplicate sends.
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(300))
                 inputFocusTrigger = UUID()
-            }
-        }
-        .onChange(of: chatBridge.isStreaming) { _, isStreaming in
-            if !isStreaming {
-                processNextQueued()
             }
         }
         .onAppear {
@@ -830,24 +820,6 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
 
         Task { await chatBridge.send() }
         resetIMEState()
-    }
-
-    private func processNextQueued() {
-        guard let next = chatBridge.dequeueNextForFlush() else { return }
-        let draftText = windowState.inputText
-        let draftAttachments = windowState.attachments
-        let shouldRestoreDraft = !draftText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || !draftAttachments.isEmpty
-
-        windowState.inputText = next.text
-        windowState.attachments = next.attachments
-        Task {
-            await chatBridge.send()
-            if shouldRestoreDraft {
-                windowState.inputText = draftText
-                windowState.attachments = draftAttachments
-            }
-        }
     }
 
     private func handleReturnKey() {

@@ -49,10 +49,7 @@ struct RootView: View {
             openActiveSession(newValue)
         }
         .onChange(of: selectedSession) { _, newValue in
-            guard compactClass == .compact,
-                  let newValue,
-                  MobileDraftSessionID.isDraft(newValue)
-            else { return }
+            guard compactClass == .compact, let newValue else { return }
             projectsPath.append(newValue)
         }
     }
@@ -123,7 +120,9 @@ struct RootView: View {
         NavigationSplitView {
             projectSidebar
         } detail: {
-            MobileBriefingView()
+            NavigationStack {
+                MobileBriefingView()
+            }
         }
     }
 
@@ -161,6 +160,7 @@ struct RootView: View {
     private func chatDestination(_ sessionID: String) -> some View {
         MobileChatView(sessionID: sessionID)
             .id(sessionID)
+            .toolbar(.hidden, for: .tabBar)
             .task(id: sessionID) {
                 if !MobileDraftSessionID.isDraft(sessionID) {
                     await state.subscribe(to: sessionID)

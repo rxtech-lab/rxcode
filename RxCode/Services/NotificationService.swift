@@ -183,7 +183,9 @@ final class NotificationService: NSObject {
     }
 
     /// Post a "response complete" notification. Silently no-ops if unauthorized.
-    func postResponseComplete(title: String, body: String, projectId: UUID, sessionId: String) async {
+    /// Mobile fan-out always runs; the local macOS banner is skipped when
+    /// `postLocalBanner` is false (e.g. the desktop app is foregrounded).
+    func postResponseComplete(title: String, body: String, projectId: UUID, sessionId: String, postLocalBanner: Bool = true) async {
         await fanoutToMobile(.init(
             kind: .responseComplete,
             title: title,
@@ -191,6 +193,7 @@ final class NotificationService: NSObject {
             sessionID: sessionId,
             projectID: projectId
         ))
+        guard postLocalBanner else { return }
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         switch settings.authorizationStatus {
         case .authorized, .provisional:

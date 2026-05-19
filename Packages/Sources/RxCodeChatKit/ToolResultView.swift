@@ -475,11 +475,9 @@ struct ToolResultView: View {
            let filePath = toolCall.editedFilePath {
             let fileName = URL(fileURLWithPath: filePath).lastPathComponent
             HStack(spacing: 0) {
-                ChatTextContentView(
-                    "\(toolDescriptionPrefix) — ",
-                    size: ClaudeTheme.messageSize(12),
-                    color: ClaudeTheme.textSecondary
-                )
+                Text("\(toolDescriptionPrefix) — ")
+                    .font(.system(size: ClaudeTheme.messageSize(12)))
+                    .foregroundStyle(ClaudeTheme.textSecondary)
                 fileActionLink(label: fileName, color: ClaudeTheme.accent) {
                     windowState.inspectorFile = PreviewFile(path: filePath, name: fileName)
                 }
@@ -487,11 +485,9 @@ struct ToolResultView: View {
                     let hunks = editHunksFromToolInput()
                     if !hunks.isEmpty {
                         HStack(spacing: 0) {
-                            ChatTextContentView(
-                                " · ",
-                                size: ClaudeTheme.messageSize(12),
-                                color: ClaudeTheme.textTertiary
-                            )
+                            Text(" · ")
+                                .font(.system(size: ClaudeTheme.messageSize(12)))
+                                .foregroundStyle(ClaudeTheme.textTertiary)
                             fileActionLink(label: "diff") {
                                 windowState.diffFile = PreviewFile(
                                     path: filePath,
@@ -503,6 +499,7 @@ struct ToolResultView: View {
                         .transition(.opacity.combined(with: .scale(scale: 0.85, anchor: .leading)))
                     }
                 }
+                Spacer(minLength: 0)
             }
             .animation(.easeOut(duration: 0.25), value: toolCall.result != nil)
         } else {

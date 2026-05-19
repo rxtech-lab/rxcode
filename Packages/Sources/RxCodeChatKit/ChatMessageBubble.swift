@@ -95,8 +95,6 @@ private struct CompactChatMessageBubble: View {
             color: ClaudeTheme.userBubbleText,
             lineSpacing: 2
         )
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .fixedSize(horizontal: false, vertical: true)
         .bubbleStyle(.user)
         .frame(maxWidth: 500, alignment: .trailing)
     }

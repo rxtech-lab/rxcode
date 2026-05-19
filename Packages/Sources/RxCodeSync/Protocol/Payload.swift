@@ -17,10 +17,16 @@ public enum Payload: Sendable {
     case sessionUpdate(SessionUpdatePayload)
     case subscribeSession(SubscribeSessionPayload)
     case userMessage(UserMessagePayload)
+    case cancelStream(CancelStreamPayload)
+    case removeQueuedMessage(RemoveQueuedMessagePayload)
     case newSessionRequest(NewSessionRequestPayload)
+    case searchRequest(SearchRequestPayload)
+    case searchResults(SearchResultsPayload)
     case notification(NotificationPayload)
     case permissionRequest(PermissionRequestPayload)
     case permissionResponse(PermissionResponsePayload)
+    case branchOpRequest(BranchOpRequestPayload)
+    case branchOpResult(BranchOpResultPayload)
     case ping(PingPayload)
     case pong(PongPayload)
     case unknown(type: String)
@@ -83,6 +89,11 @@ public struct SnapshotPayload: Codable, Sendable {
     public let settings: MobileSettingsSnapshot?
     public let activeSessionID: String?
     public let activeSessionMessages: [ChatMessage]?
+    /// Current git branch resolved per project on the desktop. Mobile uses this
+    /// to surface "you're about to create a thread on branch X" when starting
+    /// a new thread. Missing entries mean the project isn't a git repo or the
+    /// branch couldn't be resolved.
+    public let projectBranches: [ProjectBranchInfo]?
     public init(
         projects: [Project],
         sessions: [SessionSummary],
@@ -90,7 +101,8 @@ public struct SnapshotPayload: Codable, Sendable {
         threadSummaries: [MobileThreadSummary]? = nil,
         settings: MobileSettingsSnapshot? = nil,
         activeSessionID: String? = nil,
-        activeSessionMessages: [ChatMessage]? = nil
+        activeSessionMessages: [ChatMessage]? = nil,
+        projectBranches: [ProjectBranchInfo]? = nil
     ) {
         self.projects = projects
         self.sessions = sessions
@@ -99,6 +111,98 @@ public struct SnapshotPayload: Codable, Sendable {
         self.settings = settings
         self.activeSessionID = activeSessionID
         self.activeSessionMessages = activeSessionMessages
+        self.projectBranches = projectBranches
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case projects, sessions, branchBriefings, threadSummaries, settings
+        case activeSessionID, activeSessionMessages, projectBranches
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        projects = try c.decode([Project].self, forKey: .projects)
+        sessions = try c.decode([SessionSummary].self, forKey: .sessions)
+        branchBriefings = try c.decodeIfPresent([MobileBranchBriefing].self, forKey: .branchBriefings)
+        threadSummaries = try c.decodeIfPresent([MobileThreadSummary].self, forKey: .threadSummaries)
+        settings = try c.decodeIfPresent(MobileSettingsSnapshot.self, forKey: .settings)
+        activeSessionID = try c.decodeIfPresent(String.self, forKey: .activeSessionID)
+        activeSessionMessages = try c.decodeIfPresent([ChatMessage].self, forKey: .activeSessionMessages)
+        projectBranches = try c.decodeIfPresent([ProjectBranchInfo].self, forKey: .projectBranches)
+    }
+}
+
+public struct ProjectBranchInfo: Codable, Sendable, Equatable {
+    public let projectId: UUID
+    public let currentBranch: String
+    /// All local branches the desktop discovered via `git branch --list`.
+    /// Optional for backward compatibility with older desktops that only sent
+    /// the current branch.
+    public let availableBranches: [String]?
+
+    public init(projectId: UUID, currentBranch: String, availableBranches: [String]? = nil) {
+        self.projectId = projectId
+        self.currentBranch = currentBranch
+        self.availableBranches = availableBranches
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case projectId, currentBranch, availableBranches
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        projectId = try c.decode(UUID.self, forKey: .projectId)
+        currentBranch = try c.decode(String.self, forKey: .currentBranch)
+        availableBranches = try c.decodeIfPresent([String].self, forKey: .availableBranches)
+    }
+}
+
+/// Mobile-initiated request to either switch to an existing local branch in
+/// the project root, or create a new branch (and its worktree) on the desktop.
+/// The desktop responds with `BranchOpResultPayload` carrying success/error,
+/// then broadcasts a fresh snapshot so mobile sees the new branch state.
+public struct BranchOpRequestPayload: Codable, Sendable {
+    public enum Operation: String, Codable, Sendable {
+        case switchExisting
+        case createNew
+    }
+
+    public let clientRequestID: UUID
+    public let projectID: UUID
+    public let operation: Operation
+    public let branch: String
+
+    public init(clientRequestID: UUID = UUID(), projectID: UUID, operation: Operation, branch: String) {
+        self.clientRequestID = clientRequestID
+        self.projectID = projectID
+        self.operation = operation
+        self.branch = branch
+    }
+}
+
+public struct BranchOpResultPayload: Codable, Sendable {
+    public let clientRequestID: UUID
+    public let projectID: UUID
+    public let operation: BranchOpRequestPayload.Operation
+    public let branch: String
+    public let ok: Bool
+    public let errorMessage: String?
+
+    public init(
+        clientRequestID: UUID,
+        projectID: UUID,
+        operation: BranchOpRequestPayload.Operation,
+        branch: String,
+        ok: Bool,
+        errorMessage: String? = nil
+    ) {
+        self.clientRequestID = clientRequestID
+        self.projectID = projectID
+        self.operation = operation
+        self.branch = branch
+        self.ok = ok
+        self.errorMessage = errorMessage
     }
 }
 
@@ -161,6 +265,10 @@ public struct MobileSettingsSnapshot: Codable, Sendable, Equatable {
     public let archiveRetentionDays: Int
     public let autoPreviewSettings: AttachmentAutoPreviewSettings
     public let availableEfforts: [String]
+    /// All agent models discovered on the desktop, flattened across providers
+    /// and ACP clients. Lets mobile show a model picker without re-deriving the
+    /// list itself. Optional for backward compatibility with older desktops.
+    public let availableModels: [AgentModel]?
 
     public init(
         selectedAgentProvider: AgentProvider,
@@ -177,7 +285,8 @@ public struct MobileSettingsSnapshot: Codable, Sendable, Equatable {
         autoArchiveEnabled: Bool,
         archiveRetentionDays: Int,
         autoPreviewSettings: AttachmentAutoPreviewSettings,
-        availableEfforts: [String]
+        availableEfforts: [String],
+        availableModels: [AgentModel]? = nil
     ) {
         self.selectedAgentProvider = selectedAgentProvider
         self.selectedModel = selectedModel
@@ -194,6 +303,35 @@ public struct MobileSettingsSnapshot: Codable, Sendable, Equatable {
         self.archiveRetentionDays = archiveRetentionDays
         self.autoPreviewSettings = autoPreviewSettings
         self.availableEfforts = availableEfforts
+        self.availableModels = availableModels
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case selectedAgentProvider, selectedModel, selectedACPClientId, selectedEffort
+        case permissionMode, summarizationProvider, summarizationProviderDisplayName
+        case openAISummarizationEndpoint, openAISummarizationModel
+        case notificationsEnabled, focusMode, autoArchiveEnabled, archiveRetentionDays
+        case autoPreviewSettings, availableEfforts, availableModels
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        selectedAgentProvider = try c.decode(AgentProvider.self, forKey: .selectedAgentProvider)
+        selectedModel = try c.decode(String.self, forKey: .selectedModel)
+        selectedACPClientId = try c.decode(String.self, forKey: .selectedACPClientId)
+        selectedEffort = try c.decode(String.self, forKey: .selectedEffort)
+        permissionMode = try c.decode(PermissionMode.self, forKey: .permissionMode)
+        summarizationProvider = try c.decode(String.self, forKey: .summarizationProvider)
+        summarizationProviderDisplayName = try c.decode(String.self, forKey: .summarizationProviderDisplayName)
+        openAISummarizationEndpoint = try c.decode(String.self, forKey: .openAISummarizationEndpoint)
+        openAISummarizationModel = try c.decode(String.self, forKey: .openAISummarizationModel)
+        notificationsEnabled = try c.decode(Bool.self, forKey: .notificationsEnabled)
+        focusMode = try c.decode(Bool.self, forKey: .focusMode)
+        autoArchiveEnabled = try c.decode(Bool.self, forKey: .autoArchiveEnabled)
+        archiveRetentionDays = try c.decode(Int.self, forKey: .archiveRetentionDays)
+        autoPreviewSettings = try c.decode(AttachmentAutoPreviewSettings.self, forKey: .autoPreviewSettings)
+        availableEfforts = try c.decode([String].self, forKey: .availableEfforts)
+        availableModels = try c.decodeIfPresent([AgentModel].self, forKey: .availableModels)
     }
 }
 
@@ -261,6 +399,10 @@ public struct SessionSummary: Codable, Sendable, Identifiable {
     public let isStreaming: Bool
     public let attention: SessionAttentionKind?
     public let progress: SessionProgressSnapshot?
+    /// Messages waiting to be sent once the active turn finishes. Mirrored from
+    /// the desktop's per-session queue (threadStore). `nil` when the summary
+    /// comes from an older desktop that doesn't know about queue sync.
+    public let queuedMessages: [QueuedUserMessage]?
 
     public init(
         id: String,
@@ -271,7 +413,8 @@ public struct SessionSummary: Codable, Sendable, Identifiable {
         isArchived: Bool,
         isStreaming: Bool = false,
         attention: SessionAttentionKind? = nil,
-        progress: SessionProgressSnapshot? = nil
+        progress: SessionProgressSnapshot? = nil,
+        queuedMessages: [QueuedUserMessage]? = nil
     ) {
         self.id = id
         self.projectId = projectId
@@ -282,10 +425,11 @@ public struct SessionSummary: Codable, Sendable, Identifiable {
         self.isStreaming = isStreaming
         self.attention = attention
         self.progress = progress
+        self.queuedMessages = queuedMessages
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, projectId, title, updatedAt, isPinned, isArchived, isStreaming, attention, progress
+        case id, projectId, title, updatedAt, isPinned, isArchived, isStreaming, attention, progress, queuedMessages
     }
 
     public init(from decoder: Decoder) throws {
@@ -299,6 +443,7 @@ public struct SessionSummary: Codable, Sendable, Identifiable {
         isStreaming = try container.decodeIfPresent(Bool.self, forKey: .isStreaming) ?? false
         attention = try container.decodeIfPresent(SessionAttentionKind.self, forKey: .attention)
         progress = try container.decodeIfPresent(SessionProgressSnapshot.self, forKey: .progress)
+        queuedMessages = try container.decodeIfPresent([QueuedUserMessage].self, forKey: .queuedMessages)
     }
 }
 
@@ -350,6 +495,36 @@ public struct UserMessagePayload: Codable, Sendable {
     }
 }
 
+public struct CancelStreamPayload: Codable, Sendable {
+    public let sessionID: String
+    public init(sessionID: String) {
+        self.sessionID = sessionID
+    }
+}
+
+/// A user message that's waiting for the active turn to finish before being
+/// sent to the agent. Mirrored to mobile via `SessionSummary.queuedMessages`.
+public struct QueuedUserMessage: Codable, Sendable, Identifiable, Equatable {
+    public let id: UUID
+    public let text: String
+    public init(id: UUID, text: String) {
+        self.id = id
+        self.text = text
+    }
+}
+
+/// Asks the desktop to drop the queued message from threadStore. Used by the
+/// mobile UI when the user swipes a queued row away. The desktop never tries
+/// to send the message after this point.
+public struct RemoveQueuedMessagePayload: Codable, Sendable {
+    public let sessionID: String
+    public let queuedMessageID: UUID
+    public init(sessionID: String, queuedMessageID: UUID) {
+        self.sessionID = sessionID
+        self.queuedMessageID = queuedMessageID
+    }
+}
+
 public struct NewSessionRequestPayload: Codable, Sendable {
     public let clientRequestID: UUID
     public let projectID: UUID
@@ -358,6 +533,58 @@ public struct NewSessionRequestPayload: Codable, Sendable {
         self.clientRequestID = clientRequestID
         self.projectID = projectID
         self.initialText = initialText
+    }
+}
+
+/// Mobile-initiated search across all threads and projects. The desktop is
+/// the authoritative source of session content, so the heavy lifting (semantic
+/// matching, title/project lookups) lives there; mobile just renders results.
+public struct SearchRequestPayload: Codable, Sendable {
+    public let clientRequestID: UUID
+    public let query: String
+    public let limit: Int
+    public init(clientRequestID: UUID = UUID(), query: String, limit: Int = 25) {
+        self.clientRequestID = clientRequestID
+        self.query = query
+        self.limit = limit
+    }
+}
+
+public struct SearchHit: Codable, Sendable, Identifiable, Equatable {
+    public let sessionID: String
+    public let projectID: UUID
+    public let title: String
+    public let snippet: String
+    public let updatedAt: Date
+    public let score: Float
+    public var id: String { sessionID }
+    public init(
+        sessionID: String,
+        projectID: UUID,
+        title: String,
+        snippet: String,
+        updatedAt: Date,
+        score: Float
+    ) {
+        self.sessionID = sessionID
+        self.projectID = projectID
+        self.title = title
+        self.snippet = snippet
+        self.updatedAt = updatedAt
+        self.score = score
+    }
+}
+
+public struct SearchResultsPayload: Codable, Sendable {
+    public let clientRequestID: UUID
+    public let query: String
+    public let projectIDs: [UUID]
+    public let threadHits: [SearchHit]
+    public init(clientRequestID: UUID, query: String, projectIDs: [UUID], threadHits: [SearchHit]) {
+        self.clientRequestID = clientRequestID
+        self.query = query
+        self.projectIDs = projectIDs
+        self.threadHits = threadHits
     }
 }
 
@@ -442,10 +669,16 @@ extension Payload: Codable {
         case sessionUpdate = "session_update"
         case subscribeSession = "subscribe_session"
         case userMessage = "user_message"
+        case cancelStream = "cancel_stream"
+        case removeQueuedMessage = "remove_queued_message"
         case newSessionRequest = "new_session_request"
+        case searchRequest = "search_request"
+        case searchResults = "search_results"
         case notification
         case permissionRequest = "permission_request"
         case permissionResponse = "permission_response"
+        case branchOpRequest = "branch_op_request"
+        case branchOpResult = "branch_op_result"
         case ping
         case pong
     }
@@ -468,10 +701,16 @@ extension Payload: Codable {
         case .sessionUpdate: self = .sessionUpdate(try container.decode(SessionUpdatePayload.self, forKey: .data))
         case .subscribeSession: self = .subscribeSession(try container.decode(SubscribeSessionPayload.self, forKey: .data))
         case .userMessage: self = .userMessage(try container.decode(UserMessagePayload.self, forKey: .data))
+        case .cancelStream: self = .cancelStream(try container.decode(CancelStreamPayload.self, forKey: .data))
+        case .removeQueuedMessage: self = .removeQueuedMessage(try container.decode(RemoveQueuedMessagePayload.self, forKey: .data))
         case .newSessionRequest: self = .newSessionRequest(try container.decode(NewSessionRequestPayload.self, forKey: .data))
+        case .searchRequest: self = .searchRequest(try container.decode(SearchRequestPayload.self, forKey: .data))
+        case .searchResults: self = .searchResults(try container.decode(SearchResultsPayload.self, forKey: .data))
         case .notification: self = .notification(try container.decode(NotificationPayload.self, forKey: .data))
         case .permissionRequest: self = .permissionRequest(try container.decode(PermissionRequestPayload.self, forKey: .data))
         case .permissionResponse: self = .permissionResponse(try container.decode(PermissionResponsePayload.self, forKey: .data))
+        case .branchOpRequest: self = .branchOpRequest(try container.decode(BranchOpRequestPayload.self, forKey: .data))
+        case .branchOpResult: self = .branchOpResult(try container.decode(BranchOpResultPayload.self, forKey: .data))
         case .ping: self = .ping(try container.decode(PingPayload.self, forKey: .data))
         case .pong: self = .pong(try container.decode(PongPayload.self, forKey: .data))
         }
@@ -490,10 +729,16 @@ extension Payload: Codable {
         case .sessionUpdate(let p): try container.encode(TypeKey.sessionUpdate.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .subscribeSession(let p): try container.encode(TypeKey.subscribeSession.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .userMessage(let p): try container.encode(TypeKey.userMessage.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .cancelStream(let p): try container.encode(TypeKey.cancelStream.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .removeQueuedMessage(let p): try container.encode(TypeKey.removeQueuedMessage.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .newSessionRequest(let p): try container.encode(TypeKey.newSessionRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .searchRequest(let p): try container.encode(TypeKey.searchRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .searchResults(let p): try container.encode(TypeKey.searchResults.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .notification(let p): try container.encode(TypeKey.notification.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .permissionRequest(let p): try container.encode(TypeKey.permissionRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .permissionResponse(let p): try container.encode(TypeKey.permissionResponse.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .branchOpRequest(let p): try container.encode(TypeKey.branchOpRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .branchOpResult(let p): try container.encode(TypeKey.branchOpResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .ping(let p): try container.encode(TypeKey.ping.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .pong(let p): try container.encode(TypeKey.pong.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .unknown(let type): try container.encode(type, forKey: .type)

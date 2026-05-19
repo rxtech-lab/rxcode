@@ -29,9 +29,25 @@ final class MobileAppState: ObservableObject {
     @Published var branchBriefings: [MobileBranchBriefing] = []
     @Published var threadSummaries: [MobileThreadSummary] = []
     @Published var desktopSettings: MobileSettingsSnapshot?
+    /// Current git branch per project, mirrored from the desktop's snapshot.
+    @Published var projectBranches: [UUID: String] = [:]
+    /// Local branch list per project, mirrored from the desktop's snapshot.
+    @Published var availableBranchesByProject: [UUID: [String]] = [:]
+    /// IDs of branch operations awaiting a `BranchOpResultPayload`. Used so the
+    /// UI can render a spinner on the chip while the desktop runs git.
+    @Published var inFlightBranchOps: Set<UUID> = []
+    /// Last branch op error message, surfaced once and cleared by the UI.
+    @Published var lastBranchOpError: String?
     @Published var messagesBySession: [String: [ChatMessage]] = [:]
     @Published var activeSessionID: String?
     @Published var pendingPermission: PermissionRequestPayload?
+
+    @Published var searchQuery: String = ""
+    @Published var searchProjectIDs: [UUID] = []
+    @Published var searchThreadHits: [SearchHit] = []
+    @Published var isSearching: Bool = false
+    private var pendingSearchID: UUID?
+    private var searchDebounceTask: Task<Void, Never>?
 
     private var identity: DeviceIdentity
     private var client: SyncClient
@@ -234,10 +250,64 @@ final class MobileAppState: ObservableObject {
         try? await client.send(.userMessage(payload), toHex: pairedDesktopPubkey)
     }
 
+    func cancelStream(sessionID: String) async {
+        guard isPaired else { return }
+        let payload = CancelStreamPayload(sessionID: sessionID)
+        try? await client.send(.cancelStream(payload), toHex: pairedDesktopPubkey)
+    }
+
+    func removeQueuedMessage(sessionID: String, queuedID: UUID) async {
+        guard isPaired else { return }
+        let payload = RemoveQueuedMessagePayload(sessionID: sessionID, queuedMessageID: queuedID)
+        try? await client.send(.removeQueuedMessage(payload), toHex: pairedDesktopPubkey)
+    }
+
+    /// True iff the desktop reports the given session as actively streaming.
+    func isSessionStreaming(_ sessionID: String) -> Bool {
+        sessions.first(where: { $0.id == sessionID })?.isStreaming ?? false
+    }
+
+    /// Mirror of the desktop's per-session queue, surfaced via `SessionSummary`.
+    func queuedMessages(sessionID: String) -> [QueuedUserMessage] {
+        sessions.first(where: { $0.id == sessionID })?.queuedMessages ?? []
+    }
+
     func requestNewSession(projectID: UUID, initialText: String? = nil) async {
         guard isPaired else { return }
         let payload = NewSessionRequestPayload(projectID: projectID, initialText: initialText)
         try? await client.send(.newSessionRequest(payload), toHex: pairedDesktopPubkey)
+    }
+
+    /// Tell the desktop to switch the project to an existing local branch.
+    /// Returns immediately; the eventual snapshot broadcast carries the new
+    /// `currentBranch` and any error surfaces via `lastBranchOpError`.
+    func switchProjectBranch(projectID: UUID, branch: String) async {
+        guard isPaired else { return }
+        let request = BranchOpRequestPayload(
+            projectID: projectID,
+            operation: .switchExisting,
+            branch: branch
+        )
+        inFlightBranchOps.insert(request.clientRequestID)
+        try? await client.send(.branchOpRequest(request), toHex: pairedDesktopPubkey)
+    }
+
+    /// Tell the desktop to create a new branch + worktree off the current
+    /// branch. The desktop parks the worktree against the project so the next
+    /// new-thread request for this project spawns into it.
+    func createProjectBranch(projectID: UUID, branch: String) async {
+        guard isPaired else { return }
+        let request = BranchOpRequestPayload(
+            projectID: projectID,
+            operation: .createNew,
+            branch: branch
+        )
+        inFlightBranchOps.insert(request.clientRequestID)
+        try? await client.send(.branchOpRequest(request), toHex: pairedDesktopPubkey)
+    }
+
+    func clearBranchOpError() {
+        lastBranchOpError = nil
     }
 
     func subscribe(to sessionID: String?) async {
@@ -268,6 +338,38 @@ final class MobileAppState: ObservableObject {
         await requestSnapshot()
     }
 
+    /// Update the search query and dispatch a debounced search request to the
+    /// paired desktop. Empty queries clear results without hitting the network.
+    /// Stale requests are discarded by `clientRequestID`.
+    func updateSearchQuery(_ query: String) {
+        searchQuery = query
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        searchDebounceTask?.cancel()
+        guard !trimmed.isEmpty else {
+            pendingSearchID = nil
+            isSearching = false
+            searchProjectIDs = []
+            searchThreadHits = []
+            return
+        }
+        guard isPaired else {
+            isSearching = false
+            searchProjectIDs = []
+            searchThreadHits = []
+            return
+        }
+        let id = UUID()
+        pendingSearchID = id
+        isSearching = true
+        searchDebounceTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            guard !Task.isCancelled, let self else { return }
+            guard self.pendingSearchID == id else { return }
+            let payload = SearchRequestPayload(clientRequestID: id, query: trimmed, limit: 25)
+            try? await self.client.send(.searchRequest(payload), toHex: self.pairedDesktopPubkey)
+        }
+    }
+
     func reportAPNsToken(hex: String, environment: String) {
         logger.info("[APNs] received token from app delegate tokenPrefix=\(String(hex.prefix(12)), privacy: .public) environment=\(environment, privacy: .public)")
         apnsTokenHex = hex
@@ -295,6 +397,10 @@ final class MobileAppState: ObservableObject {
         branchBriefings = []
         threadSummaries = []
         desktopSettings = nil
+        projectBranches = [:]
+        availableBranchesByProject = [:]
+        inFlightBranchOps = []
+        lastBranchOpError = nil
         messagesBySession = [:]
         activeSessionID = nil
         pendingPermission = nil
@@ -351,6 +457,15 @@ final class MobileAppState: ObservableObject {
             branchBriefings = snap.branchBriefings ?? []
             threadSummaries = snap.threadSummaries ?? []
             desktopSettings = snap.settings
+            if let branches = snap.projectBranches {
+                projectBranches = Dictionary(uniqueKeysWithValues: branches.map { ($0.projectId, $0.currentBranch) })
+                availableBranchesByProject = Dictionary(
+                    uniqueKeysWithValues: branches.compactMap { info -> (UUID, [String])? in
+                        guard let list = info.availableBranches else { return nil }
+                        return (info.projectId, list)
+                    }
+                )
+            }
             if let active = snap.activeSessionID {
                 if let messages = snap.activeSessionMessages {
                     messagesBySession[active] = messages
@@ -363,10 +478,21 @@ final class MobileAppState: ObservableObject {
             applySessionUpdate(update)
         case .permissionRequest(let req):
             pendingPermission = req
+            MobileHaptics.attentionNeeded()
         case .notification:
             // Foreground notifications arriving over WS — iOS won't show a
             // banner automatically; UI surfaces these in a toast/badge.
             break
+        case .searchResults(let results):
+            guard let pending = pendingSearchID, results.clientRequestID == pending else { return }
+            searchProjectIDs = results.projectIDs
+            searchThreadHits = results.threadHits
+            isSearching = false
+        case .branchOpResult(let result):
+            inFlightBranchOps.remove(result.clientRequestID)
+            if !result.ok {
+                lastBranchOpError = result.errorMessage ?? "Branch operation failed."
+            }
         case .ping:
             Task { try? await self.client.send(.pong(PongPayload()), toHex: inbound.fromHex) }
         default:
@@ -403,7 +529,14 @@ final class MobileAppState: ObservableObject {
                 list[idx] = m
                 messagesBySession[update.sessionID] = list
             }
-        case .streamingStarted, .streamingFinished, .statusChanged:
+        case .streamingFinished:
+            // Soft success cue, but only when the user is actually looking at
+            // (or last looked at) the session that just finished. Avoids
+            // buzzing on background-session completions.
+            if update.sessionID == activeSessionID {
+                MobileHaptics.streamFinished()
+            }
+        case .streamingStarted, .statusChanged:
             // Surface as a flag on the relevant session row.
             break
         }
@@ -433,7 +566,8 @@ final class MobileAppState: ObservableObject {
             isArchived: current.isArchived,
             isStreaming: isStreaming,
             attention: current.attention,
-            progress: current.progress
+            progress: current.progress,
+            queuedMessages: current.queuedMessages
         )
     }
 
@@ -512,7 +646,8 @@ final class MobileAppState: ObservableObject {
             autoArchiveEnabled: update.autoArchiveEnabled ?? current.autoArchiveEnabled,
             archiveRetentionDays: update.archiveRetentionDays ?? current.archiveRetentionDays,
             autoPreviewSettings: update.autoPreviewSettings ?? current.autoPreviewSettings,
-            availableEfforts: current.availableEfforts
+            availableEfforts: current.availableEfforts,
+            availableModels: current.availableModels
         )
     }
 
@@ -585,5 +720,16 @@ enum MobileHaptics {
 
     static func connectionError() {
         UINotificationFeedbackGenerator().notificationOccurred(.error)
+    }
+
+    /// Soft success cue when the desktop agent finishes a turn.
+    static func streamFinished() {
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+    }
+
+    /// Warning cue for things that block progress until the user acts:
+    /// permission prompts, AskUserQuestion, and ExitPlanMode confirmation.
+    static func attentionNeeded() {
+        UINotificationFeedbackGenerator().notificationOccurred(.warning)
     }
 }

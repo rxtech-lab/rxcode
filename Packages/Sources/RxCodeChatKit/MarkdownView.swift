@@ -629,15 +629,25 @@ struct NativeChatTextView: NSViewRepresentable {
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView textView: InlineCodeTextView, context: Context) -> CGSize? {
-        let width = proposal.width ?? 500
         guard let layoutManager = textView.layoutManager,
               let textContainer = textView.textContainer else {
-            return CGSize(width: width, height: 0)
+            return CGSize(width: proposal.width ?? 0, height: 0)
         }
-        textContainer.containerSize = NSSize(width: width, height: CGFloat.greatestFiniteMagnitude)
+        textContainer.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        layoutManager.ensureLayout(for: textContainer)
+        let idealWidth = ceil(layoutManager.usedRect(for: textContainer).width)
+
+        let resolvedWidth: CGFloat
+        if let proposed = proposal.width, proposed.isFinite {
+            resolvedWidth = min(proposed, idealWidth)
+        } else {
+            resolvedWidth = idealWidth
+        }
+
+        textContainer.containerSize = NSSize(width: resolvedWidth, height: CGFloat.greatestFiniteMagnitude)
         layoutManager.ensureLayout(for: textContainer)
         let usedRect = layoutManager.usedRect(for: textContainer)
-        return CGSize(width: width, height: ceil(usedRect.height))
+        return CGSize(width: resolvedWidth, height: ceil(usedRect.height))
     }
 
     private static func nsAttributedString(

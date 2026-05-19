@@ -373,10 +373,31 @@ final class MobileSyncService: ObservableObject {
                 object: nil,
                 userInfo: ["from": inbound.fromHex, "payload": msg]
             )
+        case .cancelStream(let cancel):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "cancel_stream") else { return }
+            NotificationCenter.default.post(
+                name: .mobileSyncCancelStreamRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": cancel]
+            )
+        case .removeQueuedMessage(let payload):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "remove_queued_message") else { return }
+            NotificationCenter.default.post(
+                name: .mobileSyncRemoveQueuedRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": payload]
+            )
         case .newSessionRequest(let req):
             guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "new_session_request") else { return }
             NotificationCenter.default.post(
                 name: .mobileSyncNewSessionRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": req]
+            )
+        case .searchRequest(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "search_request") else { return }
+            NotificationCenter.default.post(
+                name: .mobileSyncSearchRequested,
                 object: nil,
                 userInfo: ["from": inbound.fromHex, "payload": req]
             )
@@ -396,6 +417,13 @@ final class MobileSyncService: ObservableObject {
                 name: .mobileSyncPermissionResponse,
                 object: nil,
                 userInfo: ["payload": resp]
+            )
+        case .branchOpRequest(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "branch_op_request") else { return }
+            NotificationCenter.default.post(
+                name: .mobileSyncBranchOpRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": req]
             )
         case .ping:
             guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "ping") else { return }
@@ -536,7 +564,11 @@ private struct APNsPushResponse: Codable {
 extension Notification.Name {
     static let mobileSyncSnapshotRequested = Notification.Name("mobileSync.snapshotRequested")
     static let mobileSyncUserMessageReceived = Notification.Name("mobileSync.userMessageReceived")
+    static let mobileSyncCancelStreamRequested = Notification.Name("mobileSync.cancelStreamRequested")
+    static let mobileSyncRemoveQueuedRequested = Notification.Name("mobileSync.removeQueuedRequested")
     static let mobileSyncNewSessionRequested = Notification.Name("mobileSync.newSessionRequested")
+    static let mobileSyncSearchRequested = Notification.Name("mobileSync.searchRequested")
     static let mobileSyncSettingsUpdateReceived = Notification.Name("mobileSync.settingsUpdateReceived")
     static let mobileSyncPermissionResponse = Notification.Name("mobileSync.permissionResponse")
+    static let mobileSyncBranchOpRequested = Notification.Name("mobileSync.branchOpRequested")
 }

@@ -1,10 +1,9 @@
 import SwiftUI
-import RxCodeCore
 
 /// Animates a text swap by erasing the current value character-by-character
 /// (cursor moving right→left) and then typing the new value left→right.
 /// No animation runs on the first appearance — the initial value is shown immediately.
-struct TypewriterTitleText: View {
+public struct TypewriterTitleText: View {
     let title: String
     var charInterval: Duration = .milliseconds(18)
     var pauseBetween: Duration = .milliseconds(120)
@@ -15,7 +14,19 @@ struct TypewriterTitleText: View {
     @State private var hasAppeared: Bool = false
     @State private var animationTask: Task<Void, Never>?
 
-    var body: some View {
+    public init(
+        title: String,
+        charInterval: Duration = .milliseconds(18),
+        pauseBetween: Duration = .milliseconds(120),
+        holdAfter: Duration = .milliseconds(180)
+    ) {
+        self.title = title
+        self.charInterval = charInterval
+        self.pauseBetween = pauseBetween
+        self.holdAfter = holdAfter
+    }
+
+    public var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 0) {
             Text(displayed)
             if isAnimating {

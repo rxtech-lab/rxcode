@@ -25,6 +25,8 @@ struct SessionsList: View {
     let projectID: UUID
     @Binding var selected: String?
     var usesSelection = true
+    @State private var searchText = ""
+    @State private var showingNewThread = false
 
     var body: some View {
         list
@@ -32,10 +34,28 @@ struct SessionsList: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    selected = MobileDraftSessionID.make(projectID: projectID)
+                    showingNewThread = true
                 } label: {
                     Image(systemName: "square.and.pencil")
                 }
+            }
+        }
+        .sheet(isPresented: $showingNewThread) {
+            NewThreadSheet(projectID: projectID) { newSessionID in
+                selected = newSessionID
+            }
+            .environmentObject(state)
+        }
+        .searchable(
+            text: $searchText,
+            placement: .navigationBarDrawer(displayMode: .automatic),
+            prompt: "Search threads"
+        )
+        .autocorrectionDisabled(true)
+        .textInputAutocapitalization(.never)
+        .overlay {
+            if filtered.isEmpty && !searchText.isEmpty {
+                ContentUnavailableView.search(text: searchText)
             }
         }
     }
@@ -55,61 +75,39 @@ struct SessionsList: View {
 
     private func sessionLink(_ session: SessionSummary) -> some View {
         NavigationLink(value: session.id) {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
-                    if let attention = session.attention {
-                        statusDot(for: attention)
-                    }
-
-                    Text(displayTitle(for: session))
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-
-                    Spacer(minLength: 6)
-
-                    if session.isPinned {
-                        Image(systemName: "pin.fill")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                    }
-
-                    if session.isStreaming {
-                        compactProgress(for: session.progress)
-                    } else {
-                        Text(session.updatedAt.formatted(.relative(presentation: .named)))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
+            HStack(spacing: 6) {
+                if let attention = session.attention {
+                    statusDot(for: attention)
                 }
 
-                if session.isStreaming {
-                    progressBar(for: session.progress)
-                } else if let attention = session.attention {
-                    Text(attention == .question ? "Question pending" : "Permission pending")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                SessionSidebarRow(
+                    title: rowTitle(for: session),
+                    updatedAt: session.updatedAt,
+                    isPinned: session.isPinned,
+                    isBackgroundStreaming: session.isStreaming
+                )
             }
-            .padding(.vertical, 3)
         }
     }
 
     private var filtered: [SessionSummary] {
-        state.sessions
-            .filter { $0.projectId == projectID && !$0.isArchived }
+        let query = searchText.lowercased()
+        return state.sessions
+            .filter { session in
+                guard session.projectId == projectID, !session.isArchived else { return false }
+                if query.isEmpty { return true }
+                let title = ChatSession.stripAttachmentMarkers(from: session.title).lowercased()
+                return title.contains(query)
+            }
             .sorted { lhs, rhs in
                 if lhs.isPinned != rhs.isPinned { return lhs.isPinned && !rhs.isPinned }
                 return lhs.updatedAt > rhs.updatedAt
             }
     }
 
-    private func displayTitle(for session: SessionSummary) -> String {
+    private func rowTitle(for session: SessionSummary) -> String {
         let cleaned = ChatSession.stripAttachmentMarkers(from: session.title)
-        let resolved = cleaned.isEmpty ? ChatSession.defaultTitle : cleaned
-        return resolved.prefix(1).uppercased() + resolved.dropFirst()
+        return cleaned.isEmpty ? ChatSession.defaultTitle : cleaned
     }
 
     private func statusDot(for attention: SessionAttentionKind) -> some View {
@@ -117,29 +115,5 @@ struct SessionsList: View {
             .fill(attention == .question ? Color.yellow : Color.orange)
             .frame(width: 7, height: 7)
             .accessibilityLabel(attention == .question ? "Question pending" : "Permission pending")
-    }
-
-    @ViewBuilder
-    private func compactProgress(for progress: SessionProgressSnapshot?) -> some View {
-        if let progress, progress.total > 0 {
-            Text("\(progress.done)/\(progress.total)")
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
-        } else {
-            ProgressView()
-                .controlSize(.small)
-        }
-    }
-
-    @ViewBuilder
-    private func progressBar(for progress: SessionProgressSnapshot?) -> some View {
-        if let progress, progress.total > 0 {
-            ProgressView(value: Double(progress.done), total: Double(progress.total))
-                .tint(progress.done == progress.total ? .green : .accentColor)
-                .accessibilityLabel("Todos \(progress.done) of \(progress.total)")
-        } else {
-            ProgressView()
-                .accessibilityLabel("Response in progress")
-        }
     }
 }

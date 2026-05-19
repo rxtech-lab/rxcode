@@ -132,6 +132,16 @@ func pushHandler(sender *PushSender) http.HandlerFunc {
 			notif.CollapseID = req.CollapseID
 		}
 
+		log.Printf(
+			"apns push send: device=%s category=%q collapse_id=%q collapse_len=%d payload_bytes=%d enc_bytes=%d",
+			short(req.DeviceToken),
+			req.Category,
+			req.CollapseID,
+			len(req.CollapseID),
+			len(raw),
+			len(req.EncryptedAlertB64),
+		)
+
 		res, err := sender.client.Push(notif)
 		if err != nil {
 			log.Printf(
@@ -145,7 +155,17 @@ func pushHandler(sender *PushSender) http.HandlerFunc {
 			http.Error(w, "apns push failed", http.StatusBadGateway)
 			return
 		}
-		if !res.Sent() {
+		if res.Sent() {
+			log.Printf(
+				"apns push sent: status=%d apns_id=%s device=%s category=%q collapse_id=%q collapse_len=%d",
+				res.StatusCode,
+				res.ApnsID,
+				short(req.DeviceToken),
+				req.Category,
+				req.CollapseID,
+				len(req.CollapseID),
+			)
+		} else {
 			log.Printf(
 				"apns push rejected: status=%d reason=%q apns_id=%s device=%s category=%q collapse_id=%q collapse_len=%d",
 				res.StatusCode,

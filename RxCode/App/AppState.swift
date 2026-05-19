@@ -944,7 +944,32 @@ final class AppState {
     let runService = RunService()
     let ideMCPServer = IDEMCPServer()
     private var mobileSyncObservers: [NSObjectProtocol] = []
+
+    /// Weak refs to every `WindowState` that's been wired up via `setupChatBridge`.
+    /// Used by AppState-driven queue maintenance (e.g. `flushNextQueuedMessageIfNeeded`)
+    /// to scrub stale entries out of each window's in-memory queue mirror.
+    private struct WeakWindowRef { weak var window: WindowState? }
+    private var liveWindowRefs: [WeakWindowRef] = []
+
+    private func registerLiveWindow(_ window: WindowState) {
+        liveWindowRefs.removeAll { $0.window == nil || $0.window === window }
+        liveWindowRefs.append(WeakWindowRef(window: window))
+    }
+
+    private func registeredWindows() -> [WindowState] {
+        liveWindowRefs.removeAll { $0.window == nil }
+        return liveWindowRefs.compactMap(\.window)
+    }
     private var mobileSnapshotBroadcastTask: Task<Void, Never>?
+
+    /// Worktrees freshly created by a mobile "create branch" request, keyed by
+    /// project. Consumed by the next mobile new-session request for the same
+    /// project so the thread spawns into the new worktree.
+    private struct MobilePendingWorktree {
+        let path: String
+        let branch: String
+    }
+    private var mobilePendingWorktrees: [UUID: MobilePendingWorktree] = [:]
 
     // MARK: - Run Profiles
 
@@ -1086,6 +1111,32 @@ final class AppState {
         }
         mobileSyncObservers.append(userMessageObserver)
 
+        let cancelStreamObserver = center.addObserver(
+            forName: .mobileSyncCancelStreamRequested,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let cancel = notification.userInfo?["payload"] as? CancelStreamPayload
+            else { return }
+            Task { @MainActor [weak self] in
+                await self?.handleMobileCancelStream(cancel)
+            }
+        }
+        mobileSyncObservers.append(cancelStreamObserver)
+
+        let removeQueuedObserver = center.addObserver(
+            forName: .mobileSyncRemoveQueuedRequested,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let payload = notification.userInfo?["payload"] as? RemoveQueuedMessagePayload
+            else { return }
+            Task { @MainActor [weak self] in
+                self?.handleMobileRemoveQueuedMessage(payload)
+            }
+        }
+        mobileSyncObservers.append(removeQueuedObserver)
+
         let newSessionObserver = center.addObserver(
             forName: .mobileSyncNewSessionRequested,
             object: nil,
@@ -1099,6 +1150,34 @@ final class AppState {
             }
         }
         mobileSyncObservers.append(newSessionObserver)
+
+        let searchObserver = center.addObserver(
+            forName: .mobileSyncSearchRequested,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let fromHex = notification.userInfo?["from"] as? String,
+                  let request = notification.userInfo?["payload"] as? SearchRequestPayload
+            else { return }
+            Task { @MainActor [weak self] in
+                await self?.handleMobileSearchRequest(request, fromHex: fromHex)
+            }
+        }
+        mobileSyncObservers.append(searchObserver)
+
+        let branchOpObserver = center.addObserver(
+            forName: .mobileSyncBranchOpRequested,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let fromHex = notification.userInfo?["from"] as? String,
+                  let request = notification.userInfo?["payload"] as? BranchOpRequestPayload
+            else { return }
+            Task { @MainActor [weak self] in
+                await self?.handleMobileBranchOpRequest(request, fromHex: fromHex)
+            }
+        }
+        mobileSyncObservers.append(branchOpObserver)
 
         observeMobileSnapshotInputs()
     }
@@ -1143,8 +1222,95 @@ final class AppState {
 
         let window = WindowState()
         window.selectedProject = project
+        if let pending = mobilePendingWorktrees.removeValue(forKey: project.id) {
+            window.pendingWorktreePath = pending.path
+            window.pendingWorktreeBranch = pending.branch
+        }
         _ = await sendPrompt(initialText, displayText: initialText, in: window)
         await sendMobileSnapshot(toHex: fromHex, activeSessionID: window.currentSessionId)
+    }
+
+    private func handleMobileBranchOpRequest(_ request: BranchOpRequestPayload, fromHex: String) async {
+        guard let project = projects.first(where: { $0.id == request.projectID }) else {
+            await replyBranchOpResult(
+                request: request,
+                ok: false,
+                errorMessage: "Project not found on desktop.",
+                toHex: fromHex
+            )
+            return
+        }
+
+        let trimmed = request.branch.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            await replyBranchOpResult(
+                request: request,
+                ok: false,
+                errorMessage: "Branch name is required.",
+                toHex: fromHex
+            )
+            return
+        }
+
+        let window = WindowState()
+        window.selectedProject = project
+
+        do {
+            switch request.operation {
+            case .switchExisting:
+                try await switchToExistingBranch(trimmed, in: window)
+            case .createNew:
+                try await attachWorktree(branch: trimmed, in: window)
+                if let path = window.pendingWorktreePath,
+                   let branch = window.pendingWorktreeBranch
+                {
+                    mobilePendingWorktrees[project.id] = MobilePendingWorktree(path: path, branch: branch)
+                }
+            }
+        } catch {
+            await replyBranchOpResult(
+                request: request,
+                ok: false,
+                errorMessage: branchOpErrorMessage(error),
+                toHex: fromHex
+            )
+            return
+        }
+
+        await replyBranchOpResult(request: request, ok: true, errorMessage: nil, toHex: fromHex)
+        scheduleMobileSnapshotBroadcast()
+    }
+
+    private func replyBranchOpResult(
+        request: BranchOpRequestPayload,
+        ok: Bool,
+        errorMessage: String?,
+        toHex hex: String
+    ) async {
+        let result = BranchOpResultPayload(
+            clientRequestID: request.clientRequestID,
+            projectID: request.projectID,
+            operation: request.operation,
+            branch: request.branch,
+            ok: ok,
+            errorMessage: errorMessage
+        )
+        await MobileSyncService.shared.send(.branchOpResult(result), toHex: hex)
+    }
+
+    private func branchOpErrorMessage(_ error: Error) -> String {
+        if let werr = error as? GitWorktreeService.WorktreeError {
+            return werr.description
+        }
+        return error.localizedDescription
+    }
+
+    private func handleMobileCancelStream(_ cancel: CancelStreamPayload) async {
+        let sessionID = cancel.sessionID
+        guard sessionStates[sessionID]?.isStreaming == true else { return }
+        let window = WindowState()
+        window.currentSessionId = sessionID
+        await cancelStreaming(in: window)
     }
 
     private func handleMobileUserMessage(_ message: UserMessagePayload, fromHex: String) async {
@@ -1163,6 +1329,17 @@ final class AppState {
         await hydrateMobileSessionIfNeeded(summary: summary, project: project)
         updateMobilePlaceholderTitleIfNeeded(sessionID: sessionID, firstUserMessage: text)
 
+        // If a turn is already streaming, the mobile message goes into the
+        // shared (threadStore-backed) queue so it flushes once the current turn
+        // ends — same behavior as the macOS InputBarView's enqueue path.
+        if sessionStates[sessionID]?.isStreaming == true {
+            let queued = QueuedMessage(text: text, attachments: [])
+            threadStore.appendQueued(sessionKey: sessionID, message: queued)
+            appendToWindowQueueMirrors(sessionID: sessionID, message: queued)
+            broadcastMobileSessionStatus(sessionID: sessionID)
+            return
+        }
+
         let window = WindowState()
         window.selectedProject = project
         window.currentSessionId = sessionID
@@ -1171,6 +1348,79 @@ final class AppState {
         }
         _ = await sendPrompt(text, displayText: text, in: window)
         await sendMobileSnapshot(toHex: fromHex, activeSessionID: window.currentSessionId)
+    }
+
+    private func handleMobileRemoveQueuedMessage(_ payload: RemoveQueuedMessagePayload) {
+        threadStore.removeQueued(id: payload.queuedMessageID)
+        evictFromWindowQueueMirrors(sessionID: payload.sessionID, queuedID: payload.queuedMessageID)
+        broadcastMobileSessionStatus(sessionID: payload.sessionID)
+    }
+
+    /// Flushes the next queued message from threadStore as a new user turn.
+    /// AppState is the single auto-flush authority — both macOS-side and
+    /// mobile-side queued items are flushed here, so the two flows never
+    /// race on duplicate sends. Triggered at the tail of `finalizeStreamSession`.
+    ///
+    /// Any macOS window currently viewing the session keeps a mirror copy of
+    /// the queue in `window.messageQueue`; clear the popped entry from those
+    /// mirrors so the UI doesn't show a stale queued row.
+    private func flushNextQueuedMessageIfNeeded(sessionID: String) async {
+        let queue = threadStore.loadQueue(sessionKey: sessionID)
+        guard let next = queue.first else { return }
+        guard let summary = allSessionSummaries.first(where: { $0.id == sessionID }),
+              let project = projects.first(where: { $0.id == summary.projectId })
+        else { return }
+
+        threadStore.removeQueued(id: next.id)
+        evictFromWindowQueueMirrors(sessionID: sessionID, queuedID: next.id)
+        broadcastMobileSessionStatus(sessionID: sessionID)
+
+        let window = WindowState()
+        window.selectedProject = project
+        window.currentSessionId = sessionID
+        _ = await sendPrompt(
+            next.text,
+            displayText: next.text,
+            attachments: next.attachments,
+            in: window
+        )
+    }
+
+    /// Mirror of `enqueueMessage` for queue items appended by AppState itself
+    /// (e.g. when a mobile-sent message arrives while the session is streaming).
+    /// Every desktop window currently viewing the session keeps an in-memory
+    /// copy in `messageQueue` and `draftQueues[sessionID]`; push the new entry
+    /// into those mirrors so the chat UI shows the queued row immediately,
+    /// matching the macOS enqueue path.
+    private func appendToWindowQueueMirrors(sessionID: String, message: QueuedMessage) {
+        for window in registeredWindows() where window.currentSessionId == sessionID {
+            if !window.messageQueue.contains(where: { $0.id == message.id }) {
+                window.messageQueue.append(message)
+            }
+            var mirror = window.draftQueues[sessionID] ?? []
+            if !mirror.contains(where: { $0.id == message.id }) {
+                mirror.append(message)
+            }
+            window.draftQueues[sessionID] = mirror
+        }
+    }
+
+    /// macOS windows hold an in-memory mirror of the queue in `messageQueue` and
+    /// in `draftQueues[sessionID]`. When AppState pops an entry from threadStore
+    /// (auto-flush or remote remove), drop it from every registered window so
+    /// the UI doesn't show a phantom queued row.
+    private func evictFromWindowQueueMirrors(sessionID: String, queuedID: UUID) {
+        for window in registeredWindows() where window.currentSessionId == sessionID {
+            window.messageQueue.removeAll { $0.id == queuedID }
+            if var mirror = window.draftQueues[sessionID] {
+                mirror.removeAll { $0.id == queuedID }
+                if mirror.isEmpty {
+                    window.draftQueues.removeValue(forKey: sessionID)
+                } else {
+                    window.draftQueues[sessionID] = mirror
+                }
+            }
+        }
     }
 
     private func createMobilePlaceholderSession(project: Project, requestID: UUID) -> String {
@@ -1239,8 +1489,82 @@ final class AppState {
         }
     }
 
+    private func handleMobileSearchRequest(_ request: SearchRequestPayload, fromHex hex: String) async {
+        let trimmed = request.query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            let empty = SearchResultsPayload(
+                clientRequestID: request.clientRequestID,
+                query: request.query,
+                projectIDs: [],
+                threadHits: []
+            )
+            await MobileSyncService.shared.send(.searchResults(empty), toHex: hex)
+            return
+        }
+
+        let knownProjectIDs = Set(projects.map(\.id))
+        let summaries = allSessionSummaries.filter { knownProjectIDs.contains($0.projectId) }
+        let summaryByID = Dictionary(uniqueKeysWithValues: summaries.map { ($0.id, $0) })
+
+        let semantic = await searchService.search(trimmed, limit: max(request.limit, 1))
+
+        var threadHitByID: [String: SearchHit] = [:]
+        for group in semantic {
+            for hit in group.hits {
+                guard let summary = summaryByID[hit.threadId] else { continue }
+                let title = ChatSession.stripAttachmentMarkers(from: summary.title)
+                threadHitByID[hit.threadId] = SearchHit(
+                    sessionID: hit.threadId,
+                    projectID: hit.projectId,
+                    title: title.isEmpty ? ChatSession.defaultTitle : title,
+                    snippet: hit.snippet,
+                    updatedAt: summary.updatedAt,
+                    score: hit.score
+                )
+            }
+        }
+
+        let lowered = trimmed.lowercased()
+        for summary in summaries where threadHitByID[summary.id] == nil {
+            let cleaned = ChatSession.stripAttachmentMarkers(from: summary.title)
+            guard cleaned.lowercased().contains(lowered) else { continue }
+            let title = cleaned.isEmpty ? ChatSession.defaultTitle : cleaned
+            threadHitByID[summary.id] = SearchHit(
+                sessionID: summary.id,
+                projectID: summary.projectId,
+                title: title,
+                snippet: title,
+                updatedAt: summary.updatedAt,
+                score: 0
+            )
+        }
+
+        let threadHits = threadHitByID.values
+            .sorted { lhs, rhs in
+                if lhs.score != rhs.score { return lhs.score > rhs.score }
+                return lhs.updatedAt > rhs.updatedAt
+            }
+            .prefix(max(request.limit, 1))
+
+        let projectIDs = projects
+            .filter { project in
+                project.name.lowercased().contains(lowered)
+                    || project.path.lowercased().contains(lowered)
+            }
+            .map(\.id)
+
+        let payload = SearchResultsPayload(
+            clientRequestID: request.clientRequestID,
+            query: request.query,
+            projectIDs: projectIDs,
+            threadHits: Array(threadHits)
+        )
+        await MobileSyncService.shared.send(.searchResults(payload), toHex: hex)
+    }
+
     private func sendMobileSnapshot(toHex hex: String, activeSessionID: String?) async {
         let active = await mobileActiveSessionPayload(for: activeSessionID)
+        let branches = await mobileProjectBranches()
         let payload = SnapshotPayload(
             projects: projects,
             sessions: mobileSessionSummaries(),
@@ -1248,7 +1572,8 @@ final class AppState {
             threadSummaries: mobileThreadSummaries(),
             settings: mobileSettingsSnapshot(),
             activeSessionID: active.id,
-            activeSessionMessages: active.messages
+            activeSessionMessages: active.messages,
+            projectBranches: branches
         )
         await MobileSyncService.shared.send(.snapshot(payload), toHex: hex)
         logger.info(
@@ -1278,6 +1603,9 @@ final class AppState {
 
     private func mobileSessionSummary(from summary: ChatSession.Summary) -> RxCodeSync.SessionSummary {
         let progress = mobileProgressSnapshot(forSessionId: summary.id)
+        let queued = threadStore.loadQueue(sessionKey: summary.id).map {
+            QueuedUserMessage(id: $0.id, text: $0.text)
+        }
         return RxCodeSync.SessionSummary(
             id: summary.id,
             projectId: summary.projectId,
@@ -1287,7 +1615,8 @@ final class AppState {
             isArchived: summary.isArchived,
             isStreaming: sessionStates[summary.id]?.isStreaming ?? false,
             attention: mobileAttentionKind(forSessionId: summary.id),
-            progress: progress
+            progress: progress,
+            queuedMessages: queued
         )
     }
 
@@ -1322,6 +1651,39 @@ final class AppState {
             return .permission
         }
         return nil
+    }
+
+    /// Diff two message arrays for a session and emit `messageAppended` /
+    /// `messageUpdated` payloads for each change. Called from `updateState`
+    /// and `flushPendingUpdates` so every visible mutation reaches mobile
+    /// without per-call site instrumentation.
+    private func broadcastMobileMessageDiff(
+        sessionKey: String,
+        prev: [ChatMessage],
+        next: [ChatMessage],
+        isStreaming: Bool
+    ) {
+        guard !MobileSyncService.shared.pairedDevices.isEmpty else { return }
+        if prev.count == next.count, prev == next { return }
+        let prevById = Dictionary(uniqueKeysWithValues: prev.map { ($0.id, $0) })
+        for message in next {
+            if let old = prevById[message.id] {
+                guard old != message else { continue }
+                MobileSyncService.shared.broadcastSessionUpdate(
+                    sessionID: sessionKey,
+                    kind: .messageUpdated,
+                    message: message,
+                    isStreaming: isStreaming
+                )
+            } else {
+                MobileSyncService.shared.broadcastSessionUpdate(
+                    sessionID: sessionKey,
+                    kind: .messageAppended,
+                    message: message,
+                    isStreaming: isStreaming
+                )
+            }
+        }
     }
 
     private func broadcastMobileSessionStatus(sessionID: String, kind: SessionUpdatePayload.Kind = .statusChanged) {
@@ -1381,7 +1743,8 @@ final class AppState {
     }
 
     private func mobileSettingsSnapshot() -> MobileSettingsSnapshot {
-        MobileSettingsSnapshot(
+        let models = availableAgentModelSections().flatMap(\.models)
+        return MobileSettingsSnapshot(
             selectedAgentProvider: selectedAgentProvider,
             selectedModel: selectedModel,
             selectedACPClientId: selectedACPClientId,
@@ -1396,8 +1759,36 @@ final class AppState {
             autoArchiveEnabled: autoArchiveEnabled,
             archiveRetentionDays: archiveRetentionDays,
             autoPreviewSettings: autoPreviewSettings,
-            availableEfforts: ["auto"] + Self.availableEfforts
+            availableEfforts: ["auto"] + Self.availableEfforts,
+            availableModels: models
         )
+    }
+
+    /// Resolve the current git branch and the local branch list for each known
+    /// project. Runs the per-project git calls concurrently so a large project
+    /// list doesn't serialize on disk I/O.
+    private func mobileProjectBranches() async -> [ProjectBranchInfo] {
+        let inputs = projects.map { (id: $0.id, path: $0.path) }
+        return await withTaskGroup(of: ProjectBranchInfo?.self) { group in
+            for input in inputs {
+                group.addTask {
+                    async let current = GitHelper.currentBranch(at: input.path)
+                    async let list = GitHelper.listLocalBranches(at: input.path)
+                    guard let branch = await current else { return nil }
+                    let branches = await list
+                    return ProjectBranchInfo(
+                        projectId: input.id,
+                        currentBranch: branch,
+                        availableBranches: branches.isEmpty ? nil : branches
+                    )
+                }
+            }
+            var result: [ProjectBranchInfo] = []
+            for await info in group {
+                if let info { result.append(info) }
+            }
+            return result
+        }
     }
 
     private func applyMobileSettingsUpdate(_ update: MobileSettingsUpdatePayload) {
@@ -2173,6 +2564,7 @@ final class AppState {
     /// Configures a `ChatBridge`'s action handlers and starts an observation loop that keeps
     /// the bridge's state properties in sync with the underlying `sessionStates`.
     func setupChatBridge(_ bridge: ChatBridge, for window: WindowState) {
+        registerLiveWindow(window)
         bridge.sendHandler = { [weak self, weak window] in
             guard let self, let window else { return }
             await self.send(in: window)
@@ -2658,14 +3050,17 @@ final class AppState {
     }
 
     private func updateState(_ key: String, _ mutate: (inout SessionStreamState) -> Void) {
+        let prevMessages = sessionStates[key]?.messages ?? []
         guard var state = sessionStates[key] else {
             var fresh = SessionStreamState()
             mutate(&fresh)
             sessionStates[key] = fresh
+            broadcastMobileMessageDiff(sessionKey: key, prev: prevMessages, next: fresh.messages, isStreaming: fresh.isStreaming)
             return
         }
         mutate(&state)
         sessionStates[key] = state
+        broadcastMobileMessageDiff(sessionKey: key, prev: prevMessages, next: state.messages, isStreaming: state.isStreaming)
     }
 
     private func finalizeStreamSession(
@@ -2702,6 +3097,9 @@ final class AppState {
             state.streamingStartDate = nil
         }
         broadcastMobileSessionStatus(sessionID: sessionKey, kind: .streamingFinished)
+        Task { @MainActor [weak self] in
+            await self?.flushNextQueuedMessageIfNeeded(sessionID: sessionKey)
+        }
     }
 
     // MARK: - Stream Completion (cross-project MCP)
@@ -3372,19 +3770,20 @@ final class AppState {
                             }
                         }
 
-                        if notificationsEnabled, !NSApp.isActive {
+                        if notificationsEnabled {
                             let summary = allSessionSummaries.first(where: { $0.id == resultEvent.sessionId })
                             let title = summary?.title ?? "New Session"
                             let responseText = lastAssistantResponseText(in: stateForSession(sessionKey).messages)
                             let fallbackBody = responseNotificationFallback(from: responseText)
                             let pid = projectId
                             let sid = resultEvent.sessionId
+                            let postLocalBanner = !NSApp.isActive
                             Task { [weak self] in
                                 var body = fallbackBody
                                 if let self, let summary {
                                     body = await self.generateResponseNotificationSummary(responseText: responseText, summary: summary) ?? fallbackBody
                                 }
-                                await NotificationService.shared.postResponseComplete(title: title, body: body, projectId: pid, sessionId: sid)
+                                await NotificationService.shared.postResponseComplete(title: title, body: body, projectId: pid, sessionId: sid, postLocalBanner: postLocalBanner)
                             }
                         }
 
@@ -3564,6 +3963,8 @@ final class AppState {
 
         guard hasText || hasToolResults else { return }
 
+        let prevMessages = state.messages
+
         func lastAssistantIdx() -> Int? {
             state.messages.indices.reversed().first { state.messages[$0].role == .assistant }
         }
@@ -3643,6 +4044,7 @@ final class AppState {
         }
 
         sessionStates[key] = state
+        broadcastMobileMessageDiff(sessionKey: key, prev: prevMessages, next: state.messages, isStreaming: state.isStreaming)
     }
 
     // MARK: - Stream Event Handler
@@ -5676,12 +6078,14 @@ final class AppState {
         let key = queueKey(for: window)
         window.draftQueues[key] = window.messageQueue
         threadStore.appendQueued(sessionKey: key, message: message)
+        broadcastMobileSessionStatus(sessionID: key)
     }
 
     func removeQueuedMessage(id: UUID, in window: WindowState) {
         window.dequeueMessage(id: id)
         saveQueue(in: window)
         threadStore.removeQueued(id: id)
+        broadcastMobileSessionStatus(sessionID: queueKey(for: window))
     }
 
     /// Pops the head of the queue (the auto-flush path used when a stream ends)
@@ -5690,6 +6094,7 @@ final class AppState {
         guard let next = window.dequeueNext() else { return nil }
         saveQueue(in: window)
         threadStore.removeQueued(id: next.id)
+        broadcastMobileSessionStatus(sessionID: queueKey(for: window))
         return next
     }
 
@@ -5734,6 +6139,7 @@ final class AppState {
             window.inputText = draftText
             window.attachments = draftAttachments
         }
+        broadcastMobileSessionStatus(sessionID: key)
     }
 
     /// Concatenates every queued message (texts joined with a blank line,
@@ -5769,6 +6175,7 @@ final class AppState {
             window.inputText = draftText
             window.attachments = draftAttachments
         }
+        broadcastMobileSessionStatus(sessionID: key)
     }
 
     /// Sends the next queued message for a background session (one the window is not currently displaying).

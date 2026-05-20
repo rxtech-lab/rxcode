@@ -1,0 +1,140 @@
+name: Deploy Relay Server
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches:
+      - main
+  release:
+    types:
+      - created
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/rxcode-relay
+
+jobs:
+  build:
+    name: Build Relay Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name == 'release'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern=v{{version}}
+            type=semver,pattern=v{{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ github.event_name == 'release' }}
+            type=sha,prefix=sha-
+
+      # Push / pull-request: build only, then smoke-test the binary boots in
+      # single-node mode (no REDIS_URL) and serves /healthz. No image is
+      # pushed and no deploy happens — that is release-gated below.
+      - name: Build Docker image (test only)
+        if: github.event_name != 'release'
+        uses: docker/build-push-action@v7
+        with:
+          context: relay-server
+          push: false
+          load: true
+          tags: rxcode-relay:ci
+          cache-from: type=gha,scope=rxcode-relay
+          cache-to: type=gha,mode=max,scope=rxcode-relay
+
+      - name: Health check (single-node)
+        if: github.event_name != 'release'
+        run: |
+          docker run -d --name relay-test -p 8787:8787 rxcode-relay:ci
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8787/healthz > /dev/null 2>&1; then
+              echo "Health check passed"
+              curl -s http://localhost:8787/healthz
+              docker rm -f relay-test
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Health check failed"
+          docker logs relay-test
+          docker rm -f relay-test
+          exit 1
+
+      - name: Build and push Docker image
+        if: github.event_name == 'release'
+        uses: docker/build-push-action@v7
+        with:
+          context: relay-server
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=rxcode-relay
+          cache-to: type=gha,mode=max,scope=rxcode-relay
+
+  deploy:
+    name: Deploy to Kubernetes
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v5
+        with:
+          version: "latest"
+
+      - name: Configure kubectl
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.K8S_CONFIG_FILE_B64 }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Verify kubectl connection
+        run: kubectl cluster-info
+
+      - name: Deploy with kustomize
+        run: kubectl kustomize relay-server/k8s/ | kubectl apply -f -
+
+      - name: Pin deployment to this release
+        run: |
+          VERSION="${{ github.ref_name }}"
+          kubectl set image deployment/rxcode-relay \
+            relay=${{ env.IMAGE }}:${VERSION} \
+            -n rxcode-relay
+
+      - name: Wait for rollout
+        run: kubectl rollout status deployment/rxcode-relay -n rxcode-relay --timeout=300s
+
+      - name: Verify deployment
+        run: |
+          echo "=== Pods ==="
+          kubectl get pods -n rxcode-relay
+          echo "=== Service ==="
+          kubectl get service -n rxcode-relay
+          echo "=== Ingress ==="
+          kubectl get ingress -n rxcode-relay

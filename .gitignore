@@ -38,3 +38,4 @@ relay-server/rxcode-relay
 relay-server/.env
 relay-server/.env.*
 relay-server/*.p8
+relay-server/k8s/secrets.yaml

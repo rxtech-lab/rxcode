@@ -130,11 +130,26 @@ actor MCPService {
 
     // MARK: - Provider Config
 
-    func writeClaudeConfig(projectPath: String?) async -> String? {
+    /// Write the `--mcp-config` JSON handed to the Claude CLI. If
+    /// `bridgeCommand` is non-nil an extra `rxcode-ide` stdio server is added —
+    /// the local MCP polyfill / introspection server that exposes IDE-only
+    /// tools (cross-project chat, thread history, running jobs, usage).
+    func writeClaudeConfig(
+        projectPath: String?,
+        bridgeCommand: (command: String, args: [String])? = nil
+    ) async -> String? {
         do {
             let records = try enabledRecords(projectPath: projectPath)
+            var servers = dictionaryForClaude(records)
+            if let bridge = bridgeCommand {
+                servers["rxcode-ide"] = [
+                    "type": "stdio",
+                    "command": bridge.command,
+                    "args": bridge.args,
+                ]
+            }
             let data = try JSONSerialization.data(
-                withJSONObject: ["mcpServers": dictionaryForClaude(records)],
+                withJSONObject: ["mcpServers": servers],
                 options: [.prettyPrinted, .sortedKeys]
             )
             return try writeGeneratedConfig(data: data, filename: "claude-mcp.json")

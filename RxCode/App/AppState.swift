@@ -3601,7 +3601,16 @@ final class AppState {
 
         switch agentProvider {
         case .claudeCode:
-            mcpClaudeConfigPath = await mcp.writeClaudeConfig(projectPath: cwd)
+            // Allocate a per-session IDE-MCP port so the Claude agent can call
+            // IDE-only tools — cross-project chat (`ide__send_to_thread`),
+            // thread history, running jobs, usage. The bridge is a perl
+            // one-liner Claude runs as the `rxcode-ide` MCP server child.
+            let idePort = await ideMCPServer.allocate(
+                sessionKey: sessionKey,
+                capabilities: AgentProvider.claudeCode.staticCapabilities
+            )
+            let bridge = idePort.map { IDEMCPServer.bridgeCommand(forPort: $0) }
+            mcpClaudeConfigPath = await mcp.writeClaudeConfig(projectPath: cwd, bridgeCommand: bridge)
         case .codex:
             mcpCodexOverrides = await mcp.codexConfigOverrides(projectPath: cwd)
             resolvedSendMode = registerMode

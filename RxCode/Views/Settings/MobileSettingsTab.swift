@@ -3,14 +3,42 @@ import CoreImage.CIFilterBuiltins
 import RxCodeCore
 import RxCodeSync
 
+/// How the relay server is chosen in the Mobile settings tab.
+private enum RelayMode: Hashable {
+    /// One of the RxLab-hosted relays from the published catalog.
+    case hosted
+    /// A free-form relay URL typed by the user (e.g. a self-hosted relay).
+    case custom
+}
+
 /// "Mobile" tab in SettingsView. Lists paired iOS / iPadOS devices and lets
 /// the user pair a new one via QR code or unpair existing devices.
 struct MobileSettingsTab: View {
     @StateObject private var sync = MobileSyncService.shared
+    @State private var catalog = RelayPresetCatalog.shared
     @State private var showPairingSheet = false
-    @State private var relayURLText: String = MobileSyncService.shared.relayURL.absoluteString
+    @State private var relayMode: RelayMode
+    @State private var selectedPresetID: String?
+    @State private var customURLText: String
     @State private var testNotificationDeviceID: String?
     @State private var testNotificationAlert: TestNotificationAlert?
+
+    init() {
+        let current = MobileSyncService.shared.relayURL
+        let match = RelayPresetCatalog.bundledPresets.first {
+            MobileSettingsTab.normalize($0.url) == MobileSettingsTab.normalize(current.absoluteString)
+        }
+        _customURLText = State(initialValue: current.absoluteString)
+        if let match {
+            _relayMode = State(initialValue: .hosted)
+            _selectedPresetID = State(initialValue: match.id)
+        } else {
+            _relayMode = State(initialValue: .custom)
+            let fallback = RelayPresetCatalog.bundledPresets.first { $0.recommended == true }
+                ?? RelayPresetCatalog.bundledPresets.first
+            _selectedPresetID = State(initialValue: fallback?.id)
+        }
+    }
 
     var body: some View {
         ScrollView {
@@ -21,6 +49,10 @@ struct MobileSettingsTab: View {
                 pairedSection
             }
             .padding(20)
+        }
+        .task {
+            await catalog.refresh()
+            reconcileWithCatalog()
         }
         .sheet(isPresented: $showPairingSheet) {
             PairingSheet(sync: sync)
@@ -46,24 +78,141 @@ struct MobileSettingsTab: View {
     }
 
     private var relaySection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             Text("Relay server")
                 .font(.headline)
-            Text("All sync traffic flows through this relay, end-to-end encrypted. Set up your own at github.com/rxlab/rxcode-relay for self-hosting.")
+            Text("All sync traffic flows through this relay, end-to-end encrypted. Use an RxLab-hosted relay, or point RxCode at your own — self-host with github.com/rxlab/rxcode-relay.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            HStack {
-                TextField("ws://host:port", text: $relayURLText)
-                    .textFieldStyle(.roundedBorder)
-                Button("Apply") {
-                    if let url = URL(string: relayURLText) {
-                        sync.updateRelay(url: url)
-                    }
-                }
-                .disabled(URL(string: relayURLText) == nil)
+
+            Picker("Relay mode", selection: $relayMode) {
+                Text("Hosted server").tag(RelayMode.hosted)
+                Text("Custom URL").tag(RelayMode.custom)
             }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+
+            switch relayMode {
+            case .hosted:
+                hostedRelayPicker
+            case .custom:
+                customRelayField
+            }
+
+            HStack(spacing: 10) {
+                Button("Apply", action: applyRelay)
+                    .disabled(!canApply)
+                if relayMode == .hosted, catalog.isLoading {
+                    ProgressView().controlSize(.small)
+                }
+                Spacer()
+            }
+
             connectionBadge
         }
+    }
+
+    @ViewBuilder
+    private var hostedRelayPicker: some View {
+        if catalog.presets.isEmpty {
+            Text("No hosted relays are available right now. Switch to Custom URL to enter one manually.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        } else {
+            Picker("Hosted relay", selection: $selectedPresetID) {
+                ForEach(catalog.presets) { preset in
+                    Text(preset.name).tag(Optional(preset.id))
+                }
+            }
+            .labelsHidden()
+
+            if let preset = selectedPreset {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(preset.url)
+                        .font(.caption)
+                        .monospaced()
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                    if let description = preset.description {
+                        Text(description)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+
+    private var customRelayField: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            TextField("wss://host:port", text: $customURLText)
+                .textFieldStyle(.roundedBorder)
+            if !customURLText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               parsedCustomURL == nil {
+                Text("Enter a valid ws:// or wss:// URL.")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+        }
+    }
+
+    // MARK: - Relay selection helpers
+
+    private var selectedPreset: RelayPreset? {
+        catalog.presets.first { $0.id == selectedPresetID }
+    }
+
+    /// The custom URL parsed and validated as a relay endpoint, or `nil`.
+    private var parsedCustomURL: URL? {
+        let trimmed = customURLText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: trimmed),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "ws" || scheme == "wss",
+              url.host?.isEmpty == false else { return nil }
+        return url
+    }
+
+    /// The relay URL implied by the current mode and selection.
+    private var pendingRelayURL: URL? {
+        switch relayMode {
+        case .hosted: selectedPreset?.relayURL
+        case .custom: parsedCustomURL
+        }
+    }
+
+    private var canApply: Bool {
+        guard let pending = pendingRelayURL else { return false }
+        return Self.normalize(pending.absoluteString) != Self.normalize(sync.relayURL.absoluteString)
+    }
+
+    private func applyRelay() {
+        guard let url = pendingRelayURL else { return }
+        sync.updateRelay(url: url)
+    }
+
+    /// After the live catalog loads, keep a valid preset selected and upgrade a
+    /// "custom" selection to the hosted picker when the active relay turns out
+    /// to be a freshly published preset.
+    private func reconcileWithCatalog() {
+        if selectedPreset == nil {
+            selectedPresetID = catalog.presets.first { $0.recommended == true }?.id
+                ?? catalog.presets.first?.id
+        }
+        guard relayMode == .custom,
+              customURLText == sync.relayURL.absoluteString,
+              let match = catalog.presets.first(where: {
+                  Self.normalize($0.url) == Self.normalize(sync.relayURL.absoluteString)
+              })
+        else { return }
+        relayMode = .hosted
+        selectedPresetID = match.id
+    }
+
+    /// Normalize a URL string for equality checks (lowercased, no trailing `/`).
+    static func normalize(_ urlString: String) -> String {
+        var value = urlString.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        while value.hasSuffix("/") { value.removeLast() }
+        return value
     }
 
     @ViewBuilder

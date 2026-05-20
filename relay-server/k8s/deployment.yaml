@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rxcode-relay
+  namespace: rxcode-relay
+  labels:
+    app: rxcode-relay
+spec:
+  # Safe to scale: the Redis backplane (REDIS_URL) routes envelopes across
+  # replicas, so a desktop and mobile peer may land on different pods.
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: rxcode-relay
+  template:
+    metadata:
+      labels:
+        app: rxcode-relay
+    spec:
+      containers:
+        - name: relay
+          image: ghcr.io/rxtech-lab/rxcode-relay:latest
+          ports:
+            - containerPort: 8787
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: rxcode-relay-config
+            - secretRef:
+                name: rxcode-relay-secrets
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8787
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8787
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      restartPolicy: Always

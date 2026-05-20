@@ -756,6 +756,39 @@ actor ClaudeCodeServer {
 
     // MARK: - Private Helpers
 
+    /// Extra system-prompt text appended via `--append-system-prompt`. Tells the
+    /// agent about the IDE-provided `rxcode-ide` MCP server, which lets it talk
+    /// to agents in other RxCode projects/threads and introspect editor state.
+    private static let ideToolsSystemPrompt = """
+    # RxCode IDE tools
+
+    You are running inside RxCode, a desktop IDE that hosts multiple projects, \
+    each with its own chat threads and agents. RxCode injects a local MCP \
+    server named `rxcode-ide`; its tools are exposed to you with the \
+    `mcp__rxcode-ide__` prefix. Use them to coordinate with other agents \
+    (multi-agent talk) and to read editor state:
+
+    - `mcp__rxcode-ide__ide__get_projects` — list every project registered in \
+    RxCode, so you can discover sibling projects to read or message.
+    - `mcp__rxcode-ide__ide__get_threads` — list or natural-language search \
+    chat threads across projects (returns AI summaries, and ranked snippets \
+    when a query is given).
+    - `mcp__rxcode-ide__ide__get_thread_messages` — fetch the message history \
+    of a specific thread by id.
+    - `mcp__rxcode-ide__ide__send_to_thread` — talk to another project's agent: \
+    send a prompt to an existing thread (`thread_id`) or start a new thread in \
+    a project (`project_id`). This triggers a real agent run that may consume \
+    tokens; it returns the other agent's reply.
+    - `mcp__rxcode-ide__ide__get_running_jobs` / `ide__get_job_output` — \
+    inspect run-profile jobs (dev servers, scripts) executing in the IDE.
+    - `mcp__rxcode-ide__ide__get_usage` — current rate-limit / token usage.
+
+    Reach for these when a task spans projects — e.g. checking what another \
+    project already did, or delegating a subtask to its agent — rather than \
+    guessing. Prefer reading threads first; only use `ide__send_to_thread` when \
+    you actually need another agent to act, since it costs tokens.
+    """
+
     /// Build arguments array for the CLI invocation.
     ///
     /// The user prompt is NOT a CLI argument — it is written to stdin as a JSON
@@ -801,6 +834,9 @@ actor ClaudeCodeServer {
 
         if let mcpConfigPath {
             args += ["--strict-mcp-config", "--mcp-config", mcpConfigPath]
+            // The `rxcode-ide` MCP server is part of this config — tell the
+            // agent the IDE multi-agent / introspection tools exist.
+            args += ["--append-system-prompt", Self.ideToolsSystemPrompt]
         }
 
         if let sessionId {

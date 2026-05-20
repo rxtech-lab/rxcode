@@ -1,0 +1,34 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rxcode-relay
+  namespace: rxcode-relay
+  labels:
+    app: rxcode-relay
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    # WebSocket connections are long-lived: the relay only pings every 25s, so
+    # the proxy must not time out an otherwise idle /ws stream, and responses
+    # must stream through unbuffered.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - relay.rxlab.app
+      secretName: rxcode-relay-tls
+  rules:
+    - host: relay.rxlab.app
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: rxcode-relay
+                port:
+                  number: 8787

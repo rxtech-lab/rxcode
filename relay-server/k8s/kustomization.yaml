@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: rxcode-relay
+  namespace: rxcode-relay
+
+resources:
+  - namespace.yaml
+  # secrets.yaml is intentionally excluded — apply it manually after filling in
+  # real APNs values: `kubectl apply -f k8s/secrets.yaml`.
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+  - pdb.yaml
+  - hpa.yaml
+
+namespace: rxcode-relay
+
+images:
+  - name: ghcr.io/rxtech-lab/rxcode-relay
+    newTag: latest

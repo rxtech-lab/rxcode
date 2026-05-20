@@ -54,6 +54,7 @@ missing file is non-fatal — the relay just uses whatever's in the process env.
 | `-apns-team-id`     | `APNS_TEAM_ID`     | 10-char Team ID.                                     |
 | `-apns-topic`       | `APNS_TOPIC`       | iOS app bundle identifier (e.g. `app.rxlab.rxcodemobile`). |
 | `-apns-production`  | `APNS_PRODUCTION`  | `true` for production endpoint, else sandbox.        |
+| `-redis-url`        | `REDIS_URL`        | Redis URL for the multi-node backplane. Empty = single-node. |
 
 `APNS_KEY_B64` wins over `APNS_KEY_PATH` when both are set. Both standard and
 URL-safe base64 are accepted, and embedded whitespace/newlines are stripped —
@@ -115,6 +116,37 @@ No bind-mount needed — the key lives only in the container environment.
   `-apns-production=true`.
 - The auth key file is sensitive — mount it via a secrets manager / Docker
   secret in production. Never commit `.p8` files.
+
+## Scaling — single-node vs. multi-node
+
+The relay keeps live WebSocket connections in an in-memory map, so a naive
+multi-replica deployment would drop messages: a desktop on pod A and its mobile
+peer on pod B never share a connection map.
+
+- **Single-node (default).** Leave `REDIS_URL` unset. One Go process handles
+  thousands of WebSocket connections comfortably. Routing is purely in-memory;
+  a recipient that isn't connected gets a `delivery_failed` notice to the
+  sender. Run exactly **1 replica**.
+- **Multi-node.** Set `REDIS_URL`. The relay uses Redis as a pub/sub backplane:
+  an envelope whose recipient isn't on the local pod is published to the
+  `relay:route` channel, and the pod holding that connection delivers it.
+  Per-pubkey presence keys (`relay:presence:*`, TTL-refreshed on every ping)
+  keep the `delivery_failed` notice accurate cluster-wide. Scale to any replica
+  count — no sticky sessions required.
+
+`/healthz` reports the active mode (`"mode": "single-node" | "multi-node"`).
+
+## Kubernetes
+
+Manifests for a multi-replica deployment live in [`k8s/`](./k8s/) — Deployment
+(2 replicas), Service, Ingress (WebSocket-friendly timeouts), HPA, and a
+PodDisruptionBudget. They wire `REDIS_URL` to the cluster-level Redis so the
+backplane is on by default. See [`k8s/README.md`](./k8s/README.md).
+
+Creating a GitHub **release** builds, pushes, and deploys the relay via the
+`Deploy Relay Server` GitHub Actions workflow
+(`.github/workflows/relay-deploy.yaml`). Pushes to `main` and pull requests
+touching `relay-server/**` build and smoke-test the image only.
 
 ## Wire envelope
 

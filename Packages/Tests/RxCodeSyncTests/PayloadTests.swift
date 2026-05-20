@@ -176,4 +176,93 @@ struct PayloadTests {
         #expect(update.permissionMode == .auto)
         #expect(update.focusMode == true)
     }
+
+    @Test("remote folder picker payloads round trip")
+    func remoteFolderPickerPayloadsRoundTrip() throws {
+        let requestID = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!
+        let request = Payload.folderTreeRequest(
+            FolderTreeRequestPayload(
+                clientRequestID: requestID,
+                path: "/Users/test/Desktop",
+                depth: 1
+            )
+        )
+
+        let requestData = try JSONEncoder().encode(request)
+        let decodedRequest = try JSONDecoder().decode(Payload.self, from: requestData)
+        guard case .folderTreeRequest(let folderRequest) = decodedRequest else {
+            Issue.record("Expected folder tree request")
+            return
+        }
+        #expect(folderRequest.clientRequestID == requestID)
+        #expect(folderRequest.path == "/Users/test/Desktop")
+        #expect(folderRequest.depth == 1)
+
+        let result = Payload.folderTreeResult(
+            FolderTreeResultPayload(
+                clientRequestID: requestID,
+                requestedPath: "/Users/test/Desktop",
+                ok: true,
+                root: RemoteFolderNode(
+                    name: "Desktop",
+                    path: "/Users/test/Desktop",
+                    children: [
+                        RemoteFolderNode(name: "RxCode", path: "/Users/test/Desktop/RxCode")
+                    ]
+                )
+            )
+        )
+
+        let resultData = try JSONEncoder().encode(result)
+        let decodedResult = try JSONDecoder().decode(Payload.self, from: resultData)
+        guard case .folderTreeResult(let folderResult) = decodedResult else {
+            Issue.record("Expected folder tree result")
+            return
+        }
+        #expect(folderResult.ok)
+        #expect(folderResult.root?.children.first?.name == "RxCode")
+    }
+
+    @Test("mobile create project payloads round trip")
+    func mobileCreateProjectPayloadsRoundTrip() throws {
+        let requestID = UUID(uuidString: "BBBBBBBB-CCCC-DDDD-EEEE-FFFFFFFFFFFF")!
+        let projectID = UUID(uuidString: "CCCCCCCC-DDDD-EEEE-FFFF-000000000000")!
+        let request = Payload.createProjectRequest(
+            CreateProjectRequestPayload(
+                clientRequestID: requestID,
+                path: "/Users/test/Desktop/RxCode"
+            )
+        )
+
+        let requestData = try JSONEncoder().encode(request)
+        let decodedRequest = try JSONDecoder().decode(Payload.self, from: requestData)
+        guard case .createProjectRequest(let createRequest) = decodedRequest else {
+            Issue.record("Expected create project request")
+            return
+        }
+        #expect(createRequest.clientRequestID == requestID)
+        #expect(createRequest.path == "/Users/test/Desktop/RxCode")
+
+        let result = Payload.createProjectResult(
+            CreateProjectResultPayload(
+                clientRequestID: requestID,
+                ok: true,
+                project: Project(
+                    id: projectID,
+                    name: "RxCode",
+                    path: "/Users/test/Desktop/RxCode"
+                )
+            )
+        )
+
+        let resultData = try JSONEncoder().encode(result)
+        let decodedResult = try JSONDecoder().decode(Payload.self, from: resultData)
+        guard case .createProjectResult(let createResult) = decodedResult else {
+            Issue.record("Expected create project result")
+            return
+        }
+        #expect(createResult.ok)
+        #expect(createResult.project?.id == projectID)
+        #expect(createResult.project?.name == "RxCode")
+    }
 }

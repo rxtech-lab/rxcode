@@ -69,6 +69,7 @@ struct ProjectListView: View {
         HStack {
             Text("Projects")
                 .font(.headline)
+                .foregroundStyle(ClaudeTheme.textPrimary)
 
             Spacer()
 
@@ -92,20 +93,23 @@ struct ProjectListView: View {
     // MARK: - Project Row
 
     private func projectRow(_ project: Project) -> some View {
-        HStack(spacing: 8) {
+        let isSelected = windowState.selectedProject?.id == project.id
+
+        return HStack(spacing: 8) {
             Image(systemName: "folder.fill")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(isSelected ? ClaudeTheme.accent : ClaudeTheme.textTertiary)
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(project.name)
                         .font(.body)
+                        .foregroundStyle(ClaudeTheme.textPrimary)
                         .lineLimit(1)
                 }
 
                 Text(truncatedPath(project.path))
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(ClaudeTheme.textSecondary)
                     .lineLimit(1)
             }
         }

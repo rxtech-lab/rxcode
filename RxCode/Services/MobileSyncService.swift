@@ -543,6 +543,20 @@ final class MobileSyncService: ObservableObject {
                 object: nil,
                 userInfo: ["from": inbound.fromHex, "payload": req]
             )
+        case .folderTreeRequest(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "folder_tree_request") else { return }
+            NotificationCenter.default.post(
+                name: .mobileSyncFolderTreeRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": req]
+            )
+        case .createProjectRequest(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "create_project_request") else { return }
+            NotificationCenter.default.post(
+                name: .mobileSyncCreateProjectRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": req]
+            )
         case .ping:
             guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "ping") else { return }
             Task { try? await client.send(.pong(PongPayload()), toHex: inbound.fromHex) }
@@ -700,4 +714,6 @@ extension Notification.Name {
     static let mobileSyncQuestionAnswerReceived = Notification.Name("mobileSync.questionAnswerReceived")
     static let mobileSyncPlanDecisionReceived = Notification.Name("mobileSync.planDecisionReceived")
     static let mobileSyncBranchOpRequested = Notification.Name("mobileSync.branchOpRequested")
+    static let mobileSyncFolderTreeRequested = Notification.Name("mobileSync.folderTreeRequested")
+    static let mobileSyncCreateProjectRequested = Notification.Name("mobileSync.createProjectRequested")
 }

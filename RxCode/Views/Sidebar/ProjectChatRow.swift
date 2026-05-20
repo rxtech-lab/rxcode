@@ -127,7 +127,7 @@ struct ProjectChatRow: View {
             } else {
                 Text(Self.compactElapsedTime(since: summary.updatedAt))
                     .font(.system(size: ClaudeTheme.size(11)))
-                    .foregroundStyle(ClaudeTheme.textTertiary)
+                    .foregroundStyle(ClaudeTheme.textSecondary)
                     .monospacedDigit()
                     .frame(width: 28, alignment: .trailing)
             }

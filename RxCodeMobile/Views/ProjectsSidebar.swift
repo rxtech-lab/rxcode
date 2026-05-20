@@ -9,11 +9,26 @@ struct ProjectsSidebar: View {
     var showsBriefingItem = true
     var usesSelection = true
     @State private var searchText = ""
+    @State private var showingRemoteFolderPicker = false
 
     var body: some View {
         list
         .navigationTitle("Projects")
         .listStyle(.sidebar)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showingRemoteFolderPicker = true
+                } label: {
+                    Image(systemName: "folder.badge.plus")
+                }
+                .accessibilityLabel("Add Project")
+            }
+        }
+        .sheet(isPresented: $showingRemoteFolderPicker) {
+            RemoteFolderPickerView()
+                .environmentObject(state)
+        }
         .refreshable {
             await state.refreshSnapshot()
         }
@@ -29,6 +44,11 @@ struct ProjectsSidebar: View {
         }
         .onDisappear {
             state.updateSearchQuery("")
+        }
+        .onChange(of: state.lastCreatedProjectID) { _, newValue in
+            guard let newValue else { return }
+            selected = newValue
+            showingBriefing = false
         }
     }
 

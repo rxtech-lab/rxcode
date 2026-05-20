@@ -28,7 +28,7 @@ public struct SessionSidebarRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 TypewriterTitleText(title: title.prefix(1).uppercased() + title.dropFirst())
                     .font(.system(size: ClaudeTheme.size(13)))
-                    .foregroundStyle(.primary.opacity(0.8))
+                    .foregroundStyle(ClaudeTheme.textPrimary)
                     .lineLimit(1)
                     .contentTransition(.opacity)
                     .animation(.easeInOut(duration: 0.25), value: title)
@@ -42,12 +42,12 @@ public struct SessionSidebarRow: View {
 
                         Text("·")
                             .font(.system(size: ClaudeTheme.size(10)))
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(ClaudeTheme.textTertiary)
                     }
 
                     Text(Self.compactElapsed(since: updatedAt))
                         .font(.system(size: ClaudeTheme.size(11)))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(ClaudeTheme.textSecondary)
                 }
             }
 

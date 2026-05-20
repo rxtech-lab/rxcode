@@ -37,9 +37,59 @@ public enum Payload: Sendable {
     case folderTreeResult(FolderTreeResultPayload)
     case createProjectRequest(CreateProjectRequestPayload)
     case createProjectResult(CreateProjectResultPayload)
+    case runProfileMutationRequest(RunProfileMutationRequestPayload)
+    case runProfileResult(RunProfileResultPayload)
+    case runProfileRunRequest(RunProfileRunRequestPayload)
+    case runProfileStopRequest(RunProfileStopRequestPayload)
+    case runTaskUpdate(RunTaskUpdatePayload)
     case ping(PingPayload)
     case pong(PongPayload)
     case unknown(type: String)
+}
+
+public extension Payload {
+    var logName: String {
+        switch self {
+        case .pairRequest: return "pair_request"
+        case .pairAck: return "pair_ack"
+        case .unpair: return "unpair"
+        case .apnsToken: return "apns_token"
+        case .requestSnapshot: return "request_snapshot"
+        case .snapshot: return "snapshot"
+        case .settingsUpdate: return "settings_update"
+        case .sessionUpdate: return "session_update"
+        case .subscribeSession: return "subscribe_session"
+        case .userMessage: return "user_message"
+        case .cancelStream: return "cancel_stream"
+        case .removeQueuedMessage: return "remove_queued_message"
+        case .newSessionRequest: return "new_session_request"
+        case .threadActionRequest: return "thread_action_request"
+        case .loadMoreMessages: return "load_more_messages"
+        case .moreMessages: return "more_messages"
+        case .searchRequest: return "search_request"
+        case .searchResults: return "search_results"
+        case .notification: return "notification"
+        case .permissionRequest: return "permission_request"
+        case .permissionResponse: return "permission_response"
+        case .questionQueue: return "question_queue"
+        case .questionAnswer: return "question_answer"
+        case .planDecision: return "plan_decision"
+        case .branchOpRequest: return "branch_op_request"
+        case .branchOpResult: return "branch_op_result"
+        case .folderTreeRequest: return "folder_tree_request"
+        case .folderTreeResult: return "folder_tree_result"
+        case .createProjectRequest: return "create_project_request"
+        case .createProjectResult: return "create_project_result"
+        case .runProfileMutationRequest: return "run_profile_mutation_request"
+        case .runProfileResult: return "run_profile_result"
+        case .runProfileRunRequest: return "run_profile_run_request"
+        case .runProfileStopRequest: return "run_profile_stop_request"
+        case .runTaskUpdate: return "run_task_update"
+        case .ping: return "ping"
+        case .pong: return "pong"
+        case .unknown(let type): return type
+        }
+    }
 }
 
 // MARK: - Wire structs
@@ -193,6 +243,14 @@ public struct SnapshotPayload: Codable, Sendable {
     /// Desktop CPU/memory/thermal load. `nil` when the desktop predates
     /// computer-status sync.
     public let hostMetrics: HostMetricsSnapshot?
+    /// Run profiles grouped per project. `nil` when the desktop predates mobile
+    /// run-profile sync.
+    public let runProfiles: [MobileProjectRunProfiles]?
+    /// Recent and active run tasks mirrored from the desktop.
+    public let runTasks: [MobileRunTaskSnapshot]?
+    /// HTTP proxy exposed by the desktop so the mobile in-app browser can open
+    /// localhost development servers running on the Mac.
+    public let webProxy: MobileWebProxyInfo?
     public init(
         projects: [Project],
         sessions: [SessionSummary],
@@ -204,7 +262,10 @@ public struct SnapshotPayload: Codable, Sendable {
         activeSessionHasMore: Bool? = nil,
         projectBranches: [ProjectBranchInfo]? = nil,
         usage: MobileUsageSnapshot? = nil,
-        hostMetrics: HostMetricsSnapshot? = nil
+        hostMetrics: HostMetricsSnapshot? = nil,
+        runProfiles: [MobileProjectRunProfiles]? = nil,
+        runTasks: [MobileRunTaskSnapshot]? = nil,
+        webProxy: MobileWebProxyInfo? = nil
     ) {
         self.projects = projects
         self.sessions = sessions
@@ -217,12 +278,15 @@ public struct SnapshotPayload: Codable, Sendable {
         self.projectBranches = projectBranches
         self.usage = usage
         self.hostMetrics = hostMetrics
+        self.runProfiles = runProfiles
+        self.runTasks = runTasks
+        self.webProxy = webProxy
     }
 
     private enum CodingKeys: String, CodingKey {
         case projects, sessions, branchBriefings, threadSummaries, settings
         case activeSessionID, activeSessionMessages, activeSessionHasMore, projectBranches
-        case usage, hostMetrics
+        case usage, hostMetrics, runProfiles, runTasks, webProxy
     }
 
     public init(from decoder: Decoder) throws {
@@ -238,6 +302,23 @@ public struct SnapshotPayload: Codable, Sendable {
         projectBranches = try c.decodeIfPresent([ProjectBranchInfo].self, forKey: .projectBranches)
         usage = try c.decodeIfPresent(MobileUsageSnapshot.self, forKey: .usage)
         hostMetrics = try c.decodeIfPresent(HostMetricsSnapshot.self, forKey: .hostMetrics)
+        runProfiles = try c.decodeIfPresent([MobileProjectRunProfiles].self, forKey: .runProfiles)
+        runTasks = try c.decodeIfPresent([MobileRunTaskSnapshot].self, forKey: .runTasks)
+        webProxy = try c.decodeIfPresent(MobileWebProxyInfo.self, forKey: .webProxy)
+    }
+}
+
+public struct MobileWebProxyInfo: Codable, Sendable, Equatable {
+    public let host: String
+    public let port: Int
+    public let username: String
+    public let password: String
+
+    public init(host: String, port: Int, username: String, password: String) {
+        self.host = host
+        self.port = port
+        self.username = username
+        self.password = password
     }
 }
 
@@ -400,6 +481,159 @@ public struct CreateProjectResultPayload: Codable, Sendable {
         self.ok = ok
         self.project = project
         self.errorMessage = errorMessage
+    }
+}
+
+public struct MobileProjectRunProfiles: Codable, Sendable, Equatable {
+    public let projectId: UUID
+    public let profiles: [RunProfile]
+
+    public init(projectId: UUID, profiles: [RunProfile]) {
+        self.projectId = projectId
+        self.profiles = profiles
+    }
+}
+
+public struct MobileRunTaskSnapshot: Codable, Sendable, Identifiable, Equatable {
+    public enum Status: String, Codable, Sendable {
+        case running
+        case succeeded
+        case failed
+        case signaled
+        case stopped
+    }
+
+    public var id: UUID { taskId }
+
+    public let taskId: UUID
+    public let projectId: UUID
+    public let profileId: UUID
+    public let profileName: String
+    public let status: Status
+    public let statusLabel: String
+    public let exitCode: Int32?
+    public let startedAt: Date
+    public let resolvedCwd: String
+    public let commandPreview: String
+    public let terminalOutputTail: String?
+
+    public init(
+        taskId: UUID,
+        projectId: UUID,
+        profileId: UUID,
+        profileName: String,
+        status: Status,
+        statusLabel: String,
+        exitCode: Int32? = nil,
+        startedAt: Date,
+        resolvedCwd: String,
+        commandPreview: String,
+        terminalOutputTail: String? = nil
+    ) {
+        self.taskId = taskId
+        self.projectId = projectId
+        self.profileId = profileId
+        self.profileName = profileName
+        self.status = status
+        self.statusLabel = statusLabel
+        self.exitCode = exitCode
+        self.startedAt = startedAt
+        self.resolvedCwd = resolvedCwd
+        self.commandPreview = commandPreview
+        self.terminalOutputTail = terminalOutputTail
+    }
+
+    public var isRunning: Bool { status == .running }
+}
+
+public struct RunProfileMutationRequestPayload: Codable, Sendable {
+    public enum Operation: String, Codable, Sendable {
+        case upsert
+        case delete
+    }
+
+    public let clientRequestID: UUID
+    public let projectID: UUID
+    public let operation: Operation
+    public let profile: RunProfile?
+    public let profileID: UUID?
+
+    public init(
+        clientRequestID: UUID = UUID(),
+        projectID: UUID,
+        operation: Operation,
+        profile: RunProfile? = nil,
+        profileID: UUID? = nil
+    ) {
+        self.clientRequestID = clientRequestID
+        self.projectID = projectID
+        self.operation = operation
+        self.profile = profile
+        self.profileID = profileID
+    }
+}
+
+public struct RunProfileRunRequestPayload: Codable, Sendable {
+    public let clientRequestID: UUID
+    public let projectID: UUID
+    public let profileID: UUID
+
+    public init(clientRequestID: UUID = UUID(), projectID: UUID, profileID: UUID) {
+        self.clientRequestID = clientRequestID
+        self.projectID = projectID
+        self.profileID = profileID
+    }
+}
+
+public struct RunProfileStopRequestPayload: Codable, Sendable {
+    public let clientRequestID: UUID
+    public let taskID: UUID?
+    public let projectID: UUID?
+    public let profileID: UUID?
+
+    public init(
+        clientRequestID: UUID = UUID(),
+        taskID: UUID? = nil,
+        projectID: UUID? = nil,
+        profileID: UUID? = nil
+    ) {
+        self.clientRequestID = clientRequestID
+        self.taskID = taskID
+        self.projectID = projectID
+        self.profileID = profileID
+    }
+}
+
+public struct RunProfileResultPayload: Codable, Sendable {
+    public let clientRequestID: UUID
+    public let projectID: UUID
+    public let ok: Bool
+    public let errorMessage: String?
+    public let profiles: [RunProfile]?
+    public let task: MobileRunTaskSnapshot?
+
+    public init(
+        clientRequestID: UUID,
+        projectID: UUID,
+        ok: Bool,
+        errorMessage: String? = nil,
+        profiles: [RunProfile]? = nil,
+        task: MobileRunTaskSnapshot? = nil
+    ) {
+        self.clientRequestID = clientRequestID
+        self.projectID = projectID
+        self.ok = ok
+        self.errorMessage = errorMessage
+        self.profiles = profiles
+        self.task = task
+    }
+}
+
+public struct RunTaskUpdatePayload: Codable, Sendable {
+    public let task: MobileRunTaskSnapshot
+
+    public init(task: MobileRunTaskSnapshot) {
+        self.task = task
     }
 }
 
@@ -647,6 +881,11 @@ public struct SessionSummary: Codable, Sendable, Identifiable {
     public let isStreaming: Bool
     public let attention: SessionAttentionKind?
     public let progress: SessionProgressSnapshot?
+    /// Latest todo items for this session. Claude sessions can still derive
+    /// these from `TodoWrite` messages, but Codex plan updates are persisted as
+    /// snapshots instead of message tool calls, so the mobile app needs the
+    /// desktop-owned item list.
+    public let todos: [TodoItem]?
     /// Messages waiting to be sent once the active turn finishes. Mirrored from
     /// the desktop's per-session queue (threadStore). `nil` when the summary
     /// comes from an older desktop that doesn't know about queue sync.
@@ -668,6 +907,7 @@ public struct SessionSummary: Codable, Sendable, Identifiable {
         isStreaming: Bool = false,
         attention: SessionAttentionKind? = nil,
         progress: SessionProgressSnapshot? = nil,
+        todos: [TodoItem]? = nil,
         queuedMessages: [QueuedUserMessage]? = nil,
         hasUncheckedCompletion: Bool = false
     ) {
@@ -680,12 +920,13 @@ public struct SessionSummary: Codable, Sendable, Identifiable {
         self.isStreaming = isStreaming
         self.attention = attention
         self.progress = progress
+        self.todos = todos
         self.queuedMessages = queuedMessages
         self.hasUncheckedCompletion = hasUncheckedCompletion
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, projectId, title, updatedAt, isPinned, isArchived, isStreaming, attention, progress, queuedMessages, hasUncheckedCompletion
+        case id, projectId, title, updatedAt, isPinned, isArchived, isStreaming, attention, progress, todos, queuedMessages, hasUncheckedCompletion
     }
 
     public init(from decoder: Decoder) throws {
@@ -699,6 +940,7 @@ public struct SessionSummary: Codable, Sendable, Identifiable {
         isStreaming = try container.decodeIfPresent(Bool.self, forKey: .isStreaming) ?? false
         attention = try container.decodeIfPresent(SessionAttentionKind.self, forKey: .attention)
         progress = try container.decodeIfPresent(SessionProgressSnapshot.self, forKey: .progress)
+        todos = try container.decodeIfPresent([TodoItem].self, forKey: .todos)
         queuedMessages = try container.decodeIfPresent([QueuedUserMessage].self, forKey: .queuedMessages)
         hasUncheckedCompletion = try container.decodeIfPresent(Bool.self, forKey: .hasUncheckedCompletion) ?? false
     }
@@ -1177,6 +1419,11 @@ extension Payload: Codable {
         case folderTreeResult = "folder_tree_result"
         case createProjectRequest = "create_project_request"
         case createProjectResult = "create_project_result"
+        case runProfileMutationRequest = "run_profile_mutation_request"
+        case runProfileResult = "run_profile_result"
+        case runProfileRunRequest = "run_profile_run_request"
+        case runProfileStopRequest = "run_profile_stop_request"
+        case runTaskUpdate = "run_task_update"
         case ping
         case pong
     }
@@ -1219,6 +1466,11 @@ extension Payload: Codable {
         case .folderTreeResult: self = .folderTreeResult(try container.decode(FolderTreeResultPayload.self, forKey: .data))
         case .createProjectRequest: self = .createProjectRequest(try container.decode(CreateProjectRequestPayload.self, forKey: .data))
         case .createProjectResult: self = .createProjectResult(try container.decode(CreateProjectResultPayload.self, forKey: .data))
+        case .runProfileMutationRequest: self = .runProfileMutationRequest(try container.decode(RunProfileMutationRequestPayload.self, forKey: .data))
+        case .runProfileResult: self = .runProfileResult(try container.decode(RunProfileResultPayload.self, forKey: .data))
+        case .runProfileRunRequest: self = .runProfileRunRequest(try container.decode(RunProfileRunRequestPayload.self, forKey: .data))
+        case .runProfileStopRequest: self = .runProfileStopRequest(try container.decode(RunProfileStopRequestPayload.self, forKey: .data))
+        case .runTaskUpdate: self = .runTaskUpdate(try container.decode(RunTaskUpdatePayload.self, forKey: .data))
         case .ping: self = .ping(try container.decode(PingPayload.self, forKey: .data))
         case .pong: self = .pong(try container.decode(PongPayload.self, forKey: .data))
         }
@@ -1257,6 +1509,11 @@ extension Payload: Codable {
         case .folderTreeResult(let p): try container.encode(TypeKey.folderTreeResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .createProjectRequest(let p): try container.encode(TypeKey.createProjectRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .createProjectResult(let p): try container.encode(TypeKey.createProjectResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .runProfileMutationRequest(let p): try container.encode(TypeKey.runProfileMutationRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .runProfileResult(let p): try container.encode(TypeKey.runProfileResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .runProfileRunRequest(let p): try container.encode(TypeKey.runProfileRunRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .runProfileStopRequest(let p): try container.encode(TypeKey.runProfileStopRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .runTaskUpdate(let p): try container.encode(TypeKey.runTaskUpdate.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .ping(let p): try container.encode(TypeKey.ping.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .pong(let p): try container.encode(TypeKey.pong.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .unknown(let type): try container.encode(type, forKey: .type)

@@ -264,12 +264,12 @@ struct BriefingView: View {
             Button {
                 showAllBranches = false
             } label: {
-                Label("Current branch", systemImage: showAllBranches ? "" : "checkmark")
+                menuSelectionLabel("Current branch", isSelected: !showAllBranches)
             }
             Button {
                 showAllBranches = true
             } label: {
-                Label("All branches", systemImage: showAllBranches ? "checkmark" : "")
+                menuSelectionLabel("All branches", isSelected: showAllBranches)
             }
         } label: {
             HStack(spacing: 6) {
@@ -311,17 +311,14 @@ struct BriefingView: View {
                     Button {
                         selectedProjectIds.removeAll()
                     } label: {
-                        Label("All projects", systemImage: selectedProjectIds.isEmpty ? "checkmark" : "")
+                        menuSelectionLabel("All projects", isSelected: selectedProjectIds.isEmpty)
                     }
                     Divider()
                     ForEach(projects) { project in
                         Button {
                             toggleProject(project.id)
                         } label: {
-                            Label(
-                                project.name,
-                                systemImage: selectedProjectIds.contains(project.id) ? "checkmark" : ""
-                            )
+                            menuSelectionLabel(project.name, isSelected: selectedProjectIds.contains(project.id))
                         }
                     }
                 } label: {
@@ -355,6 +352,15 @@ struct BriefingView: View {
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
                 .fixedSize()
+        }
+    }
+
+    @ViewBuilder
+    private func menuSelectionLabel(_ title: String, isSelected: Bool) -> some View {
+        if isSelected {
+            Label(title, systemImage: "checkmark")
+        } else {
+            Text(title)
         }
     }
 

@@ -23,52 +23,51 @@ struct MessageListView: View {
 
     var body: some View {
         ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    messageRows(settledItems[...])
+            List {
+                messageRows(settledItems[...])
 
-                    // Streaming view is outside the settled rows — text deltas don't
-                    // affect settled layout.
-                    if !windowState.focusMode {
-                        StreamingMessageView {
-                            rebuildSettledItems()
-                            if anchor.isNearBottom { scrollToBottomDebounced(proxy) }
-                        }
-                        // Suppress layout animations when switching sessions so the pulse indicator
-                        // doesn't visually jump as StreamingMessageView changes height.
-                        .animation(.none, value: windowState.currentSessionId)
-                        .chatMessageListRowStyle()
+                // Streaming view is outside VStack — text deltas don't affect settled layout
+                if !windowState.focusMode {
+                    StreamingMessageView {
+                        rebuildSettledItems()
+                        if anchor.isNearBottom { scrollToBottomDebounced(proxy) }
                     }
+                    // Suppress layout animations when switching sessions so the pulse indicator
+                    // doesn't visually jump as StreamingMessageView changes height.
+                    .animation(.none, value: windowState.currentSessionId)
+                    .chatMessageListRowStyle()
+                }
 
-                    if chatBridge.isStreaming && !chatBridge.hasPendingPlanDecision {
-                        // Hide the spinner/dots while the CLI is paused waiting on the
-                        // user's plan decision — the model isn't actually generating
-                        // tokens, so showing "in progress" is misleading.
-                        HStack(alignment: .top, spacing: 0) {
-                            StreamingIndicatorView(
-                                isThinking: chatBridge.isThinking,
-                                startDate: chatBridge.streamingStartDate,
-                                agentProvider: chatBridge.agentProvider,
-                                outputTokens: chatBridge.liveOutputTokens
-                            )
-                            Spacer(minLength: 40)
-                        }
-                        .chatMessageListRowStyle()
+                if chatBridge.isStreaming && !chatBridge.hasPendingPlanDecision {
+                    // Hide the spinner/dots while the CLI is paused waiting on the
+                    // user's plan decision — the model isn't actually generating
+                    // tokens, so showing "in progress" is misleading.
+                    HStack(alignment: .top, spacing: 0) {
+                        StreamingIndicatorView(
+                            isThinking: chatBridge.isThinking,
+                            startDate: chatBridge.streamingStartDate,
+                            agentProvider: chatBridge.agentProvider,
+                            outputTokens: chatBridge.liveOutputTokens
+                        )
+                        Spacer(minLength: 40)
                     }
+                    .chatMessageListRowStyle()
+                }
 
-                    if !chatBridge.isStreaming && !settledItems.isEmpty {
-                        WebPreviewButton(messages: settledItems)
-                            .id("web-preview")
-                            .chatMessageListRowStyle()
-                    }
-
-                    Color.clear.frame(height: 1)
-                        .id(Self.bottomAnchorID)
+                if !chatBridge.isStreaming && !settledItems.isEmpty {
+                    WebPreviewButton(messages: settledItems)
+                        .id("web-preview")
                         .chatMessageListRowStyle()
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Color.clear.frame(height: 1)
+                    .id(Self.bottomAnchorID)
+                    .chatMessageListRowStyle()
             }
+        .listStyle(.plain)
         .contentMargins(.top, 16, for: .scrollContent)
+        .scrollContentBackground(.hidden)
+        .environment(\.defaultMinListRowHeight, 0)
         .opacity(isSessionReady ? 1 : 0)
         .defaultScrollAnchor(.bottom)
         .onScrollGeometryChange(for: ScrollSample.self) { geo in

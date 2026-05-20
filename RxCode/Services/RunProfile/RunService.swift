@@ -73,8 +73,12 @@ final class RunTask: Identifiable {
     let wrapperScript: String
     let resolvedCwd: String
     let resolvedEnvironment: [String: String]
+    let outputLogURL: URL
+    var terminalOutputTail: String = ""
 
     private let delegate: RunTaskTerminalDelegate
+    nonisolated(unsafe) private var outputCaptureTask: Task<Void, Never>?
+    private let onOutputChanged: @MainActor (UUID) -> Void
 
     init(
         id: UUID = UUID(),
@@ -83,6 +87,8 @@ final class RunTask: Identifiable {
         wrapperScript: String,
         resolvedCwd: String,
         resolvedEnvironment: [String: String],
+        outputLogURL: URL,
+        onOutputChanged: @escaping @MainActor (UUID) -> Void,
         onTerminated: @escaping @MainActor (UUID, Int32) -> Void
     ) {
         self.id = id
@@ -91,6 +97,8 @@ final class RunTask: Identifiable {
         self.wrapperScript = wrapperScript
         self.resolvedCwd = resolvedCwd
         self.resolvedEnvironment = resolvedEnvironment
+        self.outputLogURL = outputLogURL
+        self.onOutputChanged = onOutputChanged
 
         let tv = LocalProcessTerminalView(frame: .zero)
         Self.applyTheme(to: tv)
@@ -117,6 +125,7 @@ final class RunTask: Identifiable {
             environment: envPairs,
             currentDirectory: resolvedCwd
         )
+        startOutputCapture()
     }
 
     func terminate() {
@@ -126,6 +135,33 @@ final class RunTask: Identifiable {
         // will fire shortly after with the real exit code; we keep the
         // `.stopped` label rather than overwriting it.
         status = .stopped
+    }
+
+    private func startOutputCapture() {
+        outputCaptureTask?.cancel()
+        outputCaptureTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                guard let self else { return }
+                self.refreshOutputTail()
+                self.onOutputChanged(self.id)
+                if self.status.isTerminal { break }
+            }
+            self?.refreshOutputTail()
+            if let self { self.onOutputChanged(self.id) }
+        }
+    }
+
+    private func refreshOutputTail() {
+        guard let data = try? Data(contentsOf: outputLogURL),
+              let text = String(data: data, encoding: .utf8)
+        else { return }
+        terminalOutputTail = String(text.suffix(20_000))
+    }
+
+    deinit {
+        outputCaptureTask?.cancel()
+        try? FileManager.default.removeItem(at: outputLogURL)
     }
 
     private static func applyTheme(to tv: LocalProcessTerminalView) {
@@ -176,6 +212,7 @@ extension RunService {
 final class RunService {
 
     private let logger = Logger(subsystem: "com.claudework", category: "RunService")
+    var onTasksChanged: (() -> Void)?
 
     /// Most-recent task first. Includes finished tasks so the inspector
     /// dropdown can show their output until cleared.
@@ -210,7 +247,13 @@ final class RunService {
             projectPath: project.path,
             baseEnvironment: ProcessInfo.processInfo.environment
         )
-        let script = RunTaskExecutor.buildWrapperScript(profile: profile, projectPath: project.path)
+        let outputLogURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("rxcode-run-\(UUID().uuidString).log")
+        let script = RunTaskExecutor.buildWrapperScript(
+            profile: profile,
+            projectPath: project.path,
+            outputLogPath: outputLogURL.path
+        )
 
         let task = RunTask(
             profile: profile,
@@ -218,6 +261,10 @@ final class RunService {
             wrapperScript: script,
             resolvedCwd: cwd,
             resolvedEnvironment: env,
+            outputLogURL: outputLogURL,
+            onOutputChanged: { [weak self] _ in
+                self?.onTasksChanged?()
+            },
             onTerminated: { [weak self] id, rawStatus in
                 Task { @MainActor in
                     self?.taskTerminated(id: id, rawStatus: rawStatus)
@@ -226,15 +273,18 @@ final class RunService {
         )
         tasks.insert(task, at: 0)
         task.start()
+        onTasksChanged?()
         return task
     }
 
     func stop(taskId: UUID) {
         tasks.first { $0.id == taskId }?.terminate()
+        onTasksChanged?()
     }
 
     func stopAll() {
         for task in activeTasks { task.terminate() }
+        onTasksChanged?()
     }
 
     func task(id: UUID) -> RunTask? {
@@ -246,11 +296,13 @@ final class RunService {
         guard let idx = tasks.firstIndex(where: { $0.id == taskId }),
               tasks[idx].status.isTerminal else { return }
         tasks.remove(at: idx)
+        onTasksChanged?()
     }
 
     /// Remove every finished task. Active tasks are left in place.
     func clearFinished() {
         tasks.removeAll { $0.status.isTerminal }
+        onTasksChanged?()
     }
 
     private func taskTerminated(id: UUID, rawStatus: Int32) {
@@ -270,5 +322,6 @@ final class RunService {
         if task.status != .stopped {
             task.status = Self.statusFromRawWaitpid(rawStatus)
         }
+        onTasksChanged?()
     }
 }

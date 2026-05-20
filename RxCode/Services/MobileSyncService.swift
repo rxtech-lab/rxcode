@@ -105,8 +105,14 @@ final class MobileSyncService: ObservableObject {
     /// Begin (or resume) the relay connection. Safe to call multiple times.
     func start() {
         Task { @MainActor in
+            logger.info("[MobileSync] starting relay=\(self.relayURL.absoluteString, privacy: .public) pairedDevices=\(self.pairedDevices.count, privacy: .public) desktopKey=\(String(self.identity.publicKeyHex.prefix(12)), privacy: .public)")
             for device in pairedDevices {
-                try? await client.addPeer(device.pubkeyHex)
+                do {
+                    try await client.addPeer(device.pubkeyHex)
+                    logger.info("[MobileSync] added paired peer mobileKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
+                } catch {
+                    logger.error("[MobileSync] failed to add paired peer mobileKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public): \(error.localizedDescription, privacy: .public)")
+                }
             }
             // Subscribe to events BEFORE calling start() so we don't miss the
             // initial .connecting / .connected state transitions.
@@ -130,6 +136,7 @@ final class MobileSyncService: ObservableObject {
     /// Update the configured relay URL, persist it, and reconnect.
     func updateRelay(url: URL) {
         guard url != relayURL else { return }
+        logger.info("[MobileSync] relay URL changed from \(self.relayURL.absoluteString, privacy: .public) to \(url.absoluteString, privacy: .public)")
         UserDefaults.standard.set(url.absoluteString, forKey: "mobileSync.relayURL")
         relayURL = url
         eventTask?.cancel()
@@ -400,16 +407,23 @@ final class MobileSyncService: ObservableObject {
         }
     }
 
+    func broadcastRunTaskUpdate(_ task: MobileRunTaskSnapshot) {
+        Task {
+            await client.broadcast(.runTaskUpdate(RunTaskUpdatePayload(task: task)))
+        }
+    }
+
     // MARK: - Event dispatch
 
     private func handle(event: RelayClient.Event) {
         switch event {
         case .stateChanged(let s):
             connectionState = s
-        case .deliveryFailed:
+            logger.info("[MobileSync] relay state=\(String(describing: s), privacy: .public) relay=\(self.relayURL.absoluteString, privacy: .public)")
+        case .deliveryFailed(let toHex):
             // Drop-on-offline policy — desktop ignores, mobile will resync on
             // next reconnect.
-            break
+            logger.warning("[MobileSync] relay delivery failed to mobileKey=\(String(toHex.prefix(12)), privacy: .public)")
         case .inbound(let inbound):
             handleInbound(inbound)
         }
@@ -440,6 +454,7 @@ final class MobileSyncService: ObservableObject {
             }
         case .requestSnapshot(let req):
             guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "request_snapshot") else { return }
+            logger.info("[MobileSync] snapshot requested by mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public) activeSession=\(req.activeSessionID ?? "<nil>", privacy: .public)")
             // AppState owns the data; it observes pendingSnapshotRequests
             // and replies. Stub for now — wired up by AppState bridge.
             var userInfo: [String: Any] = ["from": inbound.fromHex]
@@ -557,6 +572,30 @@ final class MobileSyncService: ObservableObject {
                 object: nil,
                 userInfo: ["from": inbound.fromHex, "payload": req]
             )
+        case .runProfileMutationRequest(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "run_profile_mutation_request") else { return }
+            logger.info("[MobileSync] run profile mutation requested operation=\(req.operation.rawValue, privacy: .public) project=\(req.projectID.uuidString, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+            NotificationCenter.default.post(
+                name: .mobileSyncRunProfileMutationRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": req]
+            )
+        case .runProfileRunRequest(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "run_profile_run_request") else { return }
+            logger.info("[MobileSync] run profile start requested project=\(req.projectID.uuidString, privacy: .public) profile=\(req.profileID.uuidString, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+            NotificationCenter.default.post(
+                name: .mobileSyncRunProfileRunRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": req]
+            )
+        case .runProfileStopRequest(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "run_profile_stop_request") else { return }
+            logger.info("[MobileSync] run profile stop requested task=\(req.taskID?.uuidString ?? "<nil>", privacy: .public) project=\(req.projectID?.uuidString ?? "<nil>", privacy: .public) profile=\(req.profileID?.uuidString ?? "<nil>", privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+            NotificationCenter.default.post(
+                name: .mobileSyncRunProfileStopRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": req]
+            )
         case .ping:
             guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "ping") else { return }
             Task { try? await client.send(.pong(PongPayload()), toHex: inbound.fromHex) }
@@ -598,7 +637,12 @@ final class MobileSyncService: ObservableObject {
     /// Send a payload to a single peer (used by AppState when replying to
     /// `request_snapshot` etc).
     func send(_ payload: Payload, toHex hex: String) async {
-        try? await client.send(payload, toHex: hex)
+        do {
+            try await client.send(payload, toHex: hex)
+            logger.debug("[MobileSync] sent type=\(payload.logName, privacy: .public) to mobileKey=\(String(hex.prefix(12)), privacy: .public)")
+        } catch {
+            logger.error("[MobileSync] send failed type=\(payload.logName, privacy: .public) to mobileKey=\(String(hex.prefix(12)), privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     // MARK: - Persistence
@@ -716,4 +760,7 @@ extension Notification.Name {
     static let mobileSyncBranchOpRequested = Notification.Name("mobileSync.branchOpRequested")
     static let mobileSyncFolderTreeRequested = Notification.Name("mobileSync.folderTreeRequested")
     static let mobileSyncCreateProjectRequested = Notification.Name("mobileSync.createProjectRequested")
+    static let mobileSyncRunProfileMutationRequested = Notification.Name("mobileSync.runProfileMutationRequested")
+    static let mobileSyncRunProfileRunRequested = Notification.Name("mobileSync.runProfileRunRequested")
+    static let mobileSyncRunProfileStopRequested = Notification.Name("mobileSync.runProfileStopRequested")
 }

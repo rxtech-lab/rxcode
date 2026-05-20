@@ -31,6 +31,7 @@ public struct MarketplacePlugin: Identifiable, Codable, Sendable, Hashable {
         case url
         case gitSubdir = "git-subdir"
         case skillsBundle = "skills-bundle"
+        case agentSkill = "agent-skill"
     }
 
     public var categoryLabel: String {
@@ -42,6 +43,7 @@ public struct MarketplacePlugin: Identifiable, Codable, Sendable, Hashable {
         case "agent-skills": return "Agent Skills"
         case "knowledge-work": return "Knowledge Work"
         case "financial-services": return "Financial Services"
+        case "codex-curated": return "Codex Curated"
         default: return category.replacingOccurrences(of: "-", with: " ").capitalized
         }
     }
@@ -52,12 +54,13 @@ public struct MarketplacePlugin: Identifiable, Codable, Sendable, Hashable {
         case "anthropic-agent-skills": return "Agent Skills"
         case "knowledge-work-plugins": return "Knowledge Work"
         case "financial-services-plugins": return "Financial Services"
+        case "openai-skills-curated": return "Codex Curated"
         default: return marketplace
         }
     }
 
     public var installCommand: String {
-        "/plugin install \(name)@\(marketplace)"
+        "Install \(name) from \(marketplace)"
     }
 }
 
@@ -87,6 +90,9 @@ public struct MarketplacePluginRecord: Codable, Sendable, Hashable, Identifiable
     public var summary: String?
     public var category: String?
     public var marketplaceSource: MarketplaceSource?
+    public var sourceType: MarketplacePlugin.SourceType?
+    public var skillPaths: [String]?
+    public var instructions: String?
     public var installedAt: Date
     public var isGloballyEnabled: Bool
     public var enabledProviders: Set<AgentProvider>
@@ -97,6 +103,9 @@ public struct MarketplacePluginRecord: Codable, Sendable, Hashable, Identifiable
         summary: String? = nil,
         category: String? = nil,
         marketplaceSource: MarketplaceSource?,
+        sourceType: MarketplacePlugin.SourceType? = nil,
+        skillPaths: [String]? = nil,
+        instructions: String? = nil,
         installedAt: Date = Date(),
         isGloballyEnabled: Bool = true,
         enabledProviders: Set<AgentProvider> = Set(AgentProvider.allCases)
@@ -106,6 +115,9 @@ public struct MarketplacePluginRecord: Codable, Sendable, Hashable, Identifiable
         self.summary = summary
         self.category = category
         self.marketplaceSource = marketplaceSource
+        self.sourceType = sourceType
+        self.skillPaths = skillPaths
+        self.instructions = instructions
         self.installedAt = installedAt
         self.isGloballyEnabled = isGloballyEnabled
         self.enabledProviders = enabledProviders

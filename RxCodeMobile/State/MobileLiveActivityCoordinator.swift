@@ -20,7 +20,9 @@
 import ActivityKit
 import Combine
 import Foundation
+import RxCodeCore
 import RxCodeSync
+import UIKit
 import os.log
 
 @MainActor
@@ -32,6 +34,10 @@ final class MobileLiveActivityCoordinator {
     private var startTokenHex: String?
     /// Per-activity update tokens, keyed by `Activity.id`.
     private var activityTokens: [String: (sessionID: String, tokenHex: String)] = [:]
+    /// Sessions for which we started a Live Activity locally (foreground path).
+    /// Tracked so a burst of session updates can't start the same one twice;
+    /// cleared when the user dismisses the activity.
+    private var locallyStartedSessions: Set<String> = []
     private var observationStarted = false
     private var cancellables = Set<AnyCancellable>()
 
@@ -49,6 +55,16 @@ final class MobileLiveActivityCoordinator {
                 if case .connected = connectionState {
                     self?.resendTokens()
                 }
+            }
+            .store(in: &cancellables)
+        // When the app is in the foreground a job's Live Activity can be
+        // started locally with `Activity.request` — no push-to-start budget.
+        // Watch the mirrored session list and start one as soon as a job
+        // begins streaming; backgrounded jobs still use the desktop's push.
+        state.$sessions
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] sessions in
+                self?.startLocalActivitiesIfForeground(for: sessions)
             }
             .store(in: &cancellables)
     }
@@ -153,11 +169,63 @@ final class MobileLiveActivityCoordinator {
         let sessionID = activity.attributes.sessionID
         let activityID = activity.id
         activityTokens.removeValue(forKey: activityID)
+        locallyStartedSessions.remove(sessionID)
         logger.info("[LiveActivity] activity \(String(describing: activityState), privacy: .public) id=\(activityID, privacy: .public) session=\(sessionID, privacy: .public) — reporting dismissal to desktop")
         Task { [weak state] in
             await state?.sendLiveActivityToken(LiveActivityTokenPayload(
                 activityID: activityID, sessionID: sessionID, activityDismissed: true
             ))
+        }
+    }
+
+    // MARK: - Foreground local start
+
+    /// Start a local Live Activity for every streaming job that doesn't have
+    /// one yet — but only while the app is in the foreground, where
+    /// `Activity.request` works without spending the push-to-start budget.
+    private func startLocalActivitiesIfForeground(for sessions: [SessionSummary]) {
+        guard #available(iOS 16.2, *) else { return }
+        guard UIApplication.shared.applicationState == .active else { return }
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
+        let live = Activity<RxCodeJobActivityAttributes>.activities
+        for session in sessions where session.isStreaming {
+            let sid = session.id
+            guard !locallyStartedSessions.contains(sid),
+                  !live.contains(where: { $0.attributes.sessionID == sid })
+            else { continue }
+            startActivityLocally(for: session)
+        }
+    }
+
+    /// Create the activity in-process and observe it so its push token reaches
+    /// the desktop, which then drives updates exactly as for a pushed activity.
+    @available(iOS 16.2, *)
+    private func startActivityLocally(for session: SessionSummary) {
+        let sid = session.id
+        let projectName = state?.projects.first { $0.id == session.projectId }?.name ?? ""
+        let attributes = RxCodeJobActivityAttributes(
+            sessionID: sid, projectName: projectName, title: session.title
+        )
+        let contentState = RxCodeJobActivityAttributes.ContentState(
+            phase: .running,
+            todoDone: session.progress?.done ?? 0,
+            todoTotal: session.progress?.total ?? 0,
+            currentStep: session.todos?.first { $0.status == .inProgress }?.activeForm,
+            updatedAt: Date().timeIntervalSince1970
+        )
+        do {
+            let activity = try Activity.request(
+                attributes: attributes,
+                content: ActivityContent(
+                    state: contentState, staleDate: Date().addingTimeInterval(3600)
+                ),
+                pushType: .token
+            )
+            locallyStartedSessions.insert(sid)
+            logger.info("[LiveActivity] started locally session=\(sid, privacy: .public) id=\(activity.id, privacy: .public) — foreground, no push-to-start needed")
+            observe(activity)
+        } catch {
+            logger.error("[LiveActivity] local start failed session=\(sid, privacy: .public): \(error.localizedDescription, privacy: .public) — desktop push-to-start will cover it")
         }
     }
 

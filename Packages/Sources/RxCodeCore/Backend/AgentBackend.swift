@@ -18,6 +18,9 @@ public struct BackendSendRequest: Sendable {
     public let hookSettingsPath: String?
     /// Path to the Claude MCP config JSON written for this turn. Claude-only.
     public let mcpClaudeConfigPath: String?
+    /// Extra text appended to the agent's system prompt for this turn — e.g. the
+    /// accumulated briefing for the project's current branch. Claude-only.
+    public let extraSystemPrompt: String?
     /// `-c` overrides handed to the Codex app-server child. Codex-only.
     public let mcpCodexOverrides: [String]
     /// JSON-RPC payload for ACP's `session/new` `mcpServers` parameter.
@@ -39,6 +42,7 @@ public struct BackendSendRequest: Sendable {
         planMode: Bool = false,
         hookSettingsPath: String? = nil,
         mcpClaudeConfigPath: String? = nil,
+        extraSystemPrompt: String? = nil,
         mcpCodexOverrides: [String] = [],
         acpMCPServers: [JSONValue] = [],
         acpSpec: ACPClientSpec? = nil,
@@ -54,6 +58,7 @@ public struct BackendSendRequest: Sendable {
         self.planMode = planMode
         self.hookSettingsPath = hookSettingsPath
         self.mcpClaudeConfigPath = mcpClaudeConfigPath
+        self.extraSystemPrompt = extraSystemPrompt
         self.mcpCodexOverrides = mcpCodexOverrides
         self.acpMCPServers = acpMCPServers
         self.acpSpec = acpSpec

@@ -4257,6 +4257,24 @@ final class AppState {
         }
     }
 
+    /// Wrap a branch briefing into a system-prompt section the agent can use as
+    /// background context. The briefing is auto-generated from earlier threads,
+    /// so it is framed as advisory rather than authoritative.
+    private static func branchBriefingSystemPrompt(branch: String, briefing: String) -> String {
+        let trimmed = briefing.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+        return """
+        # Current branch briefing
+
+        The notes below are an accumulated briefing of recent work on this \
+        project's current branch (`\(branch)`). They are auto-generated from \
+        previous chat threads — treat them as background context for the user's \
+        request, and be aware they may be incomplete or slightly out of date.
+
+        \(trimmed)
+        """
+    }
+
     private func processStream(
         streamId: UUID,
         prompt: String,
@@ -4284,6 +4302,7 @@ final class AppState {
         // Resolve per-backend send-request fields (MCP injection, ACP client
         // spec, model split) before dispatching through the unified protocol.
         var mcpClaudeConfigPath: String? = nil
+        var extraSystemPrompt: String? = nil
         var mcpCodexOverrides: [String] = []
         var acpMCPServers: [JSONValue] = []
         var acpSpec: ACPClientSpec? = nil
@@ -4291,6 +4310,16 @@ final class AppState {
         var resolvedModel: String? = model
         var resolvedSendMode: PermissionMode = permissionMode
         var earlyStream: AsyncStream<StreamEvent>? = nil
+
+        func appendExtraSystemPrompt(_ context: String) {
+            let trimmed = context.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return }
+            if let existing = extraSystemPrompt, !existing.isEmpty {
+                extraSystemPrompt = "\(existing)\n\n\(trimmed)"
+            } else {
+                extraSystemPrompt = trimmed
+            }
+        }
 
         switch agentProvider {
         case .claudeCode:
@@ -4304,9 +4333,24 @@ final class AppState {
             )
             let bridge = idePort.map { IDEMCPServer.bridgeCommand(forPort: $0) }
             mcpClaudeConfigPath = await mcp.writeClaudeConfig(projectPath: cwd, bridgeCommand: bridge)
+            // Surface the accumulated briefing for the project's current branch
+            // to the agent as background context via `--append-system-prompt`.
+            if let branch = await GitHelper.currentBranch(at: cwd),
+               let briefing = threadStore.branchBriefingItem(projectId: projectId, branch: branch) {
+                extraSystemPrompt = Self.branchBriefingSystemPrompt(
+                    branch: branch,
+                    briefing: briefing.briefing
+                )
+            }
+            if let skillContext = await marketplace.promptContext(for: .claudeCode) {
+                appendExtraSystemPrompt(skillContext)
+            }
         case .codex:
             mcpCodexOverrides = await mcp.codexConfigOverrides(projectPath: cwd)
             mcpCodexOverrides += await marketplace.codexConfigOverrides()
+            if let skillContext = await marketplace.promptContext(for: .codex) {
+                resolvedPrompt = "\(skillContext)\n\nUser request:\n\(prompt)"
+            }
             resolvedSendMode = registerMode
         case .acp:
             // Allocate a per-session IDE-MCP port so the ACP agent can call
@@ -4368,6 +4412,7 @@ final class AppState {
                 planMode: permissionMode == .plan,
                 hookSettingsPath: hookSettingsPath,
                 mcpClaudeConfigPath: mcpClaudeConfigPath,
+                extraSystemPrompt: extraSystemPrompt,
                 mcpCodexOverrides: mcpCodexOverrides,
                 acpMCPServers: acpMCPServers,
                 acpSpec: acpSpec,

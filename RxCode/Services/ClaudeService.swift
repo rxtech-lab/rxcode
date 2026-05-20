@@ -473,6 +473,7 @@ actor ClaudeCodeServer {
         effort: String? = nil,
         hookSettingsPath: String? = nil,
         mcpConfigPath: String? = nil,
+        extraSystemPrompt: String? = nil,
         permissionMode: PermissionMode = .default
     ) -> AsyncStream<StreamEvent> {
         let stdin = Pipe()
@@ -502,6 +503,7 @@ actor ClaudeCodeServer {
                         effort: effort,
                         hookSettingsPath: hookSettingsPath,
                         mcpConfigPath: mcpConfigPath,
+                        extraSystemPrompt: extraSystemPrompt,
                         permissionMode: permissionMode,
                         stdinPipe: stdin,
                         stdoutPipe: stdout,
@@ -800,6 +802,7 @@ actor ClaudeCodeServer {
         effort: String?,
         hookSettingsPath: String?,
         mcpConfigPath: String?,
+        extraSystemPrompt: String?,
         permissionMode: PermissionMode
     ) -> [String] {
         var args: [String] = [
@@ -834,9 +837,21 @@ actor ClaudeCodeServer {
 
         if let mcpConfigPath {
             args += ["--strict-mcp-config", "--mcp-config", mcpConfigPath]
-            // The `rxcode-ide` MCP server is part of this config — tell the
-            // agent the IDE multi-agent / introspection tools exist.
-            args += ["--append-system-prompt", Self.ideToolsSystemPrompt]
+        }
+
+        // Assemble the system-prompt additions for this turn into a single
+        // `--append-system-prompt` value (the CLI honours one occurrence):
+        //  - IDE tools blurb, when the `rxcode-ide` MCP server is wired in.
+        //  - Caller-supplied context, e.g. the current branch briefing.
+        var systemPromptSections: [String] = []
+        if mcpConfigPath != nil {
+            systemPromptSections.append(Self.ideToolsSystemPrompt)
+        }
+        if let extraSystemPrompt, !extraSystemPrompt.isEmpty {
+            systemPromptSections.append(extraSystemPrompt)
+        }
+        if !systemPromptSections.isEmpty {
+            args += ["--append-system-prompt", systemPromptSections.joined(separator: "\n\n")]
         }
 
         if let sessionId {
@@ -871,6 +886,7 @@ actor ClaudeCodeServer {
         effort: String? = nil,
         hookSettingsPath: String?,
         mcpConfigPath: String?,
+        extraSystemPrompt: String? = nil,
         permissionMode: PermissionMode = .default,
         stdinPipe: Pipe,
         stdoutPipe: Pipe,
@@ -887,6 +903,7 @@ actor ClaudeCodeServer {
             effort: effort,
             hookSettingsPath: hookSettingsPath,
             mcpConfigPath: mcpConfigPath,
+            extraSystemPrompt: extraSystemPrompt,
             permissionMode: permissionMode
         )
         let environment = await resolvedEnvironment()
@@ -1219,6 +1236,7 @@ extension ClaudeCodeServer: AgentBackend {
             effort: request.effort,
             hookSettingsPath: request.hookSettingsPath,
             mcpConfigPath: request.mcpClaudeConfigPath,
+            extraSystemPrompt: request.extraSystemPrompt,
             permissionMode: request.permissionMode
         )
     }

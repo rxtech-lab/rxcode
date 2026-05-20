@@ -104,6 +104,11 @@ final class MobileSyncService: ObservableObject {
     private var streamingSessionIDs: Set<String> = []
     /// Per-job Live Activity bookkeeping, keyed by session id.
     private var jobActivityState: [String: JobActivityState] = [:]
+    /// Pending delayed push-to-start tasks, keyed by session id. The
+    /// push-to-start is deferred briefly so a foregrounded device can instead
+    /// start the activity locally; the task is cancelled once that device
+    /// reports a per-activity token.
+    private var pendingStartTasks: [String: Task<Void, Never>] = [:]
     /// Last widget job count pushed, so a widget push only fires on a change.
     private var lastWidgetJobCount: Int = -1
 
@@ -501,7 +506,7 @@ final class MobileSyncService: ObservableObject {
             } else {
                 jobActivityState[sessionID] = JobActivityState(lastContent: content)
                 logger.info("[LiveActivity] reconcile decision=start session=\(sessionID, privacy: .public)")
-                sendLiveActivityStart(content)
+                scheduleLiveActivityStart(for: sessionID)
             }
         } else if var state = jobActivityState[sessionID] {
             // The job finished. Keep the activity alive in the "done" state so
@@ -511,6 +516,8 @@ final class MobileSyncService: ObservableObject {
                 logger.debug("[LiveActivity] reconcile decision=skip-already-done session=\(sessionID, privacy: .public)")
                 return
             }
+            // The job is already finished — no need to push-to-start it.
+            cancelPendingStart(sessionID)
             state.isDone = true
             state.lastContent = content
             jobActivityState[sessionID] = state
@@ -530,6 +537,39 @@ final class MobileSyncService: ObservableObject {
             todoTotal: summary.progress?.total ?? 0,
             currentStep: summary.todos?.first { $0.status == .inProgress }?.activeForm
         )
+    }
+
+    /// Schedule the push-to-start after a short delay. A foregrounded mobile
+    /// starts the activity itself (no push-to-start budget) and reports its
+    /// token within a second or two; that token cancels this task. Only a
+    /// backgrounded device — which cannot start an activity on its own — ends
+    /// up actually receiving the push-to-start.
+    private func scheduleLiveActivityStart(for sessionID: String) {
+        pendingStartTasks[sessionID]?.cancel()
+        pendingStartTasks[sessionID] = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled, let self else { return }
+            self.pendingStartTasks.removeValue(forKey: sessionID)
+            guard let job = self.jobActivityState[sessionID], !job.isDone else { return }
+            let hasToken = self.pairedDevices.contains { device in
+                (device.liveActivityTokens ?? []).contains { $0.sessionID == sessionID }
+            }
+            guard !hasToken else {
+                self.logger.info("[LiveActivity] push-to-start skipped session=\(sessionID, privacy: .public) — device started the activity locally")
+                return
+            }
+            self.logger.info("[LiveActivity] push-to-start firing session=\(sessionID, privacy: .public) — no local activity was reported")
+            self.sendLiveActivityStart(job.lastContent)
+        }
+    }
+
+    /// Cancel a pending push-to-start — the activity already exists, or the
+    /// job ended before the delay elapsed.
+    private func cancelPendingStart(_ sessionID: String) {
+        if let task = pendingStartTasks.removeValue(forKey: sessionID) {
+            task.cancel()
+            logger.debug("[LiveActivity] pending push-to-start cancelled session=\(sessionID, privacy: .public)")
+        }
     }
 
     /// Push a `start` Live Activity to every device with a push-to-start token.
@@ -751,6 +791,7 @@ final class MobileSyncService: ObservableObject {
                 let sessionID = t.sessionID ?? ""
                 if !sessionID.isEmpty {
                     jobActivityState.removeValue(forKey: sessionID)
+                    cancelPendingStart(sessionID)
                 }
                 if var refs = pairedDevices[idx].liveActivityTokens {
                     refs.removeAll {
@@ -775,6 +816,11 @@ final class MobileSyncService: ObservableObject {
                 refs.append(ref)
                 pairedDevices[idx].liveActivityTokens = refs
                 logger.info("[LiveActivity] activity token registered activity=\(activityID, privacy: .public) session=\(ref.sessionID, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+                // A token means the activity exists — drop any pending
+                // push-to-start so a second activity is never created.
+                if !ref.sessionID.isEmpty {
+                    cancelPendingStart(ref.sessionID)
+                }
                 // Push the latest known state straight away so a freshly
                 // started activity isn't left blank until the next change.
                 if !ref.sessionID.isEmpty, let st = jobActivityState[ref.sessionID] {

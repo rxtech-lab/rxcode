@@ -21,6 +21,7 @@ actor MarketplaceService {
         ("anthropics", "knowledge-work-plugins", "knowledge-work"),
         ("anthropics", "financial-services-plugins", "financial-services"),
     ]
+    private static let openAISkillsSource = MarketplaceSource(owner: "openai", repo: "skills")
 
     // MARK: - Fetch Catalog
 
@@ -35,6 +36,9 @@ actor MarketplaceService {
         var allPlugins: [MarketplacePlugin] = []
 
         await withTaskGroup(of: [MarketplacePlugin].self) { group in
+            group.addTask {
+                await self.fetchOpenAISkills()
+            }
             for source in Self.sourceRepos {
                 group.addTask {
                     await self.fetchRepoPlugins(
@@ -56,6 +60,59 @@ actor MarketplaceService {
 
         logger.info("Fetched \(allPlugins.count) plugins from marketplace")
         return allPlugins
+    }
+
+    private func fetchOpenAISkills() async -> [MarketplacePlugin] {
+        let apiURL = "https://api.github.com/repos/openai/skills/contents/skills/.curated?ref=main"
+        guard let url = URL(string: apiURL) else { return [] }
+
+        do {
+            let (data, response) = try await URLSession.shared.data(from: url)
+            guard let httpResponse = response as? HTTPURLResponse,
+                  httpResponse.statusCode == 200,
+                  let entries = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+                return []
+            }
+
+            let names = entries.compactMap { entry -> String? in
+                guard (entry["type"] as? String) == "dir" else { return nil }
+                return entry["name"] as? String
+            }
+
+            var skills: [MarketplacePlugin] = []
+            await withTaskGroup(of: MarketplacePlugin?.self) { group in
+                for name in names {
+                    group.addTask { await self.fetchOpenAISkill(named: name) }
+                }
+                for await skill in group {
+                    if let skill { skills.append(skill) }
+                }
+            }
+            return skills
+        } catch {
+            logger.warning("Failed to fetch OpenAI skills catalog: \(error.localizedDescription)")
+            return []
+        }
+    }
+
+    private func fetchOpenAISkill(named name: String) async -> MarketplacePlugin? {
+        let path = "skills/.curated/\(name)"
+        guard let instructions = await fetchRawSkillInstructions(source: Self.openAISkillsSource, path: path) else {
+            return nil
+        }
+
+        let metadata = parseSkillMetadata(instructions)
+        return MarketplacePlugin(
+            name: metadata.name ?? name,
+            description: metadata.description ?? "",
+            author: "OpenAI",
+            category: "codex-curated",
+            homepage: "https://github.com/openai/skills/tree/main/\(path)",
+            marketplace: "openai-skills-curated",
+            marketplaceSource: Self.openAISkillsSource,
+            sourceType: .agentSkill,
+            skillPaths: [path]
+        )
     }
 
     // MARK: - Fetch Repository
@@ -184,7 +241,9 @@ actor MarketplaceService {
                     marketplace: plugin.marketplace,
                     summary: plugin.description,
                     category: plugin.category,
-                    marketplaceSource: plugin.marketplaceSource
+                    marketplaceSource: plugin.marketplaceSource,
+                    sourceType: plugin.sourceType,
+                    skillPaths: plugin.skillPaths
                 ))
                 changed = true
             }
@@ -200,12 +259,16 @@ actor MarketplaceService {
     /// Install into RxCode-owned state and mirror to Claude Code when available.
     func installPlugin(_ plugin: MarketplacePlugin) async throws {
         var config = try loadConfig()
+        let instructions = await skillInstructions(for: plugin)
         let record = MarketplacePluginRecord(
             name: plugin.name,
             marketplace: plugin.marketplace,
             summary: plugin.description,
             category: plugin.category,
-            marketplaceSource: plugin.marketplaceSource
+            marketplaceSource: plugin.marketplaceSource,
+            sourceType: plugin.sourceType,
+            skillPaths: plugin.skillPaths,
+            instructions: instructions
         )
 
         if let index = config.plugins.firstIndex(where: { $0.id == record.id }) {
@@ -214,6 +277,9 @@ actor MarketplaceService {
             config.plugins[index].marketplaceSource = plugin.marketplaceSource
             config.plugins[index].summary = plugin.description
             config.plugins[index].category = plugin.category
+            config.plugins[index].sourceType = plugin.sourceType
+            config.plugins[index].skillPaths = plugin.skillPaths
+            config.plugins[index].instructions = instructions
         } else {
             config.plugins.append(record)
         }
@@ -279,20 +345,86 @@ actor MarketplaceService {
                 .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
             guard !records.isEmpty else { return nil }
 
-            var lines = ["Installed RxCode skills available for this session:"]
+            var lines = ["# Installed RxCode skills\nUse the following installed skills when they match the user's request."]
+            var remainingBudget = 18_000
             for record in records {
-                let detail = record.summary?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let detail = (record.instructions ?? record.summary)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let clipped = String(detail.prefix(max(0, min(remainingBudget, 6_000))))
                 if detail.isEmpty {
-                    lines.append("- \(record.name) from \(record.marketplace)")
+                    lines.append("## \(record.name)\nSource: \(record.marketplace)")
                 } else {
-                    lines.append("- \(record.name) from \(record.marketplace): \(detail)")
+                    lines.append("## \(record.name)\nSource: \(record.marketplace)\n\n\(clipped)")
+                    remainingBudget -= clipped.count
+                    if remainingBudget <= 0 { break }
                 }
             }
-            return lines.joined(separator: "\n")
+            return lines.joined(separator: "\n\n")
         } catch {
             logger.warning("Failed to build skill prompt context: \(error.localizedDescription)")
             return nil
         }
+    }
+
+    private func skillInstructions(for plugin: MarketplacePlugin) async -> String? {
+        guard let source = plugin.marketplaceSource else { return nil }
+        for path in plugin.skillPaths {
+            if let instructions = await fetchRawSkillInstructions(source: source, path: path) {
+                return instructions
+            }
+        }
+        return nil
+    }
+
+    private func fetchRawSkillInstructions(source: MarketplaceSource, path: String) async -> String? {
+        let cleanPath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let ref = source.ref?.isEmpty == false ? source.ref! : "main"
+        let rawURL = "https://raw.githubusercontent.com/\(source.owner)/\(source.repo)/\(ref)/\(cleanPath)/SKILL.md"
+        guard let url = URL(string: rawURL) else { return nil }
+
+        do {
+            let (data, response) = try await URLSession.shared.data(from: url)
+            guard let httpResponse = response as? HTTPURLResponse,
+                  httpResponse.statusCode == 200 else {
+                return nil
+            }
+            return String(data: data, encoding: .utf8)
+        } catch {
+            logger.warning("Failed to fetch skill instructions at \(rawURL, privacy: .public): \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    private func parseSkillMetadata(_ text: String) -> (name: String?, description: String?) {
+        guard text.hasPrefix("---"),
+              let end = text.dropFirst(3).range(of: "---") else {
+            return (nil, nil)
+        }
+
+        let frontMatter = text[text.index(text.startIndex, offsetBy: 3)..<end.lowerBound]
+        var name: String?
+        var description: String?
+        for rawLine in frontMatter.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            if line.hasPrefix("name:") {
+                name = cleanYAMLScalar(String(line.dropFirst("name:".count)))
+            } else if line.hasPrefix("description:") {
+                description = cleanYAMLScalar(String(line.dropFirst("description:".count)))
+            }
+        }
+        return (name, description)
+    }
+
+    private func cleanYAMLScalar(_ value: String) -> String {
+        var trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.count >= 2,
+           let first = trimmed.first,
+           let last = trimmed.last,
+           (first == "\"" && last == "\"") || (first == "'" && last == "'") {
+            trimmed.removeFirst()
+            trimmed.removeLast()
+        }
+        return trimmed
     }
 
     // MARK: - RxCode Config

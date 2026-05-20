@@ -49,6 +49,7 @@ struct MobileBriefingView: View {
                                         BriefingCard(
                                             group: group,
                                             projectName: projectsById[group.projectId]?.name ?? "Unknown Project",
+                                            activeJobCount: activeJobCountByProject[group.projectId] ?? 0,
                                             namespace: glassNamespace
                                         )
                                     }
@@ -121,6 +122,17 @@ struct MobileBriefingView: View {
 
     private var projectsById: [UUID: Project] {
         Dictionary(uniqueKeysWithValues: state.projects.map { ($0.id, $0) })
+    }
+
+    /// Number of active (streaming) jobs per project. `SessionSummary` only
+    /// carries `projectId`, not a branch, so the count is project-scoped and
+    /// every branch card for a project shares it.
+    private var activeJobCountByProject: [UUID: Int] {
+        var counts: [UUID: Int] = [:]
+        for session in state.sessions where session.isStreaming {
+            counts[session.projectId, default: 0] += 1
+        }
+        return counts
     }
 
     /// Every briefing group before the project/branch filters are applied.
@@ -253,6 +265,7 @@ struct MobileBriefingView: View {
 private struct BriefingCard: View {
     let group: GroupedBriefing
     let projectName: String
+    let activeJobCount: Int
     let namespace: Namespace.ID
 
     private var threadCount: Int { group.threads.count }
@@ -312,6 +325,11 @@ private struct BriefingCard: View {
 
             // Footer with metadata
             HStack(spacing: 12) {
+                // Active jobs chip — pulses while jobs are running
+                if activeJobCount > 0 {
+                    ActiveJobsChip(count: activeJobCount)
+                }
+
                 // Thread count chip
                 if threadCount > 0 {
                     HStack(spacing: 4) {
@@ -325,7 +343,7 @@ private struct BriefingCard: View {
                     .padding(.vertical, 4)
                     .background(.ultraThinMaterial, in: Capsule())
                 }
-                
+
                 Spacer(minLength: 0)
                 
                 // Time ago
@@ -363,6 +381,38 @@ private struct BriefingCard: View {
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
+    }
+}
+
+// MARK: - Active Jobs Chip
+
+/// Footer chip showing how many jobs are actively streaming for a project.
+/// The dot pulses to convey live progress.
+private struct ActiveJobsChip: View {
+    let count: Int
+
+    @State private var isPulsing = false
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Circle()
+                .fill(.green)
+                .frame(width: 6, height: 6)
+                .opacity(isPulsing ? 0.35 : 1)
+                .scaleEffect(isPulsing ? 0.85 : 1)
+            Text("\(count) active")
+                .font(.caption.weight(.medium))
+        }
+        .foregroundStyle(.green)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(.ultraThinMaterial, in: Capsule())
+        .onAppear {
+            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
+                isPulsing = true
+            }
+        }
+        .accessibilityLabel("\(count) active jobs")
     }
 }
 

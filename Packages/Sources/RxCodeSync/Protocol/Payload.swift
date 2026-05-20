@@ -11,6 +11,7 @@ public enum Payload: Sendable {
     case pairAck(PairAckPayload)
     case unpair(UnpairPayload)
     case apnsToken(APNsTokenPayload)
+    case liveActivityToken(LiveActivityTokenPayload)
     case requestSnapshot(RequestSnapshotPayload)
     case snapshot(SnapshotPayload)
     case settingsUpdate(MobileSettingsUpdatePayload)
@@ -23,6 +24,8 @@ public enum Payload: Sendable {
     case threadActionRequest(ThreadActionRequestPayload)
     case loadMoreMessages(LoadMoreMessagesRequestPayload)
     case moreMessages(MoreMessagesPayload)
+    case threadChangesRequest(ThreadChangesRequestPayload)
+    case threadChangesResult(ThreadChangesResultPayload)
     case searchRequest(SearchRequestPayload)
     case searchResults(SearchResultsPayload)
     case notification(NotificationPayload)
@@ -42,6 +45,20 @@ public enum Payload: Sendable {
     case runProfileRunRequest(RunProfileRunRequestPayload)
     case runProfileStopRequest(RunProfileStopRequestPayload)
     case runTaskUpdate(RunTaskUpdatePayload)
+    case skillCatalogRequest(SkillCatalogRequestPayload)
+    case skillCatalogResult(SkillCatalogResultPayload)
+    case skillMutationRequest(SkillMutationRequestPayload)
+    case skillMutationResult(SkillMutationResultPayload)
+    case skillSourceMutationRequest(SkillSourceMutationRequestPayload)
+    case skillSourceMutationResult(SkillSourceMutationResultPayload)
+    case acpRegistryRequest(ACPRegistryRequestPayload)
+    case acpRegistryResult(ACPRegistryResultPayload)
+    case acpMutationRequest(ACPMutationRequestPayload)
+    case acpMutationResult(ACPMutationResultPayload)
+    case mcpConfigRequest(MCPConfigRequestPayload)
+    case mcpConfigResult(MCPConfigResultPayload)
+    case mcpMutationRequest(MCPMutationRequestPayload)
+    case mcpMutationResult(MCPMutationResultPayload)
     case ping(PingPayload)
     case pong(PongPayload)
     case unknown(type: String)
@@ -54,6 +71,7 @@ public extension Payload {
         case .pairAck: return "pair_ack"
         case .unpair: return "unpair"
         case .apnsToken: return "apns_token"
+        case .liveActivityToken: return "live_activity_token"
         case .requestSnapshot: return "request_snapshot"
         case .snapshot: return "snapshot"
         case .settingsUpdate: return "settings_update"
@@ -66,6 +84,8 @@ public extension Payload {
         case .threadActionRequest: return "thread_action_request"
         case .loadMoreMessages: return "load_more_messages"
         case .moreMessages: return "more_messages"
+        case .threadChangesRequest: return "thread_changes_request"
+        case .threadChangesResult: return "thread_changes_result"
         case .searchRequest: return "search_request"
         case .searchResults: return "search_results"
         case .notification: return "notification"
@@ -85,6 +105,20 @@ public extension Payload {
         case .runProfileRunRequest: return "run_profile_run_request"
         case .runProfileStopRequest: return "run_profile_stop_request"
         case .runTaskUpdate: return "run_task_update"
+        case .skillCatalogRequest: return "skill_catalog_request"
+        case .skillCatalogResult: return "skill_catalog_result"
+        case .skillMutationRequest: return "skill_mutation_request"
+        case .skillMutationResult: return "skill_mutation_result"
+        case .skillSourceMutationRequest: return "skill_source_mutation_request"
+        case .skillSourceMutationResult: return "skill_source_mutation_result"
+        case .acpRegistryRequest: return "acp_registry_request"
+        case .acpRegistryResult: return "acp_registry_result"
+        case .acpMutationRequest: return "acp_mutation_request"
+        case .acpMutationResult: return "acp_mutation_result"
+        case .mcpConfigRequest: return "mcp_config_request"
+        case .mcpConfigResult: return "mcp_config_result"
+        case .mcpMutationRequest: return "mcp_mutation_request"
+        case .mcpMutationResult: return "mcp_mutation_result"
         case .ping: return "ping"
         case .pong: return "pong"
         case .unknown(let type): return type
@@ -131,6 +165,50 @@ public struct APNsTokenPayload: Codable, Sendable {
     public init(tokenHex: String, environment: String) {
         self.tokenHex = tokenHex
         self.environment = environment
+    }
+}
+
+/// Mobile → desktop: ActivityKit push tokens for the job Live Activity. A
+/// single payload reports either the device-wide push-to-start token, a
+/// per-activity update token, or both. The desktop stores them per paired
+/// device so it can remotely start, update, and end Live Activities over APNs.
+public struct LiveActivityTokenPayload: Codable, Sendable {
+    /// Device-wide push-to-start token (iOS 17.2+). Lets the desktop start a
+    /// Live Activity for a new job remotely. `nil` when this payload only
+    /// reports a per-activity update token.
+    public let pushToStartTokenHex: String?
+    /// Per-activity update token returned by `Activity.pushTokenUpdates`.
+    /// `nil` when this payload only reports a push-to-start token.
+    public let activityTokenHex: String?
+    /// Identifier of the `Activity` the update token belongs to.
+    public let activityID: String?
+    /// The job (chat session) the activity tracks.
+    public let sessionID: String?
+    /// `true` when the user dismissed the Live Activity on the device. The
+    /// desktop then forgets the activity so the next stream of the same session
+    /// starts a fresh one instead of pushing to a token that no longer renders.
+    public let activityDismissed: Bool?
+    /// `true` when the foregrounded device started the Live Activity itself
+    /// with `Activity.request`. Reported the instant the activity is created —
+    /// well before its per-activity push token, which APNs can take several
+    /// seconds to mint — so the desktop can cancel its deferred push-to-start
+    /// and never spawn a duplicate activity.
+    public let activityStartedLocally: Bool?
+
+    public init(
+        pushToStartTokenHex: String? = nil,
+        activityTokenHex: String? = nil,
+        activityID: String? = nil,
+        sessionID: String? = nil,
+        activityDismissed: Bool? = nil,
+        activityStartedLocally: Bool? = nil
+    ) {
+        self.pushToStartTokenHex = pushToStartTokenHex
+        self.activityTokenHex = activityTokenHex
+        self.activityID = activityID
+        self.sessionID = sessionID
+        self.activityDismissed = activityDismissed
+        self.activityStartedLocally = activityStartedLocally
     }
 }
 
@@ -634,6 +712,487 @@ public struct RunTaskUpdatePayload: Codable, Sendable {
 
     public init(task: MobileRunTaskSnapshot) {
         self.task = task
+    }
+}
+
+// MARK: - Skills / ACP / MCP remote management
+
+/// Mobile asks the desktop for the skill marketplace catalog. `forceRefresh`
+/// bypasses the desktop's 5-minute marketplace cache.
+public struct SkillCatalogRequestPayload: Codable, Sendable {
+    public let clientRequestID: UUID
+    public let forceRefresh: Bool
+
+    public init(clientRequestID: UUID = UUID(), forceRefresh: Bool = false) {
+        self.clientRequestID = clientRequestID
+        self.forceRefresh = forceRefresh
+    }
+}
+
+/// One marketplace plugin flattened from the desktop's `MarketplacePlugin`
+/// plus its current install state. `id` mirrors `MarketplacePlugin.id`.
+public struct MobileSkillPlugin: Codable, Sendable, Identifiable, Equatable {
+    public let id: String
+    public let name: String
+    public let summary: String
+    public let author: String
+    public let category: String
+    public let categoryLabel: String
+    public let marketplace: String
+    public let marketplaceLabel: String
+    public let homepage: String
+    public let isInstalled: Bool
+
+    public init(
+        id: String,
+        name: String,
+        summary: String,
+        author: String,
+        category: String,
+        categoryLabel: String,
+        marketplace: String,
+        marketplaceLabel: String,
+        homepage: String,
+        isInstalled: Bool
+    ) {
+        self.id = id
+        self.name = name
+        self.summary = summary
+        self.author = author
+        self.category = category
+        self.categoryLabel = categoryLabel
+        self.marketplace = marketplace
+        self.marketplaceLabel = marketplaceLabel
+        self.homepage = homepage
+        self.isInstalled = isInstalled
+    }
+}
+
+public struct MobileSkillSource: Codable, Sendable, Identifiable, Equatable {
+    public let id: String
+    public let displayName: String
+
+    public init(id: String, displayName: String) {
+        self.id = id
+        self.displayName = displayName
+    }
+}
+
+public struct SkillCatalogResultPayload: Codable, Sendable {
+    public let clientRequestID: UUID
+    public let ok: Bool
+    public let errorMessage: String?
+    public let plugins: [MobileSkillPlugin]
+    public let sources: [MobileSkillSource]
+
+    public init(
+        clientRequestID: UUID,
+        ok: Bool,
+        errorMessage: String? = nil,
+        plugins: [MobileSkillPlugin] = [],
+        sources: [MobileSkillSource] = []
+    ) {
+        self.clientRequestID = clientRequestID
+        self.ok = ok
+        self.errorMessage = errorMessage
+        self.plugins = plugins
+        self.sources = sources
+    }
+}
+
+/// Mobile asks the desktop to install or remove a marketplace skill. `pluginID`
+/// is the catalog id; the desktop re-resolves the authoritative plugin from its
+/// own freshly-fetched catalog.
+public struct SkillMutationRequestPayload: Codable, Sendable {
+    public enum Operation: String, Codable, Sendable {
+        case install
+        case uninstall
+    }
+
+    public let clientRequestID: UUID
+    public let operation: Operation
+    public let pluginID: String
+
+    public init(clientRequestID: UUID = UUID(), operation: Operation, pluginID: String) {
+        self.clientRequestID = clientRequestID
+        self.operation = operation
+        self.pluginID = pluginID
+    }
+}
+
+public struct SkillMutationResultPayload: Codable, Sendable {
+    public let clientRequestID: UUID
+    public let operation: SkillMutationRequestPayload.Operation
+    public let pluginID: String
+    public let ok: Bool
+    public let errorMessage: String?
+    public let plugins: [MobileSkillPlugin]
+    public let sources: [MobileSkillSource]
+
+    public init(
+        clientRequestID: UUID,
+        operation: SkillMutationRequestPayload.Operation,
+        pluginID: String,
+        ok: Bool,
+        errorMessage: String? = nil,
+        plugins: [MobileSkillPlugin] = [],
+        sources: [MobileSkillSource] = []
+    ) {
+        self.clientRequestID = clientRequestID
+        self.operation = operation
+        self.pluginID = pluginID
+        self.ok = ok
+        self.errorMessage = errorMessage
+        self.plugins = plugins
+        self.sources = sources
+    }
+}
+
+public struct SkillSourceMutationRequestPayload: Codable, Sendable {
+    public enum Operation: String, Codable, Sendable {
+        case add
+        case remove
+    }
+
+    public let clientRequestID: UUID
+    public let operation: Operation
+    public let sourceID: String?
+    public let gitURL: String?
+    public let ref: String?
+
+    public init(
+        clientRequestID: UUID = UUID(),
+        operation: Operation,
+        sourceID: String? = nil,
+        gitURL: String? = nil,
+        ref: String? = nil
+    ) {
+        self.clientRequestID = clientRequestID
+        self.operation = operation
+        self.sourceID = sourceID
+        self.gitURL = gitURL
+        self.ref = ref
+    }
+}
+
+public struct SkillSourceMutationResultPayload: Codable, Sendable {
+    public let clientRequestID: UUID
+    public let operation: SkillSourceMutationRequestPayload.Operation
+    public let sourceID: String?
+    public let ok: Bool
+    public let errorMessage: String?
+    public let plugins: [MobileSkillPlugin]
+    public let sources: [MobileSkillSource]
+
+    public init(
+        clientRequestID: UUID,
+        operation: SkillSourceMutationRequestPayload.Operation,
+        sourceID: String? = nil,
+        ok: Bool,
+        errorMessage: String? = nil,
+        plugins: [MobileSkillPlugin] = [],
+        sources: [MobileSkillSource] = []
+    ) {
+        self.clientRequestID = clientRequestID
+        self.operation = operation
+        self.sourceID = sourceID
+        self.ok = ok
+        self.errorMessage = errorMessage
+        self.plugins = plugins
+        self.sources = sources
+    }
+}
+
+/// Mobile asks the desktop for the ACP agent registry plus installed clients.
+public struct ACPRegistryRequestPayload: Codable, Sendable {
+    public let clientRequestID: UUID
+    public let forceRefresh: Bool
+
+    public init(clientRequestID: UUID = UUID(), forceRefresh: Bool = false) {
+        self.clientRequestID = clientRequestID
+        self.forceRefresh = forceRefresh
+    }
+}
+
+/// A registry agent flattened from the desktop's `ACPRegistryAgent`, plus
+/// whether a matching client is already installed locally.
+public struct MobileACPRegistryAgent: Codable, Sendable, Identifiable, Equatable {
+    public let id: String
+    public let name: String
+    public let version: String
+    public let summary: String
+    public let authors: [String]
+    public let license: String?
+    public let website: String?
+    public let iconURL: String?
+    public let isInstalled: Bool
+    public let hasBinary: Bool
+    public let hasNpx: Bool
+    public let hasUvx: Bool
+
+    public init(
+        id: String,
+        name: String,
+        version: String,
+        summary: String,
+        authors: [String] = [],
+        license: String? = nil,
+        website: String? = nil,
+        iconURL: String? = nil,
+        isInstalled: Bool,
+        hasBinary: Bool,
+        hasNpx: Bool,
+        hasUvx: Bool
+    ) {
+        self.id = id
+        self.name = name
+        self.version = version
+        self.summary = summary
+        self.authors = authors
+        self.license = license
+        self.website = website
+        self.iconURL = iconURL
+        self.isInstalled = isInstalled
+        self.hasBinary = hasBinary
+        self.hasNpx = hasNpx
+        self.hasUvx = hasUvx
+    }
+}
+
+/// An installed ACP client mirrored from the desktop's `ACPClientSpec`.
+public struct MobileACPClient: Codable, Sendable, Identifiable, Equatable {
+    public let id: String
+    public let registryId: String?
+    public let displayName: String
+    public let enabled: Bool
+    public let launchKind: String
+    public let modelCount: Int
+    public let iconURL: String?
+
+    public init(
+        id: String,
+        registryId: String? = nil,
+        displayName: String,
+        enabled: Bool,
+        launchKind: String,
+        modelCount: Int,
+        iconURL: String? = nil
+    ) {
+        self.id = id
+        self.registryId = registryId
+        self.displayName = displayName
+        self.enabled = enabled
+        self.launchKind = launchKind
+        self.modelCount = modelCount
+        self.iconURL = iconURL
+    }
+}
+
+public struct ACPRegistryResultPayload: Codable, Sendable {
+    public let clientRequestID: UUID
+    public let ok: Bool
+    public let errorMessage: String?
+    public let registryAgents: [MobileACPRegistryAgent]
+    public let installedClients: [MobileACPClient]
+
+    public init(
+        clientRequestID: UUID,
+        ok: Bool,
+        errorMessage: String? = nil,
+        registryAgents: [MobileACPRegistryAgent] = [],
+        installedClients: [MobileACPClient] = []
+    ) {
+        self.clientRequestID = clientRequestID
+        self.ok = ok
+        self.errorMessage = errorMessage
+        self.registryAgents = registryAgents
+        self.installedClients = installedClients
+    }
+}
+
+/// Mobile asks the desktop to install an ACP agent from the registry, remove an
+/// installed client, or toggle a client's enabled flag.
+public struct ACPMutationRequestPayload: Codable, Sendable {
+    public enum Operation: String, Codable, Sendable {
+        case install
+        case uninstall
+        case setEnabled
+    }
+
+    public let clientRequestID: UUID
+    public let operation: Operation
+    public let registryAgentID: String?
+    public let clientID: String?
+    public let enabled: Bool?
+
+    public init(
+        clientRequestID: UUID = UUID(),
+        operation: Operation,
+        registryAgentID: String? = nil,
+        clientID: String? = nil,
+        enabled: Bool? = nil
+    ) {
+        self.clientRequestID = clientRequestID
+        self.operation = operation
+        self.registryAgentID = registryAgentID
+        self.clientID = clientID
+        self.enabled = enabled
+    }
+}
+
+public struct ACPMutationResultPayload: Codable, Sendable {
+    public let clientRequestID: UUID
+    public let operation: ACPMutationRequestPayload.Operation
+    public let ok: Bool
+    public let errorMessage: String?
+    public let registryAgents: [MobileACPRegistryAgent]
+    public let installedClients: [MobileACPClient]
+
+    public init(
+        clientRequestID: UUID,
+        operation: ACPMutationRequestPayload.Operation,
+        ok: Bool,
+        errorMessage: String? = nil,
+        registryAgents: [MobileACPRegistryAgent] = [],
+        installedClients: [MobileACPClient] = []
+    ) {
+        self.clientRequestID = clientRequestID
+        self.operation = operation
+        self.ok = ok
+        self.errorMessage = errorMessage
+        self.registryAgents = registryAgents
+        self.installedClients = installedClients
+    }
+}
+
+/// Mobile asks the desktop for the configured global MCP servers.
+public struct MCPConfigRequestPayload: Codable, Sendable {
+    public let clientRequestID: UUID
+
+    public init(clientRequestID: UUID = UUID()) {
+        self.clientRequestID = clientRequestID
+    }
+}
+
+/// A plain key/value pair for MCP environment variables and headers. The
+/// desktop's `MCPKeyValue` carries a non-Codable UUID, so the wire uses this.
+public struct MobileMCPKeyValue: Codable, Sendable, Equatable, Hashable {
+    public let key: String
+    public let value: String
+
+    public init(key: String, value: String) {
+        self.key = key
+        self.value = value
+    }
+}
+
+/// One global MCP server flattened from the desktop's `MCPServerRecord`.
+public struct MobileMCPServer: Codable, Sendable, Identifiable, Equatable {
+    public var id: String { name }
+
+    public let name: String
+    public let transport: String
+    public let url: String?
+    public let command: String?
+    public let args: [String]
+    public let env: [MobileMCPKeyValue]
+    public let headers: [MobileMCPKeyValue]
+    public let isGloballyEnabled: Bool
+    public let endpoint: String
+
+    public init(
+        name: String,
+        transport: String,
+        url: String? = nil,
+        command: String? = nil,
+        args: [String] = [],
+        env: [MobileMCPKeyValue] = [],
+        headers: [MobileMCPKeyValue] = [],
+        isGloballyEnabled: Bool,
+        endpoint: String
+    ) {
+        self.name = name
+        self.transport = transport
+        self.url = url
+        self.command = command
+        self.args = args
+        self.env = env
+        self.headers = headers
+        self.isGloballyEnabled = isGloballyEnabled
+        self.endpoint = endpoint
+    }
+}
+
+public struct MCPConfigResultPayload: Codable, Sendable {
+    public let clientRequestID: UUID
+    public let ok: Bool
+    public let errorMessage: String?
+    public let servers: [MobileMCPServer]
+
+    public init(
+        clientRequestID: UUID,
+        ok: Bool,
+        errorMessage: String? = nil,
+        servers: [MobileMCPServer] = []
+    ) {
+        self.clientRequestID = clientRequestID
+        self.ok = ok
+        self.errorMessage = errorMessage
+        self.servers = servers
+    }
+}
+
+/// Mobile asks the desktop to add/upsert, remove, or toggle a global MCP server.
+public struct MCPMutationRequestPayload: Codable, Sendable {
+    public enum Operation: String, Codable, Sendable {
+        case add
+        case remove
+        case setEnabled
+    }
+
+    public let clientRequestID: UUID
+    public let operation: Operation
+    public let serverName: String
+    public let server: MobileMCPServer?
+    public let enabled: Bool?
+
+    public init(
+        clientRequestID: UUID = UUID(),
+        operation: Operation,
+        serverName: String,
+        server: MobileMCPServer? = nil,
+        enabled: Bool? = nil
+    ) {
+        self.clientRequestID = clientRequestID
+        self.operation = operation
+        self.serverName = serverName
+        self.server = server
+        self.enabled = enabled
+    }
+}
+
+public struct MCPMutationResultPayload: Codable, Sendable {
+    public let clientRequestID: UUID
+    public let operation: MCPMutationRequestPayload.Operation
+    public let serverName: String
+    public let ok: Bool
+    public let errorMessage: String?
+    public let servers: [MobileMCPServer]
+
+    public init(
+        clientRequestID: UUID,
+        operation: MCPMutationRequestPayload.Operation,
+        serverName: String,
+        ok: Bool,
+        errorMessage: String? = nil,
+        servers: [MobileMCPServer] = []
+    ) {
+        self.clientRequestID = clientRequestID
+        self.operation = operation
+        self.serverName = serverName
+        self.ok = ok
+        self.errorMessage = errorMessage
+        self.servers = servers
     }
 }
 
@@ -1203,6 +1762,117 @@ public struct SearchResultsPayload: Codable, Sendable {
     }
 }
 
+// MARK: - Thread changes
+
+/// Mobile-initiated request for the change overview of a thread: every file
+/// edited in the thread session plus the project's uncommitted git changes.
+/// The desktop is the authoritative source for both (SwiftData edit history and
+/// the working tree), so it builds the whole `ThreadChangesResultPayload`.
+public struct ThreadChangesRequestPayload: Codable, Sendable {
+    public let clientRequestID: UUID
+    public let sessionID: String
+
+    public init(clientRequestID: UUID = UUID(), sessionID: String) {
+        self.clientRequestID = clientRequestID
+        self.sessionID = sessionID
+    }
+}
+
+/// One old/new replacement pair. Wire form of `PreviewFile.EditHunk`, which is
+/// not itself `Codable`.
+public struct SyncEditHunk: Codable, Sendable, Equatable {
+    public let oldString: String
+    public let newString: String
+
+    public init(oldString: String, newString: String) {
+        self.oldString = oldString
+        self.newString = newString
+    }
+}
+
+/// Aggregated edits to a single file across a whole thread session. Wire form
+/// of `FileEditSummary`.
+public struct SyncFileEdit: Codable, Sendable, Identifiable {
+    public var id: String { path }
+    public let path: String
+    public let name: String
+    /// True if any contributing tool was Write — old content was overwritten.
+    public let containsWrite: Bool
+    public let hunks: [SyncEditHunk]
+
+    public init(path: String, name: String, containsWrite: Bool, hunks: [SyncEditHunk]) {
+        self.path = path
+        self.name = name
+        self.containsWrite = containsWrite
+        self.hunks = hunks
+    }
+}
+
+/// Which side of the working tree a git change lives on.
+public enum SyncGitChangeKind: String, Codable, Sendable {
+    case staged
+    case unstaged
+    case untracked
+}
+
+/// One uncommitted file in the project's working tree, with its unified diff.
+public struct SyncGitChange: Codable, Sendable, Identifiable {
+    public var id: String { "\(kind.rawValue):\(displayPath)" }
+    /// Path relative to the repository root.
+    public let displayPath: String
+    /// Porcelain status letter (M/A/D/R/?/…).
+    public let statusChar: String
+    public let kind: SyncGitChangeKind
+    /// Unified diff text. For untracked files this is an all-added diff.
+    public let unifiedDiff: String
+    /// True when `unifiedDiff` was clipped because it exceeded the line cap.
+    public let truncated: Bool
+
+    public init(
+        displayPath: String,
+        statusChar: String,
+        kind: SyncGitChangeKind,
+        unifiedDiff: String,
+        truncated: Bool
+    ) {
+        self.displayPath = displayPath
+        self.statusChar = statusChar
+        self.kind = kind
+        self.unifiedDiff = unifiedDiff
+        self.truncated = truncated
+    }
+}
+
+/// Desktop reply to a `ThreadChangesRequestPayload`: the two datasets backing
+/// the mobile "View Changes" sheet.
+public struct ThreadChangesResultPayload: Codable, Sendable {
+    public let clientRequestID: UUID
+    public let sessionID: String
+    /// False when the request could not be served (e.g. not a git repository).
+    public let ok: Bool
+    public let errorMessage: String?
+    /// Every file edited in the thread session.
+    public let turnEdits: [SyncFileEdit]
+    /// Uncommitted git changes in the session's project.
+    public let uncommitted: [SyncGitChange]
+
+    public init(
+        clientRequestID: UUID,
+        sessionID: String,
+        ok: Bool,
+        errorMessage: String? = nil,
+        turnEdits: [SyncFileEdit],
+        uncommitted: [SyncGitChange]
+    ) {
+        self.clientRequestID = clientRequestID
+        self.sessionID = sessionID
+        self.ok = ok
+        self.errorMessage = errorMessage
+        self.turnEdits = turnEdits
+        self.uncommitted = uncommitted
+    }
+}
+
 public struct NotificationPayload: Codable, Sendable {
     public enum Kind: String, Codable, Sendable {
         case responseComplete
@@ -1393,6 +2063,7 @@ extension Payload: Codable {
         case pairAck = "pair_ack"
         case unpair
         case apnsToken = "apns_token"
+        case liveActivityToken = "live_activity_token"
         case requestSnapshot = "request_snapshot"
         case snapshot
         case settingsUpdate = "settings_update"
@@ -1405,6 +2076,8 @@ extension Payload: Codable {
         case threadActionRequest = "thread_action_request"
         case loadMoreMessages = "load_more_messages"
         case moreMessages = "more_messages"
+        case threadChangesRequest = "thread_changes_request"
+        case threadChangesResult = "thread_changes_result"
         case searchRequest = "search_request"
         case searchResults = "search_results"
         case notification
@@ -1424,6 +2097,20 @@ extension Payload: Codable {
         case runProfileRunRequest = "run_profile_run_request"
         case runProfileStopRequest = "run_profile_stop_request"
         case runTaskUpdate = "run_task_update"
+        case skillCatalogRequest = "skill_catalog_request"
+        case skillCatalogResult = "skill_catalog_result"
+        case skillMutationRequest = "skill_mutation_request"
+        case skillMutationResult = "skill_mutation_result"
+        case skillSourceMutationRequest = "skill_source_mutation_request"
+        case skillSourceMutationResult = "skill_source_mutation_result"
+        case acpRegistryRequest = "acp_registry_request"
+        case acpRegistryResult = "acp_registry_result"
+        case acpMutationRequest = "acp_mutation_request"
+        case acpMutationResult = "acp_mutation_result"
+        case mcpConfigRequest = "mcp_config_request"
+        case mcpConfigResult = "mcp_config_result"
+        case mcpMutationRequest = "mcp_mutation_request"
+        case mcpMutationResult = "mcp_mutation_result"
         case ping
         case pong
     }
@@ -1440,6 +2127,7 @@ extension Payload: Codable {
         case .pairAck: self = .pairAck(try container.decode(PairAckPayload.self, forKey: .data))
         case .unpair: self = .unpair(try container.decode(UnpairPayload.self, forKey: .data))
         case .apnsToken: self = .apnsToken(try container.decode(APNsTokenPayload.self, forKey: .data))
+        case .liveActivityToken: self = .liveActivityToken(try container.decode(LiveActivityTokenPayload.self, forKey: .data))
         case .requestSnapshot: self = .requestSnapshot(try container.decode(RequestSnapshotPayload.self, forKey: .data))
         case .snapshot: self = .snapshot(try container.decode(SnapshotPayload.self, forKey: .data))
         case .settingsUpdate: self = .settingsUpdate(try container.decode(MobileSettingsUpdatePayload.self, forKey: .data))
@@ -1452,6 +2140,8 @@ extension Payload: Codable {
         case .threadActionRequest: self = .threadActionRequest(try container.decode(ThreadActionRequestPayload.self, forKey: .data))
         case .loadMoreMessages: self = .loadMoreMessages(try container.decode(LoadMoreMessagesRequestPayload.self, forKey: .data))
         case .moreMessages: self = .moreMessages(try container.decode(MoreMessagesPayload.self, forKey: .data))
+        case .threadChangesRequest: self = .threadChangesRequest(try container.decode(ThreadChangesRequestPayload.self, forKey: .data))
+        case .threadChangesResult: self = .threadChangesResult(try container.decode(ThreadChangesResultPayload.self, forKey: .data))
         case .searchRequest: self = .searchRequest(try container.decode(SearchRequestPayload.self, forKey: .data))
         case .searchResults: self = .searchResults(try container.decode(SearchResultsPayload.self, forKey: .data))
         case .notification: self = .notification(try container.decode(NotificationPayload.self, forKey: .data))
@@ -1471,6 +2161,20 @@ extension Payload: Codable {
         case .runProfileRunRequest: self = .runProfileRunRequest(try container.decode(RunProfileRunRequestPayload.self, forKey: .data))
         case .runProfileStopRequest: self = .runProfileStopRequest(try container.decode(RunProfileStopRequestPayload.self, forKey: .data))
         case .runTaskUpdate: self = .runTaskUpdate(try container.decode(RunTaskUpdatePayload.self, forKey: .data))
+        case .skillCatalogRequest: self = .skillCatalogRequest(try container.decode(SkillCatalogRequestPayload.self, forKey: .data))
+        case .skillCatalogResult: self = .skillCatalogResult(try container.decode(SkillCatalogResultPayload.self, forKey: .data))
+        case .skillMutationRequest: self = .skillMutationRequest(try container.decode(SkillMutationRequestPayload.self, forKey: .data))
+        case .skillMutationResult: self = .skillMutationResult(try container.decode(SkillMutationResultPayload.self, forKey: .data))
+        case .skillSourceMutationRequest: self = .skillSourceMutationRequest(try container.decode(SkillSourceMutationRequestPayload.self, forKey: .data))
+        case .skillSourceMutationResult: self = .skillSourceMutationResult(try container.decode(SkillSourceMutationResultPayload.self, forKey: .data))
+        case .acpRegistryRequest: self = .acpRegistryRequest(try container.decode(ACPRegistryRequestPayload.self, forKey: .data))
+        case .acpRegistryResult: self = .acpRegistryResult(try container.decode(ACPRegistryResultPayload.self, forKey: .data))
+        case .acpMutationRequest: self = .acpMutationRequest(try container.decode(ACPMutationRequestPayload.self, forKey: .data))
+        case .acpMutationResult: self = .acpMutationResult(try container.decode(ACPMutationResultPayload.self, forKey: .data))
+        case .mcpConfigRequest: self = .mcpConfigRequest(try container.decode(MCPConfigRequestPayload.self, forKey: .data))
+        case .mcpConfigResult: self = .mcpConfigResult(try container.decode(MCPConfigResultPayload.self, forKey: .data))
+        case .mcpMutationRequest: self = .mcpMutationRequest(try container.decode(MCPMutationRequestPayload.self, forKey: .data))
+        case .mcpMutationResult: self = .mcpMutationResult(try container.decode(MCPMutationResultPayload.self, forKey: .data))
         case .ping: self = .ping(try container.decode(PingPayload.self, forKey: .data))
         case .pong: self = .pong(try container.decode(PongPayload.self, forKey: .data))
         }
@@ -1483,6 +2187,7 @@ extension Payload: Codable {
         case .pairAck(let p): try container.encode(TypeKey.pairAck.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .unpair(let p): try container.encode(TypeKey.unpair.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .apnsToken(let p): try container.encode(TypeKey.apnsToken.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .liveActivityToken(let p): try container.encode(TypeKey.liveActivityToken.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .requestSnapshot(let p): try container.encode(TypeKey.requestSnapshot.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .snapshot(let p): try container.encode(TypeKey.snapshot.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .settingsUpdate(let p): try container.encode(TypeKey.settingsUpdate.rawValue, forKey: .type); try container.encode(p, forKey: .data)
@@ -1495,6 +2200,8 @@ extension Payload: Codable {
         case .threadActionRequest(let p): try container.encode(TypeKey.threadActionRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .loadMoreMessages(let p): try container.encode(TypeKey.loadMoreMessages.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .moreMessages(let p): try container.encode(TypeKey.moreMessages.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .threadChangesRequest(let p): try container.encode(TypeKey.threadChangesRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .threadChangesResult(let p): try container.encode(TypeKey.threadChangesResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .searchRequest(let p): try container.encode(TypeKey.searchRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .searchResults(let p): try container.encode(TypeKey.searchResults.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .notification(let p): try container.encode(TypeKey.notification.rawValue, forKey: .type); try container.encode(p, forKey: .data)
@@ -1514,6 +2221,20 @@ extension Payload: Codable {
         case .runProfileRunRequest(let p): try container.encode(TypeKey.runProfileRunRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .runProfileStopRequest(let p): try container.encode(TypeKey.runProfileStopRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .runTaskUpdate(let p): try container.encode(TypeKey.runTaskUpdate.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .skillCatalogRequest(let p): try container.encode(TypeKey.skillCatalogRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .skillCatalogResult(let p): try container.encode(TypeKey.skillCatalogResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .skillMutationRequest(let p): try container.encode(TypeKey.skillMutationRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .skillMutationResult(let p): try container.encode(TypeKey.skillMutationResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .skillSourceMutationRequest(let p): try container.encode(TypeKey.skillSourceMutationRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .skillSourceMutationResult(let p): try container.encode(TypeKey.skillSourceMutationResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .acpRegistryRequest(let p): try container.encode(TypeKey.acpRegistryRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .acpRegistryResult(let p): try container.encode(TypeKey.acpRegistryResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .acpMutationRequest(let p): try container.encode(TypeKey.acpMutationRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .acpMutationResult(let p): try container.encode(TypeKey.acpMutationResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .mcpConfigRequest(let p): try container.encode(TypeKey.mcpConfigRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .mcpConfigResult(let p): try container.encode(TypeKey.mcpConfigResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .mcpMutationRequest(let p): try container.encode(TypeKey.mcpMutationRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .mcpMutationResult(let p): try container.encode(TypeKey.mcpMutationResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .ping(let p): try container.encode(TypeKey.ping.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .pong(let p): try container.encode(TypeKey.pong.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .unknown(let type): try container.encode(type, forKey: .type)

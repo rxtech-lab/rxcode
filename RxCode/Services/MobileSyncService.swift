@@ -6,6 +6,14 @@ import RxCodeCore
 import RxCodeSync
 import os.log
 
+/// One per-activity Live Activity push token registered by a paired mobile.
+/// The desktop targets `update`/`end` pushes at `token`, scoped to `sessionID`.
+struct LiveActivityTokenRef: Codable, Sendable, Hashable {
+    var activityID: String
+    var sessionID: String
+    var token: String
+}
+
 /// One paired mobile device. Persisted to
 /// `~/Library/Application Support/RxCode/paired_devices.json`.
 struct PairedDevice: Codable, Identifiable, Sendable, Hashable {
@@ -14,6 +22,12 @@ struct PairedDevice: Codable, Identifiable, Sendable, Hashable {
     var platform: String
     var apnsToken: String?
     var apnsEnvironment: String?
+    /// Device-wide Live Activity push-to-start token (iOS 17.2+). Lets the
+    /// desktop spawn a job Live Activity remotely. Optional for wire/forward
+    /// compatibility with paired-device files written before Live Activities.
+    var liveActivityStartToken: String?
+    /// Per-activity Live Activity update tokens, one per running job activity.
+    var liveActivityTokens: [LiveActivityTokenRef]?
     var pairedAt: Date
     var lastSeen: Date?
 
@@ -76,6 +90,33 @@ final class MobileSyncService: ObservableObject {
     /// The single AppState reference is set in init order from RxCodeApp,
     /// because AppState owns the storage layer and the streaming loop.
     private weak var appState: AnyObject?
+
+    // MARK: - Live Activity & widget state
+
+    /// Resolves a project's display name for Live Activity attributes. Set by
+    /// `AppState` after initialization; `nil` before that.
+    var projectNameResolver: (@MainActor (UUID) -> String?)?
+    /// Supplies the current Claude Code / Codex 5-hour usage for the widget
+    /// background push. Set by `AppState`; `nil` before that.
+    var usageSnapshotProvider: (@MainActor () -> (cc: Double?, codex: Double?))?
+
+    /// Session ids currently streaming — the live job count for the widget.
+    private var streamingSessionIDs: Set<String> = []
+    /// Every job tracked by the single aggregate Live Activity: those still
+    /// running plus recently finished ones, in start order.
+    private var trackedJobs: [JobContent] = []
+    /// `true` once a foregrounded device reported it started the activity
+    /// locally; suppresses the push-to-start until the activity goes away.
+    private var jobsActivityLocallyStarted = false
+    /// Signature of the content-state last pushed, so an update only fires on
+    /// a real change rather than on every session event.
+    private var lastPushedJobsSignature = ""
+    /// Pending deferred push-to-start. The push-to-start is delayed briefly so
+    /// a foregrounded device can start the activity locally instead; this task
+    /// is cancelled once a device reports it did.
+    private var pendingStartTask: Task<Void, Never>?
+    /// Last widget job count pushed, so a widget push only fires on a change.
+    private var lastWidgetJobCount: Int = -1
 
     init() {
         // Persisted relay URL or sensible default for self-host.
@@ -396,6 +437,7 @@ final class MobileSyncService: ObservableObject {
             )
             await client.broadcast(.sessionUpdate(payload))
         }
+        updateJobTracking(sessionID: sessionID, kind: kind, isStreaming: isStreaming, summary: summary)
     }
 
     /// Mirror the desktop's current `AskUserQuestion` queue to every paired
@@ -410,6 +452,320 @@ final class MobileSyncService: ObservableObject {
     func broadcastRunTaskUpdate(_ task: MobileRunTaskSnapshot) {
         Task {
             await client.broadcast(.runTaskUpdate(RunTaskUpdatePayload(task: task)))
+        }
+    }
+
+    // MARK: - Live Activity & widget push
+
+    /// Fold a session update into the streaming-job set and the aggregate Live
+    /// Activity, then push any resulting Live Activity / widget changes.
+    /// Called for every `broadcastSessionUpdate`.
+    private func updateJobTracking(
+        sessionID: String,
+        kind: SessionUpdatePayload.Kind,
+        isStreaming: Bool?,
+        summary: RxCodeSync.SessionSummary?
+    ) {
+        let streaming: Bool?
+        switch kind {
+        case .streamingStarted: streaming = true
+        case .streamingFinished: streaming = false
+        default: streaming = isStreaming
+        }
+        if let streaming {
+            if streaming { streamingSessionIDs.insert(sessionID) }
+            else { streamingSessionIDs.remove(sessionID) }
+        }
+        // Summaries carry title/progress/todos — they drive the Live Activity.
+        if let summary {
+            foldSummaryIntoJobs(summary)
+            pushJobsActivity()
+        }
+        pushWidgetUpdateIfJobCountChanged()
+    }
+
+    /// Merge one session summary into `trackedJobs`.
+    ///
+    /// A running session is inserted or updated. A finished session updates
+    /// the job only if it is already tracked, and is otherwise ignored — the
+    /// aggregate activity follows jobs it saw start. When a new job begins
+    /// while every tracked job is already done, the previous (acknowledged)
+    /// batch is cleared so the activity starts a fresh list.
+    private func foldSummaryIntoJobs(_ summary: RxCodeSync.SessionSummary) {
+        let content = makeJobContent(from: summary)
+        if let idx = trackedJobs.firstIndex(where: { $0.sessionID == summary.id }) {
+            trackedJobs[idx] = content
+        } else if summary.isStreaming {
+            if !trackedJobs.isEmpty, trackedJobs.allSatisfy(\.isDone) {
+                trackedJobs.removeAll()
+                lastPushedJobsSignature = ""
+            }
+            trackedJobs.append(content)
+        }
+        pruneTrackedJobs()
+    }
+
+    /// Cap the tracked-job list, dropping the oldest finished jobs first so a
+    /// long-lived device never accumulates an unbounded history.
+    private func pruneTrackedJobs() {
+        let cap = 6
+        while trackedJobs.count > cap {
+            if let doneIdx = trackedJobs.firstIndex(where: \.isDone) {
+                trackedJobs.remove(at: doneIdx)
+            } else {
+                trackedJobs.removeFirst()
+            }
+        }
+    }
+
+    private func makeJobContent(from summary: RxCodeSync.SessionSummary) -> JobContent {
+        JobContent(
+            sessionID: summary.id,
+            title: summary.title,
+            projectName: projectNameResolver?(summary.projectId) ?? "",
+            todoDone: summary.progress?.done ?? 0,
+            todoTotal: summary.progress?.total ?? 0,
+            currentStep: summary.todos?.first { $0.status == .inProgress }?.activeForm,
+            isDone: !summary.isStreaming
+        )
+    }
+
+    // MARK: Aggregate Live Activity
+
+    /// Concatenated per-job signatures — identifies a distinct rendered state.
+    private var jobsSignature: String {
+        trackedJobs.map(\.signature).joined(separator: ";")
+    }
+
+    /// `true` once every tracked job has finished.
+    private var allJobsDone: Bool {
+        !trackedJobs.isEmpty && trackedJobs.allSatisfy(\.isDone)
+    }
+
+    /// `true` when some paired device has registered the aggregate activity's
+    /// update token — i.e. the activity exists and can be pushed `update`s.
+    private var hasAnyActivityToken: Bool {
+        pairedDevices.contains { !($0.liveActivityTokens ?? []).isEmpty }
+    }
+
+    /// Drive the single aggregate Live Activity from `trackedJobs`.
+    ///
+    /// The activity is created once with a push-to-start and then reused for
+    /// the lifetime of the device session: it is never ended or auto-dismissed
+    /// by the desktop, only updated. One activity for every job keeps re-runs
+    /// off the scarce iOS push-to-start budget; the user dismisses it.
+    private func pushJobsActivity() {
+        guard !trackedJobs.isEmpty else { return }
+        let staleAfter: TimeInterval = allJobsDone ? 8 * 3600 : 3600
+        if hasAnyActivityToken {
+            let signature = jobsSignature
+            guard signature != lastPushedJobsSignature else {
+                logger.debug("[LiveActivity] jobs activity unchanged — skip update")
+                return
+            }
+            lastPushedJobsSignature = signature
+            logger.info("[LiveActivity] jobs activity update jobs=\(self.trackedJobs.count, privacy: .public) running=\(self.trackedJobs.filter { !$0.isDone }.count, privacy: .public)")
+            sendJobsActivityUpdate(staleAfter: staleAfter)
+        } else if jobsActivityLocallyStarted {
+            // The activity exists locally; its update token has not been
+            // minted yet. The first push goes out when that token registers.
+            logger.debug("[LiveActivity] jobs activity started locally — awaiting update token")
+        } else {
+            scheduleJobsActivityStart()
+        }
+    }
+
+    /// Schedule the push-to-start after a short delay. A foregrounded device
+    /// starts the activity itself (no push-to-start budget) and reports it
+    /// within a second or two, cancelling this task. Only a backgrounded
+    /// device ends up actually receiving the push-to-start.
+    private func scheduleJobsActivityStart() {
+        guard pendingStartTask == nil else { return }
+        logger.info("[LiveActivity] scheduling jobs activity push-to-start in 5s")
+        pendingStartTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled, let self else { return }
+            self.pendingStartTask = nil
+            guard !self.trackedJobs.isEmpty else { return }
+            guard !self.hasAnyActivityToken, !self.jobsActivityLocallyStarted else {
+                self.logger.info("[LiveActivity] push-to-start skipped — a device already has the activity")
+                return
+            }
+            self.sendJobsActivityStart()
+        }
+    }
+
+    /// Cancel a pending push-to-start — the activity already exists.
+    private func cancelJobsActivityStart() {
+        if pendingStartTask != nil {
+            pendingStartTask?.cancel()
+            pendingStartTask = nil
+            logger.debug("[LiveActivity] pending push-to-start cancelled")
+        }
+    }
+
+    /// Push a `start` for the aggregate activity to every device with a
+    /// push-to-start token.
+    private func sendJobsActivityStart() {
+        let devices = pairedDevices.filter { ($0.liveActivityStartToken?.isEmpty == false) }
+        guard !devices.isEmpty else {
+            logger.warning("[LiveActivity] start skipped — no paired device has a push-to-start token (pairedDevices=\(self.pairedDevices.count, privacy: .public))")
+            return
+        }
+        guard let pushURL = Self.pushEndpointURL(from: relayURL) else {
+            logger.error("[LiveActivity] start skipped — cannot derive push endpoint from relay \(self.relayURL.absoluteString, privacy: .public)")
+            return
+        }
+        let now = Date()
+        let staleAfter: TimeInterval = allJobsDone ? 8 * 3600 : 3600
+        let payload: [String: Any] = ["aps": [
+            "timestamp": Int(now.timeIntervalSince1970),
+            "event": "start",
+            "content-state": jobsContentStateDict(at: now),
+            "attributes-type": "RxCodeJobActivityAttributes",
+            "attributes": [String: Any](),
+            "stale-date": Int(now.addingTimeInterval(staleAfter).timeIntervalSince1970),
+        ]]
+        lastPushedJobsSignature = jobsSignature
+        logger.info("[LiveActivity] start jobs activity devices=\(devices.count, privacy: .public) jobs=\(self.trackedJobs.count, privacy: .public)")
+        for device in devices {
+            guard let token = device.liveActivityStartToken else { continue }
+            logger.info("[LiveActivity] start → posting push startTokenPrefix=\(String(token.prefix(12)), privacy: .public) deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
+            Task {
+                await postRawPush(deviceToken: token, pushType: "liveactivity",
+                                  apnsPayload: payload, collapseID: nil, device: device, pushURL: pushURL)
+            }
+        }
+    }
+
+    /// Push an `update` for the aggregate activity. `staleAfter` sets when the
+    /// activity dims — long for the terminal all-done state, which stays on
+    /// screen until the user dismisses it. No `end` is ever sent.
+    private func sendJobsActivityUpdate(staleAfter: TimeInterval) {
+        let now = Date()
+        let payload: [String: Any] = ["aps": [
+            "timestamp": Int(now.timeIntervalSince1970),
+            "event": "update",
+            "content-state": jobsContentStateDict(at: now),
+            "stale-date": Int(now.addingTimeInterval(staleAfter).timeIntervalSince1970),
+        ]]
+        pushToActivityTokens(payload: payload)
+    }
+
+    /// Build the ActivityKit `content-state` dict. Field names mirror
+    /// `RxCodeJobActivityAttributes.ContentState` in the widget target.
+    private func jobsContentStateDict(at date: Date) -> [String: Any] {
+        let jobs: [[String: Any]] = trackedJobs.map { job in
+            var dict: [String: Any] = [
+                "id": job.sessionID,
+                "phase": job.isDone ? "done" : "running",
+                "title": job.title,
+                "projectName": job.projectName,
+                "todoDone": job.todoDone,
+                "todoTotal": job.todoTotal,
+            ]
+            if let step = job.currentStep, !step.isEmpty {
+                dict["currentStep"] = step
+            }
+            return dict
+        }
+        return ["jobs": jobs, "updatedAt": date.timeIntervalSince1970]
+    }
+
+    /// Push a Live Activity payload to every registered aggregate-activity
+    /// token (one per paired device).
+    private func pushToActivityTokens(payload: [String: Any]) {
+        guard let pushURL = Self.pushEndpointURL(from: relayURL) else {
+            logger.error("[LiveActivity] update skipped — cannot derive push endpoint from relay \(self.relayURL.absoluteString, privacy: .public)")
+            return
+        }
+        var matched = 0
+        for device in pairedDevices {
+            for ref in (device.liveActivityTokens ?? []) {
+                matched += 1
+                logger.info("[LiveActivity] push → activity token activity=\(ref.activityID, privacy: .public) tokenPrefix=\(String(ref.token.prefix(12)), privacy: .public) deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
+                Task {
+                    await postRawPush(deviceToken: ref.token, pushType: "liveactivity",
+                                      apnsPayload: payload, collapseID: "rxcode-jobs-activity",
+                                      device: device, pushURL: pushURL)
+                }
+            }
+        }
+        if matched == 0 {
+            logger.warning("[LiveActivity] update has no registered activity token — the mobile never reported one")
+        }
+    }
+
+    private func pushWidgetUpdateIfJobCountChanged() {
+        guard streamingSessionIDs.count != lastWidgetJobCount else { return }
+        pushWidgetUpdate()
+    }
+
+    /// Push the current ongoing-job count and agent usage to every paired
+    /// device as a silent background notification, refreshing the home-screen
+    /// widget. Also called by `AppState` when rate-limit usage refreshes.
+    func pushWidgetUpdate() {
+        let jobCount = streamingSessionIDs.count
+        lastWidgetJobCount = jobCount
+        let devices = pairedDevices.filter { ($0.apnsToken?.isEmpty == false) }
+        guard !devices.isEmpty, let pushURL = Self.pushEndpointURL(from: relayURL) else { return }
+        let usage = usageSnapshotProvider?()
+        var widget: [String: Any] = [
+            "jobs": jobCount,
+            "updatedAt": Date().timeIntervalSince1970,
+        ]
+        if let cc = usage?.cc { widget["cc"] = cc }
+        if let codex = usage?.codex { widget["codex"] = codex }
+        let payload: [String: Any] = ["aps": ["content-available": 1], "widget": widget]
+        for device in devices {
+            guard let token = device.apnsToken else { continue }
+            Task {
+                await postRawPush(deviceToken: token, pushType: "background",
+                                  apnsPayload: payload, collapseID: "rxcode-widget",
+                                  device: device, pushURL: pushURL)
+            }
+        }
+    }
+
+    /// POST a raw (Live Activity or background) push to the relay `/push`
+    /// endpoint. Failures are logged and swallowed — these are best-effort.
+    private func postRawPush(
+        deviceToken: String,
+        pushType: String,
+        apnsPayload: [String: Any],
+        collapseID: String?,
+        device: PairedDevice,
+        pushURL: URL
+    ) async {
+        var bodyDict: [String: Any] = [
+            "device_token": deviceToken,
+            "push_type": pushType,
+            "apns_payload": apnsPayload,
+        ]
+        if let collapseID { bodyDict["collapse_id"] = collapseID }
+        do {
+            let httpBody = try JSONSerialization.data(withJSONObject: bodyDict)
+            var request = URLRequest(url: pushURL)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = httpBody
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else { return }
+            guard (200..<300).contains(http.statusCode) else {
+                logger.error("[Push] \(pushType, privacy: .public) relay rejected status=\(http.statusCode, privacy: .public) body=\(Self.responseBodyString(data), privacy: .public) deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
+                return
+            }
+            if let pushResponse = try? JSONDecoder().decode(APNsPushResponse.self, from: data) {
+                if (200..<300).contains(pushResponse.statusCode) {
+                    logger.info("[Push] \(pushType, privacy: .public) accepted apnsStatus=\(pushResponse.statusCode, privacy: .public) apnsID=\(pushResponse.apnsID ?? "<nil>", privacy: .public) deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
+                } else {
+                    logger.error("[Push] \(pushType, privacy: .public) apns rejected status=\(pushResponse.statusCode, privacy: .public) reason=\(pushResponse.reason, privacy: .public) deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
+                }
+            } else {
+                logger.info("[Push] \(pushType, privacy: .public) relay accepted httpStatus=\(http.statusCode, privacy: .public) (no APNs detail in response) deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
+            }
+        } catch {
+            logger.error("[Push] \(pushType, privacy: .public) failed deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public): \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -452,6 +808,54 @@ final class MobileSyncService: ObservableObject {
             } else {
                 logger.warning("[APNs] token received for unknown mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public) tokenPrefix=\(String(t.tokenHex.prefix(12)), privacy: .public) environment=\(t.environment, privacy: .public)")
             }
+        case .liveActivityToken(let t):
+            guard let idx = pairedDevices.firstIndex(where: { $0.pubkeyHex == inbound.fromHex }) else {
+                logger.warning("[LiveActivity] token received for unknown mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+                return
+            }
+            if let startToken = t.pushToStartTokenHex, !startToken.isEmpty {
+                pairedDevices[idx].liveActivityStartToken = startToken
+                logger.info("[LiveActivity] push-to-start token registered mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+            }
+            if t.activityDismissed == true {
+                // The user swiped the aggregate Live Activity away. Forget
+                // this device's update token; once no device tracks the
+                // activity the next job push-to-starts a fresh one.
+                if var refs = pairedDevices[idx].liveActivityTokens {
+                    refs.removeAll { t.activityID == nil || $0.activityID == t.activityID }
+                    pairedDevices[idx].liveActivityTokens = refs.isEmpty ? nil : refs
+                }
+                if !hasAnyActivityToken {
+                    jobsActivityLocallyStarted = false
+                    lastPushedJobsSignature = ""
+                    cancelJobsActivityStart()
+                }
+                logger.info("[LiveActivity] aggregate activity dismissed by user activity=\(t.activityID ?? "<nil>", privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+            } else if t.activityStartedLocally == true {
+                // A foregrounded device started the activity itself with
+                // `Activity.request` and reported it the instant it was
+                // created — long before APNs mints the update token. Cancel
+                // the deferred push-to-start so iOS never spawns a duplicate.
+                jobsActivityLocallyStarted = true
+                cancelJobsActivityStart()
+                logger.info("[LiveActivity] device started aggregate activity locally mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public) — deferred push-to-start cancelled")
+            } else if let activityToken = t.activityTokenHex, !activityToken.isEmpty,
+                      let activityID = t.activityID {
+                // One aggregate activity per device — replace any prior token.
+                pairedDevices[idx].liveActivityTokens = [
+                    LiveActivityTokenRef(activityID: activityID, sessionID: "", token: activityToken)
+                ]
+                logger.info("[LiveActivity] aggregate activity token registered activity=\(activityID, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+                cancelJobsActivityStart()
+                // Push the latest known state straight away so a freshly
+                // started activity isn't left blank until the next change.
+                if !trackedJobs.isEmpty {
+                    lastPushedJobsSignature = jobsSignature
+                    sendJobsActivityUpdate(staleAfter: allJobsDone ? 8 * 3600 : 3600)
+                }
+            }
+            pairedDevices[idx].lastSeen = .now
+            savePairedDevices()
         case .requestSnapshot(let req):
             guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "request_snapshot") else { return }
             logger.info("[MobileSync] snapshot requested by mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public) activeSession=\(req.activeSessionID ?? "<nil>", privacy: .public)")
@@ -517,6 +921,13 @@ final class MobileSyncService: ObservableObject {
             guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "search_request") else { return }
             NotificationCenter.default.post(
                 name: .mobileSyncSearchRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": req]
+            )
+        case .threadChangesRequest(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "thread_changes_request") else { return }
+            NotificationCenter.default.post(
+                name: .mobileSyncThreadChangesRequested,
                 object: nil,
                 userInfo: ["from": inbound.fromHex, "payload": req]
             )
@@ -593,6 +1004,62 @@ final class MobileSyncService: ObservableObject {
             logger.info("[MobileSync] run profile stop requested task=\(req.taskID?.uuidString ?? "<nil>", privacy: .public) project=\(req.projectID?.uuidString ?? "<nil>", privacy: .public) profile=\(req.profileID?.uuidString ?? "<nil>", privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
             NotificationCenter.default.post(
                 name: .mobileSyncRunProfileStopRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": req]
+            )
+        case .skillCatalogRequest(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "skill_catalog_request") else { return }
+            logger.info("[MobileSync] skill catalog requested forceRefresh=\(req.forceRefresh, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+            NotificationCenter.default.post(
+                name: .mobileSyncSkillCatalogRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": req]
+            )
+        case .skillMutationRequest(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "skill_mutation_request") else { return }
+            logger.info("[MobileSync] skill mutation requested operation=\(req.operation.rawValue, privacy: .public) plugin=\(req.pluginID, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+            NotificationCenter.default.post(
+                name: .mobileSyncSkillMutationRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": req]
+            )
+        case .skillSourceMutationRequest(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "skill_source_mutation_request") else { return }
+            logger.info("[MobileSync] skill source mutation requested operation=\(req.operation.rawValue, privacy: .public) source=\(req.sourceID ?? req.gitURL ?? "<nil>", privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+            NotificationCenter.default.post(
+                name: .mobileSyncSkillSourceMutationRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": req]
+            )
+        case .acpRegistryRequest(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "acp_registry_request") else { return }
+            logger.info("[MobileSync] acp registry requested forceRefresh=\(req.forceRefresh, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+            NotificationCenter.default.post(
+                name: .mobileSyncACPRegistryRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": req]
+            )
+        case .acpMutationRequest(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "acp_mutation_request") else { return }
+            logger.info("[MobileSync] acp mutation requested operation=\(req.operation.rawValue, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+            NotificationCenter.default.post(
+                name: .mobileSyncACPMutationRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": req]
+            )
+        case .mcpConfigRequest(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "mcp_config_request") else { return }
+            logger.info("[MobileSync] mcp config requested mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+            NotificationCenter.default.post(
+                name: .mobileSyncMCPConfigRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": req]
+            )
+        case .mcpMutationRequest(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "mcp_mutation_request") else { return }
+            logger.info("[MobileSync] mcp mutation requested operation=\(req.operation.rawValue, privacy: .public) server=\(req.serverName, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+            NotificationCenter.default.post(
+                name: .mobileSyncMCPMutationRequested,
                 object: nil,
                 userInfo: ["from": inbound.fromHex, "payload": req]
             )
@@ -744,6 +1211,28 @@ private struct APNsPushResponse: Codable {
     }
 }
 
+/// Latest content the desktop knows for one job in the aggregate Live
+/// Activity. Stored in `MobileSyncService.trackedJobs` in start order.
+private struct JobContent {
+    var sessionID: String
+    var title: String
+    var projectName: String
+    var todoDone: Int
+    var todoTotal: Int
+    var currentStep: String?
+    /// `true` once the job has finished. It shows the "done" phase but stays
+    /// in the aggregate list so the activity can report the completed batch.
+    var isDone: Bool
+
+    /// Identifies a distinct rendered state for one job, so an update only
+    /// pushes on a real change rather than on every session event. Includes
+    /// `title` so the activity refreshes when the desktop swaps in an
+    /// AI-summarized title.
+    var signature: String {
+        "\(sessionID)|\(isDone ? "done" : "run")|\(title)|\(todoDone)/\(todoTotal)|\(currentStep ?? "")"
+    }
+}
+
 extension Notification.Name {
     static let mobileSyncSnapshotRequested = Notification.Name("mobileSync.snapshotRequested")
     static let mobileSyncUserMessageReceived = Notification.Name("mobileSync.userMessageReceived")
@@ -753,6 +1242,7 @@ extension Notification.Name {
     static let mobileSyncThreadActionRequested = Notification.Name("mobileSync.threadActionRequested")
     static let mobileSyncLoadMoreMessagesRequested = Notification.Name("mobileSync.loadMoreMessagesRequested")
     static let mobileSyncSearchRequested = Notification.Name("mobileSync.searchRequested")
+    static let mobileSyncThreadChangesRequested = Notification.Name("mobileSync.threadChangesRequested")
     static let mobileSyncSettingsUpdateReceived = Notification.Name("mobileSync.settingsUpdateReceived")
     static let mobileSyncPermissionResponse = Notification.Name("mobileSync.permissionResponse")
     static let mobileSyncQuestionAnswerReceived = Notification.Name("mobileSync.questionAnswerReceived")
@@ -763,4 +1253,11 @@ extension Notification.Name {
     static let mobileSyncRunProfileMutationRequested = Notification.Name("mobileSync.runProfileMutationRequested")
     static let mobileSyncRunProfileRunRequested = Notification.Name("mobileSync.runProfileRunRequested")
     static let mobileSyncRunProfileStopRequested = Notification.Name("mobileSync.runProfileStopRequested")
+    static let mobileSyncSkillCatalogRequested = Notification.Name("mobileSync.skillCatalogRequested")
+    static let mobileSyncSkillMutationRequested = Notification.Name("mobileSync.skillMutationRequested")
+    static let mobileSyncSkillSourceMutationRequested = Notification.Name("mobileSync.skillSourceMutationRequested")
+    static let mobileSyncACPRegistryRequested = Notification.Name("mobileSync.acpRegistryRequested")
+    static let mobileSyncACPMutationRequested = Notification.Name("mobileSync.acpMutationRequested")
+    static let mobileSyncMCPConfigRequested = Notification.Name("mobileSync.mcpConfigRequested")
+    static let mobileSyncMCPMutationRequested = Notification.Name("mobileSync.mcpMutationRequested")
 }

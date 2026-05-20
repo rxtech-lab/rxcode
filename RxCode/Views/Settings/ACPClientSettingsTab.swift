@@ -1,5 +1,6 @@
 import SwiftUI
 import RxCodeCore
+import TipKit
 
 private enum ACPClientSettingsPage: String, CaseIterable, Identifiable {
     case installed
@@ -105,6 +106,7 @@ struct ACPClientSettingsTab: View {
         .labelsHidden()
         .frame(width: 240)
         .frame(maxWidth: .infinity, alignment: .center)
+        .popoverTip(RxCodeTips.ACPTip(), arrowEdge: .top)
     }
 
     // MARK: - Installed

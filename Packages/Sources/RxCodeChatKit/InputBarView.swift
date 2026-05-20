@@ -1,4 +1,5 @@
 import SwiftUI
+import TipKit
 import UniformTypeIdentifiers
 import RxCodeCore
 
@@ -246,6 +247,7 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
         .fixedSize()
         .help(windowState.sessionPlanMode ? "Plan mode is on — Add menu" : "Add — attach file or toggle plan mode")
         .accessibilityIdentifier("composer-add-menu")
+        .popoverTip(ChatFeatureTips.PlanModeTip(), arrowEdge: .top)
         .fileImporter(
             isPresented: $showFilePicker,
             allowedContentTypes: [.item],

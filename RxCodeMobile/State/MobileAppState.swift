@@ -72,6 +72,47 @@ final class MobileAppState: ObservableObject {
     @Published var runTasks: [MobileRunTaskSnapshot] = []
     @Published var inFlightRunProfileRequests: Set<UUID> = []
     @Published var lastRunProfileError: String?
+
+    // MARK: - Remote desktop config: Skills
+
+    /// Marketplace catalog mirrored from the desktop, with per-plugin install
+    /// state. Populated lazily when the skill screen opens.
+    @Published var skillCatalog: [MobileSkillPlugin] = []
+    @Published var skillCatalogLoading = false
+    @Published var skillCatalogError: String?
+    @Published var skillSources: [MobileSkillSource] = []
+    /// Plugin ids with an in-flight install/uninstall request — drives per-row
+    /// spinners.
+    @Published var inFlightSkillMutations: Set<String> = []
+    @Published var inFlightSkillSourceMutations: Set<String> = []
+    @Published var lastSkillError: String?
+    /// The latest catalog request id, so a stale reply is discarded.
+    private var pendingSkillCatalogRequestID: UUID?
+    private var skillSourceMutationKeys: [UUID: String] = [:]
+
+    // MARK: - Remote desktop config: ACP agent clients
+
+    @Published var acpRegistryAgents: [MobileACPRegistryAgent] = []
+    @Published var acpInstalledClients: [MobileACPClient] = []
+    @Published var acpRegistryLoading = false
+    @Published var acpRegistryError: String?
+    /// Registry-agent ids or installed-client ids with an in-flight mutation.
+    @Published var inFlightACPMutations: Set<String> = []
+    @Published var lastACPError: String?
+    private var pendingACPRegistryRequestID: UUID?
+    /// Maps an ACP mutation request id to the identity key tracked in
+    /// `inFlightACPMutations`, so the result clears the right row.
+    private var acpMutationKeys: [UUID: String] = [:]
+
+    // MARK: - Remote desktop config: MCP servers
+
+    @Published var mcpServers: [MobileMCPServer] = []
+    @Published var mcpConfigLoading = false
+    @Published var mcpConfigError: String?
+    /// Server names with an in-flight add/remove/toggle request.
+    @Published var inFlightMCPMutations: Set<String> = []
+    @Published var lastMCPError: String?
+    private var pendingMCPConfigRequestID: UUID?
     /// IDs of branch operations awaiting a `BranchOpResultPayload`. Used so the
     /// UI can render a spinner on the chip while the desktop runs git.
     @Published var inFlightBranchOps: Set<UUID> = []
@@ -107,6 +148,13 @@ final class MobileAppState: ObservableObject {
     @Published var isSearching: Bool = false
     private var pendingSearchID: UUID?
     private var searchDebounceTask: Task<Void, Never>?
+
+    /// Backing data for the thread "View Changes" sheet — thread file edits and
+    /// uncommitted git changes for one thread. Nil until first loaded; carries
+    /// its own `sessionID` so a stale result for another thread is ignored.
+    @Published var threadChanges: ThreadChangesResultPayload?
+    @Published var isLoadingThreadChanges: Bool = false
+    private var pendingThreadChangesID: UUID?
 
     @Published var remoteFolderRoot: RemoteFolderNode?
     @Published var remoteFolderIsLoading = false
@@ -671,6 +719,25 @@ final class MobileAppState: ObservableObject {
         }
     }
 
+    /// Requests the change overview (thread file edits + uncommitted git
+    /// changes) for `sessionID` from the desktop. The reply lands in
+    /// `threadChanges` via the `threadChangesResult` payload.
+    func requestThreadChanges(sessionID: String) async {
+        guard isPaired else { return }
+        let requestID = UUID()
+        pendingThreadChangesID = requestID
+        isLoadingThreadChanges = true
+        let payload = ThreadChangesRequestPayload(clientRequestID: requestID, sessionID: sessionID)
+        do {
+            try await client.send(.threadChangesRequest(payload), toHex: pairedDesktopPubkey)
+        } catch {
+            if pendingThreadChangesID == requestID {
+                pendingThreadChangesID = nil
+                isLoadingThreadChanges = false
+            }
+        }
+    }
+
     func respondToPermission(allow: Bool, denyReason: String? = nil) async {
         guard let pending = pendingPermission else { return }
         let payload = PermissionResponsePayload(
@@ -870,6 +937,37 @@ final class MobileAppState: ObservableObject {
         Task { await reportAPNsTokenIfPending() }
     }
 
+    // MARK: - Live Activity & widget
+
+    /// Forward a Live Activity push token (a push-to-start token, a per-activity
+    /// update token, or both) to every paired desktop so it can drive the job
+    /// Live Activity over APNs. Called by `MobileLiveActivityCoordinator`.
+    func sendLiveActivityToken(_ payload: LiveActivityTokenPayload) async {
+        guard !pairedDesktops.isEmpty else { return }
+        for desktop in pairedDesktops {
+            do {
+                try await client.send(.liveActivityToken(payload), toHex: desktop.pubkeyHex)
+                logger.info("[LiveActivity] token reported startToken=\(payload.pushToStartTokenHex != nil, privacy: .public) activityToken=\(payload.activityTokenHex != nil, privacy: .public) startedLocally=\(payload.activityStartedLocally == true, privacy: .public) dismissed=\(payload.activityDismissed == true, privacy: .public) session=\(payload.sessionID ?? "<nil>", privacy: .public) desktopKey=\(String(desktop.pubkeyHex.prefix(12)), privacy: .public)")
+            } catch {
+                logger.error("[LiveActivity] token report failed desktopKey=\(String(desktop.pubkeyHex.prefix(12)), privacy: .public): \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    /// Recompute the home-screen widget snapshot from the current mirrored
+    /// state and persist it into the shared App Group container. Cheap to call
+    /// often — `RxCodeWidgetStore` reloads WidgetKit timelines on a real change.
+    func refreshWidgetData() {
+        let jobCount = sessions.filter { $0.isStreaming }.count
+        let snapshot = RxCodeWidgetData(
+            jobCount: jobCount,
+            ccUsagePercent: desktopUsage?.claudeCode?.fiveHourPercent,
+            codexUsagePercent: desktopUsage?.codex?.fiveHourPercent,
+            updatedAt: Date().timeIntervalSince1970
+        )
+        RxCodeWidgetStore.save(snapshot)
+    }
+
     /// Routes a tapped APNs notification to its thread. Called by `AppDelegate`'s
     /// `didReceive` handler; `RootView` observes `pendingDeepLink` and navigates.
     func openThreadFromNotification(sessionID: String, projectID: UUID?) {
@@ -946,6 +1044,315 @@ final class MobileAppState: ObservableObject {
         activeSessionID = nil
         pendingPermission = nil
         pendingQuestions = []
+        skillCatalog = []
+        skillCatalogLoading = false
+        skillCatalogError = nil
+        skillSources = []
+        inFlightSkillMutations = []
+        inFlightSkillSourceMutations = []
+        lastSkillError = nil
+        pendingSkillCatalogRequestID = nil
+        skillSourceMutationKeys = [:]
+        acpRegistryAgents = []
+        acpInstalledClients = []
+        acpRegistryLoading = false
+        acpRegistryError = nil
+        inFlightACPMutations = []
+        lastACPError = nil
+        pendingACPRegistryRequestID = nil
+        acpMutationKeys = [:]
+        mcpServers = []
+        mcpConfigLoading = false
+        mcpConfigError = nil
+        inFlightMCPMutations = []
+        lastMCPError = nil
+        pendingMCPConfigRequestID = nil
+    }
+
+    // MARK: - Remote desktop configuration
+
+    /// Timeout after which a stuck remote config request is cleared and an
+    /// error surfaced. ACP installs download a binary, so they get longer.
+    private static let remoteConfigTimeout: Duration = .seconds(20)
+    private static let acpInstallTimeout: Duration = .seconds(90)
+
+    /// Runs `perform` on the main actor after `timeout`. Callers use it to
+    /// expire a request that never received a reply (relay dropped, etc.).
+    private func scheduleTimeout(
+        _ timeout: Duration,
+        perform: @escaping (MobileAppState) -> Void
+    ) {
+        Task { [weak self] in
+            try? await Task.sleep(for: timeout)
+            guard let self else { return }
+            perform(self)
+        }
+    }
+
+    // Skills
+
+    func requestSkillCatalog(forceRefresh: Bool = false) async {
+        guard isPaired else {
+            skillCatalogError = "Connect a Mac to browse skills."
+            return
+        }
+        let payload = SkillCatalogRequestPayload(forceRefresh: forceRefresh)
+        pendingSkillCatalogRequestID = payload.clientRequestID
+        skillCatalogLoading = true
+        skillCatalogError = nil
+        do {
+            try await client.send(.skillCatalogRequest(payload), toHex: pairedDesktopPubkey)
+            scheduleTimeout(Self.remoteConfigTimeout) { s in
+                if s.pendingSkillCatalogRequestID == payload.clientRequestID {
+                    s.pendingSkillCatalogRequestID = nil
+                    s.skillCatalogLoading = false
+                    s.skillCatalogError = "Request timed out. Check your Mac and try again."
+                }
+            }
+        } catch {
+            skillCatalogLoading = false
+            skillCatalogError = "Failed to request skills: \(error.localizedDescription)"
+            if pendingSkillCatalogRequestID == payload.clientRequestID {
+                pendingSkillCatalogRequestID = nil
+            }
+        }
+    }
+
+    func installSkill(_ pluginID: String) async {
+        await mutateSkill(pluginID, operation: .install)
+    }
+
+    func uninstallSkill(_ pluginID: String) async {
+        await mutateSkill(pluginID, operation: .uninstall)
+    }
+
+    func addSkillGitSource(url: String, ref: String?) async {
+        let trimmedURL = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedURL.isEmpty else {
+            lastSkillError = "Enter a GitHub repository URL."
+            return
+        }
+        let trimmedRef = ref?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let key = "add:\(trimmedURL)"
+        await mutateSkillSource(
+            key: key,
+            operation: .add,
+            gitURL: trimmedURL,
+            ref: trimmedRef?.isEmpty == false ? trimmedRef : nil
+        )
+    }
+
+    func removeSkillGitSource(_ sourceID: String) async {
+        await mutateSkillSource(key: sourceID, operation: .remove, sourceID: sourceID)
+    }
+
+    private func mutateSkill(_ pluginID: String, operation: SkillMutationRequestPayload.Operation) async {
+        guard isPaired else {
+            lastSkillError = "Connect a Mac first."
+            return
+        }
+        guard !inFlightSkillMutations.contains(pluginID) else { return }
+        let payload = SkillMutationRequestPayload(operation: operation, pluginID: pluginID)
+        inFlightSkillMutations.insert(pluginID)
+        lastSkillError = nil
+        do {
+            try await client.send(.skillMutationRequest(payload), toHex: pairedDesktopPubkey)
+            scheduleTimeout(Self.remoteConfigTimeout) { s in
+                if s.inFlightSkillMutations.remove(pluginID) != nil {
+                    s.lastSkillError = "Request timed out. Check your Mac and try again."
+                }
+            }
+        } catch {
+            inFlightSkillMutations.remove(pluginID)
+            lastSkillError = "Failed to send request: \(error.localizedDescription)"
+        }
+    }
+
+    private func mutateSkillSource(
+        key: String,
+        operation: SkillSourceMutationRequestPayload.Operation,
+        sourceID: String? = nil,
+        gitURL: String? = nil,
+        ref: String? = nil
+    ) async {
+        guard isPaired else {
+            lastSkillError = "Connect a Mac first."
+            return
+        }
+        guard !inFlightSkillSourceMutations.contains(key) else { return }
+        let payload = SkillSourceMutationRequestPayload(
+            operation: operation,
+            sourceID: sourceID,
+            gitURL: gitURL,
+            ref: ref
+        )
+        inFlightSkillSourceMutations.insert(key)
+        skillSourceMutationKeys[payload.clientRequestID] = key
+        lastSkillError = nil
+        do {
+            try await client.send(.skillSourceMutationRequest(payload), toHex: pairedDesktopPubkey)
+            scheduleTimeout(Self.remoteConfigTimeout) { s in
+                if let key = s.skillSourceMutationKeys.removeValue(forKey: payload.clientRequestID) {
+                    s.inFlightSkillSourceMutations.remove(key)
+                    s.lastSkillError = "Request timed out. Check your Mac and try again."
+                }
+            }
+        } catch {
+            skillSourceMutationKeys.removeValue(forKey: payload.clientRequestID)
+            inFlightSkillSourceMutations.remove(key)
+            lastSkillError = "Failed to send request: \(error.localizedDescription)"
+        }
+    }
+
+    // ACP agent clients
+
+    func requestACPRegistry(forceRefresh: Bool = false) async {
+        guard isPaired else {
+            acpRegistryError = "Connect a Mac to manage agents."
+            return
+        }
+        let payload = ACPRegistryRequestPayload(forceRefresh: forceRefresh)
+        pendingACPRegistryRequestID = payload.clientRequestID
+        acpRegistryLoading = true
+        acpRegistryError = nil
+        do {
+            try await client.send(.acpRegistryRequest(payload), toHex: pairedDesktopPubkey)
+            scheduleTimeout(Self.remoteConfigTimeout) { s in
+                if s.pendingACPRegistryRequestID == payload.clientRequestID {
+                    s.pendingACPRegistryRequestID = nil
+                    s.acpRegistryLoading = false
+                    s.acpRegistryError = "Request timed out. Check your Mac and try again."
+                }
+            }
+        } catch {
+            acpRegistryLoading = false
+            acpRegistryError = "Failed to request agents: \(error.localizedDescription)"
+            if pendingACPRegistryRequestID == payload.clientRequestID {
+                pendingACPRegistryRequestID = nil
+            }
+        }
+    }
+
+    func installACPAgent(_ registryAgentID: String) async {
+        await mutateACP(operation: .install, key: registryAgentID, registryAgentID: registryAgentID)
+    }
+
+    func uninstallACPClient(_ clientID: String) async {
+        await mutateACP(operation: .uninstall, key: clientID, clientID: clientID)
+    }
+
+    func setACPClientEnabled(_ clientID: String, enabled: Bool) async {
+        await mutateACP(operation: .setEnabled, key: clientID, clientID: clientID, enabled: enabled)
+    }
+
+    private func mutateACP(
+        operation: ACPMutationRequestPayload.Operation,
+        key: String,
+        registryAgentID: String? = nil,
+        clientID: String? = nil,
+        enabled: Bool? = nil
+    ) async {
+        guard isPaired else {
+            lastACPError = "Connect a Mac first."
+            return
+        }
+        guard !inFlightACPMutations.contains(key) else { return }
+        let payload = ACPMutationRequestPayload(
+            operation: operation,
+            registryAgentID: registryAgentID,
+            clientID: clientID,
+            enabled: enabled
+        )
+        inFlightACPMutations.insert(key)
+        acpMutationKeys[payload.clientRequestID] = key
+        lastACPError = nil
+        let timeout = operation == .install ? Self.acpInstallTimeout : Self.remoteConfigTimeout
+        do {
+            try await client.send(.acpMutationRequest(payload), toHex: pairedDesktopPubkey)
+            scheduleTimeout(timeout) { s in
+                if s.acpMutationKeys.removeValue(forKey: payload.clientRequestID) != nil {
+                    s.inFlightACPMutations.remove(key)
+                    s.lastACPError = "Request timed out. Check your Mac and try again."
+                }
+            }
+        } catch {
+            acpMutationKeys.removeValue(forKey: payload.clientRequestID)
+            inFlightACPMutations.remove(key)
+            lastACPError = "Failed to send request: \(error.localizedDescription)"
+        }
+    }
+
+    // MCP servers
+
+    func requestMCPConfig() async {
+        guard isPaired else {
+            mcpConfigError = "Connect a Mac to manage MCP servers."
+            return
+        }
+        let payload = MCPConfigRequestPayload()
+        pendingMCPConfigRequestID = payload.clientRequestID
+        mcpConfigLoading = true
+        mcpConfigError = nil
+        do {
+            try await client.send(.mcpConfigRequest(payload), toHex: pairedDesktopPubkey)
+            scheduleTimeout(Self.remoteConfigTimeout) { s in
+                if s.pendingMCPConfigRequestID == payload.clientRequestID {
+                    s.pendingMCPConfigRequestID = nil
+                    s.mcpConfigLoading = false
+                    s.mcpConfigError = "Request timed out. Check your Mac and try again."
+                }
+            }
+        } catch {
+            mcpConfigLoading = false
+            mcpConfigError = "Failed to request MCP servers: \(error.localizedDescription)"
+            if pendingMCPConfigRequestID == payload.clientRequestID {
+                pendingMCPConfigRequestID = nil
+            }
+        }
+    }
+
+    func addMCPServer(_ server: MobileMCPServer) async {
+        await mutateMCP(operation: .add, serverName: server.name, server: server)
+    }
+
+    func removeMCPServer(_ serverName: String) async {
+        await mutateMCP(operation: .remove, serverName: serverName)
+    }
+
+    func setMCPServerEnabled(_ serverName: String, enabled: Bool) async {
+        await mutateMCP(operation: .setEnabled, serverName: serverName, enabled: enabled)
+    }
+
+    private func mutateMCP(
+        operation: MCPMutationRequestPayload.Operation,
+        serverName: String,
+        server: MobileMCPServer? = nil,
+        enabled: Bool? = nil
+    ) async {
+        guard isPaired else {
+            lastMCPError = "Connect a Mac first."
+            return
+        }
+        guard !inFlightMCPMutations.contains(serverName) else { return }
+        let payload = MCPMutationRequestPayload(
+            operation: operation,
+            serverName: serverName,
+            server: server,
+            enabled: enabled
+        )
+        inFlightMCPMutations.insert(serverName)
+        lastMCPError = nil
+        do {
+            try await client.send(.mcpMutationRequest(payload), toHex: pairedDesktopPubkey)
+            scheduleTimeout(Self.remoteConfigTimeout) { s in
+                if s.inFlightMCPMutations.remove(serverName) != nil {
+                    s.lastMCPError = "Request timed out. Check your Mac and try again."
+                }
+            }
+        } catch {
+            inFlightMCPMutations.remove(serverName)
+            lastMCPError = "Failed to send request: \(error.localizedDescription)"
+        }
     }
 
     // MARK: - Inbound events
@@ -1047,12 +1454,14 @@ final class MobileAppState: ObservableObject {
                 }
                 activeSessionID = active
             }
+            refreshWidgetData()
         case .moreMessages(let page):
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "more_messages") else { return }
             applyMoreMessages(page)
         case .sessionUpdate(let update):
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "session_update") else { return }
             applySessionUpdate(update)
+            refreshWidgetData()
         case .permissionRequest(let req):
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "permission_request") else { return }
             pendingPermission = req
@@ -1073,6 +1482,12 @@ final class MobileAppState: ObservableObject {
             searchProjectIDs = results.projectIDs
             searchThreadHits = results.threadHits
             isSearching = false
+        case .threadChangesResult(let result):
+            guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "thread_changes_result") else { return }
+            guard let pending = pendingThreadChangesID, result.clientRequestID == pending else { return }
+            pendingThreadChangesID = nil
+            isLoadingThreadChanges = false
+            threadChanges = result
         case .branchOpResult(let result):
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "branch_op_result") else { return }
             inFlightBranchOps.remove(result.clientRequestID)
@@ -1112,6 +1527,27 @@ final class MobileAppState: ObservableObject {
         case .runTaskUpdate(let update):
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "run_task_update") else { return }
             upsertRunTask(update.task)
+        case .skillCatalogResult(let result):
+            guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "skill_catalog_result") else { return }
+            applySkillCatalogResult(result)
+        case .skillMutationResult(let result):
+            guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "skill_mutation_result") else { return }
+            applySkillMutationResult(result)
+        case .skillSourceMutationResult(let result):
+            guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "skill_source_mutation_result") else { return }
+            applySkillSourceMutationResult(result)
+        case .acpRegistryResult(let result):
+            guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "acp_registry_result") else { return }
+            applyACPRegistryResult(result)
+        case .acpMutationResult(let result):
+            guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "acp_mutation_result") else { return }
+            applyACPMutationResult(result)
+        case .mcpConfigResult(let result):
+            guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "mcp_config_result") else { return }
+            applyMCPConfigResult(result)
+        case .mcpMutationResult(let result):
+            guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "mcp_mutation_result") else { return }
+            applyMCPMutationResult(result)
         case .ping:
             guard pairedDesktops.contains(where: { $0.pubkeyHex == inbound.fromHex }) else { return }
             Task { try? await self.client.send(.pong(PongPayload()), toHex: inbound.fromHex) }
@@ -1134,6 +1570,94 @@ final class MobileAppState: ObservableObject {
             Task { await self.requestSnapshot() }
         } else {
             lastRunProfileError = result.errorMessage ?? "Run profile operation failed."
+        }
+    }
+
+    private func applySkillCatalogResult(_ result: SkillCatalogResultPayload) {
+        guard pendingSkillCatalogRequestID == result.clientRequestID else { return }
+        pendingSkillCatalogRequestID = nil
+        skillCatalogLoading = false
+        if result.ok {
+            skillCatalog = result.plugins
+            skillSources = result.sources
+            skillCatalogError = nil
+        } else {
+            skillCatalogError = result.errorMessage ?? "Failed to load skills."
+        }
+    }
+
+    private func applySkillMutationResult(_ result: SkillMutationResultPayload) {
+        inFlightSkillMutations.remove(result.pluginID)
+        skillCatalog = result.plugins
+        skillSources = result.sources
+        if result.ok {
+            lastSkillError = nil
+        } else {
+            lastSkillError = result.errorMessage ?? "Skill operation failed."
+        }
+    }
+
+    private func applySkillSourceMutationResult(_ result: SkillSourceMutationResultPayload) {
+        if let key = skillSourceMutationKeys.removeValue(forKey: result.clientRequestID) {
+            inFlightSkillSourceMutations.remove(key)
+        }
+        if let sourceID = result.sourceID {
+            inFlightSkillSourceMutations.remove(sourceID)
+        }
+        skillCatalog = result.plugins
+        skillSources = result.sources
+        if result.ok {
+            lastSkillError = nil
+        } else {
+            lastSkillError = result.errorMessage ?? "Skill source operation failed."
+        }
+    }
+
+    private func applyACPRegistryResult(_ result: ACPRegistryResultPayload) {
+        guard pendingACPRegistryRequestID == result.clientRequestID else { return }
+        pendingACPRegistryRequestID = nil
+        acpRegistryLoading = false
+        if result.ok {
+            acpRegistryAgents = result.registryAgents
+            acpInstalledClients = result.installedClients
+            acpRegistryError = nil
+        } else {
+            acpRegistryError = result.errorMessage ?? "Failed to load the agent registry."
+        }
+    }
+
+    private func applyACPMutationResult(_ result: ACPMutationResultPayload) {
+        if let key = acpMutationKeys.removeValue(forKey: result.clientRequestID) {
+            inFlightACPMutations.remove(key)
+        }
+        acpRegistryAgents = result.registryAgents
+        acpInstalledClients = result.installedClients
+        if result.ok {
+            lastACPError = nil
+        } else {
+            lastACPError = result.errorMessage ?? "Agent operation failed."
+        }
+    }
+
+    private func applyMCPConfigResult(_ result: MCPConfigResultPayload) {
+        guard pendingMCPConfigRequestID == result.clientRequestID else { return }
+        pendingMCPConfigRequestID = nil
+        mcpConfigLoading = false
+        if result.ok {
+            mcpServers = result.servers
+            mcpConfigError = nil
+        } else {
+            mcpConfigError = result.errorMessage ?? "Failed to load MCP servers."
+        }
+    }
+
+    private func applyMCPMutationResult(_ result: MCPMutationResultPayload) {
+        inFlightMCPMutations.remove(result.serverName)
+        mcpServers = result.servers
+        if result.ok {
+            lastMCPError = nil
+        } else {
+            lastMCPError = result.errorMessage ?? "MCP operation failed."
         }
     }
 

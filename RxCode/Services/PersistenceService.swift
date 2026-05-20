@@ -239,6 +239,18 @@ actor PersistenceService {
         AppSupport.bundleScopedURL.appendingPathComponent("acp_registry.json")
     }
 
+    // MARK: - Custom Git Repositories
+
+    func saveCustomRepos(_ repos: [CustomRepo]) throws {
+        let url = baseURL.appendingPathComponent("custom_repos.json")
+        try encode(repos, to: url)
+    }
+
+    func loadCustomRepos() -> [CustomRepo] {
+        let url = baseURL.appendingPathComponent("custom_repos.json")
+        return decode([CustomRepo].self, from: url) ?? []
+    }
+
     // MARK: - GitHub User Cache
 
     func saveGitHubUser(_ user: GitHubUser) throws {

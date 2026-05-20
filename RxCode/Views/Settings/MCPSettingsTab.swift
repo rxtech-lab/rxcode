@@ -1,5 +1,6 @@
 import SwiftUI
 import RxCodeCore
+import TipKit
 
 struct MCPSettingsTab: View {
     @Environment(AppState.self) private var appState
@@ -85,6 +86,7 @@ struct MCPSettingsTab: View {
                     .font(.system(size: ClaudeTheme.size(12)))
             }
             .buttonStyle(.borderedProminent)
+            .popoverTip(RxCodeTips.MCPTip(), arrowEdge: .top)
         }
     }
 

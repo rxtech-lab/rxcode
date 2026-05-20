@@ -1,6 +1,7 @@
-import SwiftUI
-import RxCodeCore
 import RxCodeChatKit
+import RxCodeCore
+import SwiftUI
+import TipKit
 
 // MARK: - FocusedValues
 
@@ -36,6 +37,13 @@ struct RxCodeApp: App {
     @FocusedValue(\.startNewChat) private var startNewChat
     @AppStorage("showMenuBarExtra") private var showMenuBarExtra: Bool = true
     private let updateService = UpdateService.shared
+
+    init() {
+        try? Tips.configure([
+            .displayFrequency(.immediate),
+            .datastoreLocation(.applicationDefault),
+        ])
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -438,7 +446,7 @@ private struct MenuBarUsageBar: View {
         switch percent {
         case ..<60: return ClaudeTheme.accent
         case ..<85: return .orange
-        default:    return .red
+        default: return .red
         }
     }
 
@@ -545,7 +553,7 @@ struct ProjectWindowRoot: View {
             // running per-window setup. State-restoration can spawn this window
             // before the main window has finished booting.
             while !appState.isInitialized {
-                try? await Task.sleep(nanoseconds: 50_000_000)
+                try? await Task.sleep(nanoseconds: 50000000)
             }
             windowState.isProjectWindow = true
             appState.setupChatBridge(chatBridge, for: windowState)

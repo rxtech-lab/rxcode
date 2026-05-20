@@ -1,12 +1,21 @@
 import SwiftUI
 import RxCodeCore
+import TipKit
 
 @main
 struct RxCodeMobileApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var state = MobileAppState()
     @State private var windowState = WindowState()
+    @State private var liveActivityCoordinator = MobileLiveActivityCoordinator()
     @Environment(\.scenePhase) private var scenePhase
+
+    init() {
+        try? Tips.configure([
+            .displayFrequency(.immediate),
+            .datastoreLocation(.applicationDefault),
+        ])
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -15,6 +24,7 @@ struct RxCodeMobileApp: App {
                 .environment(windowState)
                 .onAppear {
                     appDelegate.mobileState = state
+                    liveActivityCoordinator.bind(state: state)
                     state.start()
                 }
                 .onOpenURL { url in

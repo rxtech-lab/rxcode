@@ -1,6 +1,7 @@
 import RxCodeCore
 import RxCodeSync
 import SwiftUI
+import TipKit
 
 struct MobileSettingsView: View {
     @EnvironmentObject private var state: MobileAppState
@@ -32,6 +33,10 @@ struct MobileSettingsView: View {
                     Section("Desktop Settings") {
                         ProgressView("Syncing settings…")
                     }
+                }
+
+                if state.isPaired {
+                    desktopConfigurationSection
                 }
 
                 pairNewSection
@@ -149,6 +154,33 @@ struct MobileSettingsView: View {
         }
     }
 
+    /// Links to the remote desktop-management screens: skill marketplace, ACP
+    /// agent clients, and MCP servers. Shown only while paired since every
+    /// action targets the active Mac.
+    private var desktopConfigurationSection: some View {
+        Section {
+            NavigationLink {
+                MobileSkillMarketView()
+            } label: {
+                Label("Skills", systemImage: "puzzlepiece.extension")
+            }
+            NavigationLink {
+                MobileACPClientsView()
+            } label: {
+                Label("Agent Clients", systemImage: "cpu")
+            }
+            NavigationLink {
+                MobileMCPServersView()
+            } label: {
+                Label("MCP Servers", systemImage: "server.rack")
+            }
+        } header: {
+            Text("Desktop Configuration")
+        } footer: {
+            Text("Install skills and agents, and configure MCP servers on the active Mac.")
+        }
+    }
+
     private var pairNewSection: some View {
         Section {
             Button {
@@ -156,6 +188,7 @@ struct MobileSettingsView: View {
             } label: {
                 Label("Pair New Mac", systemImage: "plus.circle")
             }
+            .popoverTip(MobileTips.PairingTip(), arrowEdge: .top)
         }
     }
 
@@ -333,6 +366,7 @@ struct MobileSettingsView: View {
                 }
             }
             .pickerStyle(.menu)
+            .popoverTip(MobileTips.SummarizationTip(), arrowEdge: .top)
 
             if settings.summarizationProvider == "openAI" {
                 if !settings.openAISummarizationEndpoint.isEmpty {

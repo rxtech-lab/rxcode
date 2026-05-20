@@ -8,18 +8,23 @@ struct GitHubSheet: View {
     @State private var showLoginSheet = false
     @State private var searchText = ""
     @State private var cloningRepo: String?
+    @State private var selectedTab = 0
+    @State private var customRepoURL = ""
+    @State private var customRepoName = ""
+    @State private var isAddingCustomRepo = false
+    @State private var cloningCustomRepo: String?
 
     var body: some View {
         VStack(spacing: 0) {
             // Title bar
             HStack {
-                Text("GitHub")
+                Text("Git Repositories")
                     .font(.headline)
                     .foregroundStyle(ClaudeTheme.textPrimary)
 
                 Spacer()
 
-                if appState.isLoggedIn, let user = appState.gitHubUser {
+                if selectedTab == 0, appState.isLoggedIn, let user = appState.gitHubUser {
                     Text("@\(user.login)")
                         .font(.caption)
                         .foregroundStyle(ClaudeTheme.textSecondary)
@@ -48,13 +53,22 @@ struct GitHubSheet: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
 
+            // Tab picker
+            Picker("Source", selection: $selectedTab) {
+                Text("GitHub").tag(0)
+                Text("Custom").tag(1)
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 8)
+
             ClaudeThemeDivider()
 
             // Content
-            if appState.isLoggedIn {
-                repoContent
+            if selectedTab == 0 {
+                githubContent
             } else {
-                connectPrompt
+                customContent
             }
         }
         .frame(width: 480, height: 520)
@@ -67,6 +81,18 @@ struct GitHubSheet: View {
         }
         .sheet(isPresented: $showLoginSheet) {
             GitHubLoginView()
+        }
+    }
+
+    // MARK: - GitHub Content
+
+    private var githubContent: some View {
+        Group {
+            if appState.isLoggedIn {
+                repoContent
+            } else {
+                connectPrompt
+            }
         }
     }
 
@@ -138,6 +164,159 @@ struct GitHubSheet: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
         }
+    }
+
+    // MARK: - Custom Content
+
+    private var customContent: some View {
+        VStack(spacing: 0) {
+            // Add button
+            HStack {
+                Button {
+                    withAnimation {
+                        isAddingCustomRepo = true
+                    }
+                } label: {
+                    Label("Add Repository", systemImage: "plus")
+                }
+                .buttonStyle(ClaudeAccentButtonStyle())
+
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+
+            ClaudeThemeDivider()
+
+            if isAddingCustomRepo {
+                addCustomRepoForm
+            }
+
+            if appState.customRepos.isEmpty, !isAddingCustomRepo {
+                customEmptyState
+            } else {
+                customRepoList
+            }
+        }
+    }
+
+    private var addCustomRepoForm: some View {
+        VStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Git URL")
+                    .font(.caption)
+                    .foregroundStyle(ClaudeTheme.textSecondary)
+                TextField("https://github.com/owner/repo.git or git@github.com:owner/repo.git", text: $customRepoURL)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Project Name")
+                    .font(.caption)
+                    .foregroundStyle(ClaudeTheme.textSecondary)
+                TextField("my-project", text: $customRepoName)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            HStack {
+                Button("Cancel") {
+                    withAnimation {
+                        isAddingCustomRepo = false
+                        customRepoURL = ""
+                        customRepoName = ""
+                    }
+                }
+                .buttonStyle(ClaudeSecondaryButtonStyle())
+
+                Spacer()
+
+                Button {
+                    Task { await cloneCustomRepo() }
+                } label: {
+                    if cloningCustomRepo != nil {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Text("Clone & Add")
+                    }
+                }
+                .buttonStyle(ClaudeAccentButtonStyle())
+                .disabled(customRepoURL.isEmpty || customRepoName.isEmpty || cloningCustomRepo != nil)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+    }
+
+    private var customEmptyState: some View {
+        VStack(spacing: 8) {
+            Spacer()
+            Image(systemName: "archivebox")
+                .font(.system(size: 32))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+            Text("No custom repositories")
+                .font(.subheadline)
+                .foregroundStyle(ClaudeTheme.textSecondary)
+            Text("Add a Git repository by URL")
+                .font(.caption)
+                .foregroundStyle(ClaudeTheme.textTertiary)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var customRepoList: some View {
+        List {
+            ForEach(appState.customRepos) { repo in
+                HStack(spacing: 10) {
+                    Image(systemName: "archivebox.fill")
+                        .font(.caption)
+                        .foregroundStyle(ClaudeTheme.textTertiary)
+                        .frame(width: 16)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(repo.name)
+                            .font(.body)
+                            .foregroundStyle(ClaudeTheme.textPrimary)
+                            .lineLimit(1)
+                        Text(repo.cloneURL)
+                            .font(.caption)
+                            .foregroundStyle(ClaudeTheme.textTertiary)
+                            .lineLimit(1)
+                    }
+
+                    Spacer()
+
+                    if cloningCustomRepo == repo.name {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else if isCustomRepoAdded(repo) {
+                        Label("Added", systemImage: "checkmark.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(ClaudeTheme.statusSuccess)
+                    } else {
+                        Button {
+                            Task { await cloneCustomRepo(repo) }
+                        } label: {
+                            Label("Clone", systemImage: "plus.circle")
+                                .font(.caption)
+                        }
+                        .buttonStyle(ClaudeSecondaryButtonStyle())
+                    }
+
+                    Button(role: .destructive) {
+                        Task { await appState.removeCustomRepo(repo) }
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.caption)
+                            .foregroundStyle(ClaudeTheme.textTertiary)
+                    }
+                    .buttonStyle(.borderless)
+                }
+                .padding(.vertical, 2)
+            }
+        }
+        .listStyle(.plain)
     }
 
     private var loadingState: some View {
@@ -227,6 +406,10 @@ struct GitHubSheet: View {
         appState.projects.contains { $0.gitHubRepo == repo.fullName }
     }
 
+    private func isCustomRepoAdded(_ repo: CustomRepo) -> Bool {
+        appState.projects.contains { $0.path.contains(repo.name) }
+    }
+
     private func cloneRepo(_ repo: GitHubRepo) async {
         cloningRepo = repo.fullName
         do {
@@ -236,6 +419,37 @@ struct GitHubSheet: View {
             windowState.showError = true
         }
         cloningRepo = nil
+    }
+
+    private func cloneCustomRepo(_ repo: CustomRepo? = nil) async {
+        if let repo {
+            cloningCustomRepo = repo.name
+            do {
+                let home = FileManager.default.homeDirectoryForCurrentUser.path
+                let clonePath = "\(home)/RxCode/\(repo.name)"
+                let fm = FileManager.default
+                if !fm.fileExists(atPath: "\(home)/RxCode") {
+                    try fm.createDirectory(atPath: "\(home)/RxCode", withIntermediateDirectories: true)
+                }
+                try await appState.cloneCustomRepo(repo, in: windowState)
+            } catch {
+                windowState.errorMessage = "Clone failed: \(error.localizedDescription)"
+                windowState.showError = true
+            }
+            cloningCustomRepo = nil
+        } else {
+            cloningCustomRepo = customRepoName
+            do {
+                try await appState.addCustomRepo(url: customRepoURL, name: customRepoName, in: windowState)
+                customRepoURL = ""
+                customRepoName = ""
+                isAddingCustomRepo = false
+            } catch {
+                windowState.errorMessage = "Clone failed: \(error.localizedDescription)"
+                windowState.showError = true
+            }
+            cloningCustomRepo = nil
+        }
     }
 }
 

@@ -2,6 +2,7 @@ import SwiftUI
 import UIKit
 import RxCodeCore
 import RxCodeSync
+import TipKit
 
 /// Modal sheet for composing a new thread. Captures the prompt + config knobs
 /// (branch, model, permission mode), fires `requestNewSession` on submit, then
@@ -72,7 +73,7 @@ struct NewThreadSheet: View {
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
-        .interactiveDismissDisabled(isSubmitting)
+        .interactiveDismissDisabled(true)
         .onAppear {
             seedConfigIfNeeded()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
@@ -409,6 +410,7 @@ struct NewThreadConfigStrip: View {
             chipLabel(icon: "cpu", title: selectedModelLabel)
         }
         .disabled(allModels.isEmpty)
+        .popoverTip(MobileTips.AgentSelectionTip(), arrowEdge: .top)
     }
 
     private func applyModel(_ model: AgentModel) {
@@ -460,6 +462,7 @@ struct NewThreadConfigStrip: View {
         .buttonStyle(.plain)
         .accessibilityLabel("Plan mode")
         .accessibilityValue(planModeEnabled ? "On" : "Off")
+        .popoverTip(MobileTips.PlanModeTip(), arrowEdge: .top)
     }
 
     // MARK: Chip

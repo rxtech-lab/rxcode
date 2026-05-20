@@ -282,6 +282,32 @@ actor GitHubService {
         logger.info("Cloned \(repo.fullName, privacy: .public) to \(path, privacy: .public)")
     }
 
+    func cloneRepo(from url: String, to path: String) async throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        process.arguments = ["clone", url, path]
+        process.environment = ProcessInfo.processInfo.environment
+
+        let stderrPipe = Pipe()
+        process.standardError = stderrPipe
+
+        try process.run()
+
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            process.terminationHandler = { _ in
+                continuation.resume()
+            }
+        }
+
+        guard process.terminationStatus == 0 else {
+            let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+            let stderr = String(data: stderrData, encoding: .utf8) ?? "unknown error"
+            throw GitHubError.cloneFailed(stderr)
+        }
+
+        logger.info("Cloned repo from \(url, privacy: .public) to \(path, privacy: .public)")
+    }
+
     // MARK: - Private Helpers
 
     private func apiRequest<T: Decodable>(

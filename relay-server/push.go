@@ -58,23 +58,47 @@ func NewPushSender(keyPath string, keyPEM []byte, keyID, teamID, topic string, p
 	return &PushSender{client: client, topic: topic}, nil
 }
 
+// Push delivery modes accepted by POST /push.
+const (
+	// pushModeAlert is the legacy encrypted-banner path: the desktop ships an
+	// opaque E2E-encrypted blob and the iOS Notification Service Extension
+	// decrypts it before the banner is shown. This is the default when
+	// `push_type` is empty.
+	pushModeAlert = "alert"
+	// pushModeLiveActivity carries an ActivityKit start/update/end payload.
+	// Live Activity content-state cannot be E2E encrypted because ActivityKit
+	// consumes it directly, so `apns_payload` is forwarded verbatim.
+	pushModeLiveActivity = "liveactivity"
+	// pushModeBackground is a silent content-available push used to refresh
+	// the home-screen widget; `apns_payload` is forwarded verbatim.
+	pushModeBackground = "background"
+)
+
 // PushRequest is the JSON body accepted by POST /push.
 //
-// `EncryptedAlertB64` is an opaque base64 blob produced by the desktop sender —
-// the relay never decrypts it. The mobile Notification Service Extension
-// decrypts it before iOS shows the banner.
+// For the legacy alert path, `encrypted_alert` is an opaque base64 blob
+// produced by the desktop sender — the relay never decrypts it. For the
+// `liveactivity` and `background` paths, `apns_payload` is the complete APNs
+// JSON payload (`{"aps": {…}, …}`) built by the desktop and forwarded verbatim.
 type PushRequest struct {
 	DeviceToken       string `json:"device_token"`
-	EncryptedAlertB64 string `json:"encrypted_alert"`
+	EncryptedAlertB64 string `json:"encrypted_alert,omitempty"`
 	Category          string `json:"category,omitempty"`
 	CollapseID        string `json:"collapse_id,omitempty"`
+	// PushType selects the delivery mode: "" / "alert", "liveactivity", or
+	// "background". Unknown values are rejected.
+	PushType string `json:"push_type,omitempty"`
+	// APNSPayload is the raw APNs JSON, required for "liveactivity" and
+	// "background". Ignored for the alert path.
+	APNSPayload json.RawMessage `json:"apns_payload,omitempty"`
 }
 
 // pushHandler returns an http.HandlerFunc that signs and forwards APNs pushes.
 //
-// Auth is intentionally minimal in v1: any client may submit, since the
-// payload itself is E2E-encrypted to the recipient device. A future hardening
-// pass should require a signed sender token (see plan: risk areas).
+// Auth is intentionally minimal in v1: any client may submit, since the alert
+// payload itself is E2E-encrypted to the recipient device. Live Activity and
+// widget payloads are not encrypted (ActivityKit / WidgetKit consume them
+// directly); a future hardening pass should require a signed sender token.
 func pushHandler(sender *PushSender) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -95,86 +119,57 @@ func pushHandler(sender *PushSender) http.HandlerFunc {
 			http.Error(w, "malformed body", http.StatusBadRequest)
 			return
 		}
-		if req.DeviceToken == "" || req.EncryptedAlertB64 == "" {
-			http.Error(w, "missing fields", http.StatusBadRequest)
-			return
-		}
-		if _, err := base64.StdEncoding.DecodeString(req.EncryptedAlertB64); err != nil {
-			http.Error(w, "encrypted_alert must be base64", http.StatusBadRequest)
+		if req.DeviceToken == "" {
+			http.Error(w, "missing device_token", http.StatusBadRequest)
 			return
 		}
 
-		// Payload structure: mutable-content=1 triggers Notification Service
-		// Extension on the device; the extension decrypts `enc` and rewrites
-		// the visible alert before display.
-		payload := map[string]any{
-			"aps": map[string]any{
-				"alert": map[string]string{
-					"title": "RxCode",
-					"body":  "Encrypted notification",
-				},
-				"mutable-content": 1,
-				"sound":           "default",
-			},
-			"enc": req.EncryptedAlertB64,
-		}
-		raw, _ := json.Marshal(payload)
-
-		notif := &apns2.Notification{
-			DeviceToken: req.DeviceToken,
-			Topic:       sender.topic,
-			Payload:     raw,
-		}
-		if req.Category != "" {
-			notif.PushType = apns2.PushTypeAlert
-		}
-		if req.CollapseID != "" {
-			notif.CollapseID = req.CollapseID
+		mode := req.PushType
+		if mode == "" {
+			mode = pushModeAlert
 		}
 
+		var notif *apns2.Notification
+		switch mode {
+		case pushModeAlert:
+			notif, err = buildAlertNotification(sender, &req)
+		case pushModeLiveActivity:
+			notif, err = buildRawNotification(sender, &req, apns2.PushTypeLiveActivity, apns2.PriorityHigh, true)
+		case pushModeBackground:
+			notif, err = buildRawNotification(sender, &req, apns2.PushTypeBackground, apns2.PriorityLow, false)
+		default:
+			http.Error(w, "unknown push_type", http.StatusBadRequest)
+			return
+		}
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		payloadBytes, _ := notif.Payload.([]byte)
 		log.Printf(
-			"apns push send: device=%s category=%q collapse_id=%q collapse_len=%d payload_bytes=%d enc_bytes=%d",
-			short(req.DeviceToken),
-			req.Category,
-			req.CollapseID,
-			len(req.CollapseID),
-			len(raw),
-			len(req.EncryptedAlertB64),
+			"apns push send: mode=%s device=%s category=%q collapse_id=%q payload_bytes=%d",
+			mode, short(req.DeviceToken), req.Category, req.CollapseID, len(payloadBytes),
 		)
 
 		res, err := sender.client.Push(notif)
 		if err != nil {
 			log.Printf(
-				"apns push transport error: %v device=%s category=%q collapse_id=%q collapse_len=%d",
-				err,
-				short(req.DeviceToken),
-				req.Category,
-				req.CollapseID,
-				len(req.CollapseID),
+				"apns push transport error: %v mode=%s device=%s category=%q",
+				err, mode, short(req.DeviceToken), req.Category,
 			)
 			http.Error(w, "apns push failed", http.StatusBadGateway)
 			return
 		}
 		if res.Sent() {
 			log.Printf(
-				"apns push sent: status=%d apns_id=%s device=%s category=%q collapse_id=%q collapse_len=%d",
-				res.StatusCode,
-				res.ApnsID,
-				short(req.DeviceToken),
-				req.Category,
-				req.CollapseID,
-				len(req.CollapseID),
+				"apns push sent: mode=%s status=%d apns_id=%s device=%s",
+				mode, res.StatusCode, res.ApnsID, short(req.DeviceToken),
 			)
 		} else {
 			log.Printf(
-				"apns push rejected: status=%d reason=%q apns_id=%s device=%s category=%q collapse_id=%q collapse_len=%d",
-				res.StatusCode,
-				res.Reason,
-				res.ApnsID,
-				short(req.DeviceToken),
-				req.Category,
-				req.CollapseID,
-				len(req.CollapseID),
+				"apns push rejected: mode=%s status=%d reason=%q apns_id=%s device=%s",
+				mode, res.StatusCode, res.Reason, res.ApnsID, short(req.DeviceToken),
 			)
 		}
 		resp := map[string]any{
@@ -185,4 +180,75 @@ func pushHandler(sender *PushSender) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(resp)
 	}
+}
+
+// buildAlertNotification wraps the desktop's E2E-encrypted blob in the static
+// envelope the iOS Notification Service Extension expects. `mutable-content=1`
+// triggers the extension, which decrypts `enc` and rewrites the visible alert.
+func buildAlertNotification(sender *PushSender, req *PushRequest) (*apns2.Notification, error) {
+	if req.EncryptedAlertB64 == "" {
+		return nil, fmt.Errorf("missing encrypted_alert")
+	}
+	if _, err := base64.StdEncoding.DecodeString(req.EncryptedAlertB64); err != nil {
+		return nil, fmt.Errorf("encrypted_alert must be base64")
+	}
+	payload := map[string]any{
+		"aps": map[string]any{
+			"alert": map[string]string{
+				"title": "RxCode",
+				"body":  "Encrypted notification",
+			},
+			"mutable-content": 1,
+			"sound":           "default",
+		},
+		"enc": req.EncryptedAlertB64,
+	}
+	raw, _ := json.Marshal(payload)
+	notif := &apns2.Notification{
+		DeviceToken: req.DeviceToken,
+		Topic:       sender.topic,
+		Payload:     raw,
+	}
+	if req.Category != "" {
+		notif.PushType = apns2.PushTypeAlert
+	}
+	if req.CollapseID != "" {
+		notif.CollapseID = req.CollapseID
+	}
+	return notif, nil
+}
+
+// buildRawNotification forwards the desktop-built APNs payload verbatim. Used
+// for Live Activity and background (widget) pushes, whose payloads cannot be
+// E2E encrypted because the OS consumes them directly. When `liveActivityTopic`
+// is set, the APNs topic is suffixed with `.push-type.liveactivity` as Apple
+// requires for Live Activity pushes.
+func buildRawNotification(
+	sender *PushSender,
+	req *PushRequest,
+	pushType apns2.EPushType,
+	priority int,
+	liveActivityTopic bool,
+) (*apns2.Notification, error) {
+	if len(req.APNSPayload) == 0 {
+		return nil, fmt.Errorf("missing apns_payload")
+	}
+	if !json.Valid(req.APNSPayload) {
+		return nil, fmt.Errorf("apns_payload must be valid JSON")
+	}
+	topic := sender.topic
+	if liveActivityTopic {
+		topic = sender.topic + ".push-type.liveactivity"
+	}
+	notif := &apns2.Notification{
+		DeviceToken: req.DeviceToken,
+		Topic:       topic,
+		Payload:     []byte(req.APNSPayload),
+		PushType:    pushType,
+		Priority:    priority,
+	}
+	if req.CollapseID != "" {
+		notif.CollapseID = req.CollapseID
+	}
+	return notif, nil
 }

@@ -1,6 +1,7 @@
 import SwiftUI
 import RxCodeCore
 import RxCodeSync
+import TipKit
 
 struct ProjectsSidebar: View {
     @EnvironmentObject private var state: MobileAppState
@@ -23,6 +24,7 @@ struct ProjectsSidebar: View {
                     Image(systemName: "folder.badge.plus")
                 }
                 .accessibilityLabel("Add Project")
+                .popoverTip(MobileTips.RemoteProjectTip(), arrowEdge: .top)
             }
         }
         .sheet(isPresented: $showingRemoteFolderPicker) {
@@ -37,6 +39,7 @@ struct ProjectsSidebar: View {
             placement: .navigationBarDrawer(displayMode: .automatic),
             prompt: "Search projects and threads"
         )
+        .popoverTip(MobileTips.SearchTip(), arrowEdge: .top)
         .autocorrectionDisabled(true)
         .textInputAutocapitalization(.never)
         .onChange(of: searchText) { _, newValue in
@@ -85,6 +88,7 @@ struct ProjectsSidebar: View {
                     .font(.headline)
                     .foregroundStyle(showingBriefing ? Color.accentColor : Color.primary)
             }
+            .popoverTip(MobileTips.BriefingTip(), arrowEdge: .trailing)
         }
 
         Section("Projects") {

@@ -117,6 +117,16 @@ const MOBILE_SHOTS = [
     alt: "RxCode Mobile following a live agent conversation",
     caption: "Follow live sessions",
   },
+  {
+    image: "/screenshot/mobile-screenshot-6.png",
+    alt: "RxCode Mobile previewing a website served from the paired desktop dev server in the in-app browser",
+    caption: "Preview your dev server",
+  },
+  {
+    image: "/screenshot/mobile-screenshot-5.PNG",
+    alt: "RxCode Mobile showing an agent briefing that summarizes the work an agent completed",
+    caption: "Read agent briefings",
+  },
 ];
 
 const MOBILE_POINTS = [
@@ -422,14 +432,14 @@ function MobileCompanion() {
       id="mobile"
       className="max-w-[var(--container-max)] mx-auto px-6 pb-24"
     >
-      <div className="flex items-center gap-3 mb-8">
+      <div className="flex items-center gap-3 mb-8 mobile-rise">
         <span className="font-mono text-[11px] tracking-widest uppercase text-primary">
           Mobile Companion
         </span>
         <span className="flex-1 h-px bg-surface-variant" />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.35fr] gap-12 lg:gap-16 items-center">
-        <div>
+        <div className="mobile-rise">
           <div className="flex items-center gap-2 mb-4 font-mono text-[11px] tracking-widest uppercase text-primary">
             <LockIcon className="w-3.5 h-3.5" />
             End-to-end encrypted sync
@@ -439,7 +449,8 @@ function MobileCompanion() {
           </h2>
           <p className="text-on-surface-variant leading-relaxed mb-7">
             The RxCode companion app mirrors your Mac. Browse projects, search
-            every thread, kick off new agent runs, and follow live sessions from
+            every thread, kick off new agent runs, follow live sessions, preview
+            your dev server in the browser, and catch up on agent briefings from
             your phone — all relayed over an end-to-end encrypted channel so
             nothing in the middle can read your code or conversations.
           </p>
@@ -474,18 +485,18 @@ function MobileCompanion() {
         </div>
         <div className="grid grid-cols-2 gap-4 sm:gap-5">
           {MOBILE_SHOTS.map((shot) => (
-            <figure key={shot.image} className="flex flex-col">
-              <div className="bg-surface-container border border-surface-variant relative overflow-hidden">
+            <figure key={shot.image} className="group flex flex-col mobile-shot">
+              <div className="bg-surface-container border border-surface-variant relative overflow-hidden transition-[transform,border-color,box-shadow] duration-300 ease-out group-hover:-translate-y-2 group-hover:border-primary/60 group-hover:shadow-[0_18px_44px_-22px_rgba(0,0,0,0.75)]">
                 <Image
                   src={shot.image}
                   alt={shot.alt}
                   width={1320}
                   height={2868}
                   sizes="(min-width: 1024px) 330px, (min-width: 640px) 45vw, 45vw"
-                  className="block w-full h-auto"
+                  className="block w-full h-auto transition-transform duration-500 ease-out group-hover:scale-[1.04]"
                 />
               </div>
-              <figcaption className="mt-3 font-mono text-[10px] tracking-widest uppercase text-on-surface-variant/70">
+              <figcaption className="mt-3 font-mono text-[10px] tracking-widest uppercase text-on-surface-variant/70 transition-colors duration-300 group-hover:text-primary">
                 {shot.caption}
               </figcaption>
             </figure>

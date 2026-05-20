@@ -169,6 +169,34 @@ public struct ChatMessage: Identifiable, Codable, Sendable, Equatable {
             return toolCall.result?.isEmpty == true && !toolCall.isError
         }
     }
+
+    /// Cancel-time finalizer for a paused assistant turn.
+    ///
+    /// Unlike `finalizeToolCalls()`, tool calls still awaiting a result are
+    /// kept rather than dropped, so pausing a stream leaves the in-progress
+    /// work visible instead of making the whole bubble disappear:
+    /// - Keep-always tools (Edit, Write, Agent, …) keep a `nil` result so the
+    ///   UI renders them with its built-in "Interrupted" badge.
+    /// - Other tools (Bash, Read, Grep, MCP, …) — which the chat list hides
+    ///   unless they carry a result — are given an explicit interrupted
+    ///   result so they still render.
+    /// Completed tools with an empty result are still discarded, matching
+    /// `finalizeToolCalls()` so a paused turn looks consistent with a finished one.
+    public mutating func markStreamInterrupted() {
+        isStreaming = false
+        for index in blocks.indices {
+            guard let toolCall = blocks[index].toolCall,
+                  toolCall.result == nil,
+                  !toolCall.isKeepAlways else { continue }
+            blocks[index].toolCall?.result = "Interrupted"
+            blocks[index].toolCall?.isError = true
+        }
+        blocks.removeAll { block in
+            guard let toolCall = block.toolCall, toolCall.result != nil else { return false }
+            if toolCall.keepsEmptyResult { return false }
+            return toolCall.result?.isEmpty == true && !toolCall.isError
+        }
+    }
 }
 
 // MARK: - Attachment Info

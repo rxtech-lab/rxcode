@@ -4822,13 +4822,19 @@ final class AppState {
     /// it entirely. Called at turn-finalization sites — the marker is the
     /// model's response when a turn arrives without a user prompt
     /// (ScheduleWakeup, hook re-entry) and reads as noise in the chat UI.
-    private static func stripNoOpText(at idx: Int, in messages: inout [ChatMessage]) {
+    /// Strip CLI no-op meta text ("no response requested") from a message.
+    ///
+    /// `removeIfEmpty` controls whether a message left with no blocks is also
+    /// deleted. The normal stream path passes `true` to discard pure no-op
+    /// envelopes; the cancel path passes `false` so pausing a turn never makes
+    /// the partial assistant bubble disappear.
+    private static func stripNoOpText(at idx: Int, in messages: inout [ChatMessage], removeIfEmpty: Bool = true) {
         guard messages.indices.contains(idx) else { return }
         messages[idx].blocks.removeAll { block in
             guard let text = block.text else { return false }
             return CLIMetaEnvelope.isNoResponseRequested(text.trimmingCharacters(in: .whitespacesAndNewlines))
         }
-        if messages[idx].blocks.isEmpty {
+        if removeIfEmpty, messages[idx].blocks.isEmpty {
             messages.remove(at: idx)
         }
     }
@@ -5803,12 +5809,15 @@ final class AppState {
             if let idx = state.messages.indices.reversed().first(where: {
                 state.messages[$0].role == .assistant && state.messages[$0].isStreaming
             }) {
-                state.messages[idx].isStreaming = false
-                state.messages[idx].finalizeToolCalls()
+                // The user paused this turn — keep the partial assistant bubble
+                // visible. markStreamInterrupted() retains in-progress tool calls
+                // (flagged as interrupted) instead of dropping them, and the
+                // no-op strip below is told not to delete an emptied message.
+                state.messages[idx].markStreamInterrupted()
                 if let start = state.streamingStartDate {
                     state.messages[idx].duration = Date().timeIntervalSince(start)
                 }
-                Self.stripNoOpText(at: idx, in: &state.messages)
+                Self.stripNoOpText(at: idx, in: &state.messages, removeIfEmpty: false)
             }
             state.streamingStartDate = nil
             state.inFlightUserAttachments = []

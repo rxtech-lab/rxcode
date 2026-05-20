@@ -20,6 +20,7 @@
     }
   ],
   "defaultOptions" : {
+    "codeCoverage" : false,
     "targetForVariableExpansion" : {
       "containerPath" : "container:RxCode.xcodeproj",
       "identifier" : "E67335372F7356F600FD26C7",

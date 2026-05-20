@@ -57,6 +57,7 @@ jobs:
             -configuration Debug \
             -destination platform=macOS \
             -testPlan UnitTestPlan \
+            -enableCodeCoverage NO \
             CODE_SIGNING_ALLOWED=NO \
             test | xcpretty
 

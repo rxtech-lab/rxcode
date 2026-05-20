@@ -1220,6 +1220,19 @@ final class AppState {
         }
         mobileSyncObservers.append(questionAnswerObserver)
 
+        let planDecisionObserver = center.addObserver(
+            forName: .mobileSyncPlanDecisionReceived,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let payload = notification.userInfo?["payload"] as? PlanDecisionPayload
+            else { return }
+            Task { @MainActor [weak self] in
+                await self?.handleMobilePlanDecision(payload)
+            }
+        }
+        mobileSyncObservers.append(planDecisionObserver)
+
         observeMobileSnapshotInputs()
     }
 
@@ -1239,6 +1252,8 @@ final class AppState {
             _ = threadSummaryRevision
             _ = projects.count
             _ = allSessionSummaries.count
+            _ = latestRateLimitUsage
+            _ = latestCodexRateLimitUsage
         } onChange: {
             Task { @MainActor [weak self] in
                 self?.scheduleMobileSnapshotBroadcast()
@@ -1263,6 +1278,25 @@ final class AppState {
 
         let window = WindowState()
         window.selectedProject = project
+        // Per-thread agent config captured in the mobile new-thread sheet. These
+        // session-scoped fields win over the project/global defaults in
+        // `effectiveModelSelection`, so the thread runs on exactly the chosen
+        // model — and starts in plan mode when requested. Carrying the config in
+        // the request also removes the `settings_update`/`newSessionRequest`
+        // ordering race.
+        if let provider = request.selectedAgentProvider {
+            window.sessionAgentProvider = provider
+        }
+        if let model = request.selectedModel, !model.isEmpty {
+            window.sessionModel = model
+        }
+        if let effort = request.selectedEffort, !effort.isEmpty, effort != "auto" {
+            window.sessionEffort = effort
+        }
+        if let mode = request.permissionMode {
+            window.sessionPermissionMode = mode
+        }
+        window.sessionPlanMode = request.planMode ?? false
         if let pending = mobilePendingWorktrees.removeValue(forKey: project.id) {
             window.pendingWorktreePath = pending.path
             window.pendingWorktreeBranch = pending.branch
@@ -1385,11 +1419,27 @@ final class AppState {
     }
 
     private func handleMobileCancelStream(_ cancel: CancelStreamPayload) async {
-        let sessionID = cancel.sessionID
-        guard sessionStates[sessionID]?.isStreaming == true else { return }
+        // The mobile may hold a session id the CLI has since advanced
+        // (pending-→real swap, or a compaction boundary). Follow the redirect
+        // chain so the cancel lands on the live, streaming thread — otherwise
+        // `sessionStates[sessionID]` is nil and the stop button is a no-op.
+        let sessionID = resolveCurrentSessionId(cancel.sessionID)
+        guard sessionStates[sessionID]?.isStreaming == true else {
+            logger.info("[MobileSync] cancel ignored — thread=\(sessionID, privacy: .public) (from \(cancel.sessionID, privacy: .public)) is not streaming")
+            return
+        }
         let window = WindowState()
         window.currentSessionId = sessionID
+        // Resolve the project so cancelStreaming can persist the partial
+        // messages accumulated up to the cancellation point.
+        if let summary = allSessionSummaries.first(where: { $0.id == sessionID }) {
+            window.selectedProject = projects.first(where: { $0.id == summary.projectId })
+        }
         await cancelStreaming(in: window)
+        // cancelStreaming intentionally skips finalizeStreamSession, so no
+        // status update is emitted — broadcast it so the mobile flips its
+        // stop button back to send.
+        broadcastMobileSessionStatus(sessionID: sessionID)
     }
 
     private func handleMobileUserMessage(_ message: UserMessagePayload, fromHex: String) async {
@@ -1642,6 +1692,16 @@ final class AppState {
     }
 
     private func sendMobileSnapshot(toHex hex: String, activeSessionID: String?) async {
+        // Populate the OpenAI summarization model list so mobile's model
+        // picker has options. Fetched at most once — a prior failure (no API
+        // key, bad endpoint) is recorded in `openAISummarizationModelsError`
+        // and not retried on every snapshot.
+        if summarizationProvider == .openAI,
+           openAISummarizationModels.isEmpty,
+           openAISummarizationModelsError == nil,
+           !isLoadingOpenAISummarizationModels {
+            await refreshOpenAISummarizationModels()
+        }
         let active = await mobileActiveSessionPayload(for: activeSessionID)
         // Viewing a thread on any paired device counts as reading it: drop the
         // "finished, unread" flag so the green indicator clears on desktop and
@@ -1651,6 +1711,16 @@ final class AppState {
             updateState(activeID) { $0.hasUncheckedCompletion = false }
         }
         let branches = await mobileProjectBranches()
+        // Keep mobile usage reasonably fresh. Non-forced — RateLimitService's
+        // 5-minute cache turns this into a no-op when usage was fetched
+        // recently, so frequent snapshots don't translate into API calls. A
+        // genuine refresh updates `latestRateLimitUsage`, which
+        // `observeMobileSnapshotInputs` tracks, re-broadcasting the snapshot.
+        Task { [weak self] in
+            await self?.refreshRateLimitUsage()
+            await self?.refreshCodexRateLimitUsage()
+        }
+        let hostMetrics = await SystemMetricsService.shared.sample()
         let payload = SnapshotPayload(
             projects: projects,
             sessions: mobileSessionSummaries(),
@@ -1660,7 +1730,12 @@ final class AppState {
             activeSessionID: active.id,
             activeSessionMessages: active.messages,
             activeSessionHasMore: active.hasMore,
-            projectBranches: branches
+            projectBranches: branches,
+            usage: MobileUsageSnapshot(
+                claudeCode: latestRateLimitUsage,
+                codex: latestCodexRateLimitUsage
+            ),
+            hostMetrics: hostMetrics
         )
         await MobileSyncService.shared.send(.snapshot(payload), toHex: hex)
         // The snapshot doesn't carry the question queue; send it alongside so a
@@ -1759,6 +1834,10 @@ final class AppState {
     ) {
         guard !MobileSyncService.shared.pairedDevices.isEmpty else { return }
         if prev.count == next.count, prev == next { return }
+        // Diff against the raw messages (so a CLI result overwrite still counts
+        // as a change), but bake the user-decision summary into the broadcast
+        // copy so the mobile plan banner clears once a plan is resolved.
+        let summaries = sessionStates[sessionKey]?.planDecisionSummaries ?? [:]
         let prevById = Dictionary(uniqueKeysWithValues: prev.map { ($0.id, $0) })
         for message in next {
             if let old = prevById[message.id] {
@@ -1766,14 +1845,14 @@ final class AppState {
                 MobileSyncService.shared.broadcastSessionUpdate(
                     sessionID: sessionKey,
                     kind: .messageUpdated,
-                    message: message,
+                    message: messageWithPlanDecisions(message, summaries: summaries),
                     isStreaming: isStreaming
                 )
             } else {
                 MobileSyncService.shared.broadcastSessionUpdate(
                     sessionID: sessionKey,
                     kind: .messageAppended,
-                    message: message,
+                    message: messageWithPlanDecisions(message, summaries: summaries),
                     isStreaming: isStreaming
                 )
             }
@@ -1890,7 +1969,11 @@ final class AppState {
             autoPreviewSettings: autoPreviewSettings,
             availableEfforts: ["auto"] + Self.availableEfforts,
             availableModels: models,
-            modelSections: sections
+            modelSections: sections,
+            availableSummarizationProviders: SummarizationProvider.availableCases.map {
+                SummarizationProviderOption(id: $0.rawValue, displayName: $0.displayName)
+            },
+            openAISummarizationModels: openAISummarizationModels
         )
     }
 
@@ -1936,6 +2019,14 @@ final class AppState {
         }
         if let mode = update.permissionMode {
             permissionMode = mode
+        }
+        if let rawProvider = update.summarizationProvider,
+           let provider = SummarizationProvider(rawValue: rawProvider),
+           SummarizationProvider.availableCases.contains(provider) {
+            summarizationProvider = provider
+        }
+        if let model = update.openAISummarizationModel {
+            openAISummarizationModel = model
         }
         if let enabled = update.notificationsEnabled {
             notificationsEnabled = enabled
@@ -2013,10 +2104,16 @@ final class AppState {
     /// session genuinely can't be located.
     private func fullMobileMessages(for resolvedID: String) async -> [ChatMessage]? {
         if let state = sessionStates[resolvedID] {
-            return cleanLoadedMessages(state.messages)
+            return messagesWithPlanDecisions(
+                cleanLoadedMessages(state.messages),
+                summaries: state.planDecisionSummaries
+            )
         }
+        // Non-active session: the in-memory sidecar is absent, so pull the
+        // persisted decisions from the thread store.
+        let summaries = threadStore.loadPlanDecisions(sessionId: resolvedID)
         if let cache = mobileFullMessageCache, cache.sessionID == resolvedID {
-            return cache.messages
+            return messagesWithPlanDecisions(cache.messages, summaries: summaries)
         }
         guard let summary = allSessionSummaries.first(where: { $0.id == resolvedID }),
               let project = projects.first(where: { $0.id == summary.projectId }),
@@ -2026,7 +2123,40 @@ final class AppState {
         }
         let cleaned = cleanLoadedMessages(full.messages)
         mobileFullMessageCache = (resolvedID, cleaned)
-        return cleaned
+        return messagesWithPlanDecisions(cleaned, summaries: summaries)
+    }
+
+    /// Bake persisted plan decisions into `ExitPlanMode` tool results before
+    /// messages are sent to mobile. Once a plan resolves, the CLI overwrites the
+    /// tool result with its own follow-up text ("User has approved your plan…"),
+    /// which the desktop UI sidesteps with the `planDecisionSummaries` sidecar.
+    /// Mobile has no such sidecar — it reads `toolCall.result` directly — so the
+    /// user-decision summary must be written onto the wire result, otherwise the
+    /// mobile plan banner reappears after a decision.
+    private func messagesWithPlanDecisions(
+        _ messages: [ChatMessage],
+        summaries: [String: String]
+    ) -> [ChatMessage] {
+        guard !summaries.isEmpty else { return messages }
+        return messages.map { messageWithPlanDecisions($0, summaries: summaries) }
+    }
+
+    private func messageWithPlanDecisions(
+        _ message: ChatMessage,
+        summaries: [String: String]
+    ) -> ChatMessage {
+        guard !summaries.isEmpty else { return message }
+        var result = message
+        for block in message.blocks {
+            guard let toolCall = block.toolCall,
+                  PlanLogic.isExitPlanMode(toolCall),
+                  let summary = summaries[toolCall.id] else { continue }
+            // Skip when the result is already the user-decision string.
+            if toolCall.result.map(PlanDecisionAction.isUserDecisionResult) != true {
+                result.setToolResult(id: toolCall.id, result: summary, isError: false)
+            }
+        }
+        return result
     }
 
     /// Build the active-session payload for a snapshot: only the most recent
@@ -3040,11 +3170,15 @@ final class AppState {
     }
 
     func openTerminal(in window: WindowState) async {
-        if window.showInspector, window.inspectorTab == .terminal {
-            window.showInspector = false
+        // Right sidebar visibility lives in UserDefaults (read via @AppStorage
+        // in views). Writing here triggers those views to update.
+        let defaults = UserDefaults.standard
+        let key = AppStorageKeys.showRightSidebar
+        if defaults.bool(forKey: key), window.inspectorTab == .terminal {
+            defaults.set(false, forKey: key)
         } else {
             window.inspectorTab = .terminal
-            window.showInspector = true
+            defaults.set(true, forKey: key)
         }
     }
 
@@ -4638,6 +4772,36 @@ final class AppState {
 
         clearPendingQuestion(toolUseId: toolUseId, sessionId: request.sessionId)
         await permission.respondAskUserQuestion(toolUseId: toolUseId, updatedInput: updatedInput)
+    }
+
+    /// Apply a plan decision that arrived from a paired mobile device. Builds a
+    /// transient `WindowState` bound to the target session — mirroring
+    /// `handleMobileUserMessage` — and delegates to `respondToPlanDecision`,
+    /// which owns all the desktop plan logic (CLI hook release, decision summary
+    /// into `toolCall.result` + `planDecisionSummaries`, `threadStore` persist,
+    /// one-shot plan-mode clear, follow-up permission mode, continuation prompt).
+    /// The updated messages broadcast back through the normal session-update sync.
+    private func handleMobilePlanDecision(_ payload: PlanDecisionPayload) async {
+        let sessionID = resolveCurrentSessionId(payload.sessionID)
+        guard let summary = allSessionSummaries.first(where: { $0.id == sessionID }) else {
+            logger.error("[MobileSync] plan decision for unknown thread=\(payload.sessionID, privacy: .public)")
+            return
+        }
+        let window = WindowState()
+        window.selectedProject = projects.first(where: { $0.id == summary.projectId })
+        window.currentSessionId = sessionID
+        // `respondToPlanDecision` reads `window.sessionPlanMode` to clear plan
+        // mode one-shot and `window.sessionPermissionMode` for re-registration —
+        // mirror the live session state into the fresh window.
+        if let state = sessionStates[sessionID] {
+            window.sessionPlanMode = state.planMode
+            window.sessionPermissionMode = state.permissionMode
+        }
+        await respondToPlanDecision(
+            toolUseId: payload.toolUseID,
+            action: payload.toDecisionAction(),
+            in: window
+        )
     }
 
     /// Remove a resolved `AskUserQuestion` request from every window's queue and

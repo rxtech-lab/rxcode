@@ -30,6 +30,7 @@ public enum Payload: Sendable {
     case permissionResponse(PermissionResponsePayload)
     case questionQueue(QuestionQueuePayload)
     case questionAnswer(QuestionAnswerPayload)
+    case planDecision(PlanDecisionPayload)
     case branchOpRequest(BranchOpRequestPayload)
     case branchOpResult(BranchOpResultPayload)
     case ping(PingPayload)
@@ -86,6 +87,84 @@ public struct RequestSnapshotPayload: Codable, Sendable {
     }
 }
 
+/// Agent rate-limit usage mirrored from the desktop, so mobile can render a
+/// usage section without its own Anthropic/OpenAI credentials. Each provider is
+/// optional — `nil` means the desktop has no usage for it (not signed in, or an
+/// ACP-only setup). Optional throughout for forward/backward wire-compatibility.
+public struct MobileUsageSnapshot: Codable, Sendable, Equatable {
+    /// Claude Code usage: 5-hour and 7-day limits.
+    public let claudeCode: RateLimitUsage?
+    /// Codex usage: 5-hour and 24-hour limits.
+    public let codex: RateLimitUsage?
+
+    public init(claudeCode: RateLimitUsage? = nil, codex: RateLimitUsage? = nil) {
+        self.claudeCode = claudeCode
+        self.codex = codex
+    }
+
+    /// Whether at least one provider reported usage worth rendering.
+    public var hasAnyUsage: Bool { claudeCode != nil || codex != nil }
+}
+
+/// A point-in-time snapshot of the paired desktop's system load — CPU, memory,
+/// and thermal pressure — so mobile can render a "Computer Status" panel.
+public struct HostMetricsSnapshot: Codable, Sendable, Equatable {
+    /// macOS thermal pressure, mirrored from `ProcessInfo.ThermalState`.
+    public enum ThermalState: String, Codable, Sendable {
+        case nominal
+        case fair
+        case serious
+        case critical
+        /// A state reported by a newer desktop than this build understands.
+        case unknown
+    }
+
+    /// Aggregate CPU utilization across all cores, 0–100.
+    public let cpuUsagePercent: Double
+    /// Resident memory in use — active + wired + compressed pages.
+    public let memoryUsedBytes: UInt64
+    /// Total physical memory installed on the desktop.
+    public let memoryTotalBytes: UInt64
+    public let thermalState: ThermalState
+    /// When the desktop took the sample.
+    public let sampledAt: Date
+
+    public init(
+        cpuUsagePercent: Double,
+        memoryUsedBytes: UInt64,
+        memoryTotalBytes: UInt64,
+        thermalState: ThermalState,
+        sampledAt: Date
+    ) {
+        self.cpuUsagePercent = cpuUsagePercent
+        self.memoryUsedBytes = memoryUsedBytes
+        self.memoryTotalBytes = memoryTotalBytes
+        self.thermalState = thermalState
+        self.sampledAt = sampledAt
+    }
+
+    /// Memory utilization as a 0–100 percentage; zero when total is unknown.
+    public var memoryUsedPercent: Double {
+        guard memoryTotalBytes > 0 else { return 0 }
+        return Double(memoryUsedBytes) / Double(memoryTotalBytes) * 100
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case cpuUsagePercent, memoryUsedBytes, memoryTotalBytes, thermalState, sampledAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        cpuUsagePercent = try c.decode(Double.self, forKey: .cpuUsagePercent)
+        memoryUsedBytes = try c.decode(UInt64.self, forKey: .memoryUsedBytes)
+        memoryTotalBytes = try c.decode(UInt64.self, forKey: .memoryTotalBytes)
+        // Tolerate a thermal state added by a newer desktop build.
+        let rawThermal = try c.decode(String.self, forKey: .thermalState)
+        thermalState = ThermalState(rawValue: rawThermal) ?? .unknown
+        sampledAt = try c.decode(Date.self, forKey: .sampledAt)
+    }
+}
+
 public struct SnapshotPayload: Codable, Sendable {
     public let projects: [Project]
     public let sessions: [SessionSummary]
@@ -104,6 +183,12 @@ public struct SnapshotPayload: Codable, Sendable {
     /// a new thread. Missing entries mean the project isn't a git repo or the
     /// branch couldn't be resolved.
     public let projectBranches: [ProjectBranchInfo]?
+    /// Agent rate-limit usage mirrored from the desktop. `nil` when the desktop
+    /// predates usage sync.
+    public let usage: MobileUsageSnapshot?
+    /// Desktop CPU/memory/thermal load. `nil` when the desktop predates
+    /// computer-status sync.
+    public let hostMetrics: HostMetricsSnapshot?
     public init(
         projects: [Project],
         sessions: [SessionSummary],
@@ -113,7 +198,9 @@ public struct SnapshotPayload: Codable, Sendable {
         activeSessionID: String? = nil,
         activeSessionMessages: [ChatMessage]? = nil,
         activeSessionHasMore: Bool? = nil,
-        projectBranches: [ProjectBranchInfo]? = nil
+        projectBranches: [ProjectBranchInfo]? = nil,
+        usage: MobileUsageSnapshot? = nil,
+        hostMetrics: HostMetricsSnapshot? = nil
     ) {
         self.projects = projects
         self.sessions = sessions
@@ -124,11 +211,14 @@ public struct SnapshotPayload: Codable, Sendable {
         self.activeSessionMessages = activeSessionMessages
         self.activeSessionHasMore = activeSessionHasMore
         self.projectBranches = projectBranches
+        self.usage = usage
+        self.hostMetrics = hostMetrics
     }
 
     private enum CodingKeys: String, CodingKey {
         case projects, sessions, branchBriefings, threadSummaries, settings
         case activeSessionID, activeSessionMessages, activeSessionHasMore, projectBranches
+        case usage, hostMetrics
     }
 
     public init(from decoder: Decoder) throws {
@@ -142,6 +232,8 @@ public struct SnapshotPayload: Codable, Sendable {
         activeSessionMessages = try c.decodeIfPresent([ChatMessage].self, forKey: .activeSessionMessages)
         activeSessionHasMore = try c.decodeIfPresent(Bool.self, forKey: .activeSessionHasMore)
         projectBranches = try c.decodeIfPresent([ProjectBranchInfo].self, forKey: .projectBranches)
+        usage = try c.decodeIfPresent(MobileUsageSnapshot.self, forKey: .usage)
+        hostMetrics = try c.decodeIfPresent(HostMetricsSnapshot.self, forKey: .hostMetrics)
     }
 }
 
@@ -262,6 +354,21 @@ public struct MobileThreadSummary: Codable, Sendable, Identifiable, Equatable {
     }
 }
 
+/// One selectable summarization provider, mirrored from the desktop's
+/// `SummarizationProvider` enum. Sent as data rather than the enum itself
+/// because the enum — and its hardware-dependent availability (Apple
+/// Foundation Model) — lives in the desktop target.
+public struct SummarizationProviderOption: Codable, Sendable, Equatable, Identifiable {
+    /// Raw value of the desktop's `SummarizationProvider` case.
+    public let id: String
+    public let displayName: String
+
+    public init(id: String, displayName: String) {
+        self.id = id
+        self.displayName = displayName
+    }
+}
+
 public struct MobileSettingsSnapshot: Codable, Sendable, Equatable {
     public let selectedAgentProvider: AgentProvider
     public let selectedModel: String
@@ -288,6 +395,14 @@ public struct MobileSettingsSnapshot: Codable, Sendable, Equatable {
     /// into a single bucket. Optional for backward compatibility with older
     /// desktops, which sent only the flattened `availableModels` list.
     public let modelSections: [AgentModelSection]?
+    /// Summarization providers the desktop currently offers, so mobile can
+    /// render a provider picker without re-deriving hardware availability.
+    /// Optional for backward compatibility with older desktops.
+    public let availableSummarizationProviders: [SummarizationProviderOption]?
+    /// Model identifiers fetched from the OpenAI-compatible summarization
+    /// endpoint, so mobile can render a model picker. Empty/`nil` when the
+    /// desktop hasn't fetched them yet (e.g. no API key configured).
+    public let openAISummarizationModels: [String]?
 
     public init(
         selectedAgentProvider: AgentProvider,
@@ -306,7 +421,9 @@ public struct MobileSettingsSnapshot: Codable, Sendable, Equatable {
         autoPreviewSettings: AttachmentAutoPreviewSettings,
         availableEfforts: [String],
         availableModels: [AgentModel]? = nil,
-        modelSections: [AgentModelSection]? = nil
+        modelSections: [AgentModelSection]? = nil,
+        availableSummarizationProviders: [SummarizationProviderOption]? = nil,
+        openAISummarizationModels: [String]? = nil
     ) {
         self.selectedAgentProvider = selectedAgentProvider
         self.selectedModel = selectedModel
@@ -325,6 +442,8 @@ public struct MobileSettingsSnapshot: Codable, Sendable, Equatable {
         self.availableEfforts = availableEfforts
         self.availableModels = availableModels
         self.modelSections = modelSections
+        self.availableSummarizationProviders = availableSummarizationProviders
+        self.openAISummarizationModels = openAISummarizationModels
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -333,6 +452,7 @@ public struct MobileSettingsSnapshot: Codable, Sendable, Equatable {
         case openAISummarizationEndpoint, openAISummarizationModel
         case notificationsEnabled, focusMode, autoArchiveEnabled, archiveRetentionDays
         case autoPreviewSettings, availableEfforts, availableModels, modelSections
+        case availableSummarizationProviders, openAISummarizationModels
     }
 
     public init(from decoder: Decoder) throws {
@@ -354,6 +474,12 @@ public struct MobileSettingsSnapshot: Codable, Sendable, Equatable {
         availableEfforts = try c.decode([String].self, forKey: .availableEfforts)
         availableModels = try c.decodeIfPresent([AgentModel].self, forKey: .availableModels)
         modelSections = try c.decodeIfPresent([AgentModelSection].self, forKey: .modelSections)
+        availableSummarizationProviders = try c.decodeIfPresent(
+            [SummarizationProviderOption].self, forKey: .availableSummarizationProviders
+        )
+        openAISummarizationModels = try c.decodeIfPresent(
+            [String].self, forKey: .openAISummarizationModels
+        )
     }
 }
 
@@ -363,6 +489,10 @@ public struct MobileSettingsUpdatePayload: Codable, Sendable {
     public let selectedACPClientId: String?
     public let selectedEffort: String?
     public let permissionMode: PermissionMode?
+    /// Raw value of a `SummarizationProvider` case the user picked on mobile.
+    public let summarizationProvider: String?
+    /// Model identifier picked on mobile for the OpenAI-compatible endpoint.
+    public let openAISummarizationModel: String?
     public let notificationsEnabled: Bool?
     public let focusMode: Bool?
     public let autoArchiveEnabled: Bool?
@@ -375,6 +505,8 @@ public struct MobileSettingsUpdatePayload: Codable, Sendable {
         selectedACPClientId: String? = nil,
         selectedEffort: String? = nil,
         permissionMode: PermissionMode? = nil,
+        summarizationProvider: String? = nil,
+        openAISummarizationModel: String? = nil,
         notificationsEnabled: Bool? = nil,
         focusMode: Bool? = nil,
         autoArchiveEnabled: Bool? = nil,
@@ -386,6 +518,8 @@ public struct MobileSettingsUpdatePayload: Codable, Sendable {
         self.selectedACPClientId = selectedACPClientId
         self.selectedEffort = selectedEffort
         self.permissionMode = permissionMode
+        self.summarizationProvider = summarizationProvider
+        self.openAISummarizationModel = openAISummarizationModel
         self.notificationsEnabled = notificationsEnabled
         self.focusMode = focusMode
         self.autoArchiveEnabled = autoArchiveEnabled
@@ -567,10 +701,38 @@ public struct NewSessionRequestPayload: Codable, Sendable {
     public let clientRequestID: UUID
     public let projectID: UUID
     public let initialText: String?
-    public init(clientRequestID: UUID = UUID(), projectID: UUID, initialText: String? = nil) {
+    /// Per-thread agent configuration captured in the mobile new-thread sheet.
+    /// All optional for wire-compatibility with older builds — synthesized
+    /// `Codable` decodes missing keys as `nil`, in which case the desktop falls
+    /// back to its global defaults.
+    public let selectedAgentProvider: AgentProvider?
+    public let selectedModel: String?
+    public let selectedACPClientId: String?
+    public let selectedEffort: String?
+    public let permissionMode: PermissionMode?
+    /// When `true`, the desktop starts the thread in plan mode
+    /// (CLI `--permission-mode plan`).
+    public let planMode: Bool?
+    public init(
+        clientRequestID: UUID = UUID(),
+        projectID: UUID,
+        initialText: String? = nil,
+        selectedAgentProvider: AgentProvider? = nil,
+        selectedModel: String? = nil,
+        selectedACPClientId: String? = nil,
+        selectedEffort: String? = nil,
+        permissionMode: PermissionMode? = nil,
+        planMode: Bool? = nil
+    ) {
         self.clientRequestID = clientRequestID
         self.projectID = projectID
         self.initialText = initialText
+        self.selectedAgentProvider = selectedAgentProvider
+        self.selectedModel = selectedModel
+        self.selectedACPClientId = selectedACPClientId
+        self.selectedEffort = selectedEffort
+        self.permissionMode = permissionMode
+        self.planMode = planMode
     }
 }
 
@@ -814,6 +976,66 @@ public struct QuestionAnswerPayload: Codable, Sendable {
     }
 }
 
+/// Mobile → desktop: the user's decision on a Claude `ExitPlanMode` plan card.
+/// Uses a flat wire shape (string action + optional reason) because
+/// `PlanDecisionAction` carries an associated value (`rejectWithFeedback`).
+public struct PlanDecisionPayload: Codable, Sendable {
+    public enum Action: String, Codable, Sendable {
+        case acceptAsk
+        case acceptWithEdits
+        case acceptAutoApprove
+        case reject
+        case rejectWithFeedback
+    }
+    public let toolUseID: String
+    public let sessionID: String
+    public let action: Action
+    /// Free-form revision feedback; only meaningful for `.rejectWithFeedback`.
+    public let reason: String?
+
+    public init(toolUseID: String, sessionID: String, action: Action, reason: String? = nil) {
+        self.toolUseID = toolUseID
+        self.sessionID = sessionID
+        self.action = action
+        self.reason = reason
+    }
+
+    /// Build the wire payload from the shared `PlanDecisionAction` enum.
+    public init(toolUseID: String, sessionID: String, decision: PlanDecisionAction) {
+        self.toolUseID = toolUseID
+        self.sessionID = sessionID
+        switch decision {
+        case .acceptAsk:
+            action = .acceptAsk
+            reason = nil
+        case .acceptWithEdits:
+            action = .acceptWithEdits
+            reason = nil
+        case .acceptAutoApprove:
+            action = .acceptAutoApprove
+            reason = nil
+        case .reject:
+            action = .reject
+            reason = nil
+        case .rejectWithFeedback(let feedback):
+            action = .rejectWithFeedback
+            reason = feedback
+        }
+    }
+
+    /// Map back to the shared `PlanDecisionAction` the desktop's
+    /// `respondToPlanDecision` consumes. An empty reason is normalized there.
+    public func toDecisionAction() -> PlanDecisionAction {
+        switch action {
+        case .acceptAsk: return .acceptAsk
+        case .acceptWithEdits: return .acceptWithEdits
+        case .acceptAutoApprove: return .acceptAutoApprove
+        case .reject: return .reject
+        case .rejectWithFeedback: return .rejectWithFeedback(reason: reason ?? "")
+        }
+    }
+}
+
 public struct PingPayload: Codable, Sendable {
     public let t: Date
     public init(t: Date = .now) { self.t = t }
@@ -856,6 +1078,7 @@ extension Payload: Codable {
         case permissionResponse = "permission_response"
         case questionQueue = "question_queue"
         case questionAnswer = "question_answer"
+        case planDecision = "plan_decision"
         case branchOpRequest = "branch_op_request"
         case branchOpResult = "branch_op_result"
         case ping
@@ -893,6 +1116,7 @@ extension Payload: Codable {
         case .permissionResponse: self = .permissionResponse(try container.decode(PermissionResponsePayload.self, forKey: .data))
         case .questionQueue: self = .questionQueue(try container.decode(QuestionQueuePayload.self, forKey: .data))
         case .questionAnswer: self = .questionAnswer(try container.decode(QuestionAnswerPayload.self, forKey: .data))
+        case .planDecision: self = .planDecision(try container.decode(PlanDecisionPayload.self, forKey: .data))
         case .branchOpRequest: self = .branchOpRequest(try container.decode(BranchOpRequestPayload.self, forKey: .data))
         case .branchOpResult: self = .branchOpResult(try container.decode(BranchOpResultPayload.self, forKey: .data))
         case .ping: self = .ping(try container.decode(PingPayload.self, forKey: .data))
@@ -926,6 +1150,7 @@ extension Payload: Codable {
         case .permissionResponse(let p): try container.encode(TypeKey.permissionResponse.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .questionQueue(let p): try container.encode(TypeKey.questionQueue.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .questionAnswer(let p): try container.encode(TypeKey.questionAnswer.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .planDecision(let p): try container.encode(TypeKey.planDecision.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .branchOpRequest(let p): try container.encode(TypeKey.branchOpRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .branchOpResult(let p): try container.encode(TypeKey.branchOpResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .ping(let p): try container.encode(TypeKey.ping.rawValue, forKey: .type); try container.encode(p, forKey: .data)

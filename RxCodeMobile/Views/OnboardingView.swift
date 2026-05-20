@@ -7,6 +7,9 @@ private let onboardingLogger = Logger(subsystem: "com.claudework", category: "On
 
 struct OnboardingView: View {
     @EnvironmentObject private var state: MobileAppState
+    @Environment(\.dismiss) private var dismiss
+    let showsCancelButton: Bool
+    let onPairingCompleted: (() -> Void)?
     @State private var showScanner = false
     @State private var showScanOptions = false
     @State private var photoPickerShown = false
@@ -14,6 +17,14 @@ struct OnboardingView: View {
     @State private var pairingError: String?
     @State private var displayName: String = UIDevice.current.name
     @FocusState private var nameFocused: Bool
+
+    init(
+        showsCancelButton: Bool = false,
+        onPairingCompleted: (() -> Void)? = nil
+    ) {
+        self.showsCancelButton = showsCancelButton
+        self.onPairingCompleted = onPairingCompleted
+    }
 
     var body: some View {
         ZStack {
@@ -108,6 +119,17 @@ struct OnboardingView: View {
         .onChange(of: photoItem) { _, newItem in
             guard let newItem else { return }
             Task { await loadAndDecode(item: newItem) }
+        }
+        .toolbar {
+            if showsCancelButton {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        MobileHaptics.buttonTap()
+                        state.cancelPairing()
+                        dismiss()
+                    }
+                }
+            }
         }
     }
 
@@ -303,6 +325,9 @@ struct OnboardingView: View {
                 onboardingLogger.info("starting pair task displayName=\(displayName, privacy: .public)")
                 await state.pair(with: token, displayName: displayName)
                 onboardingLogger.info("pair task finished isPaired=\(state.isPaired, privacy: .public)")
+                if state.isPaired, state.pairedDesktopPubkey == token.desktopPubkeyHex {
+                    onPairingCompleted?()
+                }
             }
         } catch {
             onboardingLogger.error("token parse failed: \(error.localizedDescription, privacy: .public)")

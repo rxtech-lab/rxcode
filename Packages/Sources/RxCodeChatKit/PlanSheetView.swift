@@ -1,8 +1,11 @@
 import SwiftUI
 import RxCodeCore
+import Combine
 #if os(macOS)
 import AppKit
-import Combine
+#else
+import UIKit
+#endif
 
 /// Test-only inspection emissary used by `PlanSheetView` so ViewInspector tests
 /// can observe @State transitions (composer reveal, feedback text). At runtime
@@ -97,7 +100,9 @@ public struct PlanSheetView: View {
             Divider()
             footer
         }
+        #if os(macOS)
         .frame(minWidth: 640, idealWidth: 760, minHeight: 480, idealHeight: 640)
+        #endif
         .background(ClaudeTheme.background)
         .onReceive(inspection.notice) { inspection.visit(self, $0) }
     }
@@ -307,9 +312,13 @@ public struct PlanSheetView: View {
     }
 
     private func copyMarkdown() {
+        #if os(macOS)
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(plan.markdown, forType: .string)
+        #else
+        UIPasteboard.general.string = plan.markdown
+        #endif
     }
 
     // MARK: - Button helper
@@ -366,4 +375,3 @@ public struct PlanSheetView: View {
             .joined(separator: "-")
     }
 }
-#endif

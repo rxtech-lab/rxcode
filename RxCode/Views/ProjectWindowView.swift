@@ -8,6 +8,7 @@ struct ProjectWindowView: View {
     @Environment(WindowState.self) private var windowState
     @State private var inspectorStarted = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @AppStorage(AppStorageKeys.showRightSidebar) private var showRightSidebar = false
 
     private var navigationTitleText: String {
         if windowState.showingBriefing {
@@ -39,7 +40,7 @@ struct ProjectWindowView: View {
                     }
                     .id(appState.themeRevision)
                     .navigationTitle(navigationTitleText)
-                    .onChange(of: windowState.showInspector) { _, isShowing in
+                    .onChange(of: showRightSidebar) { _, isShowing in
                         if isShowing, !inspectorStarted { inspectorStarted = true }
                     }
                     .onChange(of: appState.focusMode) { _, newValue in
@@ -47,6 +48,7 @@ struct ProjectWindowView: View {
                     }
                     .onAppear {
                         windowState.focusMode = appState.focusMode
+                        if showRightSidebar { inspectorStarted = true }
                     }
 
                     if inspectorStarted {

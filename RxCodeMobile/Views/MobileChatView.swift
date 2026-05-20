@@ -22,6 +22,8 @@ struct MobileChatView: View {
     @State private var showingTodoSheet = false
     /// The question request whose sheet is currently presented, if any.
     @State private var presentedQuestion: PendingQuestionPayload?
+    /// The plan whose review sheet is currently presented, if any.
+    @State private var presentedPlan: PendingPlan?
     /// The message that sat at the top before an older page was requested. The
     /// viewport is restored to it after the page is prepended so the content
     /// the user was reading doesn't jump.
@@ -29,10 +31,26 @@ struct MobileChatView: View {
     /// Gates the scroll-up "load more" trigger until the initial scroll-to-
     /// bottom has settled, so opening a thread doesn't immediately page back.
     @State private var didSettleInitialScroll = false
+    /// True while the user is actively driving the scroll view (dragging or
+    /// momentum). Layout- and keyboard-induced offset shifts happen outside
+    /// these phases and must not be mistaken for a deliberate scroll-up.
+    @State private var isUserDragging = false
+    /// While `false`, the stream no longer pulls the viewport to the bottom —
+    /// set when the user scrolls up so they can read history without being
+    /// yanked back down. Re-armed once they return to the bottom.
+    @State private var autoScrollEnabled = true
 
     private static let bottomAnchorID = "message-list-bottom"
     private static let bottomContentPadding: CGFloat = 200
-    private static let nearBottomThreshold: CGFloat = bottomContentPadding + 40
+    /// Distance from the bottom past which the "scroll to bottom" button shows.
+    private static let nearBottomThreshold: CGFloat = 120
+    /// Distance from the true bottom within which auto-follow re-arms. Kept
+    /// small on purpose: the bottom is always reachable regardless of thread
+    /// length, so this works even for threads barely taller than the viewport.
+    private static let atBottomThreshold: CGFloat = 16
+    /// Minimum upward scroll delta (points) that counts as the user
+    /// deliberately leaving the bottom.
+    private static let userScrollUpDelta: CGFloat = 4
     /// Load older messages once the viewport scrolls within this many points
     /// of the top.
     private static let loadMoreThreshold: CGFloat = 150
@@ -41,6 +59,7 @@ struct MobileChatView: View {
         activeThreadLayout
             .animation(.easeInOut(duration: 0.2), value: queuedMessages.count)
             .animation(.easeInOut(duration: 0.2), value: sessionQuestions.count)
+            .animation(.easeInOut(duration: 0.2), value: pendingPlans.count)
             .navigationBarTitleDisplayMode(.inline)
             .navigationTitle(title)
             .toolbar { threadActionsToolbar }
@@ -82,6 +101,34 @@ struct MobileChatView: View {
                 {
                     presentedQuestion = nil
                 }
+            }
+            .sheet(item: $presentedPlan) { plan in
+                PlanSheetView(
+                    plan: plan,
+                    remainingCount: max(0, pendingPlans.count - 1),
+                    onSubmit: { toolCallID, action in
+                        Task {
+                            await state.respondToPlanDecision(
+                                toolUseID: toolCallID,
+                                sessionID: sessionID,
+                                action: action
+                            )
+                        }
+                        presentedPlan = nil
+                    },
+                    onClose: { presentedPlan = nil }
+                )
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+            }
+            .onChange(of: sessionPlans) { _, plans in
+                // The plan resolved (decided here or on another device) or
+                // vanished — close the now-stale sheet.
+                guard let presented = presentedPlan else { return }
+                let stillPending = plans.contains {
+                    $0.toolCallId == presented.toolCallId && !$0.isDecided
+                }
+                if !stillPending { presentedPlan = nil }
             }
             .confirmationDialog(
                 "Archive this thread?",
@@ -225,15 +272,31 @@ struct MobileChatView: View {
                     .animation(.easeInOut(duration: 0.2), value: isLoadingMore)
                 }
                 .scrollDismissesKeyboard(.interactively)
-                .onScrollGeometryChange(for: Bool.self) { geo in
-                    let distanceFromBottom = geo.contentSize.height - geo.visibleRect.maxY
-                    return distanceFromBottom <= Self.nearBottomThreshold
-                } action: { _, newValue in
-                    if isNearBottom != newValue { isNearBottom = newValue }
+                .onScrollPhaseChange { _, newPhase, _ in
+                    isUserDragging = newPhase == .tracking
+                        || newPhase == .interacting
+                        || newPhase == .decelerating
+                }
+                .onScrollGeometryChange(for: CGFloat.self) { geo in
+                    geo.contentSize.height - geo.visibleRect.maxY
+                } action: { _, distanceFromBottom in
+                    let near = distanceFromBottom <= Self.nearBottomThreshold
+                    if isNearBottom != near { isNearBottom = near }
+                    // Returning to the true bottom re-arms auto-follow.
+                    if distanceFromBottom <= Self.atBottomThreshold {
+                        autoScrollEnabled = true
+                    }
                 }
                 .onScrollGeometryChange(for: CGFloat.self) { geo in
                     geo.contentOffset.y
-                } action: { _, offsetY in
+                } action: { oldOffsetY, offsetY in
+                    // A deliberate upward drag means the user wants to read
+                    // history — stop the stream from pulling them back down.
+                    // Gated on `isUserDragging` so keyboard/layout-induced
+                    // offset shifts don't disable auto-follow.
+                    if isUserDragging, offsetY < oldOffsetY - Self.userScrollUpDelta {
+                        autoScrollEnabled = false
+                    }
                     if offsetY < Self.loadMoreThreshold { triggerLoadMoreIfNeeded() }
                 }
                 .onAppear {
@@ -255,15 +318,16 @@ struct MobileChatView: View {
                         didEstablishInitialScroll = true
                         return
                     }
+                    guard autoScrollEnabled else { return }
                     withAnimation { proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom) }
                 }
                 .onChange(of: messages.last?.content) { _, _ in
-                    guard didEstablishInitialScroll, isNearBottom else { return }
+                    guard didEstablishInitialScroll, autoScrollEnabled else { return }
                     withAnimation { proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom) }
                 }
                 .onChange(of: isStreaming) { _, streaming in
                     // Keep the newly appeared loading indicator in view.
-                    guard streaming, didEstablishInitialScroll, isNearBottom else { return }
+                    guard streaming, didEstablishInitialScroll, autoScrollEnabled else { return }
                     withAnimation { proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom) }
                 }
                 .onChange(of: isLoadingMore) { _, loading in
@@ -294,6 +358,12 @@ struct MobileChatView: View {
                 }
                 if !sessionQuestions.isEmpty {
                     questionQueueBanner
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 4)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                if !pendingPlans.isEmpty {
+                    planBanner
                         .padding(.horizontal, 12)
                         .padding(.bottom, 4)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -353,6 +423,17 @@ struct MobileChatView: View {
         state.pendingQuestions(sessionID: sessionID)
     }
 
+    /// Every plan card for this thread (pending + decided), derived from the
+    /// synced messages via the shared `PlanLogic`.
+    private var sessionPlans: [PendingPlan] {
+        state.pendingPlans(sessionID: sessionID)
+    }
+
+    /// Plans still awaiting a decision — what the plan banner surfaces.
+    private var pendingPlans: [PendingPlan] {
+        sessionPlans.filter { !$0.isDecided && !$0.isStreaming }
+    }
+
     // MARK: - Message paging
 
     /// Spinner shown at the top of the list while an older page is loading.
@@ -389,6 +470,8 @@ struct MobileChatView: View {
     // MARK: - Send / Stop
 
     private func handleSend(_ trimmed: String) {
+        // Sending always returns the user's focus to the latest messages.
+        autoScrollEnabled = true
         Task {
             await state.sendUserMessage(trimmed, sessionID: sessionID)
             composer = ""
@@ -408,6 +491,7 @@ struct MobileChatView: View {
 
     private func scrollToBottomButton(proxy: ScrollViewProxy) -> some View {
         Button {
+            autoScrollEnabled = true
             withAnimation { proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom) }
         } label: {
             Image(systemName: "arrow.down")
@@ -517,6 +601,53 @@ struct MobileChatView: View {
     private var questionBannerText: String {
         let count = sessionQuestions.count
         return count == 1 ? "1 question pending" : "\(count) questions pending"
+    }
+
+    // MARK: - Plan review banner
+
+    /// Compact pill above the input bar shown whenever the agent has produced a
+    /// plan awaiting a decision. Tapping it opens the shared `PlanSheetView` —
+    /// the same review/accept/modify component the desktop uses.
+    private var planBanner: some View {
+        Button {
+            presentedPlan = pendingPlans.first
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "list.bullet.clipboard")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(ClaudeTheme.accent)
+
+                Text(planBannerText)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(ClaudeTheme.textPrimary)
+
+                Spacer(minLength: 8)
+
+                Text("Review")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 5)
+                    .background(ClaudeTheme.accent, in: Capsule())
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(ClaudeTheme.accentSubtle)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(ClaudeTheme.accent.opacity(0.35), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(planBannerText). Tap to review.")
+    }
+
+    private var planBannerText: String {
+        let count = pendingPlans.count
+        return count == 1 ? "Plan ready to review" : "\(count) plans ready to review"
     }
 }
 

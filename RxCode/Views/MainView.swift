@@ -13,6 +13,7 @@ struct MainView: View {
     @State private var sidebarTab: SidebarTab = .history
     @State private var fileSearchTrigger = false
     @State private var inspectorStarted = false
+    @AppStorage(AppStorageKeys.showRightSidebar) private var showRightSidebar = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var projectToDelete: Project? = nil
     @State private var projectToRename: Project? = nil
@@ -57,7 +58,7 @@ struct MainView: View {
         HSplitView {
             navigationContent
                 .id(appState.themeRevision)
-                .onChange(of: windowState.showInspector) { _, isShowing in
+                .onChange(of: showRightSidebar) { _, isShowing in
                     if isShowing, !inspectorStarted { inspectorStarted = true }
                 }
                 .onChange(of: appState.focusMode) { _, newValue in
@@ -65,6 +66,9 @@ struct MainView: View {
                 }
                 .onAppear {
                     windowState.focusMode = appState.focusMode
+                    // The panel is built lazily; if it was left open in a
+                    // previous launch, start it now so it reappears.
+                    if showRightSidebar { inspectorStarted = true }
                 }
                 .toolbar(removing: .title)
                 .toolbarBackground(.hidden, for: .windowToolbar)
@@ -104,7 +108,7 @@ struct MainView: View {
             Button("") {
                 // Cmd+K is context-sensitive: when the inspector terminal tab
                 // is active, clear the terminal; otherwise open global search.
-                if windowState.showInspector,
+                if showRightSidebar,
                    windowState.inspectorMode == .inspector,
                    windowState.inspectorTab == .terminal {
                     windowState.clearTerminalRequest = UUID()

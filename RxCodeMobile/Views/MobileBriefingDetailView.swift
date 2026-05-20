@@ -5,19 +5,21 @@ import RxCodeSync
 
 struct MobileBriefingDetailView: View {
     @EnvironmentObject private var state: MobileAppState
+    @Namespace private var glassNamespace
     let groupKey: BriefingGroupKey
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                header
-                summarySection
+            VStack(alignment: .leading, spacing: 24) {
+                headerCard
+                summaryCard
                 threadsSection
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16)
-            .padding(.vertical, 16)
+            .padding(.vertical, 20)
         }
+        .scrollContentBackground(.hidden)
         .navigationTitle(projectName)
         .navigationBarTitleDisplayMode(.inline)
         .refreshable {
@@ -40,97 +42,219 @@ struct MobileBriefingDetailView: View {
         state.projects.first(where: { $0.id == groupKey.projectId })?.name ?? "Unknown Project"
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(projectName)
-                .font(.title2.weight(.semibold))
-            HStack(spacing: 8) {
-                Label(groupKey.branch, systemImage: "arrow.triangle.branch")
-                if let updatedAt = group?.updatedAt {
-                    Text(updatedAt.formatted(.relative(presentation: .named)))
+    // MARK: - Header Card
+
+    private var headerCard: some View {
+        HStack(spacing: 14) {
+            // Project icon
+            ZStack {
+                Circle()
+                    .fill(accentGradient.opacity(0.15))
+                    .frame(width: 52, height: 52)
+                
+                Image(systemName: "folder.fill")
+                    .font(.system(size: 22, weight: .medium))
+                    .foregroundStyle(accentGradient)
+            }
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(projectName)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.primary)
+                
+                HStack(spacing: 12) {
+                    // Branch chip
+                    HStack(spacing: 5) {
+                        Image(systemName: "arrow.triangle.branch")
+                            .font(.system(size: 10, weight: .medium))
+                        Text(groupKey.branch)
+                            .font(.caption.weight(.medium))
+                    }
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    
+                    // Updated time
+                    if let updatedAt = group?.updatedAt {
+                        Text(updatedAt.formatted(.relative(presentation: .named)))
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
                 }
             }
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            
+            Spacer(minLength: 0)
         }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassEffect(.regular, in: .rect(cornerRadius: 20))
     }
 
+    // MARK: - Summary Card
+
     @ViewBuilder
-    private var summarySection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Summary")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
+    private var summaryCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Section header
+            HStack(spacing: 8) {
+                Image(systemName: "doc.text")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(accentGradient)
+                
+                Text("Summary")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+            }
 
             if let summary = group?.briefing?.briefing, !summary.isEmpty {
                 ChatTextContentView(
                     markdown: summary,
-                    size: 16,
+                    size: 15,
                     color: .primary,
-                    lineSpacing: 3
+                    lineSpacing: 4
                 )
             } else {
-                Text("No summary available yet.")
-                    .font(.body)
-                    .foregroundStyle(.tertiary)
-                    .italic()
+                HStack(spacing: 10) {
+                    Image(systemName: "text.justify.leading")
+                        .font(.system(size: 24))
+                        .foregroundStyle(.tertiary)
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("No summary yet")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.secondary)
+                        Text("A summary will appear after threads complete")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 8)
             }
         }
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(.background)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
-        )
+        .glassEffect(.regular, in: .rect(cornerRadius: 20))
     }
+
+    // MARK: - Threads Section
 
     @ViewBuilder
     private var threadsSection: some View {
         let threads = group?.threads ?? []
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Threads")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
+        
+        VStack(alignment: .leading, spacing: 12) {
+            // Section header
+            HStack(spacing: 8) {
+                Image(systemName: "bubble.left.and.bubble.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(accentGradient)
+                
+                Text("Threads")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                
+                if !threads.isEmpty {
+                    Text("\(threads.count)")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.ultraThinMaterial, in: Capsule())
+                }
+            }
+            .padding(.leading, 4)
 
             if threads.isEmpty {
-                Text("No threads on this branch yet.")
-                    .font(.subheadline)
-                    .foregroundStyle(.tertiary)
-                    .italic()
-                    .padding(.vertical, 8)
+                emptyThreadsCard
             } else {
-                VStack(spacing: 8) {
-                    ForEach(threads) { thread in
-                        NavigationLink(value: thread.sessionId) {
-                            threadRow(thread)
+                GlassEffectContainer(spacing: 12) {
+                    VStack(spacing: 12) {
+                        ForEach(threads) { thread in
+                            NavigationLink(value: thread.sessionId) {
+                                ThreadCard(thread: thread, namespace: glassNamespace)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
                 }
             }
         }
     }
 
-    private func threadRow(_ thread: MobileThreadSummary) -> some View {
+    private var emptyThreadsCard: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "bubble.left.and.bubble.right")
+                .font(.system(size: 28))
+                .foregroundStyle(.tertiary)
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text("No threads yet")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+                Text("Start a conversation from your Mac")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            
+            Spacer(minLength: 0)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassEffect(.regular, in: .rect(cornerRadius: 16))
+    }
+
+    // MARK: - Accent Gradient
+
+    private var accentGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 0.95, green: 0.6, blue: 0.4),
+                Color(red: 0.85, green: 0.5, blue: 0.55)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+}
+
+// MARK: - Thread Card
+
+private struct ThreadCard: View {
+    let thread: MobileThreadSummary
+    let namespace: Namespace.ID
+
+    var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
+            // Thread icon
+            ZStack {
+                Circle()
+                    .fill(Color.secondary.opacity(0.1))
+                    .frame(width: 36, height: 36)
+                
+                Image(systemName: "text.bubble")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+            
+            VStack(alignment: .leading, spacing: 6) {
                 Text(thread.title.isEmpty ? "Untitled" : thread.title)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                
                 if !thread.summary.isEmpty {
                     ChatTextContentView(
                         markdown: thread.summary,
-                        size: 12,
+                        size: 13,
                         color: .secondary,
-                        lineSpacing: 1,
+                        lineSpacing: 2,
                         maximumNumberOfLines: 3
                     )
                 }
+                
                 Text(thread.updatedAt.formatted(.relative(presentation: .named)))
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
@@ -139,18 +263,14 @@ struct MobileBriefingDetailView: View {
             Spacer(minLength: 0)
 
             Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
+                .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.tertiary)
-                .padding(.top, 4)
+                .padding(.top, 2)
         }
-        .padding()
+        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.background)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
-        )
-        .contentShape(Rectangle())
+        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 16))
+        .glassEffectID(thread.id, in: namespace)
+        .contentShape(.rect(cornerRadius: 16))
     }
 }

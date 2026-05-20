@@ -1,5 +1,6 @@
 import AppKit
 import UserNotifications
+import RxCodeCore
 import RxCodeSync
 import os.log
 
@@ -186,10 +187,13 @@ final class NotificationService: NSObject {
     /// Mobile fan-out always runs; the local macOS banner is skipped when
     /// `postLocalBanner` is false (e.g. the desktop app is foregrounded).
     func postResponseComplete(title: String, body: String, projectId: UUID, sessionId: String, postLocalBanner: Bool = true) async {
+        // Notification banners (the APNs alert and the macOS local banner) render
+        // Markdown syntax literally, so strip it from the assistant-summary body.
+        let cleanBody = stripMarkdown(body)
         await fanoutToMobile(.init(
             kind: .responseComplete,
             title: title,
-            body: body.isEmpty ? "Response complete" : body,
+            body: cleanBody.isEmpty ? "Response complete" : cleanBody,
             sessionID: sessionId,
             projectID: projectId
         ))
@@ -204,9 +208,9 @@ final class NotificationService: NSObject {
 
         let content = UNMutableNotificationContent()
         content.title = title
-        content.body = body.isEmpty
+        content.body = cleanBody.isEmpty
             ? NSLocalizedString("Response complete", comment: "Notification body when Claude finishes a response")
-            : body
+            : cleanBody
         content.sound = .default
         content.userInfo = ["projectId": projectId.uuidString, "sessionId": sessionId]
 

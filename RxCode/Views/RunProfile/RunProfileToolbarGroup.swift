@@ -8,6 +8,7 @@ import SwiftUI
 struct RunProfileToolbarGroup: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
+    @AppStorage(AppStorageKeys.showRightSidebar) private var showRightSidebar = false
 
     /// Destinations cached per (container, scheme). Loaded on demand when
     /// the picker first appears or the refresh button is tapped.
@@ -207,7 +208,7 @@ struct RunProfileToolbarGroup: View {
     private func openRunInspector() {
         windowState.inspectorMode = .inspector
         windowState.inspectorTab = .run
-        windowState.showInspector = true
+        showRightSidebar = true
         windowState.selectedRunTaskId = appState.runService.activeTasks.first?.id
     }
 

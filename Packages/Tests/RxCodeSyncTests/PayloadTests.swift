@@ -64,6 +64,97 @@ struct PayloadTests {
         #expect(snapshot.settings?.permissionMode == .acceptEdits)
     }
 
+    @Test("snapshot carries agent usage")
+    func snapshotCarriesAgentUsage() throws {
+        let payload = Payload.snapshot(
+            SnapshotPayload(
+                projects: [],
+                sessions: [],
+                usage: MobileUsageSnapshot(
+                    claudeCode: RateLimitUsage(
+                        fiveHourPercent: 42,
+                        sevenDayPercent: 13,
+                        fiveHourResetsAt: Date(timeIntervalSince1970: 100),
+                        sevenDayResetsAt: Date(timeIntervalSince1970: 200)
+                    ),
+                    codex: RateLimitUsage(
+                        fiveHourPercent: 7,
+                        sevenDayPercent: 0,
+                        twentyFourHourPercent: 55,
+                        fiveHourResetsAt: nil,
+                        sevenDayResetsAt: nil,
+                        twentyFourHourResetsAt: Date(timeIntervalSince1970: 300)
+                    )
+                )
+            )
+        )
+
+        let data = try JSONEncoder().encode(payload)
+        let decoded = try JSONDecoder().decode(Payload.self, from: data)
+        guard case .snapshot(let snapshot) = decoded else {
+            Issue.record("Expected snapshot payload")
+            return
+        }
+
+        #expect(snapshot.usage?.hasAnyUsage == true)
+        #expect(snapshot.usage?.claudeCode?.fiveHourPercent == 42)
+        #expect(snapshot.usage?.claudeCode?.sevenDayResetsAt == Date(timeIntervalSince1970: 200))
+        #expect(snapshot.usage?.codex?.twentyFourHourPercent == 55)
+    }
+
+    @Test("snapshot without usage decodes to nil")
+    func snapshotWithoutUsageDecodesToNil() throws {
+        let payload = Payload.snapshot(SnapshotPayload(projects: [], sessions: []))
+        let data = try JSONEncoder().encode(payload)
+        let decoded = try JSONDecoder().decode(Payload.self, from: data)
+        guard case .snapshot(let snapshot) = decoded else {
+            Issue.record("Expected snapshot payload")
+            return
+        }
+        #expect(snapshot.usage == nil)
+        #expect(snapshot.hostMetrics == nil)
+    }
+
+    @Test("snapshot carries host metrics")
+    func snapshotCarriesHostMetrics() throws {
+        let payload = Payload.snapshot(
+            SnapshotPayload(
+                projects: [],
+                sessions: [],
+                hostMetrics: HostMetricsSnapshot(
+                    cpuUsagePercent: 37.5,
+                    memoryUsedBytes: 8_000_000_000,
+                    memoryTotalBytes: 16_000_000_000,
+                    thermalState: .fair,
+                    sampledAt: Date(timeIntervalSince1970: 500)
+                )
+            )
+        )
+
+        let data = try JSONEncoder().encode(payload)
+        let decoded = try JSONDecoder().decode(Payload.self, from: data)
+        guard case .snapshot(let snapshot) = decoded else {
+            Issue.record("Expected snapshot payload")
+            return
+        }
+
+        #expect(snapshot.hostMetrics?.cpuUsagePercent == 37.5)
+        #expect(snapshot.hostMetrics?.memoryUsedBytes == 8_000_000_000)
+        #expect(snapshot.hostMetrics?.thermalState == .fair)
+        #expect(snapshot.hostMetrics?.memoryUsedPercent == 50)
+    }
+
+    @Test("host metrics tolerates an unknown thermal state")
+    func hostMetricsToleratesUnknownThermalState() throws {
+        // Simulate a newer desktop sending a thermal state this build predates.
+        let json = """
+        {"cpuUsagePercent":10,"memoryUsedBytes":1,"memoryTotalBytes":2,\
+        "thermalState":"meltdown","sampledAt":0}
+        """
+        let decoded = try JSONDecoder().decode(HostMetricsSnapshot.self, from: Data(json.utf8))
+        #expect(decoded.thermalState == .unknown)
+    }
+
     @Test("settings update round trips")
     func settingsUpdateRoundTrips() throws {
         let payload = Payload.settingsUpdate(

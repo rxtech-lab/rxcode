@@ -7,7 +7,17 @@ import os.log
 /// Bridges UIKit's APNs registration into `MobileAppState`. The state object
 /// forwards the device token to the paired desktop over the encrypted relay.
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
-    weak var mobileState: MobileAppState?
+    weak var mobileState: MobileAppState? {
+        didSet {
+            guard let target = pendingNotificationDeepLink, let state = mobileState else { return }
+            pendingNotificationDeepLink = nil
+            logger.info("[APNs] flushing buffered notification deep link sessionID=\(target.sessionID, privacy: .public)")
+            state.openThreadFromNotification(sessionID: target.sessionID, projectID: target.projectID)
+        }
+    }
+    /// Buffers a notification tap that arrives before `mobileState` is wired up
+    /// (cold launch). Flushed by the `mobileState` `didSet` above.
+    private var pendingNotificationDeepLink: (sessionID: String, projectID: UUID?)?
     private let logger = Logger(subsystem: "com.idealapp.RxCodeMobile", category: "AppDelegate")
 
     func application(_ application: UIApplication,
@@ -68,54 +78,49 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         return [.banner, .sound, .list]
     }
 
+    /// Handles a notification tap — banner, lock screen, or cold launch from a
+    /// killed app. Routes the UI to the notification's thread.
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                didReceive response: UNNotificationResponse) async {
+        let requestID = response.notification.request.identifier
+        guard response.actionIdentifier == UNNotificationDefaultActionIdentifier else {
+            logger.info("[APNs] notification action ignored request=\(requestID, privacy: .public) action=\(response.actionIdentifier, privacy: .public)")
+            return
+        }
+        let userInfo = response.notification.request.content.userInfo
+        guard let target = notificationThreadTarget(from: userInfo, requestID: requestID) else {
+            logger.info("[APNs] notification tap has no thread target request=\(requestID, privacy: .public)")
+            return
+        }
+        if let state = mobileState {
+            state.openThreadFromNotification(sessionID: target.sessionID, projectID: target.projectID)
+        } else {
+            logger.info("[APNs] notification tap buffered (state not ready) request=\(requestID, privacy: .public)")
+            pendingNotificationDeepLink = target
+        }
+    }
+
+    /// Resolves the `(sessionID, projectID)` a tapped notification points to.
+    /// The NSE / foreground handler usually decrypts these into `userInfo`
+    /// already; if only the encrypted `enc` blob is present (NSE failed), this
+    /// decrypts it as a fallback.
+    private func notificationThreadTarget(from userInfo: [AnyHashable: Any],
+                                          requestID: String) -> (sessionID: String, projectID: UUID?)? {
+        if let sessionID = userInfo["sessionId"] as? String, !sessionID.isEmpty {
+            let projectID = (userInfo["projectId"] as? String).flatMap(UUID.init)
+            return (sessionID, projectID)
+        }
+        guard let plaintext = decryptAlertPlaintext(from: userInfo, context: requestID),
+              let sessionID = plaintext.sessionID, !sessionID.isEmpty
+        else { return nil }
+        return (sessionID, plaintext.projectID)
+    }
+
     private func decryptedForegroundNotification(from content: UNNotificationContent,
                                                  requestID: String) -> UNMutableNotificationContent? {
-        guard let encB64 = content.userInfo["enc"] as? String else {
-            logger.info("[APNs] foreground notification has no enc payload request=\(requestID, privacy: .public)")
+        guard let plaintext = decryptAlertPlaintext(from: content.userInfo, context: requestID) else {
             return nil
         }
-        guard let raw = Data(base64Encoded: encB64) else {
-            logger.error("[APNs] foreground enc payload is not valid base64 request=\(requestID, privacy: .public) length=\(encB64.count, privacy: .public)")
-            return nil
-        }
-        let envelope: EncryptedAlert
-        do {
-            envelope = try JSONDecoder().decode(EncryptedAlert.self, from: raw)
-        } catch {
-            logger.error("[APNs] foreground encrypted alert decode failed request=\(requestID, privacy: .public): \(error.localizedDescription, privacy: .public)")
-            return nil
-        }
-
-        let accessGroup = DeviceIdentity.resolveAccessGroup(suffix: "app.rxlab.rxcodemobile.shared")
-        let identity: DeviceIdentity
-        do {
-            identity = try DeviceIdentity.loadOrCreate(accessGroup: accessGroup)
-            logger.info("[APNs] foreground identity loaded accessGroup=\(accessGroup, privacy: .public) publicKey=\(String(identity.publicKeyHex.prefix(12)), privacy: .public) sender=\(String(envelope.from.prefix(12)), privacy: .public)")
-        } catch {
-            logger.error("[APNs] foreground identity load failed accessGroup=\(accessGroup, privacy: .public): \(error.localizedDescription, privacy: .public)")
-            return nil
-        }
-
-        guard let senderRaw = Data(rxcodeHexString: envelope.from) else {
-            logger.error("[APNs] foreground sender public key is not hex sender=\(String(envelope.from.prefix(12)), privacy: .public)")
-            return nil
-        }
-        let senderKey: Curve25519.KeyAgreement.PublicKey
-        do {
-            senderKey = try Curve25519.KeyAgreement.PublicKey(rawRepresentation: senderRaw)
-        } catch {
-            logger.error("[APNs] foreground sender public key parse failed sender=\(String(envelope.from.prefix(12)), privacy: .public): \(error.localizedDescription, privacy: .public)")
-            return nil
-        }
-
-        let plaintext: AlertPlaintext
-        do {
-            plaintext = try APNsCrypto.open(envelope: envelope, recipient: identity.privateKey, sender: senderKey)
-        } catch {
-            logger.error("[APNs] foreground decrypt failed request=\(requestID, privacy: .public) sender=\(String(envelope.from.prefix(12)), privacy: .public) identity=\(String(identity.publicKeyHex.prefix(12)), privacy: .public): \(error.localizedDescription, privacy: .public)")
-            return nil
-        }
-
         guard let replacement = content.mutableCopy() as? UNMutableNotificationContent else {
             logger.error("[APNs] foreground unable to copy notification content request=\(requestID, privacy: .public)")
             return nil
@@ -130,6 +135,56 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         replacement.userInfo = userInfo
         logger.info("[APNs] foreground decrypted notification request=\(requestID, privacy: .public) kind=\(plaintext.kind ?? "<nil>", privacy: .public) sessionID=\(plaintext.sessionID ?? "<nil>", privacy: .public)")
         return replacement
+    }
+
+    /// Decrypts the `enc` blob nested in an APNs payload into its
+    /// `AlertPlaintext`. Shared by the foreground replacement path and the
+    /// notification-tap fallback. `context` is a request identifier for logging.
+    private func decryptAlertPlaintext(from userInfo: [AnyHashable: Any],
+                                       context: String) -> AlertPlaintext? {
+        guard let encB64 = userInfo["enc"] as? String else {
+            logger.info("[APNs] notification has no enc payload context=\(context, privacy: .public)")
+            return nil
+        }
+        guard let raw = Data(base64Encoded: encB64) else {
+            logger.error("[APNs] enc payload is not valid base64 context=\(context, privacy: .public) length=\(encB64.count, privacy: .public)")
+            return nil
+        }
+        let envelope: EncryptedAlert
+        do {
+            envelope = try JSONDecoder().decode(EncryptedAlert.self, from: raw)
+        } catch {
+            logger.error("[APNs] encrypted alert decode failed context=\(context, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+
+        let accessGroup = DeviceIdentity.resolveAccessGroup(suffix: "app.rxlab.rxcodemobile.shared")
+        let identity: DeviceIdentity
+        do {
+            identity = try DeviceIdentity.loadOrCreate(accessGroup: accessGroup)
+        } catch {
+            logger.error("[APNs] identity load failed accessGroup=\(accessGroup, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+
+        guard let senderRaw = Data(rxcodeHexString: envelope.from) else {
+            logger.error("[APNs] sender public key is not hex sender=\(String(envelope.from.prefix(12)), privacy: .public)")
+            return nil
+        }
+        let senderKey: Curve25519.KeyAgreement.PublicKey
+        do {
+            senderKey = try Curve25519.KeyAgreement.PublicKey(rawRepresentation: senderRaw)
+        } catch {
+            logger.error("[APNs] sender public key parse failed sender=\(String(envelope.from.prefix(12)), privacy: .public): \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+
+        do {
+            return try APNsCrypto.open(envelope: envelope, recipient: identity.privateKey, sender: senderKey)
+        } catch {
+            logger.error("[APNs] decrypt failed context=\(context, privacy: .public) sender=\(String(envelope.from.prefix(12)), privacy: .public) identity=\(String(identity.publicKeyHex.prefix(12)), privacy: .public): \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
     }
 
     private static func apnsSummary(_ userInfo: [AnyHashable: Any]) -> String {

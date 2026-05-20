@@ -2,9 +2,30 @@ import Foundation
 import Combine
 import CryptoKit
 import RxCodeCore
+import RxCodeChatKit
 import RxCodeSync
+import SwiftUI
 import UIKit
 import os.log
+
+/// A pending request to open a specific thread, set when the user taps an APNs
+/// notification. `RootView` observes this and pushes the chat detail page.
+/// `requestID` makes every tap a distinct value, so `onChange` still fires when
+/// the user re-taps a notification for a thread they already navigated away from.
+struct MobileDeepLink: Equatable {
+    let sessionID: String
+    let projectID: UUID?
+    let requestID = UUID()
+}
+
+struct PairedDesktop: Codable, Identifiable, Equatable, Hashable {
+    var pubkeyHex: String
+    var displayName: String
+    var pairedAt: Date
+    var lastSeen: Date?
+
+    var id: String { pubkeyHex }
+}
 
 /// Single source of truth for the mobile app. Owns the `SyncClient`, the
 /// decoded projects/sessions/messages mirrored from the paired desktop, and
@@ -20,6 +41,7 @@ final class MobileAppState: ObservableObject {
     @Published var isPaired: Bool = false
     @Published var pairedDesktopName: String = ""
     @Published var pairedDesktopPubkey: String = ""
+    @Published var pairedDesktops: [PairedDesktop] = []
     @Published var connectionState: RelayClient.ConnectionState = .disconnected
     @Published var relayURL: URL
     @Published var pairingStatus: PairingStatus = .idle
@@ -29,6 +51,14 @@ final class MobileAppState: ObservableObject {
     @Published var branchBriefings: [MobileBranchBriefing] = []
     @Published var threadSummaries: [MobileThreadSummary] = []
     @Published var desktopSettings: MobileSettingsSnapshot?
+    /// Agent rate-limit usage mirrored from the paired desktop. `nil` until the
+    /// first snapshot arrives, or when paired with a desktop that predates
+    /// usage sync.
+    @Published var desktopUsage: MobileUsageSnapshot?
+    /// Desktop CPU/memory/thermal load mirrored from the paired desktop. `nil`
+    /// until the first snapshot arrives, or when paired with a desktop that
+    /// predates computer-status sync.
+    @Published var desktopHostMetrics: HostMetricsSnapshot?
     /// Current git branch per project, mirrored from the desktop's snapshot.
     @Published var projectBranches: [UUID: String] = [:]
     /// Local branch list per project, mirrored from the desktop's snapshot.
@@ -53,6 +83,9 @@ final class MobileAppState: ObservableObject {
     /// Messages per history page — must match the desktop's expectation.
     private static let messagePageSize = 30
     @Published var activeSessionID: String?
+    /// Set when the user taps an APNs notification; `RootView` observes this and
+    /// navigates to the thread's chat detail page, then clears it.
+    @Published var pendingDeepLink: MobileDeepLink?
     @Published var pendingPermission: PermissionRequestPayload?
     /// Every `AskUserQuestion` call the desktop currently has awaiting an
     /// answer, across all sessions. Mirrored from the desktop's queue; the chat
@@ -76,6 +109,11 @@ final class MobileAppState: ObservableObject {
     private var clientStarted = false
 
     static let pairingTimeoutSeconds: UInt64 = 25
+    private static let pairedDesktopsKey = "mobileSync.pairedDesktops"
+    private static let activeDesktopPubkeyKey = "mobileSync.activeDesktopPubkey"
+    private static let legacyDesktopPubkeyKey = "mobileSync.desktopPubkey"
+    private static let legacyDesktopNameKey = "mobileSync.desktopName"
+    private static let mobilePubkeyKey = "mobileSync.mobilePubkey"
 
     init() {
         let stored = UserDefaults.standard.string(forKey: "mobileSync.relayURL")
@@ -98,7 +136,7 @@ final class MobileAppState: ObservableObject {
         }
         self.client = SyncClient(identity: identity, relayURL: initial)
         logger.info("[MobileIdentity] loaded publicKey=\(String(self.identity.publicKeyHex.prefix(12)), privacy: .public) accessGroup=\(Self.keychainAccessGroup, privacy: .public)")
-        loadPairedDesktop()
+        loadPairedDesktops()
     }
 
     /// Bare suffix as declared (post-`$(AppIdentifierPrefix)`) in
@@ -122,16 +160,41 @@ final class MobileAppState: ObservableObject {
 
     var localPublicKeyHex: String { identity.publicKeyHex }
 
+    var activePairedDesktop: PairedDesktop? {
+        pairedDesktops.first { $0.pubkeyHex == pairedDesktopPubkey }
+    }
+
     func start() {
         Task { @MainActor in
             await startClient()
         }
     }
 
+    /// Drive the relay connection from the app lifecycle. iOS suspends the
+    /// process shortly after backgrounding, which kills the WebSocket on an
+    /// unpredictable schedule; disconnecting deterministically keeps the
+    /// relay's registration table in sync with reality and gives a clean,
+    /// single re-register on the next foreground.
+    func handleScenePhase(_ phase: ScenePhase) {
+        guard clientStarted else { return }
+        switch phase {
+        case .background:
+            logger.info("[Lifecycle] entering background — disconnecting relay")
+            Task { await client.stop() }
+        case .active:
+            logger.info("[Lifecycle] entering foreground — reconnecting relay")
+            Task { await client.start() }
+        case .inactive:
+            break
+        @unknown default:
+            break
+        }
+    }
+
     private func startClient() async {
         clientStarted = true
-        if !pairedDesktopPubkey.isEmpty {
-            try? await client.addPeer(pairedDesktopPubkey)
+        for desktop in pairedDesktops {
+            try? await client.addPeer(desktop.pubkeyHex)
         }
         let events = await client.events()
         eventTask?.cancel()
@@ -236,7 +299,7 @@ final class MobileAppState: ObservableObject {
     func cancelPairing() {
         pairingTimeoutTask?.cancel()
         pairingTimeoutTask = nil
-        if !isPaired { pairingStatus = .idle }
+        pairingStatus = .idle
     }
 
     func dismissPairingError() {
@@ -251,7 +314,7 @@ final class MobileAppState: ObservableObject {
             guard !Task.isCancelled else { return }
             await MainActor.run {
                 guard let self else { return }
-                guard !self.isPaired else { return }
+                guard self.pairingStatus == .inProgress else { return }
                 self.failPairing(
                     "Your Mac didn't respond. Make sure RxCode is open and connected, then try again."
                 )
@@ -305,10 +368,80 @@ final class MobileAppState: ObservableObject {
         sessions.first(where: { $0.id == sessionID })?.queuedMessages ?? []
     }
 
-    func requestNewSession(projectID: UUID, initialText: String? = nil) async {
+    /// Ask the desktop to create a new thread. The per-thread agent config
+    /// (model, permission mode, plan mode) travels in the request so the thread
+    /// is created with exactly the chosen config — fixing the bug where a
+    /// non-default model was dropped in favor of the project default. ACP client
+    /// and effort have no mobile picker, so they ride along from the last synced
+    /// desktop settings.
+    func requestNewSession(
+        projectID: UUID,
+        initialText: String? = nil,
+        agentProvider: AgentProvider? = nil,
+        model: String? = nil,
+        permissionMode: PermissionMode? = nil,
+        planMode: Bool = false
+    ) async {
         guard isPaired else { return }
-        let payload = NewSessionRequestPayload(projectID: projectID, initialText: initialText)
+        let payload = NewSessionRequestPayload(
+            projectID: projectID,
+            initialText: initialText,
+            selectedAgentProvider: agentProvider,
+            selectedModel: model,
+            selectedACPClientId: desktopSettings?.selectedACPClientId,
+            selectedEffort: desktopSettings?.selectedEffort,
+            permissionMode: permissionMode,
+            planMode: planMode
+        )
         try? await client.send(.newSessionRequest(payload), toHex: pairedDesktopPubkey)
+    }
+
+    // MARK: - Plan mode
+
+    /// Plan cards for a session, derived live from the synced messages using the
+    /// shared `PlanLogic` — the same `ExitPlanMode` detection the desktop chat
+    /// uses. Superseded plans (re-emitted within the same turn) are dropped so
+    /// only actionable cards surface.
+    func pendingPlans(sessionID: String) -> [PendingPlan] {
+        let messages = messagesBySession[sessionID] ?? []
+        var plans: [PendingPlan] = []
+        for message in messages {
+            for block in message.blocks {
+                guard let toolCall = block.toolCall,
+                      PlanLogic.isExitPlanMode(toolCall) else { continue }
+                if PlanLogic.isSupersededExitPlanMode(
+                    toolCall: toolCall, in: message, allMessages: messages
+                ) { continue }
+                let markdown = PlanLogic.renderMarkdown(for: toolCall, in: message) ?? ""
+                let decided = PlanLogic.isPlanDecided(toolCall)
+                plans.append(PendingPlan(
+                    toolCallId: toolCall.id,
+                    markdown: markdown,
+                    isStreaming: !decided && markdown.isEmpty && message.isStreaming,
+                    isDecided: decided,
+                    decisionSummary: decided ? toolCall.result : nil
+                ))
+            }
+        }
+        return plans
+    }
+
+    /// Send the user's plan decision to the desktop, which resolves the CLI
+    /// `ExitPlanMode` hook via `respondToPlanDecision`. No optimistic mutation —
+    /// the desktop broadcasts the updated `toolCall.result` back through the
+    /// normal session-update sync, so the banner and chat reconcile from that.
+    func respondToPlanDecision(
+        toolUseID: String,
+        sessionID: String,
+        action: PlanDecisionAction
+    ) async {
+        guard isPaired else { return }
+        let payload = PlanDecisionPayload(
+            toolUseID: toolUseID,
+            sessionID: sessionID,
+            decision: action
+        )
+        try? await client.send(.planDecision(payload), toHex: pairedDesktopPubkey)
     }
 
     // MARK: - Thread lifecycle actions
@@ -584,26 +717,57 @@ final class MobileAppState: ObservableObject {
         Task { await reportAPNsTokenIfPending() }
     }
 
-    func unpair() async {
-        let desktopHex = pairedDesktopPubkey
-        if !desktopHex.isEmpty {
-            try? await client.send(.unpair(UnpairPayload(reason: "mobile")), toHex: desktopHex)
-        }
-        await clearPairing(removePeerHex: desktopHex)
+    /// Routes a tapped APNs notification to its thread. Called by `AppDelegate`'s
+    /// `didReceive` handler; `RootView` observes `pendingDeepLink` and navigates.
+    func openThreadFromNotification(sessionID: String, projectID: UUID?) {
+        logger.info("[APNs] notification tap -> open thread sessionID=\(sessionID, privacy: .public) projectID=\(projectID?.uuidString ?? "<nil>", privacy: .public)")
+        pendingDeepLink = MobileDeepLink(sessionID: sessionID, projectID: projectID)
     }
 
-    private func clearPairing(removePeerHex hex: String?) async {
-        if let hex, !hex.isEmpty {
-            await client.removePeer(hex)
+    func switchPairedDesktop(_ desktop: PairedDesktop) async {
+        guard pairedDesktops.contains(where: { $0.pubkeyHex == desktop.pubkeyHex }) else { return }
+        guard desktop.pubkeyHex != pairedDesktopPubkey else { return }
+        clearDesktopMirror()
+        setActiveDesktop(pubkeyHex: desktop.pubkeyHex)
+        savePairedDesktops()
+        try? await client.addPeer(desktop.pubkeyHex)
+        await requestSnapshot()
+        await reportAPNsTokenIfPending()
+    }
+
+    func removePairedDesktop(_ desktop: PairedDesktop) async {
+        let wasActive = desktop.pubkeyHex == pairedDesktopPubkey
+        try? await client.send(.unpair(UnpairPayload(reason: "mobile")), toHex: desktop.pubkeyHex)
+        pairedDesktops.removeAll { $0.pubkeyHex == desktop.pubkeyHex }
+        await client.removePeer(desktop.pubkeyHex)
+
+        if wasActive {
+            clearDesktopMirror()
+            setActiveDesktop(pubkeyHex: pairedDesktops.first?.pubkeyHex)
+        } else {
+            setActiveDesktop(pubkeyHex: pairedDesktopPubkey)
         }
-        pairedDesktopPubkey = ""
-        pairedDesktopName = ""
-        isPaired = false
+        savePairedDesktops()
+
+        if wasActive, isPaired {
+            await requestSnapshot()
+            await reportAPNsTokenIfPending()
+        }
+    }
+
+    func unpair() async {
+        guard let desktop = activePairedDesktop else { return }
+        await removePairedDesktop(desktop)
+    }
+
+    private func clearDesktopMirror() {
         projects = []
         sessions = []
         branchBriefings = []
         threadSummaries = []
         desktopSettings = nil
+        desktopUsage = nil
+        desktopHostMetrics = nil
         projectBranches = [:]
         availableBranchesByProject = [:]
         inFlightBranchOps = []
@@ -616,8 +780,6 @@ final class MobileAppState: ObservableObject {
         activeSessionID = nil
         pendingPermission = nil
         pendingQuestions = []
-        savePairedDesktop()
-        await resetIdentityAndClient()
     }
 
     // MARK: - Inbound events
@@ -645,30 +807,38 @@ final class MobileAppState: ObservableObject {
             pairingTimeoutTask?.cancel()
             pairingTimeoutTask = nil
             if ack.accepted {
-                pairedDesktopPubkey = inbound.fromHex
-                pairedDesktopName = ack.desktopName
-                isPaired = true
+                upsertPairedDesktop(
+                    PairedDesktop(
+                        pubkeyHex: inbound.fromHex,
+                        displayName: ack.desktopName,
+                        pairedAt: .now,
+                        lastSeen: .now
+                    )
+                )
+                setActiveDesktop(pubkeyHex: inbound.fromHex)
                 pairingStatus = .idle
                 logger.info("[Pairing] accepted desktop=\(ack.desktopName, privacy: .public) desktopKey=\(String(inbound.fromHex.prefix(12)), privacy: .public) mobileKey=\(String(self.identity.publicKeyHex.prefix(12)), privacy: .public)")
                 MobileHaptics.connected()
-                savePairedDesktop()
+                savePairedDesktops()
                 Task {
                     await self.requestSnapshot()
                     await self.reportAPNsTokenIfPending()
                 }
             } else {
-                isPaired = false
                 failPairing("Your Mac declined the pairing request.")
             }
         case .unpair:
-            guard inbound.fromHex == pairedDesktopPubkey else { return }
-            Task { await self.clearPairing(removePeerHex: inbound.fromHex) }
+            guard let desktop = pairedDesktops.first(where: { $0.pubkeyHex == inbound.fromHex }) else { return }
+            Task { await self.removePairedDesktopAfterRemoteUnpair(desktop) }
         case .snapshot(let snap):
+            guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "snapshot") else { return }
             projects = snap.projects
             sessions = snap.sessions
             branchBriefings = snap.branchBriefings ?? []
             threadSummaries = snap.threadSummaries ?? []
             desktopSettings = snap.settings
+            desktopUsage = snap.usage
+            desktopHostMetrics = snap.hostMetrics
             if let branches = snap.projectBranches {
                 projectBranches = Dictionary(uniqueKeysWithValues: branches.map { ($0.projectId, $0.currentBranch) })
                 availableBranchesByProject = Dictionary(
@@ -695,31 +865,39 @@ final class MobileAppState: ObservableObject {
                 activeSessionID = active
             }
         case .moreMessages(let page):
+            guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "more_messages") else { return }
             applyMoreMessages(page)
         case .sessionUpdate(let update):
+            guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "session_update") else { return }
             applySessionUpdate(update)
         case .permissionRequest(let req):
+            guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "permission_request") else { return }
             pendingPermission = req
             MobileHaptics.attentionNeeded()
         case .questionQueue(let queue):
+            guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "question_queue") else { return }
             let grew = queue.questions.count > pendingQuestions.count
             pendingQuestions = queue.questions
             if grew { MobileHaptics.attentionNeeded() }
         case .notification:
+            guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "notification") else { return }
             // Foreground notifications arriving over WS — iOS won't show a
             // banner automatically; UI surfaces these in a toast/badge.
             break
         case .searchResults(let results):
+            guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "search_results") else { return }
             guard let pending = pendingSearchID, results.clientRequestID == pending else { return }
             searchProjectIDs = results.projectIDs
             searchThreadHits = results.threadHits
             isSearching = false
         case .branchOpResult(let result):
+            guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "branch_op_result") else { return }
             inFlightBranchOps.remove(result.clientRequestID)
             if !result.ok {
                 lastBranchOpError = result.errorMessage ?? "Branch operation failed."
             }
         case .ping:
+            guard pairedDesktops.contains(where: { $0.pubkeyHex == inbound.fromHex }) else { return }
             Task { try? await self.client.send(.pong(PongPayload()), toHex: inbound.fromHex) }
         default:
             break
@@ -865,7 +1043,7 @@ final class MobileAppState: ObservableObject {
     }
 
     private func reportAPNsTokenIfPending() async {
-        guard isPaired else {
+        guard !pairedDesktops.isEmpty else {
             logger.info("[APNs] token report pending: mobile is not paired")
             return
         }
@@ -878,86 +1056,166 @@ final class MobileAppState: ObservableObject {
             return
         }
         let payload = APNsTokenPayload(tokenHex: tokenHex, environment: env)
-        do {
-            try await client.send(.apnsToken(payload), toHex: pairedDesktopPubkey)
-            logger.info("[APNs] token reported to desktop tokenPrefix=\(String(tokenHex.prefix(12)), privacy: .public) environment=\(env, privacy: .public) desktopKey=\(String(self.pairedDesktopPubkey.prefix(12)), privacy: .public) mobileKey=\(String(self.identity.publicKeyHex.prefix(12)), privacy: .public)")
-        } catch {
-            logger.error("[APNs] token report failed desktopKey=\(String(self.pairedDesktopPubkey.prefix(12)), privacy: .public) mobileKey=\(String(self.identity.publicKeyHex.prefix(12)), privacy: .public): \(error.localizedDescription, privacy: .public)")
+        for desktop in pairedDesktops {
+            do {
+                try await client.send(.apnsToken(payload), toHex: desktop.pubkeyHex)
+                logger.info("[APNs] token reported to desktop tokenPrefix=\(String(tokenHex.prefix(12)), privacy: .public) environment=\(env, privacy: .public) desktopKey=\(String(desktop.pubkeyHex.prefix(12)), privacy: .public) mobileKey=\(String(self.identity.publicKeyHex.prefix(12)), privacy: .public)")
+            } catch {
+                logger.error("[APNs] token report failed desktopKey=\(String(desktop.pubkeyHex.prefix(12)), privacy: .public) mobileKey=\(String(self.identity.publicKeyHex.prefix(12)), privacy: .public): \(error.localizedDescription, privacy: .public)")
+            }
         }
     }
 
     private func applySettingsUpdateLocally(_ update: MobileSettingsUpdatePayload) {
         guard let current = desktopSettings else { return }
+        // Optimistically reflect a provider change, resolving its display name
+        // from the synced options so the picker label updates immediately.
+        let summarizationProvider = update.summarizationProvider ?? current.summarizationProvider
+        let summarizationProviderDisplayName = update.summarizationProvider.flatMap { raw in
+            current.availableSummarizationProviders?.first(where: { $0.id == raw })?.displayName
+        } ?? current.summarizationProviderDisplayName
         desktopSettings = MobileSettingsSnapshot(
             selectedAgentProvider: update.selectedAgentProvider ?? current.selectedAgentProvider,
             selectedModel: update.selectedModel ?? current.selectedModel,
             selectedACPClientId: update.selectedACPClientId ?? current.selectedACPClientId,
             selectedEffort: update.selectedEffort ?? current.selectedEffort,
             permissionMode: update.permissionMode ?? current.permissionMode,
-            summarizationProvider: current.summarizationProvider,
-            summarizationProviderDisplayName: current.summarizationProviderDisplayName,
+            summarizationProvider: summarizationProvider,
+            summarizationProviderDisplayName: summarizationProviderDisplayName,
             openAISummarizationEndpoint: current.openAISummarizationEndpoint,
-            openAISummarizationModel: current.openAISummarizationModel,
+            openAISummarizationModel: update.openAISummarizationModel ?? current.openAISummarizationModel,
             notificationsEnabled: update.notificationsEnabled ?? current.notificationsEnabled,
             focusMode: update.focusMode ?? current.focusMode,
             autoArchiveEnabled: update.autoArchiveEnabled ?? current.autoArchiveEnabled,
             archiveRetentionDays: update.archiveRetentionDays ?? current.archiveRetentionDays,
             autoPreviewSettings: update.autoPreviewSettings ?? current.autoPreviewSettings,
             availableEfforts: current.availableEfforts,
-            availableModels: current.availableModels
+            availableModels: current.availableModels,
+            modelSections: current.modelSections,
+            availableSummarizationProviders: current.availableSummarizationProviders,
+            openAISummarizationModels: current.openAISummarizationModels
         )
     }
 
     // MARK: - Persistence
 
-    private func loadPairedDesktop() {
-        pairedDesktopPubkey = UserDefaults.standard.string(forKey: "mobileSync.desktopPubkey") ?? ""
-        pairedDesktopName = UserDefaults.standard.string(forKey: "mobileSync.desktopName") ?? ""
-        let savedMobilePubkey = UserDefaults.standard.string(forKey: "mobileSync.mobilePubkey")
+    private func loadPairedDesktops() {
+        let defaults = UserDefaults.standard
+        let savedMobilePubkey = defaults.string(forKey: Self.mobilePubkeyKey)
         if let savedMobilePubkey,
            !savedMobilePubkey.isEmpty,
            savedMobilePubkey != identity.publicKeyHex {
             logger.warning("[Pairing] clearing stale saved desktop pairing savedMobileKey=\(String(savedMobilePubkey.prefix(12)), privacy: .public) currentMobileKey=\(String(self.identity.publicKeyHex.prefix(12)), privacy: .public)")
-            pairedDesktopPubkey = ""
-            pairedDesktopName = ""
-            savePairedDesktop()
+            pairedDesktops = []
+            setActiveDesktop(pubkeyHex: nil)
+            savePairedDesktops()
+            return
         }
-        isPaired = !pairedDesktopPubkey.isEmpty
-    }
 
-    private func savePairedDesktop() {
-        if pairedDesktopPubkey.isEmpty {
-            UserDefaults.standard.removeObject(forKey: "mobileSync.desktopPubkey")
-            UserDefaults.standard.removeObject(forKey: "mobileSync.desktopName")
-            UserDefaults.standard.removeObject(forKey: "mobileSync.mobilePubkey")
+        if let data = defaults.data(forKey: Self.pairedDesktopsKey),
+           let decoded = try? JSONDecoder().decode([PairedDesktop].self, from: data) {
+            pairedDesktops = Self.deduplicate(decoded)
         } else {
-            UserDefaults.standard.set(pairedDesktopPubkey, forKey: "mobileSync.desktopPubkey")
-            UserDefaults.standard.set(pairedDesktopName, forKey: "mobileSync.desktopName")
-            UserDefaults.standard.set(identity.publicKeyHex, forKey: "mobileSync.mobilePubkey")
+            let legacyPubkey = defaults.string(forKey: Self.legacyDesktopPubkeyKey) ?? ""
+            let legacyName = defaults.string(forKey: Self.legacyDesktopNameKey) ?? ""
+            if !legacyPubkey.isEmpty {
+                pairedDesktops = [
+                    PairedDesktop(
+                        pubkeyHex: legacyPubkey,
+                        displayName: legacyName,
+                        pairedAt: .now,
+                        lastSeen: nil
+                    )
+                ]
+            }
+        }
+
+        let preferred = defaults.string(forKey: Self.activeDesktopPubkeyKey)
+            ?? defaults.string(forKey: Self.legacyDesktopPubkeyKey)
+        setActiveDesktop(pubkeyHex: preferred)
+        if !pairedDesktops.isEmpty {
+            savePairedDesktops()
         }
     }
 
-    private func resetIdentityAndClient() async {
-        let oldClient = client
-        eventTask?.cancel()
-        eventTask = nil
-        await oldClient.stop()
-
-        do {
-            try DeviceIdentity.reset(accessGroup: Self.keychainAccessGroup)
-            identity = try DeviceIdentity.loadOrCreate(accessGroup: Self.keychainAccessGroup)
-            client = SyncClient(identity: identity, relayURL: relayURL)
-            connectionState = .disconnected
-            logger.info("[MobileIdentity] regenerated publicKey=\(String(self.identity.publicKeyHex.prefix(12)), privacy: .public) accessGroup=\(Self.keychainAccessGroup, privacy: .public)")
-        } catch {
-            logger.error("[MobileIdentity] reset failed accessGroup=\(Self.keychainAccessGroup, privacy: .public): \(error.localizedDescription, privacy: .public)")
-            client = SyncClient(identity: identity, relayURL: relayURL)
-            connectionState = .disconnected
+    private func savePairedDesktops() {
+        let defaults = UserDefaults.standard
+        if pairedDesktops.isEmpty {
+            defaults.removeObject(forKey: Self.pairedDesktopsKey)
+            defaults.removeObject(forKey: Self.activeDesktopPubkeyKey)
+            defaults.removeObject(forKey: Self.legacyDesktopPubkeyKey)
+            defaults.removeObject(forKey: Self.legacyDesktopNameKey)
+            defaults.removeObject(forKey: Self.mobilePubkeyKey)
+        } else {
+            let encoder = JSONEncoder()
+            if let data = try? encoder.encode(pairedDesktops) {
+                defaults.set(data, forKey: Self.pairedDesktopsKey)
+            }
+            defaults.set(pairedDesktopPubkey, forKey: Self.activeDesktopPubkeyKey)
+            defaults.set(pairedDesktopPubkey, forKey: Self.legacyDesktopPubkeyKey)
+            defaults.set(pairedDesktopName, forKey: Self.legacyDesktopNameKey)
+            defaults.set(identity.publicKeyHex, forKey: Self.mobilePubkeyKey)
         }
+    }
 
-        if clientStarted {
-            await startClient()
+    private func setActiveDesktop(pubkeyHex: String?) {
+        let resolved = pubkeyHex.flatMap { requested in
+            pairedDesktops.first { $0.pubkeyHex == requested }
+        } ?? pairedDesktops.first
+
+        pairedDesktopPubkey = resolved?.pubkeyHex ?? ""
+        pairedDesktopName = resolved?.displayName ?? ""
+        isPaired = resolved != nil
+    }
+
+    private func upsertPairedDesktop(_ desktop: PairedDesktop) {
+        if let index = pairedDesktops.firstIndex(where: { $0.pubkeyHex == desktop.pubkeyHex }) {
+            let existing = pairedDesktops[index]
+            pairedDesktops[index] = PairedDesktop(
+                pubkeyHex: desktop.pubkeyHex,
+                displayName: desktop.displayName,
+                pairedAt: existing.pairedAt,
+                lastSeen: desktop.lastSeen ?? existing.lastSeen
+            )
+        } else {
+            pairedDesktops.append(desktop)
         }
+    }
+
+    private func acceptsActiveDesktopPayload(from pubkeyHex: String, type: String) -> Bool {
+        guard pubkeyHex == pairedDesktopPubkey else {
+            logger.info("[Pairing] ignoring \(type, privacy: .public) from inactive desktopKey=\(String(pubkeyHex.prefix(12)), privacy: .public)")
+            return false
+        }
+        return true
+    }
+
+    private func removePairedDesktopAfterRemoteUnpair(_ desktop: PairedDesktop) async {
+        let wasActive = desktop.pubkeyHex == pairedDesktopPubkey
+        pairedDesktops.removeAll { $0.pubkeyHex == desktop.pubkeyHex }
+        await client.removePeer(desktop.pubkeyHex)
+        if wasActive {
+            clearDesktopMirror()
+            setActiveDesktop(pubkeyHex: pairedDesktops.first?.pubkeyHex)
+        } else {
+            setActiveDesktop(pubkeyHex: pairedDesktopPubkey)
+        }
+        savePairedDesktops()
+        if wasActive, isPaired {
+            await requestSnapshot()
+            await reportAPNsTokenIfPending()
+        }
+    }
+
+    private static func deduplicate(_ desktops: [PairedDesktop]) -> [PairedDesktop] {
+        var seen: Set<String> = []
+        var result: [PairedDesktop] = []
+        for desktop in desktops {
+            guard !desktop.pubkeyHex.isEmpty, !seen.contains(desktop.pubkeyHex) else { continue }
+            seen.insert(desktop.pubkeyHex)
+            result.append(desktop)
+        }
+        return result
     }
 }
 

@@ -19,6 +19,15 @@ struct NewThreadSheet: View {
     @State private var awaitingFromSessionIDs: Set<String>?
     @FocusState private var isFocused: Bool
 
+    // Per-thread agent config. Seeded once from the desktop's current settings,
+    // then applied only to the thread this sheet creates (no longer mutates the
+    // desktop's global defaults).
+    @State private var planModeEnabled = false
+    @State private var selectedProvider: AgentProvider?
+    @State private var selectedModelID: String?
+    @State private var selectedPermissionMode: PermissionMode = .default
+    @State private var didSeedConfig = false
+
     private var trimmed: String {
         text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -37,8 +46,14 @@ struct NewThreadSheet: View {
                 VStack(spacing: 28) {
                     header
                     composer
-                    NewThreadConfigStrip(projectID: projectID)
-                        .environmentObject(state)
+                    NewThreadConfigStrip(
+                        projectID: projectID,
+                        selectedProvider: $selectedProvider,
+                        selectedModelID: $selectedModelID,
+                        selectedPermissionMode: $selectedPermissionMode,
+                        planModeEnabled: $planModeEnabled
+                    )
+                    .environmentObject(state)
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
@@ -59,9 +74,13 @@ struct NewThreadSheet: View {
         .presentationDragIndicator(.visible)
         .interactiveDismissDisabled(isSubmitting)
         .onAppear {
+            seedConfigIfNeeded()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                 isFocused = true
             }
+        }
+        .onChange(of: state.desktopSettings) { _, _ in
+            seedConfigIfNeeded()
         }
         .onChange(of: state.sessions.map(\.id)) { _, _ in
             attemptJumpToNewSession()
@@ -167,6 +186,16 @@ struct NewThreadSheet: View {
 
     // MARK: - Actions
 
+    /// Copy the desktop's current agent config into local state once it is
+    /// available. Runs on appear and again if the snapshot arrives afterwards.
+    private func seedConfigIfNeeded() {
+        guard !didSeedConfig, let settings = state.desktopSettings else { return }
+        didSeedConfig = true
+        selectedProvider = settings.selectedAgentProvider
+        selectedModelID = settings.selectedModel
+        selectedPermissionMode = settings.permissionMode
+    }
+
     private func submit() {
         guard canSend else { return }
         let body = trimmed
@@ -179,7 +208,14 @@ struct NewThreadSheet: View {
         )
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         Task {
-            await state.requestNewSession(projectID: projectID, initialText: body)
+            await state.requestNewSession(
+                projectID: projectID,
+                initialText: body,
+                agentProvider: selectedProvider,
+                model: selectedModelID,
+                permissionMode: selectedPermissionMode,
+                planMode: planModeEnabled
+            )
         }
     }
 
@@ -197,18 +233,27 @@ struct NewThreadSheet: View {
 
 // MARK: - New Thread Config Strip
 
-/// Compact configuration row showing the same three knobs the desktop exposes
-/// for a new session: branch (with create/switch menu), permission mode, and
-/// model. Picker changes mutate the desktop's default settings via the
-/// existing `settings_update` payload — the new thread inherits whatever is
-/// selected when the user sends the first message.
+/// Compact configuration row for a new thread: branch (create/switch menu),
+/// permission mode, model, and a plan-mode toggle. Model/permission/plan picks
+/// are bound to the parent sheet's local state and travel in the
+/// `new_session_request` payload — they apply only to the created thread and no
+/// longer mutate the desktop's global defaults.
 struct NewThreadConfigStrip: View {
     @EnvironmentObject private var state: MobileAppState
     let projectID: UUID
+    @Binding var selectedProvider: AgentProvider?
+    @Binding var selectedModelID: String?
+    @Binding var selectedPermissionMode: PermissionMode
+    @Binding var planModeEnabled: Bool
     @State private var showingCreateBranch = false
 
+    private let columns = [
+        GridItem(.flexible(), spacing: 12),
+        GridItem(.flexible(), spacing: 12)
+    ]
+
     var body: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 12) {
             HStack {
                 Text("Settings")
                     .font(.footnote.weight(.semibold))
@@ -217,12 +262,14 @@ struct NewThreadConfigStrip: View {
                 Spacer()
             }
 
-            HStack(spacing: 8) {
-                branchMenu
-                permissionMenu
-                modelMenu
+            GlassEffectContainer(spacing: 12) {
+                LazyVGrid(columns: columns, spacing: 12) {
+                    branchMenu
+                    modelMenu
+                    permissionMenu
+                    planToggleChip
+                }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .sheet(isPresented: $showingCreateBranch) {
             CreateBranchSheet(
@@ -325,13 +372,13 @@ struct NewThreadConfigStrip: View {
     }
 
     private var selectedModelLabel: String {
-        guard let settings = state.desktopSettings else { return "Model" }
         if let match = allModels.first(where: {
-            $0.provider == settings.selectedAgentProvider && $0.id == settings.selectedModel
+            $0.provider == selectedProvider && $0.id == selectedModelID
         }) {
             return match.displayName
         }
-        return settings.selectedModel.isEmpty ? settings.selectedAgentProvider.displayName : settings.selectedModel
+        if let id = selectedModelID, !id.isEmpty { return id }
+        return selectedProvider?.displayName ?? "Model"
     }
 
     private var modelMenu: some View {
@@ -342,8 +389,8 @@ struct NewThreadConfigStrip: View {
                         Button {
                             applyModel(model)
                         } label: {
-                            let isSelected = state.desktopSettings?.selectedAgentProvider == model.provider
-                                && state.desktopSettings?.selectedModel == model.id
+                            let isSelected = selectedProvider == model.provider
+                                && selectedModelID == model.id
                             HStack {
                                 Text(model.displayName)
                                 if isSelected {
@@ -365,27 +412,23 @@ struct NewThreadConfigStrip: View {
     }
 
     private func applyModel(_ model: AgentModel) {
-        Task {
-            await state.updateDesktopSettings(
-                MobileSettingsUpdatePayload(
-                    selectedAgentProvider: model.provider,
-                    selectedModel: model.id
-                )
-            )
-        }
+        selectedProvider = model.provider
+        selectedModelID = model.id
     }
 
     // MARK: Permission Mode
 
     private var permissionMenu: some View {
         Menu {
-            ForEach(PermissionMode.allCases, id: \.self) { mode in
+            // `.plan` is intentionally excluded — plan mode is a dedicated
+            // toggle, matching the desktop's permission dropdown.
+            ForEach(PermissionMode.allCases.filter { $0 != .plan }, id: \.self) { mode in
                 Button {
-                    applyPermissionMode(mode)
+                    selectedPermissionMode = mode
                 } label: {
                     HStack {
                         Label(mode.displayName, systemImage: mode.systemImage)
-                        if state.desktopSettings?.permissionMode == mode {
+                        if selectedPermissionMode == mode {
                             Spacer()
                             Image(systemName: "checkmark")
                         }
@@ -393,22 +436,40 @@ struct NewThreadConfigStrip: View {
                 }
             }
         } label: {
-            let mode = state.desktopSettings?.permissionMode ?? .default
-            chipLabel(icon: mode.systemImage, title: mode.displayName)
+            chipLabel(icon: selectedPermissionMode.systemImage, title: selectedPermissionMode.displayName)
         }
     }
 
-    private func applyPermissionMode(_ mode: PermissionMode) {
-        Task {
-            await state.updateDesktopSettings(
-                MobileSettingsUpdatePayload(permissionMode: mode)
+    // MARK: Plan Mode
+
+    /// Dedicated plan-mode toggle, orthogonal to the permission menu. Mirrors the
+    /// desktop's `sessionPlanMode` boolean — when on, the thread starts with the
+    /// CLI in `--permission-mode plan`.
+    private var planToggleChip: some View {
+        Button {
+            planModeEnabled.toggle()
+            UISelectionFeedbackGenerator().selectionChanged()
+        } label: {
+            chipLabel(
+                icon: PermissionMode.plan.systemImage,
+                title: "Plan",
+                showsChevron: false,
+                active: planModeEnabled
             )
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Plan mode")
+        .accessibilityValue(planModeEnabled ? "On" : "Off")
     }
 
     // MARK: Chip
 
-    private func chipLabel(icon: String, title: String, showsChevron: Bool = true) -> some View {
+    private func chipLabel(
+        icon: String,
+        title: String,
+        showsChevron: Bool = true,
+        active: Bool = false
+    ) -> some View {
         HStack(spacing: 6) {
             Image(systemName: icon)
                 .font(.system(size: 12, weight: .medium))
@@ -422,16 +483,13 @@ struct NewThreadConfigStrip: View {
                     .foregroundStyle(.tertiary)
             }
         }
-        .foregroundStyle(.primary)
+        .foregroundStyle(active ? Color.white : Color.primary)
+        .frame(maxWidth: .infinity)
         .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(.tertiarySystemGroupedBackground))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.secondary.opacity(0.15), lineWidth: 0.5)
+        .padding(.vertical, 12)
+        .glassEffect(
+            active ? .regular.tint(ClaudeTheme.accent).interactive() : .regular.interactive(),
+            in: .rect(cornerRadius: 12)
         )
     }
 }

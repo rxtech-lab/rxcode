@@ -1,7 +1,9 @@
 import Foundation
 
 /// Rate limit usage data passed through ChatBridge to avoid direct RateLimitService dependency in RxCodeChatKit.
-public struct RateLimitUsage: Sendable {
+///
+/// `Codable` so it can travel over the mobile sync protocol inside a snapshot.
+public struct RateLimitUsage: Sendable, Codable, Equatable {
     public let fiveHourPercent: Double
     public let sevenDayPercent: Double
     public let twentyFourHourPercent: Double?

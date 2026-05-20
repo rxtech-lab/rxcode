@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { AgentTalkFeature } from "./agent-talk-feature";
 import { formatSize, getLatestRelease } from "./lib/release";
 
 const GITHUB_REPO_URL = "https://github.com/rxtech-lab/rxcode";
@@ -95,6 +96,35 @@ const FEATURE_CARDS = [
   },
 ];
 
+const MOBILE_SHOTS = [
+  {
+    image: "/screenshot/mobile-screenshot-1.PNG",
+    alt: "RxCode Mobile projects list synced from the desktop app",
+    caption: "Browse synced projects",
+  },
+  {
+    image: "/screenshot/mobile-screenshot-2.PNG",
+    alt: "RxCode Mobile searching across synced agent threads",
+    caption: "Search every thread",
+  },
+  {
+    image: "/screenshot/mobile-screenshot-3.PNG",
+    alt: "RxCode Mobile starting a new agent thread with a model picker",
+    caption: "Start new threads",
+  },
+  {
+    image: "/screenshot/mobile-screenshot-4.PNG",
+    alt: "RxCode Mobile following a live agent conversation",
+    caption: "Follow live sessions",
+  },
+];
+
+const MOBILE_POINTS = [
+  "End-to-end encrypted — the relay forwards only ciphertext it can never read.",
+  "Stateless relay with APNs push, so notifications land even when the app is closed.",
+  "Start a session on your Mac, pick it up on your phone, and hand it back.",
+];
+
 export default async function Home() {
   const release = await getLatestRelease();
   const sizeLabel = formatSize(release.sizeBytes);
@@ -107,6 +137,7 @@ export default async function Home() {
         <AppPreview />
         <SupportedAgents />
         <FeatureBento />
+        <MobileCompanion />
         <CTA release={release} />
       </main>
       <Footer />
@@ -138,6 +169,12 @@ function TopNav({
               className="text-on-surface-variant hover:text-primary transition-colors"
             >
               Supported Agents
+            </a>
+            <a
+              href="#mobile"
+              className="text-on-surface-variant hover:text-primary transition-colors"
+            >
+              Mobile
             </a>
             <Link
               href="/release"
@@ -331,6 +368,7 @@ function FeatureBento() {
         <span className="flex-1 h-px bg-surface-variant" />
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <AgentTalkFeature />
         {FEATURE_CARDS.map((feature) => (
           <FeatureCard key={feature.title} feature={feature} />
         ))}
@@ -373,6 +411,88 @@ function FeatureCard({
         />
       </div>
     </article>
+  );
+}
+
+function MobileCompanion() {
+  const appStoreUrl = process.env.NEXT_PUBLIC_APP_STORE_URL?.trim();
+
+  return (
+    <section
+      id="mobile"
+      className="max-w-[var(--container-max)] mx-auto px-6 pb-24"
+    >
+      <div className="flex items-center gap-3 mb-8">
+        <span className="font-mono text-[11px] tracking-widest uppercase text-primary">
+          Mobile Companion
+        </span>
+        <span className="flex-1 h-px bg-surface-variant" />
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.35fr] gap-12 lg:gap-16 items-center">
+        <div>
+          <div className="flex items-center gap-2 mb-4 font-mono text-[11px] tracking-widest uppercase text-primary">
+            <LockIcon className="w-3.5 h-3.5" />
+            End-to-end encrypted sync
+          </div>
+          <h2 className="font-display text-3xl md:text-4xl font-semibold tracking-tight mb-5">
+            Your desktop sessions, synced to your pocket
+          </h2>
+          <p className="text-on-surface-variant leading-relaxed mb-7">
+            The RxCode companion app mirrors your Mac. Browse projects, search
+            every thread, kick off new agent runs, and follow live sessions from
+            your phone — all relayed over an end-to-end encrypted channel so
+            nothing in the middle can read your code or conversations.
+          </p>
+          <ul className="flex flex-col gap-3">
+            {MOBILE_POINTS.map((point) => (
+              <li
+                key={point}
+                className="flex items-start gap-3 text-on-surface-variant leading-relaxed"
+              >
+                <CheckIcon className="w-4 h-4 mt-1 shrink-0 text-primary" />
+                <span>{point}</span>
+              </li>
+            ))}
+          </ul>
+          {appStoreUrl ? (
+            <a
+              href={appStoreUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-8 inline-block w-fit hover:opacity-85 transition-opacity active:scale-95"
+            >
+              <Image
+                src="/download-appstore.svg"
+                alt="Download on the App Store"
+                width={540}
+                height={160}
+                unoptimized
+                className="h-[52px] w-auto"
+              />
+            </a>
+          ) : null}
+        </div>
+        <div className="grid grid-cols-2 gap-4 sm:gap-5">
+          {MOBILE_SHOTS.map((shot) => (
+            <figure key={shot.image} className="flex flex-col">
+              <div className="bg-surface-container border border-surface-variant relative overflow-hidden">
+                <Image
+                  src={shot.image}
+                  alt={shot.alt}
+                  width={1320}
+                  height={2868}
+                  sizes="(min-width: 1024px) 330px, (min-width: 640px) 45vw, 45vw"
+                  className="block w-full h-auto"
+                />
+              </div>
+              <figcaption className="mt-3 font-mono text-[10px] tracking-widest uppercase text-on-surface-variant/70">
+                {shot.caption}
+              </figcaption>
+            </figure>
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -502,6 +622,41 @@ function DotIcon({ className = "" }: { className?: string }) {
   return (
     <svg viewBox="0 0 8 8" className={className} aria-hidden="true">
       <circle cx="4" cy="4" r="4" fill="currentColor" />
+    </svg>
+  );
+}
+
+function LockIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="4" y="10.5" width="16" height="10.5" rx="1.5" />
+      <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" />
+    </svg>
+  );
+}
+
+function CheckIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M20 6 9 17l-5-5" />
     </svg>
   );
 }

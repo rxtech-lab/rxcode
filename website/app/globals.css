@@ -240,3 +240,65 @@ body {
   background: var(--color-surface-container);
   font-weight: 600;
 }
+
+/* --- Agent collaboration diagram --- */
+@keyframes agent-stream {
+  to {
+    stroke-dashoffset: -32;
+  }
+}
+
+@keyframes agent-glow {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes agent-ring {
+  0%,
+  100% {
+    stroke-opacity: 0;
+  }
+  50% {
+    stroke-opacity: 0.7;
+  }
+}
+
+/* Round packets streaming along a thread between two agents. */
+.agent-stream {
+  stroke-dasharray: 1 15;
+  stroke-linecap: round;
+  animation: agent-stream 1.6s linear infinite;
+}
+
+/* Same thread, packets travelling the opposite direction. */
+.agent-stream-rev {
+  animation-direction: reverse;
+}
+
+.agent-pulse {
+  animation: agent-glow 2.4s ease-in-out infinite;
+}
+
+.agent-ring {
+  stroke-opacity: 0;
+  animation: agent-ring 3.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-stream,
+  .agent-pulse,
+  .agent-ring {
+    animation: none;
+  }
+  .agent-ring {
+    stroke-opacity: 0.4;
+  }
+  .agent-pulse {
+    opacity: 0.85;
+  }
+}

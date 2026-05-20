@@ -18,6 +18,7 @@ struct InspectorTerminal: Identifiable {
 
 struct RightInspectorPanel: View {
     @Environment(WindowState.self) private var windowState
+    @AppStorage(AppStorageKeys.showRightSidebar) private var showRightSidebar = false
 
     // Per-thread terminal storage. Each session/thread can have multiple
     // terminals; all stay alive across thread switches.
@@ -153,28 +154,27 @@ struct RightInspectorPanel: View {
                 .frame(width: 0.5)
         }
         .frame(
-            minWidth: windowState.showInspector ? 420 : 0,
-            maxWidth: windowState.showInspector ? .infinity : 0
+            minWidth: showRightSidebar ? 420 : 0,
+            maxWidth: showRightSidebar ? .infinity : 0
         )
-        .opacity(windowState.showInspector ? 1 : 0)
+        .opacity(showRightSidebar ? 1 : 0)
         .clipped()
         .background(terminalShortcuts)
         .task(id: currentSessionKey) {
+            // Ensure the terminal process exists for this session. The panel's
+            // visibility is owned by `showRightSidebar` (@AppStorage) — do not
+            // force it open here, or the user could never close it.
             ensureTerminal(for: currentSessionKey)
-            // Keep the user's last-chosen inspector mode/tab (persisted in
-            // WindowState). Just make sure the panel is visible and the
-            // terminal process exists for this session.
-            windowState.showInspector = true
         }
         .onChange(of: windowState.inspectorTab) { _, newTab in
             if windowState.inspectorMode == .inspector { bumpFocus(for: newTab) }
         }
         .onChange(of: windowState.inspectorMode) { _, newMode in
-            if newMode == .inspector, windowState.showInspector {
+            if newMode == .inspector, showRightSidebar {
                 bumpFocus(for: windowState.inspectorTab)
             }
         }
-        .onChange(of: windowState.showInspector) { _, isShowing in
+        .onChange(of: showRightSidebar) { _, isShowing in
             if isShowing, windowState.inspectorMode == .inspector {
                 bumpFocus(for: windowState.inspectorTab)
             }
@@ -193,7 +193,7 @@ struct RightInspectorPanel: View {
     /// from the single global Cmd+K handler in MainView.
     @ViewBuilder
     private var terminalShortcuts: some View {
-        if windowState.showInspector,
+        if showRightSidebar,
            windowState.inspectorMode == .inspector,
            windowState.inspectorTab == .terminal {
             Button("New Terminal", action: addTerminalToCurrent)
@@ -242,7 +242,7 @@ struct RightInspectorPanel: View {
             }
 
             HeaderIconButton(systemImage: "xmark", help: "Close") {
-                windowState.showInspector = false
+                showRightSidebar = false
             }
             .keyboardShortcut("w", modifiers: .command)
         }

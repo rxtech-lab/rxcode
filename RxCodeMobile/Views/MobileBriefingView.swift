@@ -21,6 +21,7 @@ struct GroupedBriefing: Identifiable {
 
 struct MobileBriefingView: View {
     @EnvironmentObject private var state: MobileAppState
+    @Namespace private var glassNamespace
 
     /// Selected project ids for filtering. Empty = show every project.
     @State private var selectedProjectIds: Set<UUID> = []
@@ -31,29 +32,36 @@ struct MobileBriefingView: View {
     var body: some View {
         GeometryReader { proxy in
             ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 16) {
                     if groups.isEmpty {
                         emptyState
                             .frame(maxWidth: .infinity, minHeight: 320)
                     } else {
-                        LazyVGrid(
-                            columns: gridColumns(for: proxy.size.width),
-                            alignment: .leading,
-                            spacing: 12
-                        ) {
-                            ForEach(groups) { group in
-                                NavigationLink(value: group.key) {
-                                    briefingRow(group)
+                        GlassEffectContainer(spacing: 16) {
+                            LazyVGrid(
+                                columns: gridColumns(for: proxy.size.width),
+                                alignment: .leading,
+                                spacing: 16
+                            ) {
+                                ForEach(groups) { group in
+                                    NavigationLink(value: group.key) {
+                                        BriefingCard(
+                                            group: group,
+                                            projectName: projectsById[group.projectId]?.name ?? "Unknown Project",
+                                            namespace: glassNamespace
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
                                 }
-                                .buttonStyle(.plain)
                             }
                         }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .padding(.horizontal, horizontalPadding(for: proxy.size.width))
-                .padding(.vertical, 16)
+                .padding(.vertical, 20)
             }
+            .scrollContentBackground(.hidden)
         }
         .navigationTitle("Briefing")
         .toolbar {
@@ -87,13 +95,13 @@ struct MobileBriefingView: View {
         } else if width >= 700 {
             minimumWidth = 320
         } else {
-            minimumWidth = max(260, width - (horizontalPadding(for: width) * 2))
+            minimumWidth = max(280, width - (horizontalPadding(for: width) * 2))
         }
 
         return [
             GridItem(
                 .adaptive(minimum: minimumWidth, maximum: 560),
-                spacing: 12,
+                spacing: 16,
                 alignment: .top
             )
         ]
@@ -230,53 +238,123 @@ struct MobileBriefingView: View {
             )
         }
     }
+}
 
-    private func briefingRow(_ group: GroupedBriefing) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(projectsById[group.projectId]?.name ?? "Unknown Project")
-                    .font(.headline)
-                    .foregroundStyle(.primary)
+// MARK: - Briefing Card
 
+private struct BriefingCard: View {
+    let group: GroupedBriefing
+    let projectName: String
+    let namespace: Namespace.ID
+
+    private var threadCount: Int { group.threads.count }
+    private var hasBriefing: Bool { !(group.briefing?.briefing.isEmpty ?? true) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header with project icon and name
+            HStack(spacing: 12) {
+                projectIcon
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(projectName)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.triangle.branch")
+                            .font(.system(size: 10, weight: .medium))
+                        Text(group.branch)
+                            .font(.caption)
+                            .lineLimit(1)
+                    }
+                    .foregroundStyle(.secondary)
+                }
+                
+                Spacer(minLength: 0)
+                
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 12)
+
+            // Summary content
+            VStack(alignment: .leading, spacing: 12) {
                 if let summary = group.briefing?.briefing, !summary.isEmpty {
                     ChatTextContentView(
                         markdown: summary,
                         size: 14,
                         color: .secondary,
-                        lineSpacing: 2,
-                        maximumNumberOfLines: 3
+                        lineSpacing: 3,
+                        maximumNumberOfLines: 4
                     )
                 } else {
-                    Text("No summary yet")
+                    Text("No summary available yet")
                         .font(.subheadline)
                         .foregroundStyle(.tertiary)
                         .italic()
                 }
-
-                HStack(spacing: 8) {
-                    Label(group.branch, systemImage: "arrow.triangle.branch")
-                    Text(group.updatedAt.formatted(.relative(presentation: .named)))
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
             }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 14)
 
-            Spacer(minLength: 0)
-
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.tertiary)
-                .padding(.top, 4)
+            // Footer with metadata
+            HStack(spacing: 12) {
+                // Thread count chip
+                if threadCount > 0 {
+                    HStack(spacing: 4) {
+                        Image(systemName: "bubble.left.and.bubble.right")
+                            .font(.system(size: 10, weight: .medium))
+                        Text("\(threadCount)")
+                            .font(.caption.weight(.medium))
+                    }
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.ultraThinMaterial, in: Capsule())
+                }
+                
+                Spacer(minLength: 0)
+                
+                // Time ago
+                Text(group.updatedAt.formatted(.relative(presentation: .named)))
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 14)
         }
-        .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.background)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 20))
+        .glassEffectID(group.id, in: namespace)
+        .contentShape(.rect(cornerRadius: 20))
+    }
+
+    private var projectIcon: some View {
+        ZStack {
+            Circle()
+                .fill(accentGradient.opacity(0.15))
+                .frame(width: 40, height: 40)
+            
+            Image(systemName: "folder.fill")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(accentGradient)
+        }
+    }
+
+    private var accentGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 0.95, green: 0.6, blue: 0.4),
+                Color(red: 0.85, green: 0.5, blue: 0.55)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
         )
-        .contentShape(Rectangle())
     }
 }
 

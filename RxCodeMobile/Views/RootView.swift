@@ -43,10 +43,14 @@ struct RootView: View {
             }
         }
         .task {
+            consumePendingDeepLink()
             await state.refreshSnapshot()
         }
         .onChange(of: state.activeSessionID) { _, newValue in
             openActiveSession(newValue)
+        }
+        .onChange(of: state.pendingDeepLink) { _, _ in
+            consumePendingDeepLink()
         }
     }
 
@@ -174,13 +178,33 @@ struct RootView: View {
         }
     }
 
-    /// Navigate to a session surfaced by the desktop (deep links, notifications,
-    /// freshly created threads). Compact mode is driven solely by `projectsPath`
-    /// while the regular split view is driven by `selectedSession`. Keeping the
-    /// two mechanisms separate avoids pushing the same chat page twice.
+    /// Navigate to a session surfaced by the desktop (freshly created threads,
+    /// desktop-driven focus changes).
     private func openActiveSession(_ sessionID: String?) {
-        guard let sessionID,
-              let session = state.sessions.first(where: { $0.id == sessionID })
+        guard let sessionID else { return }
+        navigate(toSession: sessionID, projectID: nil)
+    }
+
+    /// Consume a pending APNs deep link (set by a notification tap) and navigate
+    /// to its thread. Called both when the link changes and when the paired view
+    /// first appears, since a link can already be set at cold launch.
+    private func consumePendingDeepLink() {
+        guard let link = state.pendingDeepLink else { return }
+        state.pendingDeepLink = nil
+        navigate(toSession: link.sessionID, projectID: link.projectID)
+    }
+
+    /// Push the chat detail page for `sessionID`. Shared by desktop-driven
+    /// navigation and APNs deep links. When `projectID` is supplied (notification
+    /// payloads carry it) navigation works even before the session has synced
+    /// into `state.sessions`; otherwise the project is looked up there.
+    ///
+    /// Compact mode is driven solely by `projectsPath` while the regular split
+    /// view is driven by `selectedSession`. Keeping the two mechanisms separate
+    /// avoids pushing the same chat page twice.
+    private func navigate(toSession sessionID: String, projectID: UUID?) {
+        guard let projectID = projectID
+            ?? state.sessions.first(where: { $0.id == sessionID })?.projectId
         else { return }
 
         selectedTab = .projects
@@ -188,13 +212,13 @@ struct RootView: View {
 
         if compactClass == .compact {
             var path = NavigationPath()
-            path.append(session.projectId)
+            path.append(projectID)
             path.append(sessionID)
             if projectsPath != path {
                 projectsPath = path
             }
         } else {
-            selectedProject = session.projectId
+            selectedProject = projectID
             selectedSession = sessionID
         }
     }

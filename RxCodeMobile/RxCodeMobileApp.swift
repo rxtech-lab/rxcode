@@ -6,6 +6,7 @@ struct RxCodeMobileApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var state = MobileAppState()
     @State private var windowState = WindowState()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -23,6 +24,9 @@ struct RxCodeMobileApp: App {
                     guard let url = activity.webpageURL else { return }
                     handlePairingURL(url)
                 }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            state.handleScenePhase(newPhase)
         }
     }
 

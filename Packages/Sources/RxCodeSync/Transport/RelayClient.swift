@@ -113,16 +113,25 @@ public actor RelayClient {
     }
 
     private func openSocket() {
+        // A live socket already exists, or a competing reconnect already won
+        // the race. Opening another would register a second connection for the
+        // same pubkey on the relay — the cause of duplicate registrations when
+        // resuming from background. Never stack sockets.
+        guard task == nil else { return }
+        // A disconnect() may have landed while a scheduled reconnect was still
+        // sleeping; honour it instead of reopening.
+        guard shouldReconnect else { return }
+
         updateState(.connecting)
 
         guard var components = URLComponents(url: relayURL, resolvingAgainstBaseURL: false) else {
-            handleSocketFailure(error: RelayError.invalidURL)
+            handleSocketFailure(of: nil, error: RelayError.invalidURL)
             return
         }
         components.path = Self.webSocketPath(from: components.path)
         components.queryItems = [URLQueryItem(name: "pubkey", value: identity.publicKeyHex)]
         guard let url = components.url else {
-            handleSocketFailure(error: RelayError.invalidURL)
+            handleSocketFailure(of: nil, error: RelayError.invalidURL)
             return
         }
 
@@ -137,7 +146,7 @@ public actor RelayClient {
         // in .connecting and let the first successful ping flip us to
         // .connected, so the UI reflects the real handshake outcome.
         startReceiveLoop()
-        sendPing()
+        sendPing(on: newTask)
         startPingLoop()
     }
 
@@ -148,7 +157,10 @@ public actor RelayClient {
         return "/" + trimmed + "/ws"
     }
 
-    private func markConnected() {
+    private func markConnected(_ socket: URLSessionWebSocketTask) {
+        // A ping that completes after its socket was already replaced must not
+        // resurrect a stale connection's state.
+        guard socket === task else { return }
         if state != .connected {
             reconnectAttempt = 0
             updateState(.connected)
@@ -161,17 +173,22 @@ public actor RelayClient {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 25 * 1_000_000_000)
                 guard let self else { return }
-                await self.sendPing()
+                await self.pingCurrentSocket()
             }
         }
     }
 
-    private func sendPing() {
-        task?.sendPing { [weak self] error in
+    private func pingCurrentSocket() {
+        guard let task else { return }
+        sendPing(on: task)
+    }
+
+    private func sendPing(on socket: URLSessionWebSocketTask) {
+        socket.sendPing { [weak self] error in
             if let error {
-                Task { await self?.handleSocketFailure(error: error) }
+                Task { await self?.handleSocketFailure(of: socket, error: error) }
             } else {
-                Task { await self?.markConnected() }
+                Task { await self?.markConnected(socket) }
             }
         }
     }
@@ -196,7 +213,7 @@ public actor RelayClient {
             @unknown default: break
             }
         } catch {
-            handleSocketFailure(error: error)
+            handleSocketFailure(of: task, error: error)
         }
     }
 
@@ -229,7 +246,15 @@ public actor RelayClient {
         }
     }
 
-    private func handleSocketFailure(error: Error) {
+    private func handleSocketFailure(of failedTask: URLSessionWebSocketTask?, error: Error) {
+        // The receive loop and the ping handler both observe the same dead
+        // socket. Only the first report — the one still matching the current
+        // task — may drive a reconnect; later reports (including stale pings
+        // that resolve after a new socket is already up) are ignored. Without
+        // this guard each report would schedule its own reconnect and the
+        // client would open, and register, multiple sockets on the relay.
+        if let failedTask, failedTask !== task { return }
+
         closeSocketLocally()
         guard shouldReconnect else { return }
         reconnectAttempt += 1

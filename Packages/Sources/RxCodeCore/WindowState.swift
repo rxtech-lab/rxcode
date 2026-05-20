@@ -1,6 +1,15 @@
 import Foundation
 import SwiftUI
 
+// MARK: - AppStorageKeys
+
+/// Keys for app-wide UserDefaults state read directly via `@AppStorage` in views.
+public enum AppStorageKeys {
+    /// Persisted visibility of the right inspector sidebar. Views read this
+    /// directly with `@AppStorage` so the panel can be reliably toggled.
+    public static let showRightSidebar = "showRightSidebar"
+}
+
 // MARK: - InspectorTab
 
 public enum InspectorTab: String, CaseIterable {
@@ -134,7 +143,6 @@ public final class WindowState {
     // MARK: - UI State
 
     public var interactiveTerminal: InteractiveTerminalState?
-    public var showInspector: Bool = false
     /// Persisted to UserDefaults so the inspector remembers whether the user
     /// last looked at Review or Inspector. Defaults to Review on first launch.
     public var inspectorMode: InspectorMode = WindowState.loadInspectorMode() {

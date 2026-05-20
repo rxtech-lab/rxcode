@@ -529,6 +529,13 @@ final class MobileSyncService: ObservableObject {
                 object: nil,
                 userInfo: ["from": inbound.fromHex, "payload": answer]
             )
+        case .planDecision(let decision):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "plan_decision") else { return }
+            NotificationCenter.default.post(
+                name: .mobileSyncPlanDecisionReceived,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": decision]
+            )
         case .branchOpRequest(let req):
             guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "branch_op_request") else { return }
             NotificationCenter.default.post(
@@ -691,5 +698,6 @@ extension Notification.Name {
     static let mobileSyncSettingsUpdateReceived = Notification.Name("mobileSync.settingsUpdateReceived")
     static let mobileSyncPermissionResponse = Notification.Name("mobileSync.permissionResponse")
     static let mobileSyncQuestionAnswerReceived = Notification.Name("mobileSync.questionAnswerReceived")
+    static let mobileSyncPlanDecisionReceived = Notification.Name("mobileSync.planDecisionReceived")
     static let mobileSyncBranchOpRequested = Notification.Name("mobileSync.branchOpRequested")
 }

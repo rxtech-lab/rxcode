@@ -39,6 +39,7 @@ func main() {
 	apnsTeamID := flag.String("apns-team-id", os.Getenv("APNS_TEAM_ID"), "APNs Team ID (env: APNS_TEAM_ID)")
 	apnsTopic := flag.String("apns-topic", os.Getenv("APNS_TOPIC"), "APNs topic / iOS bundle ID (env: APNS_TOPIC)")
 	apnsProduction := flag.Bool("apns-production", envBool("APNS_PRODUCTION", false), "use production APNs endpoint instead of sandbox (env: APNS_PRODUCTION)")
+	redisURL := flag.String("redis-url", os.Getenv("REDIS_URL"), "Redis URL for the multi-node pub/sub backplane; empty runs single-node (env: REDIS_URL)")
 	flag.Parse()
 
 	// APNs .p8 key can come from a base64-encoded env var (preferred for
@@ -49,6 +50,22 @@ func main() {
 	}
 
 	hub := NewHub()
+
+	// Optional Redis backplane. With REDIS_URL set the relay can run multiple
+	// replicas behind a load balancer; without it the relay runs single-node
+	// with purely in-memory routing and no Redis dependency at runtime.
+	if *redisURL != "" {
+		bp, err := NewBackplane(context.Background(), *redisURL, hub)
+		if err != nil {
+			log.Fatalf("init redis backplane: %v", err)
+		}
+		hub.backplane = bp
+		go bp.Run()
+		log.Printf("redis backplane enabled — multi-node mode")
+	} else {
+		log.Printf("no REDIS_URL set — single-node mode (in-memory routing only)")
+	}
+
 	go hub.Run()
 
 	var pushSender *PushSender

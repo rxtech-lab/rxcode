@@ -82,7 +82,11 @@ private struct CompactChatMessageBubble: View {
                 assistantText(text)
             }
         case .tool(let toolCall):
-            ToolResultView(toolCall: toolCall, isMessageStreaming: message.isStreaming)
+            if toolCall.name == "AskUserQuestion" {
+                AskUserQuestionView(toolCall: toolCall)
+            } else {
+                ToolResultView(toolCall: toolCall, isMessageStreaming: message.isStreaming)
+            }
         case .transientTools(_, let tools):
             ChatTransientToolSummaryView(tools: tools)
         }

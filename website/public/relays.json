@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "updatedAt": "2026-05-20",
+  "relays": [
+    {
+      "id": "rxlab-hosted",
+      "name": "RxLab Hosted Relay",
+      "url": "wss://relay.code.rxlab.app",
+      "description": "Official end-to-end encrypted relay operated by RxLab. Recommended for most setups.",
+      "recommended": true
+    }
+  ]
+}

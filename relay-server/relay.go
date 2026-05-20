@@ -49,6 +49,10 @@ type Hub struct {
 	register   chan *Conn
 	unregister chan *Conn
 	route      chan *Envelope
+
+	// backplane fans envelopes to other replicas over Redis. nil means the
+	// relay runs single-node and routes purely from the in-memory map.
+	backplane *Backplane
 }
 
 func NewHub() *Hub {
@@ -70,14 +74,25 @@ func (h *Hub) Run() {
 			}
 			h.conns[c.pubkey] = c
 			h.mu.Unlock()
+			if h.backplane != nil {
+				h.backplane.MarkPresent(c.pubkey)
+			}
 			log.Printf("registered %s", short(c.pubkey))
 		case c := <-h.unregister:
 			h.mu.Lock()
+			removed := false
 			if current, ok := h.conns[c.pubkey]; ok && current == c {
 				delete(h.conns, c.pubkey)
 				close(c.send)
+				removed = true
 			}
 			h.mu.Unlock()
+			// Only clear cluster presence when this exact connection was the
+			// one removed — a reconnect that already replaced it must keep its
+			// presence marker intact.
+			if removed && h.backplane != nil {
+				h.backplane.ClearPresence(c.pubkey)
+			}
 			log.Printf("unregistered %s", short(c.pubkey))
 		case env := <-h.route:
 			h.deliver(env)
@@ -85,25 +100,54 @@ func (h *Hub) Run() {
 	}
 }
 
+// deliver routes an envelope to its recipient. The recipient may be connected
+// to this pod, to another pod (reached via the Redis backplane), or offline.
 func (h *Hub) deliver(env *Envelope) {
+	if h.deliverLocal(env) {
+		return
+	}
+	// Not connected to this pod.
+	if h.backplane != nil {
+		// Another replica may hold the connection. The backplane round-trips
+		// to Redis, so run it off the hub loop to keep local routing fast.
+		go h.routeViaBackplane(env)
+		return
+	}
+	// Single-node: a missing local connection means the peer is offline.
+	h.notifyDeliveryFailed(env.From, env.To)
+}
+
+// deliverLocal delivers an envelope to a recipient connected to this pod and
+// reports whether such a connection existed. It never touches the backplane,
+// so it is safe to call on envelopes arriving from the backplane without
+// risking a re-publish loop.
+func (h *Hub) deliverLocal(env *Envelope) bool {
 	raw, err := json.Marshal(env)
 	if err != nil {
 		log.Printf("marshal envelope: %v", err)
-		return
+		return false
 	}
 	h.mu.RLock()
 	dest, ok := h.conns[env.To]
 	h.mu.RUnlock()
 	if !ok {
-		// Drop on offline. Optionally notify sender.
-		h.notifyDeliveryFailed(env.From, env.To)
-		return
+		return false
 	}
 	select {
 	case dest.send <- raw:
 	default:
 		// Slow consumer; drop and disconnect.
 		log.Printf("send buffer full for %s — dropping", short(env.To))
+	}
+	return true
+}
+
+// routeViaBackplane fans an envelope to the other replicas and, when the peer
+// is offline cluster-wide, notifies the sender. Runs on its own goroutine.
+func (h *Hub) routeViaBackplane(env *Envelope) {
+	h.backplane.Publish(env)
+	if !h.backplane.ConnectedAnywhere(env.To) {
+		h.notifyDeliveryFailed(env.From, env.To)
 	}
 }
 
@@ -209,6 +253,10 @@ func (c *Conn) writePump() {
 				return
 			}
 		case <-ticker.C:
+			// Refresh cluster presence before it can expire (TTL > pingPeriod).
+			if c.hub.backplane != nil {
+				c.hub.backplane.MarkPresent(c.pubkey)
+			}
 			_ = c.ws.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := c.ws.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return

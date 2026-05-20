@@ -13,12 +13,17 @@ var startedAt = time.Now()
 // settings tab to verify the configured relay is reachable.
 func healthHandler(hub *Hub, sender *PushSender) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		mode := "single-node"
+		if hub.backplane != nil {
+			mode = "multi-node"
+		}
 		status := map[string]any{
 			"ok":         true,
 			"uptime_sec": int(time.Since(startedAt).Seconds()),
 			"peers":      hub.ConnectedCount(),
 			"apns":       sender != nil,
-			"version":    "0.1.0",
+			"mode":       mode,
+			"version":    "0.2.0",
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)

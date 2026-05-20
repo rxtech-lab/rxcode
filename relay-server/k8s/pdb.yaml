@@ -1,0 +1,14 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: rxcode-relay
+  namespace: rxcode-relay
+  labels:
+    app: rxcode-relay
+spec:
+  # Keep at least one relay serving WebSocket clients through node drains and
+  # rolling updates.
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: rxcode-relay

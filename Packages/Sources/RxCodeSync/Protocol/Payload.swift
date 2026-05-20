@@ -24,6 +24,8 @@ public enum Payload: Sendable {
     case threadActionRequest(ThreadActionRequestPayload)
     case loadMoreMessages(LoadMoreMessagesRequestPayload)
     case moreMessages(MoreMessagesPayload)
+    case threadChangesRequest(ThreadChangesRequestPayload)
+    case threadChangesResult(ThreadChangesResultPayload)
     case searchRequest(SearchRequestPayload)
     case searchResults(SearchResultsPayload)
     case notification(NotificationPayload)
@@ -68,6 +70,8 @@ public extension Payload {
         case .threadActionRequest: return "thread_action_request"
         case .loadMoreMessages: return "load_more_messages"
         case .moreMessages: return "more_messages"
+        case .threadChangesRequest: return "thread_changes_request"
+        case .threadChangesResult: return "thread_changes_result"
         case .searchRequest: return "search_request"
         case .searchResults: return "search_results"
         case .notification: return "notification"
@@ -156,19 +160,27 @@ public struct LiveActivityTokenPayload: Codable, Sendable {
     /// desktop then forgets the activity so the next stream of the same session
     /// starts a fresh one instead of pushing to a token that no longer renders.
     public let activityDismissed: Bool?
+    /// `true` when the foregrounded device started the Live Activity itself
+    /// with `Activity.request`. Reported the instant the activity is created —
+    /// well before its per-activity push token, which APNs can take several
+    /// seconds to mint — so the desktop can cancel its deferred push-to-start
+    /// and never spawn a duplicate activity.
+    public let activityStartedLocally: Bool?
 
     public init(
         pushToStartTokenHex: String? = nil,
         activityTokenHex: String? = nil,
         activityID: String? = nil,
         sessionID: String? = nil,
-        activityDismissed: Bool? = nil
+        activityDismissed: Bool? = nil,
+        activityStartedLocally: Bool? = nil
     ) {
         self.pushToStartTokenHex = pushToStartTokenHex
         self.activityTokenHex = activityTokenHex
         self.activityID = activityID
         self.sessionID = sessionID
         self.activityDismissed = activityDismissed
+        self.activityStartedLocally = activityStartedLocally
     }
 }
 
@@ -1241,6 +1253,117 @@ public struct SearchResultsPayload: Codable, Sendable {
     }
 }
 
+// MARK: - Thread changes
+
+/// Mobile-initiated request for the change overview of a thread: every file
+/// edited in the thread session plus the project's uncommitted git changes.
+/// The desktop is the authoritative source for both (SwiftData edit history and
+/// the working tree), so it builds the whole `ThreadChangesResultPayload`.
+public struct ThreadChangesRequestPayload: Codable, Sendable {
+    public let clientRequestID: UUID
+    public let sessionID: String
+
+    public init(clientRequestID: UUID = UUID(), sessionID: String) {
+        self.clientRequestID = clientRequestID
+        self.sessionID = sessionID
+    }
+}
+
+/// One old/new replacement pair. Wire form of `PreviewFile.EditHunk`, which is
+/// not itself `Codable`.
+public struct SyncEditHunk: Codable, Sendable, Equatable {
+    public let oldString: String
+    public let newString: String
+
+    public init(oldString: String, newString: String) {
+        self.oldString = oldString
+        self.newString = newString
+    }
+}
+
+/// Aggregated edits to a single file across a whole thread session. Wire form
+/// of `FileEditSummary`.
+public struct SyncFileEdit: Codable, Sendable, Identifiable {
+    public var id: String { path }
+    public let path: String
+    public let name: String
+    /// True if any contributing tool was Write — old content was overwritten.
+    public let containsWrite: Bool
+    public let hunks: [SyncEditHunk]
+
+    public init(path: String, name: String, containsWrite: Bool, hunks: [SyncEditHunk]) {
+        self.path = path
+        self.name = name
+        self.containsWrite = containsWrite
+        self.hunks = hunks
+    }
+}
+
+/// Which side of the working tree a git change lives on.
+public enum SyncGitChangeKind: String, Codable, Sendable {
+    case staged
+    case unstaged
+    case untracked
+}
+
+/// One uncommitted file in the project's working tree, with its unified diff.
+public struct SyncGitChange: Codable, Sendable, Identifiable {
+    public var id: String { "\(kind.rawValue):\(displayPath)" }
+    /// Path relative to the repository root.
+    public let displayPath: String
+    /// Porcelain status letter (M/A/D/R/?/…).
+    public let statusChar: String
+    public let kind: SyncGitChangeKind
+    /// Unified diff text. For untracked files this is an all-added diff.
+    public let unifiedDiff: String
+    /// True when `unifiedDiff` was clipped because it exceeded the line cap.
+    public let truncated: Bool
+
+    public init(
+        displayPath: String,
+        statusChar: String,
+        kind: SyncGitChangeKind,
+        unifiedDiff: String,
+        truncated: Bool
+    ) {
+        self.displayPath = displayPath
+        self.statusChar = statusChar
+        self.kind = kind
+        self.unifiedDiff = unifiedDiff
+        self.truncated = truncated
+    }
+}
+
+/// Desktop reply to a `ThreadChangesRequestPayload`: the two datasets backing
+/// the mobile "View Changes" sheet.
+public struct ThreadChangesResultPayload: Codable, Sendable {
+    public let clientRequestID: UUID
+    public let sessionID: String
+    /// False when the request could not be served (e.g. not a git repository).
+    public let ok: Bool
+    public let errorMessage: String?
+    /// Every file edited in the thread session.
+    public let turnEdits: [SyncFileEdit]
+    /// Uncommitted git changes in the session's project.
+    public let uncommitted: [SyncGitChange]
+
+    public init(
+        clientRequestID: UUID,
+        sessionID: String,
+        ok: Bool,
+        errorMessage: String? = nil,
+        turnEdits: [SyncFileEdit],
+        uncommitted: [SyncGitChange]
+    ) {
+        self.clientRequestID = clientRequestID
+        self.sessionID = sessionID
+        self.ok = ok
+        self.errorMessage = errorMessage
+        self.turnEdits = turnEdits
+        self.uncommitted = uncommitted
+    }
+}
+
 public struct NotificationPayload: Codable, Sendable {
     public enum Kind: String, Codable, Sendable {
         case responseComplete
@@ -1444,6 +1567,8 @@ extension Payload: Codable {
         case threadActionRequest = "thread_action_request"
         case loadMoreMessages = "load_more_messages"
         case moreMessages = "more_messages"
+        case threadChangesRequest = "thread_changes_request"
+        case threadChangesResult = "thread_changes_result"
         case searchRequest = "search_request"
         case searchResults = "search_results"
         case notification
@@ -1492,6 +1617,8 @@ extension Payload: Codable {
         case .threadActionRequest: self = .threadActionRequest(try container.decode(ThreadActionRequestPayload.self, forKey: .data))
         case .loadMoreMessages: self = .loadMoreMessages(try container.decode(LoadMoreMessagesRequestPayload.self, forKey: .data))
         case .moreMessages: self = .moreMessages(try container.decode(MoreMessagesPayload.self, forKey: .data))
+        case .threadChangesRequest: self = .threadChangesRequest(try container.decode(ThreadChangesRequestPayload.self, forKey: .data))
+        case .threadChangesResult: self = .threadChangesResult(try container.decode(ThreadChangesResultPayload.self, forKey: .data))
         case .searchRequest: self = .searchRequest(try container.decode(SearchRequestPayload.self, forKey: .data))
         case .searchResults: self = .searchResults(try container.decode(SearchResultsPayload.self, forKey: .data))
         case .notification: self = .notification(try container.decode(NotificationPayload.self, forKey: .data))
@@ -1536,6 +1663,8 @@ extension Payload: Codable {
         case .threadActionRequest(let p): try container.encode(TypeKey.threadActionRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .loadMoreMessages(let p): try container.encode(TypeKey.loadMoreMessages.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .moreMessages(let p): try container.encode(TypeKey.moreMessages.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .threadChangesRequest(let p): try container.encode(TypeKey.threadChangesRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .threadChangesResult(let p): try container.encode(TypeKey.threadChangesResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .searchRequest(let p): try container.encode(TypeKey.searchRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .searchResults(let p): try container.encode(TypeKey.searchResults.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .notification(let p): try container.encode(TypeKey.notification.rawValue, forKey: .type); try container.encode(p, forKey: .data)

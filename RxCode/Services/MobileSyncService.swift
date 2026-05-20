@@ -102,13 +102,19 @@ final class MobileSyncService: ObservableObject {
 
     /// Session ids currently streaming — the live job count for the widget.
     private var streamingSessionIDs: Set<String> = []
-    /// Per-job Live Activity bookkeeping, keyed by session id.
-    private var jobActivityState: [String: JobActivityState] = [:]
-    /// Pending delayed push-to-start tasks, keyed by session id. The
-    /// push-to-start is deferred briefly so a foregrounded device can instead
-    /// start the activity locally; the task is cancelled once that device
-    /// reports a per-activity token.
-    private var pendingStartTasks: [String: Task<Void, Never>] = [:]
+    /// Every job tracked by the single aggregate Live Activity: those still
+    /// running plus recently finished ones, in start order.
+    private var trackedJobs: [JobContent] = []
+    /// `true` once a foregrounded device reported it started the activity
+    /// locally; suppresses the push-to-start until the activity goes away.
+    private var jobsActivityLocallyStarted = false
+    /// Signature of the content-state last pushed, so an update only fires on
+    /// a real change rather than on every session event.
+    private var lastPushedJobsSignature = ""
+    /// Pending deferred push-to-start. The push-to-start is delayed briefly so
+    /// a foregrounded device can start the activity locally instead; this task
+    /// is cancelled once a device reports it did.
+    private var pendingStartTask: Task<Void, Never>?
     /// Last widget job count pushed, so a widget push only fires on a change.
     private var lastWidgetJobCount: Int = -1
 
@@ -451,8 +457,8 @@ final class MobileSyncService: ObservableObject {
 
     // MARK: - Live Activity & widget push
 
-    /// Fold a session update into the streaming-job set and the per-job Live
-    /// Activity state, then push any resulting Live Activity / widget changes.
+    /// Fold a session update into the streaming-job set and the aggregate Live
+    /// Activity, then push any resulting Live Activity / widget changes.
     /// Called for every `broadcastSessionUpdate`.
     private func updateJobTracking(
         sessionID: String,
@@ -472,59 +478,43 @@ final class MobileSyncService: ObservableObject {
         }
         // Summaries carry title/progress/todos — they drive the Live Activity.
         if let summary {
-            reconcileJobActivity(summary: summary)
+            foldSummaryIntoJobs(summary)
+            pushJobsActivity()
         }
         pushWidgetUpdateIfJobCountChanged()
     }
 
-    /// Drive a job's Live Activity from the latest summary.
+    /// Merge one session summary into `trackedJobs`.
     ///
-    /// An activity is created once with a push-to-start, then reused for the
-    /// lifetime of the session: it flips between "running" and "done" via
-    /// update pushes and is never ended or auto-dismissed by the desktop. This
-    /// keeps re-runs of the same thread off the scarce iOS push-to-start
-    /// budget; the user dismisses the activity when they are done with it.
-    private func reconcileJobActivity(summary: RxCodeSync.SessionSummary) {
-        let sessionID = summary.id
+    /// A running session is inserted or updated. A finished session updates
+    /// the job only if it is already tracked, and is otherwise ignored — the
+    /// aggregate activity follows jobs it saw start. When a new job begins
+    /// while every tracked job is already done, the previous (acknowledged)
+    /// batch is cleared so the activity starts a fresh list.
+    private func foldSummaryIntoJobs(_ summary: RxCodeSync.SessionSummary) {
         let content = makeJobContent(from: summary)
-        if summary.isStreaming {
-            if var state = jobActivityState[sessionID] {
-                // The activity already exists — reuse it. Flip it back to
-                // "running" if the job had finished, and push an update
-                // whenever the rendered state changes.
-                let contentChanged = state.lastContent.signature != content.signature
-                let resumed = state.isDone
-                state.lastContent = content
-                state.isDone = false
-                jobActivityState[sessionID] = state
-                if contentChanged || resumed {
-                    logger.info("[LiveActivity] reconcile decision=update session=\(sessionID, privacy: .public) resumed=\(resumed, privacy: .public) todos=\(content.todoDone, privacy: .public)/\(content.todoTotal, privacy: .public)")
-                    sendLiveActivityUpdate(content, phase: "running")
-                } else {
-                    logger.debug("[LiveActivity] reconcile decision=skip-unchanged session=\(sessionID, privacy: .public)")
-                }
+        if let idx = trackedJobs.firstIndex(where: { $0.sessionID == summary.id }) {
+            trackedJobs[idx] = content
+        } else if summary.isStreaming {
+            if !trackedJobs.isEmpty, trackedJobs.allSatisfy(\.isDone) {
+                trackedJobs.removeAll()
+                lastPushedJobsSignature = ""
+            }
+            trackedJobs.append(content)
+        }
+        pruneTrackedJobs()
+    }
+
+    /// Cap the tracked-job list, dropping the oldest finished jobs first so a
+    /// long-lived device never accumulates an unbounded history.
+    private func pruneTrackedJobs() {
+        let cap = 6
+        while trackedJobs.count > cap {
+            if let doneIdx = trackedJobs.firstIndex(where: \.isDone) {
+                trackedJobs.remove(at: doneIdx)
             } else {
-                jobActivityState[sessionID] = JobActivityState(lastContent: content)
-                logger.info("[LiveActivity] reconcile decision=start session=\(sessionID, privacy: .public)")
-                scheduleLiveActivityStart(for: sessionID)
+                trackedJobs.removeFirst()
             }
-        } else if var state = jobActivityState[sessionID] {
-            // The job finished. Keep the activity alive in the "done" state so
-            // it can be reused if the session streams again; the user dismisses
-            // it manually. We never end or auto-dismiss it ourselves.
-            guard !state.isDone else {
-                logger.debug("[LiveActivity] reconcile decision=skip-already-done session=\(sessionID, privacy: .public)")
-                return
-            }
-            // The job is already finished — no need to push-to-start it.
-            cancelPendingStart(sessionID)
-            state.isDone = true
-            state.lastContent = content
-            jobActivityState[sessionID] = state
-            logger.info("[LiveActivity] reconcile decision=done session=\(sessionID, privacy: .public)")
-            sendLiveActivityUpdate(content, phase: "done", staleAfter: 8 * 3600)
-        } else {
-            logger.debug("[LiveActivity] reconcile decision=ignore session=\(sessionID, privacy: .public) — not streaming and no active activity")
         }
     }
 
@@ -535,71 +525,112 @@ final class MobileSyncService: ObservableObject {
             projectName: projectNameResolver?(summary.projectId) ?? "",
             todoDone: summary.progress?.done ?? 0,
             todoTotal: summary.progress?.total ?? 0,
-            currentStep: summary.todos?.first { $0.status == .inProgress }?.activeForm
+            currentStep: summary.todos?.first { $0.status == .inProgress }?.activeForm,
+            isDone: !summary.isStreaming
         )
     }
 
-    /// Schedule the push-to-start after a short delay. A foregrounded mobile
-    /// starts the activity itself (no push-to-start budget) and reports its
-    /// token within a second or two; that token cancels this task. Only a
-    /// backgrounded device — which cannot start an activity on its own — ends
-    /// up actually receiving the push-to-start.
-    private func scheduleLiveActivityStart(for sessionID: String) {
-        pendingStartTasks[sessionID]?.cancel()
-        pendingStartTasks[sessionID] = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(5))
-            guard !Task.isCancelled, let self else { return }
-            self.pendingStartTasks.removeValue(forKey: sessionID)
-            guard let job = self.jobActivityState[sessionID], !job.isDone else { return }
-            let hasToken = self.pairedDevices.contains { device in
-                (device.liveActivityTokens ?? []).contains { $0.sessionID == sessionID }
-            }
-            guard !hasToken else {
-                self.logger.info("[LiveActivity] push-to-start skipped session=\(sessionID, privacy: .public) — device started the activity locally")
+    // MARK: Aggregate Live Activity
+
+    /// Concatenated per-job signatures — identifies a distinct rendered state.
+    private var jobsSignature: String {
+        trackedJobs.map(\.signature).joined(separator: ";")
+    }
+
+    /// `true` once every tracked job has finished.
+    private var allJobsDone: Bool {
+        !trackedJobs.isEmpty && trackedJobs.allSatisfy(\.isDone)
+    }
+
+    /// `true` when some paired device has registered the aggregate activity's
+    /// update token — i.e. the activity exists and can be pushed `update`s.
+    private var hasAnyActivityToken: Bool {
+        pairedDevices.contains { !($0.liveActivityTokens ?? []).isEmpty }
+    }
+
+    /// Drive the single aggregate Live Activity from `trackedJobs`.
+    ///
+    /// The activity is created once with a push-to-start and then reused for
+    /// the lifetime of the device session: it is never ended or auto-dismissed
+    /// by the desktop, only updated. One activity for every job keeps re-runs
+    /// off the scarce iOS push-to-start budget; the user dismisses it.
+    private func pushJobsActivity() {
+        guard !trackedJobs.isEmpty else { return }
+        let staleAfter: TimeInterval = allJobsDone ? 8 * 3600 : 3600
+        if hasAnyActivityToken {
+            let signature = jobsSignature
+            guard signature != lastPushedJobsSignature else {
+                logger.debug("[LiveActivity] jobs activity unchanged — skip update")
                 return
             }
-            self.logger.info("[LiveActivity] push-to-start firing session=\(sessionID, privacy: .public) — no local activity was reported")
-            self.sendLiveActivityStart(job.lastContent)
+            lastPushedJobsSignature = signature
+            logger.info("[LiveActivity] jobs activity update jobs=\(self.trackedJobs.count, privacy: .public) running=\(self.trackedJobs.filter { !$0.isDone }.count, privacy: .public)")
+            sendJobsActivityUpdate(staleAfter: staleAfter)
+        } else if jobsActivityLocallyStarted {
+            // The activity exists locally; its update token has not been
+            // minted yet. The first push goes out when that token registers.
+            logger.debug("[LiveActivity] jobs activity started locally — awaiting update token")
+        } else {
+            scheduleJobsActivityStart()
         }
     }
 
-    /// Cancel a pending push-to-start — the activity already exists, or the
-    /// job ended before the delay elapsed.
-    private func cancelPendingStart(_ sessionID: String) {
-        if let task = pendingStartTasks.removeValue(forKey: sessionID) {
-            task.cancel()
-            logger.debug("[LiveActivity] pending push-to-start cancelled session=\(sessionID, privacy: .public)")
+    /// Schedule the push-to-start after a short delay. A foregrounded device
+    /// starts the activity itself (no push-to-start budget) and reports it
+    /// within a second or two, cancelling this task. Only a backgrounded
+    /// device ends up actually receiving the push-to-start.
+    private func scheduleJobsActivityStart() {
+        guard pendingStartTask == nil else { return }
+        logger.info("[LiveActivity] scheduling jobs activity push-to-start in 5s")
+        pendingStartTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled, let self else { return }
+            self.pendingStartTask = nil
+            guard !self.trackedJobs.isEmpty else { return }
+            guard !self.hasAnyActivityToken, !self.jobsActivityLocallyStarted else {
+                self.logger.info("[LiveActivity] push-to-start skipped — a device already has the activity")
+                return
+            }
+            self.sendJobsActivityStart()
         }
     }
 
-    /// Push a `start` Live Activity to every device with a push-to-start token.
-    private func sendLiveActivityStart(_ content: JobContent) {
+    /// Cancel a pending push-to-start — the activity already exists.
+    private func cancelJobsActivityStart() {
+        if pendingStartTask != nil {
+            pendingStartTask?.cancel()
+            pendingStartTask = nil
+            logger.debug("[LiveActivity] pending push-to-start cancelled")
+        }
+    }
+
+    /// Push a `start` for the aggregate activity to every device with a
+    /// push-to-start token.
+    private func sendJobsActivityStart() {
         let devices = pairedDevices.filter { ($0.liveActivityStartToken?.isEmpty == false) }
         guard !devices.isEmpty else {
-            logger.warning("[LiveActivity] start skipped session=\(content.sessionID, privacy: .public) — no paired device has a push-to-start token (pairedDevices=\(self.pairedDevices.count, privacy: .public)); the mobile app must register one first")
+            logger.warning("[LiveActivity] start skipped — no paired device has a push-to-start token (pairedDevices=\(self.pairedDevices.count, privacy: .public))")
             return
         }
         guard let pushURL = Self.pushEndpointURL(from: relayURL) else {
-            logger.error("[LiveActivity] start skipped session=\(content.sessionID, privacy: .public) — cannot derive push endpoint from relay \(self.relayURL.absoluteString, privacy: .public)")
+            logger.error("[LiveActivity] start skipped — cannot derive push endpoint from relay \(self.relayURL.absoluteString, privacy: .public)")
             return
         }
         let now = Date()
+        let staleAfter: TimeInterval = allJobsDone ? 8 * 3600 : 3600
         let payload: [String: Any] = ["aps": [
             "timestamp": Int(now.timeIntervalSince1970),
             "event": "start",
-            "content-state": contentStateDict(content, phase: "running", at: now),
+            "content-state": jobsContentStateDict(at: now),
             "attributes-type": "RxCodeJobActivityAttributes",
-            "attributes": [
-                "sessionID": content.sessionID,
-                "projectName": content.projectName,
-                "title": content.title,
-            ],
-            "stale-date": Int(now.addingTimeInterval(3600).timeIntervalSince1970),
+            "attributes": [String: Any](),
+            "stale-date": Int(now.addingTimeInterval(staleAfter).timeIntervalSince1970),
         ]]
-        logger.info("[LiveActivity] start session=\(content.sessionID, privacy: .public) devices=\(devices.count, privacy: .public) project=\(content.projectName, privacy: .public) title=\(content.title, privacy: .public) phase=running todos=\(content.todoDone, privacy: .public)/\(content.todoTotal, privacy: .public) step=\(content.currentStep ?? "<none>", privacy: .public)")
+        lastPushedJobsSignature = jobsSignature
+        logger.info("[LiveActivity] start jobs activity devices=\(devices.count, privacy: .public) jobs=\(self.trackedJobs.count, privacy: .public)")
         for device in devices {
             guard let token = device.liveActivityStartToken else { continue }
-            logger.info("[LiveActivity] start → posting push session=\(content.sessionID, privacy: .public) startTokenPrefix=\(String(token.prefix(12)), privacy: .public) deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
+            logger.info("[LiveActivity] start → posting push startTokenPrefix=\(String(token.prefix(12)), privacy: .public) deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
             Task {
                 await postRawPush(deviceToken: token, pushType: "liveactivity",
                                   apnsPayload: payload, collapseID: nil, device: device, pushURL: pushURL)
@@ -607,58 +638,61 @@ final class MobileSyncService: ObservableObject {
         }
     }
 
-    /// Push an `update` to a job's activity. `staleAfter` sets when the
-    /// activity dims to its stale presentation — long for the terminal "done"
-    /// state, which stays on screen until the user dismisses it. No `end` or
-    /// `dismissal-date` is ever sent: the desktop keeps the activity alive and
-    /// only the user dismisses it.
-    private func sendLiveActivityUpdate(_ content: JobContent, phase: String, staleAfter: TimeInterval = 3600) {
+    /// Push an `update` for the aggregate activity. `staleAfter` sets when the
+    /// activity dims — long for the terminal all-done state, which stays on
+    /// screen until the user dismisses it. No `end` is ever sent.
+    private func sendJobsActivityUpdate(staleAfter: TimeInterval) {
         let now = Date()
         let payload: [String: Any] = ["aps": [
             "timestamp": Int(now.timeIntervalSince1970),
             "event": "update",
-            "content-state": contentStateDict(content, phase: phase, at: now),
+            "content-state": jobsContentStateDict(at: now),
             "stale-date": Int(now.addingTimeInterval(staleAfter).timeIntervalSince1970),
         ]]
-        pushToActivityTokens(sessionID: content.sessionID, payload: payload)
+        pushToActivityTokens(payload: payload)
     }
 
     /// Build the ActivityKit `content-state` dict. Field names mirror
     /// `RxCodeJobActivityAttributes.ContentState` in the widget target.
-    private func contentStateDict(_ content: JobContent, phase: String, at date: Date) -> [String: Any] {
-        var dict: [String: Any] = [
-            "phase": phase,
-            "todoDone": content.todoDone,
-            "todoTotal": content.todoTotal,
-            "updatedAt": date.timeIntervalSince1970,
-        ]
-        if let step = content.currentStep, !step.isEmpty {
-            dict["currentStep"] = step
+    private func jobsContentStateDict(at date: Date) -> [String: Any] {
+        let jobs: [[String: Any]] = trackedJobs.map { job in
+            var dict: [String: Any] = [
+                "id": job.sessionID,
+                "phase": job.isDone ? "done" : "running",
+                "title": job.title,
+                "projectName": job.projectName,
+                "todoDone": job.todoDone,
+                "todoTotal": job.todoTotal,
+            ]
+            if let step = job.currentStep, !step.isEmpty {
+                dict["currentStep"] = step
+            }
+            return dict
         }
-        return dict
+        return ["jobs": jobs, "updatedAt": date.timeIntervalSince1970]
     }
 
-    /// Push a Live Activity payload to every per-activity token bound to a job.
-    private func pushToActivityTokens(sessionID: String, payload: [String: Any]) {
+    /// Push a Live Activity payload to every registered aggregate-activity
+    /// token (one per paired device).
+    private func pushToActivityTokens(payload: [String: Any]) {
         guard let pushURL = Self.pushEndpointURL(from: relayURL) else {
-            logger.error("[LiveActivity] update/end skipped session=\(sessionID, privacy: .public) — cannot derive push endpoint from relay \(self.relayURL.absoluteString, privacy: .public)")
+            logger.error("[LiveActivity] update skipped — cannot derive push endpoint from relay \(self.relayURL.absoluteString, privacy: .public)")
             return
         }
-        let collapseID = "rxcode-la-\(sessionID.prefix(40))"
         var matched = 0
         for device in pairedDevices {
-            for ref in (device.liveActivityTokens ?? []) where ref.sessionID == sessionID {
+            for ref in (device.liveActivityTokens ?? []) {
                 matched += 1
-                logger.info("[LiveActivity] push → activity token session=\(sessionID, privacy: .public) activity=\(ref.activityID, privacy: .public) tokenPrefix=\(String(ref.token.prefix(12)), privacy: .public) deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
+                logger.info("[LiveActivity] push → activity token activity=\(ref.activityID, privacy: .public) tokenPrefix=\(String(ref.token.prefix(12)), privacy: .public) deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
                 Task {
                     await postRawPush(deviceToken: ref.token, pushType: "liveactivity",
-                                      apnsPayload: payload, collapseID: collapseID,
+                                      apnsPayload: payload, collapseID: "rxcode-jobs-activity",
                                       device: device, pushURL: pushURL)
                 }
             }
         }
         if matched == 0 {
-            logger.warning("[LiveActivity] update/end has no registered per-activity token session=\(sessionID, privacy: .public) — the mobile never reported one, so push-to-start likely failed to spawn an Activity on the device")
+            logger.warning("[LiveActivity] update has no registered activity token — the mobile never reported one")
         }
     }
 
@@ -784,47 +818,40 @@ final class MobileSyncService: ObservableObject {
                 logger.info("[LiveActivity] push-to-start token registered mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
             }
             if t.activityDismissed == true {
-                // The user swiped the Live Activity away. Forget the activity
-                // and its token so the next stream of this session starts a
-                // fresh one instead of pushing to a token that no longer
-                // renders anything.
-                let sessionID = t.sessionID ?? ""
-                if !sessionID.isEmpty {
-                    jobActivityState.removeValue(forKey: sessionID)
-                    cancelPendingStart(sessionID)
-                }
+                // The user swiped the aggregate Live Activity away. Forget
+                // this device's update token; once no device tracks the
+                // activity the next job push-to-starts a fresh one.
                 if var refs = pairedDevices[idx].liveActivityTokens {
-                    refs.removeAll {
-                        $0.activityID == t.activityID || (!sessionID.isEmpty && $0.sessionID == sessionID)
-                    }
-                    pairedDevices[idx].liveActivityTokens = refs
+                    refs.removeAll { t.activityID == nil || $0.activityID == t.activityID }
+                    pairedDevices[idx].liveActivityTokens = refs.isEmpty ? nil : refs
                 }
-                logger.info("[LiveActivity] activity dismissed by user activity=\(t.activityID ?? "<nil>", privacy: .public) session=\(sessionID, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+                if !hasAnyActivityToken {
+                    jobsActivityLocallyStarted = false
+                    lastPushedJobsSignature = ""
+                    cancelJobsActivityStart()
+                }
+                logger.info("[LiveActivity] aggregate activity dismissed by user activity=\(t.activityID ?? "<nil>", privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+            } else if t.activityStartedLocally == true {
+                // A foregrounded device started the activity itself with
+                // `Activity.request` and reported it the instant it was
+                // created — long before APNs mints the update token. Cancel
+                // the deferred push-to-start so iOS never spawns a duplicate.
+                jobsActivityLocallyStarted = true
+                cancelJobsActivityStart()
+                logger.info("[LiveActivity] device started aggregate activity locally mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public) — deferred push-to-start cancelled")
             } else if let activityToken = t.activityTokenHex, !activityToken.isEmpty,
                       let activityID = t.activityID {
-                let ref = LiveActivityTokenRef(
-                    activityID: activityID,
-                    sessionID: t.sessionID ?? "",
-                    token: activityToken
-                )
-                var refs = pairedDevices[idx].liveActivityTokens ?? []
-                // One activity per session — drop any prior ref for the same
-                // activity or session so stale tokens don't accumulate.
-                refs.removeAll {
-                    $0.activityID == activityID || (!ref.sessionID.isEmpty && $0.sessionID == ref.sessionID)
-                }
-                refs.append(ref)
-                pairedDevices[idx].liveActivityTokens = refs
-                logger.info("[LiveActivity] activity token registered activity=\(activityID, privacy: .public) session=\(ref.sessionID, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
-                // A token means the activity exists — drop any pending
-                // push-to-start so a second activity is never created.
-                if !ref.sessionID.isEmpty {
-                    cancelPendingStart(ref.sessionID)
-                }
+                // One aggregate activity per device — replace any prior token.
+                pairedDevices[idx].liveActivityTokens = [
+                    LiveActivityTokenRef(activityID: activityID, sessionID: "", token: activityToken)
+                ]
+                logger.info("[LiveActivity] aggregate activity token registered activity=\(activityID, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+                cancelJobsActivityStart()
                 // Push the latest known state straight away so a freshly
                 // started activity isn't left blank until the next change.
-                if !ref.sessionID.isEmpty, let st = jobActivityState[ref.sessionID] {
-                    sendLiveActivityUpdate(st.lastContent, phase: st.isDone ? "done" : "running")
+                if !trackedJobs.isEmpty {
+                    lastPushedJobsSignature = jobsSignature
+                    sendJobsActivityUpdate(staleAfter: allJobsDone ? 8 * 3600 : 3600)
                 }
             }
             pairedDevices[idx].lastSeen = .now
@@ -894,6 +921,13 @@ final class MobileSyncService: ObservableObject {
             guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "search_request") else { return }
             NotificationCenter.default.post(
                 name: .mobileSyncSearchRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": req]
+            )
+        case .threadChangesRequest(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "thread_changes_request") else { return }
+            NotificationCenter.default.post(
+                name: .mobileSyncThreadChangesRequested,
                 object: nil,
                 userInfo: ["from": inbound.fromHex, "payload": req]
             )
@@ -1121,7 +1155,8 @@ private struct APNsPushResponse: Codable {
     }
 }
 
-/// Latest content the desktop knows for one job's Live Activity.
+/// Latest content the desktop knows for one job in the aggregate Live
+/// Activity. Stored in `MobileSyncService.trackedJobs` in start order.
 private struct JobContent {
     var sessionID: String
     var title: String
@@ -1129,19 +1164,17 @@ private struct JobContent {
     var todoDone: Int
     var todoTotal: Int
     var currentStep: String?
+    /// `true` once the job has finished. It shows the "done" phase but stays
+    /// in the aggregate list so the activity can report the completed batch.
+    var isDone: Bool
 
-    /// Identifies a distinct rendered state, so an update only pushes on a
-    /// real change rather than on every session event.
-    var signature: String { "\(todoDone)/\(todoTotal)|\(currentStep ?? "")" }
-}
-
-/// Per-job Live Activity bookkeeping, keyed by session id in `MobileSyncService`.
-private struct JobActivityState {
-    var lastContent: JobContent
-    /// `true` once the job has finished and its activity shows the terminal
-    /// "done" state. Kept so a re-stream of the same session reuses the
-    /// activity instead of issuing another budget-limited push-to-start.
-    var isDone: Bool = false
+    /// Identifies a distinct rendered state for one job, so an update only
+    /// pushes on a real change rather than on every session event. Includes
+    /// `title` so the activity refreshes when the desktop swaps in an
+    /// AI-summarized title.
+    var signature: String {
+        "\(sessionID)|\(isDone ? "done" : "run")|\(title)|\(todoDone)/\(todoTotal)|\(currentStep ?? "")"
+    }
 }
 
 extension Notification.Name {
@@ -1153,6 +1186,7 @@ extension Notification.Name {
     static let mobileSyncThreadActionRequested = Notification.Name("mobileSync.threadActionRequested")
     static let mobileSyncLoadMoreMessagesRequested = Notification.Name("mobileSync.loadMoreMessagesRequested")
     static let mobileSyncSearchRequested = Notification.Name("mobileSync.searchRequested")
+    static let mobileSyncThreadChangesRequested = Notification.Name("mobileSync.threadChangesRequested")
     static let mobileSyncSettingsUpdateReceived = Notification.Name("mobileSync.settingsUpdateReceived")
     static let mobileSyncPermissionResponse = Notification.Name("mobileSync.permissionResponse")
     static let mobileSyncQuestionAnswerReceived = Notification.Name("mobileSync.questionAnswerReceived")

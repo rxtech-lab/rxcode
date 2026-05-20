@@ -1,5 +1,5 @@
-import SwiftUI
 import RxCodeCore
+import SwiftUI
 
 /// Skill marketplace panel — displayed as an overlay or embedded in a settings tab.
 struct SkillMarketView: View {
@@ -198,9 +198,9 @@ struct SkillMarketView: View {
             let query = searchText.lowercased()
             plugins = plugins.filter {
                 $0.name.lowercased().contains(query) ||
-                $0.description.lowercased().contains(query) ||
-                $0.author.lowercased().contains(query) ||
-                $0.category.lowercased().contains(query)
+                    $0.description.lowercased().contains(query) ||
+                    $0.author.lowercased().contains(query) ||
+                    $0.category.lowercased().contains(query)
             }
         }
 
@@ -422,7 +422,7 @@ struct PluginDetailView: View {
                         Text("Agent Availability")
                             .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
 
-                        Text("Installed skills are managed by RxCode and enabled for Claude Code, Codex, and ACP agents where supported.")
+                        Text("Installed skills are managed by RxCode, sourced from OpenAI Agent Skills and compatible catalogs, and enabled for Claude Code, Codex, and ACP agents where supported.")
                             .font(.system(size: ClaudeTheme.size(12)))
                             .foregroundStyle(.secondary)
                             .padding(10)
@@ -457,10 +457,6 @@ struct PluginDetailView: View {
         }
         .font(.system(size: ClaudeTheme.size(12), weight: .medium))
         .foregroundStyle(Color.red)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 6)
-        .background(Color.red.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
     @ViewBuilder
@@ -491,7 +487,6 @@ struct PluginDetailView: View {
         }
     }
 }
-
 
 #Preview {
     SkillMarketView()

@@ -247,6 +247,119 @@ public enum GitHelper {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
     }
+
+    // MARK: - Uncommitted changes
+
+    /// Which side of the working tree an uncommitted change lives on.
+    public enum GitChangeKind: Sendable {
+        case staged
+        case unstaged
+        case untracked
+    }
+
+    /// One uncommitted file in the working tree, with its unified diff.
+    public struct GitChange: Sendable {
+        public let displayPath: String
+        public let statusChar: String
+        public let kind: GitChangeKind
+        public let unifiedDiff: String
+        public let truncated: Bool
+    }
+
+    /// Maximum number of diff lines kept per file before truncation.
+    private static let maxDiffLines = 800
+
+    /// Returns every uncommitted change in the working tree at `repoPath`:
+    /// staged, unstaged, and untracked files, each with its unified diff. A
+    /// file modified both in the index and the worktree yields two entries
+    /// (one `.staged`, one `.unstaged`). Returns nil when `repoPath` is not a
+    /// git repository.
+    public static func uncommittedChanges(at repoPath: String) async -> [GitChange]? {
+        guard let statusRaw = await run(
+            ["status", "--porcelain=v1", "-z"],
+            at: repoPath
+        ) else {
+            return nil
+        }
+
+        var changes: [GitChange] = []
+        // Porcelain `-z` records are NUL-terminated; renames/copies append a
+        // second NUL-terminated token for the original path.
+        let tokens = statusRaw.split(separator: "\0", omittingEmptySubsequences: false).map(String.init)
+        var i = 0
+        while i < tokens.count {
+            let entry = tokens[i]
+            i += 1
+            guard entry.count >= 3 else { continue }
+            let chars = Array(entry)
+            let indexChar = chars[0]    // staged side
+            let worktreeChar = chars[1] // worktree side
+            let displayPath = String(entry.dropFirst(3))
+
+            let isUntracked = (indexChar == "?" && worktreeChar == "?")
+            let isRename = indexChar == "R" || worktreeChar == "R"
+            if isRename, i < tokens.count {
+                i += 1 // skip the rename's original-path token
+            }
+
+            if isUntracked {
+                let diff = await untrackedDiff(displayPath: displayPath, repoPath: repoPath)
+                changes.append(GitChange(
+                    displayPath: displayPath,
+                    statusChar: "?",
+                    kind: .untracked,
+                    unifiedDiff: diff.text,
+                    truncated: diff.truncated
+                ))
+            } else if worktreeChar != " " {
+                let raw = await run(["diff", "--no-color", "--", displayPath], at: repoPath) ?? ""
+                let clipped = clipDiff(raw)
+                changes.append(GitChange(
+                    displayPath: displayPath,
+                    statusChar: String(worktreeChar),
+                    kind: .unstaged,
+                    unifiedDiff: clipped.text,
+                    truncated: clipped.truncated
+                ))
+            }
+
+            if !isUntracked, indexChar != " " {
+                let raw = await run(["diff", "--cached", "--no-color", "--", displayPath], at: repoPath) ?? ""
+                let clipped = clipDiff(raw)
+                changes.append(GitChange(
+                    displayPath: displayPath,
+                    statusChar: String(indexChar),
+                    kind: .staged,
+                    unifiedDiff: clipped.text,
+                    truncated: clipped.truncated
+                ))
+            }
+        }
+        return changes
+    }
+
+    /// Builds an all-added pseudo-diff for an untracked file by reading its
+    /// contents. Binary or unreadable files yield an empty diff.
+    private static func untrackedDiff(
+        displayPath: String,
+        repoPath: String
+    ) async -> (text: String, truncated: Bool) {
+        let absolute = (repoPath as NSString).appendingPathComponent(displayPath)
+        guard let content = try? String(contentsOf: URL(fileURLWithPath: absolute), encoding: .utf8) else {
+            return ("", false)
+        }
+        let lines = content.components(separatedBy: "\n")
+        let capped = lines.count > maxDiffLines
+        let kept = capped ? Array(lines.prefix(maxDiffLines)) : lines
+        return (kept.map { "+" + $0 }.joined(separator: "\n"), capped)
+    }
+
+    /// Clips a unified diff to `maxDiffLines` lines.
+    private static func clipDiff(_ diff: String) -> (text: String, truncated: Bool) {
+        let lines = diff.components(separatedBy: "\n")
+        guard lines.count > maxDiffLines else { return (diff, false) }
+        return (lines.prefix(maxDiffLines).joined(separator: "\n"), true)
+    }
 }
 
 #endif

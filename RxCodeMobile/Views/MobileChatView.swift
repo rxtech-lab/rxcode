@@ -22,6 +22,7 @@ struct MobileChatView: View {
     @State private var showingTodoSheet = false
     @State private var showingRunProfiles = false
     @State private var showingBrowser = false
+    @State private var showingChanges = false
     /// The question request whose sheet is currently presented, if any.
     @State private var presentedQuestion: PendingQuestionPayload?
     /// The plan whose review sheet is currently presented, if any.
@@ -93,6 +94,12 @@ struct MobileChatView: View {
                             }
                     }
                 }
+            }
+            .sheet(isPresented: $showingChanges) {
+                ThreadChangesSheet(sessionID: sessionID)
+                    .environmentObject(state)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
             }
             .fullScreenCover(isPresented: $showingBrowser) {
                 NavigationStack {
@@ -194,6 +201,11 @@ struct MobileChatView: View {
                         Label("Run Profiles", systemImage: "play.rectangle")
                     }
                     .disabled(currentProjectID == nil)
+                    Button {
+                        showingChanges = true
+                    } label: {
+                        Label("View Changes", systemImage: "plus.forwardslash.minus")
+                    }
                     Divider()
                     Button {
                         showingRenameSheet = true

@@ -108,6 +108,13 @@ final class MobileAppState: ObservableObject {
     private var pendingSearchID: UUID?
     private var searchDebounceTask: Task<Void, Never>?
 
+    /// Backing data for the thread "View Changes" sheet — thread file edits and
+    /// uncommitted git changes for one thread. Nil until first loaded; carries
+    /// its own `sessionID` so a stale result for another thread is ignored.
+    @Published var threadChanges: ThreadChangesResultPayload?
+    @Published var isLoadingThreadChanges: Bool = false
+    private var pendingThreadChangesID: UUID?
+
     @Published var remoteFolderRoot: RemoteFolderNode?
     @Published var remoteFolderIsLoading = false
     @Published var remoteFolderError: String?
@@ -671,6 +678,25 @@ final class MobileAppState: ObservableObject {
         }
     }
 
+    /// Requests the change overview (thread file edits + uncommitted git
+    /// changes) for `sessionID` from the desktop. The reply lands in
+    /// `threadChanges` via the `threadChangesResult` payload.
+    func requestThreadChanges(sessionID: String) async {
+        guard isPaired else { return }
+        let requestID = UUID()
+        pendingThreadChangesID = requestID
+        isLoadingThreadChanges = true
+        let payload = ThreadChangesRequestPayload(clientRequestID: requestID, sessionID: sessionID)
+        do {
+            try await client.send(.threadChangesRequest(payload), toHex: pairedDesktopPubkey)
+        } catch {
+            if pendingThreadChangesID == requestID {
+                pendingThreadChangesID = nil
+                isLoadingThreadChanges = false
+            }
+        }
+    }
+
     func respondToPermission(allow: Bool, denyReason: String? = nil) async {
         guard let pending = pendingPermission else { return }
         let payload = PermissionResponsePayload(
@@ -880,7 +906,7 @@ final class MobileAppState: ObservableObject {
         for desktop in pairedDesktops {
             do {
                 try await client.send(.liveActivityToken(payload), toHex: desktop.pubkeyHex)
-                logger.info("[LiveActivity] token reported startToken=\(payload.pushToStartTokenHex != nil, privacy: .public) activityToken=\(payload.activityTokenHex != nil, privacy: .public) session=\(payload.sessionID ?? "<nil>", privacy: .public) desktopKey=\(String(desktop.pubkeyHex.prefix(12)), privacy: .public)")
+                logger.info("[LiveActivity] token reported startToken=\(payload.pushToStartTokenHex != nil, privacy: .public) activityToken=\(payload.activityTokenHex != nil, privacy: .public) startedLocally=\(payload.activityStartedLocally == true, privacy: .public) dismissed=\(payload.activityDismissed == true, privacy: .public) session=\(payload.sessionID ?? "<nil>", privacy: .public) desktopKey=\(String(desktop.pubkeyHex.prefix(12)), privacy: .public)")
             } catch {
                 logger.error("[LiveActivity] token report failed desktopKey=\(String(desktop.pubkeyHex.prefix(12)), privacy: .public): \(error.localizedDescription, privacy: .public)")
             }
@@ -1106,6 +1132,12 @@ final class MobileAppState: ObservableObject {
             searchProjectIDs = results.projectIDs
             searchThreadHits = results.threadHits
             isSearching = false
+        case .threadChangesResult(let result):
+            guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "thread_changes_result") else { return }
+            guard let pending = pendingThreadChangesID, result.clientRequestID == pending else { return }
+            pendingThreadChangesID = nil
+            isLoadingThreadChanges = false
+            threadChanges = result
         case .branchOpResult(let result):
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "branch_op_result") else { return }
             inFlightBranchOps.remove(result.clientRequestID)

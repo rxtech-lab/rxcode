@@ -20,6 +20,7 @@ actor MarketplaceService {
         ("anthropics", "skills", "agent-skills"),
         ("anthropics", "knowledge-work-plugins", "knowledge-work"),
         ("anthropics", "financial-services-plugins", "financial-services"),
+        ("rxtech-lab", "agent-skills", "rxlab-skills"),
     ]
     private static let openAISkillsSource = MarketplaceSource(owner: "openai", repo: "skills")
 
@@ -233,19 +234,48 @@ actor MarketplaceService {
         do {
             var config = try loadConfig()
             var changed = false
-            let existingIds = Set(config.plugins.map(\.id))
-
-            for plugin in catalog where installedNames.contains(plugin.name) && !existingIds.contains(plugin.id) {
-                config.plugins.append(MarketplacePluginRecord(
-                    name: plugin.name,
-                    marketplace: plugin.marketplace,
-                    summary: plugin.description,
-                    category: plugin.category,
-                    marketplaceSource: plugin.marketplaceSource,
-                    sourceType: plugin.sourceType,
-                    skillPaths: plugin.skillPaths
-                ))
-                changed = true
+            for plugin in catalog where installedNames.contains(plugin.name) {
+                if let index = config.plugins.firstIndex(where: { $0.id == plugin.id }) {
+                    var shouldFetchInstructions = config.plugins[index].instructions == nil
+                    if config.plugins[index].summary != plugin.description {
+                        config.plugins[index].summary = plugin.description
+                        changed = true
+                    }
+                    if config.plugins[index].category != plugin.category {
+                        config.plugins[index].category = plugin.category
+                        changed = true
+                    }
+                    if config.plugins[index].marketplaceSource != plugin.marketplaceSource {
+                        config.plugins[index].marketplaceSource = plugin.marketplaceSource
+                        changed = true
+                    }
+                    if config.plugins[index].sourceType != plugin.sourceType {
+                        config.plugins[index].sourceType = plugin.sourceType
+                        changed = true
+                    }
+                    if config.plugins[index].skillPaths != plugin.skillPaths {
+                        config.plugins[index].skillPaths = plugin.skillPaths
+                        shouldFetchInstructions = true
+                        changed = true
+                    }
+                    if shouldFetchInstructions,
+                       let instructions = await skillInstructions(for: plugin) {
+                        config.plugins[index].instructions = instructions
+                        changed = true
+                    }
+                } else {
+                    config.plugins.append(MarketplacePluginRecord(
+                        name: plugin.name,
+                        marketplace: plugin.marketplace,
+                        summary: plugin.description,
+                        category: plugin.category,
+                        marketplaceSource: plugin.marketplaceSource,
+                        sourceType: plugin.sourceType,
+                        skillPaths: plugin.skillPaths,
+                        instructions: await skillInstructions(for: plugin)
+                    ))
+                    changed = true
+                }
             }
 
             if changed {
@@ -321,7 +351,8 @@ actor MarketplaceService {
                    !emittedMarketplaces.contains(record.marketplace) {
                     emittedMarketplaces.insert(record.marketplace)
                     let marketplaceKey = "marketplaces.\(tomlKey(record.marketplace))"
-                    pairs += ["-c", "\(marketplaceKey).source_type=\(tomlString("github"))"]
+                    // Codex's `source_type` enum only accepts `git` or `local`.
+                    pairs += ["-c", "\(marketplaceKey).source_type=\(tomlString("git"))"]
                     pairs += ["-c", "\(marketplaceKey).source=\(tomlString(source.codexSource))"]
                 }
 

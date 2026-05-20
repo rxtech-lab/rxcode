@@ -1205,6 +1205,20 @@ final class AppState {
         }
         mobileSyncObservers.append(searchObserver)
 
+        let threadChangesObserver = center.addObserver(
+            forName: .mobileSyncThreadChangesRequested,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let fromHex = notification.userInfo?["from"] as? String,
+                  let request = notification.userInfo?["payload"] as? ThreadChangesRequestPayload
+            else { return }
+            Task { @MainActor [weak self] in
+                await self?.handleMobileThreadChangesRequest(request, fromHex: fromHex)
+            }
+        }
+        mobileSyncObservers.append(threadChangesObserver)
+
         let branchOpObserver = center.addObserver(
             forName: .mobileSyncBranchOpRequested,
             object: nil,
@@ -2764,6 +2778,74 @@ final class AppState {
             )),
             toHex: fromHex
         )
+    }
+
+    /// Builds the change overview for the mobile "View Changes" sheet: every
+    /// file edited in the thread session plus the project's uncommitted git
+    /// changes. Replies with a `threadChangesResult`.
+    private func handleMobileThreadChangesRequest(
+        _ request: ThreadChangesRequestPayload,
+        fromHex hex: String
+    ) async {
+        let resolvedID = resolveCurrentSessionId(request.sessionID)
+
+        // This Turn: every file edited in the thread session (SwiftData history).
+        let turnEdits = threadStore.fetchFileEdits(sessionId: resolvedID).map { edit -> SyncFileEdit in
+            let summary = edit.toSummary()
+            return SyncFileEdit(
+                path: summary.path,
+                name: summary.name,
+                containsWrite: summary.containsWrite,
+                hunks: summary.hunks.map {
+                    SyncEditHunk(oldString: $0.oldString, newString: $0.newString)
+                }
+            )
+        }
+
+        func reply(ok: Bool, error: String?, uncommitted: [SyncGitChange]) async {
+            await MobileSyncService.shared.send(
+                .threadChangesResult(ThreadChangesResultPayload(
+                    clientRequestID: request.clientRequestID,
+                    sessionID: request.sessionID,
+                    ok: ok,
+                    errorMessage: error,
+                    turnEdits: turnEdits,
+                    uncommitted: uncommitted
+                )),
+                toHex: hex
+            )
+        }
+
+        // Uncommitted: the session's project working tree.
+        let projectPath = allSessionSummaries
+            .first(where: { $0.id == resolvedID })
+            .flatMap { summary in projects.first(where: { $0.id == summary.projectId })?.path }
+
+        guard let projectPath, !projectPath.isEmpty else {
+            await reply(ok: false, error: "This thread has no associated project folder.", uncommitted: [])
+            return
+        }
+
+        guard let gitChanges = await GitHelper.uncommittedChanges(at: projectPath) else {
+            await reply(ok: false, error: "This project is not a git repository.", uncommitted: [])
+            return
+        }
+
+        let uncommitted = gitChanges.map { change -> SyncGitChange in
+            let kind: SyncGitChangeKind = switch change.kind {
+            case .staged: .staged
+            case .unstaged: .unstaged
+            case .untracked: .untracked
+            }
+            return SyncGitChange(
+                displayPath: change.displayPath,
+                statusChar: change.statusChar,
+                kind: kind,
+                unifiedDiff: change.unifiedDiff,
+                truncated: change.truncated
+            )
+        }
+        await reply(ok: true, error: nil, uncommitted: uncommitted)
     }
 
     /// User-triggered full reindex of every thread. Wipes cached embeddings,

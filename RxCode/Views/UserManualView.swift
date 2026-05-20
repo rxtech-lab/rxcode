@@ -539,7 +539,7 @@ enum ManualTopic: String, CaseIterable, Identifiable {
             [
                 ManualSection(
                     title: "Skill Marketplace",
-                    body: "Open Settings and select Skill Marketplace to browse agent skills from configured catalogs. Skills can be filtered by category or searched by name, description, or author."
+                    body: "Open Settings and select Skill Marketplace to browse OpenAI Agent Skills and compatible skill catalogs. Skills can be filtered by category or searched by name, description, or author."
                 ),
                 ManualSection(
                     title: "Installing Skills",

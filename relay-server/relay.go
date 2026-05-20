@@ -12,7 +12,10 @@ import (
 )
 
 const (
-	maxEnvelopeBytes = 256 * 1024
+	// Keep this aligned with RelayClient.maxWebSocketMessageSize. Mobile
+	// thread snapshots are paged, but an encrypted envelope still carries
+	// active messages, session summaries, briefings, and base64 overhead.
+	maxEnvelopeBytes = 10 * 1024 * 1024
 	pongWait         = 90 * time.Second
 	pingPeriod       = 25 * time.Second
 	writeWait        = 10 * time.Second

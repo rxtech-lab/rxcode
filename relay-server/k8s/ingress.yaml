@@ -19,10 +19,10 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - relay.rxlab.app
+        - relay.code.rxlab.app
       secretName: rxcode-relay-tls
   rules:
-    - host: relay.rxlab.app
+    - host: relay.code.rxlab.app
       http:
         paths:
           - path: /

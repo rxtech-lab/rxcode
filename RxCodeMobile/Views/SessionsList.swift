@@ -163,3 +163,334 @@ struct SessionsList: View {
             .accessibilityLabel(attention == .question ? "Question pending" : "Permission pending")
     }
 }
+
+struct MobileRunProfilesView: View {
+    @EnvironmentObject private var state: MobileAppState
+    @Environment(\.dismiss) private var dismiss
+    let projectID: UUID
+    @State private var editingProfile: RunProfile?
+
+    private var project: Project? {
+        state.projects.first { $0.id == projectID }
+    }
+
+    private var profiles: [RunProfile] {
+        state.runProfiles(for: projectID).sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    private var tasks: [MobileRunTaskSnapshot] {
+        state.runTasks(for: projectID)
+    }
+
+    var body: some View {
+        List {
+            if !tasks.isEmpty {
+                Section("Runs") {
+                    ForEach(tasks) { task in
+                        runTaskRow(task)
+                    }
+                }
+            }
+
+            Section("Profiles") {
+                if profiles.isEmpty {
+                    ContentUnavailableView(
+                        "No Run Profiles",
+                        systemImage: "play.rectangle",
+                        description: Text("Create a profile to run a command on your Mac.")
+                    )
+                } else {
+                    ForEach(profiles) { profile in
+                        profileRow(profile)
+                    }
+                }
+            }
+        }
+        .navigationTitle(project?.name ?? "Run Profiles")
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Done") { dismiss() }
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    editingProfile = Self.newProfile(projectID: projectID)
+                } label: {
+                    Image(systemName: "plus")
+                }
+            }
+        }
+        .refreshable {
+            await state.refreshSnapshot()
+        }
+        .sheet(item: $editingProfile) { profile in
+            NavigationStack {
+                MobileRunProfileEditorView(profile: profile, projectID: projectID)
+                    .environmentObject(state)
+            }
+        }
+        .alert("Run Profile Error", isPresented: Binding(
+            get: { state.lastRunProfileError != nil },
+            set: { if !$0 { state.lastRunProfileError = nil } }
+        )) {
+            Button("OK", role: .cancel) { state.lastRunProfileError = nil }
+        } message: {
+            Text(state.lastRunProfileError ?? "")
+        }
+    }
+
+    private func profileRow(_ profile: RunProfile) -> some View {
+        let task = state.runningTask(projectID: projectID, profileID: profile.id)
+        return HStack(spacing: 12) {
+            Image(systemName: iconName(for: profile.type))
+                .foregroundStyle(.secondary)
+                .frame(width: 24)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(profile.name.isEmpty ? "Untitled" : profile.name)
+                    .lineLimit(1)
+                Text(profileSubtitle(profile))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+
+            Spacer()
+
+            if let task {
+                Button {
+                    Task { await state.stopRunTask(task) }
+                } label: {
+                    Image(systemName: "stop.fill")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .tint(.red)
+            } else {
+                Button {
+                    Task { await state.runProfile(projectID: projectID, profileID: profile.id) }
+                } label: {
+                    Image(systemName: "play.fill")
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            editingProfile = profile
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button(role: .destructive) {
+                Task { await state.deleteRunProfile(projectID: projectID, profileID: profile.id) }
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+        .contextMenu {
+            Button("Edit") { editingProfile = profile }
+            Button("Duplicate") {
+                var copy = profile
+                copy.id = UUID()
+                copy.name = profile.name + " (copy)"
+                copy.createdAt = Date()
+                copy.updatedAt = Date()
+                Task { await state.saveRunProfile(copy, projectID: projectID) }
+            }
+            Button("Delete", role: .destructive) {
+                Task { await state.deleteRunProfile(projectID: projectID, profileID: profile.id) }
+            }
+        }
+    }
+
+    private func runTaskRow(_ task: MobileRunTaskSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Label(task.profileName, systemImage: task.isRunning ? "play.circle.fill" : "checkmark.circle")
+                    .foregroundStyle(task.isRunning ? Color.accentColor : .secondary)
+                Spacer()
+                Text(task.statusLabel)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if !task.commandPreview.isEmpty {
+                Text(task.commandPreview)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(4)
+            }
+
+            if let output = task.terminalOutputTail, !output.isEmpty {
+                ScrollView([.horizontal, .vertical]) {
+                    Text(output)
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+                .frame(maxHeight: 180)
+            }
+
+            if task.isRunning {
+                Button(role: .destructive) {
+                    Task { await state.stopRunTask(task) }
+                } label: {
+                    Label("Stop", systemImage: "stop.fill")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func iconName(for type: RunProfileType) -> String {
+        switch type {
+        case .bash: return "terminal"
+        case .xcode: return "hammer.fill"
+        case .make: return "wrench.and.screwdriver.fill"
+        }
+    }
+
+    private func profileSubtitle(_ profile: RunProfile) -> String {
+        switch profile.type {
+        case .bash:
+            return profile.bash.command.isEmpty ? "Bash command" : profile.bash.command
+        case .xcode:
+            let xcode = profile.xcode ?? XcodeRunConfig()
+            return [xcode.container, xcode.scheme, xcode.action.rawValue].filter { !$0.isEmpty }.joined(separator: " · ")
+        case .make:
+            let make = profile.make ?? MakeRunConfig()
+            return ["make", make.target, make.arguments].filter { !$0.isEmpty }.joined(separator: " ")
+        }
+    }
+
+    private static func newProfile(projectID: UUID) -> RunProfile {
+        let now = Date()
+        return RunProfile(
+            projectId: projectID,
+            name: "New Bash Configuration",
+            type: .bash,
+            bash: BashRunConfig(),
+            createdAt: now,
+            updatedAt: now
+        )
+    }
+}
+
+private struct MobileRunProfileEditorView: View {
+    @EnvironmentObject private var state: MobileAppState
+    @Environment(\.dismiss) private var dismiss
+    @State private var draft: RunProfile
+    let projectID: UUID
+
+    init(profile: RunProfile, projectID: UUID) {
+        self._draft = State(initialValue: profile)
+        self.projectID = projectID
+    }
+
+    var body: some View {
+        Form {
+            Section("Configuration") {
+                TextField("Name", text: $draft.name)
+                Picker("Type", selection: Binding(
+                    get: { draft.type },
+                    set: { type in
+                        draft.type = type
+                        if type == .xcode, draft.xcode == nil { draft.xcode = XcodeRunConfig() }
+                        if type == .make, draft.make == nil { draft.make = MakeRunConfig() }
+                    }
+                )) {
+                    Text("Bash").tag(RunProfileType.bash)
+                    Text("Xcode").tag(RunProfileType.xcode)
+                    Text("Make").tag(RunProfileType.make)
+                }
+            }
+
+            switch draft.type {
+            case .bash:
+                bashSection
+            case .xcode:
+                xcodeSection
+            case .make:
+                makeSection
+            }
+        }
+        .navigationTitle(draft.name.isEmpty ? "Run Profile" : draft.name)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel") { dismiss() }
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Save") {
+                    var saved = draft
+                    saved.projectId = projectID
+                    saved.updatedAt = Date()
+                    Task {
+                        await state.saveRunProfile(saved, projectID: projectID)
+                        dismiss()
+                    }
+                }
+                .disabled(draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+    }
+
+    private var bashSection: some View {
+        Section("Command") {
+            TextEditor(text: $draft.bash.command)
+                .font(.system(.body, design: .monospaced))
+                .frame(minHeight: 90)
+            TextField("Working Directory", text: $draft.bash.workingDirectory, prompt: Text("Project root"))
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled(true)
+        }
+    }
+
+    private var xcodeSection: some View {
+        Section("Xcode") {
+            let xcode = Binding(
+                get: { draft.xcode ?? XcodeRunConfig() },
+                set: { draft.xcode = $0 }
+            )
+            TextField("Project / Workspace", text: xcode.container, prompt: Text("App.xcodeproj"))
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled(true)
+            Toggle("Use Workspace", isOn: xcode.isWorkspace)
+            TextField("Scheme", text: xcode.scheme)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled(true)
+            TextField("Configuration", text: xcode.configuration)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled(true)
+            Picker("Action", selection: xcode.action) {
+                ForEach(XcodeAction.allCases, id: \.self) { action in
+                    Text(action.rawValue.capitalized).tag(action)
+                }
+            }
+            TextField("Destination", text: xcode.destination, prompt: Text("Optional xcodebuild destination"))
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled(true)
+        }
+    }
+
+    private var makeSection: some View {
+        Section("Make") {
+            let make = Binding(
+                get: { draft.make ?? MakeRunConfig() },
+                set: { draft.make = $0 }
+            )
+            TextField("Makefile", text: make.makefile, prompt: Text("Makefile"))
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled(true)
+            TextField("Target", text: make.target)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled(true)
+            TextField("Arguments", text: make.arguments)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled(true)
+            TextField("Working Directory", text: $draft.bash.workingDirectory, prompt: Text("Project root"))
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled(true)
+        }
+    }
+}

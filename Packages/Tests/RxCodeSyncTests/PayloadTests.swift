@@ -64,6 +64,42 @@ struct PayloadTests {
         #expect(snapshot.settings?.permissionMode == .acceptEdits)
     }
 
+    @Test("session summary carries todo items")
+    func sessionSummaryCarriesTodoItems() throws {
+        let projectId = UUID(uuidString: "11111111-2222-3333-4444-555555555555")!
+        let todos = [
+            TodoItem(id: 0, content: "Inspect Codex plan", activeForm: "Inspecting Codex plan", status: .completed),
+            TodoItem(id: 1, content: "Sync mobile list", activeForm: "Syncing mobile list", status: .inProgress)
+        ]
+        let payload = Payload.snapshot(
+            SnapshotPayload(
+                projects: [],
+                sessions: [
+                    SessionSummary(
+                        id: "thread-1",
+                        projectId: projectId,
+                        title: "Fix Codex todo sync",
+                        updatedAt: Date(timeIntervalSince1970: 12),
+                        isPinned: false,
+                        isArchived: false,
+                        progress: SessionProgressSnapshot(done: 1, total: 2, inProgress: true),
+                        todos: todos
+                    )
+                ]
+            )
+        )
+
+        let data = try JSONEncoder().encode(payload)
+        let decoded = try JSONDecoder().decode(Payload.self, from: data)
+        guard case .snapshot(let snapshot) = decoded else {
+            Issue.record("Expected snapshot payload")
+            return
+        }
+
+        #expect(snapshot.sessions.first?.todos == todos)
+        #expect(snapshot.sessions.first?.progress?.total == 2)
+    }
+
     @Test("snapshot carries agent usage")
     func snapshotCarriesAgentUsage() throws {
         let payload = Payload.snapshot(

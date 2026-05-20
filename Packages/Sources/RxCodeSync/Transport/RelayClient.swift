@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import os
 
 /// Manages a single WebSocket to the relay. Handles E2E encrypt/decrypt, ping
 /// keepalive, and exponential-backoff reconnect.
@@ -34,6 +35,7 @@ public actor RelayClient {
     private let identity: DeviceIdentity
     private let relayURL: URL
     private let session: URLSession
+    private let logger = Logger(subsystem: "com.idealapp.RxCodeSync", category: "RelayClient")
 
     private var task: URLSessionWebSocketTask?
     private(set) public var state: ConnectionState = .disconnected
@@ -68,11 +70,13 @@ public actor RelayClient {
     public func connect() {
         guard task == nil else { return }
         shouldReconnect = true
+        logger.info("[Relay] connect requested relay=\(self.relayURL.absoluteString, privacy: .public) localKey=\(String(self.identity.publicKeyHex.prefix(12)), privacy: .public)")
         openSocket()
     }
 
     public func disconnect() {
         shouldReconnect = false
+        logger.info("[Relay] disconnect requested relay=\(self.relayURL.absoluteString, privacy: .public) localKey=\(String(self.identity.publicKeyHex.prefix(12)), privacy: .public)")
         closeSocketLocally()
         emit(.stateChanged(.disconnected))
         state = .disconnected
@@ -80,7 +84,10 @@ public actor RelayClient {
 
     /// Encrypt `payload` for `recipient` and send the resulting envelope.
     public func send(_ payload: Payload, to recipient: Curve25519.KeyAgreement.PublicKey) async throws {
-        guard let task else { throw RelayError.notConnected }
+        guard let task else {
+            logger.error("[Relay] send failed not connected type=\(payload.logName, privacy: .public) to=\(String(recipient.rawRepresentation.hexString.prefix(12)), privacy: .public) relay=\(self.relayURL.absoluteString, privacy: .public)")
+            throw RelayError.notConnected
+        }
         let plaintext = try JSONEncoder().encode(payload)
         let (nonce, ct) = try SessionCrypto.seal(
             plaintext: plaintext,
@@ -94,7 +101,12 @@ public actor RelayClient {
             ct: ct
         )
         let raw = try JSONEncoder().encode(envelope)
-        try await task.send(.data(raw))
+        do {
+            try await task.send(.data(raw))
+        } catch {
+            logger.error("[Relay] send failed type=\(payload.logName, privacy: .public) to=\(String(envelope.to.prefix(12)), privacy: .public) error=\(error.localizedDescription, privacy: .public)")
+            throw error
+        }
     }
 
     // MARK: - Private
@@ -135,6 +147,7 @@ public actor RelayClient {
             return
         }
 
+        logger.info("[Relay] opening websocket url=\(url.absoluteString, privacy: .public)")
         let newTask = session.webSocketTask(with: url)
         // Raise the 1 MiB default frame limit so large sync payloads aren't
         // silently dropped by `task.send`. Applies to both send and receive.
@@ -163,6 +176,7 @@ public actor RelayClient {
         guard socket === task else { return }
         if state != .connected {
             reconnectAttempt = 0
+            logger.info("[Relay] connected relay=\(self.relayURL.absoluteString, privacy: .public)")
             updateState(.connected)
         }
     }
@@ -221,15 +235,22 @@ public actor RelayClient {
         let decoder = JSONDecoder()
         if let notice = try? decoder.decode(DeliveryFailedNotice.self, from: raw),
            notice.type == "delivery_failed" {
+            logger.warning("[Relay] delivery failed to=\(String(notice.to.prefix(12)), privacy: .public)")
             emit(.deliveryFailed(toHex: notice.to))
             return
         }
-        guard let env = try? decoder.decode(Envelope.self, from: raw) else { return }
+        guard let env = try? decoder.decode(Envelope.self, from: raw) else {
+            logger.warning("[Relay] dropping non-envelope message bytes=\(raw.count, privacy: .public)")
+            return
+        }
         guard let nonce = env.nonceData,
               let ct = env.ciphertextData,
               let fromRaw = Data(hexString: env.from),
               let fromKey = try? Curve25519.KeyAgreement.PublicKey(rawRepresentation: fromRaw)
-        else { return }
+        else {
+            logger.warning("[Relay] dropping malformed envelope from=\(String(env.from.prefix(12)), privacy: .public)")
+            return
+        }
         do {
             let plaintext = try SessionCrypto.open(
                 ciphertext: ct,
@@ -242,6 +263,7 @@ public actor RelayClient {
         } catch {
             // Decrypt or decode failure means the sender isn't a paired peer
             // we know how to talk to, OR the wire format drifted. Drop quietly.
+            logger.warning("[Relay] dropping encrypted payload from=\(String(env.from.prefix(12)), privacy: .public) error=\(error.localizedDescription, privacy: .public)")
             return
         }
     }
@@ -259,6 +281,7 @@ public actor RelayClient {
         guard shouldReconnect else { return }
         reconnectAttempt += 1
         let delay = min(30, Int(pow(2.0, Double(reconnectAttempt))))
+        logger.error("[Relay] socket failed relay=\(self.relayURL.absoluteString, privacy: .public) error=\(error.localizedDescription, privacy: .public) reconnectIn=\(delay, privacy: .public)s")
         updateState(.reconnecting(nextAttemptInSeconds: delay))
         Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000_000)

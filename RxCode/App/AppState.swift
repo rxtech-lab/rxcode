@@ -942,6 +942,7 @@ final class AppState {
     /// Live progress for a user-triggered full reindex. `nil` when idle.
     var reindexProgress: (done: Int, total: Int)? = nil
     let runService = RunService()
+    let localWebProxy = LocalWebProxyServer()
     let ideMCPServer = IDEMCPServer()
     private var mobileSyncObservers: [NSObjectProtocol] = []
 
@@ -961,6 +962,7 @@ final class AppState {
         return liveWindowRefs.compactMap(\.window)
     }
     private var mobileSnapshotBroadcastTask: Task<Void, Never>?
+    private var lastBroadcastRunTaskSnapshots: [UUID: MobileRunTaskSnapshot] = [:]
 
     /// Worktrees freshly created by a mobile "create branch" request, keyed by
     /// project. Consumed by the next mobile new-session request for the same
@@ -991,9 +993,12 @@ final class AppState {
     /// Replace the in-memory list and persist atomically.
     func setRunProfiles(_ profiles: [RunProfile], for projectId: UUID) {
         runProfilesByProject[projectId] = profiles
+        logger.info("[MobileSync] desktop run profiles changed project=\(projectId.uuidString, privacy: .public) count=\(profiles.count, privacy: .public)")
+        scheduleMobileSnapshotBroadcast()
         Task { [persistence] in
             do {
                 try await persistence.saveRunProfiles(profiles, projectId: projectId)
+                logger.info("[MobileSync] persisted run profiles project=\(projectId.uuidString, privacy: .public) count=\(profiles.count, privacy: .public)")
             } catch {
                 logger.error("Failed to save run profiles: \(error.localizedDescription, privacy: .public)")
             }
@@ -1035,6 +1040,11 @@ final class AppState {
         self.persistence = PersistenceService(metaStore: metaStore, cliStore: cliStore)
         self.mcp = MCPService(claudeService: claude)
         self.threadStore = ThreadStore.make()
+        self.runService.onTasksChanged = { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.broadcastMobileRunTasks()
+            }
+        }
 
         // Bridge ACP `session/request_permission` and Codex in-band permission
         // requests into the existing PermissionServer.
@@ -1235,6 +1245,48 @@ final class AppState {
         }
         mobileSyncObservers.append(createProjectObserver)
 
+        let runProfileMutationObserver = center.addObserver(
+            forName: .mobileSyncRunProfileMutationRequested,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let fromHex = notification.userInfo?["from"] as? String,
+                  let request = notification.userInfo?["payload"] as? RunProfileMutationRequestPayload
+            else { return }
+            Task { @MainActor [weak self] in
+                await self?.handleMobileRunProfileMutation(request, fromHex: fromHex)
+            }
+        }
+        mobileSyncObservers.append(runProfileMutationObserver)
+
+        let runProfileRunObserver = center.addObserver(
+            forName: .mobileSyncRunProfileRunRequested,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let fromHex = notification.userInfo?["from"] as? String,
+                  let request = notification.userInfo?["payload"] as? RunProfileRunRequestPayload
+            else { return }
+            Task { @MainActor [weak self] in
+                await self?.handleMobileRunProfileRun(request, fromHex: fromHex)
+            }
+        }
+        mobileSyncObservers.append(runProfileRunObserver)
+
+        let runProfileStopObserver = center.addObserver(
+            forName: .mobileSyncRunProfileStopRequested,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let fromHex = notification.userInfo?["from"] as? String,
+                  let request = notification.userInfo?["payload"] as? RunProfileStopRequestPayload
+            else { return }
+            Task { @MainActor [weak self] in
+                await self?.handleMobileRunProfileStop(request, fromHex: fromHex)
+            }
+        }
+        mobileSyncObservers.append(runProfileStopObserver)
+
         let questionAnswerObserver = center.addObserver(
             forName: .mobileSyncQuestionAnswerReceived,
             object: nil,
@@ -1282,6 +1334,7 @@ final class AppState {
             _ = allSessionSummaries.count
             _ = latestRateLimitUsage
             _ = latestCodexRateLimitUsage
+            _ = runProfilesByProject.count
         } onChange: {
             Task { @MainActor [weak self] in
                 self?.scheduleMobileSnapshotBroadcast()
@@ -1537,6 +1590,174 @@ final class AppState {
             errorMessage: errorMessage
         )
         await MobileSyncService.shared.send(.createProjectResult(result), toHex: hex)
+    }
+
+    private func handleMobileRunProfileMutation(
+        _ request: RunProfileMutationRequestPayload,
+        fromHex: String
+    ) async {
+        logger.info("[MobileSync] handling run profile mutation operation=\(request.operation.rawValue, privacy: .public) project=\(request.projectID.uuidString, privacy: .public) mobileKey=\(String(fromHex.prefix(12)), privacy: .public)")
+        guard projects.contains(where: { $0.id == request.projectID }) else {
+            logger.error("[MobileSync] run profile mutation rejected unknown project=\(request.projectID.uuidString, privacy: .public)")
+            await replyRunProfileResult(
+                requestID: request.clientRequestID,
+                projectID: request.projectID,
+                ok: false,
+                errorMessage: "Project not found on desktop.",
+                task: nil,
+                toHex: fromHex
+            )
+            return
+        }
+
+        await ensureRunProfilesLoaded(for: request.projectID)
+        var profiles = runProfiles(for: request.projectID)
+        let now = Date()
+
+        switch request.operation {
+        case .upsert:
+            guard var profile = request.profile else {
+                logger.error("[MobileSync] run profile upsert rejected missing payload project=\(request.projectID.uuidString, privacy: .public)")
+                await replyRunProfileResult(
+                    requestID: request.clientRequestID,
+                    projectID: request.projectID,
+                    ok: false,
+                    errorMessage: "Profile payload is missing.",
+                    task: nil,
+                    toHex: fromHex
+                )
+                return
+            }
+            profile.projectId = request.projectID
+            profile.updatedAt = now
+            if let idx = profiles.firstIndex(where: { $0.id == profile.id }) {
+                profiles[idx] = profile
+            } else {
+                profile.createdAt = now
+                profiles.append(profile)
+            }
+        case .delete:
+            guard let profileID = request.profileID else {
+                logger.error("[MobileSync] run profile delete rejected missing profile id project=\(request.projectID.uuidString, privacy: .public)")
+                await replyRunProfileResult(
+                    requestID: request.clientRequestID,
+                    projectID: request.projectID,
+                    ok: false,
+                    errorMessage: "Profile id is missing.",
+                    task: nil,
+                    toHex: fromHex
+                )
+                return
+            }
+            profiles.removeAll { $0.id == profileID }
+        }
+
+        setRunProfiles(profiles, for: request.projectID)
+        logger.info("[MobileSync] run profile mutation applied project=\(request.projectID.uuidString, privacy: .public) count=\(profiles.count, privacy: .public)")
+        await replyRunProfileResult(
+            requestID: request.clientRequestID,
+            projectID: request.projectID,
+            ok: true,
+            errorMessage: nil,
+            task: nil,
+            toHex: fromHex
+        )
+    }
+
+    private func handleMobileRunProfileRun(
+        _ request: RunProfileRunRequestPayload,
+        fromHex: String
+    ) async {
+        logger.info("[MobileSync] handling run profile run project=\(request.projectID.uuidString, privacy: .public) profile=\(request.profileID.uuidString, privacy: .public) mobileKey=\(String(fromHex.prefix(12)), privacy: .public)")
+        guard let project = projects.first(where: { $0.id == request.projectID }) else {
+            logger.error("[MobileSync] run profile run rejected unknown project=\(request.projectID.uuidString, privacy: .public)")
+            await replyRunProfileResult(
+                requestID: request.clientRequestID,
+                projectID: request.projectID,
+                ok: false,
+                errorMessage: "Project not found on desktop.",
+                task: nil,
+                toHex: fromHex
+            )
+            return
+        }
+
+        await ensureRunProfilesLoaded(for: request.projectID)
+        guard let profile = runProfiles(for: request.projectID).first(where: { $0.id == request.profileID }) else {
+            logger.error("[MobileSync] run profile run rejected missing profile=\(request.profileID.uuidString, privacy: .public) project=\(request.projectID.uuidString, privacy: .public) knownProfiles=\(self.runProfiles(for: request.projectID).count, privacy: .public)")
+            await replyRunProfileResult(
+                requestID: request.clientRequestID,
+                projectID: request.projectID,
+                ok: false,
+                errorMessage: "Run profile not found on desktop.",
+                task: nil,
+                toHex: fromHex
+            )
+            return
+        }
+
+        let task = runService.start(profile: profile, project: project)
+        logger.info("[MobileSync] run profile started task=\(task.id.uuidString, privacy: .public) profile=\(profile.name, privacy: .public) project=\(project.id.uuidString, privacy: .public)")
+        await replyRunProfileResult(
+            requestID: request.clientRequestID,
+            projectID: request.projectID,
+            ok: true,
+            errorMessage: nil,
+            task: mobileRunTaskSnapshot(task),
+            toHex: fromHex
+        )
+    }
+
+    private func handleMobileRunProfileStop(
+        _ request: RunProfileStopRequestPayload,
+        fromHex: String
+    ) async {
+        logger.info("[MobileSync] handling run profile stop task=\(request.taskID?.uuidString ?? "<nil>", privacy: .public) project=\(request.projectID?.uuidString ?? "<nil>", privacy: .public) profile=\(request.profileID?.uuidString ?? "<nil>", privacy: .public) mobileKey=\(String(fromHex.prefix(12)), privacy: .public)")
+        let stoppedTask: RunTask?
+        if let taskID = request.taskID {
+            stoppedTask = runService.task(id: taskID)
+            runService.stop(taskId: taskID)
+        } else if let projectID = request.projectID, let profileID = request.profileID {
+            stoppedTask = runService.activeTasks.first {
+                $0.project.id == projectID && $0.profile.id == profileID
+            }
+            if let stoppedTask {
+                runService.stop(taskId: stoppedTask.id)
+            }
+        } else {
+            stoppedTask = nil
+        }
+
+        await replyRunProfileResult(
+            requestID: request.clientRequestID,
+            projectID: request.projectID ?? stoppedTask?.project.id ?? UUID(),
+            ok: stoppedTask != nil,
+            errorMessage: stoppedTask == nil ? "No matching running task was found." : nil,
+            task: stoppedTask.map(mobileRunTaskSnapshot),
+            toHex: fromHex
+        )
+    }
+
+    private func replyRunProfileResult(
+        requestID: UUID,
+        projectID: UUID,
+        ok: Bool,
+        errorMessage: String?,
+        task: MobileRunTaskSnapshot?,
+        toHex hex: String
+    ) async {
+        await ensureRunProfilesLoaded(for: projectID)
+        logger.info("[MobileSync] replying run profile result ok=\(ok, privacy: .public) project=\(projectID.uuidString, privacy: .public) profiles=\(self.runProfiles(for: projectID).count, privacy: .public) task=\(task?.taskId.uuidString ?? "<nil>", privacy: .public) to mobileKey=\(String(hex.prefix(12)), privacy: .public) error=\(errorMessage ?? "<nil>", privacy: .public)")
+        let result = RunProfileResultPayload(
+            clientRequestID: requestID,
+            projectID: projectID,
+            ok: ok,
+            errorMessage: errorMessage,
+            profiles: runProfiles(for: projectID),
+            task: task
+        )
+        await MobileSyncService.shared.send(.runProfileResult(result), toHex: hex)
+        if ok { scheduleMobileSnapshotBroadcast() }
     }
 
     private func mobileFolderTreeRoot(for request: FolderTreeRequestPayload) throws -> RemoteFolderNode {
@@ -1961,6 +2182,14 @@ final class AppState {
             await self?.refreshCodexRateLimitUsage()
         }
         let hostMetrics = await SystemMetricsService.shared.sample()
+        let runProfiles = await mobileRunProfiles()
+        let runTasks = mobileRunTaskSnapshots()
+        let webProxy = await localWebProxy.proxyInfo()
+        if let webProxy {
+            logger.info("[WebBrowserSync] snapshot includes web proxy host=\(webProxy.host, privacy: .public) port=\(webProxy.port, privacy: .public) to mobileKey=\(String(hex.prefix(12)), privacy: .public)")
+        } else {
+            logger.warning("[WebBrowserSync] snapshot has no web proxy info to mobileKey=\(String(hex.prefix(12)), privacy: .public)")
+        }
         let payload = SnapshotPayload(
             projects: projects,
             sessions: mobileSessionSummaries(),
@@ -1975,7 +2204,10 @@ final class AppState {
                 claudeCode: latestRateLimitUsage,
                 codex: latestCodexRateLimitUsage
             ),
-            hostMetrics: hostMetrics
+            hostMetrics: hostMetrics,
+            runProfiles: runProfiles,
+            runTasks: runTasks,
+            webProxy: webProxy
         )
         await MobileSyncService.shared.send(.snapshot(payload), toHex: hex)
         // The snapshot doesn't carry the question queue; send it alongside so a
@@ -1985,7 +2217,7 @@ final class AppState {
             toHex: hex
         )
         logger.info(
-            "[MobileSync] sent snapshot projects=\(self.projects.count, privacy: .public) sessions=\(payload.sessions.count, privacy: .public) active=\(active.id ?? "<nil>", privacy: .public)"
+            "[MobileSync] sent snapshot projects=\(self.projects.count, privacy: .public) sessions=\(payload.sessions.count, privacy: .public) runProfileProjects=\(runProfiles.count, privacy: .public) runProfileTotal=\(runProfiles.reduce(0) { $0 + $1.profiles.count }, privacy: .public) runTasks=\(runTasks.count, privacy: .public) active=\(active.id ?? "<nil>", privacy: .public) to mobileKey=\(String(hex.prefix(12)), privacy: .public)"
         )
     }
 
@@ -2002,6 +2234,75 @@ final class AppState {
             }
     }
 
+    private func mobileRunProfiles() async -> [MobileProjectRunProfiles] {
+        var result: [MobileProjectRunProfiles] = []
+        for project in projects {
+            await ensureRunProfilesLoaded(for: project.id)
+            let profiles = runProfiles(for: project.id)
+            result.append(MobileProjectRunProfiles(
+                projectId: project.id,
+                profiles: profiles
+            ))
+        }
+        return result
+    }
+
+    private func mobileRunTaskSnapshots() -> [MobileRunTaskSnapshot] {
+        runService.tasks.map(mobileRunTaskSnapshot)
+    }
+
+    private func mobileRunTaskSnapshot(_ task: RunTask) -> MobileRunTaskSnapshot {
+        MobileRunTaskSnapshot(
+            taskId: task.id,
+            projectId: task.project.id,
+            profileId: task.profile.id,
+            profileName: task.profile.name,
+            status: mobileRunTaskStatus(task.status),
+            statusLabel: task.status.label,
+            exitCode: task.exitCode,
+            startedAt: task.startedAt,
+            resolvedCwd: task.resolvedCwd,
+            commandPreview: mobileRunTaskCommandPreview(task),
+            terminalOutputTail: String(task.terminalOutputTail.suffix(8_000))
+        )
+    }
+
+    private func mobileRunTaskStatus(_ status: RunTaskStatus) -> MobileRunTaskSnapshot.Status {
+        switch status {
+        case .running: return .running
+        case .succeeded: return .succeeded
+        case .failed: return .failed
+        case .signaled: return .signaled
+        case .stopped: return .stopped
+        }
+    }
+
+    private func mobileRunTaskCommandPreview(_ task: RunTask) -> String {
+        let lines = task.wrapperScript
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map(String.init)
+        if let mainIndex = lines.firstIndex(of: "# --- main ---") {
+            return lines.dropFirst(mainIndex + 1)
+                .prefix(8)
+                .joined(separator: "\n")
+        }
+        return lines.suffix(8).joined(separator: "\n")
+    }
+
+    private func broadcastMobileRunTasks() {
+        guard !MobileSyncService.shared.pairedDevices.isEmpty else { return }
+        let currentSnapshots = runService.tasks.prefix(5).map(mobileRunTaskSnapshot)
+        let currentById = Dictionary(uniqueKeysWithValues: currentSnapshots.map { ($0.taskId, $0) })
+        let removedIds = Set(lastBroadcastRunTaskSnapshots.keys).subtracting(currentById.keys)
+        if !removedIds.isEmpty {
+            scheduleMobileSnapshotBroadcast()
+        }
+        for snapshot in currentSnapshots where lastBroadcastRunTaskSnapshots[snapshot.taskId] != snapshot {
+            MobileSyncService.shared.broadcastRunTaskUpdate(snapshot)
+        }
+        lastBroadcastRunTaskSnapshots = currentById
+    }
+
     private func mobileSessionSummary(for sessionID: String) -> RxCodeSync.SessionSummary? {
         guard let summary = allSessionSummaries.first(where: { $0.id == sessionID }) else {
             return nil
@@ -2010,6 +2311,7 @@ final class AppState {
     }
 
     private func mobileSessionSummary(from summary: ChatSession.Summary) -> RxCodeSync.SessionSummary {
+        let todos = mobileTodoItems(forSessionId: summary.id)
         let progress = mobileProgressSnapshot(forSessionId: summary.id)
         let queued = threadStore.loadQueue(sessionKey: summary.id).map {
             QueuedUserMessage(id: $0.id, text: $0.text)
@@ -2024,15 +2326,14 @@ final class AppState {
             isStreaming: sessionStates[summary.id]?.isStreaming ?? false,
             attention: mobileAttentionKind(forSessionId: summary.id),
             progress: progress,
+            todos: todos,
             queuedMessages: queued,
             hasUncheckedCompletion: sessionStates[summary.id]?.hasUncheckedCompletion ?? false
         )
     }
 
     private func mobileProgressSnapshot(forSessionId id: String) -> SessionProgressSnapshot? {
-        if let messages = sessionStates[id]?.messages,
-           let todos = TodoExtractor.latest(in: messages)
-        {
+        if let todos = mobileTodoItems(forSessionId: id) {
             return SessionProgressSnapshot(
                 done: todos.filter { $0.status == .completed }.count,
                 total: todos.count,
@@ -2040,15 +2341,21 @@ final class AppState {
             )
         }
 
+        return nil
+    }
+
+    private func mobileTodoItems(forSessionId id: String) -> [TodoItem]? {
+        if let messages = sessionStates[id]?.messages,
+           let todos = TodoExtractor.latest(in: messages)
+        {
+            return todos
+        }
+
         guard let snapshot = threadStore.fetchTodoSnapshot(sessionId: id), snapshot.total > 0 else {
             return nil
         }
 
-        return SessionProgressSnapshot(
-            done: snapshot.done,
-            total: snapshot.total,
-            inProgress: snapshot.inProgress > 0
-        )
+        return snapshot.items
     }
 
     private func mobileAttentionKind(forSessionId id: String) -> SessionAttentionKind? {

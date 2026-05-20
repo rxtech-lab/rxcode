@@ -68,7 +68,11 @@ public enum RunTaskExecutor {
     /// Note: banner text is intentionally plain ASCII without SGR styling.
     /// SwiftTerm renders SGR 2 (dim) as low-contrast on dark backgrounds,
     /// which made the banners invisible in earlier versions.
-    public static func buildWrapperScript(profile: RunProfile, projectPath: String) -> String {
+    public static func buildWrapperScript(
+        profile: RunProfile,
+        projectPath: String,
+        outputLogPath: String? = nil
+    ) -> String {
         let cwd = resolveWorkingDirectory(profile.bash.workingDirectory, projectPath: projectPath)
 
         let afterSteps = profile.afterSteps.filter { !$0.command.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -86,6 +90,10 @@ public enum RunTaskExecutor {
         // weirdness) can't leak back here.
         lines.append("__rxcode_user_path=$(/bin/zsh -ic 'printf %s \"$PATH\"' 2>/dev/null)")
         lines.append("[ -n \"$__rxcode_user_path\" ] && export PATH=\"$__rxcode_user_path\"")
+        if let outputLogPath {
+            lines.append(": > \(shellEscape(outputLogPath))")
+            lines.append("exec > >(tee -a \(shellEscape(outputLogPath))) 2>&1")
+        }
         lines.append("")
         // Trap is registered first so it fires for any subsequent failure —
         // including a failing `cd` into a stale working directory.

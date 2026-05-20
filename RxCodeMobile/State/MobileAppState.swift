@@ -59,10 +59,19 @@ final class MobileAppState: ObservableObject {
     /// until the first snapshot arrives, or when paired with a desktop that
     /// predates computer-status sync.
     @Published var desktopHostMetrics: HostMetricsSnapshot?
+    /// Desktop HTTP proxy used by the in-app browser to load localhost URLs
+    /// from the paired Mac instead of from the iPad.
+    @Published var desktopWebProxy: MobileWebProxyInfo?
     /// Current git branch per project, mirrored from the desktop's snapshot.
     @Published var projectBranches: [UUID: String] = [:]
     /// Local branch list per project, mirrored from the desktop's snapshot.
     @Published var availableBranchesByProject: [UUID: [String]] = [:]
+    /// Desktop-owned run profiles per project, mirrored into the mobile app.
+    @Published var runProfilesByProject: [UUID: [RunProfile]] = [:]
+    /// Recent and active run tasks mirrored from the desktop.
+    @Published var runTasks: [MobileRunTaskSnapshot] = []
+    @Published var inFlightRunProfileRequests: Set<UUID> = []
+    @Published var lastRunProfileError: String?
     /// IDs of branch operations awaiting a `BranchOpResultPayload`. Used so the
     /// UI can render a spinner on the chip while the desktop runs git.
     @Published var inFlightBranchOps: Set<UUID> = []
@@ -216,8 +225,7 @@ final class MobileAppState: ObservableObject {
         await client.start()
         // Re-request snapshot on every (re)start so we don't show stale state.
         if isPaired {
-            let payload = RequestSnapshotPayload(activeSessionID: activeSessionID)
-            try? await client.send(.requestSnapshot(payload), toHex: pairedDesktopPubkey)
+            await requestSnapshot(reason: "client_start")
             await reportAPNsTokenIfPending()
         }
     }
@@ -719,6 +727,110 @@ final class MobileAppState: ObservableObject {
         await requestSnapshot()
     }
 
+    func runProfiles(for projectID: UUID) -> [RunProfile] {
+        runProfilesByProject[projectID] ?? []
+    }
+
+    func runTasks(for projectID: UUID) -> [MobileRunTaskSnapshot] {
+        runTasks.filter { $0.projectId == projectID }
+    }
+
+    func runningTask(projectID: UUID, profileID: UUID) -> MobileRunTaskSnapshot? {
+        runTasks.first {
+            $0.projectId == projectID && $0.profileId == profileID && $0.isRunning
+        }
+    }
+
+    func saveRunProfile(_ profile: RunProfile, projectID: UUID) async {
+        guard isPaired else {
+            logger.error("[RunProfiles] save dropped because mobile is not paired project=\(projectID.uuidString, privacy: .public) profile=\(profile.id.uuidString, privacy: .public)")
+            return
+        }
+        var next = runProfilesByProject[projectID] ?? []
+        if let idx = next.firstIndex(where: { $0.id == profile.id }) {
+            next[idx] = profile
+        } else {
+            next.append(profile)
+        }
+        runProfilesByProject[projectID] = next
+
+        let payload = RunProfileMutationRequestPayload(
+            projectID: projectID,
+            operation: .upsert,
+            profile: profile,
+            profileID: profile.id
+        )
+        inFlightRunProfileRequests.insert(payload.clientRequestID)
+        do {
+            try await client.send(.runProfileMutationRequest(payload), toHex: pairedDesktopPubkey)
+            logger.info("[RunProfiles] sent save request id=\(payload.clientRequestID.uuidString, privacy: .public) project=\(projectID.uuidString, privacy: .public) profile=\(profile.id.uuidString, privacy: .public) desktopKey=\(String(self.pairedDesktopPubkey.prefix(12)), privacy: .public)")
+        } catch {
+            inFlightRunProfileRequests.remove(payload.clientRequestID)
+            lastRunProfileError = "Failed to send run profile update: \(error.localizedDescription)"
+            logger.error("[RunProfiles] save send failed id=\(payload.clientRequestID.uuidString, privacy: .public) project=\(projectID.uuidString, privacy: .public) profile=\(profile.id.uuidString, privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    func deleteRunProfile(projectID: UUID, profileID: UUID) async {
+        guard isPaired else {
+            logger.error("[RunProfiles] delete dropped because mobile is not paired project=\(projectID.uuidString, privacy: .public) profile=\(profileID.uuidString, privacy: .public)")
+            return
+        }
+        runProfilesByProject[projectID]?.removeAll { $0.id == profileID }
+        let payload = RunProfileMutationRequestPayload(
+            projectID: projectID,
+            operation: .delete,
+            profileID: profileID
+        )
+        inFlightRunProfileRequests.insert(payload.clientRequestID)
+        do {
+            try await client.send(.runProfileMutationRequest(payload), toHex: pairedDesktopPubkey)
+            logger.info("[RunProfiles] sent delete request id=\(payload.clientRequestID.uuidString, privacy: .public) project=\(projectID.uuidString, privacy: .public) profile=\(profileID.uuidString, privacy: .public)")
+        } catch {
+            inFlightRunProfileRequests.remove(payload.clientRequestID)
+            lastRunProfileError = "Failed to send run profile delete: \(error.localizedDescription)"
+            logger.error("[RunProfiles] delete send failed id=\(payload.clientRequestID.uuidString, privacy: .public) project=\(projectID.uuidString, privacy: .public) profile=\(profileID.uuidString, privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    func runProfile(projectID: UUID, profileID: UUID) async {
+        guard isPaired else {
+            logger.error("[RunProfiles] run dropped because mobile is not paired project=\(projectID.uuidString, privacy: .public) profile=\(profileID.uuidString, privacy: .public)")
+            return
+        }
+        let payload = RunProfileRunRequestPayload(projectID: projectID, profileID: profileID)
+        inFlightRunProfileRequests.insert(payload.clientRequestID)
+        do {
+            try await client.send(.runProfileRunRequest(payload), toHex: pairedDesktopPubkey)
+            logger.info("[RunProfiles] sent run request id=\(payload.clientRequestID.uuidString, privacy: .public) project=\(projectID.uuidString, privacy: .public) profile=\(profileID.uuidString, privacy: .public)")
+        } catch {
+            inFlightRunProfileRequests.remove(payload.clientRequestID)
+            lastRunProfileError = "Failed to send run request: \(error.localizedDescription)"
+            logger.error("[RunProfiles] run send failed id=\(payload.clientRequestID.uuidString, privacy: .public) project=\(projectID.uuidString, privacy: .public) profile=\(profileID.uuidString, privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    func stopRunTask(_ task: MobileRunTaskSnapshot) async {
+        guard isPaired else {
+            logger.error("[RunProfiles] stop dropped because mobile is not paired task=\(task.taskId.uuidString, privacy: .public)")
+            return
+        }
+        let payload = RunProfileStopRequestPayload(
+            taskID: task.taskId,
+            projectID: task.projectId,
+            profileID: task.profileId
+        )
+        inFlightRunProfileRequests.insert(payload.clientRequestID)
+        do {
+            try await client.send(.runProfileStopRequest(payload), toHex: pairedDesktopPubkey)
+            logger.info("[RunProfiles] sent stop request id=\(payload.clientRequestID.uuidString, privacy: .public) task=\(task.taskId.uuidString, privacy: .public) project=\(task.projectId.uuidString, privacy: .public) profile=\(task.profileId.uuidString, privacy: .public)")
+        } catch {
+            inFlightRunProfileRequests.remove(payload.clientRequestID)
+            lastRunProfileError = "Failed to send stop request: \(error.localizedDescription)"
+            logger.error("[RunProfiles] stop send failed id=\(payload.clientRequestID.uuidString, privacy: .public) task=\(task.taskId.uuidString, privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     /// Update the search query and dispatch a debounced search request to the
     /// paired desktop. Empty queries clear results without hitting the network.
     /// Stale requests are discarded by `clientRequestID`.
@@ -809,8 +921,13 @@ final class MobileAppState: ObservableObject {
         desktopSettings = nil
         desktopUsage = nil
         desktopHostMetrics = nil
+        desktopWebProxy = nil
         projectBranches = [:]
         availableBranchesByProject = [:]
+        runProfilesByProject = [:]
+        runTasks = []
+        inFlightRunProfileRequests = []
+        lastRunProfileError = nil
         inFlightBranchOps = []
         lastBranchOpError = nil
         messagesBySession = [:]
@@ -836,15 +953,15 @@ final class MobileAppState: ObservableObject {
     private func handle(_ event: RelayClient.Event) {
         switch event {
         case .stateChanged(let state):
-            logger.info("relay connection state changed: \(String(describing: state), privacy: .public)")
+            logger.info("[Relay] connection state changed: \(String(describing: state), privacy: .public) relay=\(self.relayURL.absoluteString, privacy: .public) desktopKey=\(String(self.pairedDesktopPubkey.prefix(12)), privacy: .public)")
             let previous = connectionState
             connectionState = state
             triggerConnectionFeedback(from: previous, to: state)
             if case .connected = state, isPaired {
-                Task { await self.requestSnapshot() }
+                Task { await self.requestSnapshot(reason: "relay_connected") }
             }
-        case .deliveryFailed:
-            break
+        case .deliveryFailed(let toHex):
+            logger.warning("[Relay] delivery failed to desktopKey=\(String(toHex.prefix(12)), privacy: .public)")
         case .inbound(let inbound):
             handleInbound(inbound)
         }
@@ -881,6 +998,9 @@ final class MobileAppState: ObservableObject {
             Task { await self.removePairedDesktopAfterRemoteUnpair(desktop) }
         case .snapshot(let snap):
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "snapshot") else { return }
+            let profileProjectCount = snap.runProfiles?.count ?? 0
+            let profileTotal = snap.runProfiles?.reduce(0) { $0 + $1.profiles.count } ?? 0
+            logger.info("[MobileSync] applying snapshot projects=\(snap.projects.count, privacy: .public) sessions=\(snap.sessions.count, privacy: .public) runProfileProjects=\(profileProjectCount, privacy: .public) runProfileTotal=\(profileTotal, privacy: .public) runTasks=\(snap.runTasks?.count ?? 0, privacy: .public) from desktopKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
             projects = snap.projects
             sessions = snap.sessions
             branchBriefings = snap.branchBriefings ?? []
@@ -888,6 +1008,20 @@ final class MobileAppState: ObservableObject {
             desktopSettings = snap.settings
             desktopUsage = snap.usage
             desktopHostMetrics = snap.hostMetrics
+            desktopWebProxy = snap.webProxy
+            if let webProxy = snap.webProxy {
+                logger.info("[WebBrowserSync] snapshot web proxy host=\(webProxy.host, privacy: .public) port=\(webProxy.port, privacy: .public)")
+            } else {
+                logger.warning("[WebBrowserSync] snapshot missing web proxy info")
+            }
+            if let runProfiles = snap.runProfiles {
+                runProfilesByProject = Dictionary(
+                    uniqueKeysWithValues: runProfiles.map { ($0.projectId, $0.profiles) }
+                )
+            }
+            if let tasks = snap.runTasks {
+                runTasks = tasks.sorted { $0.startedAt > $1.startedAt }
+            }
             if let branches = snap.projectBranches {
                 projectBranches = Dictionary(uniqueKeysWithValues: branches.map { ($0.projectId, $0.currentBranch) })
                 availableBranchesByProject = Dictionary(
@@ -971,12 +1105,45 @@ final class MobileAppState: ObservableObject {
             } else {
                 remoteProjectCreateError = result.errorMessage ?? "Failed to add project."
             }
+        case .runProfileResult(let result):
+            guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "run_profile_result") else { return }
+            logger.info("[RunProfiles] received result id=\(result.clientRequestID.uuidString, privacy: .public) ok=\(result.ok, privacy: .public) project=\(result.projectID.uuidString, privacy: .public) profiles=\(result.profiles?.count ?? 0, privacy: .public) task=\(result.task?.taskId.uuidString ?? "<nil>", privacy: .public) error=\(result.errorMessage ?? "<nil>", privacy: .public)")
+            applyRunProfileResult(result)
+        case .runTaskUpdate(let update):
+            guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "run_task_update") else { return }
+            upsertRunTask(update.task)
         case .ping:
             guard pairedDesktops.contains(where: { $0.pubkeyHex == inbound.fromHex }) else { return }
             Task { try? await self.client.send(.pong(PongPayload()), toHex: inbound.fromHex) }
         default:
             break
         }
+    }
+
+    private func applyRunProfileResult(_ result: RunProfileResultPayload) {
+        inFlightRunProfileRequests.remove(result.clientRequestID)
+        if let profiles = result.profiles {
+            runProfilesByProject[result.projectID] = profiles
+            logger.info("[RunProfiles] applied result profiles project=\(result.projectID.uuidString, privacy: .public) count=\(profiles.count, privacy: .public)")
+        }
+        if let task = result.task {
+            upsertRunTask(task)
+        }
+        if result.ok {
+            lastRunProfileError = nil
+            Task { await self.requestSnapshot() }
+        } else {
+            lastRunProfileError = result.errorMessage ?? "Run profile operation failed."
+        }
+    }
+
+    private func upsertRunTask(_ task: MobileRunTaskSnapshot) {
+        if let idx = runTasks.firstIndex(where: { $0.taskId == task.taskId }) {
+            runTasks[idx] = task
+        } else {
+            runTasks.insert(task, at: 0)
+        }
+        runTasks.sort { $0.startedAt > $1.startedAt }
     }
 
     private func applySessionUpdate(_ update: SessionUpdatePayload) {
@@ -1069,7 +1236,9 @@ final class MobileAppState: ObservableObject {
             isStreaming: isStreaming,
             attention: current.attention,
             progress: current.progress,
-            queuedMessages: current.queuedMessages
+            todos: current.todos,
+            queuedMessages: current.queuedMessages,
+            hasUncheckedCompletion: current.hasUncheckedCompletion
         )
     }
 
@@ -1081,10 +1250,22 @@ final class MobileAppState: ObservableObject {
         }
     }
 
-    private func requestSnapshot() async {
-        guard isPaired else { return }
+    func refreshFromDesktop(reason: String) async {
+        await requestSnapshot(reason: reason)
+    }
+
+    private func requestSnapshot(reason: String = "manual") async {
+        guard isPaired else {
+            logger.info("[MobileSync] snapshot request skipped reason=\(reason, privacy: .public): mobile is not paired")
+            return
+        }
         let payload = RequestSnapshotPayload(activeSessionID: activeSessionID)
-        try? await client.send(.requestSnapshot(payload), toHex: pairedDesktopPubkey)
+        do {
+            try await client.send(.requestSnapshot(payload), toHex: pairedDesktopPubkey)
+            logger.info("[MobileSync] requested snapshot reason=\(reason, privacy: .public) activeSession=\(self.activeSessionID ?? "<nil>", privacy: .public) desktopKey=\(String(self.pairedDesktopPubkey.prefix(12)), privacy: .public)")
+        } catch {
+            logger.error("[MobileSync] snapshot request failed reason=\(reason, privacy: .public) desktopKey=\(String(self.pairedDesktopPubkey.prefix(12)), privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     private func failPairing(_ message: String) {

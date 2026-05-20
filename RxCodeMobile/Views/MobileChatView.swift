@@ -20,6 +20,8 @@ struct MobileChatView: View {
     @State private var showingArchiveConfirm = false
     @State private var showingDeleteConfirm = false
     @State private var showingTodoSheet = false
+    @State private var showingRunProfiles = false
+    @State private var showingBrowser = false
     /// The question request whose sheet is currently presented, if any.
     @State private var presentedQuestion: PendingQuestionPayload?
     /// The plan whose review sheet is currently presented, if any.
@@ -80,6 +82,25 @@ struct MobileChatView: View {
                     todos: todos ?? [],
                     summary: threadSummary
                 )
+            }
+            .sheet(isPresented: $showingRunProfiles) {
+                if let projectID = currentProjectID {
+                    NavigationStack {
+                        MobileRunProfilesView(projectID: projectID)
+                            .environmentObject(state)
+                            .task {
+                                await state.refreshFromDesktop(reason: "open_run_profiles")
+                            }
+                    }
+                }
+            }
+            .fullScreenCover(isPresented: $showingBrowser) {
+                NavigationStack {
+                    MobileInAppBrowserView(
+                        initialURL: browserLaunchURL,
+                        proxyInfo: state.desktopWebProxy
+                    )
+                }
             }
             .sheet(item: $presentedQuestion) { question in
                 MobileQuestionSheet(
@@ -162,6 +183,18 @@ struct MobileChatView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
+                    Button {
+                        showingBrowser = true
+                    } label: {
+                        Label("Open in Browser", systemImage: "globe")
+                    }
+                    Button {
+                        showingRunProfiles = true
+                    } label: {
+                        Label("Run Profiles", systemImage: "play.rectangle")
+                    }
+                    .disabled(currentProjectID == nil)
+                    Divider()
                     Button {
                         showingRenameSheet = true
                     } label: {
@@ -384,15 +417,30 @@ struct MobileChatView: View {
         state.messagesBySession[sessionID] ?? []
     }
 
+    private var currentProjectID: UUID? {
+        state.sessions.first(where: { $0.id == sessionID })?.projectId
+    }
+
+    private var browserLaunchURL: URL? {
+        let threadURL = MobileBrowserURLDetector.detect(in: messages.map(\.content))
+        if let threadURL { return threadURL }
+        guard let projectID = currentProjectID else { return nil }
+        let taskText = state.runTasks(for: projectID).flatMap { task in
+            [task.commandPreview, task.terminalOutputTail ?? ""]
+        }
+        return MobileBrowserURLDetector.detect(in: taskText)
+    }
+
     private var title: String {
         state.sessions.first(where: { $0.id == sessionID })?.title ?? "Thread"
     }
 
-    /// Live todos extracted from the most recent `TodoWrite` tool call in the
-    /// thread's messages — the same source the desktop toolbar pill uses.
-    /// `nil` when the thread has never emitted a todo list.
+    /// Live todos from synced messages when available, otherwise from the
+    /// desktop session summary. Codex plan updates arrive as desktop-owned
+    /// snapshots rather than `TodoWrite` message tool calls.
     private var todos: [TodoItem]? {
         TodoExtractor.latest(in: messages)
+            ?? state.sessions.first(where: { $0.id == sessionID })?.todos
     }
 
     /// The desktop-generated summary for this thread, if one exists. Summaries

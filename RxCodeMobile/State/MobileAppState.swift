@@ -1693,6 +1693,7 @@ final class MobileAppState: ObservableObject {
             if activeSessionID == previous {
                 activeSessionID = update.sessionID
             }
+            sessions.removeAll { $0.id == previous }
         }
 
         if let summary = update.summary {

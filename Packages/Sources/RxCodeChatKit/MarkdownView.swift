@@ -1,22 +1,47 @@
 import SwiftUI
 import Foundation
+import MarkdownUI
 import RxCodeCore
 import Textual
 
 // MARK: - Markdown Content View
 
-/// Renders markdown text — headings, lists, blockquotes, tables, and rich text —
-/// using the Textual rendering engine (https://github.com/gonzalezreal/textual).
-struct MarkdownContentView: View {
+/// Renders markdown text with the renderer selected in `Settings.swift`.
+public struct MarkdownContentView: View {
     let text: String
     let showsTrailingCursor: Bool
     let isCursorVisible: Bool
 
-    init(text: String, showsTrailingCursor: Bool = false, isCursorVisible: Bool = true) {
+    public init(text: String, showsTrailingCursor: Bool = false, isCursorVisible: Bool = true) {
         self.text = text
         self.showsTrailingCursor = showsTrailingCursor
         self.isCursorVisible = isCursorVisible
     }
+
+    public var body: some View {
+        switch RxCodeChatKitSettings.markdownRenderer {
+        case .textual:
+            TextualMarkdownContentView(
+                text: text,
+                showsTrailingCursor: showsTrailingCursor,
+                isCursorVisible: isCursorVisible
+            )
+        case .markdownUI:
+            MarkdownUIMarkdownContentView(
+                text: text,
+                showsTrailingCursor: showsTrailingCursor,
+                isCursorVisible: isCursorVisible
+            )
+        }
+    }
+}
+
+// MARK: - Textual Renderer
+
+private struct TextualMarkdownContentView: View {
+    let text: String
+    let showsTrailingCursor: Bool
+    let isCursorVisible: Bool
 
     var body: some View {
         StructuredText(markdown: renderedMarkdown)
@@ -34,20 +59,10 @@ struct MarkdownContentView: View {
             )
             .textual.headingStyle(RxCodeHeadingStyle())
             .textual.codeBlockStyle(RxCodeBlockStyle())
-            // Keep Textual's text-selection overlay permanently disabled.
-            // When enabled it installs a geometry-dependent
-            // `onChange(of: AnyTextLayoutCollection)` that fires many times
-            // per frame while the chat List scrolls, dropping frames and
-            // making the scroll bumpy. Toggling it per scroll-phase is worse:
-            // flipping selectability swaps Textual's view-tree branch and
-            // rebuilds every visible markdown row. Whole-message and
-            // per-code-block Copy buttons cover copying instead.
             .textual.textSelection(.disabled)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// The markdown actually passed to the renderer: bare URLs auto-linked and,
-    /// while streaming, a trailing cursor glyph appended.
     private var renderedMarkdown: String {
         let processed = preprocessMarkdown(text)
         if showsTrailingCursor && isCursorVisible {
@@ -57,10 +72,166 @@ struct MarkdownContentView: View {
     }
 }
 
+// MARK: - MarkdownUI Renderer
+
+private struct MarkdownUIMarkdownContentView: View {
+    let text: String
+    let showsTrailingCursor: Bool
+    let isCursorVisible: Bool
+
+    var body: some View {
+        Markdown(renderedMarkdown)
+            .id(renderedMarkdown)
+            .markdownTheme(.rxCodeChat)
+            .markdownTextStyle(\.code) {
+                FontFamilyVariant(.monospaced)
+                FontSize(.em(0.93))
+                ForegroundColor(ClaudeTheme.textPrimary)
+                BackgroundColor(ClaudeTheme.surfaceTertiary)
+            }
+            .markdownBlockStyle(\.codeBlock) { configuration in
+                MarkdownUICodeBlock(
+                    language: configuration.language,
+                    content: configuration.content
+                ) {
+                    configuration.label
+                }
+            }
+            .tint(ClaudeTheme.accent)
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var renderedMarkdown: String {
+        let processed = preprocessMarkdown(text)
+        if showsTrailingCursor && isCursorVisible {
+            return processed + "\u{2009}\u{25CF}"
+        }
+        return processed
+    }
+}
+
+private struct MarkdownUICodeBlock<Label: View>: View {
+    let language: String?
+    let content: String
+    @ViewBuilder let label: () -> Label
+    @State private var isCopied = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                if let language, !language.isEmpty {
+                    Text(language)
+                        .font(.system(size: ClaudeTheme.messageSize(11), weight: .medium, design: .monospaced))
+                        .foregroundStyle(ClaudeTheme.textTertiary)
+                }
+                Spacer()
+                Button {
+                    copyToClipboard(content, feedback: $isCopied)
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: isCopied ? "checkmark" : "doc.on.doc")
+                            .font(.caption2)
+                        Text(isCopied ? String(localized: "Copied", bundle: .module) : String(localized: "Copy", bundle: .module))
+                            .font(.caption2)
+                    }
+                    .foregroundStyle(isCopied ? ClaudeTheme.statusSuccess : ClaudeTheme.textTertiary)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(ClaudeTheme.codeHeaderBackground)
+
+            Rectangle()
+                .fill(ClaudeTheme.border)
+                .frame(height: 0.5)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                label()
+                    .markdownTextStyle {
+                        FontFamilyVariant(.monospaced)
+                        FontSize(.em(0.88))
+                        ForegroundColor(ClaudeTheme.textPrimary)
+                        BackgroundColor(nil)
+                    }
+                    .fixedSize()
+                    .padding(12)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(ClaudeTheme.codeBackground)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
+        .overlay(
+            RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
+                .strokeBorder(ClaudeTheme.border, lineWidth: 0.5)
+        )
+        .markdownMargin(top: .em(0.88), bottom: .em(0.4))
+    }
+}
+
+private extension Theme {
+    static let rxCodeChat = Theme.gitHub
+        .text {
+            FontSize(ClaudeTheme.messageSize(15))
+            ForegroundColor(ClaudeTheme.textPrimary)
+        }
+        .link {
+            ForegroundColor(ClaudeTheme.accent)
+        }
+        .heading1 { configuration in
+            configuration.label
+                .markdownTextStyle {
+                    FontSize(.em(1.33))
+                    FontWeight(.bold)
+                    ForegroundColor(ClaudeTheme.textPrimary)
+                }
+                .markdownMargin(top: .em(1.2), bottom: .em(0.4))
+        }
+        .heading2 { configuration in
+            configuration.label
+                .markdownTextStyle {
+                    FontSize(.em(1.2))
+                    FontWeight(.bold)
+                    ForegroundColor(ClaudeTheme.textPrimary)
+                }
+                .markdownMargin(top: .em(1.2), bottom: .em(0.4))
+        }
+        .heading3 { configuration in
+            configuration.label
+                .markdownTextStyle {
+                    FontSize(.em(1.07))
+                    FontWeight(.semibold)
+                    ForegroundColor(ClaudeTheme.textPrimary)
+                }
+                .markdownMargin(top: .em(1.2), bottom: .em(0.4))
+        }
+        .blockquote { configuration in
+            configuration.label
+                .markdownTextStyle {
+                    ForegroundColor(ClaudeTheme.textSecondary)
+                }
+                .padding(.leading, 12)
+                .overlay(alignment: .leading) {
+                    Rectangle()
+                        .fill(ClaudeTheme.accent)
+                        .frame(width: 3)
+                }
+                .markdownMargin(top: .em(0.8), bottom: .em(0.4))
+        }
+        .paragraph { configuration in
+            configuration.label
+                .relativeLineSpacing(.em(0.2))
+                .markdownMargin(top: .em(0), bottom: .em(0.5))
+        }
+        .listItem { configuration in
+            configuration.label
+                .markdownMargin(top: .em(0.15), bottom: .em(0.15))
+        }
+}
+
 // MARK: - Markdown Preprocessing
 
-/// Applies bare-URL auto-linking and link sanitization, skipping fenced code blocks
-/// so URLs inside code samples are left untouched.
 private func preprocessMarkdown(_ text: String) -> String {
     var lines: [String] = []
     var inFence = false
@@ -78,9 +249,8 @@ private func preprocessMarkdown(_ text: String) -> String {
     return lines.joined(separator: "\n")
 }
 
-// MARK: - Heading Style
+// MARK: - Textual Styles
 
-/// Heading style tuned to RxCode's chat typography (15pt body text).
 private struct RxCodeHeadingStyle: StructuredText.HeadingStyle {
     private static let fontScales: [CGFloat] = [1.333, 1.2, 1.067, 1.0, 1.0, 1.0]
     private static let fontWeights: [Font.Weight] = [.bold, .bold, .semibold, .semibold, .medium, .medium]
@@ -94,10 +264,6 @@ private struct RxCodeHeadingStyle: StructuredText.HeadingStyle {
     }
 }
 
-// MARK: - Code Block Style
-
-/// Code block style that keeps RxCode's chrome — language label and copy button —
-/// while delegating syntax highlighting to Textual.
 private struct RxCodeBlockStyle: StructuredText.CodeBlockStyle {
     func makeBody(configuration: Configuration) -> some View {
         RxCodeBlockBody(configuration: configuration)
@@ -169,7 +335,6 @@ private struct RxCodeBlockBody: View {
 
 // MARK: - Markdown Link Helpers
 
-/// Removes incorrectly included characters (such as backticks) from URLs inside markdown links `[text](url)`
 func sanitizeMarkdownLinkURLs(_ text: String) -> String {
     let pattern = #"\[([^\]]*)\]\(([^)]*`[^)]*)\)"#
     guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
@@ -186,17 +351,12 @@ func sanitizeMarkdownLinkURLs(_ text: String) -> String {
     return result
 }
 
-/// Converts bare URLs not already inside a markdown link into `[url](url)` form
 func autoLinkURLs(_ text: String) -> String {
-    // Leave URLs already inside markdown links untouched
-    // Pattern: match only bare URLs that are not in ](url) or [text](url) form
     let pattern = #"(?<!\]\()(?<!\()https?://[^\s\)<>\[\]`]+"#
     guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
     let range = NSRange(text.startIndex..., in: text)
     var result = text
-    // Substitute from back to front to prevent index shifting
-    let matches = regex.matches(in: text, range: range).reversed()
-    for match in matches {
+    for match in regex.matches(in: text, range: range).reversed() {
         guard let swiftRange = Range(match.range, in: result) else { continue }
         let url = String(result[swiftRange])
         result.replaceSubrange(swiftRange, with: "[\(url)](\(url))")

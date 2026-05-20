@@ -65,6 +65,16 @@ struct RxCodeJobActivityAttributes: ActivityAttributes {
                 guard todoTotal > 0 else { return 0 }
                 return min(1, max(0, Double(todoDone) / Double(todoTotal)))
             }
+
+            var displayIdentity: String {
+                [
+                    phase.rawValue,
+                    projectName,
+                    title,
+                    "\(todoDone)/\(todoTotal)",
+                    currentStep ?? "",
+                ].joined(separator: "\u{1F}")
+            }
         }
 
         /// Every tracked job: those still running plus recently finished ones,
@@ -88,7 +98,19 @@ struct RxCodeJobActivityAttributes: ActivityAttributes {
                     ordered.append(job)
                 }
             }
-            return ordered
+
+            var visible: [Job] = []
+            var indicesByDisplay: [String: Int] = [:]
+            for job in ordered {
+                let key = job.displayIdentity
+                if let index = indicesByDisplay[key] {
+                    visible[index] = job
+                } else {
+                    indicesByDisplay[key] = visible.count
+                    visible.append(job)
+                }
+            }
+            return visible
         }
 
         /// Jobs still being worked on.

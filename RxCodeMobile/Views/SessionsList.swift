@@ -1,6 +1,6 @@
-import SwiftUI
 import RxCodeCore
 import RxCodeSync
+import SwiftUI
 
 enum MobileDraftSessionID {
     private static let prefix = "draft-new"
@@ -27,6 +27,7 @@ struct SessionsList: View {
     var usesSelection = true
     @State private var searchText = ""
     @State private var showingNewThread = false
+    @Namespace private var glassNamespace
 
     /// Number of rows currently materialized. The list grows in `pageSize`
     /// increments as the user scrolls so we never render every thread at once.
@@ -34,66 +35,141 @@ struct SessionsList: View {
     private static let pageSize = 20
 
     var body: some View {
-        list
-        .navigationTitle("Threads")
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    showingNewThread = true
-                } label: {
-                    Image(systemName: "square.and.pencil")
+        glassThreadList
+            .navigationTitle("Threads")
+            .toolbar { toolbarContent }
+            .sheet(isPresented: $showingNewThread) {
+                NewThreadSheet(projectID: projectID) { newSessionID in
+                    selected = newSessionID
+                }
+                .environmentObject(state)
+            }
+            .searchable(
+                text: $searchText,
+                placement: .navigationBarDrawer(displayMode: .automatic),
+                prompt: "Search threads"
+            )
+            .autocorrectionDisabled(true)
+            .textInputAutocapitalization(.never)
+            .onChange(of: searchText) { _, _ in
+                // Restart paging so search results always begin at the top.
+                displayLimit = Self.pageSize
+            }
+            .overlay {
+                if filtered.isEmpty && !searchText.isEmpty {
+                    ContentUnavailableView.search(text: searchText)
+                } else if filtered.isEmpty && searchText.isEmpty {
+                    emptyStateView
                 }
             }
-        }
-        .sheet(isPresented: $showingNewThread) {
-            NewThreadSheet(projectID: projectID) { newSessionID in
-                selected = newSessionID
-            }
-            .environmentObject(state)
-        }
-        .searchable(
-            text: $searchText,
-            placement: .navigationBarDrawer(displayMode: .automatic),
-            prompt: "Search threads"
-        )
-        .autocorrectionDisabled(true)
-        .textInputAutocapitalization(.never)
-        .onChange(of: searchText) { _, _ in
-            // Restart paging so search results always begin at the top.
-            displayLimit = Self.pageSize
-        }
-        .overlay {
-            if filtered.isEmpty && !searchText.isEmpty {
-                ContentUnavailableView.search(text: searchText)
+    }
+
+    // MARK: - Toolbar
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            Button {
+                showingNewThread = true
+            } label: {
+                Image(systemName: "square.and.pencil")
+                    .font(.system(size: 16, weight: .medium))
             }
         }
     }
 
+    // MARK: - Glass Thread List
+
+    private var glassThreadList: some View {
+        ScrollView {
+            LazyVStack(spacing: 10) {
+                GlassEffectContainer(spacing: 12) {
+                    ForEach(visible) { session in
+                        GlassThreadCard(
+                            session: session,
+                            isSelected: selected == session.id,
+                            usesNavigationLink: !usesSelection,
+                            onSelect: usesSelection ? { selected = session.id } : nil
+                        )
+                        .glassEffectID(session.id, in: glassNamespace)
+                        .onAppear {
+                            if session.id == visible.last?.id { loadMore() }
+                        }
+                        .contextMenu {
+                            threadContextMenu(for: session)
+                        }
+                    }
+                }
+
+                if displayLimit < filtered.count {
+                    loadingIndicator
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .animation(.spring(duration: 0.3), value: filtered.map(\.id))
+    }
+
+    // MARK: - Context Menu
+
     @ViewBuilder
-    private var list: some View {
-        if usesSelection {
-            List(selection: $selected) { sessionRows }
-        } else {
-            List { sessionRows }
+    private func threadContextMenu(for session: SessionSummary) -> some View {
+        Button {
+            Task { await state.archiveThread(sessionID: session.id) }
+        } label: {
+            Label("Archive", systemImage: "archivebox")
+        }
+
+        Divider()
+
+        Button(role: .destructive) {
+            Task { await state.deleteThread(sessionID: session.id) }
+        } label: {
+            Label("Delete", systemImage: "trash")
         }
     }
 
-    @ViewBuilder
-    private var sessionRows: some View {
-        ForEach(visible) { session in
-            sessionLink(session)
-                .onAppear {
-                    if session.id == visible.last?.id { loadMore() }
-                }
+    // MARK: - Loading Indicator
+
+    private var loadingIndicator: some View {
+        HStack {
+            Spacer()
+            ProgressView()
+                .padding(.vertical, 20)
+            Spacer()
         }
-        if displayLimit < filtered.count {
-            HStack {
-                Spacer()
-                ProgressView()
-                Spacer()
+    }
+
+    // MARK: - Empty State
+
+    private var emptyStateView: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "bubble.left.and.bubble.right")
+                .font(.system(size: 48, weight: .light))
+                .foregroundStyle(.tertiary)
+
+            Text("No Threads")
+                .font(.title3.weight(.medium))
+                .foregroundStyle(.secondary)
+
+            Text("Start a new conversation to get help with your project.")
+                .font(.subheadline)
+                .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+
+            Button {
+                showingNewThread = true
+            } label: {
+                Label("New Thread", systemImage: "plus")
+                    .font(.subheadline.weight(.medium))
             }
-            .listRowSeparator(.hidden)
+            .buttonStyle(.glass)
+            .padding(.top, 8)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     /// The slice of `filtered` currently rendered.
@@ -104,36 +180,6 @@ struct SessionsList: View {
     private func loadMore() {
         guard displayLimit < filtered.count else { return }
         displayLimit = min(displayLimit + Self.pageSize, filtered.count)
-    }
-
-    private func sessionLink(_ session: SessionSummary) -> some View {
-        NavigationLink(value: session.id) {
-            HStack(spacing: 6) {
-                leadingDot(for: session)
-
-                SessionSidebarRow(
-                    title: rowTitle(for: session),
-                    updatedAt: session.updatedAt,
-                    isPinned: session.isPinned,
-                    isBackgroundStreaming: session.isStreaming
-                )
-            }
-        }
-    }
-
-    /// Status dot shown ahead of the row. A pending permission or question
-    /// takes precedence; otherwise a green dot marks a thread whose run
-    /// finished while unread, mirroring the desktop sidebar.
-    @ViewBuilder
-    private func leadingDot(for session: SessionSummary) -> some View {
-        if let attention = session.attention {
-            statusDot(for: attention)
-        } else if session.hasUncheckedCompletion, !session.isStreaming {
-            Circle()
-                .fill(ClaudeTheme.statusSuccess)
-                .frame(width: 7, height: 7)
-                .accessibilityLabel("Finished, unread")
-        }
     }
 
     private var filtered: [SessionSummary] {
@@ -149,18 +195,6 @@ struct SessionsList: View {
                 if lhs.isPinned != rhs.isPinned { return lhs.isPinned && !rhs.isPinned }
                 return lhs.updatedAt > rhs.updatedAt
             }
-    }
-
-    private func rowTitle(for session: SessionSummary) -> String {
-        let cleaned = ChatSession.stripAttachmentMarkers(from: session.title)
-        return cleaned.isEmpty ? ChatSession.defaultTitle : cleaned
-    }
-
-    private func statusDot(for attention: SessionAttentionKind) -> some View {
-        Circle()
-            .fill(attention == .question ? Color.yellow : Color.orange)
-            .frame(width: 7, height: 7)
-            .accessibilityLabel(attention == .question ? "Question pending" : "Permission pending")
     }
 }
 

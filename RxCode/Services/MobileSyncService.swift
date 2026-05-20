@@ -437,7 +437,13 @@ final class MobileSyncService: ObservableObject {
             )
             await client.broadcast(.sessionUpdate(payload))
         }
-        updateJobTracking(sessionID: sessionID, kind: kind, isStreaming: isStreaming, summary: summary)
+        updateJobTracking(
+            sessionID: sessionID,
+            kind: kind,
+            isStreaming: isStreaming,
+            summary: summary,
+            previousSessionID: previousSessionID
+        )
     }
 
     /// Mirror the desktop's current `AskUserQuestion` queue to every paired
@@ -464,8 +470,20 @@ final class MobileSyncService: ObservableObject {
         sessionID: String,
         kind: SessionUpdatePayload.Kind,
         isStreaming: Bool?,
-        summary: RxCodeSync.SessionSummary?
+        summary: RxCodeSync.SessionSummary?,
+        previousSessionID: String?
     ) {
+        if let previousSessionID, previousSessionID != sessionID {
+            streamingSessionIDs.remove(previousSessionID)
+            if let previousIdx = trackedJobs.firstIndex(where: { $0.sessionID == previousSessionID }) {
+                if let summary {
+                    trackedJobs[previousIdx] = makeJobContent(from: summary)
+                } else {
+                    trackedJobs.remove(at: previousIdx)
+                }
+                lastPushedJobsSignature = ""
+            }
+        }
         let streaming: Bool?
         switch kind {
         case .streamingStarted: streaming = true

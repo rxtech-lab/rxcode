@@ -174,6 +174,90 @@ public enum IDEToolRegistry {
             ])
         ),
         IDETool(
+            name: "ide__memory_search",
+            description: "Search durable RxCode memories. Use this to retrieve saved user preferences, project facts, or decisions relevant to the current task.",
+            visibility: .alwaysIDEOnly,
+            inputSchema: .object([
+                "type": .string("object"),
+                "properties": .object([
+                    "query": .object([
+                        "type": .string("string"),
+                        "description": .string("Natural-language search query."),
+                    ]),
+                    "project_id": .object([
+                        "type": .string("string"),
+                        "description": .string("Optional project UUID to prefer project-local memories while still including global memories."),
+                    ]),
+                    "limit": .object([
+                        "type": .string("integer"),
+                        "description": .string("Maximum number of memories to return. Default 20, capped at 100."),
+                    ]),
+                ]),
+                "required": .array([.string("query")]),
+            ])
+        ),
+        IDETool(
+            name: "ide__memory_add",
+            description: "Add a durable memory to RxCode. Use only for stable user preferences, project facts, or decisions that should help future work.",
+            visibility: .alwaysIDEOnly,
+            inputSchema: .object([
+                "type": .string("object"),
+                "properties": .object([
+                    "content": .object(["type": .string("string")]),
+                    "project_id": .object([
+                        "type": .string("string"),
+                        "description": .string("Optional project UUID. Ignored when scope is global."),
+                    ]),
+                    "kind": .object([
+                        "type": .string("string"),
+                        "enum": .array([.string("preference"), .string("fact"), .string("decision")]),
+                    ]),
+                    "scope": .object([
+                        "type": .string("string"),
+                        "enum": .array([.string("project"), .string("global")]),
+                    ]),
+                ]),
+                "required": .array([.string("content")]),
+            ])
+        ),
+        IDETool(
+            name: "ide__memory_update",
+            description: "Update an existing RxCode memory by id.",
+            visibility: .alwaysIDEOnly,
+            inputSchema: .object([
+                "type": .string("object"),
+                "properties": .object([
+                    "id": .object(["type": .string("string")]),
+                    "content": .object(["type": .string("string")]),
+                    "project_id": .object([
+                        "type": .string("string"),
+                        "description": .string("Optional project UUID. Ignored when scope is global."),
+                    ]),
+                    "kind": .object([
+                        "type": .string("string"),
+                        "enum": .array([.string("preference"), .string("fact"), .string("decision")]),
+                    ]),
+                    "scope": .object([
+                        "type": .string("string"),
+                        "enum": .array([.string("project"), .string("global")]),
+                    ]),
+                ]),
+                "required": .array([.string("id"), .string("content")]),
+            ])
+        ),
+        IDETool(
+            name: "ide__memory_delete",
+            description: "Delete a durable RxCode memory by id.",
+            visibility: .alwaysIDEOnly,
+            inputSchema: .object([
+                "type": .string("object"),
+                "properties": .object([
+                    "id": .object(["type": .string("string")]),
+                ]),
+                "required": .array([.string("id")]),
+            ])
+        ),
+        IDETool(
             name: "ide__send_to_thread",
             description: "Send a chat prompt to a thread in any project — continue an existing thread by `thread_id`, or start a brand-new thread by passing `project_id`. Triggers a real agent run that may consume tokens. Returns the assistant's reply text (waits up to `timeout_seconds`).",
             visibility: .alwaysIDEOnly,

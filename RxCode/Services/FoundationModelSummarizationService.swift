@@ -92,6 +92,23 @@ actor FoundationModelSummarizationService {
         return cleanSummary(raw, limit: 1800)
     }
 
+    func generateMemoryOperations(
+        existingMemories: [(id: String, content: String)],
+        userMessage: String,
+        finalResponse: String
+    ) async -> String? {
+        let prompt = OpenAISummarizationService.memoryExtractionPrompt(
+            existingMemories: existingMemories,
+            userMessage: userMessage,
+            finalResponse: finalResponse
+        )
+        let raw = await respond(
+            instructions: "You extract concise durable memory as JSON operations. Output only JSON.",
+            prompt: prompt
+        )
+        return cleanSummary(raw, limit: 3000)
+    }
+
     func generateBranchBriefing(
         threadSummaries: [(title: String, summary: String)]
     ) async -> String? {

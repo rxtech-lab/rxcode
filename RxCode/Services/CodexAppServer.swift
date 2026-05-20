@@ -313,6 +313,21 @@ actor CodexAppServer {
         return cleanSummary(raw, limit: 1800)
     }
 
+    func generateMemoryOperations(
+        existingMemories: [(id: String, content: String)],
+        userMessage: String,
+        finalResponse: String,
+        model: String?
+    ) async -> String? {
+        let prompt = OpenAISummarizationService.memoryExtractionPrompt(
+            existingMemories: existingMemories,
+            userMessage: userMessage,
+            finalResponse: finalResponse
+        )
+        guard let raw = await generateCodexPlainSummary(prompt: prompt, model: model) else { return nil }
+        return cleanSummary(raw, limit: 3000)
+    }
+
     func generateBranchBriefing(
         threadSummaries: [(title: String, summary: String)],
         model: String?
@@ -512,6 +527,9 @@ actor CodexAppServer {
             let handles = try await spawnAppServer(binary: binary, streamId: streamId, cwd: cwd, configOverrides: mcpConfigOverrides)
             try Self.writeJSONLine(Self.request(id: 1, method: "initialize", params: initializeParams()), to: handles.stdin)
 
+            // Surface the IDE tools blurb as developer instructions only when
+            // the `rxcode-ide` MCP bridge is wired into this turn's overrides.
+            let ideInstructions = Self.includesIDEServer(mcpConfigOverrides) ? Self.ideToolsDeveloperInstructions : nil
             var activeThreadId = threadId
             var turnStarted = false
             var turnCompleted = false
@@ -534,7 +552,7 @@ actor CodexAppServer {
                         try Self.writeJSONLine(Self.notification(method: "initialized", params: [:]), to: handles.stdin)
                         let method = activeThreadId == nil ? "thread/start" : "thread/resume"
                         let params = method == "thread/start"
-                            ? threadStartParams(threadId: activeThreadId, cwd: cwd, permissionMode: permissionMode, planMode: planMode)
+                            ? threadStartParams(threadId: activeThreadId, cwd: cwd, permissionMode: permissionMode, planMode: planMode, ideInstructions: ideInstructions)
                             : threadParams(threadId: activeThreadId, cwd: cwd)
                         try Self.writeJSONLine(Self.request(id: 2, method: method, params: params), to: handles.stdin)
                     case "2":
@@ -832,13 +850,16 @@ actor CodexAppServer {
         return params
     }
 
-    private func threadStartParams(threadId: String?, cwd: String, permissionMode: PermissionMode, planMode: Bool) -> [String: JSONValue] {
+    private func threadStartParams(threadId: String?, cwd: String, permissionMode: PermissionMode, planMode: Bool, ideInstructions: String?) -> [String: JSONValue] {
         var params: [String: JSONValue] = ["cwd": .string(cwd)]
         if let threadId { params["threadId"] = .string(threadId) }
         params["approvalPolicy"] = .string(Self.codexApprovalPolicy(permissionMode: permissionMode, planMode: planMode))
         params["sandbox"] = .string(Self.codexSandboxMode(permissionMode: permissionMode, planMode: planMode))
-        if planMode {
-            params["developerInstructions"] = .string(Self.planModeInstructions)
+        var instructions: [String] = []
+        if let ideInstructions, !ideInstructions.isEmpty { instructions.append(ideInstructions) }
+        if planMode { instructions.append(Self.planModeInstructions) }
+        if !instructions.isEmpty {
+            params["developerInstructions"] = .string(instructions.joined(separator: "\n\n"))
         }
         return params
     }
@@ -863,6 +884,59 @@ actor CodexAppServer {
     Read-only inspection is allowed. End with a concise summary of the proposed plan and \
     wait for the user to disable plan mode before making changes.
     """
+
+    /// Developer-role instructions handed to Codex on `thread/start`. Tells the
+    /// agent about the IDE-provided `rxcode-ide` MCP server — cross-project
+    /// chat, thread history, running jobs, usage, and durable cross-session
+    /// memory. Only emitted when the IDE MCP bridge is wired into the turn.
+    private static let ideToolsDeveloperInstructions = """
+    # RxCode IDE tools
+
+    You are running inside RxCode, a desktop IDE that hosts multiple projects, \
+    each with its own chat threads and agents. RxCode wires in a local MCP \
+    server named `rxcode-ide`; its tools appear in your available tools list. \
+    Use them to coordinate with other agents and to read editor state:
+
+    - `ide__get_projects` — list every project registered in RxCode, so you \
+    can discover sibling projects to read or message.
+    - `ide__get_threads` — list or natural-language search chat threads across \
+    projects.
+    - `ide__get_thread_messages` — fetch the message history of a specific \
+    thread by id.
+    - `ide__send_to_thread` — talk to another project's agent: send a prompt \
+    to an existing thread or start a new thread in a project. This triggers a \
+    real agent run that may consume tokens; it returns the other agent's reply.
+    - `ide__get_running_jobs` / `ide__get_job_output` — inspect run-profile \
+    jobs executing in the IDE.
+    - `ide__get_usage` — current rate-limit / token usage.
+
+    Reach for these when a task spans projects rather than guessing. Prefer \
+    reading threads first; only use `ide__send_to_thread` when you actually \
+    need another agent to act, since it costs tokens.
+
+    RxCode also persists durable memories — stable user preferences, project \
+    facts, and decisions — across sessions. Use these tools to recall and \
+    store them:
+
+    - `ide__memory_search` — before starting a task, search for saved \
+    preferences, facts, or decisions relevant to it instead of asking the \
+    user to repeat themselves.
+    - `ide__memory_add` — when the user states a stable preference, project \
+    fact, or decision ("remember…", "from now on…", "always…"), save it. Set \
+    `kind` (`preference`/`fact`/`decision`) and `scope` (`global` for \
+    cross-project, `project` for repo-specific).
+    - `ide__memory_update` — when saved information changes, update the \
+    existing entry by `id` rather than adding a duplicate.
+    - `ide__memory_delete` — remove a memory by `id` when it is no longer valid.
+
+    Only store stable, reusable information in memory — not transient task \
+    details.
+    """
+
+    /// True when the `rxcode-ide` MCP bridge is present in the `-c` overrides.
+    private static func includesIDEServer(_ overrides: [String]) -> Bool {
+        overrides.contains { $0.hasPrefix("mcp_servers.rxcode-ide=") }
+    }
 
     private static func codexApprovalPolicy(permissionMode: PermissionMode, planMode: Bool) -> String {
         if planMode { return "on-request" }

@@ -4,7 +4,6 @@ import RxCodeCore
 /// Skill marketplace panel — displayed as an overlay or embedded in a settings tab.
 struct SkillMarketView: View {
     @Environment(AppState.self) private var appState
-    @Environment(WindowState.self) private var windowState
     @Environment(\.dismiss) private var dismiss
     @State private var searchText = ""
     @State private var selectedFilter = "All"
@@ -30,11 +29,7 @@ struct SkillMarketView: View {
         }
         .sheet(item: $selectedPlugin) { plugin in
             PluginDetailView(
-                plugin: plugin,
-                isInstalled: appState.marketplaceInstalledNames.contains(plugin.name),
-                installStatus: appState.marketplacePluginStates[plugin.id] ?? .notInstalled,
-                onInstall: {},
-                onUninstall: {}
+                plugin: plugin
             )
             .focusable(false)
         }
@@ -337,15 +332,17 @@ struct PluginCard: View {
 
 struct PluginDetailView: View {
     let plugin: MarketplacePlugin
-    let isInstalled: Bool
-    let installStatus: PluginInstallStatus
-    let onInstall: () -> Void
-    let onUninstall: () -> Void
 
     @Environment(\.dismiss) private var dismiss
     @Environment(AppState.self) private var appState
-    @Environment(WindowState.self) private var windowState
-    @State private var terminalState: InteractiveTerminalState?
+
+    private var isInstalled: Bool {
+        appState.marketplaceInstalledNames.contains(plugin.name)
+    }
+
+    private var installStatus: PluginInstallStatus {
+        appState.marketplacePluginStates[plugin.id] ?? .notInstalled
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -422,11 +419,11 @@ struct PluginDetailView: View {
 
                     // Install command
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Install Command")
+                        Text("Agent Availability")
                             .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
 
-                        Text(plugin.installCommand)
-                            .font(.system(size: ClaudeTheme.size(12), design: .monospaced))
+                        Text("Installed skills are managed by RxCode and enabled for Claude Code, Codex, and ACP agents where supported.")
+                            .font(.system(size: ClaudeTheme.size(12)))
                             .foregroundStyle(.secondary)
                             .padding(10)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -438,12 +435,6 @@ struct PluginDetailView: View {
             }
         }
         .frame(width: 620, height: 500)
-        .sheet(item: $terminalState) { terminal in
-            InteractiveTerminalPopup(state: terminal)
-                .onDisappear {
-                    Task { await appState.loadMarketplace() }
-                }
-        }
     }
 
     @ViewBuilder
@@ -462,13 +453,7 @@ struct PluginDetailView: View {
     @ViewBuilder
     private var removeButton: some View {
         Button("Remove") {
-            terminalState = InteractiveTerminalState(
-                title: "Uninstall \(plugin.name)",
-                executable: "/bin/zsh",
-                arguments: ["-il"],
-                initialCommand: "claude plugin uninstall \(plugin.name)",
-                reportToChat: false
-            )
+            Task { await appState.uninstallMarketplacePlugin(plugin) }
         }
         .font(.system(size: ClaudeTheme.size(12), weight: .medium))
         .foregroundStyle(Color.red)
@@ -495,24 +480,12 @@ struct PluginDetailView: View {
             removeButton
         case .failed:
             Button("Retry") {
-                terminalState = InteractiveTerminalState(
-                    title: "Install \(plugin.name)",
-                    executable: "/bin/zsh",
-                    arguments: ["-il"],
-                    initialCommand: "claude plugin install \(plugin.name)@\(plugin.marketplace)",
-                    reportToChat: false
-                )
+                Task { await appState.installMarketplacePlugin(plugin) }
             }
             .buttonStyle(.borderedProminent)
         default:
             Button("Install") {
-                terminalState = InteractiveTerminalState(
-                    title: "Install \(plugin.name)",
-                    executable: "/bin/zsh",
-                    arguments: ["-il"],
-                    initialCommand: "claude plugin install \(plugin.name)@\(plugin.marketplace)",
-                    reportToChat: false
-                )
+                Task { await appState.installMarketplacePlugin(plugin) }
             }
             .buttonStyle(.borderedProminent)
         }

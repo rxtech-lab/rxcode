@@ -4,6 +4,10 @@
 <dict>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
+    <key>NSSupportsLiveActivities</key>
+    <true/>
+    <key>NSSupportsLiveActivitiesFrequentUpdates</key>
+    <true/>
     <key>NSCameraUsageDescription</key>
     <string>Scan a QR code shown by RxCode on your Mac to pair this device.</string>
     <key>NSLocalNetworkUsageDescription</key>

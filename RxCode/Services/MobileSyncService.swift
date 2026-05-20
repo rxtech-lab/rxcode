@@ -6,6 +6,14 @@ import RxCodeCore
 import RxCodeSync
 import os.log
 
+/// One per-activity Live Activity push token registered by a paired mobile.
+/// The desktop targets `update`/`end` pushes at `token`, scoped to `sessionID`.
+struct LiveActivityTokenRef: Codable, Sendable, Hashable {
+    var activityID: String
+    var sessionID: String
+    var token: String
+}
+
 /// One paired mobile device. Persisted to
 /// `~/Library/Application Support/RxCode/paired_devices.json`.
 struct PairedDevice: Codable, Identifiable, Sendable, Hashable {
@@ -14,6 +22,12 @@ struct PairedDevice: Codable, Identifiable, Sendable, Hashable {
     var platform: String
     var apnsToken: String?
     var apnsEnvironment: String?
+    /// Device-wide Live Activity push-to-start token (iOS 17.2+). Lets the
+    /// desktop spawn a job Live Activity remotely. Optional for wire/forward
+    /// compatibility with paired-device files written before Live Activities.
+    var liveActivityStartToken: String?
+    /// Per-activity Live Activity update tokens, one per running job activity.
+    var liveActivityTokens: [LiveActivityTokenRef]?
     var pairedAt: Date
     var lastSeen: Date?
 
@@ -76,6 +90,22 @@ final class MobileSyncService: ObservableObject {
     /// The single AppState reference is set in init order from RxCodeApp,
     /// because AppState owns the storage layer and the streaming loop.
     private weak var appState: AnyObject?
+
+    // MARK: - Live Activity & widget state
+
+    /// Resolves a project's display name for Live Activity attributes. Set by
+    /// `AppState` after initialization; `nil` before that.
+    var projectNameResolver: (@MainActor (UUID) -> String?)?
+    /// Supplies the current Claude Code / Codex 5-hour usage for the widget
+    /// background push. Set by `AppState`; `nil` before that.
+    var usageSnapshotProvider: (@MainActor () -> (cc: Double?, codex: Double?))?
+
+    /// Session ids currently streaming — the live job count for the widget.
+    private var streamingSessionIDs: Set<String> = []
+    /// Per-job Live Activity bookkeeping, keyed by session id.
+    private var jobActivityState: [String: JobActivityState] = [:]
+    /// Last widget job count pushed, so a widget push only fires on a change.
+    private var lastWidgetJobCount: Int = -1
 
     init() {
         // Persisted relay URL or sensible default for self-host.
@@ -396,6 +426,7 @@ final class MobileSyncService: ObservableObject {
             )
             await client.broadcast(.sessionUpdate(payload))
         }
+        updateJobTracking(sessionID: sessionID, kind: kind, isStreaming: isStreaming, summary: summary)
     }
 
     /// Mirror the desktop's current `AskUserQuestion` queue to every paired
@@ -410,6 +441,258 @@ final class MobileSyncService: ObservableObject {
     func broadcastRunTaskUpdate(_ task: MobileRunTaskSnapshot) {
         Task {
             await client.broadcast(.runTaskUpdate(RunTaskUpdatePayload(task: task)))
+        }
+    }
+
+    // MARK: - Live Activity & widget push
+
+    /// Fold a session update into the streaming-job set and the per-job Live
+    /// Activity state, then push any resulting Live Activity / widget changes.
+    /// Called for every `broadcastSessionUpdate`.
+    private func updateJobTracking(
+        sessionID: String,
+        kind: SessionUpdatePayload.Kind,
+        isStreaming: Bool?,
+        summary: RxCodeSync.SessionSummary?
+    ) {
+        let streaming: Bool?
+        switch kind {
+        case .streamingStarted: streaming = true
+        case .streamingFinished: streaming = false
+        default: streaming = isStreaming
+        }
+        if let streaming {
+            if streaming { streamingSessionIDs.insert(sessionID) }
+            else { streamingSessionIDs.remove(sessionID) }
+        }
+        // Summaries carry title/progress/todos — they drive the Live Activity.
+        if let summary {
+            reconcileJobActivity(summary: summary)
+        }
+        pushWidgetUpdateIfJobCountChanged()
+    }
+
+    /// Start, update, or end a job's Live Activity based on the latest summary.
+    private func reconcileJobActivity(summary: RxCodeSync.SessionSummary) {
+        let sessionID = summary.id
+        let content = makeJobContent(from: summary)
+        if summary.isStreaming {
+            if var state = jobActivityState[sessionID] {
+                let changed = state.lastContent.signature != content.signature
+                state.lastContent = content
+                jobActivityState[sessionID] = state
+                if changed {
+                    logger.info("[LiveActivity] reconcile decision=update session=\(sessionID, privacy: .public) todos=\(content.todoDone, privacy: .public)/\(content.todoTotal, privacy: .public)")
+                    sendLiveActivityUpdate(content, phase: "running")
+                } else {
+                    logger.debug("[LiveActivity] reconcile decision=skip-unchanged session=\(sessionID, privacy: .public)")
+                }
+            } else {
+                jobActivityState[sessionID] = JobActivityState(lastContent: content)
+                logger.info("[LiveActivity] reconcile decision=start session=\(sessionID, privacy: .public)")
+                sendLiveActivityStart(content)
+            }
+        } else if jobActivityState[sessionID] != nil {
+            jobActivityState.removeValue(forKey: sessionID)
+            logger.info("[LiveActivity] reconcile decision=end session=\(sessionID, privacy: .public)")
+            sendLiveActivityEnd(content)
+            clearActivityTokens(sessionID: sessionID)
+        } else {
+            logger.debug("[LiveActivity] reconcile decision=ignore session=\(sessionID, privacy: .public) — not streaming and no active activity")
+        }
+    }
+
+    private func makeJobContent(from summary: RxCodeSync.SessionSummary) -> JobContent {
+        JobContent(
+            sessionID: summary.id,
+            title: summary.title,
+            projectName: projectNameResolver?(summary.projectId) ?? "",
+            todoDone: summary.progress?.done ?? 0,
+            todoTotal: summary.progress?.total ?? 0,
+            currentStep: summary.todos?.first { $0.status == .inProgress }?.activeForm
+        )
+    }
+
+    /// Push a `start` Live Activity to every device with a push-to-start token.
+    private func sendLiveActivityStart(_ content: JobContent) {
+        let devices = pairedDevices.filter { ($0.liveActivityStartToken?.isEmpty == false) }
+        guard !devices.isEmpty else {
+            logger.warning("[LiveActivity] start skipped session=\(content.sessionID, privacy: .public) — no paired device has a push-to-start token (pairedDevices=\(self.pairedDevices.count, privacy: .public)); the mobile app must register one first")
+            return
+        }
+        guard let pushURL = Self.pushEndpointURL(from: relayURL) else {
+            logger.error("[LiveActivity] start skipped session=\(content.sessionID, privacy: .public) — cannot derive push endpoint from relay \(self.relayURL.absoluteString, privacy: .public)")
+            return
+        }
+        let now = Date()
+        let payload: [String: Any] = ["aps": [
+            "timestamp": Int(now.timeIntervalSince1970),
+            "event": "start",
+            "content-state": contentStateDict(content, phase: "running", at: now),
+            "attributes-type": "RxCodeJobActivityAttributes",
+            "attributes": [
+                "sessionID": content.sessionID,
+                "projectName": content.projectName,
+                "title": content.title,
+            ],
+            "stale-date": Int(now.addingTimeInterval(3600).timeIntervalSince1970),
+        ]]
+        logger.info("[LiveActivity] start session=\(content.sessionID, privacy: .public) devices=\(devices.count, privacy: .public) project=\(content.projectName, privacy: .public) title=\(content.title, privacy: .public) phase=running todos=\(content.todoDone, privacy: .public)/\(content.todoTotal, privacy: .public) step=\(content.currentStep ?? "<none>", privacy: .public)")
+        for device in devices {
+            guard let token = device.liveActivityStartToken else { continue }
+            logger.info("[LiveActivity] start → posting push session=\(content.sessionID, privacy: .public) startTokenPrefix=\(String(token.prefix(12)), privacy: .public) deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
+            Task {
+                await postRawPush(deviceToken: token, pushType: "liveactivity",
+                                  apnsPayload: payload, collapseID: nil, device: device, pushURL: pushURL)
+            }
+        }
+    }
+
+    private func sendLiveActivityUpdate(_ content: JobContent, phase: String) {
+        let now = Date()
+        let payload: [String: Any] = ["aps": [
+            "timestamp": Int(now.timeIntervalSince1970),
+            "event": "update",
+            "content-state": contentStateDict(content, phase: phase, at: now),
+            "stale-date": Int(now.addingTimeInterval(3600).timeIntervalSince1970),
+        ]]
+        pushToActivityTokens(sessionID: content.sessionID, payload: payload)
+    }
+
+    private func sendLiveActivityEnd(_ content: JobContent) {
+        let now = Date()
+        let payload: [String: Any] = ["aps": [
+            "timestamp": Int(now.timeIntervalSince1970),
+            "event": "end",
+            "content-state": contentStateDict(content, phase: "done", at: now),
+            // Keep the "Done" state on screen briefly, then auto-dismiss.
+            "dismissal-date": Int(now.addingTimeInterval(300).timeIntervalSince1970),
+        ]]
+        logger.info("[LiveActivity] end session=\(content.sessionID, privacy: .public)")
+        pushToActivityTokens(sessionID: content.sessionID, payload: payload)
+    }
+
+    /// Build the ActivityKit `content-state` dict. Field names mirror
+    /// `RxCodeJobActivityAttributes.ContentState` in the widget target.
+    private func contentStateDict(_ content: JobContent, phase: String, at date: Date) -> [String: Any] {
+        var dict: [String: Any] = [
+            "phase": phase,
+            "todoDone": content.todoDone,
+            "todoTotal": content.todoTotal,
+            "updatedAt": date.timeIntervalSince1970,
+        ]
+        if let step = content.currentStep, !step.isEmpty {
+            dict["currentStep"] = step
+        }
+        return dict
+    }
+
+    /// Push a Live Activity payload to every per-activity token bound to a job.
+    private func pushToActivityTokens(sessionID: String, payload: [String: Any]) {
+        guard let pushURL = Self.pushEndpointURL(from: relayURL) else {
+            logger.error("[LiveActivity] update/end skipped session=\(sessionID, privacy: .public) — cannot derive push endpoint from relay \(self.relayURL.absoluteString, privacy: .public)")
+            return
+        }
+        let collapseID = "rxcode-la-\(sessionID.prefix(40))"
+        var matched = 0
+        for device in pairedDevices {
+            for ref in (device.liveActivityTokens ?? []) where ref.sessionID == sessionID {
+                matched += 1
+                logger.info("[LiveActivity] push → activity token session=\(sessionID, privacy: .public) activity=\(ref.activityID, privacy: .public) tokenPrefix=\(String(ref.token.prefix(12)), privacy: .public) deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
+                Task {
+                    await postRawPush(deviceToken: ref.token, pushType: "liveactivity",
+                                      apnsPayload: payload, collapseID: collapseID,
+                                      device: device, pushURL: pushURL)
+                }
+            }
+        }
+        if matched == 0 {
+            logger.warning("[LiveActivity] update/end has no registered per-activity token session=\(sessionID, privacy: .public) — the mobile never reported one, so push-to-start likely failed to spawn an Activity on the device")
+        }
+    }
+
+    /// Forget the per-activity tokens of a finished job.
+    private func clearActivityTokens(sessionID: String) {
+        var changed = false
+        for i in pairedDevices.indices {
+            guard let refs = pairedDevices[i].liveActivityTokens,
+                  refs.contains(where: { $0.sessionID == sessionID }) else { continue }
+            pairedDevices[i].liveActivityTokens = refs.filter { $0.sessionID != sessionID }
+            changed = true
+        }
+        if changed { savePairedDevices() }
+    }
+
+    private func pushWidgetUpdateIfJobCountChanged() {
+        guard streamingSessionIDs.count != lastWidgetJobCount else { return }
+        pushWidgetUpdate()
+    }
+
+    /// Push the current ongoing-job count and agent usage to every paired
+    /// device as a silent background notification, refreshing the home-screen
+    /// widget. Also called by `AppState` when rate-limit usage refreshes.
+    func pushWidgetUpdate() {
+        let jobCount = streamingSessionIDs.count
+        lastWidgetJobCount = jobCount
+        let devices = pairedDevices.filter { ($0.apnsToken?.isEmpty == false) }
+        guard !devices.isEmpty, let pushURL = Self.pushEndpointURL(from: relayURL) else { return }
+        let usage = usageSnapshotProvider?()
+        var widget: [String: Any] = [
+            "jobs": jobCount,
+            "updatedAt": Date().timeIntervalSince1970,
+        ]
+        if let cc = usage?.cc { widget["cc"] = cc }
+        if let codex = usage?.codex { widget["codex"] = codex }
+        let payload: [String: Any] = ["aps": ["content-available": 1], "widget": widget]
+        for device in devices {
+            guard let token = device.apnsToken else { continue }
+            Task {
+                await postRawPush(deviceToken: token, pushType: "background",
+                                  apnsPayload: payload, collapseID: "rxcode-widget",
+                                  device: device, pushURL: pushURL)
+            }
+        }
+    }
+
+    /// POST a raw (Live Activity or background) push to the relay `/push`
+    /// endpoint. Failures are logged and swallowed — these are best-effort.
+    private func postRawPush(
+        deviceToken: String,
+        pushType: String,
+        apnsPayload: [String: Any],
+        collapseID: String?,
+        device: PairedDevice,
+        pushURL: URL
+    ) async {
+        var bodyDict: [String: Any] = [
+            "device_token": deviceToken,
+            "push_type": pushType,
+            "apns_payload": apnsPayload,
+        ]
+        if let collapseID { bodyDict["collapse_id"] = collapseID }
+        do {
+            let httpBody = try JSONSerialization.data(withJSONObject: bodyDict)
+            var request = URLRequest(url: pushURL)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = httpBody
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else { return }
+            guard (200..<300).contains(http.statusCode) else {
+                logger.error("[Push] \(pushType, privacy: .public) relay rejected status=\(http.statusCode, privacy: .public) body=\(Self.responseBodyString(data), privacy: .public) deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
+                return
+            }
+            if let pushResponse = try? JSONDecoder().decode(APNsPushResponse.self, from: data) {
+                if (200..<300).contains(pushResponse.statusCode) {
+                    logger.info("[Push] \(pushType, privacy: .public) accepted apnsStatus=\(pushResponse.statusCode, privacy: .public) apnsID=\(pushResponse.apnsID ?? "<nil>", privacy: .public) deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
+                } else {
+                    logger.error("[Push] \(pushType, privacy: .public) apns rejected status=\(pushResponse.statusCode, privacy: .public) reason=\(pushResponse.reason, privacy: .public) deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
+                }
+            } else {
+                logger.info("[Push] \(pushType, privacy: .public) relay accepted httpStatus=\(http.statusCode, privacy: .public) (no APNs detail in response) deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
+            }
+        } catch {
+            logger.error("[Push] \(pushType, privacy: .public) failed deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public): \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -452,6 +735,35 @@ final class MobileSyncService: ObservableObject {
             } else {
                 logger.warning("[APNs] token received for unknown mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public) tokenPrefix=\(String(t.tokenHex.prefix(12)), privacy: .public) environment=\(t.environment, privacy: .public)")
             }
+        case .liveActivityToken(let t):
+            guard let idx = pairedDevices.firstIndex(where: { $0.pubkeyHex == inbound.fromHex }) else {
+                logger.warning("[LiveActivity] token received for unknown mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+                return
+            }
+            if let startToken = t.pushToStartTokenHex, !startToken.isEmpty {
+                pairedDevices[idx].liveActivityStartToken = startToken
+                logger.info("[LiveActivity] push-to-start token registered mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+            }
+            if let activityToken = t.activityTokenHex, !activityToken.isEmpty,
+               let activityID = t.activityID {
+                let ref = LiveActivityTokenRef(
+                    activityID: activityID,
+                    sessionID: t.sessionID ?? "",
+                    token: activityToken
+                )
+                var refs = pairedDevices[idx].liveActivityTokens ?? []
+                refs.removeAll { $0.activityID == activityID }
+                refs.append(ref)
+                pairedDevices[idx].liveActivityTokens = refs
+                logger.info("[LiveActivity] activity token registered activity=\(activityID, privacy: .public) session=\(ref.sessionID, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+                // Push the latest known state straight away so a freshly
+                // started activity isn't left blank until the next change.
+                if !ref.sessionID.isEmpty, let st = jobActivityState[ref.sessionID] {
+                    sendLiveActivityUpdate(st.lastContent, phase: "running")
+                }
+            }
+            pairedDevices[idx].lastSeen = .now
+            savePairedDevices()
         case .requestSnapshot(let req):
             guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "request_snapshot") else { return }
             logger.info("[MobileSync] snapshot requested by mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public) activeSession=\(req.activeSessionID ?? "<nil>", privacy: .public)")
@@ -742,6 +1054,25 @@ private struct APNsPushResponse: Codable {
         case reason
         case apnsID = "apns_id"
     }
+}
+
+/// Latest content the desktop knows for one job's Live Activity.
+private struct JobContent {
+    var sessionID: String
+    var title: String
+    var projectName: String
+    var todoDone: Int
+    var todoTotal: Int
+    var currentStep: String?
+
+    /// Identifies a distinct rendered state, so an update only pushes on a
+    /// real change rather than on every session event.
+    var signature: String { "\(todoDone)/\(todoTotal)|\(currentStep ?? "")" }
+}
+
+/// Per-job Live Activity bookkeeping, keyed by session id in `MobileSyncService`.
+private struct JobActivityState {
+    var lastContent: JobContent
 }
 
 extension Notification.Name {

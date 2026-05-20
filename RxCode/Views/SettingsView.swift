@@ -41,23 +41,29 @@ struct SettingsView: View {
                 }
                 .tag(3)
 
+            SkillMarketView(isEmbedded: true)
+                .tabItem {
+                    Label("Skill Marketplace", systemImage: "brain.head.profile")
+                }
+                .tag(4)
+
             MCPSettingsTab()
                 .tabItem {
                     Label("MCP", systemImage: "puzzlepiece.extension")
                 }
-                .tag(4)
+                .tag(5)
 
             ACPClientSettingsTab()
                 .tabItem {
                     Label("ACP Clients", systemImage: "link.circle")
                 }
-                .tag(5)
+                .tag(6)
 
             MobileSettingsTab()
                 .tabItem {
                     Label("Mobile", systemImage: "iphone.gen3")
                 }
-                .tag(6)
+                .tag(7)
         }
         .frame(width: 680, height: 620)
         .focusable(false)
@@ -85,7 +91,6 @@ struct GeneralSettingsTab: View {
     @Environment(AppState.self) private var appState
     @Binding var showUserManual: Bool
     @Binding var showOnboarding: Bool
-    @State private var showSkillMarket = false
     @State private var showThemePicker = false
     @AppStorage("showMenuBarExtra") private var showMenuBarExtra: Bool = true
 
@@ -104,7 +109,6 @@ struct GeneralSettingsTab: View {
                 searchIndexSection
                 Divider()
                 VStack(alignment: .leading, spacing: 8) {
-                    skillMarketSection
                     onboardingSection
                     helpSection
                     sourceCodeSection
@@ -316,44 +320,6 @@ struct GeneralSettingsTab: View {
                 .frame(minWidth: 220)
                 .focusable(false)
             }
-        }
-    }
-
-    // MARK: - Skill Market Section
-
-    private var skillMarketSection: some View {
-        Button {
-            showSkillMarket = true
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: "brain.head.profile")
-                    .font(.system(size: ClaudeTheme.size(14)))
-                    .frame(width: 20)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Skill Marketplace")
-                        .font(.system(size: ClaudeTheme.size(13)))
-                        .foregroundStyle(.primary)
-                    Text("Browse and manage Claude Code skills")
-                        .font(.system(size: ClaudeTheme.size(11)))
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Image(systemName: "arrow.up.right.square")
-                    .font(.system(size: ClaudeTheme.size(11)))
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(Color(NSColor.controlBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
-        .sheet(isPresented: $showSkillMarket) {
-            SkillMarketView(isEmbedded: false)
         }
     }
 

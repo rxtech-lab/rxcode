@@ -13,6 +13,9 @@
 		DCA8CF4A05C959C4A6EB391F /* RxCodeCore in Frameworks */ = {isa = PBXBuildFile; productRef = CCDF9594876099576D4FD46E /* RxCodeCore */; };
 		DF06CCD12FB4CAB5005991E1 /* ViewInspector in Frameworks */ = {isa = PBXBuildFile; productRef = DF06CCD02FB4CAB5005991E1 /* ViewInspector */; };
 		DF06DCC72FB8552B005991E1 /* UnitTestPlan.xctestplan in Resources */ = {isa = PBXBuildFile; fileRef = DF06DCC62FB8552B005991E1 /* UnitTestPlan.xctestplan */; };
+		DF22D8282FBE025C00E3ABFD /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DF22D8272FBE025C00E3ABFD /* WidgetKit.framework */; };
+		DF22D82A2FBE025C00E3ABFD /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DF22D8292FBE025C00E3ABFD /* SwiftUI.framework */; };
+		DF22D8372FBE025D00E3ABFD /* RxCodeWidgetExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = DF22D8262FBE025C00E3ABFD /* RxCodeWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		DF230B992FBC738D008929A6 /* RxCodeChatKit in Frameworks */ = {isa = PBXBuildFile; productRef = DF230B982FBC738D008929A6 /* RxCodeChatKit */; };
 		DF230B9B2FBC738D008929A6 /* RxCodeCore in Frameworks */ = {isa = PBXBuildFile; productRef = DF230B9A2FBC738D008929A6 /* RxCodeCore */; };
 		DF230B9D2FBC738D008929A6 /* RxCodeSync in Frameworks */ = {isa = PBXBuildFile; productRef = DF230B9C2FBC738D008929A6 /* RxCodeSync */; };
@@ -50,6 +53,13 @@
 			remoteGlobalIDString = E67335372F7356F600FD26C7;
 			remoteInfo = RxCode;
 		};
+		DF22D8352FBE025D00E3ABFD /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E67335302F7356F600FD26C7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DF22D8252FBE025C00E3ABFD;
+			remoteInfo = RxCodeWidgetExtension;
+		};
 		DF230B602FBC7368008929A6 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = E67335302F7356F600FD26C7 /* Project object */;
@@ -81,6 +91,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				DF230BB42FBC9001008929A6 /* RxCodeMobileNotificationService.appex in Embed App Extensions */,
+				DF22D8372FBE025D00E3ABFD /* RxCodeWidgetExtension.appex in Embed App Extensions */,
 			);
 			name = "Embed App Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -95,6 +106,9 @@
 		7321B5E8B81AAB1A2DC0593B /* RxCodeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RxCodeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A9993BB72A5307039A88B729 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
 		DF06DCC62FB8552B005991E1 /* UnitTestPlan.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = UnitTestPlan.xctestplan; sourceTree = "<group>"; };
+		DF22D8262FBE025C00E3ABFD /* RxCodeWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RxCodeWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		DF22D8272FBE025C00E3ABFD /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		DF22D8292FBE025C00E3ABFD /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		DF230B4F2FBC7367008929A6 /* RxCodeMobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RxCodeMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DF230B5F2FBC7368008929A6 /* RxCodeMobileTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RxCodeMobileTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		DF230B692FBC7368008929A6 /* RxCodeMobileUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RxCodeMobileUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -107,6 +121,21 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		DF22D83B2FBE025D00E3ABFD /* Exceptions for "RxCodeWidget" folder in "RxCodeWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = DF22D8252FBE025C00E3ABFD /* RxCodeWidgetExtension */;
+		};
+		DF5A11AC2FBE025D00E3ABF1 /* Exceptions for "RxCodeWidget" folder in "RxCodeMobile" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				RxCodeJobActivity.swift,
+				RxCodeWidgetData.swift,
+			);
+			target = DF230B4E2FBC7367008929A6 /* RxCodeMobile */;
+		};
 		DF230B772FBC7368008929A6 /* Exceptions for "RxCodeMobile" folder in "RxCodeMobile" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -124,6 +153,15 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		DF22D82B2FBE025C00E3ABFD /* RxCodeWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				DF22D83B2FBE025D00E3ABFD /* Exceptions for "RxCodeWidget" folder in "RxCodeWidgetExtension" target */,
+				DF5A11AC2FBE025D00E3ABF1 /* Exceptions for "RxCodeWidget" folder in "RxCodeMobile" target */,
+			);
+			path = RxCodeWidget;
+			sourceTree = "<group>";
+		};
 		DF230B502FBC7367008929A6 /* RxCodeMobile */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -173,6 +211,15 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DF22D8232FBE025C00E3ABFD /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DF22D82A2FBE025C00E3ABFD /* SwiftUI.framework in Frameworks */,
+				DF22D8282FBE025C00E3ABFD /* WidgetKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -250,6 +297,8 @@
 			isa = PBXGroup;
 			children = (
 				50F6C20C7EE8F07B95128612 /* OS X */,
+				DF22D8272FBE025C00E3ABFD /* WidgetKit.framework */,
+				DF22D8292FBE025C00E3ABFD /* SwiftUI.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -274,6 +323,7 @@
 				DF230BA92FBC9001008929A6 /* RxCodeMobileNotificationService */,
 				DF230B622FBC7368008929A6 /* RxCodeMobileTests */,
 				DF230B6C2FBC7368008929A6 /* RxCodeMobileUITests */,
+				DF22D82B2FBE025C00E3ABFD /* RxCodeWidget */,
 				E67335392F7356F600FD26C7 /* Products */,
 				609E8EE085862BD7D5B4012F /* Frameworks */,
 				1525FE6BFB6F06A3F00B92D3 /* RxCodeTests */,
@@ -290,6 +340,7 @@
 				DF230BAB2FBC9001008929A6 /* RxCodeMobileNotificationService.appex */,
 				DF230B5F2FBC7368008929A6 /* RxCodeMobileTests.xctest */,
 				DF230B692FBC7368008929A6 /* RxCodeMobileUITests.xctest */,
+				DF22D8262FBE025C00E3ABFD /* RxCodeWidgetExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -340,6 +391,28 @@
 			productReference = 6E17B0032FC8000100A10001 /* RxCodeUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		DF22D8252FBE025C00E3ABFD /* RxCodeWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DF22D8382FBE025D00E3ABFD /* Build configuration list for PBXNativeTarget "RxCodeWidgetExtension" */;
+			buildPhases = (
+				DF22D8222FBE025C00E3ABFD /* Sources */,
+				DF22D8232FBE025C00E3ABFD /* Frameworks */,
+				DF22D8242FBE025C00E3ABFD /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				DF22D82B2FBE025C00E3ABFD /* RxCodeWidget */,
+			);
+			name = RxCodeWidgetExtension;
+			packageProductDependencies = (
+			);
+			productName = RxCodeWidgetExtension;
+			productReference = DF22D8262FBE025C00E3ABFD /* RxCodeWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		DF230B4E2FBC7367008929A6 /* RxCodeMobile */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = DF230B782FBC7368008929A6 /* Build configuration list for PBXNativeTarget "RxCodeMobile" */;
@@ -353,6 +426,7 @@
 			);
 			dependencies = (
 				DF230BB72FBC9001008929A6 /* PBXTargetDependency */,
+				DF22D8362FBE025D00E3ABFD /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				DF230B502FBC7367008929A6 /* RxCodeMobile */,
@@ -477,6 +551,9 @@
 				LastSwiftUpdateCheck = 2630;
 				LastUpgradeCheck = 2630;
 				TargetAttributes = {
+					DF22D8252FBE025C00E3ABFD = {
+						CreatedOnToolsVersion = 26.3;
+					};
 					DF230B4E2FBC7367008929A6 = {
 						CreatedOnToolsVersion = 26.3;
 					};
@@ -525,6 +602,7 @@
 				DF230BA42FBC9001008929A6 /* RxCodeMobileNotificationService */,
 				DF230B5E2FBC7368008929A6 /* RxCodeMobileTests */,
 				DF230B682FBC7368008929A6 /* RxCodeMobileUITests */,
+				DF22D8252FBE025C00E3ABFD /* RxCodeWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -538,6 +616,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		AB14AE27D09CB3D7C28C9888 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DF22D8242FBE025C00E3ABFD /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -604,6 +689,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		DF22D8222FBE025C00E3ABFD /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		DF230B4B2FBC7367008929A6 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -653,6 +745,11 @@
 			name = RxCode;
 			target = E67335372F7356F600FD26C7 /* RxCode */;
 			targetProxy = 35C1B17CDEF83F212F648418 /* PBXContainerItemProxy */;
+		};
+		DF22D8362FBE025D00E3ABFD /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DF22D8252FBE025C00E3ABFD /* RxCodeWidgetExtension */;
+			targetProxy = DF22D8352FBE025D00E3ABFD /* PBXContainerItemProxy */;
 		};
 		DF230B612FBC7368008929A6 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -725,6 +822,73 @@
 				SDKROOT = macosx;
 				SWIFT_VERSION = 6.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/RxCode.app/Contents/MacOS/RxCode";
+			};
+			name = Release;
+		};
+		DF22D8392FBE025D00E3ABFD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = RxCodeWidget/RxCodeWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = T7GYB573Y6;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RxCodeWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = RxCodeWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.rxlab.rxcodemobile.RxCodeWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		DF22D83A2FBE025D00E3ABFD /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = RxCodeWidget/RxCodeWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = T7GYB573Y6;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RxCodeWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = RxCodeWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.rxlab.rxcodemobile.RxCodeWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
 		};
@@ -1163,6 +1327,15 @@
 			buildConfigurations = (
 				6E17B00C2FC8000100A10001 /* Release */,
 				6E17B00B2FC8000100A10001 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		DF22D8382FBE025D00E3ABFD /* Build configuration list for PBXNativeTarget "RxCodeWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DF22D8392FBE025D00E3ABFD /* Debug */,
+				DF22D83A2FBE025D00E3ABFD /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

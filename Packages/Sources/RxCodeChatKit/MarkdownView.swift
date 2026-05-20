@@ -12,9 +12,6 @@ struct MarkdownContentView: View {
     let showsTrailingCursor: Bool
     let isCursorVisible: Bool
 
-    /// `true` while the chat list is scrolling — see `markdownTextSelection`.
-    @Environment(\.chatListScrollActive) private var isScrollActive
-
     init(text: String, showsTrailingCursor: Bool = false, isCursorVisible: Bool = true) {
         self.text = text
         self.showsTrailingCursor = showsTrailingCursor
@@ -37,7 +34,15 @@ struct MarkdownContentView: View {
             )
             .textual.headingStyle(RxCodeHeadingStyle())
             .textual.codeBlockStyle(RxCodeBlockStyle())
-            .markdownTextSelection(enabled: !isScrollActive)
+            // Keep Textual's text-selection overlay permanently disabled.
+            // When enabled it installs a geometry-dependent
+            // `onChange(of: AnyTextLayoutCollection)` that fires many times
+            // per frame while the chat List scrolls, dropping frames and
+            // making the scroll bumpy. Toggling it per scroll-phase is worse:
+            // flipping selectability swaps Textual's view-tree branch and
+            // rebuilds every visible markdown row. Whole-message and
+            // per-code-block Copy buttons cover copying instead.
+            .textual.textSelection(.disabled)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -49,36 +54,6 @@ struct MarkdownContentView: View {
             return processed + "\u{2009}\u{25CF}"
         }
         return processed
-    }
-}
-
-// MARK: - Text Selection Toggle
-
-extension EnvironmentValues {
-    /// `true` while the chat message list is actively scrolling.
-    ///
-    /// Markdown rows read this to drop Textual's text-selection overlay
-    /// mid-scroll — see `View.markdownTextSelection(enabled:)`.
-    @Entry var chatListScrollActive: Bool = false
-}
-
-private extension View {
-    /// Applies Textual text selection, gated by `enabled`.
-    ///
-    /// Textual's selection overlay installs a per-message `Text.LayoutKey`
-    /// preference observer whose `onChange` mutates an `@Observable` model on
-    /// every layout pass. While a `List` scrolls, that fires repeatedly within
-    /// a single frame ("onChange(of: AnyTextLayoutCollection) ... tried to
-    /// update multiple times per frame"), dropping frames and making the
-    /// scroll bumpy. Suspending selection during scroll removes the overlay
-    /// entirely; it is restored the instant the list settles.
-    @ViewBuilder
-    func markdownTextSelection(enabled: Bool) -> some View {
-        if enabled {
-            textual.textSelection(.enabled)
-        } else {
-            textual.textSelection(.disabled)
-        }
     }
 }
 

@@ -7,6 +7,7 @@ struct RxCodeMobileApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var state = MobileAppState()
     @State private var windowState = WindowState()
+    @State private var liveActivityCoordinator = MobileLiveActivityCoordinator()
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -23,6 +24,7 @@ struct RxCodeMobileApp: App {
                 .environment(windowState)
                 .onAppear {
                     appDelegate.mobileState = state
+                    liveActivityCoordinator.bind(state: state)
                     state.start()
                 }
                 .onOpenURL { url in

@@ -56,6 +56,35 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         logger.error("[APNs] registration failed: \(error.localizedDescription, privacy: .public)")
     }
 
+    /// Handles a silent background push carrying a fresh home-screen widget
+    /// snapshot. The desktop sends these (`push_type=background`) whenever the
+    /// ongoing-job count or agent usage changes; the payload is plaintext
+    /// because WidgetKit data is low-sensitivity and not user-facing text.
+    func application(_ application: UIApplication,
+                     didReceiveRemoteNotification userInfo: [AnyHashable: Any]) async
+        -> UIBackgroundFetchResult {
+        guard let widget = userInfo["widget"] as? [String: Any] else {
+            return .noData
+        }
+        // Merge into the existing snapshot so a job-count-only push doesn't
+        // wipe the usage figures (and vice versa).
+        var snapshot = RxCodeWidgetStore.load()
+        if let jobs = (widget["jobs"] as? NSNumber)?.intValue {
+            snapshot.jobCount = jobs
+        }
+        if let cc = (widget["cc"] as? NSNumber)?.doubleValue {
+            snapshot.ccUsagePercent = cc
+        }
+        if let codex = (widget["codex"] as? NSNumber)?.doubleValue {
+            snapshot.codexUsagePercent = codex
+        }
+        snapshot.updatedAt = (widget["updatedAt"] as? NSNumber)?.doubleValue
+            ?? Date().timeIntervalSince1970
+        RxCodeWidgetStore.save(snapshot)
+        logger.info("[Widget] background push applied jobs=\(snapshot.jobCount, privacy: .public)")
+        return .newData
+    }
+
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
         let content = notification.request.content

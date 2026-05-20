@@ -13,18 +13,36 @@ envelopes (`{v, to, from, nonce, ct}`) and a destination pubkey.
   already prevents reading or forging messages. Drop-on-offline: if the
   recipient pubkey isn't currently connected, the envelope is dropped and the
   sender receives a `delivery_failed` notice.
-- `POST /push` — desktop submits APNs pushes. Body:
-  ```json
-  {
-    "device_token": "<hex APNs token>",
-    "encrypted_alert": "<base64 ciphertext>",
-    "category": "permission_request",     // optional
-    "collapse_id": "<id>"                  // optional
-  }
-  ```
-  The relay signs a JWT with the configured APNs auth key and forwards the
-  push. The encrypted alert blob is decrypted on-device by the iOS
-  Notification Service Extension before iOS displays the banner.
+- `POST /push` — desktop submits APNs pushes. The `push_type` field selects
+  one of three delivery modes (defaults to `alert`):
+  - **`alert`** (or omitted) — encrypted banner. Body:
+    ```json
+    {
+      "device_token": "<hex APNs token>",
+      "encrypted_alert": "<base64 ciphertext>",
+      "category": "permission_request",     // optional
+      "collapse_id": "<id>"                  // optional
+    }
+    ```
+    The encrypted alert blob is decrypted on-device by the iOS Notification
+    Service Extension before iOS displays the banner.
+  - **`liveactivity`** — ActivityKit start/update/end push. Body:
+    ```json
+    {
+      "device_token": "<hex push-to-start or per-activity token>",
+      "push_type": "liveactivity",
+      "apns_payload": { "aps": { "event": "update", "content-state": { … } } },
+      "collapse_id": "<id>"                  // optional
+    }
+    ```
+    The relay forwards `apns_payload` verbatim and suffixes the topic with
+    `.push-type.liveactivity`. Live Activity content-state is **not** E2E
+    encrypted — ActivityKit consumes it directly.
+  - **`background`** — silent `content-available` push used to refresh the
+    home-screen widget. Body is `{ "device_token", "push_type": "background",
+    "apns_payload" }`; the payload is forwarded verbatim at low priority.
+
+  The relay signs a JWT with the configured APNs auth key and forwards the push.
 - `GET  /healthz` — liveness probe.
 
 ## Run locally

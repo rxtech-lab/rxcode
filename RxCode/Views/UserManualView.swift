@@ -539,11 +539,11 @@ enum ManualTopic: String, CaseIterable, Identifiable {
             [
                 ManualSection(
                     title: "Skill Marketplace",
-                    body: "Click the brain icon (🧠) in the toolbar to browse the MCP plugin catalog published on Anthropic's GitHub. Plugins can be filtered by category or searched by name, description, or author."
+                    body: "Open Settings and select Skill Marketplace to browse agent skills from configured catalogs. Skills can be filtered by category or searched by name, description, or author."
                 ),
                 ManualSection(
-                    title: "Installing Plugins",
-                    body: "Click a plugin to view its details, then press Install. An interactive terminal popup opens and runs the install command automatically.",
+                    title: "Installing Skills",
+                    body: "Click a skill to view its details, then press Install. RxCode stores installed skills in its own settings and enables them for supported coding agents.",
                     items: [
                         KeyValueItem(key: "clock", value: "Not installed", symbolName: "clock", symbolColor: .secondary),
                         KeyValueItem(key: "arrow.down", value: "Installing…", symbolName: "arrow.down.circle", symbolColor: .accentColor),

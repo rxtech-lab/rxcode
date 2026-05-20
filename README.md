@@ -72,7 +72,7 @@ Same agents, no terminal required.
 | **Git Status** | Sidebar Git status summary with changed-file counts, branch display, and local/remote branch switching. |
 | **GitHub Integration** | OAuth device flow, Keychain token storage, SSH key management, repository browsing, and cloning. |
 | **Memo Panel** | Per-project rich-text memo pad with headings, lists, checkboxes, links, and persistent storage. |
-| **Skill Marketplace** | Browse and install official Anthropic plugins, refreshed with a 5-minute cache. |
+| **Skill Marketplace** | Browse and install agent skills from Settings, refreshed with a 5-minute cache and enabled for supported coding agents. |
 | **Themes and Font Controls** | Six accent themes plus independent font size controls for the interface and message area. |
 | **Focus Mode** | Optional focused chat layout that can be enabled from Settings. |
 | **Notifications** | Optional system notifications with response previews while RxCode is in the background. |

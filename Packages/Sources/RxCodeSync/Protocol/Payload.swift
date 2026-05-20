@@ -11,6 +11,7 @@ public enum Payload: Sendable {
     case pairAck(PairAckPayload)
     case unpair(UnpairPayload)
     case apnsToken(APNsTokenPayload)
+    case liveActivityToken(LiveActivityTokenPayload)
     case requestSnapshot(RequestSnapshotPayload)
     case snapshot(SnapshotPayload)
     case settingsUpdate(MobileSettingsUpdatePayload)
@@ -54,6 +55,7 @@ public extension Payload {
         case .pairAck: return "pair_ack"
         case .unpair: return "unpair"
         case .apnsToken: return "apns_token"
+        case .liveActivityToken: return "live_activity_token"
         case .requestSnapshot: return "request_snapshot"
         case .snapshot: return "snapshot"
         case .settingsUpdate: return "settings_update"
@@ -131,6 +133,36 @@ public struct APNsTokenPayload: Codable, Sendable {
     public init(tokenHex: String, environment: String) {
         self.tokenHex = tokenHex
         self.environment = environment
+    }
+}
+
+/// Mobile → desktop: ActivityKit push tokens for the job Live Activity. A
+/// single payload reports either the device-wide push-to-start token, a
+/// per-activity update token, or both. The desktop stores them per paired
+/// device so it can remotely start, update, and end Live Activities over APNs.
+public struct LiveActivityTokenPayload: Codable, Sendable {
+    /// Device-wide push-to-start token (iOS 17.2+). Lets the desktop start a
+    /// Live Activity for a new job remotely. `nil` when this payload only
+    /// reports a per-activity update token.
+    public let pushToStartTokenHex: String?
+    /// Per-activity update token returned by `Activity.pushTokenUpdates`.
+    /// `nil` when this payload only reports a push-to-start token.
+    public let activityTokenHex: String?
+    /// Identifier of the `Activity` the update token belongs to.
+    public let activityID: String?
+    /// The job (chat session) the activity tracks.
+    public let sessionID: String?
+
+    public init(
+        pushToStartTokenHex: String? = nil,
+        activityTokenHex: String? = nil,
+        activityID: String? = nil,
+        sessionID: String? = nil
+    ) {
+        self.pushToStartTokenHex = pushToStartTokenHex
+        self.activityTokenHex = activityTokenHex
+        self.activityID = activityID
+        self.sessionID = sessionID
     }
 }
 
@@ -1393,6 +1425,7 @@ extension Payload: Codable {
         case pairAck = "pair_ack"
         case unpair
         case apnsToken = "apns_token"
+        case liveActivityToken = "live_activity_token"
         case requestSnapshot = "request_snapshot"
         case snapshot
         case settingsUpdate = "settings_update"
@@ -1440,6 +1473,7 @@ extension Payload: Codable {
         case .pairAck: self = .pairAck(try container.decode(PairAckPayload.self, forKey: .data))
         case .unpair: self = .unpair(try container.decode(UnpairPayload.self, forKey: .data))
         case .apnsToken: self = .apnsToken(try container.decode(APNsTokenPayload.self, forKey: .data))
+        case .liveActivityToken: self = .liveActivityToken(try container.decode(LiveActivityTokenPayload.self, forKey: .data))
         case .requestSnapshot: self = .requestSnapshot(try container.decode(RequestSnapshotPayload.self, forKey: .data))
         case .snapshot: self = .snapshot(try container.decode(SnapshotPayload.self, forKey: .data))
         case .settingsUpdate: self = .settingsUpdate(try container.decode(MobileSettingsUpdatePayload.self, forKey: .data))
@@ -1483,6 +1517,7 @@ extension Payload: Codable {
         case .pairAck(let p): try container.encode(TypeKey.pairAck.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .unpair(let p): try container.encode(TypeKey.unpair.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .apnsToken(let p): try container.encode(TypeKey.apnsToken.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .liveActivityToken(let p): try container.encode(TypeKey.liveActivityToken.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .requestSnapshot(let p): try container.encode(TypeKey.requestSnapshot.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .snapshot(let p): try container.encode(TypeKey.snapshot.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .settingsUpdate(let p): try container.encode(TypeKey.settingsUpdate.rawValue, forKey: .type); try container.encode(p, forKey: .data)

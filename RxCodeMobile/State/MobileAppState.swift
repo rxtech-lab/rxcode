@@ -870,6 +870,37 @@ final class MobileAppState: ObservableObject {
         Task { await reportAPNsTokenIfPending() }
     }
 
+    // MARK: - Live Activity & widget
+
+    /// Forward a Live Activity push token (a push-to-start token, a per-activity
+    /// update token, or both) to every paired desktop so it can drive the job
+    /// Live Activity over APNs. Called by `MobileLiveActivityCoordinator`.
+    func sendLiveActivityToken(_ payload: LiveActivityTokenPayload) async {
+        guard !pairedDesktops.isEmpty else { return }
+        for desktop in pairedDesktops {
+            do {
+                try await client.send(.liveActivityToken(payload), toHex: desktop.pubkeyHex)
+                logger.info("[LiveActivity] token reported startToken=\(payload.pushToStartTokenHex != nil, privacy: .public) activityToken=\(payload.activityTokenHex != nil, privacy: .public) session=\(payload.sessionID ?? "<nil>", privacy: .public) desktopKey=\(String(desktop.pubkeyHex.prefix(12)), privacy: .public)")
+            } catch {
+                logger.error("[LiveActivity] token report failed desktopKey=\(String(desktop.pubkeyHex.prefix(12)), privacy: .public): \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    /// Recompute the home-screen widget snapshot from the current mirrored
+    /// state and persist it into the shared App Group container. Cheap to call
+    /// often — `RxCodeWidgetStore` reloads WidgetKit timelines on a real change.
+    func refreshWidgetData() {
+        let jobCount = sessions.filter { $0.isStreaming }.count
+        let snapshot = RxCodeWidgetData(
+            jobCount: jobCount,
+            ccUsagePercent: desktopUsage?.claudeCode?.fiveHourPercent,
+            codexUsagePercent: desktopUsage?.codex?.fiveHourPercent,
+            updatedAt: Date().timeIntervalSince1970
+        )
+        RxCodeWidgetStore.save(snapshot)
+    }
+
     /// Routes a tapped APNs notification to its thread. Called by `AppDelegate`'s
     /// `didReceive` handler; `RootView` observes `pendingDeepLink` and navigates.
     func openThreadFromNotification(sessionID: String, projectID: UUID?) {
@@ -1047,12 +1078,14 @@ final class MobileAppState: ObservableObject {
                 }
                 activeSessionID = active
             }
+            refreshWidgetData()
         case .moreMessages(let page):
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "more_messages") else { return }
             applyMoreMessages(page)
         case .sessionUpdate(let update):
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "session_update") else { return }
             applySessionUpdate(update)
+            refreshWidgetData()
         case .permissionRequest(let req):
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "permission_request") else { return }
             pendingPermission = req

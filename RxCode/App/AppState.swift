@@ -645,6 +645,8 @@ final class AppState {
         case .acp:
             break
         }
+        // Refresh the mobile home-screen widget's usage figures.
+        MobileSyncService.shared.pushWidgetUpdate()
     }
 
     /// Force-refresh the shared Claude rate-limit usage.
@@ -3261,6 +3263,16 @@ final class AppState {
         ThemeStore.shared.fontSizeAdjustment = fontSizeAdjustment
         ThemeStore.shared.messageFontSizeAdjustment = messageFontSizeAdjustment
 
+        // Supply MobileSyncService with desktop-side context for the mobile
+        // job Live Activity and home-screen widget pushes.
+        MobileSyncService.shared.projectNameResolver = { [weak self] id in
+            self?.projects.first { $0.id == id }?.name
+        }
+        MobileSyncService.shared.usageSnapshotProvider = { [weak self] in
+            (self?.latestRateLimitUsage?.fiveHourPercent,
+             self?.latestCodexRateLimitUsage?.fiveHourPercent)
+        }
+
         await refreshAgentInstallations()
 
         projects = await persistence.loadProjects()
@@ -4275,6 +4287,7 @@ final class AppState {
         var mcpCodexOverrides: [String] = []
         var acpMCPServers: [JSONValue] = []
         var acpSpec: ACPClientSpec? = nil
+        var resolvedPrompt = prompt
         var resolvedModel: String? = model
         var resolvedSendMode: PermissionMode = permissionMode
         var earlyStream: AsyncStream<StreamEvent>? = nil
@@ -4293,6 +4306,7 @@ final class AppState {
             mcpClaudeConfigPath = await mcp.writeClaudeConfig(projectPath: cwd, bridgeCommand: bridge)
         case .codex:
             mcpCodexOverrides = await mcp.codexConfigOverrides(projectPath: cwd)
+            mcpCodexOverrides += await marketplace.codexConfigOverrides()
             resolvedSendMode = registerMode
         case .acp:
             // Allocate a per-session IDE-MCP port so the ACP agent can call
@@ -4308,6 +4322,9 @@ final class AppState {
                 projectPath: cwd,
                 bridgeCommand: bridge
             )
+            if let skillContext = await marketplace.promptContext(for: .acp) {
+                resolvedPrompt = "\(skillContext)\n\nUser request:\n\(prompt)"
+            }
             // `model` may be a composite `<clientId>::<model>` key (from the picker)
             // or a bare model id (from a per-session override).
             let split = acpSelectionParts(for: model)
@@ -4342,7 +4359,7 @@ final class AppState {
         } else {
             let request = BackendSendRequest(
                 streamId: streamId,
-                prompt: prompt,
+                prompt: resolvedPrompt,
                 cwd: cwd,
                 sessionId: cliSessionId,
                 model: resolvedModel,
@@ -6814,8 +6831,12 @@ final class AppState {
         async let catalog = marketplace.fetchCatalog(forceRefresh: forceRefresh)
         async let installed = marketplace.installedPluginNames()
 
-        marketplaceCatalog = await catalog
-        marketplaceInstalledNames = await installed
+        let fetchedCatalog = await catalog
+        let installedNames = await installed
+        await marketplace.importInstalledPlugins(catalog: fetchedCatalog, installedNames: installedNames)
+
+        marketplaceCatalog = fetchedCatalog
+        marketplaceInstalledNames = installedNames
     }
 
     func installMarketplacePlugin(_ plugin: MarketplacePlugin) async {

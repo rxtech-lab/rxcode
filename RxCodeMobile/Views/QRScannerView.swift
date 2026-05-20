@@ -21,6 +21,8 @@ struct QRScannerView: UIViewControllerRepresentable {
         var onResult: ((String) -> Void)?
         private let session = AVCaptureSession()
         private var previewLayer: AVCaptureVideoPreviewLayer?
+        private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
+        private var rotationObservation: NSKeyValueObservation?
 
         override func viewDidLoad() {
             super.viewDidLoad()
@@ -77,9 +79,31 @@ struct QRScannerView: UIViewControllerRepresentable {
             preview.frame = view.layer.bounds
             view.layer.addSublayer(preview)
             previewLayer = preview
+
+            // Keep the preview upright as the device rotates (notably on iPad,
+            // which is not locked to portrait like the iPhone layout).
+            let coordinator = AVCaptureDevice.RotationCoordinator(device: device, previewLayer: preview)
+            rotationCoordinator = coordinator
+            applyPreviewRotation()
+            rotationObservation = coordinator.observe(
+                \.videoRotationAngleForHorizonLevelPreview,
+                options: [.new]
+            ) { [weak self] _, _ in
+                DispatchQueue.main.async { self?.applyPreviewRotation() }
+            }
+
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                 self?.session.startRunning()
                 scannerLogger.info("capture session started")
+            }
+        }
+
+        private func applyPreviewRotation() {
+            guard let coordinator = rotationCoordinator,
+                  let connection = previewLayer?.connection else { return }
+            let angle = coordinator.videoRotationAngleForHorizonLevelPreview
+            if connection.isVideoRotationAngleSupported(angle) {
+                connection.videoRotationAngle = angle
             }
         }
 

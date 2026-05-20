@@ -2,8 +2,8 @@ import Foundation
 import RxCodeCore
 import os
 
-/// Fetches the marketplace catalog from Anthropic's GitHub repositories
-/// and handles plugin installation/uninstallation via Claude Code CLI.
+/// Fetches skill/plugin catalogs and keeps RxCode-owned install state.
+/// Provider-specific config is materialized at launch time where possible.
 actor MarketplaceService {
 
     private let logger = Logger(subsystem: "com.claudework", category: "MarketplaceService")
@@ -12,6 +12,7 @@ actor MarketplaceService {
     private var cachedCatalog: [MarketplacePlugin] = []
     private var cacheDate: Date?
     private let cacheTTL: TimeInterval = 300 // 5 minutes
+    private let configURL = AppSupport.bundleScopedURL.appendingPathComponent("skills.json")
 
     /// Source repositories to scan.
     private static let sourceRepos: [(owner: String, repo: String, defaultCategory: String)] = [
@@ -88,6 +89,8 @@ actor MarketplaceService {
         let ownerInfo = json["owner"] as? [String: Any]
         let defaultAuthor = ownerInfo?["name"] as? String ?? owner
 
+        let marketplaceSource = MarketplaceSource(owner: owner, repo: repo)
+
         return plugins.compactMap { entry -> MarketplacePlugin? in
             guard let name = entry["name"] as? String else { return nil }
 
@@ -131,26 +134,33 @@ actor MarketplaceService {
                 category: category,
                 homepage: homepage,
                 marketplace: marketplaceName,
+                marketplaceSource: marketplaceSource,
                 sourceType: sourceType,
                 skillPaths: skillPaths
             )
         }
     }
 
-    // MARK: - Installation (via Claude Code CLI)
+    // MARK: - Installation
 
-    /// Retrieve the list of installed plugin names.
+    /// Retrieve installed plugin names from RxCode state, plus legacy Claude installs.
     func installedPluginNames() async -> Set<String> {
+        var names = Set((try? loadConfig().plugins.map(\.name)) ?? [])
+        names.formUnion(await installedClaudePluginNames())
+        return names
+    }
+
+    private func installedClaudePluginNames() async -> Set<String> {
         let (output, exitCode) = await runCLI(["plugin", "list", "--json"])
         guard exitCode == 0,
               let data = output.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
-            return installedPluginNamesFromDisk()
+            return installedClaudePluginNamesFromDisk()
         }
         return Set(json.compactMap { $0["name"] as? String })
     }
 
-    private func installedPluginNamesFromDisk() -> Set<String> {
+    private func installedClaudePluginNamesFromDisk() -> Set<String> {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let fm = FileManager.default
         var names: Set<String> = []
@@ -162,23 +172,148 @@ actor MarketplaceService {
         return names
     }
 
-    /// Install a plugin by running `claude plugin install <name>@<marketplace>`
-    func installPlugin(_ plugin: MarketplacePlugin) async throws {
-        let installArg = "\(plugin.name)@\(plugin.marketplace)"
-        let (_, exitCode) = await runCLI(["plugin", "install", installArg])
-        guard exitCode == 0 else {
-            throw MarketplaceError.installFailed(installArg)
+    func importInstalledPlugins(catalog: [MarketplacePlugin], installedNames: Set<String>) async {
+        do {
+            var config = try loadConfig()
+            var changed = false
+            let existingIds = Set(config.plugins.map(\.id))
+
+            for plugin in catalog where installedNames.contains(plugin.name) && !existingIds.contains(plugin.id) {
+                config.plugins.append(MarketplacePluginRecord(
+                    name: plugin.name,
+                    marketplace: plugin.marketplace,
+                    summary: plugin.description,
+                    category: plugin.category,
+                    marketplaceSource: plugin.marketplaceSource
+                ))
+                changed = true
+            }
+
+            if changed {
+                try saveConfig(config)
+            }
+        } catch {
+            logger.warning("Failed to import installed marketplace plugins: \(error.localizedDescription)")
         }
-        logger.info("Installed plugin: \(plugin.name, privacy: .public) from \(plugin.marketplace, privacy: .public)")
     }
 
-    /// Uninstall a plugin by running `claude plugin uninstall <name>`
-    func uninstallPlugin(_ plugin: MarketplacePlugin) async throws {
-        let (_, exitCode) = await runCLI(["plugin", "uninstall", plugin.name])
-        guard exitCode == 0 else {
-            throw MarketplaceError.uninstallFailed(plugin.name)
+    /// Install into RxCode-owned state and mirror to Claude Code when available.
+    func installPlugin(_ plugin: MarketplacePlugin) async throws {
+        var config = try loadConfig()
+        let record = MarketplacePluginRecord(
+            name: plugin.name,
+            marketplace: plugin.marketplace,
+            summary: plugin.description,
+            category: plugin.category,
+            marketplaceSource: plugin.marketplaceSource
+        )
+
+        if let index = config.plugins.firstIndex(where: { $0.id == record.id }) {
+            config.plugins[index].isGloballyEnabled = true
+            config.plugins[index].enabledProviders = Set(AgentProvider.allCases)
+            config.plugins[index].marketplaceSource = plugin.marketplaceSource
+            config.plugins[index].summary = plugin.description
+            config.plugins[index].category = plugin.category
+        } else {
+            config.plugins.append(record)
         }
-        logger.info("Uninstalled plugin: \(plugin.name, privacy: .public)")
+        try saveConfig(config)
+
+        let installArg = "\(plugin.name)@\(plugin.marketplace)"
+        let (_, exitCode) = await runCLI(["plugin", "install", installArg])
+        if exitCode != 0 {
+            logger.warning("Claude plugin mirror install failed for \(installArg, privacy: .public)")
+        }
+        logger.info("Installed skill: \(plugin.name, privacy: .public) from \(plugin.marketplace, privacy: .public)")
+    }
+
+    /// Remove from RxCode-owned state and mirror to Claude Code when available.
+    func uninstallPlugin(_ plugin: MarketplacePlugin) async throws {
+        var config = try loadConfig()
+        config.plugins.removeAll { $0.id == plugin.id || $0.name == plugin.name }
+        try saveConfig(config)
+
+        let (_, exitCode) = await runCLI(["plugin", "uninstall", plugin.name])
+        if exitCode != 0 {
+            logger.warning("Claude plugin mirror uninstall failed for \(plugin.name, privacy: .public)")
+        }
+        logger.info("Uninstalled skill: \(plugin.name, privacy: .public)")
+    }
+
+    func codexConfigOverrides() async -> [String] {
+        do {
+            let config = try loadConfig()
+            let records = config.plugins
+                .filter { $0.isEnabled(for: .codex) }
+                .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+
+            var pairs: [String] = []
+            var emittedMarketplaces: Set<String> = []
+
+            for record in records {
+                if let source = record.marketplaceSource,
+                   !emittedMarketplaces.contains(record.marketplace) {
+                    emittedMarketplaces.insert(record.marketplace)
+                    let marketplaceKey = "marketplaces.\(tomlKey(record.marketplace))"
+                    pairs += ["-c", "\(marketplaceKey).source_type=\(tomlString("github"))"]
+                    pairs += ["-c", "\(marketplaceKey).source=\(tomlString(source.codexSource))"]
+                }
+
+                let pluginId = "\(record.name)@\(record.marketplace)"
+                pairs += ["-c", "plugins.\(tomlKey(pluginId)).enabled=true"]
+            }
+            if !pairs.isEmpty {
+                pairs = ["--enable", "plugins"] + pairs
+            }
+            return pairs
+        } catch {
+            logger.warning("Failed to build Codex skill overrides: \(error.localizedDescription)")
+            return []
+        }
+    }
+
+    func promptContext(for provider: AgentProvider) async -> String? {
+        do {
+            let records = try loadConfig().plugins
+                .filter { $0.isEnabled(for: provider) }
+                .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            guard !records.isEmpty else { return nil }
+
+            var lines = ["Installed RxCode skills available for this session:"]
+            for record in records {
+                let detail = record.summary?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                if detail.isEmpty {
+                    lines.append("- \(record.name) from \(record.marketplace)")
+                } else {
+                    lines.append("- \(record.name) from \(record.marketplace): \(detail)")
+                }
+            }
+            return lines.joined(separator: "\n")
+        } catch {
+            logger.warning("Failed to build skill prompt context: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    // MARK: - RxCode Config
+
+    private func loadConfig() throws -> MarketplacePluginConfiguration {
+        let fm = FileManager.default
+        try fm.createDirectory(at: configURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        guard fm.fileExists(atPath: configURL.path) else {
+            return MarketplacePluginConfiguration()
+        }
+        let data = try Data(contentsOf: configURL)
+        return try JSONDecoder().decode(MarketplacePluginConfiguration.self, from: data)
+    }
+
+    private func saveConfig(_ config: MarketplacePluginConfiguration) throws {
+        let fm = FileManager.default
+        try fm.createDirectory(at: configURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(config)
+        try data.write(to: configURL, options: [.atomic])
     }
 
     // MARK: - CLI Runner
@@ -206,6 +341,21 @@ actor MarketplaceService {
                 continuation.resume(returning: (error.localizedDescription, 1))
             }
         }
+    }
+
+    private func tomlKey(_ key: String) -> String {
+        if key.range(of: #"^[A-Za-z0-9_-]+$"#, options: .regularExpression) != nil {
+            return key
+        }
+        return tomlString(key)
+    }
+
+    private func tomlString(_ value: String) -> String {
+        let escaped = value
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\n", with: "\\n")
+        return "\"\(escaped)\""
     }
 
     // MARK: - Errors

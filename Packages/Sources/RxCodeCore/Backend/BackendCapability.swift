@@ -13,6 +13,7 @@ public enum BackendCapability: String, Sendable, Hashable, CaseIterable, Codable
     case attachments
     case hooks
     case mcpServers
+    case skills
 }
 
 public typealias CapabilitySet = Set<BackendCapability>
@@ -26,16 +27,16 @@ public extension AgentProvider {
         case .claudeCode:
             return [
                 .askUserQuestion, .todos, .planMode, .fileEdit, .hooks,
-                .mcpServers, .attachments, .customSlashCommands, .getUsage,
+                .mcpServers, .skills, .attachments, .customSlashCommands, .getUsage,
             ]
         case .codex:
             return [
                 .askUserQuestion, .todos, .planMode, .fileEdit,
-                .mcpServers, .attachments, .getUsage,
+                .mcpServers, .skills, .attachments, .getUsage,
             ]
         case .acp:
             return [
-                .planMode, .fileEdit, .mcpServers, .attachments, .getUsage,
+                .planMode, .fileEdit, .mcpServers, .skills, .attachments, .getUsage,
             ]
         }
     }

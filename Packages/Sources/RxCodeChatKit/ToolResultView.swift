@@ -227,6 +227,7 @@ struct ToolResultView: View {
                 }
                 .font(.system(size: ClaudeTheme.messageSize(12)))
                 .foregroundStyle(toolCall.isError ? ClaudeTheme.statusError : ClaudeTheme.textTertiary)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)

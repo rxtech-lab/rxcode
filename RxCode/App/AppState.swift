@@ -1151,6 +1151,20 @@ final class AppState {
         }
         mobileSyncObservers.append(newSessionObserver)
 
+        let threadActionObserver = center.addObserver(
+            forName: .mobileSyncThreadActionRequested,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let fromHex = notification.userInfo?["from"] as? String,
+                  let request = notification.userInfo?["payload"] as? ThreadActionRequestPayload
+            else { return }
+            Task { @MainActor [weak self] in
+                await self?.handleMobileThreadActionRequest(request, fromHex: fromHex)
+            }
+        }
+        mobileSyncObservers.append(threadActionObserver)
+
         let searchObserver = center.addObserver(
             forName: .mobileSyncSearchRequested,
             object: nil,
@@ -1228,6 +1242,44 @@ final class AppState {
         }
         _ = await sendPrompt(initialText, displayText: initialText, in: window)
         await sendMobileSnapshot(toHex: fromHex, activeSessionID: window.currentSessionId)
+    }
+
+    /// Apply a mobile-initiated lifecycle action (rename / archive / unarchive /
+    /// delete) to an existing thread, then push a fresh snapshot back so the
+    /// requesting device reconciles immediately. The action mutators each
+    /// schedule their own broadcast for the remaining paired devices.
+    private func handleMobileThreadActionRequest(_ request: ThreadActionRequestPayload, fromHex: String) async {
+        // The mobile may hold a session id the CLI has since advanced
+        // (pending-→real swap, or a compaction boundary). Follow the redirect
+        // chain so the action lands on the live thread.
+        let sessionID = resolveCurrentSessionId(request.sessionID)
+        guard let summary = allSessionSummaries.first(where: { $0.id == sessionID }) else {
+            logger.error("[MobileSync] thread action=\(request.action.rawValue, privacy: .public) for unknown thread=\(request.sessionID, privacy: .public)")
+            await sendMobileSnapshot(toHex: fromHex, activeSessionID: nil)
+            return
+        }
+
+        logger.info("[MobileSync] applying thread action=\(request.action.rawValue, privacy: .public) thread=\(sessionID, privacy: .public)")
+
+        let session = summary.makeSession()
+        // Mobile actions aren't tied to a desktop window; a fresh WindowState
+        // keeps the data-layer mutators happy without disturbing open windows.
+        let window = WindowState()
+
+        switch request.action {
+        case .rename:
+            let title = request.newTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !title.isEmpty else { break }
+            await renameSession(session, to: title)
+        case .archive:
+            await archiveSession(session, in: window)
+        case .unarchive:
+            await unarchiveSession(session, in: window)
+        case .delete:
+            await deleteSession(session, in: window)
+        }
+
+        await sendMobileSnapshot(toHex: fromHex, activeSessionID: nil)
     }
 
     private func handleMobileBranchOpRequest(_ request: BranchOpRequestPayload, fromHex: String) async {
@@ -1564,6 +1616,13 @@ final class AppState {
 
     private func sendMobileSnapshot(toHex hex: String, activeSessionID: String?) async {
         let active = await mobileActiveSessionPayload(for: activeSessionID)
+        // Viewing a thread on any paired device counts as reading it: drop the
+        // "finished, unread" flag so the green indicator clears on desktop and
+        // mobile alike. Done before the snapshot is built so the payload below
+        // already reflects the cleared state.
+        if let activeID = active.id, sessionStates[activeID]?.hasUncheckedCompletion == true {
+            updateState(activeID) { $0.hasUncheckedCompletion = false }
+        }
         let branches = await mobileProjectBranches()
         let payload = SnapshotPayload(
             projects: projects,
@@ -1616,7 +1675,8 @@ final class AppState {
             isStreaming: sessionStates[summary.id]?.isStreaming ?? false,
             attention: mobileAttentionKind(forSessionId: summary.id),
             progress: progress,
-            queuedMessages: queued
+            queuedMessages: queued,
+            hasUncheckedCompletion: sessionStates[summary.id]?.hasUncheckedCompletion ?? false
         )
     }
 
@@ -1743,7 +1803,16 @@ final class AppState {
     }
 
     private func mobileSettingsSnapshot() -> MobileSettingsSnapshot {
-        let models = availableAgentModelSections().flatMap(\.models)
+        let sections = availableAgentModelSections().map {
+            AgentModelSection(
+                id: $0.id,
+                title: $0.title,
+                provider: $0.provider,
+                iconURL: $0.iconURL,
+                models: $0.models
+            )
+        }
+        let models = sections.flatMap(\.models)
         return MobileSettingsSnapshot(
             selectedAgentProvider: selectedAgentProvider,
             selectedModel: selectedModel,
@@ -1760,7 +1829,8 @@ final class AppState {
             archiveRetentionDays: archiveRetentionDays,
             autoPreviewSettings: autoPreviewSettings,
             availableEfforts: ["auto"] + Self.availableEfforts,
-            availableModels: models
+            availableModels: models,
+            modelSections: sections
         )
     }
 
@@ -3051,16 +3121,34 @@ final class AppState {
 
     private func updateState(_ key: String, _ mutate: (inout SessionStreamState) -> Void) {
         let prevMessages = sessionStates[key]?.messages ?? []
+        let prevThinking = sessionStates[key]?.isThinking ?? false
         guard var state = sessionStates[key] else {
             var fresh = SessionStreamState()
             mutate(&fresh)
             sessionStates[key] = fresh
             broadcastMobileMessageDiff(sessionKey: key, prev: prevMessages, next: fresh.messages, isStreaming: fresh.isStreaming)
+            broadcastMobileThinkingChange(sessionKey: key, prev: prevThinking, next: fresh.isThinking, isStreaming: fresh.isStreaming)
             return
         }
         mutate(&state)
         sessionStates[key] = state
         broadcastMobileMessageDiff(sessionKey: key, prev: prevMessages, next: state.messages, isStreaming: state.isStreaming)
+        broadcastMobileThinkingChange(sessionKey: key, prev: prevThinking, next: state.isThinking, isStreaming: state.isStreaming)
+    }
+
+    /// Mirror `isThinking` transitions to paired mobile devices so the remote
+    /// streaming indicator can show a "Thinking…" label. Only fires on an
+    /// actual change — the flag flips repeatedly within a turn and we don't
+    /// want to flood the relay with redundant updates.
+    private func broadcastMobileThinkingChange(sessionKey: String, prev: Bool, next: Bool, isStreaming: Bool) {
+        guard prev != next, !MobileSyncService.shared.pairedDevices.isEmpty else { return }
+        MobileSyncService.shared.broadcastSessionUpdate(
+            sessionID: sessionKey,
+            kind: .statusChanged,
+            message: nil,
+            isStreaming: isStreaming,
+            isThinking: next
+        )
     }
 
     private func finalizeStreamSession(
@@ -3715,6 +3803,12 @@ final class AppState {
                         sessionKey = resultEvent.sessionId
                     }
 
+                    // A background completion is "finished, unread". Setting the
+                    // flag inside finalizeStreamSession means the trailing
+                    // `.streamingFinished` broadcast already carries it to mobile.
+                    let isFg = (window.currentSessionId ?? window.newSessionKey) == sessionKey
+                    let markUnread = !isFg && !resultEvent.isError
+
                     finalizeStreamSession(for: sessionKey) { state in
                         if let cost = resultEvent.totalCostUsd { state.costUsd = cost }
                         if let duration = resultEvent.durationMs { state.durationMs += duration }
@@ -3725,6 +3819,7 @@ final class AppState {
                             state.cacheCreationTokens += usage.cacheCreationInputTokens
                             state.cacheReadTokens += usage.cacheReadInputTokens
                         }
+                        if markUnread { state.hasUncheckedCompletion = true }
                     }
 
                     recordStreamCompletion(
@@ -3734,10 +3829,6 @@ final class AppState {
                         error: resultEvent.isError ? "Agent reported an error result." : nil
                     )
 
-                    let isFg = (window.currentSessionId ?? window.newSessionKey) == sessionKey
-                    if !isFg, !resultEvent.isError {
-                        updateState(sessionKey) { $0.hasUncheckedCompletion = true }
-                    }
                     if isFg {
                         window.currentSessionId = resultEvent.sessionId
                         if resultEvent.isError {
@@ -3855,9 +3946,9 @@ final class AppState {
             let stillStreaming = stateForSession(sessionKey).isStreaming
             if stillStreaming, isStillOwner {
                 logger.warning("[Stream:UI] isStreaming was still true at stream end — forcing cleanup")
-                finalizeStreamSession(for: sessionKey)
-                if (window.currentSessionId ?? window.newSessionKey) != sessionKey {
-                    updateState(sessionKey) { $0.hasUncheckedCompletion = true }
+                let markUnread = (window.currentSessionId ?? window.newSessionKey) != sessionKey
+                finalizeStreamSession(for: sessionKey) { state in
+                    if markUnread { state.hasUncheckedCompletion = true }
                 }
 
                 // If the last assistant message is invisible after cleanup (blocks=[] because

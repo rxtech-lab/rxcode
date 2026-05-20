@@ -294,6 +294,7 @@ final class MobileSyncService: ObservableObject {
         kind: SessionUpdatePayload.Kind,
         message: ChatMessage?,
         isStreaming: Bool?,
+        isThinking: Bool? = nil,
         summary: RxCodeSync.SessionSummary? = nil,
         previousSessionID: String? = nil
     ) {
@@ -303,6 +304,7 @@ final class MobileSyncService: ObservableObject {
                 kind: kind,
                 message: message,
                 isStreaming: isStreaming,
+                isThinking: isThinking,
                 summary: summary,
                 previousSessionID: previousSessionID
             )
@@ -391,6 +393,13 @@ final class MobileSyncService: ObservableObject {
             guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "new_session_request") else { return }
             NotificationCenter.default.post(
                 name: .mobileSyncNewSessionRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": req]
+            )
+        case .threadActionRequest(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "thread_action_request") else { return }
+            NotificationCenter.default.post(
+                name: .mobileSyncThreadActionRequested,
                 object: nil,
                 userInfo: ["from": inbound.fromHex, "payload": req]
             )
@@ -567,6 +576,7 @@ extension Notification.Name {
     static let mobileSyncCancelStreamRequested = Notification.Name("mobileSync.cancelStreamRequested")
     static let mobileSyncRemoveQueuedRequested = Notification.Name("mobileSync.removeQueuedRequested")
     static let mobileSyncNewSessionRequested = Notification.Name("mobileSync.newSessionRequested")
+    static let mobileSyncThreadActionRequested = Notification.Name("mobileSync.threadActionRequested")
     static let mobileSyncSearchRequested = Notification.Name("mobileSync.searchRequested")
     static let mobileSyncSettingsUpdateReceived = Notification.Name("mobileSync.settingsUpdateReceived")
     static let mobileSyncPermissionResponse = Notification.Name("mobileSync.permissionResponse")

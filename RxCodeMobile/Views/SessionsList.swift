@@ -28,6 +28,11 @@ struct SessionsList: View {
     @State private var searchText = ""
     @State private var showingNewThread = false
 
+    /// Number of rows currently materialized. The list grows in `pageSize`
+    /// increments as the user scrolls so we never render every thread at once.
+    @State private var displayLimit = SessionsList.pageSize
+    private static let pageSize = 20
+
     var body: some View {
         list
         .navigationTitle("Threads")
@@ -53,6 +58,10 @@ struct SessionsList: View {
         )
         .autocorrectionDisabled(true)
         .textInputAutocapitalization(.never)
+        .onChange(of: searchText) { _, _ in
+            // Restart paging so search results always begin at the top.
+            displayLimit = Self.pageSize
+        }
         .overlay {
             if filtered.isEmpty && !searchText.isEmpty {
                 ContentUnavailableView.search(text: searchText)
@@ -63,22 +72,44 @@ struct SessionsList: View {
     @ViewBuilder
     private var list: some View {
         if usesSelection {
-            List(filtered, selection: $selected) { session in
-                sessionLink(session)
-            }
+            List(selection: $selected) { sessionRows }
         } else {
-            List(filtered) { session in
-                sessionLink(session)
-            }
+            List { sessionRows }
         }
+    }
+
+    @ViewBuilder
+    private var sessionRows: some View {
+        ForEach(visible) { session in
+            sessionLink(session)
+                .onAppear {
+                    if session.id == visible.last?.id { loadMore() }
+                }
+        }
+        if displayLimit < filtered.count {
+            HStack {
+                Spacer()
+                ProgressView()
+                Spacer()
+            }
+            .listRowSeparator(.hidden)
+        }
+    }
+
+    /// The slice of `filtered` currently rendered.
+    private var visible: [SessionSummary] {
+        Array(filtered.prefix(displayLimit))
+    }
+
+    private func loadMore() {
+        guard displayLimit < filtered.count else { return }
+        displayLimit = min(displayLimit + Self.pageSize, filtered.count)
     }
 
     private func sessionLink(_ session: SessionSummary) -> some View {
         NavigationLink(value: session.id) {
             HStack(spacing: 6) {
-                if let attention = session.attention {
-                    statusDot(for: attention)
-                }
+                leadingDot(for: session)
 
                 SessionSidebarRow(
                     title: rowTitle(for: session),
@@ -87,6 +118,21 @@ struct SessionsList: View {
                     isBackgroundStreaming: session.isStreaming
                 )
             }
+        }
+    }
+
+    /// Status dot shown ahead of the row. A pending permission or question
+    /// takes precedence; otherwise a green dot marks a thread whose run
+    /// finished while unread, mirroring the desktop sidebar.
+    @ViewBuilder
+    private func leadingDot(for session: SessionSummary) -> some View {
+        if let attention = session.attention {
+            statusDot(for: attention)
+        } else if session.hasUncheckedCompletion, !session.isStreaming {
+            Circle()
+                .fill(ClaudeTheme.statusSuccess)
+                .frame(width: 7, height: 7)
+                .accessibilityLabel("Finished, unread")
         }
     }
 

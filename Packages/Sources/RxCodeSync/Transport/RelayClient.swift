@@ -26,6 +26,11 @@ public actor RelayClient {
         case deliveryFailed(toHex: String)
     }
 
+    /// WebSocket frame ceiling. The 1 MiB `URLSessionWebSocketTask` default is
+    /// too small for snapshots that bundle a full thread history; 32 MiB covers
+    /// realistic threads with room to spare.
+    private static let maxWebSocketMessageSize = 32 * 1024 * 1024
+
     private let identity: DeviceIdentity
     private let relayURL: URL
     private let session: URLSession
@@ -122,6 +127,12 @@ public actor RelayClient {
         }
 
         let newTask = session.webSocketTask(with: url)
+        // The default frame limit is 1 MiB. A snapshot carries a full thread
+        // history (tool results with file contents, diffs, command output),
+        // which routinely exceeds that — `task.send` would then throw and the
+        // snapshot would silently never reach the peer. Raise the ceiling so
+        // history sync isn't dropped. Applies to both send and receive.
+        newTask.maximumMessageSize = Self.maxWebSocketMessageSize
         task = newTask
         newTask.resume()
 

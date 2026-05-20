@@ -1,13 +1,14 @@
 {
   "fill" : {
-    "solid" : "display-p3:0.00057,0.16509,1.00000,1.00000"
+    "solid" : "extended-srgb:1.00000,0.55294,0.15686,1.00000"
   },
   "groups" : [
     {
       "layers" : [
         {
-          "image-name" : "image.png",
-          "name" : "image"
+          "glass" : true,
+          "image-name" : "image 2.png",
+          "name" : "image 2"
         }
       ],
       "shadow" : {

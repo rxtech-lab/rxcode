@@ -20,6 +20,7 @@ public enum Payload: Sendable {
     case cancelStream(CancelStreamPayload)
     case removeQueuedMessage(RemoveQueuedMessagePayload)
     case newSessionRequest(NewSessionRequestPayload)
+    case threadActionRequest(ThreadActionRequestPayload)
     case searchRequest(SearchRequestPayload)
     case searchResults(SearchResultsPayload)
     case notification(NotificationPayload)
@@ -269,6 +270,12 @@ public struct MobileSettingsSnapshot: Codable, Sendable, Equatable {
     /// and ACP clients. Lets mobile show a model picker without re-deriving the
     /// list itself. Optional for backward compatibility with older desktops.
     public let availableModels: [AgentModel]?
+    /// Model picker sections, mirroring the desktop layout — Claude Code,
+    /// Codex, and one section per enabled ACP client. Lets mobile reproduce the
+    /// desktop's per-ACP-client grouping instead of collapsing every ACP client
+    /// into a single bucket. Optional for backward compatibility with older
+    /// desktops, which sent only the flattened `availableModels` list.
+    public let modelSections: [AgentModelSection]?
 
     public init(
         selectedAgentProvider: AgentProvider,
@@ -286,7 +293,8 @@ public struct MobileSettingsSnapshot: Codable, Sendable, Equatable {
         archiveRetentionDays: Int,
         autoPreviewSettings: AttachmentAutoPreviewSettings,
         availableEfforts: [String],
-        availableModels: [AgentModel]? = nil
+        availableModels: [AgentModel]? = nil,
+        modelSections: [AgentModelSection]? = nil
     ) {
         self.selectedAgentProvider = selectedAgentProvider
         self.selectedModel = selectedModel
@@ -304,6 +312,7 @@ public struct MobileSettingsSnapshot: Codable, Sendable, Equatable {
         self.autoPreviewSettings = autoPreviewSettings
         self.availableEfforts = availableEfforts
         self.availableModels = availableModels
+        self.modelSections = modelSections
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -311,7 +320,7 @@ public struct MobileSettingsSnapshot: Codable, Sendable, Equatable {
         case permissionMode, summarizationProvider, summarizationProviderDisplayName
         case openAISummarizationEndpoint, openAISummarizationModel
         case notificationsEnabled, focusMode, autoArchiveEnabled, archiveRetentionDays
-        case autoPreviewSettings, availableEfforts, availableModels
+        case autoPreviewSettings, availableEfforts, availableModels, modelSections
     }
 
     public init(from decoder: Decoder) throws {
@@ -332,6 +341,7 @@ public struct MobileSettingsSnapshot: Codable, Sendable, Equatable {
         autoPreviewSettings = try c.decode(AttachmentAutoPreviewSettings.self, forKey: .autoPreviewSettings)
         availableEfforts = try c.decode([String].self, forKey: .availableEfforts)
         availableModels = try c.decodeIfPresent([AgentModel].self, forKey: .availableModels)
+        modelSections = try c.decodeIfPresent([AgentModelSection].self, forKey: .modelSections)
     }
 }
 
@@ -403,6 +413,12 @@ public struct SessionSummary: Codable, Sendable, Identifiable {
     /// the desktop's per-session queue (threadStore). `nil` when the summary
     /// comes from an older desktop that doesn't know about queue sync.
     public let queuedMessages: [QueuedUserMessage]?
+    /// Whether the session's stream finished while the user wasn't viewing it
+    /// and it hasn't been opened since. Mirrors the desktop's
+    /// `hasUncheckedCompletion` so mobile can show the same green
+    /// "finished, unread" indicator. Defaults to `false` for summaries from
+    /// an older desktop that predates this field.
+    public let hasUncheckedCompletion: Bool
 
     public init(
         id: String,
@@ -414,7 +430,8 @@ public struct SessionSummary: Codable, Sendable, Identifiable {
         isStreaming: Bool = false,
         attention: SessionAttentionKind? = nil,
         progress: SessionProgressSnapshot? = nil,
-        queuedMessages: [QueuedUserMessage]? = nil
+        queuedMessages: [QueuedUserMessage]? = nil,
+        hasUncheckedCompletion: Bool = false
     ) {
         self.id = id
         self.projectId = projectId
@@ -426,10 +443,11 @@ public struct SessionSummary: Codable, Sendable, Identifiable {
         self.attention = attention
         self.progress = progress
         self.queuedMessages = queuedMessages
+        self.hasUncheckedCompletion = hasUncheckedCompletion
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, projectId, title, updatedAt, isPinned, isArchived, isStreaming, attention, progress, queuedMessages
+        case id, projectId, title, updatedAt, isPinned, isArchived, isStreaming, attention, progress, queuedMessages, hasUncheckedCompletion
     }
 
     public init(from decoder: Decoder) throws {
@@ -444,6 +462,7 @@ public struct SessionSummary: Codable, Sendable, Identifiable {
         attention = try container.decodeIfPresent(SessionAttentionKind.self, forKey: .attention)
         progress = try container.decodeIfPresent(SessionProgressSnapshot.self, forKey: .progress)
         queuedMessages = try container.decodeIfPresent([QueuedUserMessage].self, forKey: .queuedMessages)
+        hasUncheckedCompletion = try container.decodeIfPresent(Bool.self, forKey: .hasUncheckedCompletion) ?? false
     }
 }
 
@@ -459,6 +478,11 @@ public struct SessionUpdatePayload: Codable, Sendable {
     public let kind: Kind
     public let message: ChatMessage?
     public let isStreaming: Bool?
+    /// Whether the agent is currently producing reasoning/thinking tokens (as
+    /// opposed to output text). Drives the mobile streaming indicator's
+    /// "Thinking…" label, mirroring the desktop. Optional for backward
+    /// compatibility with desktops that predate thinking sync.
+    public let isThinking: Bool?
     public let summary: SessionSummary?
     public let previousSessionID: String?
 
@@ -467,6 +491,7 @@ public struct SessionUpdatePayload: Codable, Sendable {
         kind: Kind,
         message: ChatMessage? = nil,
         isStreaming: Bool? = nil,
+        isThinking: Bool? = nil,
         summary: SessionSummary? = nil,
         previousSessionID: String? = nil
     ) {
@@ -474,6 +499,7 @@ public struct SessionUpdatePayload: Codable, Sendable {
         self.kind = kind
         self.message = message
         self.isStreaming = isStreaming
+        self.isThinking = isThinking
         self.summary = summary
         self.previousSessionID = previousSessionID
     }
@@ -533,6 +559,37 @@ public struct NewSessionRequestPayload: Codable, Sendable {
         self.clientRequestID = clientRequestID
         self.projectID = projectID
         self.initialText = initialText
+    }
+}
+
+/// Mobile-initiated lifecycle action on an existing thread: rename, archive,
+/// unarchive, or delete. The desktop applies the action against its
+/// authoritative session store and broadcasts a fresh snapshot so every paired
+/// device reconciles. Fire-and-forget — there is no dedicated result payload.
+public struct ThreadActionRequestPayload: Codable, Sendable {
+    public enum Action: String, Codable, Sendable {
+        case rename
+        case archive
+        case unarchive
+        case delete
+    }
+
+    public let clientRequestID: UUID
+    public let sessionID: String
+    public let action: Action
+    /// New title, required only when `action == .rename`.
+    public let newTitle: String?
+
+    public init(
+        clientRequestID: UUID = UUID(),
+        sessionID: String,
+        action: Action,
+        newTitle: String? = nil
+    ) {
+        self.clientRequestID = clientRequestID
+        self.sessionID = sessionID
+        self.action = action
+        self.newTitle = newTitle
     }
 }
 
@@ -672,6 +729,7 @@ extension Payload: Codable {
         case cancelStream = "cancel_stream"
         case removeQueuedMessage = "remove_queued_message"
         case newSessionRequest = "new_session_request"
+        case threadActionRequest = "thread_action_request"
         case searchRequest = "search_request"
         case searchResults = "search_results"
         case notification
@@ -704,6 +762,7 @@ extension Payload: Codable {
         case .cancelStream: self = .cancelStream(try container.decode(CancelStreamPayload.self, forKey: .data))
         case .removeQueuedMessage: self = .removeQueuedMessage(try container.decode(RemoveQueuedMessagePayload.self, forKey: .data))
         case .newSessionRequest: self = .newSessionRequest(try container.decode(NewSessionRequestPayload.self, forKey: .data))
+        case .threadActionRequest: self = .threadActionRequest(try container.decode(ThreadActionRequestPayload.self, forKey: .data))
         case .searchRequest: self = .searchRequest(try container.decode(SearchRequestPayload.self, forKey: .data))
         case .searchResults: self = .searchResults(try container.decode(SearchResultsPayload.self, forKey: .data))
         case .notification: self = .notification(try container.decode(NotificationPayload.self, forKey: .data))
@@ -732,6 +791,7 @@ extension Payload: Codable {
         case .cancelStream(let p): try container.encode(TypeKey.cancelStream.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .removeQueuedMessage(let p): try container.encode(TypeKey.removeQueuedMessage.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .newSessionRequest(let p): try container.encode(TypeKey.newSessionRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .threadActionRequest(let p): try container.encode(TypeKey.threadActionRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .searchRequest(let p): try container.encode(TypeKey.searchRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .searchResults(let p): try container.encode(TypeKey.searchResults.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .notification(let p): try container.encode(TypeKey.notification.rawValue, forKey: .type); try container.encode(p, forKey: .data)

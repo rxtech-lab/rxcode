@@ -245,7 +245,6 @@ struct MessageBubble: View {
                     previewImagePath = path
                     return true
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
                 if isLong {
                     Button {

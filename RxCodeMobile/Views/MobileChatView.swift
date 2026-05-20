@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import RxCodeCore
 import RxCodeChatKit
 import RxCodeSync
@@ -8,10 +9,16 @@ import RxCodeSync
 struct MobileChatView: View {
     @EnvironmentObject private var state: MobileAppState
     let sessionID: String
+    /// Invoked after the thread is archived or deleted so the parent can pop
+    /// this view — the thread is no longer reachable from the active list.
+    var onClose: () -> Void = {}
     @State private var composer: String = ""
     @State private var isNearBottom: Bool = true
     @State private var showingQueueSheet = false
     @State private var didEstablishInitialScroll = false
+    @State private var showingRenameSheet = false
+    @State private var showingArchiveConfirm = false
+    @State private var showingDeleteConfirm = false
 
     private static let bottomAnchorID = "message-list-bottom"
     private static let bottomContentPadding: CGFloat = 200
@@ -22,12 +29,85 @@ struct MobileChatView: View {
             .animation(.easeInOut(duration: 0.2), value: queuedMessages.count)
             .navigationBarTitleDisplayMode(.inline)
             .navigationTitle(title)
+            .toolbar { threadActionsToolbar }
             .sheet(isPresented: $showingQueueSheet) {
                 QueuedMessagesSheet(
                     messages: queuedMessages,
                     onRemove: removeQueued
                 )
             }
+            .sheet(isPresented: $showingRenameSheet) {
+                RenameThreadSheet(currentTitle: title) { newTitle in
+                    Task { await state.renameThread(sessionID: sessionID, title: newTitle) }
+                }
+            }
+            .confirmationDialog(
+                "Archive this thread?",
+                isPresented: $showingArchiveConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("Archive", role: .destructive) { performArchive() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Archived threads are hidden from the list. You can still find them on your Mac.")
+            }
+            .confirmationDialog(
+                "Delete this thread?",
+                isPresented: $showingDeleteConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("Delete", role: .destructive) { performDelete() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This permanently deletes the thread and all of its messages. This cannot be undone.")
+            }
+    }
+
+    // MARK: - Thread actions toolbar
+
+    @ToolbarContentBuilder
+    private var threadActionsToolbar: some ToolbarContent {
+        if threadExists {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button {
+                        showingRenameSheet = true
+                    } label: {
+                        Label("Rename", systemImage: "pencil")
+                    }
+                    Button {
+                        showingArchiveConfirm = true
+                    } label: {
+                        Label("Archive", systemImage: "archivebox")
+                    }
+                    Divider()
+                    Button(role: .destructive) {
+                        showingDeleteConfirm = true
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .accessibilityLabel("Thread actions")
+            }
+        }
+    }
+
+    /// A real, persisted thread the desktop can act on — excludes drafts.
+    private var threadExists: Bool {
+        !MobileDraftSessionID.isDraft(sessionID)
+            && state.sessions.contains(where: { $0.id == sessionID })
+    }
+
+    private func performArchive() {
+        Task { await state.archiveThread(sessionID: sessionID) }
+        onClose()
+    }
+
+    private func performDelete() {
+        Task { await state.deleteThread(sessionID: sessionID) }
+        onClose()
     }
 
     // MARK: - Active Thread Layout
@@ -38,12 +118,17 @@ struct MobileChatView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 12) {
                         ChatMessageListView(messages: messages)
+                        if isStreaming {
+                            MobileStreamingIndicator(isThinking: isThinking)
+                                .transition(.opacity)
+                        }
                         Color.clear
                             .frame(height: Self.bottomContentPadding)
                             .id(Self.bottomAnchorID)
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 8)
+                    .animation(.easeInOut(duration: 0.2), value: isStreaming)
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .onScrollGeometryChange(for: Bool.self) { geo in
@@ -66,6 +151,11 @@ struct MobileChatView: View {
                 }
                 .onChange(of: messages.last?.content) { _, _ in
                     guard didEstablishInitialScroll, isNearBottom else { return }
+                    withAnimation { proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom) }
+                }
+                .onChange(of: isStreaming) { _, streaming in
+                    // Keep the newly appeared loading indicator in view.
+                    guard streaming, didEstablishInitialScroll, isNearBottom else { return }
                     withAnimation { proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom) }
                 }
                 .overlay(alignment: .bottomTrailing) {
@@ -109,6 +199,10 @@ struct MobileChatView: View {
 
     private var isStreaming: Bool {
         state.isSessionStreaming(sessionID)
+    }
+
+    private var isThinking: Bool {
+        state.isSessionThinking(sessionID)
     }
 
     private var queuedMessages: [QueuedUserMessage] {
@@ -199,6 +293,119 @@ struct MobileChatView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(queuedMessages.count) queued messages. Tap to view all.")
+    }
+}
+
+// MARK: - Streaming Indicator
+
+/// Loading indicator shown at the end of the message list while the agent is
+/// generating a response — mirrors the desktop `StreamingIndicatorView`. Shows
+/// a "Thinking…" label while the agent is producing reasoning tokens, and three
+/// bouncing dots throughout.
+private struct MobileStreamingIndicator: View {
+    var isThinking: Bool = false
+    @State private var phase: Int = 0
+    private let timer = Timer.publish(every: 0.18, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if isThinking {
+                HStack(spacing: 6) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(ClaudeTheme.textTertiary)
+                    Text("Thinking")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(ClaudeTheme.textSecondary)
+                }
+                .transition(.opacity)
+            }
+            dots
+        }
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .animation(.easeInOut(duration: 0.2), value: isThinking)
+        .onReceive(timer) { _ in
+            phase = (phase + 1) % 3
+        }
+        .accessibilityLabel(isThinking ? "Thinking" : "Response in progress")
+    }
+
+    private var dots: some View {
+        HStack(spacing: 5) {
+            ForEach(0 ..< 3, id: \.self) { i in
+                Circle()
+                    .fill(ClaudeTheme.textTertiary)
+                    .frame(width: 7, height: 7)
+                    .opacity(phase == i ? 1.0 : 0.3)
+                    .scaleEffect(phase == i ? 1.0 : 0.85)
+                    .animation(.easeInOut(duration: 0.25), value: phase)
+            }
+        }
+    }
+}
+
+// MARK: - Rename Thread Sheet
+
+/// Compact modal that captures a new thread title. Commits the trimmed value
+/// via `onSubmit` and dismisses; an empty title is treated as a no-op.
+private struct RenameThreadSheet: View {
+    let currentTitle: String
+    let onSubmit: (String) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var text: String
+    @FocusState private var isFocused: Bool
+
+    init(currentTitle: String, onSubmit: @escaping (String) -> Void) {
+        self.currentTitle = currentTitle
+        self.onSubmit = onSubmit
+        _text = State(initialValue: currentTitle)
+    }
+
+    private var trimmed: String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var canSave: Bool {
+        !trimmed.isEmpty && trimmed != currentTitle
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Thread name") {
+                    TextField("Thread name", text: $text)
+                        .focused($isFocused)
+                        .submitLabel(.done)
+                        .onSubmit(commit)
+                }
+            }
+            .navigationTitle("Rename Thread")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Save") { commit() }
+                        .fontWeight(.semibold)
+                        .disabled(!canSave)
+                }
+            }
+            .onAppear {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    isFocused = true
+                }
+            }
+        }
+        .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
+    }
+
+    private func commit() {
+        guard canSave else { return }
+        onSubmit(trimmed)
+        dismiss()
     }
 }
 

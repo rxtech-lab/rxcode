@@ -48,10 +48,6 @@ struct RootView: View {
         .onChange(of: state.activeSessionID) { _, newValue in
             openActiveSession(newValue)
         }
-        .onChange(of: selectedSession) { _, newValue in
-            guard compactClass == .compact, let newValue else { return }
-            projectsPath.append(newValue)
-        }
     }
 
     private var phoneTabs: some View {
@@ -158,7 +154,7 @@ struct RootView: View {
     }
 
     private func chatDestination(_ sessionID: String) -> some View {
-        MobileChatView(sessionID: sessionID)
+        MobileChatView(sessionID: sessionID, onClose: { closeChat() })
             .id(sessionID)
             .toolbar(.hidden, for: .tabBar)
             .task(id: sessionID) {
@@ -168,21 +164,38 @@ struct RootView: View {
             }
     }
 
+    /// Pop the chat view after its thread is archived or deleted. Compact mode
+    /// is driven by `projectsPath`; the split view by `selectedSession`.
+    private func closeChat() {
+        if compactClass == .compact {
+            if !projectsPath.isEmpty { projectsPath.removeLast() }
+        } else {
+            selectedSession = nil
+        }
+    }
+
+    /// Navigate to a session surfaced by the desktop (deep links, notifications,
+    /// freshly created threads). Compact mode is driven solely by `projectsPath`
+    /// while the regular split view is driven by `selectedSession`. Keeping the
+    /// two mechanisms separate avoids pushing the same chat page twice.
     private func openActiveSession(_ sessionID: String?) {
         guard let sessionID,
               let session = state.sessions.first(where: { $0.id == sessionID })
         else { return }
 
         selectedTab = .projects
-        selectedProject = session.projectId
-        selectedSession = sessionID
         showingBriefing = false
 
         if compactClass == .compact {
             var path = NavigationPath()
             path.append(session.projectId)
             path.append(sessionID)
-            projectsPath = path
+            if projectsPath != path {
+                projectsPath = path
+            }
+        } else {
+            selectedProject = session.projectId
+            selectedSession = sessionID
         }
     }
 }

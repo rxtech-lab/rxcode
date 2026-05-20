@@ -22,17 +22,19 @@ struct GroupedBriefing: Identifiable {
 struct MobileBriefingView: View {
     @EnvironmentObject private var state: MobileAppState
 
+    /// Selected project ids for filtering. Empty = show every project.
+    @State private var selectedProjectIds: Set<UUID> = []
+
+    /// When false (default), only show briefings for each project's current branch.
+    @State private var showAllBranches: Bool = false
+
     var body: some View {
         GeometryReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     if groups.isEmpty {
-                        ContentUnavailableView(
-                            "No Briefings Yet",
-                            systemImage: "doc.text.magnifyingglass",
-                            description: Text("Briefings appear here after threads finish on your Mac.")
-                        )
-                        .frame(maxWidth: .infinity, minHeight: 320)
+                        emptyState
+                            .frame(maxWidth: .infinity, minHeight: 320)
                     } else {
                         LazyVGrid(
                             columns: gridColumns(for: proxy.size.width),
@@ -54,6 +56,13 @@ struct MobileBriefingView: View {
             }
         }
         .navigationTitle("Briefing")
+        .toolbar {
+            if hasAnyData {
+                ToolbarItem(placement: .topBarTrailing) {
+                    filterMenu
+                }
+            }
+        }
         .refreshable {
             await state.refreshSnapshot()
         }
@@ -104,8 +113,122 @@ struct MobileBriefingView: View {
         Dictionary(uniqueKeysWithValues: state.projects.map { ($0.id, $0) })
     }
 
-    private var groups: [GroupedBriefing] {
+    /// Every briefing group before the project/branch filters are applied.
+    private var allGroups: [GroupedBriefing] {
         groupBriefings(briefings: state.branchBriefings, threads: state.threadSummaries)
+    }
+
+    /// Briefing groups after applying the active project and branch filters.
+    private var groups: [GroupedBriefing] {
+        let projectFiltered: [GroupedBriefing]
+        if selectedProjectIds.isEmpty {
+            projectFiltered = allGroups
+        } else {
+            projectFiltered = allGroups.filter { selectedProjectIds.contains($0.projectId) }
+        }
+
+        if showAllBranches {
+            return projectFiltered
+        }
+        return projectFiltered.filter { group in
+            guard let branch = state.projectBranches[group.projectId] else {
+                // Branch not yet mirrored from the desktop — keep the group so
+                // the user isn't shown an empty state while it resolves.
+                return true
+            }
+            return group.branch == branch
+        }
+    }
+
+    /// True when at least one briefing or summary exists, regardless of filters.
+    private var hasAnyData: Bool {
+        !state.branchBriefings.isEmpty || !state.threadSummaries.isEmpty
+    }
+
+    /// Projects that actually have at least one briefing or summary recorded.
+    private var projectsWithData: [Project] {
+        let ids = Set(allGroups.map(\.projectId))
+        return state.projects.filter { ids.contains($0.id) }
+    }
+
+    private var isFilterActive: Bool {
+        showAllBranches || !selectedProjectIds.isEmpty
+    }
+
+    private func toggleProject(_ id: UUID) {
+        if selectedProjectIds.contains(id) {
+            selectedProjectIds.remove(id)
+        } else {
+            selectedProjectIds.insert(id)
+        }
+    }
+
+    // MARK: - Filter menu
+
+    @ViewBuilder
+    private var filterMenu: some View {
+        Menu {
+            Section("Branches") {
+                Button {
+                    showAllBranches = false
+                } label: {
+                    Label("Current branch", systemImage: showAllBranches ? "" : "checkmark")
+                }
+                Button {
+                    showAllBranches = true
+                } label: {
+                    Label("All branches", systemImage: showAllBranches ? "checkmark" : "")
+                }
+            }
+
+            let projects = projectsWithData
+            if projects.count > 1 {
+                Section("Projects") {
+                    Button {
+                        selectedProjectIds.removeAll()
+                    } label: {
+                        Label("All projects", systemImage: selectedProjectIds.isEmpty ? "checkmark" : "")
+                    }
+                    ForEach(projects) { project in
+                        Button {
+                            toggleProject(project.id)
+                        } label: {
+                            Label(
+                                project.name,
+                                systemImage: selectedProjectIds.contains(project.id) ? "checkmark" : ""
+                            )
+                        }
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: isFilterActive
+                  ? "line.3.horizontal.decrease.circle.fill"
+                  : "line.3.horizontal.decrease.circle")
+        }
+    }
+
+    // MARK: - Empty state
+
+    @ViewBuilder
+    private var emptyState: some View {
+        if hasAnyData {
+            ContentUnavailableView(
+                "Nothing to Show",
+                systemImage: "line.3.horizontal.decrease.circle",
+                description: Text(
+                    showAllBranches
+                        ? "No briefings match the selected projects."
+                        : "No briefings for the current branch. Choose All branches to see other branches."
+                )
+            )
+        } else {
+            ContentUnavailableView(
+                "No Briefings Yet",
+                systemImage: "doc.text.magnifyingglass",
+                description: Text("Briefings appear here after threads finish on your Mac.")
+            )
+        }
     }
 
     private func briefingRow(_ group: GroupedBriefing) -> some View {

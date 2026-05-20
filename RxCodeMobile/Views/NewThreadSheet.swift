@@ -292,23 +292,41 @@ struct NewThreadConfigStrip: View {
 
     // MARK: Model
 
-    private var availableModels: [AgentModel] {
+    /// Flat model list synced from the desktop. Used only as a fallback when the
+    /// paired desktop is too old to send structured `modelSections`.
+    private var flatModels: [AgentModel] {
         state.desktopSettings?.availableModels ?? []
     }
 
-    private var groupedModels: [(provider: AgentProvider, models: [AgentModel])] {
+    /// Model picker sections mirroring the desktop layout: Claude Code, Codex,
+    /// and one section per enabled ACP client. Falls back to grouping the flat
+    /// model list by provider when paired with a desktop that predates
+    /// `modelSections` in the sync protocol.
+    private var modelSections: [AgentModelSection] {
+        if let sections = state.desktopSettings?.modelSections, !sections.isEmpty {
+            return sections
+        }
         var seen: [AgentProvider] = []
-        for model in availableModels where !seen.contains(model.provider) {
+        for model in flatModels where !seen.contains(model.provider) {
             seen.append(model.provider)
         }
         return seen.map { provider in
-            (provider, availableModels.filter { $0.provider == provider })
+            AgentModelSection(
+                id: provider.rawValue,
+                title: provider.displayName,
+                provider: provider,
+                models: flatModels.filter { $0.provider == provider }
+            )
         }
+    }
+
+    private var allModels: [AgentModel] {
+        modelSections.flatMap(\.models)
     }
 
     private var selectedModelLabel: String {
         guard let settings = state.desktopSettings else { return "Model" }
-        if let match = availableModels.first(where: {
+        if let match = allModels.first(where: {
             $0.provider == settings.selectedAgentProvider && $0.id == settings.selectedModel
         }) {
             return match.displayName
@@ -318,9 +336,9 @@ struct NewThreadConfigStrip: View {
 
     private var modelMenu: some View {
         Menu {
-            ForEach(groupedModels, id: \.provider) { group in
-                Section(group.provider.displayName) {
-                    ForEach(group.models, id: \.key) { model in
+            ForEach(modelSections) { section in
+                Section(section.title) {
+                    ForEach(section.models, id: \.key) { model in
                         Button {
                             applyModel(model)
                         } label: {
@@ -337,13 +355,13 @@ struct NewThreadConfigStrip: View {
                     }
                 }
             }
-            if availableModels.isEmpty {
+            if allModels.isEmpty {
                 Text("No models available")
             }
         } label: {
             chipLabel(icon: "cpu", title: selectedModelLabel)
         }
-        .disabled(availableModels.isEmpty)
+        .disabled(allModels.isEmpty)
     }
 
     private func applyModel(_ model: AgentModel) {

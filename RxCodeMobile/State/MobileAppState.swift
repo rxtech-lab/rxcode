@@ -39,6 +39,9 @@ final class MobileAppState: ObservableObject {
     /// Last branch op error message, surfaced once and cleared by the UI.
     @Published var lastBranchOpError: String?
     @Published var messagesBySession: [String: [ChatMessage]] = [:]
+    /// Sessions the desktop currently reports as producing reasoning/thinking
+    /// tokens. Drives the "Thinking…" label in the streaming indicator.
+    @Published var thinkingSessions: Set<String> = []
     @Published var activeSessionID: String?
     @Published var pendingPermission: PermissionRequestPayload?
 
@@ -267,6 +270,12 @@ final class MobileAppState: ObservableObject {
         sessions.first(where: { $0.id == sessionID })?.isStreaming ?? false
     }
 
+    /// True iff the desktop reports the given session as currently producing
+    /// reasoning/thinking tokens.
+    func isSessionThinking(_ sessionID: String) -> Bool {
+        thinkingSessions.contains(sessionID)
+    }
+
     /// Mirror of the desktop's per-session queue, surfaced via `SessionSummary`.
     func queuedMessages(sessionID: String) -> [QueuedUserMessage] {
         sessions.first(where: { $0.id == sessionID })?.queuedMessages ?? []
@@ -276,6 +285,85 @@ final class MobileAppState: ObservableObject {
         guard isPaired else { return }
         let payload = NewSessionRequestPayload(projectID: projectID, initialText: initialText)
         try? await client.send(.newSessionRequest(payload), toHex: pairedDesktopPubkey)
+    }
+
+    // MARK: - Thread lifecycle actions
+
+    /// Rename a thread. The local title is updated optimistically; the desktop
+    /// confirms via the next snapshot / session update.
+    func renameThread(sessionID: String, title: String) async {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        replaceSession(sessionID: sessionID) { current in
+            SessionSummary(
+                id: current.id,
+                projectId: current.projectId,
+                title: trimmed,
+                updatedAt: current.updatedAt,
+                isPinned: current.isPinned,
+                isArchived: current.isArchived,
+                isStreaming: current.isStreaming,
+                attention: current.attention,
+                progress: current.progress,
+                queuedMessages: current.queuedMessages
+            )
+        }
+        await sendThreadAction(sessionID: sessionID, action: .rename, newTitle: trimmed)
+    }
+
+    /// Archive a thread. Optimistically flips `isArchived` so the row drops out
+    /// of the active list right away.
+    func archiveThread(sessionID: String) async {
+        replaceSession(sessionID: sessionID) { current in
+            SessionSummary(
+                id: current.id,
+                projectId: current.projectId,
+                title: current.title,
+                updatedAt: current.updatedAt,
+                isPinned: current.isPinned,
+                isArchived: true,
+                isStreaming: current.isStreaming,
+                attention: current.attention,
+                progress: current.progress,
+                queuedMessages: current.queuedMessages
+            )
+        }
+        await sendThreadAction(sessionID: sessionID, action: .archive)
+    }
+
+    /// Delete a thread. Optimistically drops it from local state.
+    func deleteThread(sessionID: String) async {
+        sessions.removeAll { $0.id == sessionID }
+        messagesBySession.removeValue(forKey: sessionID)
+        if activeSessionID == sessionID { activeSessionID = nil }
+        await sendThreadAction(sessionID: sessionID, action: .delete)
+    }
+
+    private func replaceSession(sessionID: String, _ transform: (SessionSummary) -> SessionSummary) {
+        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        sessions[index] = transform(sessions[index])
+    }
+
+    private func sendThreadAction(
+        sessionID: String,
+        action: ThreadActionRequestPayload.Action,
+        newTitle: String? = nil
+    ) async {
+        guard isPaired else {
+            logger.error("[ThreadAction] not paired — dropping action=\(action.rawValue, privacy: .public)")
+            return
+        }
+        let payload = ThreadActionRequestPayload(
+            sessionID: sessionID,
+            action: action,
+            newTitle: newTitle
+        )
+        do {
+            try await client.send(.threadActionRequest(payload), toHex: pairedDesktopPubkey)
+            logger.info("[ThreadAction] sent action=\(action.rawValue, privacy: .public) thread=\(sessionID, privacy: .public)")
+        } catch {
+            logger.error("[ThreadAction] send failed action=\(action.rawValue, privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     /// Tell the desktop to switch the project to an existing local branch.
@@ -517,6 +605,14 @@ final class MobileAppState: ObservableObject {
             updateSessionStreamingFlag(sessionID: update.sessionID, isStreaming: isStreaming)
         }
 
+        if let isThinking = update.isThinking {
+            setSessionThinking(sessionID: update.sessionID, isThinking: isThinking)
+        }
+        // A session that is no longer streaming cannot still be thinking.
+        if update.isStreaming == false {
+            thinkingSessions.remove(update.sessionID)
+        }
+
         switch update.kind {
         case .messageAppended:
             if let m = update.message {
@@ -530,6 +626,7 @@ final class MobileAppState: ObservableObject {
                 messagesBySession[update.sessionID] = list
             }
         case .streamingFinished:
+            thinkingSessions.remove(update.sessionID)
             // Soft success cue, but only when the user is actually looking at
             // (or last looked at) the session that just finished. Avoids
             // buzzing on background-session completions.
@@ -569,6 +666,14 @@ final class MobileAppState: ObservableObject {
             progress: current.progress,
             queuedMessages: current.queuedMessages
         )
+    }
+
+    private func setSessionThinking(sessionID: String, isThinking: Bool) {
+        if isThinking {
+            thinkingSessions.insert(sessionID)
+        } else {
+            thinkingSessions.remove(sessionID)
+        }
     }
 
     private func requestSnapshot() async {

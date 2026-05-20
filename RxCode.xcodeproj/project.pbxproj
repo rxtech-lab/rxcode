@@ -128,14 +128,6 @@
 			);
 			target = DF22D8252FBE025C00E3ABFD /* RxCodeWidgetExtension */;
 		};
-		DF5A11AC2FBE025D00E3ABF1 /* Exceptions for "RxCodeWidget" folder in "RxCodeMobile" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				RxCodeJobActivity.swift,
-				RxCodeWidgetData.swift,
-			);
-			target = DF230B4E2FBC7367008929A6 /* RxCodeMobile */;
-		};
 		DF230B772FBC7368008929A6 /* Exceptions for "RxCodeMobile" folder in "RxCodeMobile" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -150,14 +142,22 @@
 			);
 			target = DF230BA42FBC9001008929A6 /* RxCodeMobileNotificationService */;
 		};
+		DF5A11AC2FBE025D00E3ABF1 /* Exceptions for "RxCodeWidget" folder in "RxCodeMobile" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				RxCodeJobActivity.swift,
+				RxCodeWidgetData.swift,
+			);
+			target = DF230B4E2FBC7367008929A6 /* RxCodeMobile */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		DF22D82B2FBE025C00E3ABFD /* RxCodeWidget */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				DF22D83B2FBE025D00E3ABFD /* Exceptions for "RxCodeWidget" folder in "RxCodeWidgetExtension" target */,
 				DF5A11AC2FBE025D00E3ABF1 /* Exceptions for "RxCodeWidget" folder in "RxCodeMobile" target */,
+				DF22D83B2FBE025D00E3ABFD /* Exceptions for "RxCodeWidget" folder in "RxCodeWidgetExtension" target */,
 			);
 			path = RxCodeWidget;
 			sourceTree = "<group>";

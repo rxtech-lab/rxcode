@@ -26,7 +26,8 @@ struct RxCodeJobActivityAttributes: ActivityAttributes {
         enum Phase: String, Codable, Hashable {
             /// The agent is still working.
             case running
-            /// The agent finished — the activity shows "Done" before dismissal.
+            /// The agent finished. The activity stays in this state until the
+            /// user dismisses it — the desktop never ends it automatically.
             case done
         }
 

@@ -472,17 +472,28 @@ final class MobileSyncService: ObservableObject {
         pushWidgetUpdateIfJobCountChanged()
     }
 
-    /// Start, update, or end a job's Live Activity based on the latest summary.
+    /// Drive a job's Live Activity from the latest summary.
+    ///
+    /// An activity is created once with a push-to-start, then reused for the
+    /// lifetime of the session: it flips between "running" and "done" via
+    /// update pushes and is never ended or auto-dismissed by the desktop. This
+    /// keeps re-runs of the same thread off the scarce iOS push-to-start
+    /// budget; the user dismisses the activity when they are done with it.
     private func reconcileJobActivity(summary: RxCodeSync.SessionSummary) {
         let sessionID = summary.id
         let content = makeJobContent(from: summary)
         if summary.isStreaming {
             if var state = jobActivityState[sessionID] {
-                let changed = state.lastContent.signature != content.signature
+                // The activity already exists — reuse it. Flip it back to
+                // "running" if the job had finished, and push an update
+                // whenever the rendered state changes.
+                let contentChanged = state.lastContent.signature != content.signature
+                let resumed = state.isDone
                 state.lastContent = content
+                state.isDone = false
                 jobActivityState[sessionID] = state
-                if changed {
-                    logger.info("[LiveActivity] reconcile decision=update session=\(sessionID, privacy: .public) todos=\(content.todoDone, privacy: .public)/\(content.todoTotal, privacy: .public)")
+                if contentChanged || resumed {
+                    logger.info("[LiveActivity] reconcile decision=update session=\(sessionID, privacy: .public) resumed=\(resumed, privacy: .public) todos=\(content.todoDone, privacy: .public)/\(content.todoTotal, privacy: .public)")
                     sendLiveActivityUpdate(content, phase: "running")
                 } else {
                     logger.debug("[LiveActivity] reconcile decision=skip-unchanged session=\(sessionID, privacy: .public)")
@@ -492,11 +503,19 @@ final class MobileSyncService: ObservableObject {
                 logger.info("[LiveActivity] reconcile decision=start session=\(sessionID, privacy: .public)")
                 sendLiveActivityStart(content)
             }
-        } else if jobActivityState[sessionID] != nil {
-            jobActivityState.removeValue(forKey: sessionID)
-            logger.info("[LiveActivity] reconcile decision=end session=\(sessionID, privacy: .public)")
-            sendLiveActivityEnd(content)
-            clearActivityTokens(sessionID: sessionID)
+        } else if var state = jobActivityState[sessionID] {
+            // The job finished. Keep the activity alive in the "done" state so
+            // it can be reused if the session streams again; the user dismisses
+            // it manually. We never end or auto-dismiss it ourselves.
+            guard !state.isDone else {
+                logger.debug("[LiveActivity] reconcile decision=skip-already-done session=\(sessionID, privacy: .public)")
+                return
+            }
+            state.isDone = true
+            state.lastContent = content
+            jobActivityState[sessionID] = state
+            logger.info("[LiveActivity] reconcile decision=done session=\(sessionID, privacy: .public)")
+            sendLiveActivityUpdate(content, phase: "done", staleAfter: 8 * 3600)
         } else {
             logger.debug("[LiveActivity] reconcile decision=ignore session=\(sessionID, privacy: .public) — not streaming and no active activity")
         }
@@ -548,27 +567,19 @@ final class MobileSyncService: ObservableObject {
         }
     }
 
-    private func sendLiveActivityUpdate(_ content: JobContent, phase: String) {
+    /// Push an `update` to a job's activity. `staleAfter` sets when the
+    /// activity dims to its stale presentation — long for the terminal "done"
+    /// state, which stays on screen until the user dismisses it. No `end` or
+    /// `dismissal-date` is ever sent: the desktop keeps the activity alive and
+    /// only the user dismisses it.
+    private func sendLiveActivityUpdate(_ content: JobContent, phase: String, staleAfter: TimeInterval = 3600) {
         let now = Date()
         let payload: [String: Any] = ["aps": [
             "timestamp": Int(now.timeIntervalSince1970),
             "event": "update",
             "content-state": contentStateDict(content, phase: phase, at: now),
-            "stale-date": Int(now.addingTimeInterval(3600).timeIntervalSince1970),
+            "stale-date": Int(now.addingTimeInterval(staleAfter).timeIntervalSince1970),
         ]]
-        pushToActivityTokens(sessionID: content.sessionID, payload: payload)
-    }
-
-    private func sendLiveActivityEnd(_ content: JobContent) {
-        let now = Date()
-        let payload: [String: Any] = ["aps": [
-            "timestamp": Int(now.timeIntervalSince1970),
-            "event": "end",
-            "content-state": contentStateDict(content, phase: "done", at: now),
-            // Keep the "Done" state on screen briefly, then auto-dismiss.
-            "dismissal-date": Int(now.addingTimeInterval(300).timeIntervalSince1970),
-        ]]
-        logger.info("[LiveActivity] end session=\(content.sessionID, privacy: .public)")
         pushToActivityTokens(sessionID: content.sessionID, payload: payload)
     }
 
@@ -609,18 +620,6 @@ final class MobileSyncService: ObservableObject {
         if matched == 0 {
             logger.warning("[LiveActivity] update/end has no registered per-activity token session=\(sessionID, privacy: .public) — the mobile never reported one, so push-to-start likely failed to spawn an Activity on the device")
         }
-    }
-
-    /// Forget the per-activity tokens of a finished job.
-    private func clearActivityTokens(sessionID: String) {
-        var changed = false
-        for i in pairedDevices.indices {
-            guard let refs = pairedDevices[i].liveActivityTokens,
-                  refs.contains(where: { $0.sessionID == sessionID }) else { continue }
-            pairedDevices[i].liveActivityTokens = refs.filter { $0.sessionID != sessionID }
-            changed = true
-        }
-        if changed { savePairedDevices() }
     }
 
     private func pushWidgetUpdateIfJobCountChanged() {
@@ -744,22 +743,42 @@ final class MobileSyncService: ObservableObject {
                 pairedDevices[idx].liveActivityStartToken = startToken
                 logger.info("[LiveActivity] push-to-start token registered mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
             }
-            if let activityToken = t.activityTokenHex, !activityToken.isEmpty,
-               let activityID = t.activityID {
+            if t.activityDismissed == true {
+                // The user swiped the Live Activity away. Forget the activity
+                // and its token so the next stream of this session starts a
+                // fresh one instead of pushing to a token that no longer
+                // renders anything.
+                let sessionID = t.sessionID ?? ""
+                if !sessionID.isEmpty {
+                    jobActivityState.removeValue(forKey: sessionID)
+                }
+                if var refs = pairedDevices[idx].liveActivityTokens {
+                    refs.removeAll {
+                        $0.activityID == t.activityID || (!sessionID.isEmpty && $0.sessionID == sessionID)
+                    }
+                    pairedDevices[idx].liveActivityTokens = refs
+                }
+                logger.info("[LiveActivity] activity dismissed by user activity=\(t.activityID ?? "<nil>", privacy: .public) session=\(sessionID, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+            } else if let activityToken = t.activityTokenHex, !activityToken.isEmpty,
+                      let activityID = t.activityID {
                 let ref = LiveActivityTokenRef(
                     activityID: activityID,
                     sessionID: t.sessionID ?? "",
                     token: activityToken
                 )
                 var refs = pairedDevices[idx].liveActivityTokens ?? []
-                refs.removeAll { $0.activityID == activityID }
+                // One activity per session — drop any prior ref for the same
+                // activity or session so stale tokens don't accumulate.
+                refs.removeAll {
+                    $0.activityID == activityID || (!ref.sessionID.isEmpty && $0.sessionID == ref.sessionID)
+                }
                 refs.append(ref)
                 pairedDevices[idx].liveActivityTokens = refs
                 logger.info("[LiveActivity] activity token registered activity=\(activityID, privacy: .public) session=\(ref.sessionID, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
                 // Push the latest known state straight away so a freshly
                 // started activity isn't left blank until the next change.
                 if !ref.sessionID.isEmpty, let st = jobActivityState[ref.sessionID] {
-                    sendLiveActivityUpdate(st.lastContent, phase: "running")
+                    sendLiveActivityUpdate(st.lastContent, phase: st.isDone ? "done" : "running")
                 }
             }
             pairedDevices[idx].lastSeen = .now
@@ -1073,6 +1092,10 @@ private struct JobContent {
 /// Per-job Live Activity bookkeeping, keyed by session id in `MobileSyncService`.
 private struct JobActivityState {
     var lastContent: JobContent
+    /// `true` once the job has finished and its activity shows the terminal
+    /// "done" state. Kept so a re-stream of the same session reuses the
+    /// activity instead of issuing another budget-limited push-to-start.
+    var isDone: Bool = false
 }
 
 extension Notification.Name {

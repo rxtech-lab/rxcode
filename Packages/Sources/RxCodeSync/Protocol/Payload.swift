@@ -152,17 +152,23 @@ public struct LiveActivityTokenPayload: Codable, Sendable {
     public let activityID: String?
     /// The job (chat session) the activity tracks.
     public let sessionID: String?
+    /// `true` when the user dismissed the Live Activity on the device. The
+    /// desktop then forgets the activity so the next stream of the same session
+    /// starts a fresh one instead of pushing to a token that no longer renders.
+    public let activityDismissed: Bool?
 
     public init(
         pushToStartTokenHex: String? = nil,
         activityTokenHex: String? = nil,
         activityID: String? = nil,
-        sessionID: String? = nil
+        sessionID: String? = nil,
+        activityDismissed: Bool? = nil
     ) {
         self.pushToStartTokenHex = pushToStartTokenHex
         self.activityTokenHex = activityTokenHex
         self.activityID = activityID
         self.sessionID = sessionID
+        self.activityDismissed = activityDismissed
     }
 }
 

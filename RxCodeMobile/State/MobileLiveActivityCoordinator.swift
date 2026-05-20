@@ -105,6 +105,18 @@ final class MobileLiveActivityCoordinator {
                 self?.handleActivityToken(activity: activity, hex: hex)
             }
         }
+        // The desktop reuses an activity across re-runs and never ends it
+        // itself, so the only way it goes away is the user dismissing it.
+        // Report that so the desktop forgets the activity and the next run
+        // push-to-starts a fresh one instead of pushing to a dead token.
+        Task { [weak self] in
+            for await activityState in activity.activityStateUpdates {
+                if activityState == .dismissed || activityState == .ended {
+                    self?.handleActivityDismissed(activity, activityState: activityState)
+                    break
+                }
+            }
+        }
     }
 
     private func handleStartToken(_ hex: String) {
@@ -126,6 +138,25 @@ final class MobileLiveActivityCoordinator {
         Task { [weak state] in
             await state?.sendLiveActivityToken(LiveActivityTokenPayload(
                 activityTokenHex: hex, activityID: activityID, sessionID: sessionID
+            ))
+        }
+    }
+
+    /// The user dismissed (or the system ended) an activity. Drop our local
+    /// token and tell the desktop so it forgets the activity — the next run of
+    /// this session will then push-to-start a fresh one.
+    @available(iOS 16.1, *)
+    private func handleActivityDismissed(
+        _ activity: Activity<RxCodeJobActivityAttributes>,
+        activityState: ActivityState
+    ) {
+        let sessionID = activity.attributes.sessionID
+        let activityID = activity.id
+        activityTokens.removeValue(forKey: activityID)
+        logger.info("[LiveActivity] activity \(String(describing: activityState), privacy: .public) id=\(activityID, privacy: .public) session=\(sessionID, privacy: .public) — reporting dismissal to desktop")
+        Task { [weak state] in
+            await state?.sendLiveActivityToken(LiveActivityTokenPayload(
+                activityID: activityID, sessionID: sessionID, activityDismissed: true
             ))
         }
     }

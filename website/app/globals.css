@@ -302,3 +302,60 @@ body {
     opacity: 0.85;
   }
 }
+
+/* --- Mobile companion section --- */
+@keyframes mobile-shot-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(38px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes mobile-rise {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Phone screenshots reveal with a staggered lift as they scroll into view. */
+.mobile-shot {
+  animation: mobile-shot-reveal both linear;
+  animation-timeline: view();
+  animation-range: entry 5% cover 28%;
+}
+
+/* Offset the right column so each row reveals left-to-right. */
+.mobile-shot:nth-child(even) {
+  animation-range: entry 13% cover 36%;
+}
+
+/* Section header and copy fade up on entry. */
+.mobile-rise {
+  animation: mobile-rise both linear;
+  animation-timeline: view();
+  animation-range: entry 0% cover 20%;
+}
+
+/* Browsers without scroll-driven animations show everything at rest. */
+@supports not (animation-timeline: view()) {
+  .mobile-shot,
+  .mobile-rise {
+    animation: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobile-shot,
+  .mobile-rise {
+    animation: none;
+  }
+}

@@ -728,9 +728,17 @@ final class MobileAppState: ObservableObject {
 
     private func applySessionUpdate(_ update: SessionUpdatePayload) {
         if let previous = update.previousSessionID, previous != update.sessionID {
-            if let messages = messagesBySession.removeValue(forKey: previous),
-               messagesBySession[update.sessionID] == nil {
-                messagesBySession[update.sessionID] = messages
+            if let carried = messagesBySession.removeValue(forKey: previous) {
+                if let existing = messagesBySession[update.sessionID], !existing.isEmpty {
+                    // The new session id already accumulated live messages
+                    // before the redirect landed. Prepend the carried history,
+                    // deduped by id, so the older messages aren't dropped.
+                    let existingIDs = Set(existing.map(\.id))
+                    messagesBySession[update.sessionID] =
+                        carried.filter { !existingIDs.contains($0.id) } + existing
+                } else {
+                    messagesBySession[update.sessionID] = carried
+                }
             }
             if sessionsWithMoreMessages.remove(previous) != nil {
                 sessionsWithMoreMessages.insert(update.sessionID)

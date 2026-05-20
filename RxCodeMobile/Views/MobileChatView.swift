@@ -1,8 +1,8 @@
-import SwiftUI
 import Combine
-import RxCodeCore
 import RxCodeChatKit
+import RxCodeCore
 import RxCodeSync
+import SwiftUI
 
 /// Read-write chat view. User messages are forwarded to the desktop and the
 /// desktop agent's stream is mirrored back as `session_update` payloads.
@@ -56,7 +56,11 @@ struct MobileChatView: View {
                 }
             }
             .sheet(isPresented: $showingTodoSheet) {
-                ThreadTodoSheet(todos: todos ?? [], summary: threadSummary)
+                ThreadTodoSheet(
+                    threadTitle: title,
+                    todos: todos ?? [],
+                    summary: threadSummary
+                )
             }
             .sheet(item: $presentedQuestion) { question in
                 MobileQuestionSheet(
@@ -74,7 +78,8 @@ struct MobileChatView: View {
                 // A question resolved elsewhere (desktop or another device)
                 // should close a now-stale sheet.
                 if let presented = presentedQuestion,
-                   !questions.contains(where: { $0.toolUseID == presented.toolUseID }) {
+                   !questions.contains(where: { $0.toolUseID == presented.toolUseID })
+                {
                     presentedQuestion = nil
                 }
             }
@@ -104,12 +109,10 @@ struct MobileChatView: View {
 
     @ToolbarContentBuilder
     private var threadActionsToolbar: some ToolbarContent {
-        if let todos, !todos.isEmpty {
-            ToolbarItem(placement: .principal) {
-                todoTitleView(todos: todos)
-            }
-        }
         if threadExists {
+            ToolbarItem(placement: .principal) {
+                navigationTitleView
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button {
@@ -129,20 +132,20 @@ struct MobileChatView: View {
                         Label("Delete", systemImage: "trash")
                     }
                 } label: {
-                    Image(systemName: "ellipsis.circle")
+                    Image(systemName: "ellipsis")
                 }
                 .accessibilityLabel("Thread actions")
             }
         }
     }
 
-    /// Navigation-title view shown when the thread has todos: the thread title
-    /// next to a tappable progress indicator that opens the todo + summary
-    /// sheet. Mirrors the desktop's todo progress pill in the toolbar.
+    /// Tappable navigation-title view. Tapping always opens the todo + summary
+    /// sheet so the thread summary stays reachable. When the thread has todos
+    /// it also shows a progress indicator; otherwise a subtle chevron hints
+    /// that the title is interactive. Mirrors the desktop's todo progress pill.
     @ViewBuilder
-    private func todoTitleView(todos: [TodoItem]) -> some View {
-        let done = todos.filter { $0.status == .completed }.count
-        let inProgress = todos.contains { $0.status == .inProgress }
+    private var navigationTitleView: some View {
+        let todos = self.todos
         Button {
             showingTodoSheet = true
         } label: {
@@ -152,16 +155,33 @@ struct MobileChatView: View {
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .truncationMode(.tail)
-                MobileTodoProgressIndicator(
-                    done: done,
-                    total: todos.count,
-                    inProgress: inProgress
-                )
+                if let todos, !todos.isEmpty {
+                    let done = todos.filter { $0.status == .completed }.count
+                    let inProgress = todos.contains { $0.status == .inProgress }
+                    MobileTodoProgressIndicator(
+                        done: done,
+                        total: todos.count,
+                        inProgress: inProgress
+                    )
+                } else {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                }
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(title). Todos, \(done) of \(todos.count) complete. Tap to view todos and thread summary.")
+        .accessibilityLabel(navigationTitleAccessibilityLabel)
+        .accessibilityHint("Opens todos and thread summary")
+    }
+
+    private var navigationTitleAccessibilityLabel: String {
+        guard let todos, !todos.isEmpty else {
+            return "\(title). Tap to view thread summary."
+        }
+        let done = todos.filter { $0.status == .completed }.count
+        return "\(title). Todos, \(done) of \(todos.count) complete. Tap to view todos and thread summary."
     }
 
     /// A real, persisted thread the desktop can act on — excludes drafts.
@@ -718,6 +738,7 @@ private struct MobileTodoProgressIndicator: View {
 /// mirroring the desktop's todo popover. Opened from the navigation-title
 /// progress indicator.
 private struct ThreadTodoSheet: View {
+    let threadTitle: String
     let todos: [TodoItem]
     let summary: MobileThreadSummary?
     @Environment(\.dismiss) private var dismiss
@@ -730,13 +751,16 @@ private struct ThreadTodoSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    todoSection
+                    titleHeader
+                    if !todos.isEmpty {
+                        todoSection
+                    }
                     summarySection
                 }
                 .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .navigationTitle("Todos & Summary")
+            .navigationTitle(todos.isEmpty ? "Thread Summary" : "Todos & Summary")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -746,6 +770,16 @@ private struct ThreadTodoSheet: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+    }
+
+    // MARK: Title header
+
+    private var titleHeader: some View {
+        Text(threadTitle)
+            .font(.title3.weight(.semibold))
+            .foregroundStyle(.primary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     // MARK: Todo section

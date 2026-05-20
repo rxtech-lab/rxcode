@@ -1958,6 +1958,49 @@ final class AppState {
     /// recent page on subscribe and requests older pages as the user scrolls up.
     static let mobileMessagePageSize = 30
 
+    /// Encoded byte ceiling for the message slice carried in one sync frame.
+    /// The relay caps a WebSocket frame at 10 MiB and the encrypted envelope
+    /// inflates the plaintext by roughly a third (base64), so an oversized
+    /// snapshot would have `task.send` throw and be silently dropped — leaving
+    /// mobile with only the live stream and no history. Holding the message
+    /// slice to 3 MiB leaves ample room for the rest of the snapshot (projects,
+    /// session summaries, briefings) and the envelope overhead; older messages
+    /// beyond the budget are paged in on demand via `load_more_messages`.
+    static let mobileMessagePageByteBudget = 3 * 1024 * 1024
+
+    /// Largest suffix of `messages[..<end]` that fits both the page-count and
+    /// byte budgets, walking newest-first. At least one message is always
+    /// returned so paging can still advance even on a pathologically large
+    /// message. Returns the page and the index it starts at — a non-zero start
+    /// means older messages remain.
+    private func mobileMessagePage(
+        from messages: [ChatMessage],
+        endingAt end: Int,
+        countLimit: Int
+    ) -> (page: [ChatMessage], startIndex: Int) {
+        let clampedEnd = min(max(end, 0), messages.count)
+        guard clampedEnd > 0, countLimit > 0 else { return ([], clampedEnd) }
+        let encoder = JSONEncoder()
+        var startIndex = clampedEnd
+        var byteCount = 0
+        var index = clampedEnd - 1
+        while index >= 0 {
+            let size = (try? encoder.encode(messages[index]))?.count ?? 0
+            let takenSoFar = clampedEnd - startIndex
+            // Always accept the newest message; afterwards stop once either
+            // budget would be exceeded so the frame stays under the relay cap.
+            if takenSoFar > 0,
+               takenSoFar >= countLimit
+                || byteCount + size > Self.mobileMessagePageByteBudget {
+                break
+            }
+            byteCount += size
+            startIndex = index
+            index -= 1
+        }
+        return (Array(messages[startIndex ..< clampedEnd]), startIndex)
+    }
+
     /// Single-entry cache of a disk-loaded session's full message list. Mobile
     /// pages one thread at a time, so caching just the most recent one lets the
     /// snapshot and every subsequent `load_more_messages` page reuse one parse
@@ -1998,11 +2041,12 @@ final class AppState {
         guard let all = await fullMobileMessages(for: resolvedID) else {
             return (nil, nil, false)
         }
-        let pageSize = Self.mobileMessagePageSize
-        if all.count <= pageSize {
-            return (resolvedID, all, false)
-        }
-        return (resolvedID, Array(all.suffix(pageSize)), true)
+        let (page, startIndex) = mobileMessagePage(
+            from: all,
+            endingAt: all.count,
+            countLimit: Self.mobileMessagePageSize
+        )
+        return (resolvedID, page, startIndex > 0)
     }
 
     /// Reply to a mobile `load_more_messages` request with the page of messages
@@ -2027,8 +2071,11 @@ final class AppState {
             return
         }
         let limit = max(1, request.limit)
-        let startIndex = max(0, anchorIndex - limit)
-        let page = Array(all[startIndex ..< anchorIndex])
+        let (page, startIndex) = mobileMessagePage(
+            from: all,
+            endingAt: anchorIndex,
+            countLimit: limit
+        )
         await MobileSyncService.shared.send(
             .moreMessages(MoreMessagesPayload(
                 clientRequestID: request.clientRequestID,

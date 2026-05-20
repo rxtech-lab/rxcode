@@ -42,8 +42,22 @@ final class MobileAppState: ObservableObject {
     /// Sessions the desktop currently reports as producing reasoning/thinking
     /// tokens. Drives the "Thinking…" label in the streaming indicator.
     @Published var thinkingSessions: Set<String> = []
+    /// Sessions known to have messages older than the window currently held in
+    /// `messagesBySession`. Drives the scroll-up "load more" affordance.
+    @Published var sessionsWithMoreMessages: Set<String> = []
+    /// Sessions with an in-flight `load_more_messages` request.
+    @Published var loadingMoreSessions: Set<String> = []
+    /// Maps an outstanding load-more request ID to its session, so a late
+    /// `more_messages` reply lands on the right thread.
+    private var pendingLoadMoreRequests: [UUID: String] = [:]
+    /// Messages per history page — must match the desktop's expectation.
+    private static let messagePageSize = 30
     @Published var activeSessionID: String?
     @Published var pendingPermission: PermissionRequestPayload?
+    /// Every `AskUserQuestion` call the desktop currently has awaiting an
+    /// answer, across all sessions. Mirrored from the desktop's queue; the chat
+    /// view filters it by session to drive the question banner and sheet.
+    @Published var pendingQuestions: [PendingQuestionPayload] = []
 
     @Published var searchQuery: String = ""
     @Published var searchProjectIDs: [UUID] = []
@@ -276,6 +290,16 @@ final class MobileAppState: ObservableObject {
         thinkingSessions.contains(sessionID)
     }
 
+    /// Whether the given session has messages older than the loaded window.
+    func hasMoreMessages(sessionID: String) -> Bool {
+        sessionsWithMoreMessages.contains(sessionID)
+    }
+
+    /// Whether an older page is currently being fetched for the given session.
+    func isLoadingMoreMessages(sessionID: String) -> Bool {
+        loadingMoreSessions.contains(sessionID)
+    }
+
     /// Mirror of the desktop's per-session queue, surfaced via `SessionSummary`.
     func queuedMessages(sessionID: String) -> [QueuedUserMessage] {
         sessions.first(where: { $0.id == sessionID })?.queuedMessages ?? []
@@ -335,6 +359,8 @@ final class MobileAppState: ObservableObject {
     func deleteThread(sessionID: String) async {
         sessions.removeAll { $0.id == sessionID }
         messagesBySession.removeValue(forKey: sessionID)
+        sessionsWithMoreMessages.remove(sessionID)
+        loadingMoreSessions.remove(sessionID)
         if activeSessionID == sessionID { activeSessionID = nil }
         await sendThreadAction(sessionID: sessionID, action: .delete)
     }
@@ -405,6 +431,64 @@ final class MobileAppState: ObservableObject {
         try? await client.send(.subscribeSession(payload), toHex: pairedDesktopPubkey)
     }
 
+    // MARK: - Message paging
+
+    /// Ask the desktop for the page of messages immediately older than the
+    /// oldest one currently loaded for `sessionID`. No-op when there's nothing
+    /// older, a request is already in flight, or the thread has no messages yet.
+    /// Returns `true` when a request was dispatched — callers can then expect
+    /// `isLoadingMoreMessages(sessionID:)` to flip back to `false` once it
+    /// settles.
+    @discardableResult
+    func loadMoreMessages(sessionID: String) async -> Bool {
+        guard isPaired,
+              sessionsWithMoreMessages.contains(sessionID),
+              !loadingMoreSessions.contains(sessionID),
+              let oldest = messagesBySession[sessionID]?.first
+        else { return false }
+
+        let requestID = UUID()
+        loadingMoreSessions.insert(sessionID)
+        pendingLoadMoreRequests[requestID] = sessionID
+
+        let payload = LoadMoreMessagesRequestPayload(
+            clientRequestID: requestID,
+            sessionID: sessionID,
+            beforeMessageID: oldest.id,
+            limit: Self.messagePageSize
+        )
+        do {
+            try await client.send(.loadMoreMessages(payload), toHex: pairedDesktopPubkey)
+        } catch {
+            loadingMoreSessions.remove(sessionID)
+            pendingLoadMoreRequests.removeValue(forKey: requestID)
+        }
+        return true
+    }
+
+    /// Fold an older page returned by the desktop into the local window.
+    private func applyMoreMessages(_ page: MoreMessagesPayload) {
+        guard let sessionID = pendingLoadMoreRequests.removeValue(forKey: page.clientRequestID)
+        else { return }
+        loadingMoreSessions.remove(sessionID)
+
+        if !page.messages.isEmpty {
+            var current = messagesBySession[sessionID] ?? []
+            let known = Set(current.map(\.id))
+            let fresh = page.messages.filter { !known.contains($0.id) }
+            if !fresh.isEmpty {
+                current.insert(contentsOf: fresh, at: 0)
+                messagesBySession[sessionID] = current
+            }
+        }
+
+        if page.hasMore {
+            sessionsWithMoreMessages.insert(sessionID)
+        } else {
+            sessionsWithMoreMessages.remove(sessionID)
+        }
+    }
+
     func respondToPermission(allow: Bool, denyReason: String? = nil) async {
         guard let pending = pendingPermission else { return }
         let payload = PermissionResponsePayload(
@@ -414,6 +498,41 @@ final class MobileAppState: ObservableObject {
         )
         try? await client.send(.permissionResponse(payload), toHex: pairedDesktopPubkey)
         pendingPermission = nil
+    }
+
+    // MARK: - AskUserQuestion
+
+    /// Pending `AskUserQuestion` calls for one session, in the order the desktop
+    /// queued them.
+    func pendingQuestions(sessionID: String) -> [PendingQuestionPayload] {
+        pendingQuestions.filter { $0.sessionID == sessionID }
+    }
+
+    /// Submit the user's answers for one `AskUserQuestion` call to the desktop.
+    /// The request is dropped from the local queue optimistically; the desktop
+    /// re-broadcasts the authoritative queue once it resolves the tool call.
+    func answerQuestion(toolUseID: String, answers: [Int: AskUserQuestion.Answer]) async {
+        guard isPaired else { return }
+        let entries: [QuestionAnswerEntry] = answers.map { index, answer in
+            switch answer {
+            case .single(let value):
+                return QuestionAnswerEntry(questionIndex: index, values: [value], multiSelect: false)
+            case .multi(let values):
+                return QuestionAnswerEntry(questionIndex: index, values: values, multiSelect: true)
+            }
+        }
+        let payload = QuestionAnswerPayload(toolUseID: toolUseID, answers: entries)
+        try? await client.send(.questionAnswer(payload), toHex: pairedDesktopPubkey)
+        pendingQuestions.removeAll { $0.toolUseID == toolUseID }
+    }
+
+    /// Skip one `AskUserQuestion` call. An empty answer set tells the desktop to
+    /// resolve the tool call as denied.
+    func skipQuestion(toolUseID: String) async {
+        guard isPaired else { return }
+        let payload = QuestionAnswerPayload(toolUseID: toolUseID, answers: [])
+        try? await client.send(.questionAnswer(payload), toHex: pairedDesktopPubkey)
+        pendingQuestions.removeAll { $0.toolUseID == toolUseID }
     }
 
     func updateDesktopSettings(_ update: MobileSettingsUpdatePayload) async {
@@ -490,8 +609,13 @@ final class MobileAppState: ObservableObject {
         inFlightBranchOps = []
         lastBranchOpError = nil
         messagesBySession = [:]
+        thinkingSessions = []
+        sessionsWithMoreMessages = []
+        loadingMoreSessions = []
+        pendingLoadMoreRequests = [:]
         activeSessionID = nil
         pendingPermission = nil
+        pendingQuestions = []
         savePairedDesktop()
         await resetIdentityAndClient()
     }
@@ -556,17 +680,31 @@ final class MobileAppState: ObservableObject {
             }
             if let active = snap.activeSessionID {
                 if let messages = snap.activeSessionMessages {
+                    // The snapshot carries only the most recent page; replacing
+                    // the window resets paging to that page.
                     messagesBySession[active] = messages
+                    if snap.activeSessionHasMore == true {
+                        sessionsWithMoreMessages.insert(active)
+                    } else {
+                        sessionsWithMoreMessages.remove(active)
+                    }
+                    loadingMoreSessions.remove(active)
                 } else if messagesBySession[active] == nil {
                     messagesBySession[active] = []
                 }
                 activeSessionID = active
             }
+        case .moreMessages(let page):
+            applyMoreMessages(page)
         case .sessionUpdate(let update):
             applySessionUpdate(update)
         case .permissionRequest(let req):
             pendingPermission = req
             MobileHaptics.attentionNeeded()
+        case .questionQueue(let queue):
+            let grew = queue.questions.count > pendingQuestions.count
+            pendingQuestions = queue.questions
+            if grew { MobileHaptics.attentionNeeded() }
         case .notification:
             // Foreground notifications arriving over WS — iOS won't show a
             // banner automatically; UI surfaces these in a toast/badge.
@@ -593,6 +731,12 @@ final class MobileAppState: ObservableObject {
             if let messages = messagesBySession.removeValue(forKey: previous),
                messagesBySession[update.sessionID] == nil {
                 messagesBySession[update.sessionID] = messages
+            }
+            if sessionsWithMoreMessages.remove(previous) != nil {
+                sessionsWithMoreMessages.insert(update.sessionID)
+            }
+            if loadingMoreSessions.remove(previous) != nil {
+                loadingMoreSessions.insert(update.sessionID)
             }
             if activeSessionID == previous {
                 activeSessionID = update.sessionID

@@ -1165,6 +1165,20 @@ final class AppState {
         }
         mobileSyncObservers.append(threadActionObserver)
 
+        let loadMoreObserver = center.addObserver(
+            forName: .mobileSyncLoadMoreMessagesRequested,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let fromHex = notification.userInfo?["from"] as? String,
+                  let request = notification.userInfo?["payload"] as? LoadMoreMessagesRequestPayload
+            else { return }
+            Task { @MainActor [weak self] in
+                await self?.handleMobileLoadMoreMessages(request, fromHex: fromHex)
+            }
+        }
+        mobileSyncObservers.append(loadMoreObserver)
+
         let searchObserver = center.addObserver(
             forName: .mobileSyncSearchRequested,
             object: nil,
@@ -1192,6 +1206,19 @@ final class AppState {
             }
         }
         mobileSyncObservers.append(branchOpObserver)
+
+        let questionAnswerObserver = center.addObserver(
+            forName: .mobileSyncQuestionAnswerReceived,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let payload = notification.userInfo?["payload"] as? QuestionAnswerPayload
+            else { return }
+            Task { @MainActor [weak self] in
+                await self?.handleMobileQuestionAnswer(payload)
+            }
+        }
+        mobileSyncObservers.append(questionAnswerObserver)
 
         observeMobileSnapshotInputs()
     }
@@ -1632,9 +1659,16 @@ final class AppState {
             settings: mobileSettingsSnapshot(),
             activeSessionID: active.id,
             activeSessionMessages: active.messages,
+            activeSessionHasMore: active.hasMore,
             projectBranches: branches
         )
         await MobileSyncService.shared.send(.snapshot(payload), toHex: hex)
+        // The snapshot doesn't carry the question queue; send it alongside so a
+        // freshly connected device renders any outstanding question banner.
+        await MobileSyncService.shared.send(
+            .questionQueue(QuestionQueuePayload(questions: mobilePendingQuestionPayloads())),
+            toHex: hex
+        )
         logger.info(
             "[MobileSync] sent snapshot projects=\(self.projects.count, privacy: .public) sessions=\(payload.sessions.count, privacy: .public) active=\(active.id ?? "<nil>", privacy: .public)"
         )
@@ -1755,6 +1789,32 @@ final class AppState {
             isStreaming: summary.isStreaming,
             summary: summary
         )
+    }
+
+    /// Wire representation of every `AskUserQuestion` call currently awaiting an
+    /// answer, used to mirror the desktop's question queue to mobile.
+    private func mobilePendingQuestionPayloads() -> [PendingQuestionPayload] {
+        mobilePendingRequests.values
+            .filter { $0.toolName == "AskUserQuestion" }
+            .compactMap { request in
+                guard let sessionId = request.sessionId,
+                      let data = try? JSONEncoder().encode(request.toolInput),
+                      let json = String(data: data, encoding: .utf8)
+                else { return nil }
+                return PendingQuestionPayload(
+                    toolUseID: request.id,
+                    sessionID: sessionId,
+                    toolInputJSON: json
+                )
+            }
+    }
+
+    /// Broadcast the current `AskUserQuestion` queue to paired mobile devices.
+    /// Called whenever the queue changes (a question is added or resolved) so
+    /// mobile mirrors it exactly — additions and retractions alike.
+    private func broadcastMobileQuestionQueue() {
+        guard !MobileSyncService.shared.pairedDevices.isEmpty else { return }
+        MobileSyncService.shared.broadcastQuestionQueue(mobilePendingQuestionPayloads())
     }
 
     private func broadcastMobileSessionRedirect(from previousSessionID: String, to sessionID: String) {
@@ -1894,22 +1954,90 @@ final class AppState {
         }
     }
 
-    private func mobileActiveSessionPayload(for requestedID: String?) async -> (id: String?, messages: [ChatMessage]?) {
-        guard let requestedID else { return (nil, nil) }
-        let resolvedID = resolveCurrentSessionId(requestedID)
+    /// Number of messages in one mobile history page. Mobile loads the most
+    /// recent page on subscribe and requests older pages as the user scrolls up.
+    static let mobileMessagePageSize = 30
 
+    /// Single-entry cache of a disk-loaded session's full message list. Mobile
+    /// pages one thread at a time, so caching just the most recent one lets the
+    /// snapshot and every subsequent `load_more_messages` page reuse one parse
+    /// instead of re-reading the whole jsonl each time — without holding many
+    /// threads in memory. Live (streaming) sessions bypass this entirely.
+    private var mobileFullMessageCache: (sessionID: String, messages: [ChatMessage])?
+
+    /// Resolve the full, cleaned message list for a session — from live stream
+    /// state when available, otherwise from disk (cached). `nil` only when the
+    /// session genuinely can't be located.
+    private func fullMobileMessages(for resolvedID: String) async -> [ChatMessage]? {
         if let state = sessionStates[resolvedID] {
-            return (resolvedID, cleanLoadedMessages(state.messages))
+            return cleanLoadedMessages(state.messages)
         }
-
+        if let cache = mobileFullMessageCache, cache.sessionID == resolvedID {
+            return cache.messages
+        }
         guard let summary = allSessionSummaries.first(where: { $0.id == resolvedID }),
               let project = projects.first(where: { $0.id == summary.projectId }),
               let full = await persistence.loadFullSession(summary: summary, cwd: project.path)
         else {
-            return (nil, nil)
+            return nil
         }
+        let cleaned = cleanLoadedMessages(full.messages)
+        mobileFullMessageCache = (resolvedID, cleaned)
+        return cleaned
+    }
 
-        return (resolvedID, cleanLoadedMessages(full.messages))
+    /// Build the active-session payload for a snapshot: only the most recent
+    /// page of messages, plus whether older messages remain. Mobile pages the
+    /// rest in via `load_more_messages` so a snapshot never carries a whole
+    /// (potentially multi-MB) thread history in one frame.
+    private func mobileActiveSessionPayload(
+        for requestedID: String?
+    ) async -> (id: String?, messages: [ChatMessage]?, hasMore: Bool) {
+        guard let requestedID else { return (nil, nil, false) }
+        let resolvedID = resolveCurrentSessionId(requestedID)
+        guard let all = await fullMobileMessages(for: resolvedID) else {
+            return (nil, nil, false)
+        }
+        let pageSize = Self.mobileMessagePageSize
+        if all.count <= pageSize {
+            return (resolvedID, all, false)
+        }
+        return (resolvedID, Array(all.suffix(pageSize)), true)
+    }
+
+    /// Reply to a mobile `load_more_messages` request with the page of messages
+    /// immediately older than `beforeMessageID`.
+    private func handleMobileLoadMoreMessages(
+        _ request: LoadMoreMessagesRequestPayload,
+        fromHex: String
+    ) async {
+        let resolvedID = resolveCurrentSessionId(request.sessionID)
+        let all = await fullMobileMessages(for: resolvedID) ?? []
+        guard let anchorIndex = all.firstIndex(where: { $0.id == request.beforeMessageID }) else {
+            // The anchor is gone (thread changed, or never loaded). Stop paging.
+            await MobileSyncService.shared.send(
+                .moreMessages(MoreMessagesPayload(
+                    clientRequestID: request.clientRequestID,
+                    sessionID: request.sessionID,
+                    messages: [],
+                    hasMore: false
+                )),
+                toHex: fromHex
+            )
+            return
+        }
+        let limit = max(1, request.limit)
+        let startIndex = max(0, anchorIndex - limit)
+        let page = Array(all[startIndex ..< anchorIndex])
+        await MobileSyncService.shared.send(
+            .moreMessages(MoreMessagesPayload(
+                clientRequestID: request.clientRequestID,
+                sessionID: request.sessionID,
+                messages: page,
+                hasMore: startIndex > 0
+            )),
+            toHex: fromHex
+        )
     }
 
     /// User-triggered full reindex of every thread. Wipes cached embeddings,
@@ -2553,6 +2681,9 @@ final class AppState {
                     let toolName = request.toolName
                     if let requestSessionId = request.sessionId {
                         broadcastMobileSessionStatus(sessionID: requestSessionId)
+                    }
+                    if toolName == "AskUserQuestion" {
+                        broadcastMobileQuestionQueue()
                     }
                     // Auto-present the question sheet only when the user is actively viewing
                     // the thread the question belongs to. Otherwise it stays in the queue
@@ -4390,6 +4521,7 @@ final class AppState {
         if let requestSessionId {
             broadcastMobileSessionStatus(sessionID: requestSessionId)
         }
+        broadcastMobileQuestionQueue()
 
         await permission.respondAskUserQuestion(toolUseId: toolUseId, updatedInput: updatedInput)
     }
@@ -4405,7 +4537,67 @@ final class AppState {
         if let requestSessionId {
             broadcastMobileSessionStatus(sessionID: requestSessionId)
         }
+        broadcastMobileQuestionQueue()
         await permission.respond(toolUseId: toolUseId, decision: .deny)
+    }
+
+    /// Apply a question answer that arrived from a paired mobile device.
+    /// Resolves the CLI hook, mirrors the answer into chat history, and clears
+    /// the request from every desktop window's queue. An empty `answers` array
+    /// means the user chose "Skip All Questions" on mobile.
+    private func handleMobileQuestionAnswer(_ payload: QuestionAnswerPayload) async {
+        let toolUseId = payload.toolUseID
+        guard let request = mobilePendingRequests[toolUseId] else { return }
+
+        guard !payload.answers.isEmpty, let parsed = AskUserQuestion(input: request.toolInput) else {
+            // Skip — or a malformed payload we cannot answer: deny the hook.
+            clearPendingQuestion(toolUseId: toolUseId, sessionId: request.sessionId)
+            await permission.respond(toolUseId: toolUseId, decision: .deny)
+            return
+        }
+
+        var answers: [Int: AskUserQuestion.Answer] = [:]
+        for entry in payload.answers {
+            answers[entry.questionIndex] = entry.multiSelect
+                ? .multi(entry.values)
+                : .single(entry.values.first ?? "")
+        }
+
+        let updatedInput = AskUserQuestion.updatedInputJSON(
+            originalInput: request.toolInput,
+            questions: parsed.questions,
+            answers: answers
+        )
+        let summary = AskUserQuestion.summary(questions: parsed.questions, answers: answers)
+
+        if let sessionId = request.sessionId {
+            updateState(sessionId) { state in
+                for i in state.messages.indices.reversed() {
+                    guard state.messages[i].toolCallIndex(id: toolUseId) != nil else { continue }
+                    state.messages[i].setToolResult(id: toolUseId, result: summary, isError: false)
+                    return
+                }
+            }
+        }
+
+        clearPendingQuestion(toolUseId: toolUseId, sessionId: request.sessionId)
+        await permission.respondAskUserQuestion(toolUseId: toolUseId, updatedInput: updatedInput)
+    }
+
+    /// Remove a resolved `AskUserQuestion` request from every window's queue and
+    /// re-broadcast the (now smaller) queue to mobile.
+    private func clearPendingQuestion(toolUseId: String, sessionId: String?) {
+        for window in registeredWindows() {
+            window.pendingPermissions.removeAll { $0.id == toolUseId }
+            if window.presentedPermissionId == toolUseId {
+                window.presentedPermissionId = nil
+            }
+        }
+        mobilePendingRequests.removeValue(forKey: toolUseId)
+        if let sessionId {
+            broadcastMobileSessionStatus(sessionID: sessionId)
+        }
+        broadcastMobileQuestionQueue()
     }
 
     // MARK: - Plan Decision Response

@@ -312,6 +312,15 @@ final class MobileSyncService: ObservableObject {
         }
     }
 
+    /// Mirror the desktop's current `AskUserQuestion` queue to every paired
+    /// device. Sent whenever a question is queued or resolved so mobile can
+    /// surface the same queue banner + question sheet.
+    func broadcastQuestionQueue(_ questions: [PendingQuestionPayload]) {
+        Task {
+            await client.broadcast(.questionQueue(QuestionQueuePayload(questions: questions)))
+        }
+    }
+
     // MARK: - Event dispatch
 
     private func handle(event: RelayClient.Event) {
@@ -403,6 +412,13 @@ final class MobileSyncService: ObservableObject {
                 object: nil,
                 userInfo: ["from": inbound.fromHex, "payload": req]
             )
+        case .loadMoreMessages(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "load_more_messages") else { return }
+            NotificationCenter.default.post(
+                name: .mobileSyncLoadMoreMessagesRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": req]
+            )
         case .searchRequest(let req):
             guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "search_request") else { return }
             NotificationCenter.default.post(
@@ -426,6 +442,13 @@ final class MobileSyncService: ObservableObject {
                 name: .mobileSyncPermissionResponse,
                 object: nil,
                 userInfo: ["payload": resp]
+            )
+        case .questionAnswer(let answer):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "question_answer") else { return }
+            NotificationCenter.default.post(
+                name: .mobileSyncQuestionAnswerReceived,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": answer]
             )
         case .branchOpRequest(let req):
             guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "branch_op_request") else { return }
@@ -577,8 +600,10 @@ extension Notification.Name {
     static let mobileSyncRemoveQueuedRequested = Notification.Name("mobileSync.removeQueuedRequested")
     static let mobileSyncNewSessionRequested = Notification.Name("mobileSync.newSessionRequested")
     static let mobileSyncThreadActionRequested = Notification.Name("mobileSync.threadActionRequested")
+    static let mobileSyncLoadMoreMessagesRequested = Notification.Name("mobileSync.loadMoreMessagesRequested")
     static let mobileSyncSearchRequested = Notification.Name("mobileSync.searchRequested")
     static let mobileSyncSettingsUpdateReceived = Notification.Name("mobileSync.settingsUpdateReceived")
     static let mobileSyncPermissionResponse = Notification.Name("mobileSync.permissionResponse")
+    static let mobileSyncQuestionAnswerReceived = Notification.Name("mobileSync.questionAnswerReceived")
     static let mobileSyncBranchOpRequested = Notification.Name("mobileSync.branchOpRequested")
 }

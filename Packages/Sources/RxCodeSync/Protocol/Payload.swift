@@ -21,11 +21,15 @@ public enum Payload: Sendable {
     case removeQueuedMessage(RemoveQueuedMessagePayload)
     case newSessionRequest(NewSessionRequestPayload)
     case threadActionRequest(ThreadActionRequestPayload)
+    case loadMoreMessages(LoadMoreMessagesRequestPayload)
+    case moreMessages(MoreMessagesPayload)
     case searchRequest(SearchRequestPayload)
     case searchResults(SearchResultsPayload)
     case notification(NotificationPayload)
     case permissionRequest(PermissionRequestPayload)
     case permissionResponse(PermissionResponsePayload)
+    case questionQueue(QuestionQueuePayload)
+    case questionAnswer(QuestionAnswerPayload)
     case branchOpRequest(BranchOpRequestPayload)
     case branchOpResult(BranchOpResultPayload)
     case ping(PingPayload)
@@ -90,6 +94,11 @@ public struct SnapshotPayload: Codable, Sendable {
     public let settings: MobileSettingsSnapshot?
     public let activeSessionID: String?
     public let activeSessionMessages: [ChatMessage]?
+    /// Whether the active thread has messages older than the window in
+    /// `activeSessionMessages`. Mobile uses this to decide whether to offer
+    /// "load more" as the user scrolls up. `nil`/`false` means the window is
+    /// the whole thread (or the desktop predates message paging).
+    public let activeSessionHasMore: Bool?
     /// Current git branch resolved per project on the desktop. Mobile uses this
     /// to surface "you're about to create a thread on branch X" when starting
     /// a new thread. Missing entries mean the project isn't a git repo or the
@@ -103,6 +112,7 @@ public struct SnapshotPayload: Codable, Sendable {
         settings: MobileSettingsSnapshot? = nil,
         activeSessionID: String? = nil,
         activeSessionMessages: [ChatMessage]? = nil,
+        activeSessionHasMore: Bool? = nil,
         projectBranches: [ProjectBranchInfo]? = nil
     ) {
         self.projects = projects
@@ -112,12 +122,13 @@ public struct SnapshotPayload: Codable, Sendable {
         self.settings = settings
         self.activeSessionID = activeSessionID
         self.activeSessionMessages = activeSessionMessages
+        self.activeSessionHasMore = activeSessionHasMore
         self.projectBranches = projectBranches
     }
 
     private enum CodingKeys: String, CodingKey {
         case projects, sessions, branchBriefings, threadSummaries, settings
-        case activeSessionID, activeSessionMessages, projectBranches
+        case activeSessionID, activeSessionMessages, activeSessionHasMore, projectBranches
     }
 
     public init(from decoder: Decoder) throws {
@@ -129,6 +140,7 @@ public struct SnapshotPayload: Codable, Sendable {
         settings = try c.decodeIfPresent(MobileSettingsSnapshot.self, forKey: .settings)
         activeSessionID = try c.decodeIfPresent(String.self, forKey: .activeSessionID)
         activeSessionMessages = try c.decodeIfPresent([ChatMessage].self, forKey: .activeSessionMessages)
+        activeSessionHasMore = try c.decodeIfPresent(Bool.self, forKey: .activeSessionHasMore)
         projectBranches = try c.decodeIfPresent([ProjectBranchInfo].self, forKey: .projectBranches)
     }
 }
@@ -593,6 +605,56 @@ public struct ThreadActionRequestPayload: Codable, Sendable {
     }
 }
 
+/// Mobile-initiated request for an older page of a thread's messages. Mobile
+/// holds only the most recent window (see `SnapshotPayload.activeSessionMessages`)
+/// and pages backwards as the user scrolls up. The desktop replies with a
+/// `MoreMessagesPayload` carrying the messages strictly older than
+/// `beforeMessageID`.
+public struct LoadMoreMessagesRequestPayload: Codable, Sendable {
+    public let clientRequestID: UUID
+    public let sessionID: String
+    /// The oldest message the requester currently holds. The desktop returns
+    /// messages that come before this one in the thread.
+    public let beforeMessageID: UUID
+    /// How many older messages to return at most.
+    public let limit: Int
+
+    public init(
+        clientRequestID: UUID = UUID(),
+        sessionID: String,
+        beforeMessageID: UUID,
+        limit: Int
+    ) {
+        self.clientRequestID = clientRequestID
+        self.sessionID = sessionID
+        self.beforeMessageID = beforeMessageID
+        self.limit = limit
+    }
+}
+
+/// Desktop reply to a `LoadMoreMessagesRequestPayload`: one older page of a
+/// thread's messages, to be prepended to the requester's local window.
+public struct MoreMessagesPayload: Codable, Sendable {
+    public let clientRequestID: UUID
+    public let sessionID: String
+    /// Older messages in chronological order (oldest first).
+    public let messages: [ChatMessage]
+    /// Whether messages older than this page still remain.
+    public let hasMore: Bool
+
+    public init(
+        clientRequestID: UUID,
+        sessionID: String,
+        messages: [ChatMessage],
+        hasMore: Bool
+    ) {
+        self.clientRequestID = clientRequestID
+        self.sessionID = sessionID
+        self.messages = messages
+        self.hasMore = hasMore
+    }
+}
+
 /// Mobile-initiated search across all threads and projects. The desktop is
 /// the authoritative source of session content, so the heavy lifting (semantic
 /// matching, title/project lookups) lives there; mobile just renders results.
@@ -697,6 +759,61 @@ public struct PermissionResponsePayload: Codable, Sendable {
     }
 }
 
+/// One `AskUserQuestion` tool call awaiting the user's answer, mirrored to
+/// mobile so it can render the question sheet. `toolInputJSON` is the raw,
+/// JSON-encoded `input` of the tool call — it decodes to `[String: JSONValue]`,
+/// the same shape `AskUserQuestion(input:)` parses on either platform.
+public struct PendingQuestionPayload: Codable, Sendable, Identifiable, Equatable {
+    public var id: String { toolUseID }
+    public let toolUseID: String
+    public let sessionID: String
+    public let toolInputJSON: String
+    public init(toolUseID: String, sessionID: String, toolInputJSON: String) {
+        self.toolUseID = toolUseID
+        self.sessionID = sessionID
+        self.toolInputJSON = toolInputJSON
+    }
+}
+
+/// Desktop → mobile: the complete set of `AskUserQuestion` calls currently
+/// awaiting an answer across every session. The desktop is authoritative and
+/// re-broadcasts the full set whenever a question is queued or resolved, so
+/// mobile mirrors the desktop's question queue exactly (additions and
+/// retractions alike).
+public struct QuestionQueuePayload: Codable, Sendable {
+    public let questions: [PendingQuestionPayload]
+    public init(questions: [PendingQuestionPayload]) {
+        self.questions = questions
+    }
+}
+
+/// One answered question inside a `QuestionAnswerPayload`. `values` holds the
+/// chosen option labels (or free-form "Other: …" text); a single-select answer
+/// has exactly one value, a multi-select answer has zero or more. `multiSelect`
+/// mirrors the original question so the desktop rebuilds `.single` vs `.multi`.
+public struct QuestionAnswerEntry: Codable, Sendable {
+    public let questionIndex: Int
+    public let values: [String]
+    public let multiSelect: Bool
+    public init(questionIndex: Int, values: [String], multiSelect: Bool) {
+        self.questionIndex = questionIndex
+        self.values = values
+        self.multiSelect = multiSelect
+    }
+}
+
+/// Mobile → desktop: the user's answers for one `AskUserQuestion` call. An
+/// empty `answers` array means the user chose "Skip All Questions" — the
+/// desktop then resolves the tool call as denied instead of injecting answers.
+public struct QuestionAnswerPayload: Codable, Sendable {
+    public let toolUseID: String
+    public let answers: [QuestionAnswerEntry]
+    public init(toolUseID: String, answers: [QuestionAnswerEntry]) {
+        self.toolUseID = toolUseID
+        self.answers = answers
+    }
+}
+
 public struct PingPayload: Codable, Sendable {
     public let t: Date
     public init(t: Date = .now) { self.t = t }
@@ -730,11 +847,15 @@ extension Payload: Codable {
         case removeQueuedMessage = "remove_queued_message"
         case newSessionRequest = "new_session_request"
         case threadActionRequest = "thread_action_request"
+        case loadMoreMessages = "load_more_messages"
+        case moreMessages = "more_messages"
         case searchRequest = "search_request"
         case searchResults = "search_results"
         case notification
         case permissionRequest = "permission_request"
         case permissionResponse = "permission_response"
+        case questionQueue = "question_queue"
+        case questionAnswer = "question_answer"
         case branchOpRequest = "branch_op_request"
         case branchOpResult = "branch_op_result"
         case ping
@@ -763,11 +884,15 @@ extension Payload: Codable {
         case .removeQueuedMessage: self = .removeQueuedMessage(try container.decode(RemoveQueuedMessagePayload.self, forKey: .data))
         case .newSessionRequest: self = .newSessionRequest(try container.decode(NewSessionRequestPayload.self, forKey: .data))
         case .threadActionRequest: self = .threadActionRequest(try container.decode(ThreadActionRequestPayload.self, forKey: .data))
+        case .loadMoreMessages: self = .loadMoreMessages(try container.decode(LoadMoreMessagesRequestPayload.self, forKey: .data))
+        case .moreMessages: self = .moreMessages(try container.decode(MoreMessagesPayload.self, forKey: .data))
         case .searchRequest: self = .searchRequest(try container.decode(SearchRequestPayload.self, forKey: .data))
         case .searchResults: self = .searchResults(try container.decode(SearchResultsPayload.self, forKey: .data))
         case .notification: self = .notification(try container.decode(NotificationPayload.self, forKey: .data))
         case .permissionRequest: self = .permissionRequest(try container.decode(PermissionRequestPayload.self, forKey: .data))
         case .permissionResponse: self = .permissionResponse(try container.decode(PermissionResponsePayload.self, forKey: .data))
+        case .questionQueue: self = .questionQueue(try container.decode(QuestionQueuePayload.self, forKey: .data))
+        case .questionAnswer: self = .questionAnswer(try container.decode(QuestionAnswerPayload.self, forKey: .data))
         case .branchOpRequest: self = .branchOpRequest(try container.decode(BranchOpRequestPayload.self, forKey: .data))
         case .branchOpResult: self = .branchOpResult(try container.decode(BranchOpResultPayload.self, forKey: .data))
         case .ping: self = .ping(try container.decode(PingPayload.self, forKey: .data))
@@ -792,11 +917,15 @@ extension Payload: Codable {
         case .removeQueuedMessage(let p): try container.encode(TypeKey.removeQueuedMessage.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .newSessionRequest(let p): try container.encode(TypeKey.newSessionRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .threadActionRequest(let p): try container.encode(TypeKey.threadActionRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .loadMoreMessages(let p): try container.encode(TypeKey.loadMoreMessages.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .moreMessages(let p): try container.encode(TypeKey.moreMessages.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .searchRequest(let p): try container.encode(TypeKey.searchRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .searchResults(let p): try container.encode(TypeKey.searchResults.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .notification(let p): try container.encode(TypeKey.notification.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .permissionRequest(let p): try container.encode(TypeKey.permissionRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .permissionResponse(let p): try container.encode(TypeKey.permissionResponse.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .questionQueue(let p): try container.encode(TypeKey.questionQueue.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .questionAnswer(let p): try container.encode(TypeKey.questionAnswer.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .branchOpRequest(let p): try container.encode(TypeKey.branchOpRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .branchOpResult(let p): try container.encode(TypeKey.branchOpResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .ping(let p): try container.encode(TypeKey.ping.rawValue, forKey: .type); try container.encode(p, forKey: .data)

@@ -5,7 +5,7 @@ import Security
 
 actor GitHubService {
 
-    static let oauthClientId = "Ov23liaj3hlJoMGsNZTW"
+    static let oauthClientId = "Ov23li0plkoiQCmLm5O5"
     private let clientId = oauthClientId
     private let logger = Logger(subsystem: "com.claudework", category: "GitHubService")
     private let sshKeyManager = SSHKeyManager()

@@ -15,13 +15,21 @@ actor PermissionServer {
     private static let basePort: UInt16 = 19836
     private static let maxPort: UInt16 = 19846
     private static let timeoutSeconds: UInt64 = 300 // 5 minutes
+    /// Upper bound on simultaneously-valid hook tokens. Each CLI launch mints one;
+    /// the oldest is evicted past this cap — generous enough that no realistic
+    /// number of concurrent agents ever loses a still-live token.
+    private static let maxValidRunTokens = 64
 
     // MARK: - Properties
 
     private var listener: NWListener?
     private(set) var port: UInt16 = PermissionServer.basePort
     private let appSecret = UUID().uuidString
-    private var runToken = UUID().uuidString
+    /// Hook tokens currently accepted on the `/hook/pre-tool-use` path. Each CLI
+    /// subprocess gets its own (see `mintRunToken`), so spawning a new agent never
+    /// invalidates the hook URL of an agent already running. Ordered oldest-first;
+    /// bounded by `maxValidRunTokens`.
+    private var validRunTokens: [String] = []
     private let logger = Logger(subsystem: "com.claudework", category: "PermissionServer")
 
     /// Resolved outcome for a pending hook: the permission decision plus an optional
@@ -163,6 +171,7 @@ actor PermissionServer {
         subscribers.removeAll()
         sessionRegistry.removeAll()
         sessionToolAllows.removeAll()
+        validRunTokens.removeAll()
         bashCmdAllows = nil
     }
 
@@ -248,7 +257,7 @@ actor PermissionServer {
             id: toolUseId,
             toolName: toolName,
             toolInput: toolInput,
-            runToken: runToken,
+            runToken: "",
             streamPermissionMode: mode,
             sessionId: sessionId
         )
@@ -305,20 +314,22 @@ actor PermissionServer {
         return nil
     }
 
-    /// Refresh the run token (call at the start of each CLI session).
-    func refreshRunToken() {
-        runToken = UUID().uuidString
-    }
-
-    /// The current run token for building the hook URL.
-    func currentRunToken() -> String {
-        runToken
-    }
-
     // MARK: - Hook Settings
 
+    /// Mint a fresh run token and register it as valid. Each CLI subprocess gets
+    /// its own, so spawning a new agent never invalidates the hook URL of an agent
+    /// that is already running. Evicts the oldest token past `maxValidRunTokens`.
+    private func mintRunToken() -> String {
+        let token = UUID().uuidString
+        validRunTokens.append(token)
+        if validRunTokens.count > Self.maxValidRunTokens {
+            validRunTokens.removeFirst(validRunTokens.count - Self.maxValidRunTokens)
+        }
+        return token
+    }
+
     /// Generate the hook settings JSON that should be passed to `claude --settings`.
-    func generateHookSettings() -> String {
+    private func generateHookSettings(runToken: String) -> String {
         let url = "http://127.0.0.1:\(port)/hook/pre-tool-use/\(appSecret)/\(runToken)"
         let settings: [String: Any] = [
             "hooks": [
@@ -343,9 +354,9 @@ actor PermissionServer {
         return json
     }
 
-    /// Write hook settings to a temporary file and return its path.
+    /// Mint a fresh run token, write hook settings to a temporary file, return its path.
     func writeHookSettingsFile() throws -> String {
-        let json = generateHookSettings()
+        let json = generateHookSettings(runToken: mintRunToken())
         let tempDir = FileManager.default.temporaryDirectory
         let filePath = tempDir.appendingPathComponent("claudework-hooks-\(UUID().uuidString).json")
         try json.write(to: filePath, atomically: true, encoding: .utf8)
@@ -373,7 +384,7 @@ actor PermissionServer {
                       components[0] == "hook",
                       components[1] == "pre-tool-use",
                       components[2] == appSecret,
-                      components[3] == runToken else {
+                      validRunTokens.contains(components[3]) else {
                     logger.warning("Invalid path or secret: \(path)")
                     await sendHTTPResponse(connection, status: "403 Forbidden", body: #"{"error":"invalid path"}"#)
                     return
@@ -397,7 +408,7 @@ actor PermissionServer {
                     id: hookRequest.toolUseId,
                     toolName: hookRequest.toolName,
                     toolInput: hookRequest.toolInput,
-                    runToken: runToken,
+                    runToken: components[3],
                     streamPermissionMode: streamMode,
                     sessionId: hookRequest.sessionId
                 )

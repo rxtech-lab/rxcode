@@ -236,7 +236,14 @@ final class PlanCardViewTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private let planMd = "# My plan\n- step 1\n- step 2"
+    // PlanSheetView's body renders the plan markdown through MarkdownUI, whose
+    // view tree crashes ViewInspector's `findAll(ViewType.Text.self)` traversal
+    // with "Index out of range". The sheet tests below only assert on the sheet
+    // chrome (decision buttons, footer, feedback composer) — never the rendered
+    // body — so they build the plan with empty markdown. An empty body renders
+    // the plain `Text` fallback in `PlanSheetView.planBody`, keeping the whole
+    // inspected tree traversable.
+    private let planMd = ""
 
     private func makeChip(
         result: String?,

@@ -11,6 +11,10 @@ struct MessageListView: View {
     @Environment(WindowState.self) private var windowState
     @State private var settledItems: [ChatMessage] = []
     @State private var scrollTask: Task<Void, Never>?
+    /// Owns the post-stream "pin to bottom" sweep. Kept separate from
+    /// `scrollTask` so a concurrent `scrollToBottomDebounced()` — driven by
+    /// scroll-geometry changes during the same handoff — can't cancel it.
+    @State private var settleScrollTask: Task<Void, Never>?
     /// Separate handle from `scrollTask`. Owns the fade-in / scroll-on-switch
     /// sequence so a concurrent content-growth `scrollToBottomDebounced()`
     /// (which also writes to `scrollTask`) can't cancel the session-ready flip.
@@ -99,6 +103,7 @@ struct MessageListView: View {
             }
             isSessionReady = false
             scrollTask?.cancel()
+            settleScrollTask?.cancel()
             readyTask?.cancel()
             rebuildSettledItems()
             Self.log.info("[MessageList.task] post-rebuild settled=\(settledItems.count) sid=\(sid, privacy: .public) isLoadingFromDisk=\(chatBridge.isLoadingFromDisk)")
@@ -154,7 +159,8 @@ struct MessageListView: View {
             // Only update when streaming ends — settled list doesn't change at start, so skip
             if old && !new {
                 rebuildSettledItems()
-                scrollToBottomDebounced(proxy)
+                anchor.resetToBottom()
+                pinScrollToBottomDuringHandoff(proxy)
             }
         }
         .onChange(of: isSessionReady) { _, new in
@@ -217,6 +223,25 @@ struct MessageListView: View {
             try? await Task.sleep(for: .milliseconds(50))
             guard !Task.isCancelled else { return }
             scrollToBottom(proxy)
+        }
+    }
+
+    /// When a stream ends, the just-completed assistant turn moves out of
+    /// `StreamingMessageView` and into the settled list. That row handoff makes
+    /// `List` reload, which can momentarily snap the scroll offset to the top —
+    /// the user sees the list jump up, then jump back down. A single debounced
+    /// scroll can't fix it reliably: the streaming-insertion animation keeps
+    /// emitting scroll-geometry changes that re-arm and starve the debounce.
+    /// Re-assert the bottom on every frame for a short window so the snap is
+    /// corrected within one frame, before it becomes visible.
+    private func pinScrollToBottomDuringHandoff(_ proxy: ScrollViewProxy) {
+        settleScrollTask?.cancel()
+        settleScrollTask = Task { @MainActor in
+            for _ in 0..<12 {
+                guard !Task.isCancelled else { return }
+                scrollToBottom(proxy)
+                try? await Task.sleep(for: .milliseconds(16))
+            }
         }
     }
 }

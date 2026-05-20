@@ -5781,18 +5781,15 @@ final class AppState {
         let key = window.currentSessionId ?? window.newSessionKey
         let streamToCancel = sessionStates[key]?.activeStreamId
         sessionStates[key]?.streamTask?.cancel()
-        sessionStates[key]?.streamTask = nil
-        // Set isStreaming=false before suspending so that processStream — which may run
-        // on the MainActor while we await — does not call finalizeStreamSession and
-        // incorrectly mark the cancelled message as isResponseComplete=true.
-        sessionStates[key]?.isStreaming = false
-        sessionStates[key]?.activeStreamId = nil
 
-        if let streamToCancel {
-            let provider = sessionStates[key]?.agentProvider ?? effectiveModelSelection(in: window).provider
-            await backend(for: provider).cancel(streamId: streamToCancel)
-        }
-
+        // Finalize the in-progress turn *before* the await below, in a single
+        // state mutation. The session `isStreaming` flag and the streaming
+        // message's own `isStreaming` flag must flip to false together: if they
+        // disagree when the message list rebuilds (which is driven by the
+        // session flag), the paused bubble lands in neither the settled list
+        // nor the streaming view and vanishes until the next turn. Clearing
+        // isStreaming here also stops processStream's end-of-stream cleanup
+        // from re-finalizing the cancelled message while we suspend.
         flushPendingUpdates(for: key)
         stopFlushTimer(for: key)
 
@@ -5810,9 +5807,10 @@ final class AppState {
                 state.messages[$0].role == .assistant && state.messages[$0].isStreaming
             }) {
                 // The user paused this turn — keep the partial assistant bubble
-                // visible. markStreamInterrupted() retains in-progress tool calls
-                // (flagged as interrupted) instead of dropping them, and the
-                // no-op strip below is told not to delete an emptied message.
+                // visible. markStreamInterrupted() clears the message's streaming
+                // flag and retains in-progress tool calls (flagged as interrupted)
+                // instead of dropping them; the no-op strip below is told not to
+                // delete an emptied message.
                 state.messages[idx].markStreamInterrupted()
                 if let start = state.streamingStartDate {
                     state.messages[idx].duration = Date().timeIntervalSince(start)
@@ -5825,6 +5823,11 @@ final class AppState {
 
         window.showError = false
         window.errorMessage = nil
+
+        if let streamToCancel {
+            let provider = sessionStates[key]?.agentProvider ?? effectiveModelSelection(in: window).provider
+            await backend(for: provider).cancel(streamId: streamToCancel)
+        }
 
         // Save messages accumulated up to the point of cancellation to disk (prevent data loss).
         // The placeholder session (if any) is left in place so partial messages remain visible;

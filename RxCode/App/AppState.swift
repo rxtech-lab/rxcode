@@ -3908,7 +3908,6 @@ final class AppState {
             state.currentTurnOutputTokensUnkeyed = 0
         }
         broadcastMobileSessionStatus(sessionID: sessionKey, kind: .streamingStarted)
-        await permission.refreshRunToken()
 
         let basePermissionMode = window.sessionPermissionMode ?? permissionMode
         // Plan-mode boolean overrides the dropdown for the CLI `--permission-mode` flag only.
@@ -7258,8 +7257,6 @@ final class AppState {
             state.currentTurnOutputTokensByMessage.removeAll(keepingCapacity: true)
             state.currentTurnOutputTokensUnkeyed = 0
         }
-
-        await permission.refreshRunToken()
 
         let currentPermissionMode = sessionStates[sessionKey]?.permissionMode ?? permissionMode
         let projectSelection = defaultModelSelection(for: projects.first { $0.id == projectId })

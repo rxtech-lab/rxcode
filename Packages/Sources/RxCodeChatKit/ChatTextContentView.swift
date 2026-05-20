@@ -1,9 +1,8 @@
 import SwiftUI
 import RxCodeCore
-#if os(macOS)
-import AppKit
-#endif
 
+/// Renders inline chat text — plain strings, pre-built attributed strings, or
+/// inline-only markdown — using native SwiftUI `Text`.
 public struct ChatTextContentView: View {
     enum Content {
         case plain(String)
@@ -80,22 +79,6 @@ public struct ChatTextContentView: View {
     }
 
     public var body: some View {
-        #if os(macOS)
-        nativeBody
-        #else
-        swiftUIBody
-        #endif
-    }
-
-    private static func markdownAttributedString(_ text: String) -> AttributedString {
-        (try? AttributedString(
-            markdown: text,
-            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        )) ?? AttributedString(text)
-    }
-
-    @ViewBuilder
-    private var swiftUIBody: some View {
         let text = {
             switch content {
             case .plain(let value):
@@ -108,6 +91,7 @@ public struct ChatTextContentView: View {
         text
             .font(.system(size: size, weight: weight, design: design))
             .foregroundStyle(color)
+            .tint(ClaudeTheme.accent)
             .lineSpacing(lineSpacing)
             .lineLimit(maximumNumberOfLines)
             .textSelection(.enabled)
@@ -117,51 +101,10 @@ public struct ChatTextContentView: View {
             })
     }
 
-    #if os(macOS)
-    @ViewBuilder
-    private var nativeBody: some View {
-        switch content {
-        case .plain(let text):
-            NativeChatTextView(
-                text,
-                font: nativeFont,
-                color: NSColor(color),
-                lineSpacing: lineSpacing,
-                maximumNumberOfLines: maximumNumberOfLines,
-                openURL: openURL
-            )
-        case .attributed(let attributed):
-            NativeChatTextView(
-                attributed: attributed,
-                font: nativeFont,
-                color: NSColor(color),
-                lineSpacing: lineSpacing,
-                maximumNumberOfLines: maximumNumberOfLines,
-                openURL: openURL
-            )
-        }
+    private static func markdownAttributedString(_ text: String) -> AttributedString {
+        (try? AttributedString(
+            markdown: text,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        )) ?? AttributedString(text)
     }
-
-    private var nativeFont: NSFont {
-        if design == .monospaced {
-            return NSFont.monospacedSystemFont(ofSize: size, weight: nativeWeight)
-        }
-        return NSFont.systemFont(ofSize: size, weight: nativeWeight)
-    }
-
-    private var nativeWeight: NSFont.Weight {
-        switch weight {
-        case .ultraLight: return .ultraLight
-        case .thin: return .thin
-        case .light: return .light
-        case .regular: return .regular
-        case .medium: return .medium
-        case .semibold: return .semibold
-        case .bold: return .bold
-        case .heavy: return .heavy
-        case .black: return .black
-        default: return .regular
-        }
-    }
-    #endif
 }

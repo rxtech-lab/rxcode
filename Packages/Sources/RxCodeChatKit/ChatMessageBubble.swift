@@ -100,14 +100,10 @@ private struct CompactChatMessageBubble: View {
     }
 
     private func assistantText(_ text: String) -> some View {
-        ChatTextContentView(
-            markdown: text,
-            size: ClaudeTheme.messageSize(14),
-            color: ClaudeTheme.textPrimary,
-            lineSpacing: 2
-        )
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 2)
+        MarkdownContentView(text: text)
+            .foregroundStyle(ClaudeTheme.textPrimary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 2)
     }
 
     private var compactBoundaryBubble: some View {

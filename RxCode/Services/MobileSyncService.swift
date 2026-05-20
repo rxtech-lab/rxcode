@@ -219,13 +219,92 @@ final class MobileSyncService: ObservableObject {
     // MARK: - Notification fan-out
 
     /// Send a notification to every paired device.
+    ///
+    /// Two delivery paths run for each broadcast:
+    /// - the live WebSocket relay channel reaches devices that are currently
+    ///   connected and foregrounded;
+    /// - a best-effort APNs push reaches devices that are backgrounded or
+    ///   offline, so a finished thread still surfaces a banner.
     func broadcastNotification(_ payload: NotificationPayload) {
         Task {
             await client.broadcast(.notification(payload))
-            // Best-effort APNs path is intentionally not yet wired here — the
-            // /push endpoint in the relay server provides it; a follow-up
-            // patch will submit encrypted alerts for each paired device that
-            // has an APNs token. See PLAN risk areas.
+            await fanoutAPNs(payload)
+        }
+    }
+
+    /// Best-effort APNs fan-out: submit one encrypted alert per paired device
+    /// that has registered a push token. Per-device failures are logged and
+    /// swallowed — the live channel above remains the primary path.
+    private func fanoutAPNs(_ payload: NotificationPayload) async {
+        let devices = pairedDevices.filter { ($0.apnsToken?.isEmpty == false) }
+        guard !devices.isEmpty else { return }
+        guard let pushURL = Self.pushEndpointURL(from: relayURL) else {
+            logger.error("[APNs] cannot derive push endpoint from relay URL \(self.relayURL.absoluteString, privacy: .public)")
+            return
+        }
+        for device in devices {
+            do {
+                try await sendAPNsPush(payload, to: device, pushURL: pushURL)
+            } catch {
+                logger.error("[APNs] fan-out failed deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public): \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    /// Encrypt `payload` for one device and POST it to the relay `/push`
+    /// endpoint. Throws on a missing token, unknown peer, or relay/APNs
+    /// rejection so callers can log the specific failure.
+    private func sendAPNsPush(_ payload: NotificationPayload, to device: PairedDevice, pushURL: URL) async throws {
+        guard let token = device.apnsToken, !token.isEmpty else {
+            throw MobilePushError.missingDeviceToken
+        }
+        guard let peer = await client.peer(forHex: device.pubkeyHex) else {
+            throw MobilePushError.unknownPeer
+        }
+
+        let plaintext = AlertPlaintext(
+            title: payload.title,
+            body: payload.body,
+            sessionID: payload.sessionID,
+            projectID: payload.projectID,
+            kind: payload.kind.rawValue
+        )
+        let encrypted = try APNsCrypto.seal(
+            plaintext: plaintext,
+            sender: identity.privateKey,
+            recipient: peer
+        )
+        let encryptedAlertData = try JSONEncoder().encode(encrypted)
+        let body = APNsPushRequest(
+            deviceToken: token,
+            encryptedAlert: encryptedAlertData.base64EncodedString(),
+            category: payload.kind.rawValue,
+            collapseID: Self.notificationCollapseID(for: payload, device: device)
+        )
+
+        var request = URLRequest(url: pushURL)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(body)
+
+        logger.info("[APNs] sending push kind=\(payload.kind.rawValue, privacy: .public) deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public) tokenPrefix=\(String(token.prefix(12)), privacy: .public)")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw MobilePushError.relayRejected(status: -1, body: "No HTTP response")
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            throw MobilePushError.relayRejected(
+                status: http.statusCode,
+                body: Self.responseBodyString(data)
+            )
+        }
+        let pushResponse = try JSONDecoder().decode(APNsPushResponse.self, from: data)
+        guard (200..<300).contains(pushResponse.statusCode) else {
+            throw MobilePushError.apnsRejected(
+                status: pushResponse.statusCode,
+                reason: pushResponse.reason
+            )
         }
     }
 
@@ -294,6 +373,7 @@ final class MobileSyncService: ObservableObject {
         kind: SessionUpdatePayload.Kind,
         message: ChatMessage?,
         isStreaming: Bool?,
+        isThinking: Bool? = nil,
         summary: RxCodeSync.SessionSummary? = nil,
         previousSessionID: String? = nil
     ) {
@@ -303,10 +383,20 @@ final class MobileSyncService: ObservableObject {
                 kind: kind,
                 message: message,
                 isStreaming: isStreaming,
+                isThinking: isThinking,
                 summary: summary,
                 previousSessionID: previousSessionID
             )
             await client.broadcast(.sessionUpdate(payload))
+        }
+    }
+
+    /// Mirror the desktop's current `AskUserQuestion` queue to every paired
+    /// device. Sent whenever a question is queued or resolved so mobile can
+    /// surface the same queue banner + question sheet.
+    func broadcastQuestionQueue(_ questions: [PendingQuestionPayload]) {
+        Task {
+            await client.broadcast(.questionQueue(QuestionQueuePayload(questions: questions)))
         }
     }
 
@@ -394,6 +484,20 @@ final class MobileSyncService: ObservableObject {
                 object: nil,
                 userInfo: ["from": inbound.fromHex, "payload": req]
             )
+        case .threadActionRequest(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "thread_action_request") else { return }
+            NotificationCenter.default.post(
+                name: .mobileSyncThreadActionRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": req]
+            )
+        case .loadMoreMessages(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "load_more_messages") else { return }
+            NotificationCenter.default.post(
+                name: .mobileSyncLoadMoreMessagesRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": req]
+            )
         case .searchRequest(let req):
             guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "search_request") else { return }
             NotificationCenter.default.post(
@@ -417,6 +521,13 @@ final class MobileSyncService: ObservableObject {
                 name: .mobileSyncPermissionResponse,
                 object: nil,
                 userInfo: ["payload": resp]
+            )
+        case .questionAnswer(let answer):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "question_answer") else { return }
+            NotificationCenter.default.post(
+                name: .mobileSyncQuestionAnswerReceived,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": answer]
             )
         case .branchOpRequest(let req):
             guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "branch_op_request") else { return }
@@ -533,6 +644,13 @@ final class MobileSyncService: ObservableObject {
     private static func testNotificationCollapseID(for device: PairedDevice) -> String {
         "rxcode-test-\(device.pubkeyHex.prefix(32))"
     }
+
+    /// Collapse repeated alerts for the same session + kind so a device shows
+    /// the latest banner instead of stacking one per stream event.
+    private static func notificationCollapseID(for payload: NotificationPayload, device: PairedDevice) -> String {
+        let scope = payload.sessionID ?? "global"
+        return "rxcode-\(payload.kind.rawValue)-\(scope.prefix(48))"
+    }
 }
 
 private struct APNsPushRequest: Codable {
@@ -567,8 +685,11 @@ extension Notification.Name {
     static let mobileSyncCancelStreamRequested = Notification.Name("mobileSync.cancelStreamRequested")
     static let mobileSyncRemoveQueuedRequested = Notification.Name("mobileSync.removeQueuedRequested")
     static let mobileSyncNewSessionRequested = Notification.Name("mobileSync.newSessionRequested")
+    static let mobileSyncThreadActionRequested = Notification.Name("mobileSync.threadActionRequested")
+    static let mobileSyncLoadMoreMessagesRequested = Notification.Name("mobileSync.loadMoreMessagesRequested")
     static let mobileSyncSearchRequested = Notification.Name("mobileSync.searchRequested")
     static let mobileSyncSettingsUpdateReceived = Notification.Name("mobileSync.settingsUpdateReceived")
     static let mobileSyncPermissionResponse = Notification.Name("mobileSync.permissionResponse")
+    static let mobileSyncQuestionAnswerReceived = Notification.Name("mobileSync.questionAnswerReceived")
     static let mobileSyncBranchOpRequested = Notification.Name("mobileSync.branchOpRequested")
 }

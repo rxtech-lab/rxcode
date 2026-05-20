@@ -26,6 +26,11 @@ public actor RelayClient {
         case deliveryFailed(toHex: String)
     }
 
+    /// WebSocket frame ceiling. The 1 MiB `URLSessionWebSocketTask` default is
+    /// too small for sync payloads; 10 MiB is a comfortable safety margin now
+    /// that thread history is paged rather than sent in a single frame.
+    private static let maxWebSocketMessageSize = 10 * 1024 * 1024
+
     private let identity: DeviceIdentity
     private let relayURL: URL
     private let session: URLSession
@@ -122,6 +127,9 @@ public actor RelayClient {
         }
 
         let newTask = session.webSocketTask(with: url)
+        // Raise the 1 MiB default frame limit so large sync payloads aren't
+        // silently dropped by `task.send`. Applies to both send and receive.
+        newTask.maximumMessageSize = Self.maxWebSocketMessageSize
         task = newTask
         newTask.resume()
 

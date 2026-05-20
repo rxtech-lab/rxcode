@@ -40,3 +40,32 @@ public struct AgentModel: Identifiable, Codable, Sendable, Hashable {
         self.description = description
     }
 }
+
+/// A named group of agent models as presented in the model picker. Mirrors the
+/// desktop's section layout — Claude Code, Codex, and one section per enabled
+/// ACP client — so other surfaces (e.g. the mobile app) can reproduce the same
+/// grouping instead of collapsing every ACP client into a single bucket.
+public struct AgentModelSection: Identifiable, Codable, Sendable, Hashable {
+    /// Stable section identifier (`claudeCode`, `codex`, or `acp:<clientId>`).
+    public let id: String
+    /// Human-readable section header (e.g. "Claude Code" or an ACP client name).
+    public let title: String
+    public let provider: AgentProvider
+    /// Remote icon URL for ACP client sections; `nil` for built-in providers.
+    public let iconURL: String?
+    public let models: [AgentModel]
+
+    public init(
+        id: String,
+        title: String,
+        provider: AgentProvider,
+        iconURL: String? = nil,
+        models: [AgentModel]
+    ) {
+        self.id = id
+        self.title = title
+        self.provider = provider
+        self.iconURL = iconURL
+        self.models = models
+    }
+}

@@ -161,7 +161,7 @@ struct ThreadChangesSheet: View {
                 gitSection("Unstaged", changes.filter { $0.kind == .unstaged })
                 gitSection("Untracked", changes.filter { $0.kind == .untracked })
             }
-            .listStyle(.insetGrouped)
+            .listStyle(.plain)
             .refreshable { await load() }
         }
     }

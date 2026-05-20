@@ -33,7 +33,6 @@ actor MarketplaceService {
         ("anthropics", "skills", "agent-skills"),
         ("anthropics", "knowledge-work-plugins", "knowledge-work"),
         ("anthropics", "financial-services-plugins", "financial-services"),
-        ("rxtech-lab", "agent-skills", "rxlab-skills"),
     ]
     private static let openAISkillsSource = MarketplaceSource(owner: "openai", repo: "skills")
 

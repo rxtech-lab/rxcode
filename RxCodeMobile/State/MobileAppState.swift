@@ -80,12 +80,15 @@ final class MobileAppState: ObservableObject {
     @Published var skillCatalog: [MobileSkillPlugin] = []
     @Published var skillCatalogLoading = false
     @Published var skillCatalogError: String?
+    @Published var skillSources: [MobileSkillSource] = []
     /// Plugin ids with an in-flight install/uninstall request — drives per-row
     /// spinners.
     @Published var inFlightSkillMutations: Set<String> = []
+    @Published var inFlightSkillSourceMutations: Set<String> = []
     @Published var lastSkillError: String?
     /// The latest catalog request id, so a stale reply is discarded.
     private var pendingSkillCatalogRequestID: UUID?
+    private var skillSourceMutationKeys: [UUID: String] = [:]
 
     // MARK: - Remote desktop config: ACP agent clients
 
@@ -1044,9 +1047,12 @@ final class MobileAppState: ObservableObject {
         skillCatalog = []
         skillCatalogLoading = false
         skillCatalogError = nil
+        skillSources = []
         inFlightSkillMutations = []
+        inFlightSkillSourceMutations = []
         lastSkillError = nil
         pendingSkillCatalogRequestID = nil
+        skillSourceMutationKeys = [:]
         acpRegistryAgents = []
         acpInstalledClients = []
         acpRegistryLoading = false
@@ -1120,6 +1126,26 @@ final class MobileAppState: ObservableObject {
         await mutateSkill(pluginID, operation: .uninstall)
     }
 
+    func addSkillGitSource(url: String, ref: String?) async {
+        let trimmedURL = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedURL.isEmpty else {
+            lastSkillError = "Enter a GitHub repository URL."
+            return
+        }
+        let trimmedRef = ref?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let key = "add:\(trimmedURL)"
+        await mutateSkillSource(
+            key: key,
+            operation: .add,
+            gitURL: trimmedURL,
+            ref: trimmedRef?.isEmpty == false ? trimmedRef : nil
+        )
+    }
+
+    func removeSkillGitSource(_ sourceID: String) async {
+        await mutateSkillSource(key: sourceID, operation: .remove, sourceID: sourceID)
+    }
+
     private func mutateSkill(_ pluginID: String, operation: SkillMutationRequestPayload.Operation) async {
         guard isPaired else {
             lastSkillError = "Connect a Mac first."
@@ -1138,6 +1164,42 @@ final class MobileAppState: ObservableObject {
             }
         } catch {
             inFlightSkillMutations.remove(pluginID)
+            lastSkillError = "Failed to send request: \(error.localizedDescription)"
+        }
+    }
+
+    private func mutateSkillSource(
+        key: String,
+        operation: SkillSourceMutationRequestPayload.Operation,
+        sourceID: String? = nil,
+        gitURL: String? = nil,
+        ref: String? = nil
+    ) async {
+        guard isPaired else {
+            lastSkillError = "Connect a Mac first."
+            return
+        }
+        guard !inFlightSkillSourceMutations.contains(key) else { return }
+        let payload = SkillSourceMutationRequestPayload(
+            operation: operation,
+            sourceID: sourceID,
+            gitURL: gitURL,
+            ref: ref
+        )
+        inFlightSkillSourceMutations.insert(key)
+        skillSourceMutationKeys[payload.clientRequestID] = key
+        lastSkillError = nil
+        do {
+            try await client.send(.skillSourceMutationRequest(payload), toHex: pairedDesktopPubkey)
+            scheduleTimeout(Self.remoteConfigTimeout) { s in
+                if let key = s.skillSourceMutationKeys.removeValue(forKey: payload.clientRequestID) {
+                    s.inFlightSkillSourceMutations.remove(key)
+                    s.lastSkillError = "Request timed out. Check your Mac and try again."
+                }
+            }
+        } catch {
+            skillSourceMutationKeys.removeValue(forKey: payload.clientRequestID)
+            inFlightSkillSourceMutations.remove(key)
             lastSkillError = "Failed to send request: \(error.localizedDescription)"
         }
     }
@@ -1471,6 +1533,9 @@ final class MobileAppState: ObservableObject {
         case .skillMutationResult(let result):
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "skill_mutation_result") else { return }
             applySkillMutationResult(result)
+        case .skillSourceMutationResult(let result):
+            guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "skill_source_mutation_result") else { return }
+            applySkillSourceMutationResult(result)
         case .acpRegistryResult(let result):
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "acp_registry_result") else { return }
             applyACPRegistryResult(result)
@@ -1514,6 +1579,7 @@ final class MobileAppState: ObservableObject {
         skillCatalogLoading = false
         if result.ok {
             skillCatalog = result.plugins
+            skillSources = result.sources
             skillCatalogError = nil
         } else {
             skillCatalogError = result.errorMessage ?? "Failed to load skills."
@@ -1523,10 +1589,27 @@ final class MobileAppState: ObservableObject {
     private func applySkillMutationResult(_ result: SkillMutationResultPayload) {
         inFlightSkillMutations.remove(result.pluginID)
         skillCatalog = result.plugins
+        skillSources = result.sources
         if result.ok {
             lastSkillError = nil
         } else {
             lastSkillError = result.errorMessage ?? "Skill operation failed."
+        }
+    }
+
+    private func applySkillSourceMutationResult(_ result: SkillSourceMutationResultPayload) {
+        if let key = skillSourceMutationKeys.removeValue(forKey: result.clientRequestID) {
+            inFlightSkillSourceMutations.remove(key)
+        }
+        if let sourceID = result.sourceID {
+            inFlightSkillSourceMutations.remove(sourceID)
+        }
+        skillCatalog = result.plugins
+        skillSources = result.sources
+        if result.ok {
+            lastSkillError = nil
+        } else {
+            lastSkillError = result.errorMessage ?? "Skill source operation failed."
         }
     }
 

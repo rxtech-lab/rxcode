@@ -49,6 +49,8 @@ public enum Payload: Sendable {
     case skillCatalogResult(SkillCatalogResultPayload)
     case skillMutationRequest(SkillMutationRequestPayload)
     case skillMutationResult(SkillMutationResultPayload)
+    case skillSourceMutationRequest(SkillSourceMutationRequestPayload)
+    case skillSourceMutationResult(SkillSourceMutationResultPayload)
     case acpRegistryRequest(ACPRegistryRequestPayload)
     case acpRegistryResult(ACPRegistryResultPayload)
     case acpMutationRequest(ACPMutationRequestPayload)
@@ -107,6 +109,8 @@ public extension Payload {
         case .skillCatalogResult: return "skill_catalog_result"
         case .skillMutationRequest: return "skill_mutation_request"
         case .skillMutationResult: return "skill_mutation_result"
+        case .skillSourceMutationRequest: return "skill_source_mutation_request"
+        case .skillSourceMutationResult: return "skill_source_mutation_result"
         case .acpRegistryRequest: return "acp_registry_request"
         case .acpRegistryResult: return "acp_registry_result"
         case .acpMutationRequest: return "acp_mutation_request"
@@ -764,22 +768,35 @@ public struct MobileSkillPlugin: Codable, Sendable, Identifiable, Equatable {
     }
 }
 
+public struct MobileSkillSource: Codable, Sendable, Identifiable, Equatable {
+    public let id: String
+    public let displayName: String
+
+    public init(id: String, displayName: String) {
+        self.id = id
+        self.displayName = displayName
+    }
+}
+
 public struct SkillCatalogResultPayload: Codable, Sendable {
     public let clientRequestID: UUID
     public let ok: Bool
     public let errorMessage: String?
     public let plugins: [MobileSkillPlugin]
+    public let sources: [MobileSkillSource]
 
     public init(
         clientRequestID: UUID,
         ok: Bool,
         errorMessage: String? = nil,
-        plugins: [MobileSkillPlugin] = []
+        plugins: [MobileSkillPlugin] = [],
+        sources: [MobileSkillSource] = []
     ) {
         self.clientRequestID = clientRequestID
         self.ok = ok
         self.errorMessage = errorMessage
         self.plugins = plugins
+        self.sources = sources
     }
 }
 
@@ -810,6 +827,7 @@ public struct SkillMutationResultPayload: Codable, Sendable {
     public let ok: Bool
     public let errorMessage: String?
     public let plugins: [MobileSkillPlugin]
+    public let sources: [MobileSkillSource]
 
     public init(
         clientRequestID: UUID,
@@ -817,7 +835,8 @@ public struct SkillMutationResultPayload: Codable, Sendable {
         pluginID: String,
         ok: Bool,
         errorMessage: String? = nil,
-        plugins: [MobileSkillPlugin] = []
+        plugins: [MobileSkillPlugin] = [],
+        sources: [MobileSkillSource] = []
     ) {
         self.clientRequestID = clientRequestID
         self.operation = operation
@@ -825,6 +844,62 @@ public struct SkillMutationResultPayload: Codable, Sendable {
         self.ok = ok
         self.errorMessage = errorMessage
         self.plugins = plugins
+        self.sources = sources
+    }
+}
+
+public struct SkillSourceMutationRequestPayload: Codable, Sendable {
+    public enum Operation: String, Codable, Sendable {
+        case add
+        case remove
+    }
+
+    public let clientRequestID: UUID
+    public let operation: Operation
+    public let sourceID: String?
+    public let gitURL: String?
+    public let ref: String?
+
+    public init(
+        clientRequestID: UUID = UUID(),
+        operation: Operation,
+        sourceID: String? = nil,
+        gitURL: String? = nil,
+        ref: String? = nil
+    ) {
+        self.clientRequestID = clientRequestID
+        self.operation = operation
+        self.sourceID = sourceID
+        self.gitURL = gitURL
+        self.ref = ref
+    }
+}
+
+public struct SkillSourceMutationResultPayload: Codable, Sendable {
+    public let clientRequestID: UUID
+    public let operation: SkillSourceMutationRequestPayload.Operation
+    public let sourceID: String?
+    public let ok: Bool
+    public let errorMessage: String?
+    public let plugins: [MobileSkillPlugin]
+    public let sources: [MobileSkillSource]
+
+    public init(
+        clientRequestID: UUID,
+        operation: SkillSourceMutationRequestPayload.Operation,
+        sourceID: String? = nil,
+        ok: Bool,
+        errorMessage: String? = nil,
+        plugins: [MobileSkillPlugin] = [],
+        sources: [MobileSkillSource] = []
+    ) {
+        self.clientRequestID = clientRequestID
+        self.operation = operation
+        self.sourceID = sourceID
+        self.ok = ok
+        self.errorMessage = errorMessage
+        self.plugins = plugins
+        self.sources = sources
     }
 }
 
@@ -2026,6 +2101,8 @@ extension Payload: Codable {
         case skillCatalogResult = "skill_catalog_result"
         case skillMutationRequest = "skill_mutation_request"
         case skillMutationResult = "skill_mutation_result"
+        case skillSourceMutationRequest = "skill_source_mutation_request"
+        case skillSourceMutationResult = "skill_source_mutation_result"
         case acpRegistryRequest = "acp_registry_request"
         case acpRegistryResult = "acp_registry_result"
         case acpMutationRequest = "acp_mutation_request"
@@ -2088,6 +2165,8 @@ extension Payload: Codable {
         case .skillCatalogResult: self = .skillCatalogResult(try container.decode(SkillCatalogResultPayload.self, forKey: .data))
         case .skillMutationRequest: self = .skillMutationRequest(try container.decode(SkillMutationRequestPayload.self, forKey: .data))
         case .skillMutationResult: self = .skillMutationResult(try container.decode(SkillMutationResultPayload.self, forKey: .data))
+        case .skillSourceMutationRequest: self = .skillSourceMutationRequest(try container.decode(SkillSourceMutationRequestPayload.self, forKey: .data))
+        case .skillSourceMutationResult: self = .skillSourceMutationResult(try container.decode(SkillSourceMutationResultPayload.self, forKey: .data))
         case .acpRegistryRequest: self = .acpRegistryRequest(try container.decode(ACPRegistryRequestPayload.self, forKey: .data))
         case .acpRegistryResult: self = .acpRegistryResult(try container.decode(ACPRegistryResultPayload.self, forKey: .data))
         case .acpMutationRequest: self = .acpMutationRequest(try container.decode(ACPMutationRequestPayload.self, forKey: .data))
@@ -2146,6 +2225,8 @@ extension Payload: Codable {
         case .skillCatalogResult(let p): try container.encode(TypeKey.skillCatalogResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .skillMutationRequest(let p): try container.encode(TypeKey.skillMutationRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .skillMutationResult(let p): try container.encode(TypeKey.skillMutationResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .skillSourceMutationRequest(let p): try container.encode(TypeKey.skillSourceMutationRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .skillSourceMutationResult(let p): try container.encode(TypeKey.skillSourceMutationResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .acpRegistryRequest(let p): try container.encode(TypeKey.acpRegistryRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .acpRegistryResult(let p): try container.encode(TypeKey.acpRegistryResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .acpMutationRequest(let p): try container.encode(TypeKey.acpMutationRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)

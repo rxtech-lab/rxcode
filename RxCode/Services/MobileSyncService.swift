@@ -1023,6 +1023,14 @@ final class MobileSyncService: ObservableObject {
                 object: nil,
                 userInfo: ["from": inbound.fromHex, "payload": req]
             )
+        case .skillSourceMutationRequest(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "skill_source_mutation_request") else { return }
+            logger.info("[MobileSync] skill source mutation requested operation=\(req.operation.rawValue, privacy: .public) source=\(req.sourceID ?? req.gitURL ?? "<nil>", privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+            NotificationCenter.default.post(
+                name: .mobileSyncSkillSourceMutationRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": req]
+            )
         case .acpRegistryRequest(let req):
             guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "acp_registry_request") else { return }
             logger.info("[MobileSync] acp registry requested forceRefresh=\(req.forceRefresh, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
@@ -1247,6 +1255,7 @@ extension Notification.Name {
     static let mobileSyncRunProfileStopRequested = Notification.Name("mobileSync.runProfileStopRequested")
     static let mobileSyncSkillCatalogRequested = Notification.Name("mobileSync.skillCatalogRequested")
     static let mobileSyncSkillMutationRequested = Notification.Name("mobileSync.skillMutationRequested")
+    static let mobileSyncSkillSourceMutationRequested = Notification.Name("mobileSync.skillSourceMutationRequested")
     static let mobileSyncACPRegistryRequested = Notification.Name("mobileSync.acpRegistryRequested")
     static let mobileSyncACPMutationRequested = Notification.Name("mobileSync.acpMutationRequested")
     static let mobileSyncMCPConfigRequested = Notification.Name("mobileSync.mcpConfigRequested")

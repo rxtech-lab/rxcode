@@ -375,34 +375,41 @@ struct AddSkillGitSourceSheet: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.vertical, 8)
                 } else {
-                    ForEach(appState.marketplaceCustomSources) { source in
-                        HStack(spacing: 10) {
-                            Image(systemName: "point.3.connected.trianglepath.dotted")
-                                .font(.system(size: ClaudeTheme.size(12)))
-                                .foregroundStyle(.secondary)
-                                .frame(width: 16)
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(appState.marketplaceCustomSources) { source in
+                                HStack(spacing: 10) {
+                                    Image(systemName: "point.3.connected.trianglepath.dotted")
+                                        .font(.system(size: ClaudeTheme.size(12)))
+                                        .foregroundStyle(.secondary)
+                                        .frame(width: 16)
 
-                            Text(source.displayName)
-                                .font(.system(size: ClaudeTheme.size(12), weight: .medium))
-                                .lineLimit(1)
-                                .textSelection(.enabled)
+                                    Text(source.displayName)
+                                        .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+                                        .lineLimit(1)
+                                        .textSelection(.enabled)
 
-                            Spacer()
+                                    Spacer()
 
-                            Button(role: .destructive) {
-                                Task { await appState.removeMarketplaceGitSource(source) }
-                            } label: {
-                                Image(systemName: "trash")
+                                    Button(role: .destructive) {
+                                        Task { await appState.removeMarketplaceGitSource(source) }
+                                    } label: {
+                                        Image(systemName: "trash")
+                                    }
+                                    .buttonStyle(.borderless)
+                                }
+                                .padding(.vertical, 4)
                             }
-                            .buttonStyle(.borderless)
                         }
-                        .padding(.vertical, 4)
                     }
                 }
             }
             .padding(20)
+            // Fill the remaining vertical space so the list scrolls internally
+            // instead of pushing the pinned header off the top of the sheet.
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .frame(width: 520, height: 460)
+        .frame(width: 520, height: 560)
     }
 
     private func addSource() async {

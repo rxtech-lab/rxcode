@@ -1361,6 +1361,20 @@ final class AppState {
         }
         mobileSyncObservers.append(skillMutationObserver)
 
+        let skillSourceMutationObserver = center.addObserver(
+            forName: .mobileSyncSkillSourceMutationRequested,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let fromHex = notification.userInfo?["from"] as? String,
+                  let request = notification.userInfo?["payload"] as? SkillSourceMutationRequestPayload
+            else { return }
+            Task { @MainActor [weak self] in
+                await self?.handleMobileSkillSourceMutationRequest(request, fromHex: fromHex)
+            }
+        }
+        mobileSyncObservers.append(skillSourceMutationObserver)
+
         let acpRegistryObserver = center.addObserver(
             forName: .mobileSyncACPRegistryRequested,
             object: nil,
@@ -1899,13 +1913,21 @@ final class AppState {
         }
     }
 
+    private func mobileSkillSources() async -> [MobileSkillSource] {
+        await marketplace.customSources().map { source in
+            MobileSkillSource(id: source.id, displayName: source.displayName)
+        }
+    }
+
     private func handleMobileSkillCatalogRequest(_ request: SkillCatalogRequestPayload, fromHex: String) async {
         let plugins = await mobileSkillPlugins(forceRefresh: request.forceRefresh)
+        let sources = await mobileSkillSources()
         let result = SkillCatalogResultPayload(
             clientRequestID: request.clientRequestID,
             ok: true,
             errorMessage: nil,
-            plugins: plugins
+            plugins: plugins,
+            sources: sources
         )
         await MobileSyncService.shared.send(.skillCatalogResult(result), toHex: fromHex)
     }
@@ -1919,7 +1941,8 @@ final class AppState {
                 pluginID: request.pluginID,
                 ok: false,
                 errorMessage: "Skill not found in the marketplace catalog.",
-                plugins: await mobileSkillPlugins()
+                plugins: await mobileSkillPlugins(),
+                sources: await mobileSkillSources()
             )
             await MobileSyncService.shared.send(.skillMutationResult(result), toHex: fromHex)
             return
@@ -1958,9 +1981,67 @@ final class AppState {
             pluginID: request.pluginID,
             ok: ok,
             errorMessage: errorMessage,
-            plugins: await mobileSkillPlugins()
+            plugins: await mobileSkillPlugins(),
+            sources: await mobileSkillSources()
         )
         await MobileSyncService.shared.send(.skillMutationResult(result), toHex: fromHex)
+    }
+
+    private func handleMobileSkillSourceMutationRequest(_ request: SkillSourceMutationRequestPayload, fromHex: String) async {
+        var ok = true
+        var errorMessage: String?
+        var sourceID = request.sourceID
+        var bannerTitle: String?
+        var bannerBody: String?
+
+        do {
+            switch request.operation {
+            case .add:
+                guard let gitURL = request.gitURL,
+                      !gitURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    throw MobileRemoteConfigError.invalidRequest("Missing Git repository URL.")
+                }
+                let source = try await marketplace.addCustomGitSource(url: gitURL, ref: request.ref)
+                sourceID = source.id
+                marketplaceCustomSources = await marketplace.customSources()
+                bannerTitle = "Skill Git source added remotely"
+                bannerBody = source.displayName
+            case .remove:
+                let currentSources = await marketplace.customSources()
+                guard let sourceID = request.sourceID,
+                      let source = currentSources.first(where: { $0.id == sourceID }) else {
+                    throw MobileRemoteConfigError.invalidRequest("Skill Git source not found.")
+                }
+                try await marketplace.removeCustomGitSource(source)
+                marketplaceCustomSources = await marketplace.customSources()
+                bannerTitle = "Skill Git source removed remotely"
+                bannerBody = source.displayName
+            }
+        } catch {
+            ok = false
+            errorMessage = error.localizedDescription
+            logger.error("[MobileSync] skill source mutation failed operation=\(request.operation.rawValue, privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
+
+        let plugins = await mobileSkillPlugins(forceRefresh: true)
+        let sources = await mobileSkillSources()
+        marketplaceCatalog = await marketplace.fetchCatalog()
+        marketplaceInstalledNames = await marketplace.installedPluginNames()
+
+        if ok, let bannerTitle, let bannerBody {
+            await NotificationService.shared.postRemoteConfigChanged(title: bannerTitle, body: bannerBody)
+        }
+
+        let result = SkillSourceMutationResultPayload(
+            clientRequestID: request.clientRequestID,
+            operation: request.operation,
+            sourceID: sourceID,
+            ok: ok,
+            errorMessage: errorMessage,
+            plugins: plugins,
+            sources: sources
+        )
+        await MobileSyncService.shared.send(.skillSourceMutationResult(result), toHex: fromHex)
     }
 
     private func mobileACPRegistryAgents() -> [MobileACPRegistryAgent] {

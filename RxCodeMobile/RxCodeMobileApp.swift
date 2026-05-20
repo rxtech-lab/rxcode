@@ -1,5 +1,6 @@
 import SwiftUI
 import RxCodeCore
+import TipKit
 
 @main
 struct RxCodeMobileApp: App {
@@ -7,6 +8,13 @@ struct RxCodeMobileApp: App {
     @StateObject private var state = MobileAppState()
     @State private var windowState = WindowState()
     @Environment(\.scenePhase) private var scenePhase
+
+    init() {
+        try? Tips.configure([
+            .displayFrequency(.immediate),
+            .datastoreLocation(.applicationDefault),
+        ])
+    }
 
     var body: some Scene {
         WindowGroup {

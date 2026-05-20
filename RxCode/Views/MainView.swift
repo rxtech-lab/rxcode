@@ -2,6 +2,7 @@ import AppKit
 import RxCodeChatKit
 import RxCodeCore
 import SwiftUI
+import TipKit
 import UniformTypeIdentifiers
 
 struct MainView: View {
@@ -202,6 +203,7 @@ struct MainView: View {
                     Image(systemName: "magnifyingglass")
                 }
                 .help("Search Threads (⌘K)")
+                .popoverTip(RxCodeTips.GlobalSearchTip(), arrowEdge: .top)
             }
 
             ToolbarItem(placement: .navigation) {
@@ -588,6 +590,7 @@ struct ChatToolbarControls: View {
             .fixedSize()
             .help("Model: \(effectiveProvider.displayName) · \(appState.modelDisplayLabel(effectiveModel, provider: effectiveProvider))")
             .accessibilityIdentifier("provider-model-menu")
+            .popoverTip(RxCodeTips.AgentSelectionTip(), arrowEdge: .top)
 
             Menu {
                 Section("Effort Picker") {

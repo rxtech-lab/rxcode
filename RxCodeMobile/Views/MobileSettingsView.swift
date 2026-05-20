@@ -1,6 +1,7 @@
 import RxCodeCore
 import RxCodeSync
 import SwiftUI
+import TipKit
 
 struct MobileSettingsView: View {
     @EnvironmentObject private var state: MobileAppState
@@ -156,6 +157,7 @@ struct MobileSettingsView: View {
             } label: {
                 Label("Pair New Mac", systemImage: "plus.circle")
             }
+            .popoverTip(MobileTips.PairingTip(), arrowEdge: .top)
         }
     }
 
@@ -333,6 +335,7 @@ struct MobileSettingsView: View {
                 }
             }
             .pickerStyle(.menu)
+            .popoverTip(MobileTips.SummarizationTip(), arrowEdge: .top)
 
             if settings.summarizationProvider == "openAI" {
                 if !settings.openAISummarizationEndpoint.isEmpty {

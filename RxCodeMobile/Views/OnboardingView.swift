@@ -2,6 +2,7 @@ import SwiftUI
 import PhotosUI
 import RxCodeSync
 import os
+import TipKit
 
 private let onboardingLogger = Logger(subsystem: "com.claudework", category: "Onboarding")
 
@@ -240,6 +241,7 @@ struct OnboardingView: View {
         .buttonStyle(.glassProminent)
         .controlSize(.large)
         .tint(.accentColor)
+        .popoverTip(MobileTips.PairingTip(), arrowEdge: .top)
     }
 
     private func errorBanner(_ message: String) -> some View {

@@ -2,6 +2,7 @@ import SwiftUI
 import CoreImage.CIFilterBuiltins
 import RxCodeCore
 import RxCodeSync
+import TipKit
 
 /// How the relay server is chosen in the Mobile settings tab.
 private enum RelayMode: Hashable {
@@ -243,6 +244,7 @@ struct MobileSettingsTab: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(sync.connectionState != .connected)
                 .help(sync.connectionState == .connected ? "" : "Connect to the relay before pairing a device.")
+                .popoverTip(RxCodeTips.MobileConnectionTip(), arrowEdge: .top)
             }
 
             if sync.pairedDevices.isEmpty {

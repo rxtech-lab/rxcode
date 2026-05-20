@@ -1,5 +1,6 @@
 import SwiftUI
 import RxCodeCore
+import TipKit
 
 // MARK: - ProjectTreeView
 
@@ -178,6 +179,7 @@ private struct SummarySidebarSection: View {
             }
             .buttonStyle(.plain)
             .help("Open project branch briefing")
+            .popoverTip(RxCodeTips.BriefingTip(), arrowEdge: .trailing)
         }
     }
 }

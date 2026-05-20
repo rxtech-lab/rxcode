@@ -1,6 +1,7 @@
 import SwiftUI
 import RxCodeCore
 import RxCodeChatKit
+import TipKit
 
 // MARK: - FocusedValues
 
@@ -36,6 +37,13 @@ struct RxCodeApp: App {
     @FocusedValue(\.startNewChat) private var startNewChat
     @AppStorage("showMenuBarExtra") private var showMenuBarExtra: Bool = true
     private let updateService = UpdateService.shared
+
+    init() {
+        try? Tips.configure([
+            .displayFrequency(.immediate),
+            .datastoreLocation(.applicationDefault),
+        ])
+    }
 
     var body: some Scene {
         WindowGroup {

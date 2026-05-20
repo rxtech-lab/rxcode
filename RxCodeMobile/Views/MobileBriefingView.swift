@@ -2,6 +2,7 @@ import SwiftUI
 import RxCodeCore
 import RxCodeChatKit
 import RxCodeSync
+import TipKit
 
 struct BriefingGroupKey: Hashable {
     let projectId: UUID
@@ -64,6 +65,7 @@ struct MobileBriefingView: View {
             .scrollContentBackground(.hidden)
         }
         .navigationTitle("Briefing")
+        .popoverTip(MobileTips.BriefingTip(), arrowEdge: .top)
         .toolbar {
             if hasAnyData {
                 ToolbarItem(placement: .topBarTrailing) {

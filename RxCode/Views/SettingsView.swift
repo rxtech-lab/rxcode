@@ -1,6 +1,7 @@
 import SwiftUI
 import RxCodeCore
 import RxCodeChatKit
+import TipKit
 
 // MARK: - Settings Sheet
 
@@ -684,6 +685,7 @@ struct ChatSettingsTab: View {
             }
             .pickerStyle(.menu)
             .fixedSize()
+            .popoverTip(RxCodeTips.SummarizationModelTip(), arrowEdge: .trailing)
             .onChange(of: appState.summarizationProvider) { _, newValue in
                 guard newValue == .openAI, appState.openAISummarizationModels.isEmpty else { return }
                 Task { await appState.refreshOpenAISummarizationModels() }

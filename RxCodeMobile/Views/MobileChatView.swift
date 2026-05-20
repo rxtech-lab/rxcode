@@ -632,14 +632,7 @@ struct MobileChatView: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(ClaudeTheme.accentSubtle)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(ClaudeTheme.accent.opacity(0.35), lineWidth: 1)
-            )
+            .glassEffect(.regular.tint(ClaudeTheme.accent).interactive(), in: .rect(cornerRadius: 14))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(planBannerText). Tap to review.")

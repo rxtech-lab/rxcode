@@ -20,6 +20,7 @@ struct MarkdownContentView: View {
 
     var body: some View {
         StructuredText(markdown: renderedMarkdown)
+            .id(renderedMarkdown)
             .font(.system(size: 15))
             .tint(ClaudeTheme.accent)
             .textual.inlineStyle(

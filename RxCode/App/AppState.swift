@@ -1207,6 +1207,34 @@ final class AppState {
         }
         mobileSyncObservers.append(branchOpObserver)
 
+        let folderTreeObserver = center.addObserver(
+            forName: .mobileSyncFolderTreeRequested,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let fromHex = notification.userInfo?["from"] as? String,
+                  let request = notification.userInfo?["payload"] as? FolderTreeRequestPayload
+            else { return }
+            Task { @MainActor [weak self] in
+                await self?.handleMobileFolderTreeRequest(request, fromHex: fromHex)
+            }
+        }
+        mobileSyncObservers.append(folderTreeObserver)
+
+        let createProjectObserver = center.addObserver(
+            forName: .mobileSyncCreateProjectRequested,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let fromHex = notification.userInfo?["from"] as? String,
+                  let request = notification.userInfo?["payload"] as? CreateProjectRequestPayload
+            else { return }
+            Task { @MainActor [weak self] in
+                await self?.handleMobileCreateProjectRequest(request, fromHex: fromHex)
+            }
+        }
+        mobileSyncObservers.append(createProjectObserver)
+
         let questionAnswerObserver = center.addObserver(
             forName: .mobileSyncQuestionAnswerReceived,
             object: nil,
@@ -1416,6 +1444,218 @@ final class AppState {
             return werr.description
         }
         return error.localizedDescription
+    }
+
+    private func handleMobileFolderTreeRequest(_ request: FolderTreeRequestPayload, fromHex: String) async {
+        let result: FolderTreeResultPayload
+        do {
+            let root = try mobileFolderTreeRoot(for: request)
+            result = FolderTreeResultPayload(
+                clientRequestID: request.clientRequestID,
+                requestedPath: request.path,
+                ok: true,
+                root: root
+            )
+        } catch {
+            result = FolderTreeResultPayload(
+                clientRequestID: request.clientRequestID,
+                requestedPath: request.path,
+                ok: false,
+                errorMessage: mobileFolderErrorMessage(error)
+            )
+        }
+        await MobileSyncService.shared.send(.folderTreeResult(result), toHex: fromHex)
+    }
+
+    private func handleMobileCreateProjectRequest(_ request: CreateProjectRequestPayload, fromHex: String) async {
+        let trimmedPath = request.path.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedPath.isEmpty else {
+            await replyCreateProjectResult(
+                requestID: request.clientRequestID,
+                ok: false,
+                project: nil,
+                errorMessage: "Folder path is required.",
+                toHex: fromHex
+            )
+            return
+        }
+
+        let url = URL(fileURLWithPath: trimmedPath).standardizedFileURL
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+              isDirectory.boolValue
+        else {
+            await replyCreateProjectResult(
+                requestID: request.clientRequestID,
+                ok: false,
+                project: nil,
+                errorMessage: "Folder does not exist on the desktop.",
+                toHex: fromHex
+            )
+            return
+        }
+
+        if projects.first(where: { $0.path == url.path }) == nil {
+            let isGitRepo = FileManager.default.fileExists(atPath: url.appendingPathComponent(".git").path)
+            let gitHubRepo = isGitRepo ? detectGitHubOwnerRepo(at: url.path) : nil
+            await addProject(name: url.lastPathComponent, path: url.path, gitHubRepo: gitHubRepo)
+        }
+
+        guard let project = projects.first(where: { $0.path == url.path }) else {
+            await replyCreateProjectResult(
+                requestID: request.clientRequestID,
+                ok: false,
+                project: nil,
+                errorMessage: "Failed to add project on the desktop.",
+                toHex: fromHex
+            )
+            return
+        }
+
+        await replyCreateProjectResult(
+            requestID: request.clientRequestID,
+            ok: true,
+            project: project,
+            errorMessage: nil,
+            toHex: fromHex
+        )
+        await sendMobileSnapshot(toHex: fromHex, activeSessionID: nil)
+        scheduleMobileSnapshotBroadcast()
+    }
+
+    private func replyCreateProjectResult(
+        requestID: UUID,
+        ok: Bool,
+        project: Project?,
+        errorMessage: String?,
+        toHex hex: String
+    ) async {
+        let result = CreateProjectResultPayload(
+            clientRequestID: requestID,
+            ok: ok,
+            project: project,
+            errorMessage: errorMessage
+        )
+        await MobileSyncService.shared.send(.createProjectResult(result), toHex: hex)
+    }
+
+    private func mobileFolderTreeRoot(for request: FolderTreeRequestPayload) throws -> RemoteFolderNode {
+        let depth = max(0, min(request.depth, 2))
+        guard let path = request.path?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !path.isEmpty
+        else {
+            return RemoteFolderNode(
+                name: Host.current().localizedName ?? "Mac",
+                path: "",
+                isSelectable: false,
+                children: mobileFolderPickerRoots(depth: 1, includeHidden: request.includeHidden)
+            )
+        }
+
+        return try mobileFolderNode(
+            for: URL(fileURLWithPath: path).standardizedFileURL,
+            depth: depth,
+            includeHidden: request.includeHidden
+        )
+    }
+
+    private func mobileFolderPickerRoots(depth: Int, includeHidden: Bool) -> [RemoteFolderNode] {
+        let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL
+        var candidates = [
+            home,
+            home.appendingPathComponent("Desktop", isDirectory: true),
+            home.appendingPathComponent("Documents", isDirectory: true),
+            home.appendingPathComponent("Downloads", isDirectory: true),
+            home.appendingPathComponent("Developer", isDirectory: true)
+        ]
+
+        let projectParents = projects
+            .map { URL(fileURLWithPath: $0.path).deletingLastPathComponent().standardizedFileURL }
+        candidates.append(contentsOf: projectParents)
+
+        var seen: Set<String> = []
+        return candidates.compactMap { url in
+            let path = url.path
+            guard seen.insert(path).inserted else { return nil }
+            return try? mobileFolderNode(for: url, depth: depth, includeHidden: includeHidden)
+        }
+    }
+
+    private func mobileFolderNode(
+        for url: URL,
+        depth: Int,
+        includeHidden: Bool
+    ) throws -> RemoteFolderNode {
+        let fm = FileManager.default
+        var isDirectory: ObjCBool = false
+        guard fm.fileExists(atPath: url.path, isDirectory: &isDirectory),
+              isDirectory.boolValue
+        else {
+            throw MobileFolderPickerError.notFolder
+        }
+
+        let name = url == fm.homeDirectoryForCurrentUser.standardizedFileURL
+            ? "Home"
+            : url.lastPathComponent
+        guard depth > 0 else {
+            return RemoteFolderNode(name: name, path: url.path, children: [])
+        }
+
+        var options: FileManager.DirectoryEnumerationOptions = []
+        if !includeHidden { options.insert(.skipsHiddenFiles) }
+        let contents = (try? fm.contentsOfDirectory(
+            at: url,
+            includingPropertiesForKeys: [.isDirectoryKey, .isHiddenKey],
+            options: options
+        )) ?? []
+
+        let children = contents
+            .filter { child in
+                guard let values = try? child.resourceValues(forKeys: [.isDirectoryKey, .isHiddenKey]),
+                      values.isDirectory == true
+                else { return false }
+                if !includeHidden && (values.isHidden == true || child.lastPathComponent.hasPrefix(".")) {
+                    return false
+                }
+                return !Self.mobileFolderIgnoredNames.contains(child.lastPathComponent)
+            }
+            .sorted { lhs, rhs in
+                lhs.lastPathComponent.localizedStandardCompare(rhs.lastPathComponent) == .orderedAscending
+            }
+            .prefix(Self.mobileFolderMaxChildren)
+            .compactMap { child in
+                try? mobileFolderNode(
+                    for: child.standardizedFileURL,
+                    depth: depth - 1,
+                    includeHidden: includeHidden
+                )
+            }
+
+        return RemoteFolderNode(name: name, path: url.path, children: Array(children))
+    }
+
+    private func mobileFolderErrorMessage(_ error: Error) -> String {
+        if let folderError = error as? MobileFolderPickerError {
+            return folderError.localizedDescription
+        }
+        return error.localizedDescription
+    }
+
+    private static let mobileFolderMaxChildren = 250
+    private static let mobileFolderIgnoredNames: Set<String> = [
+        ".git", ".build", ".swiftpm", "DerivedData",
+        "node_modules", ".DS_Store", "Pods", "xcuserdata"
+    ]
+
+    private enum MobileFolderPickerError: LocalizedError {
+        case notFolder
+
+        var errorDescription: String? {
+            switch self {
+            case .notFolder:
+                return "Folder does not exist on the desktop."
+            }
+        }
     }
 
     private func handleMobileCancelStream(_ cancel: CancelStreamPayload) async {

@@ -69,6 +69,7 @@ struct MessageBubble: View {
                 } else {
                     // Assistant message: render blocks in order
                     let renderBlocks = assistantRenderBlocks()
+                    let cursorBlockId = streamingCursorBlockId(in: renderBlocks)
                     // While the model is paused on an undecided ExitPlanMode in this
                     // same message, sibling tools without results are effectively
                     // suspended — not running. Drop the streaming flag for those so
@@ -81,7 +82,11 @@ struct MessageBubble: View {
                             switch block {
                             case .text(let textBlock):
                                 if let text = textBlock.text, !text.isEmpty {
-                                    assistantTextBubble(text: text, blockId: textBlock.id)
+                                    assistantTextBubble(
+                                        text: text,
+                                        blockId: textBlock.id,
+                                        showsCursor: textBlock.id == cursorBlockId
+                                    )
                                 }
                             case .tool(let toolCall):
                                 if toolCall.name == "AskUserQuestion" {
@@ -290,12 +295,8 @@ struct MessageBubble: View {
 
     // MARK: - Assistant Text Bubble
 
-    private func assistantTextBubble(text: String, blockId: String) -> some View {
-        let isLastBlock = message.blocks.last?.isText == true
-            && message.blocks.last?.text == text
-        let showsCursor = message.isStreaming && isLastBlock
-
-        return MarkdownContentView(
+    private func assistantTextBubble(text: String, blockId: String, showsCursor: Bool) -> some View {
+        MarkdownContentView(
             text: text,
             showsTrailingCursor: showsCursor,
             isCursorVisible: cursorVisible
@@ -319,6 +320,21 @@ struct MessageBubble: View {
         }
         .onHover { hoveredBlockId = $0 ? blockId : nil }
         .accessibilityLabel("Assistant: \(text)")
+    }
+
+    private func streamingCursorBlockId(in renderBlocks: [AssistantRenderBlock]) -> String? {
+        guard message.isStreaming,
+              latestStreamingAssistantMessageId == message.id,
+              case .text(let textBlock) = renderBlocks.last,
+              textBlock.text?.isEmpty == false
+        else { return nil }
+        return textBlock.id
+    }
+
+    private var latestStreamingAssistantMessageId: UUID? {
+        chatBridge.messages.last {
+            $0.role == .assistant && $0.isStreaming
+        }?.id
     }
 
     // MARK: - Copy Button

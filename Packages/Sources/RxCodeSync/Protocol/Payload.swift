@@ -33,6 +33,10 @@ public enum Payload: Sendable {
     case planDecision(PlanDecisionPayload)
     case branchOpRequest(BranchOpRequestPayload)
     case branchOpResult(BranchOpResultPayload)
+    case folderTreeRequest(FolderTreeRequestPayload)
+    case folderTreeResult(FolderTreeResultPayload)
+    case createProjectRequest(CreateProjectRequestPayload)
+    case createProjectResult(CreateProjectResultPayload)
     case ping(PingPayload)
     case pong(PongPayload)
     case unknown(type: String)
@@ -307,6 +311,94 @@ public struct BranchOpResultPayload: Codable, Sendable {
         self.operation = operation
         self.branch = branch
         self.ok = ok
+        self.errorMessage = errorMessage
+    }
+}
+
+public struct RemoteFolderNode: Codable, Sendable, Identifiable, Equatable {
+    public var id: String { path }
+
+    public let name: String
+    public let path: String
+    public let isSelectable: Bool
+    public let children: [RemoteFolderNode]
+
+    public init(name: String, path: String, isSelectable: Bool = true, children: [RemoteFolderNode] = []) {
+        self.name = name
+        self.path = path
+        self.isSelectable = isSelectable
+        self.children = children
+    }
+}
+
+public struct FolderTreeRequestPayload: Codable, Sendable {
+    public let clientRequestID: UUID
+    /// `nil` asks the desktop for the picker roots. Non-nil asks for that
+    /// folder's immediate children.
+    public let path: String?
+    public let depth: Int
+    public let includeHidden: Bool
+
+    public init(
+        clientRequestID: UUID = UUID(),
+        path: String? = nil,
+        depth: Int = 1,
+        includeHidden: Bool = false
+    ) {
+        self.clientRequestID = clientRequestID
+        self.path = path
+        self.depth = depth
+        self.includeHidden = includeHidden
+    }
+}
+
+public struct FolderTreeResultPayload: Codable, Sendable {
+    public let clientRequestID: UUID
+    public let requestedPath: String?
+    public let ok: Bool
+    public let root: RemoteFolderNode?
+    public let errorMessage: String?
+
+    public init(
+        clientRequestID: UUID,
+        requestedPath: String?,
+        ok: Bool,
+        root: RemoteFolderNode? = nil,
+        errorMessage: String? = nil
+    ) {
+        self.clientRequestID = clientRequestID
+        self.requestedPath = requestedPath
+        self.ok = ok
+        self.root = root
+        self.errorMessage = errorMessage
+    }
+}
+
+public struct CreateProjectRequestPayload: Codable, Sendable {
+    public let clientRequestID: UUID
+    public let path: String
+
+    public init(clientRequestID: UUID = UUID(), path: String) {
+        self.clientRequestID = clientRequestID
+        self.path = path
+    }
+}
+
+public struct CreateProjectResultPayload: Codable, Sendable {
+    public let clientRequestID: UUID
+    public let ok: Bool
+    public let project: Project?
+    public let errorMessage: String?
+
+    public init(
+        clientRequestID: UUID,
+        ok: Bool,
+        project: Project? = nil,
+        errorMessage: String? = nil
+    ) {
+        self.clientRequestID = clientRequestID
+        self.ok = ok
+        self.project = project
         self.errorMessage = errorMessage
     }
 }
@@ -1081,6 +1173,10 @@ extension Payload: Codable {
         case planDecision = "plan_decision"
         case branchOpRequest = "branch_op_request"
         case branchOpResult = "branch_op_result"
+        case folderTreeRequest = "folder_tree_request"
+        case folderTreeResult = "folder_tree_result"
+        case createProjectRequest = "create_project_request"
+        case createProjectResult = "create_project_result"
         case ping
         case pong
     }
@@ -1119,6 +1215,10 @@ extension Payload: Codable {
         case .planDecision: self = .planDecision(try container.decode(PlanDecisionPayload.self, forKey: .data))
         case .branchOpRequest: self = .branchOpRequest(try container.decode(BranchOpRequestPayload.self, forKey: .data))
         case .branchOpResult: self = .branchOpResult(try container.decode(BranchOpResultPayload.self, forKey: .data))
+        case .folderTreeRequest: self = .folderTreeRequest(try container.decode(FolderTreeRequestPayload.self, forKey: .data))
+        case .folderTreeResult: self = .folderTreeResult(try container.decode(FolderTreeResultPayload.self, forKey: .data))
+        case .createProjectRequest: self = .createProjectRequest(try container.decode(CreateProjectRequestPayload.self, forKey: .data))
+        case .createProjectResult: self = .createProjectResult(try container.decode(CreateProjectResultPayload.self, forKey: .data))
         case .ping: self = .ping(try container.decode(PingPayload.self, forKey: .data))
         case .pong: self = .pong(try container.decode(PongPayload.self, forKey: .data))
         }
@@ -1153,6 +1253,10 @@ extension Payload: Codable {
         case .planDecision(let p): try container.encode(TypeKey.planDecision.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .branchOpRequest(let p): try container.encode(TypeKey.branchOpRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .branchOpResult(let p): try container.encode(TypeKey.branchOpResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .folderTreeRequest(let p): try container.encode(TypeKey.folderTreeRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .folderTreeResult(let p): try container.encode(TypeKey.folderTreeResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .createProjectRequest(let p): try container.encode(TypeKey.createProjectRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .createProjectResult(let p): try container.encode(TypeKey.createProjectResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .ping(let p): try container.encode(TypeKey.ping.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .pong(let p): try container.encode(TypeKey.pong.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .unknown(let type): try container.encode(type, forKey: .type)

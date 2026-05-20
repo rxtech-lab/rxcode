@@ -99,6 +99,15 @@ final class MobileAppState: ObservableObject {
     private var pendingSearchID: UUID?
     private var searchDebounceTask: Task<Void, Never>?
 
+    @Published var remoteFolderRoot: RemoteFolderNode?
+    @Published var remoteFolderIsLoading = false
+    @Published var remoteFolderError: String?
+    @Published var remoteProjectCreateInFlight = false
+    @Published var remoteProjectCreateError: String?
+    @Published var lastCreatedProjectID: UUID?
+    private var pendingFolderTreeRequestID: UUID?
+    private var pendingCreateProjectRequestID: UUID?
+
     private var identity: DeviceIdentity
     private var client: SyncClient
     private let logger = Logger(subsystem: "com.idealapp.RxCodeMobile", category: "MobileAppState")
@@ -394,6 +403,38 @@ final class MobileAppState: ObservableObject {
             planMode: planMode
         )
         try? await client.send(.newSessionRequest(payload), toHex: pairedDesktopPubkey)
+    }
+
+    func requestRemoteFolder(path: String? = nil) async {
+        guard isPaired else { return }
+        let request = FolderTreeRequestPayload(path: path, depth: 1)
+        pendingFolderTreeRequestID = request.clientRequestID
+        remoteFolderIsLoading = true
+        remoteFolderError = nil
+        do {
+            try await client.send(.folderTreeRequest(request), toHex: pairedDesktopPubkey)
+        } catch {
+            pendingFolderTreeRequestID = nil
+            remoteFolderIsLoading = false
+            remoteFolderError = error.localizedDescription
+        }
+    }
+
+    func createProjectFromRemoteFolder(path: String) async {
+        guard isPaired else { return }
+        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let request = CreateProjectRequestPayload(path: trimmed)
+        pendingCreateProjectRequestID = request.clientRequestID
+        remoteProjectCreateInFlight = true
+        remoteProjectCreateError = nil
+        do {
+            try await client.send(.createProjectRequest(request), toHex: pairedDesktopPubkey)
+        } catch {
+            pendingCreateProjectRequestID = nil
+            remoteProjectCreateInFlight = false
+            remoteProjectCreateError = error.localizedDescription
+        }
     }
 
     // MARK: - Plan mode
@@ -777,6 +818,14 @@ final class MobileAppState: ObservableObject {
         sessionsWithMoreMessages = []
         loadingMoreSessions = []
         pendingLoadMoreRequests = [:]
+        remoteFolderRoot = nil
+        remoteFolderIsLoading = false
+        remoteFolderError = nil
+        remoteProjectCreateInFlight = false
+        remoteProjectCreateError = nil
+        pendingFolderTreeRequestID = nil
+        pendingCreateProjectRequestID = nil
+        lastCreatedProjectID = nil
         activeSessionID = nil
         pendingPermission = nil
         pendingQuestions = []
@@ -895,6 +944,32 @@ final class MobileAppState: ObservableObject {
             inFlightBranchOps.remove(result.clientRequestID)
             if !result.ok {
                 lastBranchOpError = result.errorMessage ?? "Branch operation failed."
+            }
+        case .folderTreeResult(let result):
+            guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "folder_tree_result") else { return }
+            guard pendingFolderTreeRequestID == result.clientRequestID else { return }
+            pendingFolderTreeRequestID = nil
+            remoteFolderIsLoading = false
+            if result.ok, let root = result.root {
+                remoteFolderRoot = root
+                remoteFolderError = nil
+            } else {
+                remoteFolderError = result.errorMessage ?? "Failed to load folders."
+            }
+        case .createProjectResult(let result):
+            guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "create_project_result") else { return }
+            guard pendingCreateProjectRequestID == result.clientRequestID else { return }
+            pendingCreateProjectRequestID = nil
+            remoteProjectCreateInFlight = false
+            if result.ok, let project = result.project {
+                if !projects.contains(where: { $0.id == project.id }) {
+                    projects.append(project)
+                }
+                lastCreatedProjectID = project.id
+                remoteProjectCreateError = nil
+                Task { await self.requestSnapshot() }
+            } else {
+                remoteProjectCreateError = result.errorMessage ?? "Failed to add project."
             }
         case .ping:
             guard pairedDesktops.contains(where: { $0.pubkeyHex == inbound.fromHex }) else { return }

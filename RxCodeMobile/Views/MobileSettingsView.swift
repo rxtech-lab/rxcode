@@ -35,6 +35,10 @@ struct MobileSettingsView: View {
                     }
                 }
 
+                if state.isPaired {
+                    desktopConfigurationSection
+                }
+
                 pairNewSection
             }
             .navigationTitle("Settings")
@@ -147,6 +151,33 @@ struct MobileSettingsView: View {
             }
             .buttonStyle(.borderless)
             .accessibilityLabel("Remove \(desktop.displayName.isEmpty ? "Mac" : desktop.displayName)")
+        }
+    }
+
+    /// Links to the remote desktop-management screens: skill marketplace, ACP
+    /// agent clients, and MCP servers. Shown only while paired since every
+    /// action targets the active Mac.
+    private var desktopConfigurationSection: some View {
+        Section {
+            NavigationLink {
+                MobileSkillMarketView()
+            } label: {
+                Label("Skills", systemImage: "puzzlepiece.extension")
+            }
+            NavigationLink {
+                MobileACPClientsView()
+            } label: {
+                Label("Agent Clients", systemImage: "cpu")
+            }
+            NavigationLink {
+                MobileMCPServersView()
+            } label: {
+                Label("MCP Servers", systemImage: "server.rack")
+            }
+        } header: {
+            Text("Desktop Configuration")
+        } footer: {
+            Text("Install skills and agents, and configure MCP servers on the active Mac.")
         }
     }
 

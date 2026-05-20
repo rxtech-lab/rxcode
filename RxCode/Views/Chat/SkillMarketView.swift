@@ -8,6 +8,7 @@ struct SkillMarketView: View {
     @State private var searchText = ""
     @State private var selectedFilter = "All"
     @State private var selectedPlugin: MarketplacePlugin?
+    @State private var showGitSourceSheet = false
 
     /// When true, strips overlay-specific styling (rounded corners, shadow, fixed frame)
     /// and hides the close button so the view can be embedded in a parent container.
@@ -33,6 +34,10 @@ struct SkillMarketView: View {
             )
             .focusable(false)
         }
+        .sheet(isPresented: $showGitSourceSheet) {
+            AddSkillGitSourceSheet()
+                .focusable(false)
+        }
     }
 
     private var marketplaceContent: some View {
@@ -40,6 +45,10 @@ struct SkillMarketView: View {
             headerBar
             Divider()
             searchAndFilterBar
+            if !appState.marketplaceCustomSources.isEmpty || appState.marketplaceSourceError != nil {
+                Divider()
+                customSourcesBar
+            }
             Divider()
             pluginGrid
         }
@@ -57,6 +66,16 @@ struct SkillMarketView: View {
                 .font(.system(size: ClaudeTheme.size(15), weight: .semibold))
 
             Spacer()
+
+            Button {
+                showGitSourceSheet = true
+            } label: {
+                Label("Add Git Source", systemImage: "plus")
+                    .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .help("Add a skill catalog from a GitHub repository")
 
             Button {
                 Task { await appState.loadMarketplace(forceRefresh: true) }
@@ -120,6 +139,45 @@ struct SkillMarketView: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 10)
+    }
+
+    @ViewBuilder
+    private var customSourcesBar: some View {
+        if !appState.marketplaceCustomSources.isEmpty || appState.marketplaceSourceError != nil {
+            HStack(spacing: 8) {
+                Image(systemName: "point.3.connected.trianglepath.dotted")
+                    .font(.system(size: ClaudeTheme.size(12)))
+                    .foregroundStyle(.secondary)
+
+                if appState.marketplaceCustomSources.isEmpty {
+                    Text("No custom Git sources")
+                        .font(.system(size: ClaudeTheme.size(12)))
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("\(appState.marketplaceCustomSources.count) custom Git source\(appState.marketplaceCustomSources.count == 1 ? "" : "s")")
+                        .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+
+                if let error = appState.marketplaceSourceError {
+                    Text(error)
+                        .font(.system(size: ClaudeTheme.size(12)))
+                        .foregroundStyle(Color.red)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                Button("Manage") {
+                    showGitSourceSheet = true
+                }
+                .font(.system(size: ClaudeTheme.size(12)))
+                .buttonStyle(.borderless)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 8)
+            .background(Color(NSColor.controlBackgroundColor).opacity(0.45))
+        }
     }
 
     private func filterChip(_ label: String) -> some View {
@@ -213,6 +271,154 @@ struct SkillMarketView: View {
             counts[plugin.marketplaceLabel, default: 0] += 1
         }
         return counts.sorted { $0.value > $1.value }.map(\.key)
+    }
+}
+
+// MARK: - Add Git Source
+
+struct AddSkillGitSourceSheet: View {
+    @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
+    @State private var gitURL = ""
+    @State private var ref = ""
+    @State private var isAdding = false
+    @State private var localError: String?
+
+    private var canAdd: Bool {
+        !gitURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isAdding
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Add Git Skill Source")
+                        .font(.system(size: ClaudeTheme.size(16), weight: .semibold))
+                    Text("Use a GitHub repository that exposes .claude-plugin/marketplace.json.")
+                        .font(.system(size: ClaudeTheme.size(12)))
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.borderless)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("GitHub Repository")
+                        .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+                    TextField("https://github.com/owner/repo", text: $gitURL)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: ClaudeTheme.size(13)))
+                }
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Branch or Ref")
+                        .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+                    TextField("main", text: $ref)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: ClaudeTheme.size(13)))
+                }
+
+                if let error = localError ?? appState.marketplaceSourceError {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .font(.system(size: ClaudeTheme.size(12)))
+                        .foregroundStyle(Color.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                HStack {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+
+                    Spacer()
+
+                    Button {
+                        Task { await addSource() }
+                    } label: {
+                        if isAdding {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Text("Add Source")
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!canAdd)
+                }
+            }
+            .padding(20)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Custom Sources")
+                    .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
+
+                if appState.marketplaceCustomSources.isEmpty {
+                    Text("No custom Git sources added.")
+                        .font(.system(size: ClaudeTheme.size(12)))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 8)
+                } else {
+                    ForEach(appState.marketplaceCustomSources) { source in
+                        HStack(spacing: 10) {
+                            Image(systemName: "point.3.connected.trianglepath.dotted")
+                                .font(.system(size: ClaudeTheme.size(12)))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 16)
+
+                            Text(source.displayName)
+                                .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+                                .lineLimit(1)
+                                .textSelection(.enabled)
+
+                            Spacer()
+
+                            Button(role: .destructive) {
+                                Task { await appState.removeMarketplaceGitSource(source) }
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+            }
+            .padding(20)
+        }
+        .frame(width: 520, height: 460)
+    }
+
+    private func addSource() async {
+        isAdding = true
+        localError = nil
+        let ok = await appState.addMarketplaceGitSource(
+            url: gitURL,
+            ref: ref.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : ref
+        )
+        isAdding = false
+        if ok {
+            gitURL = ""
+            ref = ""
+        } else {
+            localError = appState.marketplaceSourceError
+        }
     }
 }
 

@@ -896,6 +896,8 @@ final class AppState {
     var isLoggedIn = false
     var gitHubUser: GitHubUser?
     var repos: [GitHubRepo] = []
+    var customRepos: [CustomRepo] = []
+    var isCloningCustomRepo: String?
 
     // MARK: - CLI Version
 
@@ -910,6 +912,8 @@ final class AppState {
     var marketplaceLoading = false
     var marketplaceInstalledNames: Set<String> = []
     var marketplacePluginStates: [String: PluginInstallStatus] = [:]
+    var marketplaceCustomSources: [MarketplaceCustomSource] = []
+    var marketplaceSourceError: String?
 
     // MARK: - Onboarding
 
@@ -1328,6 +1332,90 @@ final class AppState {
             }
         }
         mobileSyncObservers.append(planDecisionObserver)
+
+        let skillCatalogObserver = center.addObserver(
+            forName: .mobileSyncSkillCatalogRequested,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let fromHex = notification.userInfo?["from"] as? String,
+                  let request = notification.userInfo?["payload"] as? SkillCatalogRequestPayload
+            else { return }
+            Task { @MainActor [weak self] in
+                await self?.handleMobileSkillCatalogRequest(request, fromHex: fromHex)
+            }
+        }
+        mobileSyncObservers.append(skillCatalogObserver)
+
+        let skillMutationObserver = center.addObserver(
+            forName: .mobileSyncSkillMutationRequested,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let fromHex = notification.userInfo?["from"] as? String,
+                  let request = notification.userInfo?["payload"] as? SkillMutationRequestPayload
+            else { return }
+            Task { @MainActor [weak self] in
+                await self?.handleMobileSkillMutationRequest(request, fromHex: fromHex)
+            }
+        }
+        mobileSyncObservers.append(skillMutationObserver)
+
+        let acpRegistryObserver = center.addObserver(
+            forName: .mobileSyncACPRegistryRequested,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let fromHex = notification.userInfo?["from"] as? String,
+                  let request = notification.userInfo?["payload"] as? ACPRegistryRequestPayload
+            else { return }
+            Task { @MainActor [weak self] in
+                await self?.handleMobileACPRegistryRequest(request, fromHex: fromHex)
+            }
+        }
+        mobileSyncObservers.append(acpRegistryObserver)
+
+        let acpMutationObserver = center.addObserver(
+            forName: .mobileSyncACPMutationRequested,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let fromHex = notification.userInfo?["from"] as? String,
+                  let request = notification.userInfo?["payload"] as? ACPMutationRequestPayload
+            else { return }
+            Task { @MainActor [weak self] in
+                await self?.handleMobileACPMutationRequest(request, fromHex: fromHex)
+            }
+        }
+        mobileSyncObservers.append(acpMutationObserver)
+
+        let mcpConfigObserver = center.addObserver(
+            forName: .mobileSyncMCPConfigRequested,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let fromHex = notification.userInfo?["from"] as? String,
+                  let request = notification.userInfo?["payload"] as? MCPConfigRequestPayload
+            else { return }
+            Task { @MainActor [weak self] in
+                await self?.handleMobileMCPConfigRequest(request, fromHex: fromHex)
+            }
+        }
+        mobileSyncObservers.append(mcpConfigObserver)
+
+        let mcpMutationObserver = center.addObserver(
+            forName: .mobileSyncMCPMutationRequested,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let fromHex = notification.userInfo?["from"] as? String,
+                  let request = notification.userInfo?["payload"] as? MCPMutationRequestPayload
+            else { return }
+            Task { @MainActor [weak self] in
+                await self?.handleMobileMCPMutationRequest(request, fromHex: fromHex)
+            }
+        }
+        mobileSyncObservers.append(mcpMutationObserver)
 
         observeMobileSnapshotInputs()
     }
@@ -1774,6 +1862,328 @@ final class AppState {
         )
         await MobileSyncService.shared.send(.runProfileResult(result), toHex: hex)
         if ok { scheduleMobileSnapshotBroadcast() }
+    }
+
+    // MARK: - Mobile: Skills / ACP / MCP remote management
+
+    /// Error for malformed remote skill/ACP/MCP requests; its description is
+    /// surfaced verbatim to the mobile client.
+    private enum MobileRemoteConfigError: LocalizedError {
+        case invalidRequest(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .invalidRequest(let detail): return detail
+            }
+        }
+    }
+
+    /// The marketplace catalog flattened into wire DTOs with current install
+    /// state. `forceRefresh` bypasses the 5-minute marketplace cache.
+    private func mobileSkillPlugins(forceRefresh: Bool = false) async -> [MobileSkillPlugin] {
+        let catalog = await marketplace.fetchCatalog(forceRefresh: forceRefresh)
+        let installed = await marketplace.installedPluginNames()
+        return catalog.map { plugin in
+            MobileSkillPlugin(
+                id: plugin.id,
+                name: plugin.name,
+                summary: plugin.description,
+                author: plugin.author,
+                category: plugin.category,
+                categoryLabel: plugin.categoryLabel,
+                marketplace: plugin.marketplace,
+                marketplaceLabel: plugin.marketplaceLabel,
+                homepage: plugin.homepage,
+                isInstalled: installed.contains(plugin.name)
+            )
+        }
+    }
+
+    private func handleMobileSkillCatalogRequest(_ request: SkillCatalogRequestPayload, fromHex: String) async {
+        let plugins = await mobileSkillPlugins(forceRefresh: request.forceRefresh)
+        let result = SkillCatalogResultPayload(
+            clientRequestID: request.clientRequestID,
+            ok: true,
+            errorMessage: nil,
+            plugins: plugins
+        )
+        await MobileSyncService.shared.send(.skillCatalogResult(result), toHex: fromHex)
+    }
+
+    private func handleMobileSkillMutationRequest(_ request: SkillMutationRequestPayload, fromHex: String) async {
+        let catalog = await marketplace.fetchCatalog()
+        guard let plugin = catalog.first(where: { $0.id == request.pluginID }) else {
+            let result = SkillMutationResultPayload(
+                clientRequestID: request.clientRequestID,
+                operation: request.operation,
+                pluginID: request.pluginID,
+                ok: false,
+                errorMessage: "Skill not found in the marketplace catalog.",
+                plugins: await mobileSkillPlugins()
+            )
+            await MobileSyncService.shared.send(.skillMutationResult(result), toHex: fromHex)
+            return
+        }
+
+        var ok = true
+        var errorMessage: String?
+        do {
+            switch request.operation {
+            case .install:
+                try await marketplace.installPlugin(plugin)
+                marketplaceInstalledNames.insert(plugin.name)
+                marketplacePluginStates[plugin.id] = .installed
+            case .uninstall:
+                try await marketplace.uninstallPlugin(plugin)
+                marketplaceInstalledNames.remove(plugin.name)
+                marketplacePluginStates[plugin.id] = .notInstalled
+            }
+        } catch {
+            ok = false
+            errorMessage = error.localizedDescription
+            logger.error("[MobileSync] skill mutation failed plugin=\(plugin.name, privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
+
+        if ok {
+            let verb = request.operation == .install ? "installed" : "removed"
+            await NotificationService.shared.postRemoteConfigChanged(
+                title: "Skill \(verb) remotely",
+                body: plugin.name
+            )
+        }
+
+        let result = SkillMutationResultPayload(
+            clientRequestID: request.clientRequestID,
+            operation: request.operation,
+            pluginID: request.pluginID,
+            ok: ok,
+            errorMessage: errorMessage,
+            plugins: await mobileSkillPlugins()
+        )
+        await MobileSyncService.shared.send(.skillMutationResult(result), toHex: fromHex)
+    }
+
+    private func mobileACPRegistryAgents() -> [MobileACPRegistryAgent] {
+        let installedRegistryIDs = Set(acpClients.compactMap(\.registryId))
+        return (acpRegistry?.agents ?? []).map { agent in
+            MobileACPRegistryAgent(
+                id: agent.id,
+                name: agent.name,
+                version: agent.version,
+                summary: agent.description,
+                authors: agent.authors ?? [],
+                license: agent.license,
+                website: agent.website,
+                iconURL: agent.icon,
+                isInstalled: installedRegistryIDs.contains(agent.id),
+                hasBinary: agent.distribution.binary?[ACPPlatform.current] != nil,
+                hasNpx: agent.distribution.npx != nil,
+                hasUvx: agent.distribution.uvx != nil
+            )
+        }
+    }
+
+    private func mobileACPClients() -> [MobileACPClient] {
+        acpClients.map { spec in
+            MobileACPClient(
+                id: spec.id,
+                registryId: spec.registryId,
+                displayName: spec.displayName,
+                enabled: spec.enabled,
+                launchKind: spec.launch.displayKind,
+                modelCount: spec.models.count,
+                iconURL: spec.iconURL
+            )
+        }
+    }
+
+    private func handleMobileACPRegistryRequest(_ request: ACPRegistryRequestPayload, fromHex: String) async {
+        await refreshACPRegistry(forceRefresh: request.forceRefresh)
+        let ok = acpRegistry != nil
+        let result = ACPRegistryResultPayload(
+            clientRequestID: request.clientRequestID,
+            ok: ok,
+            errorMessage: ok ? nil : "Could not load the ACP agent registry.",
+            registryAgents: mobileACPRegistryAgents(),
+            installedClients: mobileACPClients()
+        )
+        await MobileSyncService.shared.send(.acpRegistryResult(result), toHex: fromHex)
+    }
+
+    private func handleMobileACPMutationRequest(_ request: ACPMutationRequestPayload, fromHex: String) async {
+        var ok = true
+        var errorMessage: String?
+        var bannerTitle: String?
+        var bannerBody: String?
+        do {
+            switch request.operation {
+            case .install:
+                guard let agentID = request.registryAgentID else {
+                    throw MobileRemoteConfigError.invalidRequest("Missing registry agent id.")
+                }
+                if acpRegistry == nil { await refreshACPRegistry() }
+                guard let agent = acpRegistry?.agents.first(where: { $0.id == agentID }) else {
+                    throw MobileRemoteConfigError.invalidRequest("Agent not found in the registry.")
+                }
+                let spec = try await installACPClient(from: agent)
+                addACPClient(spec)
+                bannerTitle = "ACP agent installed remotely"
+                bannerBody = agent.name
+            case .uninstall:
+                guard let clientID = request.clientID,
+                      let client = acpClients.first(where: { $0.id == clientID })
+                else {
+                    throw MobileRemoteConfigError.invalidRequest("Installed client not found.")
+                }
+                removeACPClient(id: clientID)
+                bannerTitle = "ACP agent removed remotely"
+                bannerBody = client.displayName
+            case .setEnabled:
+                guard let clientID = request.clientID,
+                      let enabled = request.enabled,
+                      var client = acpClients.first(where: { $0.id == clientID })
+                else {
+                    throw MobileRemoteConfigError.invalidRequest("Installed client not found.")
+                }
+                client.enabled = enabled
+                updateACPClient(client)
+                bannerTitle = "ACP agent \(enabled ? "enabled" : "disabled") remotely"
+                bannerBody = client.displayName
+            }
+        } catch {
+            ok = false
+            errorMessage = error.localizedDescription
+            logger.error("[MobileSync] acp mutation failed operation=\(request.operation.rawValue, privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
+
+        if ok, let bannerTitle, let bannerBody {
+            await NotificationService.shared.postRemoteConfigChanged(title: bannerTitle, body: bannerBody)
+        }
+
+        let result = ACPMutationResultPayload(
+            clientRequestID: request.clientRequestID,
+            operation: request.operation,
+            ok: ok,
+            errorMessage: errorMessage,
+            registryAgents: mobileACPRegistryAgents(),
+            installedClients: mobileACPClients()
+        )
+        await MobileSyncService.shared.send(.acpMutationResult(result), toHex: fromHex)
+    }
+
+    private func mobileMCPServer(_ record: MCPServerRecord) -> MobileMCPServer {
+        let env = record.env
+            .sorted { $0.key < $1.key }
+            .map { MobileMCPKeyValue(key: $0.key, value: $0.value) }
+        let headers = record.headers
+            .sorted { $0.key < $1.key }
+            .map { MobileMCPKeyValue(key: $0.key, value: $0.value) }
+        let endpoint: String
+        if record.transport == .stdio {
+            endpoint = ([record.command ?? ""] + record.args)
+                .filter { !$0.isEmpty }
+                .joined(separator: " ")
+        } else {
+            endpoint = record.url ?? ""
+        }
+        return MobileMCPServer(
+            name: record.name,
+            transport: record.transport.rawValue,
+            url: record.url,
+            command: record.command,
+            args: record.args,
+            env: env,
+            headers: headers,
+            isGloballyEnabled: record.isGloballyEnabled,
+            endpoint: endpoint
+        )
+    }
+
+    private func mobileMCPServers() async throws -> [MobileMCPServer] {
+        try await mcp.globalRecords().map { mobileMCPServer($0) }
+    }
+
+    private func mcpServerSpec(from server: MobileMCPServer) -> MCPServerSpec {
+        MCPServerSpec(
+            name: server.name,
+            transport: MCPTransport(rawValue: server.transport) ?? .stdio,
+            url: server.url ?? "",
+            headers: server.headers.map { MCPKeyValue(key: $0.key, value: $0.value) },
+            command: server.command ?? "",
+            args: server.args,
+            env: server.env.map { MCPKeyValue(key: $0.key, value: $0.value) }
+        )
+    }
+
+    private func handleMobileMCPConfigRequest(_ request: MCPConfigRequestPayload, fromHex: String) async {
+        do {
+            let servers = try await mobileMCPServers()
+            let result = MCPConfigResultPayload(
+                clientRequestID: request.clientRequestID,
+                ok: true,
+                errorMessage: nil,
+                servers: servers
+            )
+            await MobileSyncService.shared.send(.mcpConfigResult(result), toHex: fromHex)
+        } catch {
+            let result = MCPConfigResultPayload(
+                clientRequestID: request.clientRequestID,
+                ok: false,
+                errorMessage: error.localizedDescription,
+                servers: []
+            )
+            await MobileSyncService.shared.send(.mcpConfigResult(result), toHex: fromHex)
+        }
+    }
+
+    private func handleMobileMCPMutationRequest(_ request: MCPMutationRequestPayload, fromHex: String) async {
+        var ok = true
+        var errorMessage: String?
+        var bannerTitle: String?
+        do {
+            switch request.operation {
+            case .add:
+                guard let server = request.server else {
+                    throw MobileRemoteConfigError.invalidRequest("Missing server definition.")
+                }
+                try await mcp.add(spec: mcpServerSpec(from: server), scope: .user, projectPath: nil)
+                bannerTitle = "MCP server saved remotely"
+            case .remove:
+                try await mcp.remove(name: request.serverName, scope: .user)
+                bannerTitle = "MCP server removed remotely"
+            case .setEnabled:
+                guard let enabled = request.enabled else {
+                    throw MobileRemoteConfigError.invalidRequest("Missing enabled flag.")
+                }
+                try await mcp.setGlobalEnabled(name: request.serverName, enabled: enabled)
+                bannerTitle = "MCP server \(enabled ? "enabled" : "disabled") remotely"
+            }
+            await refreshMCPServers()
+        } catch {
+            ok = false
+            errorMessage = error.localizedDescription
+            logger.error("[MobileSync] mcp mutation failed server=\(request.serverName, privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
+
+        if ok, let bannerTitle {
+            await NotificationService.shared.postRemoteConfigChanged(title: bannerTitle, body: request.serverName)
+        }
+
+        var servers: [MobileMCPServer] = []
+        do {
+            servers = try await mobileMCPServers()
+        } catch {
+            logger.error("[MobileSync] failed reading mcp servers for reply: \(error.localizedDescription, privacy: .public)")
+        }
+        let result = MCPMutationResultPayload(
+            clientRequestID: request.clientRequestID,
+            operation: request.operation,
+            serverName: request.serverName,
+            ok: ok,
+            errorMessage: errorMessage,
+            servers: servers
+        )
+        await MobileSyncService.shared.send(.mcpMutationResult(result), toHex: fromHex)
     }
 
     private func mobileFolderTreeRoot(for request: FolderTreeRequestPayload) throws -> RemoteFolderNode {
@@ -3370,6 +3780,9 @@ final class AppState {
             isLoggedIn = true
             _ = await github.loadToken()
         }
+
+        customRepos = await persistence.loadCustomRepos()
+        marketplaceCustomSources = await marketplace.customSources()
 
         // Sidebar threads are now sourced from the local SwiftData store.
         // CLI session files are no longer surfaced in the sidebar list — the
@@ -5940,6 +6353,50 @@ final class AppState {
         await addAndSelectProject(name: repo.name, path: clonePath, gitHubRepo: repo.fullName, in: window)
     }
 
+    func loadCustomRepos() async {
+        customRepos = await persistence.loadCustomRepos()
+    }
+
+    func addCustomRepo(url: String, name: String, in window: WindowState) async throws {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let clonePath = "\(home)/RxCode/\(name)"
+        let fm = FileManager.default
+        if !fm.fileExists(atPath: "\(home)/RxCode") {
+            try fm.createDirectory(atPath: "\(home)/RxCode", withIntermediateDirectories: true)
+        }
+        if fm.fileExists(atPath: clonePath) {
+            throw NSError(domain: "RxCode", code: 1, userInfo: [NSLocalizedDescriptionKey: "A folder named '\(name)' already exists in ~/RxCode"])
+        }
+        try await github.cloneRepo(from: url, to: clonePath)
+        let repo = CustomRepo(name: name, cloneURL: url)
+        customRepos.append(repo)
+        try await persistence.saveCustomRepos(customRepos)
+        await addAndSelectProject(name: name, path: clonePath, gitHubRepo: nil, in: window)
+    }
+
+    func cloneCustomRepo(_ repo: CustomRepo, in window: WindowState) async throws {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let clonePath = "\(home)/RxCode/\(repo.name)"
+        let fm = FileManager.default
+        if !fm.fileExists(atPath: "\(home)/RxCode") {
+            try fm.createDirectory(atPath: "\(home)/RxCode", withIntermediateDirectories: true)
+        }
+        if fm.fileExists(atPath: clonePath) {
+            throw NSError(domain: "RxCode", code: 1, userInfo: [NSLocalizedDescriptionKey: "A folder named '\(repo.name)' already exists in ~/RxCode"])
+        }
+        try await github.cloneRepo(from: repo.cloneURL, to: clonePath)
+        await addAndSelectProject(name: repo.name, path: clonePath, gitHubRepo: nil, in: window)
+    }
+
+    func removeCustomRepo(_ repo: CustomRepo) async {
+        customRepos.removeAll { $0.id == repo.id }
+        do {
+            try await persistence.saveCustomRepos(customRepos)
+        } catch {
+            logger.error("Failed to save custom repos: \(error.localizedDescription)")
+        }
+    }
+
     // MARK: - View Convenience API
 
     func startNewChat(in window: WindowState) {
@@ -6953,6 +7410,7 @@ final class AppState {
 
     func loadMarketplace(forceRefresh: Bool = false) async {
         marketplaceLoading = true
+        marketplaceSourceError = nil
         defer { marketplaceLoading = false }
 
         async let catalog = marketplace.fetchCatalog(forceRefresh: forceRefresh)
@@ -6964,6 +7422,7 @@ final class AppState {
 
         marketplaceCatalog = fetchedCatalog
         marketplaceInstalledNames = installedNames
+        marketplaceCustomSources = await marketplace.customSources()
     }
 
     func installMarketplacePlugin(_ plugin: MarketplacePlugin) async {
@@ -6985,6 +7444,36 @@ final class AppState {
             marketplacePluginStates[plugin.id] = .notInstalled
         } catch {
             logger.error("Failed to uninstall plugin \(plugin.name): \(error.localizedDescription)")
+        }
+    }
+
+    @discardableResult
+    func addMarketplaceGitSource(url: String, ref: String?) async -> Bool {
+        marketplaceSourceError = nil
+        do {
+            _ = try await marketplace.addCustomGitSource(url: url, ref: ref)
+            marketplaceCustomSources = await marketplace.customSources()
+            await loadMarketplace(forceRefresh: true)
+            return true
+        } catch {
+            marketplaceSourceError = error.localizedDescription
+            logger.error("Failed to add marketplace Git source: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    @discardableResult
+    func removeMarketplaceGitSource(_ source: MarketplaceCustomSource) async -> Bool {
+        marketplaceSourceError = nil
+        do {
+            try await marketplace.removeCustomGitSource(source)
+            marketplaceCustomSources = await marketplace.customSources()
+            await loadMarketplace(forceRefresh: true)
+            return true
+        } catch {
+            marketplaceSourceError = error.localizedDescription
+            logger.error("Failed to remove marketplace Git source: \(error.localizedDescription)")
+            return false
         }
     }
 

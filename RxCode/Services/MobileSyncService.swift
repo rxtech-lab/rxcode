@@ -1007,6 +1007,54 @@ final class MobileSyncService: ObservableObject {
                 object: nil,
                 userInfo: ["from": inbound.fromHex, "payload": req]
             )
+        case .skillCatalogRequest(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "skill_catalog_request") else { return }
+            logger.info("[MobileSync] skill catalog requested forceRefresh=\(req.forceRefresh, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+            NotificationCenter.default.post(
+                name: .mobileSyncSkillCatalogRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": req]
+            )
+        case .skillMutationRequest(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "skill_mutation_request") else { return }
+            logger.info("[MobileSync] skill mutation requested operation=\(req.operation.rawValue, privacy: .public) plugin=\(req.pluginID, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+            NotificationCenter.default.post(
+                name: .mobileSyncSkillMutationRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": req]
+            )
+        case .acpRegistryRequest(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "acp_registry_request") else { return }
+            logger.info("[MobileSync] acp registry requested forceRefresh=\(req.forceRefresh, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+            NotificationCenter.default.post(
+                name: .mobileSyncACPRegistryRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": req]
+            )
+        case .acpMutationRequest(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "acp_mutation_request") else { return }
+            logger.info("[MobileSync] acp mutation requested operation=\(req.operation.rawValue, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+            NotificationCenter.default.post(
+                name: .mobileSyncACPMutationRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": req]
+            )
+        case .mcpConfigRequest(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "mcp_config_request") else { return }
+            logger.info("[MobileSync] mcp config requested mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+            NotificationCenter.default.post(
+                name: .mobileSyncMCPConfigRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": req]
+            )
+        case .mcpMutationRequest(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "mcp_mutation_request") else { return }
+            logger.info("[MobileSync] mcp mutation requested operation=\(req.operation.rawValue, privacy: .public) server=\(req.serverName, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+            NotificationCenter.default.post(
+                name: .mobileSyncMCPMutationRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": req]
+            )
         case .ping:
             guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "ping") else { return }
             Task { try? await client.send(.pong(PongPayload()), toHex: inbound.fromHex) }
@@ -1197,4 +1245,10 @@ extension Notification.Name {
     static let mobileSyncRunProfileMutationRequested = Notification.Name("mobileSync.runProfileMutationRequested")
     static let mobileSyncRunProfileRunRequested = Notification.Name("mobileSync.runProfileRunRequested")
     static let mobileSyncRunProfileStopRequested = Notification.Name("mobileSync.runProfileStopRequested")
+    static let mobileSyncSkillCatalogRequested = Notification.Name("mobileSync.skillCatalogRequested")
+    static let mobileSyncSkillMutationRequested = Notification.Name("mobileSync.skillMutationRequested")
+    static let mobileSyncACPRegistryRequested = Notification.Name("mobileSync.acpRegistryRequested")
+    static let mobileSyncACPMutationRequested = Notification.Name("mobileSync.acpMutationRequested")
+    static let mobileSyncMCPConfigRequested = Notification.Name("mobileSync.mcpConfigRequested")
+    static let mobileSyncMCPMutationRequested = Notification.Name("mobileSync.mcpMutationRequested")
 }

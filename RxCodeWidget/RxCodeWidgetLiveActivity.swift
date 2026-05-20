@@ -76,7 +76,7 @@ private func leadingIcon(_ state: JobState) -> String {
 private func headlineTitle(_ state: JobState) -> String {
     if let job = state.soleRunningJob { return job.title }
     if state.allDone {
-        return state.jobs.count == 1 ? "Job done" : "\(state.jobs.count) jobs done"
+        return state.jobCount == 1 ? "Job done" : "\(state.jobCount) jobs done"
     }
     return "\(state.runningCount) jobs running"
 }
@@ -147,7 +147,7 @@ private struct JobsLockScreenView: View {
             SoleJobView(job: job)
         } else if state.allDone {
             VStack(alignment: .leading, spacing: 8) {
-                Text("\(state.jobs.count) \(state.jobs.count == 1 ? "job" : "jobs") completed")
+                Text("\(state.jobCount) \(state.jobCount == 1 ? "job" : "jobs") completed")
                     .font(.subheadline.weight(.medium))
                 StepProgressBar(done: 1, total: 0, isComplete: true)
             }

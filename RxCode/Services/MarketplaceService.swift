@@ -7,6 +7,19 @@ import os
 actor MarketplaceService {
 
     private let logger = Logger(subsystem: "com.claudework", category: "MarketplaceService")
+    enum CustomSourceError: LocalizedError {
+        case invalidGitHubURL
+        case duplicateSource
+
+        var errorDescription: String? {
+            switch self {
+            case .invalidGitHubURL:
+                return "Enter a GitHub repository URL such as https://github.com/owner/repo."
+            case .duplicateSource:
+                return "This Git source is already included."
+            }
+        }
+    }
 
     /// Cached catalog with TTL.
     private var cachedCatalog: [MarketplacePlugin] = []
@@ -40,11 +53,17 @@ actor MarketplaceService {
             group.addTask {
                 await self.fetchOpenAISkills()
             }
-            for source in Self.sourceRepos {
+            let customSources = loadCustomSources()
+            let repoSources = Self.sourceRepos.map {
+                (source: MarketplaceSource(owner: $0.owner, repo: $0.repo), defaultCategory: $0.defaultCategory)
+            } + customSources.map {
+                (source: $0.source, defaultCategory: $0.defaultCategory)
+            }
+
+            for source in repoSources {
                 group.addTask {
                     await self.fetchRepoPlugins(
-                        owner: source.owner,
-                        repo: source.repo,
+                        source: source.source,
                         defaultCategory: source.defaultCategory
                     )
                 }
@@ -118,8 +137,9 @@ actor MarketplaceService {
 
     // MARK: - Fetch Repository
 
-    private func fetchRepoPlugins(owner: String, repo: String, defaultCategory: String) async -> [MarketplacePlugin] {
-        let catalogURL = "https://raw.githubusercontent.com/\(owner)/\(repo)/main/.claude-plugin/marketplace.json"
+    private func fetchRepoPlugins(source: MarketplaceSource, defaultCategory: String) async -> [MarketplacePlugin] {
+        let ref = source.ref?.isEmpty == false ? source.ref! : "main"
+        let catalogURL = "https://raw.githubusercontent.com/\(source.owner)/\(source.repo)/\(ref)/.claude-plugin/marketplace.json"
         guard let url = URL(string: catalogURL) else { return [] }
 
         do {
@@ -128,16 +148,16 @@ actor MarketplaceService {
                   httpResponse.statusCode == 200 else {
                 return []
             }
-            return parseMarketplaceCatalog(data: data, owner: owner, repo: repo, defaultCategory: defaultCategory)
+            return parseMarketplaceCatalog(data: data, source: source, defaultCategory: defaultCategory)
         } catch {
-            logger.warning("Failed to fetch catalog from \(owner)/\(repo): \(error.localizedDescription)")
+            logger.warning("Failed to fetch catalog from \(source.codexSource, privacy: .public): \(error.localizedDescription)")
             return []
         }
     }
 
     // MARK: - Parse Catalog
 
-    private func parseMarketplaceCatalog(data: Data, owner: String, repo: String, defaultCategory: String) -> [MarketplacePlugin] {
+    private func parseMarketplaceCatalog(data: Data, source: MarketplaceSource, defaultCategory: String) -> [MarketplacePlugin] {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let marketplaceName = json["name"] as? String,
               let plugins = json["plugins"] as? [[String: Any]] else {
@@ -145,9 +165,9 @@ actor MarketplaceService {
         }
 
         let ownerInfo = json["owner"] as? [String: Any]
-        let defaultAuthor = ownerInfo?["name"] as? String ?? owner
+        let defaultAuthor = ownerInfo?["name"] as? String ?? source.owner
 
-        let marketplaceSource = MarketplaceSource(owner: owner, repo: repo)
+        let marketplaceSource = source
 
         return plugins.compactMap { entry -> MarketplacePlugin? in
             guard let name = entry["name"] as? String else { return nil }
@@ -197,6 +217,95 @@ actor MarketplaceService {
                 skillPaths: skillPaths
             )
         }
+    }
+
+    // MARK: - Custom Git Sources
+
+    func customSources() -> [MarketplaceCustomSource] {
+        loadCustomSources()
+    }
+
+    func addCustomGitSource(url rawURL: String, ref rawRef: String? = nil) throws -> MarketplaceCustomSource {
+        let source = try parseGitHubSource(url: rawURL, ref: rawRef)
+        let normalizedSource = MarketplaceCustomSource(source: source)
+        var config = try loadConfig()
+
+        let builtInSources = Self.sourceRepos.map { MarketplaceSource(owner: $0.owner, repo: $0.repo) }
+        if builtInSources.contains(where: { sameSource($0, source) }) ||
+            config.customSources.contains(where: { sameSource($0.source, source) }) {
+            throw CustomSourceError.duplicateSource
+        }
+
+        config.customSources.append(normalizedSource)
+        try saveConfig(config)
+        cachedCatalog = []
+        cacheDate = nil
+        return normalizedSource
+    }
+
+    func removeCustomGitSource(_ source: MarketplaceCustomSource) throws {
+        var config = try loadConfig()
+        config.customSources.removeAll { $0.id == source.id }
+        try saveConfig(config)
+        cachedCatalog = []
+        cacheDate = nil
+    }
+
+    private func loadCustomSources() -> [MarketplaceCustomSource] {
+        (try? loadConfig().customSources) ?? []
+    }
+
+    private func parseGitHubSource(url rawURL: String, ref rawRef: String?) throws -> MarketplaceSource {
+        let trimmed = rawURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let ref = rawRef?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let explicitRef = ref?.isEmpty == false ? ref : nil
+
+        if let match = regexMatch(trimmed, #"^git@github\.com:([^/\s]+)/([^/\s]+?)(?:\.git)?/?$"#) {
+            return MarketplaceSource(owner: match[0], repo: match[1], ref: explicitRef)
+        }
+
+        if let match = regexMatch(trimmed, #"^https?://github\.com/([^/\s]+)/([^/\s]+?)(?:\.git)?/?$"#) {
+            return MarketplaceSource(owner: match[0], repo: match[1], ref: explicitRef)
+        }
+
+        if let match = regexMatch(trimmed, #"^https?://github\.com/([^/\s]+)/([^/\s]+)/tree/([^/\s]+)(?:/.*)?$"#) {
+            return MarketplaceSource(owner: match[0], repo: match[1], ref: explicitRef ?? match[2])
+        }
+
+        if let match = regexMatch(trimmed, #"^([^/\s]+)/([^/\s@]+)(?:@([^/\s]+))?$"#) {
+            let parsedRef = match.count > 2 && !match[2].isEmpty ? match[2] : nil
+            return MarketplaceSource(owner: match[0], repo: match[1], ref: explicitRef ?? parsedRef)
+        }
+
+        throw CustomSourceError.invalidGitHubURL
+    }
+
+    private func regexMatch(_ value: String, _ pattern: String) -> [String]? {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let range = NSRange(value.startIndex..<value.endIndex, in: value)
+        guard let match = regex.firstMatch(in: value, range: range),
+              match.range.location != NSNotFound else {
+            return nil
+        }
+        return (1..<match.numberOfRanges).map { index in
+            let range = match.range(at: index)
+            guard range.location != NSNotFound,
+                  let swiftRange = Range(range, in: value) else {
+                return ""
+            }
+            return String(value[swiftRange])
+        }
+    }
+
+    private func sameSource(_ lhs: MarketplaceSource, _ rhs: MarketplaceSource) -> Bool {
+        lhs.owner.lowercased() == rhs.owner.lowercased() &&
+            lhs.repo.lowercased() == rhs.repo.lowercased() &&
+            normalizedRef(lhs.ref) == normalizedRef(rhs.ref)
+    }
+
+    private func normalizedRef(_ ref: String?) -> String {
+        let trimmed = ref?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed?.isEmpty == false ? trimmed! : "main"
     }
 
     // MARK: - Installation

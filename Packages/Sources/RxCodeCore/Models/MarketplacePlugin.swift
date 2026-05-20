@@ -83,6 +83,27 @@ public struct MarketplaceSource: Codable, Sendable, Hashable {
     }
 }
 
+public struct MarketplaceCustomSource: Codable, Sendable, Hashable, Identifiable {
+    public var id: String { source.codexSource }
+    public var source: MarketplaceSource
+    public var defaultCategory: String
+    public var addedAt: Date
+
+    public init(
+        source: MarketplaceSource,
+        defaultCategory: String = "custom",
+        addedAt: Date = Date()
+    ) {
+        self.source = source
+        self.defaultCategory = defaultCategory
+        self.addedAt = addedAt
+    }
+
+    public var displayName: String {
+        source.codexSource
+    }
+}
+
 public struct MarketplacePluginRecord: Codable, Sendable, Hashable, Identifiable {
     public var id: String { "\(marketplace)/\(name)" }
     public var name: String
@@ -131,10 +152,29 @@ public struct MarketplacePluginRecord: Codable, Sendable, Hashable, Identifiable
 public struct MarketplacePluginConfiguration: Codable, Sendable, Equatable {
     public var version: Int
     public var plugins: [MarketplacePluginRecord]
+    public var customSources: [MarketplaceCustomSource]
 
-    public init(version: Int = 1, plugins: [MarketplacePluginRecord] = []) {
+    public init(
+        version: Int = 2,
+        plugins: [MarketplacePluginRecord] = [],
+        customSources: [MarketplaceCustomSource] = []
+    ) {
         self.version = version
         self.plugins = plugins
+        self.customSources = customSources
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case version
+        case plugins
+        case customSources
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
+        plugins = try container.decodeIfPresent([MarketplacePluginRecord].self, forKey: .plugins) ?? []
+        customSources = try container.decodeIfPresent([MarketplaceCustomSource].self, forKey: .customSources) ?? []
     }
 }
 

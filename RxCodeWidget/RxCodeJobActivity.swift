@@ -74,14 +74,33 @@ struct RxCodeJobActivityAttributes: ActivityAttributes {
         /// `Date` so a pushed content-state decodes without a date strategy.
         var updatedAt: Double
 
+        /// Client-side normalized job list keyed by the chat-session id. APNs
+        /// updates can race a foreground local start, so renderers should read
+        /// this list instead of the raw wire array.
+        var deduplicatedJobs: [Job] {
+            var ordered: [Job] = []
+            var indicesByID: [String: Int] = [:]
+            for job in jobs {
+                if let index = indicesByID[job.id] {
+                    ordered[index] = job
+                } else {
+                    indicesByID[job.id] = ordered.count
+                    ordered.append(job)
+                }
+            }
+            return ordered
+        }
+
         /// Jobs still being worked on.
-        var runningJobs: [Job] { jobs.filter { $0.phase == .running } }
+        var runningJobs: [Job] { deduplicatedJobs.filter { $0.phase == .running } }
         /// Jobs that have finished.
-        var doneJobs: [Job] { jobs.filter { $0.phase == .done } }
+        var doneJobs: [Job] { deduplicatedJobs.filter { $0.phase == .done } }
         /// Count of jobs still running — the headline number for the UI.
         var runningCount: Int { runningJobs.count }
+        /// Count of unique jobs represented by this activity.
+        var jobCount: Int { deduplicatedJobs.count }
         /// `true` once every tracked job has finished.
-        var allDone: Bool { !jobs.isEmpty && runningJobs.isEmpty }
+        var allDone: Bool { !deduplicatedJobs.isEmpty && runningJobs.isEmpty }
         /// The single job to feature when exactly one is running, else `nil`.
         var soleRunningJob: Job? {
             runningJobs.count == 1 ? runningJobs.first : nil

@@ -183,6 +183,36 @@ final class NotificationService: NSObject {
         }
     }
 
+    /// Post a local banner after a paired mobile device remotely changed the
+    /// desktop's skill / ACP / MCP configuration. Silently no-ops if the user
+    /// has not authorized notifications.
+    func postRemoteConfigChanged(title: String, body: String) async {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        switch settings.authorizationStatus {
+        case .authorized, .provisional:
+            break
+        default:
+            return
+        }
+
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+
+        let request = UNNotificationRequest(
+            identifier: "remote-config-\(UUID().uuidString)",
+            content: content,
+            trigger: nil
+        )
+
+        do {
+            try await UNUserNotificationCenter.current().add(request)
+        } catch {
+            logger.error("Failed to post remote config notification: \(error.localizedDescription)")
+        }
+    }
+
     /// Post a "response complete" notification. Silently no-ops if unauthorized.
     /// Mobile fan-out always runs; the local macOS banner is skipped when
     /// `postLocalBanner` is false (e.g. the desktop app is foregrounded).

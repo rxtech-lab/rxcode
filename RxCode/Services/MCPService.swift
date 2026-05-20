@@ -43,6 +43,14 @@ actor MCPService {
             .map { makeInfo(record: $0, projectPath: projectPath) }
     }
 
+    /// Full server records sorted by name. Unlike `list`, this exposes the
+    /// command/args/env/headers needed to render an editable form (e.g. on the
+    /// mobile MCP screen).
+    func globalRecords() async throws -> [MCPServerRecord] {
+        try loadConfig().servers
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
     func get(name: String, projectPath: String?) async throws -> MCPServerDetail {
         guard let record = try loadConfig().servers.first(where: { $0.name == name }) else {
             throw MCPError.parseFailure("MCP server '\(name)' not found")

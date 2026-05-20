@@ -17,6 +17,9 @@ struct MessageListView: View {
     @State private var readyTask: Task<Void, Never>?
     @State private var anchor = AutoScrollAnchor()
     @State private var isSessionReady = false
+    /// Tracks active scrolling so markdown rows can suspend Textual's
+    /// text-selection overlay mid-scroll (avoids per-frame layout cycles).
+    @State private var isScrollActive = false
 
     private static let log = Logger(subsystem: "com.claudework", category: "MessageListView")
     private static let bottomAnchorID = "message-list-bottom-anchor"
@@ -68,6 +71,7 @@ struct MessageListView: View {
         .contentMargins(.top, 16, for: .scrollContent)
         .scrollContentBackground(.hidden)
         .environment(\.defaultMinListRowHeight, 0)
+        .environment(\.chatListScrollActive, isScrollActive)
         .opacity(isSessionReady ? 1 : 0)
         .defaultScrollAnchor(.bottom)
         .onScrollGeometryChange(for: ScrollSample.self) { geo in
@@ -81,6 +85,11 @@ struct MessageListView: View {
             if decision == .scrollToBottom {
                 scrollToBottomDebounced(proxy)
             }
+        }
+        .onScrollPhaseChange { _, newPhase in
+            // Suspend Textual text selection while the list is in motion and
+            // restore it the instant scrolling settles back to `.idle`.
+            isScrollActive = newPhase != .idle
         }
         .task(id: windowState.currentSessionId) {
             let sid = windowState.currentSessionId ?? "<nil>"

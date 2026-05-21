@@ -40,8 +40,6 @@ struct MobileSettingsView: View {
                 if state.isPaired {
                     desktopConfigurationSection
                 }
-
-                pairNewSection
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -128,6 +126,12 @@ struct MobileSettingsView: View {
             ForEach(state.pairedDesktops) { desktop in
                 pairedMacRow(desktop)
             }
+            Button {
+                showPairingSheet = true
+            } label: {
+                Label("Pair New Mac", systemImage: "plus.circle")
+            }
+            .popoverTip(MobileTips.PairingTip(), arrowEdge: .top)
             HStack {
                 Text("Connection")
                 Spacer()
@@ -141,53 +145,54 @@ struct MobileSettingsView: View {
     }
 
     private func pairedMacRow(_ desktop: PairedDesktop) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: "desktopcomputer")
-                .frame(width: 22)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(desktop.displayName.isEmpty ? "Unknown Mac" : desktop.displayName)
-                    .foregroundStyle(.primary)
-                HStack(spacing: 6) {
-                    Text("Paired \(desktop.pairedAt, format: .relative(presentation: .named))")
-                    if let relay = desktop.relayDisplayName {
-                        Text("•")
-                        Label(relay, systemImage: "antenna.radiowaves.left.and.right")
-                            .labelStyle(.titleOnly)
-                    }
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        Button {
+            if desktop.id != state.activePairedDesktop?.id {
+                Task { await state.switchPairedDesktop(desktop) }
             }
-            Spacer()
-            if desktop.pubkeyHex == state.pairedDesktopPubkey {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-                    .accessibilityLabel("Active")
-            } else {
-                Button {
-                    Task { await state.switchPairedDesktop(desktop) }
-                } label: {
-                    Label("Switch", systemImage: "arrow.triangle.2.circlepath")
-                        .labelStyle(.iconOnly)
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "desktopcomputer")
+                    .frame(width: 22)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(desktop.displayName.isEmpty ? "Unknown Mac" : desktop.displayName)
+                        .foregroundStyle(.primary)
+                    HStack(spacing: 6) {
+                        Text("Paired \(desktop.pairedAt, format: .relative(presentation: .named))")
+                        if let relay = desktop.relayDisplayName {
+                            Text("•")
+                            Label(relay, systemImage: "antenna.radiowaves.left.and.right")
+                                .labelStyle(.titleOnly)
+                        }
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.borderless)
-                .accessibilityLabel("Switch to \(desktop.displayName.isEmpty ? "Mac" : desktop.displayName)")
+                Spacer()
+                if desktop.id == state.activePairedDesktop?.id {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                        .accessibilityLabel("Active")
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(desktop.id == state.activePairedDesktop?.id
+            ? "\(desktop.displayName.isEmpty ? "Mac" : desktop.displayName), Active"
+            : "Switch to \(desktop.displayName.isEmpty ? "Mac" : desktop.displayName)")
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button(role: .destructive) {
+                desktopPendingRemoval = desktop
+            } label: {
+                Label("Remove", systemImage: "trash")
             }
             Button {
                 renameText = desktop.displayName
                 desktopBeingRenamed = desktop
             } label: {
-                Image(systemName: "pencil")
+                Label("Rename", systemImage: "pencil")
             }
-            .buttonStyle(.borderless)
-            .accessibilityLabel("Rename \(desktop.displayName.isEmpty ? "Mac" : desktop.displayName)")
-            Button(role: .destructive) {
-                desktopPendingRemoval = desktop
-            } label: {
-                Image(systemName: "trash")
-            }
-            .buttonStyle(.borderless)
-            .accessibilityLabel("Remove \(desktop.displayName.isEmpty ? "Mac" : desktop.displayName)")
+            .tint(.orange)
         }
     }
 
@@ -218,16 +223,7 @@ struct MobileSettingsView: View {
         }
     }
 
-    private var pairNewSection: some View {
-        Section {
-            Button {
-                showPairingSheet = true
-            } label: {
-                Label("Pair New Mac", systemImage: "plus.circle")
-            }
-            .popoverTip(MobileTips.PairingTip(), arrowEdge: .top)
-        }
-    }
+
 
     /// Agent rate-limit usage mirrored from the paired desktop. Renders one
     /// section per provider that reported usage; falls back to a hint when the

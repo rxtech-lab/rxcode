@@ -133,15 +133,7 @@ struct GlassThreadCard: View {
     // MARK: - Streaming Indicator
     
     private var streamingIndicator: some View {
-        HStack(spacing: 3) {
-            ForEach(0..<3, id: \.self) { index in
-                Circle()
-                    .fill(ClaudeTheme.accent)
-                    .frame(width: 4, height: 4)
-                    .opacity(0.6)
-            }
-        }
-        .modifier(PulsingAnimation())
+        StreamingIndicatorView()
     }
     
     // MARK: - Helpers
@@ -205,33 +197,91 @@ private struct GlassCardButtonStyle: ButtonStyle {
     }
 }
 
-// MARK: - Pulsing Animation
+// MARK: - Streaming Indicator View
 
-private struct PulsingAnimation: ViewModifier {
-    @State private var isAnimating = false
+/// An animated streaming indicator with bouncing dots.
+/// Shows clearly when a thread is actively processing.
+struct StreamingIndicatorView: View {
+    @State private var animatingDots = [false, false, false]
     
-    func body(content: Content) -> some View {
-        content
-            .opacity(isAnimating ? 0.4 : 1.0)
-            .animation(
-                .easeInOut(duration: 0.8)
-                .repeatForever(autoreverses: true),
-                value: isAnimating
-            )
-            .onAppear {
-                isAnimating = true
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(0..<3, id: \.self) { index in
+                Circle()
+                    .fill(ClaudeTheme.accent)
+                    .frame(width: 6, height: 6)
+                    .scaleEffect(animatingDots[index] ? 1.0 : 0.5)
+                    .opacity(animatingDots[index] ? 1.0 : 0.4)
             }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background {
+            Capsule()
+                .fill(ClaudeTheme.accent.opacity(0.15))
+        }
+        .onAppear {
+            startAnimation()
+        }
+    }
+    
+    private func startAnimation() {
+        for index in 0..<3 {
+            withAnimation(
+                .easeInOut(duration: 0.4)
+                .repeatForever(autoreverses: true)
+                .delay(Double(index) * 0.15)
+            ) {
+                animatingDots[index] = true
+            }
+        }
     }
 }
 
-// MARK: - Preview
+#Preview("Streaming Indicator") {
+    VStack(spacing: 20) {
+        StreamingIndicatorView()
+        
+        HStack {
+            Text("Processing...")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            StreamingIndicatorView()
+        }
+    }
+    .padding()
+}
 
-#Preview {
+// MARK: - Thread Card Previews
+
+#Preview("Thread States") {
     ScrollView {
         VStack(spacing: 12) {
+            // Active streaming thread - most prominent
             GlassThreadCard(
                 session: SessionSummary(
                     id: "1",
+                    projectId: UUID(),
+                    title: "Building new feature module",
+                    updatedAt: Date(),
+                    isPinned: false,
+                    isArchived: false,
+                    isStreaming: true,
+                    attention: nil,
+                    todos: [
+                        TodoItem(id: 1, content: "Create models", activeForm: "Creating models", status: .completed),
+                        TodoItem(id: 2, content: "Add views", activeForm: "Adding views", status: .inProgress),
+                        TodoItem(id: 3, content: "Write tests", activeForm: "Writing tests", status: .pending)
+                    ],
+                    hasUncheckedCompletion: false
+                ),
+                isSelected: false
+            )
+            
+            // Selected thread with todos
+            GlassThreadCard(
+                session: SessionSummary(
+                    id: "2",
                     projectId: UUID(),
                     title: "Implement Liquid Glass UI",
                     updatedAt: Date().addingTimeInterval(-300),
@@ -241,40 +291,76 @@ private struct PulsingAnimation: ViewModifier {
                     attention: nil,
                     todos: [
                         TodoItem(id: 1, content: "Task 1", activeForm: "Doing task 1", status: .completed),
-                        TodoItem(id: 2, content: "Task 2", activeForm: "Doing task 2", status: .inProgress),
-                        TodoItem(id: 3, content: "Task 3", activeForm: "Doing task 3", status: .pending)
+                        TodoItem(id: 2, content: "Task 2", activeForm: "Doing task 2", status: .completed),
+                        TodoItem(id: 3, content: "Task 3", activeForm: "Doing task 3", status: .completed)
                     ],
                     hasUncheckedCompletion: false
                 ),
                 isSelected: true
             )
             
+            // Thread needing attention (permission)
             GlassThreadCard(
                 session: SessionSummary(
-                    id: "2",
+                    id: "3",
                     projectId: UUID(),
-                    title: "Fix scrolling performance",
-                    updatedAt: Date().addingTimeInterval(-3600),
+                    title: "Deploy to production",
+                    updatedAt: Date().addingTimeInterval(-120),
                     isPinned: false,
                     isArchived: false,
-                    isStreaming: true,
-                    attention: nil,
+                    isStreaming: false,
+                    attention: .permission,
                     todos: nil,
                     hasUncheckedCompletion: false
                 ),
                 isSelected: false
             )
             
+            // Thread needing attention (question)
             GlassThreadCard(
                 session: SessionSummary(
-                    id: "3",
+                    id: "4",
+                    projectId: UUID(),
+                    title: "Code review assistance",
+                    updatedAt: Date().addingTimeInterval(-600),
+                    isPinned: false,
+                    isArchived: false,
+                    isStreaming: false,
+                    attention: .question,
+                    todos: nil,
+                    hasUncheckedCompletion: false
+                ),
+                isSelected: false
+            )
+            
+            // Completed thread with unchecked completion
+            GlassThreadCard(
+                session: SessionSummary(
+                    id: "5",
+                    projectId: UUID(),
+                    title: "Fix scrolling performance",
+                    updatedAt: Date().addingTimeInterval(-3600),
+                    isPinned: false,
+                    isArchived: false,
+                    isStreaming: false,
+                    attention: nil,
+                    todos: nil,
+                    hasUncheckedCompletion: true
+                ),
+                isSelected: false
+            )
+            
+            // Regular idle thread
+            GlassThreadCard(
+                session: SessionSummary(
+                    id: "6",
                     projectId: UUID(),
                     title: "Review pull request",
                     updatedAt: Date().addingTimeInterval(-86400),
                     isPinned: false,
                     isArchived: false,
                     isStreaming: false,
-                    attention: .permission,
+                    attention: nil,
                     todos: nil,
                     hasUncheckedCompletion: false
                 ),

@@ -26,6 +26,7 @@ struct GroupedBriefing: Identifiable {
 struct MobileBriefingView: View {
     @EnvironmentObject private var state: MobileAppState
     @Namespace private var glassNamespace
+    var onCloseChat: () -> Void = {}
 
     /// Selected project ids for filtering. Empty = show every project.
     @State private var selectedProjectIds: Set<UUID> = []
@@ -84,8 +85,9 @@ struct MobileBriefingView: View {
             MobileBriefingDetailView(groupKey: key)
         }
         .navigationDestination(for: String.self) { sessionID in
-            MobileChatView(sessionID: sessionID)
+            MobileChatView(sessionID: sessionID, onClose: onCloseChat)
                 .id(sessionID)
+                .toolbar(.hidden, for: .tabBar)
                 .task(id: sessionID) {
                     if !MobileDraftSessionID.isDraft(sessionID) {
                         await state.subscribe(to: sessionID)

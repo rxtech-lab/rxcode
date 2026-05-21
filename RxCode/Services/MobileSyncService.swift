@@ -105,9 +105,14 @@ final class MobileSyncService: ObservableObject {
     /// Resolves a project's display name for Live Activity attributes. Set by
     /// `AppState` after initialization; `nil` before that.
     var projectNameResolver: (@MainActor (UUID) -> String?)?
-    /// Supplies the current Claude Code / Codex 5-hour usage for the widget
+    /// Supplies the current Claude Code / Codex usage for the widget
     /// background push. Set by `AppState`; `nil` before that.
-    var usageSnapshotProvider: (@MainActor () -> (cc: Double?, codex: Double?))?
+    var usageSnapshotProvider: (@MainActor () -> (
+        cc: Double?,
+        ccWeekly: Double?,
+        codex: Double?,
+        codexWeekly: Double?
+    ))?
 
     /// Pure state machine behind the aggregate Live Activity — the tracked-job
     /// list and the streaming-session set. The folding logic lives here so it
@@ -295,6 +300,16 @@ final class MobileSyncService: ObservableObject {
         // Notify mobile and clean up peer connection (best-effort, ignore failures)
         try? await client.send(.unpair(UnpairPayload(reason: "desktop")), toHex: pubkeyHex)
         await client.removePeer(pubkeyHex)
+    }
+
+    /// Rename a paired device locally.
+    func renameDevice(_ device: PairedDevice, to newName: String) {
+        guard let index = pairedDevices.firstIndex(where: { $0.pubkeyHex == device.pubkeyHex }) else { return }
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        pairedDevices[index].displayName = trimmed
+        savePairedDevices()
+        logger.info("[MobileSync] renamed device mobileKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public) newName=\(trimmed, privacy: .public)")
     }
 
     // MARK: - Notification fan-out

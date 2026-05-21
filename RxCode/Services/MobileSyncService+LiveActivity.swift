@@ -306,7 +306,9 @@ extension MobileSyncService {
         let snapshot = WidgetSnapshotPayload(
             jobs: jobCount,
             cc: usage?.cc,
+            ccWeekly: usage?.ccWeekly,
             codex: usage?.codex,
+            codexWeekly: usage?.codexWeekly,
             updatedAt: Date().timeIntervalSince1970
         )
         for device in devices {

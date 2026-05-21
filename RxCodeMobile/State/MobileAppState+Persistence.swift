@@ -84,11 +84,25 @@ extension MobileAppState {
                 pubkeyHex: desktop.pubkeyHex,
                 displayName: desktop.displayName,
                 pairedAt: existing.pairedAt,
-                lastSeen: desktop.lastSeen ?? existing.lastSeen
+                lastSeen: desktop.lastSeen ?? existing.lastSeen,
+                relayURL: desktop.relayURL ?? existing.relayURL
             )
         } else {
             pairedDesktops.append(desktop)
         }
+    }
+
+    /// Rename a paired desktop locally.
+    func renamePairedDesktop(_ desktop: PairedDesktop, to newName: String) {
+        guard let index = pairedDesktops.firstIndex(where: { $0.pubkeyHex == desktop.pubkeyHex }) else { return }
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        pairedDesktops[index].displayName = trimmed
+        if desktop.pubkeyHex == pairedDesktopPubkey {
+            pairedDesktopName = trimmed
+        }
+        savePairedDesktops()
+        logger.info("[MobileSync] renamed desktop desktopKey=\(String(desktop.pubkeyHex.prefix(12)), privacy: .public) newName=\(trimmed, privacy: .public)")
     }
 
     func acceptsActiveDesktopPayload(from pubkeyHex: String, type: String) -> Bool {

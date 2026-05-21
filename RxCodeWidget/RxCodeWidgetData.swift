@@ -20,13 +20,22 @@ struct RxCodeWidgetData: Codable, Equatable {
     var jobCount: Int
     /// Claude Code 5-hour utilization, 0...100. `nil` when not signed in.
     var ccUsagePercent: Double?
+    /// Claude Code 7-day utilization, 0...100. `nil` when not signed in.
+    var ccWeeklyUsagePercent: Double?
     /// Codex 5-hour utilization, 0...100. `nil` when not signed in.
     var codexUsagePercent: Double?
+    /// Codex 7-day utilization, 0...100. `nil` when not signed in.
+    var codexWeeklyUsagePercent: Double?
     /// When the desktop produced this snapshot, unix seconds.
     var updatedAt: Double
 
     static let empty = RxCodeWidgetData(
-        jobCount: 0, ccUsagePercent: nil, codexUsagePercent: nil, updatedAt: 0
+        jobCount: 0,
+        ccUsagePercent: nil,
+        ccWeeklyUsagePercent: nil,
+        codexUsagePercent: nil,
+        codexWeeklyUsagePercent: nil,
+        updatedAt: 0
     )
 }
 

@@ -332,7 +332,9 @@ extension MobileAppState {
         let snapshot = RxCodeWidgetData(
             jobCount: jobCount,
             ccUsagePercent: desktopUsage?.claudeCode?.fiveHourPercent,
+            ccWeeklyUsagePercent: desktopUsage?.claudeCode?.sevenDayPercent,
             codexUsagePercent: desktopUsage?.codex?.fiveHourPercent,
+            codexWeeklyUsagePercent: desktopUsage?.codex?.sevenDayPercent,
             updatedAt: Date().timeIntervalSince1970
         )
         RxCodeWidgetStore.save(snapshot)

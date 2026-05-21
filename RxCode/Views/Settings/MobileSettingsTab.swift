@@ -23,6 +23,8 @@ struct MobileSettingsTab: View {
     @State private var customURLText: String
     @State private var testNotificationDeviceID: String?
     @State private var testNotificationAlert: TestNotificationAlert?
+    @State private var deviceBeingRenamed: PairedDevice?
+    @State private var renameText: String = ""
 
     init() {
         let current = MobileSyncService.shared.relayURL
@@ -64,6 +66,26 @@ struct MobileSettingsTab: View {
                 message: Text(alert.message),
                 dismissButton: .default(Text("OK"))
             )
+        }
+        .alert(
+            "Rename Device",
+            isPresented: Binding(
+                get: { deviceBeingRenamed != nil },
+                set: { if !$0 { deviceBeingRenamed = nil } }
+            )
+        ) {
+            TextField("Device name", text: $renameText)
+            Button("Cancel", role: .cancel) {
+                deviceBeingRenamed = nil
+            }
+            Button("Save") {
+                if let device = deviceBeingRenamed {
+                    sync.renameDevice(device, to: renameText)
+                }
+                deviceBeingRenamed = nil
+            }
+        } message: {
+            Text("Enter a new name for this device.")
         }
     }
 
@@ -295,6 +317,14 @@ struct MobileSettingsTab: View {
             }
             Spacer()
             testNotificationButton(for: device)
+            Button {
+                renameText = device.displayName
+                deviceBeingRenamed = device
+            } label: {
+                Image(systemName: "pencil")
+            }
+            .buttonStyle(.borderless)
+            .help("Rename device")
             Button(role: .destructive) {
                 Task { await sync.unpair(device) }
             } label: {

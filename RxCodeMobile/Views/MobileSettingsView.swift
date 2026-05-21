@@ -9,6 +9,8 @@ struct MobileSettingsView: View {
     let showsDoneButton: Bool
     @State private var showPairingSheet = false
     @State private var desktopPendingRemoval: PairedDesktop?
+    @State private var desktopBeingRenamed: PairedDesktop?
+    @State private var renameText: String = ""
     @State private var modelDraft = ""
     @State private var acpClientDraft = ""
 
@@ -88,6 +90,26 @@ struct MobileSettingsView: View {
                     Text("This removes \(desktop.displayName.isEmpty ? "this Mac" : desktop.displayName) from this device. Other paired Macs stay available.")
                 }
             }
+            .alert(
+                "Rename Mac",
+                isPresented: Binding(
+                    get: { desktopBeingRenamed != nil },
+                    set: { if !$0 { desktopBeingRenamed = nil } }
+                )
+            ) {
+                TextField("Mac name", text: $renameText)
+                Button("Cancel", role: .cancel) {
+                    desktopBeingRenamed = nil
+                }
+                Button("Save") {
+                    if let desktop = desktopBeingRenamed {
+                        state.renamePairedDesktop(desktop, to: renameText)
+                    }
+                    desktopBeingRenamed = nil
+                }
+            } message: {
+                Text("Enter a new name for this Mac.")
+            }
             .onAppear {
                 modelDraft = state.desktopSettings?.selectedModel ?? ""
                 acpClientDraft = state.desktopSettings?.selectedACPClientId ?? ""
@@ -151,6 +173,14 @@ struct MobileSettingsView: View {
                 .buttonStyle(.borderless)
                 .accessibilityLabel("Switch to \(desktop.displayName.isEmpty ? "Mac" : desktop.displayName)")
             }
+            Button {
+                renameText = desktop.displayName
+                desktopBeingRenamed = desktop
+            } label: {
+                Image(systemName: "pencil")
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Rename \(desktop.displayName.isEmpty ? "Mac" : desktop.displayName)")
             Button(role: .destructive) {
                 desktopPendingRemoval = desktop
             } label: {
@@ -231,14 +261,12 @@ struct MobileSettingsView: View {
                             valueText: Self.percentText(codex.fiveHourPercent),
                             caption: Self.resetCaption(codex.fiveHourResetsAt)
                         )
-                        if let twentyFour = codex.twentyFourHourPercent {
-                            MetricBar(
-                                label: "24-hour limit",
-                                percent: twentyFour,
-                                valueText: Self.percentText(twentyFour),
-                                caption: Self.resetCaption(codex.twentyFourHourResetsAt)
-                            )
-                        }
+                        MetricBar(
+                            label: "7-day limit",
+                            percent: codex.sevenDayPercent,
+                            valueText: Self.percentText(codex.sevenDayPercent),
+                            caption: Self.resetCaption(codex.sevenDayResetsAt)
+                        )
                     }
                 }
             } else {

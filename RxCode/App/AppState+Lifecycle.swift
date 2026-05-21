@@ -137,8 +137,12 @@ extension AppState {
             self?.projects.first { $0.id == id }?.name
         }
         MobileSyncService.shared.usageSnapshotProvider = { [weak self] in
-            (self?.latestRateLimitUsage?.fiveHourPercent,
-             self?.latestCodexRateLimitUsage?.fiveHourPercent)
+            (
+                cc: self?.latestRateLimitUsage?.fiveHourPercent,
+                ccWeekly: self?.latestRateLimitUsage?.sevenDayPercent,
+                codex: self?.latestCodexRateLimitUsage?.fiveHourPercent,
+                codexWeekly: self?.latestCodexRateLimitUsage?.sevenDayPercent
+            )
         }
 
         await refreshAgentInstallations()

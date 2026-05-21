@@ -72,7 +72,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         var stored = RxCodeWidgetStore.load()
         if let jobs = snapshot.jobs { stored.jobCount = jobs }
         if let cc = snapshot.cc { stored.ccUsagePercent = cc }
+        if let ccWeekly = snapshot.ccWeekly { stored.ccWeeklyUsagePercent = ccWeekly }
         if let codex = snapshot.codex { stored.codexUsagePercent = codex }
+        if let codexWeekly = snapshot.codexWeekly { stored.codexWeeklyUsagePercent = codexWeekly }
         stored.updatedAt = snapshot.updatedAt
         RxCodeWidgetStore.save(stored)
         logger.info("[Widget] background push applied jobs=\(stored.jobCount, privacy: .public)")

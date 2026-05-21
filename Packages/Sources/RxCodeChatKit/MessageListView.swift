@@ -5,33 +5,32 @@ import os
 
 #if os(macOS)
 
-/// Message scroll area — extracted from ChatView to isolate @Observable dependencies on `messages`.
+/// Message scroll area — extracted from ChatView to isolate @Observable
+/// dependencies on `messages`.
+///
+/// Behavior: the transcript stays anchored to the bottom. A freshly opened
+/// thread, a new send, and a streaming response all keep the latest message in
+/// view. `AutoScrollAnchor` releases that anchor only when the user deliberately
+/// scrolls up; `scrollPhase` keeps auto-scroll from fighting an active drag.
 struct MessageListView: View {
     @Environment(ChatBridge.self) private var chatBridge
     @Environment(WindowState.self) private var windowState
     @State private var settledItems: [ChatMessage] = []
+    /// Owns the debounced content-growth scroll.
     @State private var scrollTask: Task<Void, Never>?
-    /// Owns the post-stream "pin to bottom" sweep. Kept separate from
-    /// `scrollTask` so a concurrent `scrollToBottomDebounced()` — driven by
-    /// scroll-geometry changes during the same handoff — can't cancel it.
+    /// Owns the multi-frame "settle at the bottom" sweep used on session open
+    /// and the streaming→settled handoff. Separate from `scrollTask` so a
+    /// concurrent `scrollToBottomDebounced()` can't cancel it.
     @State private var settleScrollTask: Task<Void, Never>?
-    /// Separate handle from `scrollTask`. Owns the fade-in / scroll-on-switch
-    /// sequence so a concurrent content-growth `scrollToBottomDebounced()`
-    /// (which also writes to `scrollTask`) can't cancel the session-ready flip.
+    /// Owns the fade-in. A separate handle so the content-growth path
+    /// (`scrollToBottomDebounced`, which owns `scrollTask`) can't cancel the
+    /// session-ready flip.
     @State private var readyTask: Task<Void, Never>?
     @State private var anchor = AutoScrollAnchor()
     @State private var isSessionReady = false
-    /// Visible height of the message `List` — drives the dynamic tail spacer.
-    @State private var viewportHeight: CGFloat = 0
-    /// `minY` of the latest user message in `chatContentCoordinateSpace`.
-    @State private var latestUserMinY: CGFloat = 0
-    /// `minY` of the tail spacer in `chatContentCoordinateSpace`.
-    @State private var tailSpacerMinY: CGFloat = 0
-    /// Latest user message id already seen — distinguishes a genuine new send
-    /// from a session switch / disk load.
-    @State private var lastTrackedUserID: UUID?
-    /// Session the `lastTrackedUserID` baseline belongs to.
-    @State private var pinSessionID: String?
+    /// Latest scroll phase — gates auto-scroll so it never fires while the user
+    /// is driving the scroll.
+    @State private var scrollPhase: ScrollPhase = .idle
 
     private static let log = Logger(subsystem: "com.claudework", category: "MessageListView")
     private static let bottomAnchorID = "message-list-bottom-anchor"
@@ -51,8 +50,6 @@ struct MessageListView: View {
         // Streaming view is outside VStack — text deltas don't affect settled layout
         if !windowState.focusMode {
             StreamingMessageView {
-                // While streaming, the dynamic tail spacer keeps the pinned
-                // question in place — no scroll-to-bottom.
                 rebuildSettledItems()
             }
             // Suppress layout animations when switching sessions so the pulse indicator
@@ -83,24 +80,18 @@ struct MessageListView: View {
                 .chatMessageListRowStyle()
         }
 
-        tailSpacer
+        bottomAnchor
     }
 
-    /// Dynamic tail spacer: pads the latest turn so the user message can always
-    /// be scrolled to the very top, and shrinks as the assistant response grows
-    /// so the pinned message stays put.
-    private var tailSpacer: some View {
+    /// A 1pt sentinel row at the end of the transcript — the target every
+    /// scroll-to-bottom aims at.
+    private var bottomAnchor: some View {
         Color.clear
-            .frame(height: tailSpacerHeight)
+            .frame(height: 1)
             .id(Self.bottomAnchorID)
             .listRowInsets(EdgeInsets())
             .listRowSeparator(.hidden)
             .listRowBackground(Color.clear)
-            .onGeometryChange(for: CGFloat.self) { proxy in
-                proxy.frame(in: .named(chatContentCoordinateSpace)).minY
-            } action: { newValue in
-                updateTailSpacerMinY(newValue)
-            }
     }
 
     private func messageList(proxy: ScrollViewProxy) -> some View {
@@ -110,30 +101,23 @@ struct MessageListView: View {
             .scrollContentBackground(.hidden)
             .environment(\.defaultMinListRowHeight, 0)
             .opacity(isSessionReady ? 1 : 0)
-            .coordinateSpace(.named(chatContentCoordinateSpace))
-            .environment(\.chatTrackedMessageID, trackedUserMessageID)
-            .environment(\.chatTrackedMessageGeometry, updateLatestUserMinY)
-            .onGeometryChange(for: CGFloat.self) { proxy in
-                proxy.size.height
-            } action: { newValue in
-                viewportHeight = newValue
-            }
-        let scrolling = base
             .onScrollGeometryChange(for: ScrollSample.self) { geo in
                 ScrollSample(contentHeight: geo.contentSize.height, visibleMaxY: geo.visibleRect.maxY)
             } action: { _, sample in
                 // Route the geometry change through AutoScrollAnchor so content
-                // growth (e.g. an Edit/Bash card expanding) doesn't un-stick the
-                // anchor — only deliberate user scrolling does. Suppressed while
-                // streaming: the dynamic spacer keeps the question pinned.
+                // growth (streaming text, an Edit/Bash card expanding) keeps the
+                // list glued to the bottom — only a deliberate user scroll
+                // un-sticks it. Suppressed while the user drives the scroll so
+                // auto-scroll never fights a drag.
                 let decision = anchor.apply(contentHeight: sample.contentHeight, visibleMaxY: sample.visibleMaxY)
-                if decision == .scrollToBottom && !chatBridge.isStreaming {
+                if decision == .scrollToBottom, !isUserDrivenScroll {
                     scrollToBottomDebounced(proxy)
                 }
             }
-            .onChange(of: trackedUserMessageID) { _, newID in
-                handleTrackedUserChange(newID, proxy: proxy)
+            .onScrollPhaseChange { _, newPhase in
+                scrollPhase = newPhase
             }
+        let scrolling = base
             .task(id: windowState.currentSessionId) {
                 await handleSessionTask(proxy: proxy)
             }
@@ -171,7 +155,7 @@ struct MessageListView: View {
         if chatBridge.isStreaming {
             rebuildSettledItems()
             anchor.resetToBottom()
-            syncPinTracking()
+            settleAtBottom(proxy: proxy, reason: "sessionTask.streaming")
             if !isSessionReady { isSessionReady = true }
             Self.log.info("[MessageList.task] streaming-path settled=\(settledItems.count) sid=\(sid, privacy: .public)")
             return
@@ -181,12 +165,10 @@ struct MessageListView: View {
         settleScrollTask?.cancel()
         readyTask?.cancel()
         rebuildSettledItems()
-        syncPinTracking()
         Self.log.info("[MessageList.task] post-rebuild settled=\(settledItems.count) sid=\(sid, privacy: .public) isLoadingFromDisk=\(chatBridge.isLoadingFromDisk)")
-        // Skip scroll/fade delay for empty sessions — appear instantly,
-        // unless we're still loading persisted messages from disk (in which
-        // case the onChange handler below will fade the list in once messages
-        // arrive, avoiding the empty → populated "blink").
+        // Empty sessions appear instantly — unless we're still loading persisted
+        // messages from disk, in which case `handleLoadingChange` fades the list
+        // in once messages arrive, avoiding the empty → populated "blink".
         guard !settledItems.isEmpty else {
             if !chatBridge.isLoadingFromDisk {
                 isSessionReady = true
@@ -196,10 +178,12 @@ struct MessageListView: View {
             }
             return
         }
-        try? await Task.sleep(for: .milliseconds(16))  // 1 frame: scroll after VStack layout is committed
-        scrollToBottom(proxy)
+        // Re-assert the bottom across several frames: a single scroll can fire
+        // before `List` has realized the freshly-rebuilt rows, stranding the
+        // view at the top — which the fade-in would then reveal.
+        settleAtBottom(proxy: proxy, reason: "sessionOpen")
         anchor.resetToBottom()
-        try? await Task.sleep(for: .milliseconds(32))  // 2 frames: fade-in after scroll settles
+        try? await Task.sleep(for: .milliseconds(48))  // let the first re-asserts land before fade-in
         withAnimation(.easeIn(duration: 0.15)) { isSessionReady = true }
     }
 
@@ -210,35 +194,28 @@ struct MessageListView: View {
         // rebuild the settled list and fade in — same sequence as the .task above.
         guard !isLoading else { return }
         rebuildSettledItems()
-        syncPinTracking()
         Self.log.info("[MessageList.onLoadChange] post-rebuild settled=\(settledItems.count) sid=\(sid, privacy: .public)")
+        readyTask?.cancel()
+        settleAtBottom(proxy: proxy, reason: "loadFinished")
+        anchor.resetToBottom()
         // Fade-in lives on `readyTask` so the content-growth path
         // (`scrollToBottomDebounced`, which owns `scrollTask`) cannot cancel it.
-        readyTask?.cancel()
         readyTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(16))
-            guard !Task.isCancelled else { return }
-            scrollToBottom(proxy)
-            anchor.resetToBottom()
-            guard !isSessionReady else { return }
-            try? await Task.sleep(for: .milliseconds(32))
-            guard !Task.isCancelled else { return }
+            try? await Task.sleep(for: .milliseconds(48))
+            guard !Task.isCancelled, !isSessionReady else { return }
             withAnimation(.easeIn(duration: 0.15)) { isSessionReady = true }
         }
     }
 
     private func handleStreamingChange(old: Bool, new: Bool, proxy: ScrollViewProxy) {
-        // Only update when streaming ends — settled list doesn't change at start.
+        // Only react when streaming ends — the settled list doesn't change at start.
         guard old && !new else { return }
         rebuildSettledItems()
         anchor.resetToBottom()
-        // Keep the question pinned to the top through the row handoff; fall back
-        // to the bottom only when there is no user message.
-        if let pinned = trackedUserMessageID {
-            pinScrollDuringHandoff(to: pinned, anchor: .top, proxy: proxy)
-        } else {
-            pinScrollDuringHandoff(to: Self.bottomAnchorID, anchor: .bottom, proxy: proxy)
-        }
+        // The just-finished turn moves out of `StreamingMessageView` and into
+        // the settled list. That row handoff makes `List` reload and can
+        // momentarily snap the offset; re-assert the bottom across the handoff.
+        settleAtBottom(proxy: proxy, reason: "streamingEnded")
     }
 
     // MARK: - Helpers
@@ -247,8 +224,6 @@ struct MessageListView: View {
     private func messageRows(_ messages: some RandomAccessCollection<ChatMessage>) -> some View {
         ChatMessageListView(messages: Array(messages))
     }
-
-    // MARK: - Message Grouping
 
     // MARK: - Settled Items
 
@@ -276,101 +251,52 @@ struct MessageListView: View {
         return chatSuppressPlanReadyFollowups(in: settled)
     }
 
+    // MARK: - Scrolling
+
+    /// `true` while the user is driving the scroll — finger/trackpad down or a
+    /// post-flick glide. Our own programmatic `.animating` scroll and the
+    /// settled `.idle` state are not user-driven.
+    private var isUserDrivenScroll: Bool {
+        switch scrollPhase {
+        case .interacting, .tracking, .decelerating: return true
+        case .idle, .animating: return false
+        @unknown default: return false
+        }
+    }
+
     private func scrollToBottom(_ proxy: ScrollViewProxy) {
         proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom)
     }
 
+    /// Debounced scroll-to-bottom for content growth. Re-armed on every geometry
+    /// change, so a burst of streaming deltas collapses into a single scroll.
     private func scrollToBottomDebounced(_ proxy: ScrollViewProxy) {
         scrollTask?.cancel()
         scrollTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(50))
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, !isUserDrivenScroll else { return }
             scrollToBottom(proxy)
         }
     }
 
-    /// When a stream ends, the just-completed assistant turn moves out of
-    /// `StreamingMessageView` and into the settled list. That row handoff makes
-    /// `List` reload, which can momentarily snap the scroll offset to the top —
-    /// the user sees the list jump up, then jump back down. A single debounced
-    /// scroll can't fix it reliably: the streaming-insertion animation keeps
-    /// emitting scroll-geometry changes that re-arm and starve the debounce.
-    /// Re-assert the desired anchor on every frame for a short window so the
-    /// snap is corrected within one frame, before it becomes visible.
-    private func pinScrollDuringHandoff(to id: some Hashable, anchor: UnitPoint, proxy: ScrollViewProxy) {
+    /// Re-assert the bottom on every frame for a short window.
+    ///
+    /// A single scroll can land before `List` has realized the freshly-rebuilt
+    /// rows (session open / disk load), or while the streaming→settled row
+    /// handoff is still reloading the list — in both cases the offset snaps to
+    /// the top. Re-asserting corrects the snap within a frame, before it becomes
+    /// visible. Bails the moment the user grabs the scroll so it never fights a
+    /// drag — our own `.animating` scroll is not user-driven.
+    private func settleAtBottom(proxy: ScrollViewProxy, reason: String) {
         settleScrollTask?.cancel()
+        Self.log.info("[ScrollSettle] reason=\(reason, privacy: .public) sid=\(windowState.currentSessionId ?? "<nil>", privacy: .public) settled=\(settledItems.count)")
         settleScrollTask = Task { @MainActor in
             for _ in 0..<12 {
-                guard !Task.isCancelled else { return }
-                proxy.scrollTo(id, anchor: anchor)
+                guard !Task.isCancelled, !isUserDrivenScroll else { return }
+                scrollToBottom(proxy)
                 try? await Task.sleep(for: .milliseconds(16))
             }
         }
-    }
-
-    // MARK: - Pin to top
-
-    /// The latest user message — the row pinned to the top on send and the
-    /// reference point for the dynamic tail spacer.
-    private var trackedUserMessageID: UUID? {
-        chatBridge.messages.last(where: { $0.role == .user })?.id
-    }
-
-    /// Height of the tail spacer: pads the latest turn so the user message can
-    /// always be scrolled to the very top. Shrinks as the response grows, so the
-    /// pinned message stays put without any further scrolling.
-    private var tailSpacerHeight: CGFloat {
-        guard viewportHeight > 0 else { return 1 }
-        let latestTurnHeight = max(0, tailSpacerMinY - latestUserMinY)
-        return max(1, viewportHeight - latestTurnHeight)
-    }
-
-    /// Re-baseline the new-send detector to the current session so a session
-    /// switch or disk load is never mistaken for a freshly sent message.
-    private func syncPinTracking() {
-        pinSessionID = windowState.currentSessionId
-        lastTrackedUserID = trackedUserMessageID
-    }
-
-    /// React to the latest user message changing: pin a genuine new send to the
-    /// top, but ignore the change when it is really a session switch.
-    private func handleTrackedUserChange(_ newID: UUID?, proxy: ScrollViewProxy) {
-        let sid = windowState.currentSessionId
-        guard pinSessionID == sid else {
-            // Session switch — re-baseline without pinning.
-            pinSessionID = sid
-            lastTrackedUserID = newID
-            return
-        }
-        guard let newID, newID != lastTrackedUserID else { return }
-        lastTrackedUserID = newID
-        guard !chatBridge.isLoadingFromDisk else { return }
-        // A genuine new user message in the active session — pin it to the top.
-        scrollTask?.cancel()
-        scrollTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(16))  // 1 frame: spacer + row layout
-            guard !Task.isCancelled else { return }
-            withAnimation(.easeOut(duration: 0.28)) {
-                proxy.scrollTo(newID, anchor: .top)
-            }
-        }
-    }
-
-    /// `minY` of the latest user message — fed back from `ChatMessageListView`.
-    private func updateLatestUserMinY(_ value: CGFloat) {
-        guard abs(value - latestUserMinY) > 0.5 else { return }
-        var t = Transaction()
-        t.animation = nil
-        withTransaction(t) { latestUserMinY = value }
-    }
-
-    /// `minY` of the tail spacer — its distance from the user message is the
-    /// height of the latest turn.
-    private func updateTailSpacerMinY(_ value: CGFloat) {
-        guard abs(value - tailSpacerMinY) > 0.5 else { return }
-        var t = Transaction()
-        t.animation = nil
-        withTransaction(t) { tailSpacerMinY = value }
     }
 }
 

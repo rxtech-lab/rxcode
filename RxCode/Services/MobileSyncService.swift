@@ -29,8 +29,18 @@ struct PairedDevice: Codable, Identifiable, Sendable, Hashable {
     var liveActivityTokens: [LiveActivityTokenRef]?
     var pairedAt: Date
     var lastSeen: Date?
+    /// The relay server URL this device was paired through.
+    var relayURL: String?
 
     var id: String { pubkeyHex }
+
+    /// Human-readable relay host for display (e.g. "relay.example.com").
+    var relayDisplayName: String? {
+        guard let urlString = relayURL,
+              let url = URL(string: urlString),
+              let host = url.host else { return nil }
+        return host
+    }
 }
 
 /// Result of a pairing handshake propagated to the SwiftUI pairing sheet.
@@ -240,7 +250,8 @@ final class MobileSyncService: ObservableObject {
             apnsToken: nil,
             apnsEnvironment: nil,
             pairedAt: .now,
-            lastSeen: .now
+            lastSeen: .now,
+            relayURL: relayURL.absoluteString
         )
         pairedDevices.removeAll { $0.pubkeyHex == device.pubkeyHex }
         pairedDevices.append(device)
@@ -253,6 +264,7 @@ final class MobileSyncService: ObservableObject {
         pairingToken = nil
         pairingContinuation?.resume(returning: .accepted(device))
         pairingContinuation = nil
+        logger.info("[Pairing] accepted mobile=\(pending.displayName, privacy: .public) mobileKey=\(String(pending.mobilePubkeyHex.prefix(12)), privacy: .public) relay=\(self.relayURL.absoluteString, privacy: .public)")
     }
 
     func cancelPairing() {
@@ -273,11 +285,16 @@ final class MobileSyncService: ObservableObject {
 
     /// Remove a paired device and notify it before forgetting its pubkey.
     func unpair(_ device: PairedDevice) async {
-        try? await client.send(.unpair(UnpairPayload(reason: "desktop")), toHex: device.pubkeyHex)
-        pairedDevices.removeAll { $0.pubkeyHex == device.pubkeyHex }
+        let pubkeyHex = device.pubkeyHex
+
+        // Optimistically remove from UI first for immediate feedback
+        pairedDevices.removeAll { $0.pubkeyHex == pubkeyHex }
         savePairedDevices()
-        subscribedSessions.removeValue(forKey: device.pubkeyHex)
-        await client.removePeer(device.pubkeyHex)
+        subscribedSessions.removeValue(forKey: pubkeyHex)
+
+        // Notify mobile and clean up peer connection (best-effort, ignore failures)
+        try? await client.send(.unpair(UnpairPayload(reason: "desktop")), toHex: pubkeyHex)
+        await client.removePeer(pubkeyHex)
     }
 
     // MARK: - Notification fan-out

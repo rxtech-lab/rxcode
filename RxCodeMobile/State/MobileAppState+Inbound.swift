@@ -38,12 +38,13 @@ extension MobileAppState {
                         pubkeyHex: inbound.fromHex,
                         displayName: ack.desktopName,
                         pairedAt: .now,
-                        lastSeen: .now
+                        lastSeen: .now,
+                        relayURL: relayURL.absoluteString
                     )
                 )
                 setActiveDesktop(pubkeyHex: inbound.fromHex)
                 pairingStatus = .idle
-                logger.info("[Pairing] accepted desktop=\(ack.desktopName, privacy: .public) desktopKey=\(String(inbound.fromHex.prefix(12)), privacy: .public) mobileKey=\(String(self.identity.publicKeyHex.prefix(12)), privacy: .public)")
+                logger.info("[Pairing] accepted desktop=\(ack.desktopName, privacy: .public) desktopKey=\(String(inbound.fromHex.prefix(12)), privacy: .public) mobileKey=\(String(self.identity.publicKeyHex.prefix(12)), privacy: .public) relay=\(self.relayURL.absoluteString, privacy: .public)")
                 MobileHaptics.connected()
                 savePairedDesktops()
                 Task {

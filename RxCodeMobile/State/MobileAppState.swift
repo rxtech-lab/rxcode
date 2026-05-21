@@ -23,8 +23,18 @@ struct PairedDesktop: Codable, Identifiable, Equatable, Hashable {
     var displayName: String
     var pairedAt: Date
     var lastSeen: Date?
+    /// The relay server URL this desktop was paired through.
+    var relayURL: String?
 
     var id: String { pubkeyHex }
+
+    /// Human-readable relay host for display (e.g. "relay.example.com").
+    var relayDisplayName: String? {
+        guard let urlString = relayURL,
+              let url = URL(string: urlString),
+              let host = url.host else { return nil }
+        return host
+    }
 }
 
 /// Single source of truth for the mobile app. Owns the `SyncClient`, the

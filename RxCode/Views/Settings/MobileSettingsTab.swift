@@ -283,6 +283,14 @@ struct MobileSettingsTab: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                    if let relay = device.relayDisplayName {
+                        Text("•")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Label(relay, systemImage: "antenna.radiowaves.left.and.right")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             Spacer()

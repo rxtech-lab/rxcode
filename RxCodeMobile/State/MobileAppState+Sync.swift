@@ -358,9 +358,10 @@ extension MobileAppState {
 
     func removePairedDesktop(_ desktop: PairedDesktop) async {
         let wasActive = desktop.pubkeyHex == pairedDesktopPubkey
-        try? await client.send(.unpair(UnpairPayload(reason: "mobile")), toHex: desktop.pubkeyHex)
-        pairedDesktops.removeAll { $0.pubkeyHex == desktop.pubkeyHex }
-        await client.removePeer(desktop.pubkeyHex)
+        let pubkeyHex = desktop.pubkeyHex
+
+        // Optimistically remove from UI first for immediate feedback
+        pairedDesktops.removeAll { $0.pubkeyHex == pubkeyHex }
 
         if wasActive {
             clearDesktopMirror()
@@ -369,6 +370,10 @@ extension MobileAppState {
             setActiveDesktop(pubkeyHex: pairedDesktopPubkey)
         }
         savePairedDesktops()
+
+        // Notify desktop and clean up peer connection (best-effort, ignore failures)
+        try? await client.send(.unpair(UnpairPayload(reason: "mobile")), toHex: pubkeyHex)
+        await client.removePeer(pubkeyHex)
 
         if wasActive, isPaired {
             await requestSnapshot()

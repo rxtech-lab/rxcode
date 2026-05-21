@@ -125,9 +125,16 @@ struct MobileSettingsView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(desktop.displayName.isEmpty ? "Unknown Mac" : desktop.displayName)
                     .foregroundStyle(.primary)
-                Text("Paired \(desktop.pairedAt, format: .relative(presentation: .named))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    Text("Paired \(desktop.pairedAt, format: .relative(presentation: .named))")
+                    if let relay = desktop.relayDisplayName {
+                        Text("•")
+                        Label(relay, systemImage: "antenna.radiowaves.left.and.right")
+                            .labelStyle(.titleOnly)
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
             Spacer()
             if desktop.pubkeyHex == state.pairedDesktopPubkey {

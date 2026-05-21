@@ -58,30 +58,24 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 
     /// Handles a silent background push carrying a fresh home-screen widget
     /// snapshot. The desktop sends these (`push_type=background`) whenever the
-    /// ongoing-job count or agent usage changes; the payload is plaintext
-    /// because WidgetKit data is low-sensitivity and not user-facing text.
+    /// ongoing-job count or agent usage changes. The snapshot is E2E-encrypted
+    /// to this device under `encWidget` and decrypted here before it reaches
+    /// the widget store.
     func application(_ application: UIApplication,
                      didReceiveRemoteNotification userInfo: [AnyHashable: Any]) async
         -> UIBackgroundFetchResult {
-        guard let widget = userInfo["widget"] as? [String: Any] else {
+        guard let snapshot = decryptWidgetSnapshot(from: userInfo, context: "background-push") else {
             return .noData
         }
         // Merge into the existing snapshot so a job-count-only push doesn't
         // wipe the usage figures (and vice versa).
-        var snapshot = RxCodeWidgetStore.load()
-        if let jobs = (widget["jobs"] as? NSNumber)?.intValue {
-            snapshot.jobCount = jobs
-        }
-        if let cc = (widget["cc"] as? NSNumber)?.doubleValue {
-            snapshot.ccUsagePercent = cc
-        }
-        if let codex = (widget["codex"] as? NSNumber)?.doubleValue {
-            snapshot.codexUsagePercent = codex
-        }
-        snapshot.updatedAt = (widget["updatedAt"] as? NSNumber)?.doubleValue
-            ?? Date().timeIntervalSince1970
-        RxCodeWidgetStore.save(snapshot)
-        logger.info("[Widget] background push applied jobs=\(snapshot.jobCount, privacy: .public)")
+        var stored = RxCodeWidgetStore.load()
+        if let jobs = snapshot.jobs { stored.jobCount = jobs }
+        if let cc = snapshot.cc { stored.ccUsagePercent = cc }
+        if let codex = snapshot.codex { stored.codexUsagePercent = codex }
+        stored.updatedAt = snapshot.updatedAt
+        RxCodeWidgetStore.save(stored)
+        logger.info("[Widget] background push applied jobs=\(stored.jobCount, privacy: .public)")
         return .newData
     }
 
@@ -171,19 +165,61 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     /// notification-tap fallback. `context` is a request identifier for logging.
     private func decryptAlertPlaintext(from userInfo: [AnyHashable: Any],
                                        context: String) -> AlertPlaintext? {
-        guard let encB64 = userInfo["enc"] as? String else {
-            logger.info("[APNs] notification has no enc payload context=\(context, privacy: .public)")
+        guard let resolved = resolveEncryptedEnvelope(from: userInfo, key: "enc", context: context) else {
+            return nil
+        }
+        do {
+            return try APNsCrypto.open(envelope: resolved.envelope,
+                                       recipient: resolved.recipient,
+                                       sender: resolved.sender)
+        } catch {
+            logger.error("[APNs] decrypt failed context=\(context, privacy: .public) sender=\(String(resolved.envelope.from.prefix(12)), privacy: .public): \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
+
+    /// Decrypts the `encWidget` blob carried by a silent background push into a
+    /// `WidgetSnapshotPayload`. The desktop seals one envelope per device, so
+    /// the relay only ever forwards opaque ciphertext.
+    private func decryptWidgetSnapshot(from userInfo: [AnyHashable: Any],
+                                       context: String) -> WidgetSnapshotPayload? {
+        guard let resolved = resolveEncryptedEnvelope(from: userInfo, key: "encWidget", context: context) else {
+            return nil
+        }
+        do {
+            return try APNsCrypto.openWidget(envelope: resolved.envelope,
+                                             recipient: resolved.recipient,
+                                             sender: resolved.sender)
+        } catch {
+            logger.error("[Widget] decrypt failed context=\(context, privacy: .public) sender=\(String(resolved.envelope.from.prefix(12)), privacy: .public): \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
+
+    /// Resolves the `EncryptedAlert` envelope stored under `key`, together with
+    /// the local device private key and the sender's public key needed to open
+    /// it. Shared by the alert and widget decryption paths. `context` is a
+    /// request identifier used for logging.
+    private func resolveEncryptedEnvelope(
+        from userInfo: [AnyHashable: Any],
+        key: String,
+        context: String
+    ) -> (envelope: EncryptedAlert,
+          recipient: Curve25519.KeyAgreement.PrivateKey,
+          sender: Curve25519.KeyAgreement.PublicKey)? {
+        guard let encB64 = userInfo[key] as? String else {
+            logger.info("[APNs] notification has no \(key, privacy: .public) payload context=\(context, privacy: .public)")
             return nil
         }
         guard let raw = Data(base64Encoded: encB64) else {
-            logger.error("[APNs] enc payload is not valid base64 context=\(context, privacy: .public) length=\(encB64.count, privacy: .public)")
+            logger.error("[APNs] \(key, privacy: .public) payload is not valid base64 context=\(context, privacy: .public) length=\(encB64.count, privacy: .public)")
             return nil
         }
         let envelope: EncryptedAlert
         do {
             envelope = try JSONDecoder().decode(EncryptedAlert.self, from: raw)
         } catch {
-            logger.error("[APNs] encrypted alert decode failed context=\(context, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            logger.error("[APNs] encrypted envelope decode failed context=\(context, privacy: .public): \(error.localizedDescription, privacy: .public)")
             return nil
         }
 
@@ -207,13 +243,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             logger.error("[APNs] sender public key parse failed sender=\(String(envelope.from.prefix(12)), privacy: .public): \(error.localizedDescription, privacy: .public)")
             return nil
         }
-
-        do {
-            return try APNsCrypto.open(envelope: envelope, recipient: identity.privateKey, sender: senderKey)
-        } catch {
-            logger.error("[APNs] decrypt failed context=\(context, privacy: .public) sender=\(String(envelope.from.prefix(12)), privacy: .public) identity=\(String(identity.publicKeyHex.prefix(12)), privacy: .public): \(error.localizedDescription, privacy: .public)")
-            return nil
-        }
+        return (envelope, identity.privateKey, senderKey)
     }
 
     private static func apnsSummary(_ userInfo: [AnyHashable: Any]) -> String {

@@ -1,5 +1,8 @@
 import SwiftUI
 import RxCodeSync
+import os.log
+
+private let logger = Logger(subsystem: "com.idealapp.RxCode", category: "RootView")
 
 private enum MobileRootTab: Hashable {
     case briefing
@@ -14,10 +17,14 @@ struct RootView: View {
     @EnvironmentObject private var state: MobileAppState
     @State private var selectedProject: UUID?
     @State private var selectedSession: String?
+    @State private var selectedBriefingGroup: BriefingGroupKey?
+    @State private var briefingDetailPath = NavigationPath()
     @State private var showingBriefing = true
     @State private var showSettings = false
     @State private var selectedTab: MobileRootTab = .briefing
     @State private var projectsPath = NavigationPath()
+    @State private var minimumLoadingTimeElapsed = false
+    @State private var connectionTimedOut = false
 
     var body: some View {
         Group {
@@ -34,23 +41,116 @@ struct RootView: View {
         .mobileDismissesKeyboardOnScroll()
     }
 
+    /// Whether the loading splash should be dismissed (data loaded AND minimum time elapsed, but NOT timed out)
+    private var shouldShowContent: Bool {
+        let result = state.hasReceivedInitialSnapshot && minimumLoadingTimeElapsed && !connectionTimedOut
+        logger.debug("shouldShowContent: \(result) (hasSnapshot: \(self.state.hasReceivedInitialSnapshot), minTimeElapsed: \(self.minimumLoadingTimeElapsed), timedOut: \(self.connectionTimedOut))")
+        return result
+    }
+
     private var paired: some View {
-        Group {
-            if compactClass == .compact {
-                phoneTabs
-            } else {
-                ipadSplitView
+        ZStack {
+            // Main content - always present but may be hidden
+            mainContent
+                .opacity(shouldShowContent ? 1 : 0)
+
+            // Loading splash - shown until first snapshot AND minimum 2 seconds
+            if !shouldShowContent {
+                SyncLoadingView(
+                    isTimedOut: connectionTimedOut,
+                    onRetry: {
+                        connectionTimedOut = false
+                        Task {
+                            await retryConnection()
+                        }
+                    }
+                )
+                .transition(.splashTransition)
+                .zIndex(1)
             }
         }
+        .animation(.easeInOut(duration: 0.5), value: shouldShowContent)
         .task {
-            consumePendingDeepLink()
-            await state.refreshSnapshot()
+            await initialLoad()
         }
         .onChange(of: state.activeSessionID) { _, newValue in
             openActiveSession(newValue)
         }
         .onChange(of: state.pendingDeepLink) { _, _ in
             consumePendingDeepLink()
+        }
+        .onChange(of: state.hasReceivedInitialSnapshot) { oldValue, newValue in
+            // Reset states when snapshot state resets (e.g., switching paired desktops)
+            if oldValue && !newValue {
+                minimumLoadingTimeElapsed = false
+                connectionTimedOut = false
+                Task {
+                    await initialLoad()
+                }
+            }
+        }
+    }
+
+    /// Performs initial load with timeout handling
+    private func initialLoad() async {
+        logger.info("initialLoad started, current hasReceivedInitialSnapshot: \(self.state.hasReceivedInitialSnapshot)")
+        
+        // Send the snapshot request (returns immediately, snapshot arrives async)
+        consumePendingDeepLink()
+        await state.refreshSnapshot()
+        logger.info("Snapshot request sent")
+        
+        // Wait for either snapshot to arrive or timeout
+        let timeoutSeconds = 15
+        let pollIntervalMs: UInt64 = 100
+        let maxPolls = (timeoutSeconds * 1000) / Int(pollIntervalMs)
+        
+        var pollCount = 0
+        while !state.hasReceivedInitialSnapshot && pollCount < maxPolls {
+            try? await Task.sleep(for: .milliseconds(pollIntervalMs))
+            pollCount += 1
+            if pollCount % 50 == 0 { // Log every 5 seconds
+                logger.debug("Still waiting for snapshot... polls=\(pollCount)/\(maxPolls)")
+            }
+        }
+        
+        let hasSnapshot = state.hasReceivedInitialSnapshot
+        logger.info("Wait completed: hasSnapshot=\(hasSnapshot), polls=\(pollCount)/\(maxPolls)")
+        
+        // Ensure minimum 2 second display time for smooth UX
+        if pollCount < 20 { // Less than 2 seconds elapsed
+            let remainingMs = (20 - pollCount) * Int(pollIntervalMs)
+            logger.debug("Waiting additional \(remainingMs)ms for minimum display time")
+            try? await Task.sleep(for: .milliseconds(remainingMs))
+        }
+        
+        if hasSnapshot {
+            logger.info("Connection successful - showing content")
+            withAnimation {
+                minimumLoadingTimeElapsed = true
+            }
+        } else {
+            logger.warning("Connection timed out after \(timeoutSeconds)s - showing timeout screen")
+            withAnimation {
+                connectionTimedOut = true
+                minimumLoadingTimeElapsed = true
+            }
+        }
+    }
+
+    /// Retry connection after timeout
+    private func retryConnection() async {
+        logger.info("Retry connection requested")
+        await initialLoad()
+    }
+
+    private var mainContent: some View {
+        Group {
+            if compactClass == .compact {
+                phoneTabs
+            } else {
+                ipadSplitView
+            }
         }
     }
 
@@ -119,10 +219,41 @@ struct RootView: View {
     private var briefingSplitView: some View {
         NavigationSplitView {
             projectSidebar
+        } content: {
+            BriefingListView(selectedGroup: $selectedBriefingGroup)
+                .onChange(of: selectedBriefingGroup) { _, _ in
+                    // Clear navigation path when switching briefing groups
+                    briefingDetailPath.removeLast(briefingDetailPath.count)
+                }
         } detail: {
-            NavigationStack {
-                MobileBriefingView()
+            NavigationStack(path: $briefingDetailPath) {
+                Group {
+                    if let groupKey = selectedBriefingGroup {
+                        MobileBriefingDetailView(groupKey: groupKey)
+                    } else {
+                        ContentUnavailableView {
+                            Label("No Selection", systemImage: "doc.text")
+                        } description: {
+                            Text("Select a briefing to view details")
+                        }
+                    }
+                }
+                .navigationDestination(for: String.self) { sessionID in
+                    MobileChatView(sessionID: sessionID, onClose: { closeBriefingChat() })
+                        .id(sessionID)
+                        .task(id: sessionID) {
+                            if !MobileDraftSessionID.isDraft(sessionID) {
+                                await state.subscribe(to: sessionID)
+                            }
+                        }
+                }
             }
+        }
+    }
+
+    private func closeBriefingChat() {
+        if !briefingDetailPath.isEmpty {
+            briefingDetailPath.removeLast()
         }
     }
 
@@ -182,6 +313,10 @@ struct RootView: View {
     /// desktop-driven focus changes).
     private func openActiveSession(_ sessionID: String?) {
         guard let sessionID else { return }
+        // Skip navigation if we're already viewing this session in briefing detail
+        if showingBriefing && briefingDetailPath.count > 0 {
+            return
+        }
         navigate(toSession: sessionID, projectID: nil)
     }
 

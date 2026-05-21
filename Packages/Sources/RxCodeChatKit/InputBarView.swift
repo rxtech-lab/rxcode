@@ -23,8 +23,9 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
     @State private var textPreviewAttachment: Attachment?
     @State private var imagePreviewAttachment: Attachment?
     @State private var isDragOver = false
-    @State private var showAtFilePopup = false
-    @State private var atFileSelectedIndex = 0
+    @State private var showAtPopup = false
+    @State private var atSelectedIndex = 0
+    @State private var shortcuts: [ChatShortcut] = []
     @State private var historyIndex: Int = -1
     @State private var textFieldLayoutID = 0
     @State private var measuredInputHeight: CGFloat = 20
@@ -100,16 +101,19 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
                     if showSlashPopup && !slashFilteredCommands.isEmpty {
                         SlashCommandPopup(
                             query: slashQuery,
+                            agent: chatBridge.agentProvider,
                             onSelect: { cmd in selectSlashCommand(cmd) },
                             selectedIndex: $slashSelectedIndex
                         )
                         .transition(.offset(y: 10).combined(with: .opacity))
                     }
-                    if showAtFilePopup && !atFileFilteredEntries.isEmpty {
-                        AtFilePopup(
-                            entries: atFileFilteredEntries,
-                            onSelect: { relativePath in selectAtFile(relativePath) },
-                            selectedIndex: $atFileSelectedIndex
+                    if showAtPopup && atCombinedCount > 0 {
+                        AtMentionPopup(
+                            shortcuts: atShortcutMatches,
+                            files: atFileFilteredEntries,
+                            onSelectShortcut: { shortcut in selectShortcut(shortcut) },
+                            onSelectFile: { relativePath in selectAtFile(relativePath) },
+                            selectedIndex: $atSelectedIndex
                         )
                         .transition(.offset(y: 10).combined(with: .opacity))
                     }
@@ -145,6 +149,10 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
             if let path = windowState.selectedProject?.path {
                 AtFileSearch.prefetch(projectPath: path)
             }
+            shortcuts = ChatShortcutRegistry.currentShortcuts
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .chatShortcutsDidChange)) { _ in
+            shortcuts = ChatShortcutRegistry.currentShortcuts
         }
         .onChange(of: windowState.selectedProject?.path) { _, newPath in
             if let path = newPath {
@@ -360,16 +368,16 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
         if shouldShowSlash { slashSelectedIndex = 0 }
 
         let shouldShowAt = !shouldShowSlash && hasActiveAtQuery(in: newValue)
-        if shouldShowAt != showAtFilePopup {
-            withAnimation(.easeOut(duration: 0.15)) { showAtFilePopup = shouldShowAt }
+        if shouldShowAt != showAtPopup {
+            withAnimation(.easeOut(duration: 0.15)) { showAtPopup = shouldShowAt }
         }
-        if shouldShowAt { atFileSelectedIndex = 0 }
+        if shouldShowAt { atSelectedIndex = 0 }
     }
 
     private func handleUpArrow() -> KeyPress.Result {
-        if showAtFilePopup && !atFileFilteredEntries.isEmpty {
-            let count = atFileFilteredEntries.count
-            atFileSelectedIndex = (atFileSelectedIndex - 1 + count) % count
+        if showAtPopup && atCombinedCount > 0 {
+            let count = atCombinedCount
+            atSelectedIndex = (atSelectedIndex - 1 + count) % count
             return .handled
         }
         if showSlashPopup && !slashFilteredCommands.isEmpty {
@@ -389,9 +397,9 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
     }
 
     private func handleDownArrow() -> KeyPress.Result {
-        if showAtFilePopup && !atFileFilteredEntries.isEmpty {
-            let count = atFileFilteredEntries.count
-            atFileSelectedIndex = (atFileSelectedIndex + 1) % count
+        if showAtPopup && atCombinedCount > 0 {
+            let count = atCombinedCount
+            atSelectedIndex = (atSelectedIndex + 1) % count
             return .handled
         }
         if showSlashPopup && !slashFilteredCommands.isEmpty {
@@ -414,9 +422,8 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
     }
 
     private func handleTab() -> KeyPress.Result {
-        if showAtFilePopup && !atFileFilteredEntries.isEmpty {
-            let entries = atFileFilteredEntries
-            if atFileSelectedIndex < entries.count { selectAtFile(entries[atFileSelectedIndex].relativePath) }
+        if showAtPopup && atCombinedCount > 0 {
+            selectAtMention(at: atSelectedIndex)
             return .handled
         }
         guard showSlashPopup && !slashFilteredCommands.isEmpty else { return .ignored }
@@ -572,8 +579,8 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
     }
 
     private func handleEscapeKey() -> Bool {
-        if showAtFilePopup {
-            withAnimation(.easeOut(duration: 0.15)) { showAtFilePopup = false }
+        if showAtPopup {
+            withAnimation(.easeOut(duration: 0.15)) { showAtPopup = false }
             return true
         }
         if showSlashPopup {
@@ -597,7 +604,7 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
     }
 
     private var slashFilteredCommands: [SlashCommand] {
-        SlashCommandRegistry.filtered(by: slashQuery)
+        SlashCommandRegistry.filtered(by: slashQuery, agent: chatBridge.agentProvider)
     }
 
     private var userMessageHistory: [String] {
@@ -617,6 +624,19 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
         return AtFileSearch.search(query: atFileQuery, projectPath: project.path)
     }
 
+    private var atShortcutMatches: [ChatShortcut] {
+        let query = atFileQuery.lowercased()
+        guard !query.isEmpty else { return Array(shortcuts.prefix(20)) }
+        return shortcuts.filter {
+            $0.name.lowercased().contains(query) || $0.message.lowercased().contains(query)
+        }
+    }
+
+    /// Total rows in the unified `@` popup — shortcuts followed by files.
+    private var atCombinedCount: Int {
+        atShortcutMatches.count + atFileFilteredEntries.count
+    }
+
     private func selectSlashCommand(_ cmd: SlashCommand) {
         withAnimation(.easeOut(duration: 0.15)) { showSlashPopup = false }
         if cmd.acceptsInput && !cmd.isInteractive {
@@ -628,12 +648,42 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
     }
 
     private func selectAtFile(_ relativePath: String) {
-        withAnimation(.easeOut(duration: 0.15)) { showAtFilePopup = false }
+        withAnimation(.easeOut(duration: 0.15)) { showAtPopup = false }
         var text = windowState.inputText
         if let atRange = text.range(of: "@", options: .backwards) {
             text.replaceSubrange(atRange.lowerBound..., with: "@\(relativePath) ")
         }
         windowState.inputText = text
+    }
+
+    /// Dispatches a flat `@` popup index to the shortcut or file at that row.
+    private func selectAtMention(at index: Int) {
+        let shortcutMatches = atShortcutMatches
+        if index < shortcutMatches.count {
+            selectShortcut(shortcutMatches[index])
+            return
+        }
+        let fileIndex = index - shortcutMatches.count
+        let entries = atFileFilteredEntries
+        if fileIndex >= 0 && fileIndex < entries.count {
+            selectAtFile(entries[fileIndex].relativePath)
+        }
+    }
+
+    private func selectShortcut(_ shortcut: ChatShortcut) {
+        withAnimation(.easeOut(duration: 0.15)) { showAtPopup = false }
+        var text = windowState.inputText
+        if let atRange = text.range(of: "@", options: .backwards) {
+            text.replaceSubrange(atRange.lowerBound..., with: "")
+        }
+        if shortcut.isTerminalCommand {
+            windowState.inputText = text
+            guard !chatBridge.isStreaming else { return }
+            Task { await chatBridge.runTerminalCommand(shortcut.message) }
+        } else {
+            // Insert the shortcut's message so the user can review/edit before sending.
+            windowState.inputText = text + shortcut.message
+        }
     }
 
     private func hasActiveAtQuery(in text: String) -> Bool {
@@ -715,11 +765,8 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
             }
             return
         }
-        if showAtFilePopup && !atFileFilteredEntries.isEmpty {
-            let entries = atFileFilteredEntries
-            if atFileSelectedIndex < entries.count {
-                selectAtFile(entries[atFileSelectedIndex].relativePath)
-            }
+        if showAtPopup && atCombinedCount > 0 {
+            selectAtMention(at: atSelectedIndex)
             return
         }
         sendMessage()

@@ -261,6 +261,14 @@ extension MobileSyncService {
                 object: nil,
                 userInfo: ["from": inbound.fromHex, "payload": req]
             )
+        case .runnableDetectRequest(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "runnable_detect_request") else { return }
+            logger.info("[MobileSync] runnable detection requested project=\(req.projectID.uuidString, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+            NotificationCenter.default.post(
+                name: .mobileSyncRunnableDetectRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": req]
+            )
         case .skillCatalogRequest(let req):
             guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "skill_catalog_request") else { return }
             logger.info("[MobileSync] skill catalog requested forceRefresh=\(req.forceRefresh, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")

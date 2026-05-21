@@ -404,18 +404,27 @@ extension AppState {
                 name: Host.current().localizedName ?? "Mac",
                 path: "",
                 isSelectable: false,
-                children: mobileFolderPickerRoots(depth: 1, includeHidden: request.includeHidden)
+                children: mobileFolderPickerRoots(
+                    depth: 1,
+                    includeHidden: request.includeHidden,
+                    includeFiles: request.includeFiles
+                )
             )
         }
 
         return try mobileFolderNode(
             for: URL(fileURLWithPath: path).standardizedFileURL,
             depth: depth,
-            includeHidden: request.includeHidden
+            includeHidden: request.includeHidden,
+            includeFiles: request.includeFiles
         )
     }
 
-    func mobileFolderPickerRoots(depth: Int, includeHidden: Bool) -> [RemoteFolderNode] {
+    func mobileFolderPickerRoots(
+        depth: Int,
+        includeHidden: Bool,
+        includeFiles: Bool
+    ) -> [RemoteFolderNode] {
         let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL
         var candidates = [
             home,
@@ -433,14 +442,20 @@ extension AppState {
         return candidates.compactMap { url in
             let path = url.path
             guard seen.insert(path).inserted else { return nil }
-            return try? mobileFolderNode(for: url, depth: depth, includeHidden: includeHidden)
+            return try? mobileFolderNode(
+                for: url,
+                depth: depth,
+                includeHidden: includeHidden,
+                includeFiles: includeFiles
+            )
         }
     }
 
     func mobileFolderNode(
         for url: URL,
         depth: Int,
-        includeHidden: Bool
+        includeHidden: Bool,
+        includeFiles: Bool
     ) throws -> RemoteFolderNode {
         let fm = FileManager.default
         var isDirectory: ObjCBool = false
@@ -465,27 +480,43 @@ extension AppState {
             options: options
         )) ?? []
 
-        let children = contents
-            .filter { child in
-                guard let values = try? child.resourceValues(forKeys: [.isDirectoryKey, .isHiddenKey]),
-                      values.isDirectory == true
-                else { return false }
+        // Keep directories (always) and plain files (when requested). Folders
+        // sort first so navigation targets stay grouped above file leaves.
+        let entries = contents
+            .compactMap { child -> (url: URL, isDirectory: Bool)? in
+                guard let values = try? child.resourceValues(forKeys: [.isDirectoryKey, .isHiddenKey])
+                else { return nil }
                 if !includeHidden && (values.isHidden == true || child.lastPathComponent.hasPrefix(".")) {
-                    return false
+                    return nil
                 }
-                return !Self.mobileFolderIgnoredNames.contains(child.lastPathComponent)
+                if Self.mobileFolderIgnoredNames.contains(child.lastPathComponent) { return nil }
+                let isDir = values.isDirectory == true
+                if !isDir && !includeFiles { return nil }
+                return (child, isDir)
             }
             .sorted { lhs, rhs in
-                lhs.lastPathComponent.localizedStandardCompare(rhs.lastPathComponent) == .orderedAscending
+                if lhs.isDirectory != rhs.isDirectory { return lhs.isDirectory }
+                return lhs.url.lastPathComponent.localizedStandardCompare(rhs.url.lastPathComponent) == .orderedAscending
             }
             .prefix(Self.mobileFolderMaxChildren)
-            .compactMap { child in
-                try? mobileFolderNode(
-                    for: child.standardizedFileURL,
+
+        let children = entries.compactMap { entry -> RemoteFolderNode? in
+            if entry.isDirectory {
+                return try? mobileFolderNode(
+                    for: entry.url.standardizedFileURL,
                     depth: depth - 1,
-                    includeHidden: includeHidden
+                    includeHidden: includeHidden,
+                    includeFiles: includeFiles
                 )
             }
+            return RemoteFolderNode(
+                name: entry.url.lastPathComponent,
+                path: entry.url.standardizedFileURL.path,
+                isSelectable: false,
+                isDirectory: false,
+                children: []
+            )
+        }
 
         return RemoteFolderNode(name: name, path: url.path, children: Array(children))
     }

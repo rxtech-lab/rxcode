@@ -1,9 +1,26 @@
 import SwiftUI
 import RxCodeCore
 
+/// Name of the coordinate space spanning the chat scroll content. Containers
+/// (`MessageListView`, `MobileChatView`) declare it on their scroll content so
+/// message rows and the dynamic tail spacer can be measured in a common space.
+public nonisolated let chatContentCoordinateSpace = "rxcode.chat.content"
+
+extension EnvironmentValues {
+    /// The message whose on-screen geometry the container wants reported back —
+    /// the latest user message, used to size the dynamic tail spacer.
+    @Entry public var chatTrackedMessageID: UUID?
+    /// Callback invoked with the tracked message's `minY` in
+    /// `chatContentCoordinateSpace` whenever it changes.
+    @Entry public var chatTrackedMessageGeometry: (CGFloat) -> Void = { _ in }
+}
+
 public struct ChatMessageListView: View {
     private let messages: [ChatMessage]
     private let transientGroupMinSize: Int
+
+    @Environment(\.chatTrackedMessageID) private var trackedMessageID
+    @Environment(\.chatTrackedMessageGeometry) private var trackedMessageGeometry
 
     public init(messages: [ChatMessage], transientGroupMinSize: Int = 2) {
         self.messages = messages
@@ -11,6 +28,8 @@ public struct ChatMessageListView: View {
     }
 
     public var body: some View {
+        let tracked = trackedMessageID
+        let report = trackedMessageGeometry
         ForEach(chatMessageGroups(messages, minGroupSize: transientGroupMinSize)) { group in
             if group.isTransientGroup {
                 ChatTransientGroupSummaryView(messages: group.messages)
@@ -19,6 +38,16 @@ public struct ChatMessageListView: View {
                     .chatMessageListRowStyle()
             } else if let message = group.messages.first {
                 ChatMessageBubble(message: message)
+                    // Report the tracked (latest user) message's position so the
+                    // container can size the tail spacer. A true no-op for every
+                    // other row: the transform short-circuits to a constant.
+                    .onGeometryChange(for: CGFloat.self) { proxy in
+                        message.id == tracked
+                            ? proxy.frame(in: .named(chatContentCoordinateSpace)).minY
+                            : 0
+                    } action: { newValue in
+                        if message.id == tracked { report(newValue) }
+                    }
                     .id(message.id)
                     .transition(messageFadeTransition(role: message.role))
                     .chatMessageListRowStyle()

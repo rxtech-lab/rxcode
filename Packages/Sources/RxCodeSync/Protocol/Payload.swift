@@ -44,6 +44,8 @@ public enum Payload: Sendable {
     case runProfileResult(RunProfileResultPayload)
     case runProfileRunRequest(RunProfileRunRequestPayload)
     case runProfileStopRequest(RunProfileStopRequestPayload)
+    case runnableDetectRequest(RunnableDetectRequestPayload)
+    case runnableDetectResult(RunnableDetectResultPayload)
     case runTaskUpdate(RunTaskUpdatePayload)
     case skillCatalogRequest(SkillCatalogRequestPayload)
     case skillCatalogResult(SkillCatalogResultPayload)
@@ -104,6 +106,8 @@ public extension Payload {
         case .runProfileResult: return "run_profile_result"
         case .runProfileRunRequest: return "run_profile_run_request"
         case .runProfileStopRequest: return "run_profile_stop_request"
+        case .runnableDetectRequest: return "runnable_detect_request"
+        case .runnableDetectResult: return "runnable_detect_result"
         case .runTaskUpdate: return "run_task_update"
         case .skillCatalogRequest: return "skill_catalog_request"
         case .skillCatalogResult: return "skill_catalog_result"
@@ -474,93 +478,9 @@ public struct BranchOpResultPayload: Codable, Sendable {
     }
 }
 
-public struct RemoteFolderNode: Codable, Sendable, Identifiable, Equatable {
-    public var id: String { path }
-
-    public let name: String
-    public let path: String
-    public let isSelectable: Bool
-    public let children: [RemoteFolderNode]
-
-    public init(name: String, path: String, isSelectable: Bool = true, children: [RemoteFolderNode] = []) {
-        self.name = name
-        self.path = path
-        self.isSelectable = isSelectable
-        self.children = children
-    }
-}
-
-public struct FolderTreeRequestPayload: Codable, Sendable {
-    public let clientRequestID: UUID
-    /// `nil` asks the desktop for the picker roots. Non-nil asks for that
-    /// folder's immediate children.
-    public let path: String?
-    public let depth: Int
-    public let includeHidden: Bool
-
-    public init(
-        clientRequestID: UUID = UUID(),
-        path: String? = nil,
-        depth: Int = 1,
-        includeHidden: Bool = false
-    ) {
-        self.clientRequestID = clientRequestID
-        self.path = path
-        self.depth = depth
-        self.includeHidden = includeHidden
-    }
-}
-
-public struct FolderTreeResultPayload: Codable, Sendable {
-    public let clientRequestID: UUID
-    public let requestedPath: String?
-    public let ok: Bool
-    public let root: RemoteFolderNode?
-    public let errorMessage: String?
-
-    public init(
-        clientRequestID: UUID,
-        requestedPath: String?,
-        ok: Bool,
-        root: RemoteFolderNode? = nil,
-        errorMessage: String? = nil
-    ) {
-        self.clientRequestID = clientRequestID
-        self.requestedPath = requestedPath
-        self.ok = ok
-        self.root = root
-        self.errorMessage = errorMessage
-    }
-}
-
-public struct CreateProjectRequestPayload: Codable, Sendable {
-    public let clientRequestID: UUID
-    public let path: String
-
-    public init(clientRequestID: UUID = UUID(), path: String) {
-        self.clientRequestID = clientRequestID
-        self.path = path
-    }
-}
-
-public struct CreateProjectResultPayload: Codable, Sendable {
-    public let clientRequestID: UUID
-    public let ok: Bool
-    public let project: Project?
-    public let errorMessage: String?
-
-    public init(
-        clientRequestID: UUID,
-        ok: Bool,
-        project: Project? = nil,
-        errorMessage: String? = nil
-    ) {
-        self.clientRequestID = clientRequestID
-        self.ok = ok
-        self.project = project
-        self.errorMessage = errorMessage
-    }
-}
+// `RemoteFolderNode`, `FolderTreeRequestPayload`, `FolderTreeResultPayload`,
+// `CreateProjectRequestPayload`, and `CreateProjectResultPayload` live in
+// `FolderPayloads.swift` to keep this file under the line-length limit.
 
 public struct MobileProjectRunProfiles: Codable, Sendable, Equatable {
     public let projectId: UUID
@@ -715,6 +635,9 @@ public struct RunTaskUpdatePayload: Codable, Sendable {
     }
 }
 
+// `RunnableDetectRequestPayload` / `RunnableDetectResultPayload` live in
+// `DetectionPayloads.swift` to keep this file under the line-length limit.
+
 // MARK: - Codable
 
 extension Payload: Codable {
@@ -761,6 +684,8 @@ extension Payload: Codable {
         case runProfileResult = "run_profile_result"
         case runProfileRunRequest = "run_profile_run_request"
         case runProfileStopRequest = "run_profile_stop_request"
+        case runnableDetectRequest = "runnable_detect_request"
+        case runnableDetectResult = "runnable_detect_result"
         case runTaskUpdate = "run_task_update"
         case skillCatalogRequest = "skill_catalog_request"
         case skillCatalogResult = "skill_catalog_result"
@@ -825,6 +750,8 @@ extension Payload: Codable {
         case .runProfileResult: self = .runProfileResult(try container.decode(RunProfileResultPayload.self, forKey: .data))
         case .runProfileRunRequest: self = .runProfileRunRequest(try container.decode(RunProfileRunRequestPayload.self, forKey: .data))
         case .runProfileStopRequest: self = .runProfileStopRequest(try container.decode(RunProfileStopRequestPayload.self, forKey: .data))
+        case .runnableDetectRequest: self = .runnableDetectRequest(try container.decode(RunnableDetectRequestPayload.self, forKey: .data))
+        case .runnableDetectResult: self = .runnableDetectResult(try container.decode(RunnableDetectResultPayload.self, forKey: .data))
         case .runTaskUpdate: self = .runTaskUpdate(try container.decode(RunTaskUpdatePayload.self, forKey: .data))
         case .skillCatalogRequest: self = .skillCatalogRequest(try container.decode(SkillCatalogRequestPayload.self, forKey: .data))
         case .skillCatalogResult: self = .skillCatalogResult(try container.decode(SkillCatalogResultPayload.self, forKey: .data))
@@ -885,6 +812,8 @@ extension Payload: Codable {
         case .runProfileResult(let p): try container.encode(TypeKey.runProfileResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .runProfileRunRequest(let p): try container.encode(TypeKey.runProfileRunRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .runProfileStopRequest(let p): try container.encode(TypeKey.runProfileStopRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .runnableDetectRequest(let p): try container.encode(TypeKey.runnableDetectRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .runnableDetectResult(let p): try container.encode(TypeKey.runnableDetectResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .runTaskUpdate(let p): try container.encode(TypeKey.runTaskUpdate.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .skillCatalogRequest(let p): try container.encode(TypeKey.skillCatalogRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .skillCatalogResult(let p): try container.encode(TypeKey.skillCatalogResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)

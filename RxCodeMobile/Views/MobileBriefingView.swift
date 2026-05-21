@@ -20,6 +20,9 @@ struct GroupedBriefing: Identifiable {
     var key: BriefingGroupKey { BriefingGroupKey(projectId: projectId, branch: branch) }
 }
 
+/// Briefing view for iPhone (stack-based navigation) and iPad detail column.
+/// On iPhone, this shows a grid of cards that push to detail views.
+/// On iPad in three-column mode, use `BriefingListView` for the content column instead.
 struct MobileBriefingView: View {
     @EnvironmentObject private var state: MobileAppState
     @Namespace private var glassNamespace
@@ -257,6 +260,387 @@ struct MobileBriefingView: View {
                 description: Text("Briefings appear here after threads finish on your Mac.")
             )
         }
+    }
+}
+
+// MARK: - Briefing List View (iPad Content Column)
+
+/// List view for the iPad three-column layout content column.
+/// Shows briefing cards in a vertical list with selection support.
+struct BriefingListView: View {
+    @EnvironmentObject private var state: MobileAppState
+    @Binding var selectedGroup: BriefingGroupKey?
+    @Namespace private var glassNamespace
+
+    /// Selected project ids for filtering. Empty = show every project.
+    @State private var selectedProjectIds: Set<UUID> = []
+
+    /// When false (default), only show briefings for each project's current branch.
+    @State private var showAllBranches: Bool = false
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(spacing: 12) {
+                if groups.isEmpty {
+                    emptyState
+                        .frame(maxWidth: .infinity, minHeight: 200)
+                } else {
+                    GlassEffectContainer(spacing: 12) {
+                        ForEach(groups) { group in
+                            Button {
+                                selectedGroup = group.key
+                            } label: {
+                                BriefingListCard(
+                                    group: group,
+                                    projectName: projectsById[group.projectId]?.name ?? "Unknown Project",
+                                    activeJobCount: activeJobCountByProject[group.projectId] ?? 0,
+                                    isSelected: selectedGroup == group.key,
+                                    namespace: glassNamespace
+                                )
+                            }
+                            .buttonStyle(BriefingListCardButtonStyle(isSelected: selectedGroup == group.key))
+                            .glassEffectID(group.id, in: glassNamespace)
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .navigationTitle("Briefing")
+        .toolbar {
+            if hasAnyData {
+                ToolbarItem(placement: .topBarTrailing) {
+                    filterMenu
+                }
+            }
+        }
+        .refreshable {
+            await state.refreshSnapshot()
+        }
+    }
+
+    // MARK: - Data
+
+    private var projectsById: [UUID: Project] {
+        Dictionary(uniqueKeysWithValues: state.projects.map { ($0.id, $0) })
+    }
+
+    private var activeJobCountByProject: [UUID: Int] {
+        var counts: [UUID: Int] = [:]
+        for session in state.sessions where session.isStreaming {
+            counts[session.projectId, default: 0] += 1
+        }
+        return counts
+    }
+
+    private var allGroups: [GroupedBriefing] {
+        groupBriefings(briefings: state.branchBriefings, threads: state.threadSummaries)
+    }
+
+    private var groups: [GroupedBriefing] {
+        let projectFiltered: [GroupedBriefing]
+        if selectedProjectIds.isEmpty {
+            projectFiltered = allGroups
+        } else {
+            projectFiltered = allGroups.filter { selectedProjectIds.contains($0.projectId) }
+        }
+
+        if showAllBranches {
+            return projectFiltered
+        }
+        return projectFiltered.filter { group in
+            guard let branch = state.projectBranches[group.projectId] else {
+                return true
+            }
+            return group.branch == branch
+        }
+    }
+
+    private var hasAnyData: Bool {
+        !state.branchBriefings.isEmpty || !state.threadSummaries.isEmpty
+    }
+
+    private var projectsWithData: [Project] {
+        let ids = Set(allGroups.map(\.projectId))
+        return state.projects.filter { ids.contains($0.id) }
+    }
+
+    private var isFilterActive: Bool {
+        showAllBranches || !selectedProjectIds.isEmpty
+    }
+
+    private func toggleProject(_ id: UUID) {
+        if selectedProjectIds.contains(id) {
+            selectedProjectIds.remove(id)
+        } else {
+            selectedProjectIds.insert(id)
+        }
+    }
+
+    // MARK: - Filter Menu
+
+    @ViewBuilder
+    private var filterMenu: some View {
+        Menu {
+            Section("Branches") {
+                Button {
+                    showAllBranches = false
+                } label: {
+                    if !showAllBranches {
+                        Label("Current branch", systemImage: "checkmark")
+                    } else {
+                        Text("Current branch")
+                    }
+                }
+                Button {
+                    showAllBranches = true
+                } label: {
+                    if showAllBranches {
+                        Label("All branches", systemImage: "checkmark")
+                    } else {
+                        Text("All branches")
+                    }
+                }
+            }
+
+            let projects = projectsWithData
+            if projects.count > 1 {
+                Section("Projects") {
+                    Button {
+                        selectedProjectIds.removeAll()
+                    } label: {
+                        if selectedProjectIds.isEmpty {
+                            Label("All projects", systemImage: "checkmark")
+                        } else {
+                            Text("All projects")
+                        }
+                    }
+                    ForEach(projects) { project in
+                        Button {
+                            toggleProject(project.id)
+                        } label: {
+                            if selectedProjectIds.contains(project.id) {
+                                Label(project.name, systemImage: "checkmark")
+                            } else {
+                                Text(project.name)
+                            }
+                        }
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: isFilterActive
+                  ? "line.3.horizontal.decrease.circle.fill"
+                  : "line.3.horizontal.decrease.circle")
+        }
+    }
+
+    // MARK: - Empty State
+
+    @ViewBuilder
+    private var emptyState: some View {
+        if hasAnyData {
+            ContentUnavailableView(
+                "Nothing to Show",
+                systemImage: "line.3.horizontal.decrease.circle",
+                description: Text(
+                    showAllBranches
+                        ? "No briefings match the selected projects."
+                        : "No briefings for the current branch."
+                )
+            )
+        } else {
+            ContentUnavailableView(
+                "No Briefings Yet",
+                systemImage: "doc.text.magnifyingglass",
+                description: Text("Briefings appear here after threads finish on your Mac.")
+            )
+        }
+    }
+}
+
+// MARK: - Briefing List Card (Compact for Content Column)
+
+private struct BriefingListCard: View {
+    let group: GroupedBriefing
+    let projectName: String
+    let activeJobCount: Int
+    let isSelected: Bool
+    let namespace: Namespace.ID
+
+    private var threadCount: Int { group.threads.count }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Project icon
+            ZStack {
+                Circle()
+                    .fill(accentGradient.opacity(0.15))
+                    .frame(width: 40, height: 40)
+
+                Image(systemName: "folder.fill")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(accentGradient)
+            }
+
+            // Content
+            VStack(alignment: .leading, spacing: 4) {
+                Text(projectName)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.triangle.branch")
+                        .font(.system(size: 9, weight: .medium))
+                    Text(group.branch)
+                        .font(.system(size: 12))
+                        .lineLimit(1)
+                }
+                .foregroundStyle(.secondary)
+
+                // Metadata
+                FlowLayout(spacing: 8) {
+                    if threadCount > 0 {
+                        HStack(spacing: 4) {
+                            Image(systemName: "bubble.left.and.bubble.right")
+                                .font(.system(size: 9, weight: .medium))
+                            Text("\(threadCount)")
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .foregroundStyle(.secondary)
+                    }
+
+                    if activeJobCount > 0 {
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(.green)
+                                .frame(width: 5, height: 5)
+                            Text("\(activeJobCount) active")
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .foregroundStyle(.green)
+                    }
+
+                    HStack(spacing: 4) {
+                        Image(systemName: "clock")
+                            .font(.system(size: 9))
+                        Text(group.updatedAt.formatted(.relative(presentation: .named)))
+                            .font(.system(size: 11))
+                    }
+                    .foregroundStyle(.tertiary)
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+
+    private var accentGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 0.95, green: 0.6, blue: 0.4),
+                Color(red: 0.85, green: 0.5, blue: 0.55)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+}
+
+// MARK: - Briefing List Card Button Style
+
+private struct BriefingListCardButtonStyle: ButtonStyle {
+    let isSelected: Bool
+    @Environment(\.colorScheme) private var colorScheme
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(backgroundColor(isPressed: configuration.isPressed))
+            }
+            .glassEffect(
+                glassConfig(isPressed: configuration.isPressed),
+                in: .rect(cornerRadius: 14)
+            )
+            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
+            .animation(.spring(duration: 0.2), value: configuration.isPressed)
+    }
+
+    private func backgroundColor(isPressed: Bool) -> Color {
+        if isSelected {
+            return ClaudeTheme.accent.opacity(0.15)
+        } else if isPressed {
+            return Color.primary.opacity(0.05)
+        } else {
+            return .clear
+        }
+    }
+
+    private func glassConfig(isPressed: Bool) -> Glass {
+        if isSelected {
+            return .regular.tint(ClaudeTheme.accent.opacity(0.3)).interactive()
+        } else {
+            return .regular.interactive()
+        }
+    }
+}
+
+// MARK: - Flow Layout
+
+/// A layout that arranges views horizontally and wraps to the next line when needed.
+private struct FlowLayout: Layout {
+    var spacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        return layout(sizes: sizes, containerWidth: proposal.width ?? .infinity).size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        let offsets = layout(sizes: sizes, containerWidth: bounds.width).offsets
+
+        for (index, subview) in subviews.enumerated() {
+            subview.place(
+                at: CGPoint(x: bounds.minX + offsets[index].x, y: bounds.minY + offsets[index].y),
+                proposal: ProposedViewSize(sizes[index])
+            )
+        }
+    }
+
+    private func layout(sizes: [CGSize], containerWidth: CGFloat) -> (offsets: [CGPoint], size: CGSize) {
+        var offsets: [CGPoint] = []
+        var currentX: CGFloat = 0
+        var currentY: CGFloat = 0
+        var lineHeight: CGFloat = 0
+        var maxWidth: CGFloat = 0
+
+        for size in sizes {
+            if currentX + size.width > containerWidth && currentX > 0 {
+                currentX = 0
+                currentY += lineHeight + spacing
+                lineHeight = 0
+            }
+
+            offsets.append(CGPoint(x: currentX, y: currentY))
+            lineHeight = max(lineHeight, size.height)
+            currentX += size.width + spacing
+            maxWidth = max(maxWidth, currentX - spacing)
+        }
+
+        return (offsets, CGSize(width: maxWidth, height: currentY + lineHeight))
     }
 }
 

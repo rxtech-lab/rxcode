@@ -1,8 +1,14 @@
 import Combine
+import OSLog
 import RxCodeChatKit
 import RxCodeCore
 import RxCodeSync
 import SwiftUI
+
+private let mobileChatLogger = Logger(
+    subsystem: "com.idealapp.RxCodeMobile",
+    category: "MobileChat"
+)
 
 /// Read-write chat view. User messages are forwarded to the desktop and the
 /// desktop agent's stream is mirrored back as `session_update` payloads.
@@ -42,9 +48,23 @@ struct MobileChatView: View {
     /// set when the user scrolls up so they can read history without being
     /// yanked back down. Re-armed once they return to the bottom.
     @State private var autoScrollEnabled = true
+    /// Full height of the scroll view (independent of the keyboard).
+    @State private var scrollViewHeight: CGFloat = 0
+    /// Global `minY` of the scroll view.
+    @State private var scrollViewMinY: CGFloat = 0
+    /// Global `minY` of the floating composer stack — its top is the boundary
+    /// between the visible chat area and the area covered by composer + keyboard.
+    @State private var composerMinY: CGFloat = 0
+    /// `minY` of the latest user message in `chatContentCoordinateSpace`.
+    @State private var latestUserMinY: CGFloat = 0
+    /// `minY` of the tail spacer in `chatContentCoordinateSpace`.
+    @State private var tailSpacerMinY: CGFloat = 0
+    /// Set by `handleSend`; the next appended user message is the one we sent
+    /// and should be pinned to the top of the viewport.
+    @State private var awaitingSentUserMessage = false
+    @State private var distanceFromBottom: CGFloat = 0
 
     private static let bottomAnchorID = "message-list-bottom"
-    private static let bottomContentPadding: CGFloat = 200
     /// Distance from the bottom past which the "scroll to bottom" button shows.
     private static let nearBottomThreshold: CGFloat = 120
     /// Distance from the true bottom within which auto-follow re-arms. Kept
@@ -307,16 +327,35 @@ struct MobileChatView: View {
                             MobileStreamingIndicator(isThinking: isThinking)
                                 .transition(.opacity)
                         }
+                        // Dynamic tail spacer: pads the latest turn so a sent
+                        // message can be pinned to the top, and shrinks as the
+                        // assistant response grows so the question stays put.
                         Color.clear
-                            .frame(height: Self.bottomContentPadding)
+                            .frame(height: tailSpacerHeight)
+                            .onGeometryChange(for: CGFloat.self) { proxy in
+                                proxy.frame(in: .named(chatContentCoordinateSpace)).minY
+                            } action: { newValue in
+                                updateTailSpacerMinY(newValue)
+                            }
+                        Color.clear
+                            .frame(height: 1)
                             .id(Self.bottomAnchorID)
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 8)
                     .animation(.easeInOut(duration: 0.2), value: isStreaming)
                     .animation(.easeInOut(duration: 0.2), value: isLoadingMore)
+                    .coordinateSpace(.named(chatContentCoordinateSpace))
+                    .environment(\.chatTrackedMessageID, trackedUserMessageID)
+                    .environment(\.chatTrackedMessageGeometry, updateLatestUserMinY)
                 }
                 .scrollDismissesKeyboard(.interactively)
+                .onGeometryChange(for: CGRect.self) { proxy in
+                    proxy.frame(in: .global)
+                } action: { rect in
+                    scrollViewHeight = rect.height
+                    scrollViewMinY = rect.minY
+                }
                 .onScrollPhaseChange { _, newPhase, _ in
                     isUserDragging = newPhase == .tracking
                         || newPhase == .interacting
@@ -325,8 +364,14 @@ struct MobileChatView: View {
                 .onScrollGeometryChange(for: CGFloat.self) { geo in
                     geo.contentSize.height - geo.visibleRect.maxY
                 } action: { _, distanceFromBottom in
+                    self.distanceFromBottom = distanceFromBottom
                     let near = distanceFromBottom <= Self.nearBottomThreshold
-                    if isNearBottom != near { isNearBottom = near }
+                    if isNearBottom != near {
+                        mobileChatLogger.debug(
+                            "[ScrollButton] visibility near=\(near, privacy: .public) distance=\(Double(distanceFromBottom), privacy: .public)"
+                        )
+                        isNearBottom = near
+                    }
                     // Returning to the true bottom re-arms auto-follow.
                     if distanceFromBottom <= Self.atBottomThreshold {
                         autoScrollEnabled = true
@@ -358,13 +403,21 @@ struct MobileChatView: View {
                 }
                 .onChange(of: messages.last?.id) { _, _ in
                     // Keyed on the last message id so a prepended older page
-                    // (which leaves the tail unchanged) doesn't yank to bottom.
+                    // (which leaves the tail unchanged) doesn't yank the view.
                     guard didEstablishInitialScroll else {
                         didEstablishInitialScroll = true
                         return
                     }
-                    guard autoScrollEnabled else { return }
-                    withAnimation { proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom) }
+                    guard let last = messages.last else { return }
+                    if last.role == .user, awaitingSentUserMessage {
+                        // The message we just sent round-tripped back from the
+                        // desktop — pin it to the top of the viewport.
+                        awaitingSentUserMessage = false
+                        autoScrollEnabled = false
+                        pinSentMessageToTop(last.id, proxy: proxy)
+                    } else if autoScrollEnabled {
+                        withAnimation { proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom) }
+                    }
                 }
                 .onChange(of: messages.last?.content) { _, _ in
                     guard didEstablishInitialScroll, autoScrollEnabled else { return }
@@ -382,13 +435,21 @@ struct MobileChatView: View {
                     pendingTopAnchorID = nil
                     proxy.scrollTo(anchor, anchor: .top)
                 }
-                .overlay(alignment: .bottomTrailing) {
+                .overlay(alignment: .bottomLeading) {
                     if !isNearBottom {
                         scrollToBottomButton(proxy: proxy)
-                            .padding(.trailing, 16)
-                            .padding(.bottom, 80)
+                            .padding(.leading, 16)
+                            .padding(.bottom, scrollToBottomButtonBottomPadding)
                             .transition(.scale.combined(with: .opacity))
                             .zIndex(1)
+                            .onAppear {
+                                mobileChatLogger.debug(
+                                    "[ScrollButton] appeared bottomPadding=\(Double(scrollToBottomButtonBottomPadding), privacy: .public)"
+                                )
+                            }
+                            .onDisappear {
+                                mobileChatLogger.debug("[ScrollButton] disappeared")
+                            }
                     }
                 }
                 .animation(.spring(duration: 0.25), value: isNearBottom)
@@ -422,6 +483,11 @@ struct MobileChatView: View {
             }
             .background(Color.clear)
             .zIndex(2)
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.frame(in: .global).minY
+            } action: { newValue in
+                composerMinY = newValue
+            }
         }
     }
 
@@ -530,12 +596,80 @@ struct MobileChatView: View {
     // MARK: - Send / Stop
 
     private func handleSend(_ trimmed: String) {
-        // Sending always returns the user's focus to the latest messages.
-        autoScrollEnabled = true
+        // The sent message round-trips through the desktop; when it comes back
+        // it is pinned to the top. Suppress bottom-follow so the streaming
+        // reply fills the space below the question instead of yanking past it.
+        awaitingSentUserMessage = true
+        autoScrollEnabled = false
         Task {
             await state.sendUserMessage(trimmed, sessionID: sessionID)
             composer = ""
         }
+    }
+
+    // MARK: - Pin to top
+
+    /// The latest user message — the row pinned to the top on send and the
+    /// reference point for the dynamic tail spacer.
+    private var trackedUserMessageID: UUID? {
+        messages.last(where: { $0.role == .user })?.id
+    }
+
+    /// Visible chat area above the floating composer. `composerMinY` rides up
+    /// with the keyboard, so this shrinks automatically when the keyboard opens.
+    private var availableHeight: CGFloat {
+        guard composerMinY > 0, scrollViewMinY > 0 else { return scrollViewHeight }
+        return max(0, composerMinY - scrollViewMinY)
+    }
+
+    /// Minimum tail spacer: keeps the last line of a long reply clear of the
+    /// area covered by the composer (and keyboard).
+    private var minTailSpacer: CGFloat {
+        max(0, scrollViewHeight - availableHeight) + 16
+    }
+
+    /// Keeps the floating scroll button above the composer, including queued
+    /// message/question/plan banners and the keyboard-driven composer lift.
+    private var scrollToBottomButtonBottomPadding: CGFloat {
+        guard composerMinY > 0, scrollViewMinY > 0 else { return 80 }
+        let coveredHeight = max(0, scrollViewMinY + scrollViewHeight - composerMinY)
+        return coveredHeight + 12
+    }
+
+    /// Dynamic tail spacer height — pads the latest turn so the user message
+    /// can be pinned to the top, shrinking as the response grows.
+    private var tailSpacerHeight: CGFloat {
+        guard availableHeight > 0 else { return minTailSpacer }
+        let latestTurnHeight = max(0, tailSpacerMinY - latestUserMinY)
+        return max(minTailSpacer, availableHeight - latestTurnHeight)
+    }
+
+    /// Pin a freshly sent user message to the top of the viewport.
+    private func pinSentMessageToTop(_ id: UUID, proxy: ScrollViewProxy) {
+        // Defer one runloop so the dynamic tail spacer grows before we scroll —
+        // otherwise there is not enough content to reach the top.
+        DispatchQueue.main.async {
+            withAnimation(.easeInOut(duration: 0.25)) {
+                proxy.scrollTo(id, anchor: .top)
+            }
+        }
+    }
+
+    /// `minY` of the latest user message — fed back from `ChatMessageListView`.
+    private func updateLatestUserMinY(_ value: CGFloat) {
+        guard abs(value - latestUserMinY) > 0.5 else { return }
+        var t = Transaction()
+        t.animation = nil
+        withTransaction(t) { latestUserMinY = value }
+    }
+
+    /// `minY` of the tail spacer — its distance from the user message is the
+    /// height of the latest turn.
+    private func updateTailSpacerMinY(_ value: CGFloat) {
+        guard abs(value - tailSpacerMinY) > 0.5 else { return }
+        var t = Transaction()
+        t.animation = nil
+        withTransaction(t) { tailSpacerMinY = value }
     }
 
     private func handleStop() {
@@ -551,8 +685,12 @@ struct MobileChatView: View {
 
     private func scrollToBottomButton(proxy: ScrollViewProxy) -> some View {
         Button {
+            mobileChatLogger.info(
+                "[ScrollButton] tap session=\(sessionID, privacy: .public) messages=\(messages.count, privacy: .public) distance=\(Double(distanceFromBottom), privacy: .public) padding=\(Double(scrollToBottomButtonBottomPadding), privacy: .public)"
+            )
             autoScrollEnabled = true
-            withAnimation { proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom) }
+            isUserDragging = false
+            scrollToBottomFromButton(proxy)
         } label: {
             Image(systemName: "arrow.down")
                 .font(.system(size: 14, weight: .semibold))
@@ -568,8 +706,23 @@ struct MobileChatView: View {
                 )
                 .shadow(color: .black.opacity(0.12), radius: 6, x: 0, y: 2)
         }
+        .frame(width: 48, height: 48)
+        .contentShape(Circle())
         .buttonStyle(.plain)
         .accessibilityLabel("Scroll to bottom")
+    }
+
+    private func scrollToBottomFromButton(_ proxy: ScrollViewProxy) {
+        mobileChatLogger.debug("[ScrollButton] scroll immediate")
+        withAnimation(.easeInOut(duration: 0.2)) {
+            proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom)
+        }
+        DispatchQueue.main.async {
+            mobileChatLogger.debug("[ScrollButton] scroll deferred")
+            withAnimation(.easeInOut(duration: 0.2)) {
+                proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom)
+            }
+        }
     }
 
     // MARK: - Queued preview pill

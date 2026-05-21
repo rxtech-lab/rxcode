@@ -107,6 +107,7 @@ extension MobileAppState {
                 }
                 activeSessionID = active
             }
+            hasReceivedInitialSnapshot = true
             refreshWidgetData()
         case .moreMessages(let page):
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "more_messages") else { return }
@@ -180,6 +181,9 @@ extension MobileAppState {
         case .runTaskUpdate(let update):
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "run_task_update") else { return }
             upsertRunTask(update.task)
+        case .runnableDetectResult(let result):
+            guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "runnable_detect_result") else { return }
+            applyRunnableDetectResult(result)
         case .skillCatalogResult(let result):
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "skill_catalog_result") else { return }
             applySkillCatalogResult(result)
@@ -223,6 +227,20 @@ extension MobileAppState {
             Task { await self.requestSnapshot() }
         } else {
             lastRunProfileError = result.errorMessage ?? "Run profile operation failed."
+        }
+    }
+
+    func applyRunnableDetectResult(_ result: RunnableDetectResultPayload) {
+        runnableDetectInFlight.remove(result.projectID)
+        if pendingRunnableDetectRequestID == result.clientRequestID {
+            pendingRunnableDetectRequestID = nil
+        }
+        if result.ok, let detected = result.detected {
+            detectedRunnablesByProject[result.projectID] = detected
+            runnableDetectError = nil
+            logger.info("[RunProfiles] applied detection project=\(result.projectID.uuidString, privacy: .public) xcode=\(detected.xcode.count, privacy: .public) npm=\(detected.npm.count, privacy: .public) make=\(detected.make.count, privacy: .public)")
+        } else {
+            runnableDetectError = result.errorMessage ?? "Failed to detect runnables."
         }
     }
 

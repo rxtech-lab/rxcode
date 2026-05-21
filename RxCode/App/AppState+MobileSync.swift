@@ -232,6 +232,20 @@ extension AppState {
         }
         mobileSyncObservers.append(runProfileStopObserver)
 
+        let runnableDetectObserver = center.addObserver(
+            forName: .mobileSyncRunnableDetectRequested,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let fromHex = notification.userInfo?["from"] as? String,
+                  let request = notification.userInfo?["payload"] as? RunnableDetectRequestPayload
+            else { return }
+            Task { @MainActor [weak self] in
+                await self?.handleMobileRunnableDetectRequest(request, fromHex: fromHex)
+            }
+        }
+        mobileSyncObservers.append(runnableDetectObserver)
+
         let questionAnswerObserver = center.addObserver(
             forName: .mobileSyncQuestionAnswerReceived,
             object: nil,
@@ -801,6 +815,37 @@ extension AppState {
         )
         await MobileSyncService.shared.send(.runProfileResult(result), toHex: hex)
         if ok { scheduleMobileSnapshotBroadcast() }
+    }
+
+    /// Scan a project for runnable Xcode schemes, npm scripts, and Make targets
+    /// on behalf of a paired mobile device. Detection logic lives entirely on
+    /// the desktop — mobile only displays the result.
+    func handleMobileRunnableDetectRequest(
+        _ request: RunnableDetectRequestPayload,
+        fromHex: String
+    ) async {
+        logger.info("[MobileSync] handling runnable detection project=\(request.projectID.uuidString, privacy: .public) mobileKey=\(String(fromHex.prefix(12)), privacy: .public)")
+        guard let project = projects.first(where: { $0.id == request.projectID }) else {
+            logger.error("[MobileSync] runnable detection rejected unknown project=\(request.projectID.uuidString, privacy: .public)")
+            let result = RunnableDetectResultPayload(
+                clientRequestID: request.clientRequestID,
+                projectID: request.projectID,
+                ok: false,
+                errorMessage: "Project not found on desktop."
+            )
+            await MobileSyncService.shared.send(.runnableDetectResult(result), toHex: fromHex)
+            return
+        }
+
+        let detected = await RunProfileDetector().detect(in: project.path)
+        logger.info("[MobileSync] runnable detection complete project=\(request.projectID.uuidString, privacy: .public) xcode=\(detected.xcode.count, privacy: .public) npm=\(detected.npm.count, privacy: .public) make=\(detected.make.count, privacy: .public)")
+        let result = RunnableDetectResultPayload(
+            clientRequestID: request.clientRequestID,
+            projectID: request.projectID,
+            ok: true,
+            detected: detected
+        )
+        await MobileSyncService.shared.send(.runnableDetectResult(result), toHex: fromHex)
     }
 
 }

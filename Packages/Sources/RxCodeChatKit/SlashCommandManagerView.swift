@@ -257,6 +257,8 @@ public struct SlashCommandManagerView: View {
                         .font(.system(size: ClaudeTheme.size(13), weight: .semibold, design: .monospaced))
                         .foregroundStyle(isEnabled ? Color.primary : Color.secondary)
 
+                    agentScopeBadge(cmd.agentProvider)
+
                     if isDefault {
                         Text("default", bundle: .module)
                             .font(.system(size: ClaudeTheme.size(9)))
@@ -311,6 +313,19 @@ public struct SlashCommandManagerView: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// Capsule showing which agent a command applies to.
+    @ViewBuilder
+    private func agentScopeBadge(_ provider: AgentProvider?) -> some View {
+        let label = provider?.displayName ?? String(localized: "All Agents", bundle: .module)
+        let tint: Color = provider == nil ? .secondary : Color.accentColor
+        Text(label)
+            .font(.system(size: ClaudeTheme.size(9), weight: .medium))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .background(tint.opacity(0.12), in: Capsule())
     }
 
     // MARK: - Empty State
@@ -416,6 +431,7 @@ struct SlashCommandEditView: View {
     @State private var detailDesc: String = ""
     @State private var acceptsInput: Bool = false
     @State private var isInteractive: Bool = false
+    @State private var agentScope: AgentProvider? = nil
 
     private var isEditing: Bool { command != nil }
     private var normalizedName: String { SlashCommandRegistry.normalizedNameForInput(name) }
@@ -539,6 +555,23 @@ struct SlashCommandEditView: View {
                                 .labelsHidden()
                         }
                     }
+
+                    // Agent scope
+                    fieldSection("Agent") {
+                        Picker("", selection: $agentScope) {
+                            Text("All Agents (Global)", bundle: .module).tag(nil as AgentProvider?)
+                            ForEach(AgentProvider.allCases, id: \.self) { provider in
+                                Text(provider.displayName).tag(Optional(provider))
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .disabled(isDefault)
+
+                        Text("Built-in commands are Claude Code only. Custom commands can target one agent or all.", bundle: .module)
+                            .font(.system(size: ClaudeTheme.size(11)))
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(20)
@@ -586,7 +619,8 @@ struct SlashCommandEditView: View {
                         description: desc.trimmingCharacters(in: .whitespacesAndNewlines),
                         detailDescription: detailDesc.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : detailDesc.trimmingCharacters(in: .whitespacesAndNewlines),
                         acceptsInput: acceptsInput,
-                        isInteractive: isInteractive
+                        isInteractive: isInteractive,
+                        agentProvider: isDefault ? .claudeCode : agentScope
                     )
                     onSave(result)
                     dismiss()
@@ -597,7 +631,7 @@ struct SlashCommandEditView: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
         }
-        .frame(width: 520, height: 520)
+        .frame(width: 520, height: 580)
         .focusable(false)
         .onAppear {
             if let cmd = command {
@@ -606,6 +640,7 @@ struct SlashCommandEditView: View {
                 detailDesc = cmd.detailDescription ?? ""
                 acceptsInput = cmd.acceptsInput
                 isInteractive = cmd.isInteractive
+                agentScope = cmd.agentProvider
             }
         }
     }

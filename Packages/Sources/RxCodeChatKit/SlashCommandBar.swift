@@ -12,15 +12,18 @@ public struct SlashCommand: Identifiable, Codable, Hashable {
     public var detailDescription: String?
     public var acceptsInput: Bool
     public var isInteractive: Bool
+    /// Agent this command applies to. `nil` means global (available to every agent).
+    public var agentProvider: AgentProvider?
 
     public var command: String { "/\(name)" }
 
-    public init(name: String, description: String, detailDescription: String? = nil, acceptsInput: Bool = false, isInteractive: Bool = false) {
+    public init(name: String, description: String, detailDescription: String? = nil, acceptsInput: Bool = false, isInteractive: Bool = false, agentProvider: AgentProvider? = nil) {
         self.name = name
         self.description = description
         self.detailDescription = detailDescription
         self.acceptsInput = acceptsInput
         self.isInteractive = isInteractive
+        self.agentProvider = agentProvider
     }
 
     public init(from decoder: Decoder) throws {
@@ -30,6 +33,7 @@ public struct SlashCommand: Identifiable, Codable, Hashable {
         detailDescription = try c.decodeIfPresent(String.self, forKey: .detailDescription)
         acceptsInput = try c.decodeIfPresent(Bool.self, forKey: .acceptsInput) ?? false
         isInteractive = try c.decodeIfPresent(Bool.self, forKey: .isInteractive) ?? false
+        agentProvider = try c.decodeIfPresent(AgentProvider.self, forKey: .agentProvider)
     }
 }
 
@@ -80,7 +84,7 @@ public enum SlashCommandRegistry {
         _cachedCommands = nil
     }
 
-    public static let defaultCommands: [SlashCommand] = [
+    private static let defaultCommandsRaw: [SlashCommand] = [
         // CLI built-in: conversation
         SlashCommand(name: "clear", description: "Start a new conversation"),
         SlashCommand(name: "btw", description: "Side question not added to conversation", acceptsInput: true),
@@ -173,6 +177,13 @@ public enum SlashCommandRegistry {
         SlashCommand(name: "exit", description: "Exit CLI"),
     ]
 
+    /// All built-in commands, scoped to Claude Code — they are Claude CLI features.
+    public static let defaultCommands: [SlashCommand] = defaultCommandsRaw.map {
+        var command = $0
+        command.agentProvider = .claudeCode
+        return command
+    }
+
     private static var defaultCommandKeys: Set<String> {
         Set(defaultCommands.map { commandKey($0.name) })
     }
@@ -209,6 +220,8 @@ public enum SlashCommandRegistry {
         for defaultCommand in defaultCommands {
             guard var modified = byKey[commandKey(defaultCommand.name)] else { continue }
             modified.name = defaultCommand.name
+            // Built-in scope is fixed (Claude Code) and not user-editable.
+            modified.agentProvider = defaultCommand.agentProvider
             if modified != defaultCommand {
                 result[defaultCommand.name] = modified
             }
@@ -396,10 +409,12 @@ public enum SlashCommandRegistry {
             String(localized: "detailDescription: optional longer text shown in command details. Use null or omit it when empty.", bundle: .module),
             String(localized: "acceptsInput: true lets users type additional text after the command.", bundle: .module),
             String(localized: "isInteractive: true runs the command in the interactive terminal.", bundle: .module),
+            String(localized: "agentProvider: agent this command applies to (claudeCode, codex, acp). Use null or omit it for all agents.", bundle: .module),
             "",
             String(localized: "All properties example:", bundle: .module),
             "{",
             "  \"acceptsInput\": true,",
+            "  \"agentProvider\": \"claudeCode\",",
             "  \"description\": \"\(String(localized: "Short description shown in the command picker", bundle: .module))\",",
             "  \"detailDescription\": \"\(String(localized: "Optional longer description shown in command details", bundle: .module))\",",
             "  \"isInteractive\": false,",
@@ -416,14 +431,23 @@ public enum SlashCommandRegistry {
         commands.filter { isEnabled(name: $0.name) }
     }
 
-    static func filtered(by query: String) -> [SlashCommand] {
+    /// Whether a command should be offered for the given agent.
+    /// A `nil` agent (no active session) shows everything; otherwise a command
+    /// is visible when it is global (`agentProvider == nil`) or matches the agent.
+    static func isVisible(_ cmd: SlashCommand, for agent: AgentProvider?) -> Bool {
+        guard let agent else { return true }
+        return cmd.agentProvider == nil || cmd.agentProvider == agent
+    }
+
+    static func filtered(by query: String, agent: AgentProvider?) -> [SlashCommand] {
         let q = query.lowercased().trimmingCharacters(in: .whitespaces)
-        if q.isEmpty || q == "/" { return enabledCommands }
+        let base = enabledCommands.filter { isVisible($0, for: agent) }
+        if q.isEmpty || q == "/" { return base }
         let search = q.hasPrefix("/") ? String(q.dropFirst()) : q
 
         var nameMatches: [SlashCommand] = []
         var descriptionMatches: [SlashCommand] = []
-        for cmd in enabledCommands {
+        for cmd in base {
             if cmd.name.lowercased().contains(search) {
                 nameMatches.append(cmd)
             } else if cmd.description.lowercased().contains(search) {
@@ -438,12 +462,13 @@ public enum SlashCommandRegistry {
 
 struct SlashCommandPopup: View {
     let query: String
+    let agent: AgentProvider?
     let onSelect: (SlashCommand) -> Void
     @Binding var selectedIndex: Int
     @State private var detailCommand: SlashCommand?
 
     private var filtered: [SlashCommand] {
-        SlashCommandRegistry.filtered(by: query)
+        SlashCommandRegistry.filtered(by: query, agent: agent)
     }
 
     func showDetailForSelected() {

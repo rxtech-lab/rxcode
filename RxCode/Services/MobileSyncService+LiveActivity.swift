@@ -294,27 +294,56 @@ extension MobileSyncService {
     /// Push the current ongoing-job count and agent usage to every paired
     /// device as a silent background notification, refreshing the home-screen
     /// widget. Also called by `AppState` when rate-limit usage refreshes.
+    ///
+    /// The snapshot is E2E-encrypted per device (sealed to that device's
+    /// Curve25519 key), so the relay only ever forwards opaque ciphertext.
     func pushWidgetUpdate() {
         let jobCount = streamingSessionIDs.count
         lastWidgetJobCount = jobCount
         let devices = pairedDevices.filter { ($0.apnsToken?.isEmpty == false) }
         guard !devices.isEmpty, let pushURL = Self.pushEndpointURL(from: relayURL) else { return }
         let usage = usageSnapshotProvider?()
-        var widget: [String: Any] = [
-            "jobs": jobCount,
-            "updatedAt": Date().timeIntervalSince1970,
-        ]
-        if let cc = usage?.cc { widget["cc"] = cc }
-        if let codex = usage?.codex { widget["codex"] = codex }
-        let payload: [String: Any] = ["aps": ["content-available": 1], "widget": widget]
+        let snapshot = WidgetSnapshotPayload(
+            jobs: jobCount,
+            cc: usage?.cc,
+            codex: usage?.codex,
+            updatedAt: Date().timeIntervalSince1970
+        )
         for device in devices {
             guard let token = device.apnsToken else { continue }
             Task {
-                await postRawPush(deviceToken: token, pushType: "background",
-                                  apnsPayload: payload, collapseID: "rxcode-widget",
-                                  device: device, pushURL: pushURL)
+                await sendWidgetPush(snapshot, to: device, token: token, pushURL: pushURL)
             }
         }
+    }
+
+    /// Seal the widget snapshot for one device and POST it as a silent
+    /// background push. Per-device failures are logged and swallowed — widget
+    /// refreshes are best-effort.
+    private func sendWidgetPush(
+        _ snapshot: WidgetSnapshotPayload,
+        to device: PairedDevice,
+        token: String,
+        pushURL: URL
+    ) async {
+        guard let peer = await client.peer(forHex: device.pubkeyHex) else {
+            logger.error("[Push] widget push skipped — unknown peer deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
+            return
+        }
+        let encWidget: String
+        do {
+            let envelope = try APNsCrypto.sealWidget(
+                snapshot, sender: identity.privateKey, recipient: peer
+            )
+            encWidget = try JSONEncoder().encode(envelope).base64EncodedString()
+        } catch {
+            logger.error("[Push] widget seal failed deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public): \(error.localizedDescription, privacy: .public)")
+            return
+        }
+        let payload: [String: Any] = ["aps": ["content-available": 1], "encWidget": encWidget]
+        await postRawPush(deviceToken: token, pushType: "background",
+                          apnsPayload: payload, collapseID: "rxcode-widget",
+                          device: device, pushURL: pushURL)
     }
 
     /// POST a raw (Live Activity or background) push to the relay `/push`

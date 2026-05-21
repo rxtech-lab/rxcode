@@ -29,41 +29,35 @@ struct SettingsView: View {
                 }
                 .tag(1)
 
-            SlashCommandManagerView(isEmbedded: true)
+            CommandsSettingsTab()
                 .tabItem {
-                    Label("Slash Commands", systemImage: "terminal.fill")
+                    Label("Commands", systemImage: "command")
                 }
                 .tag(2)
-
-            ShortcutManagerView(isEmbedded: true)
-                .tabItem {
-                    Label("Shortcuts", systemImage: "bolt.fill")
-                }
-                .tag(3)
 
             SkillMarketView(isEmbedded: true)
                 .tabItem {
                     Label("Skill Marketplace", systemImage: "brain.head.profile")
                 }
-                .tag(4)
+                .tag(3)
 
             MCPSettingsTab()
                 .tabItem {
                     Label("MCP", systemImage: "puzzlepiece.extension")
                 }
-                .tag(5)
+                .tag(4)
 
             ACPClientSettingsTab()
                 .tabItem {
                     Label("ACP Clients", systemImage: "link.circle")
                 }
-                .tag(6)
+                .tag(5)
 
             MobileSettingsTab()
                 .tabItem {
                     Label("Mobile", systemImage: "iphone.gen3")
                 }
-                .tag(7)
+                .tag(6)
         }
         .frame(width: 680, height: 620)
         .focusable(false)

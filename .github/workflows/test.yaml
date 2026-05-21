@@ -100,3 +100,37 @@ jobs:
             -destination platform=macOS \
             CODE_SIGNING_ALLOWED=NO \
             build | xcpretty
+
+  build-mobile:
+    name: xcodebuild build (RxCodeMobile)
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install xcpretty
+        run: gem install xcpretty
+
+      - name: Build mobile app (ad-hoc signing)
+        run: |
+          # The iOS app embeds extensions (notification service, widget), so
+          # CODE_SIGNING_ALLOWED=NO won't link a valid .app. Ad-hoc sign the
+          # device build instead — no certificate or provisioning profile
+          # required, just enough to produce a verifiable bundle.
+          set -o pipefail && xcodebuild \
+            -project RxCode.xcodeproj \
+            -scheme RxCodeMobile \
+            -configuration Debug \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=YES \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
+            build | xcpretty

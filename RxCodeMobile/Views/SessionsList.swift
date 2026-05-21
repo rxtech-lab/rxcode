@@ -694,8 +694,8 @@ extension MobileAppState {
 #Preview("Sessions List") {
     let state = MobileAppState.preview
     let projectID = state.projects.first!.id
-    
-    return NavigationStack {
+
+    NavigationStack {
         SessionsList(
             projectID: projectID,
             selected: .constant(nil)
@@ -708,8 +708,8 @@ extension MobileAppState {
     let state = MobileAppState.preview
     let projectID = state.projects.first!.id
     let selectedID = state.sessions.first?.id
-    
-    return NavigationStack {
+
+    NavigationStack {
         SessionsList(
             projectID: projectID,
             selected: .constant(selectedID),
@@ -722,8 +722,8 @@ extension MobileAppState {
 #Preview("Sessions List - Empty") {
     let state = MobileAppState.previewEmpty
     let projectID = state.projects.first!.id
-    
-    return NavigationStack {
+
+    NavigationStack {
         SessionsList(
             projectID: projectID,
             selected: .constant(nil)

@@ -44,16 +44,16 @@ struct GlassThreadCard: View {
             VStack(alignment: .leading, spacing: 6) {
                 // Title row
                 HStack(spacing: 6) {
-                    Text(displayTitle)
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                    
                     if session.isPinned {
                         Image(systemName: "pin.fill")
                             .font(.system(size: 10, weight: .semibold))
                             .foregroundStyle(.tertiary)
                     }
+                    
+                    Text(displayTitle)
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
                 }
                 
                 // Metadata row

@@ -190,7 +190,7 @@ enum ManualTopic: String, CaseIterable, Identifiable {
         case .shortcuts:       "Keyboard Shortcuts"
         case .slashCommands:   "Slash Commands"
         case .attachments:     "File & Image Attachments"
-        case .customShortcuts: "Shortcut Buttons"
+        case .customShortcuts: "Shortcuts"
         case .inspectorPanel:  "Inspector Panel"
         case .github:          "GitHub Integration"
         case .marketplace:     "Skill Marketplace"
@@ -233,7 +233,7 @@ enum ManualTopic: String, CaseIterable, Identifiable {
                 ),
                 ManualSection(
                     title: "Top Toolbar",
-                    body: "The toolbar contains: New Chat, Manage Slash Commands, Manage Shortcut Buttons, Skip Permissions toggle, Model picker, Inspector panel toggle, Settings, and the GitHub integration button."
+                    body: "The toolbar contains: New Chat, Manage Commands, Skip Permissions toggle, Model picker, Inspector panel toggle, Settings, and the GitHub integration button."
                 ),
             ]
 
@@ -384,11 +384,11 @@ enum ManualTopic: String, CaseIterable, Identifiable {
                     ]
                 ),
                 ManualSection(
-                    title: "@ File Popup",
+                    title: "@ Mention Popup",
                     body: "",
                     items: [
-                        KeyValueItem(key: "↑ / ↓", value: "Select item"),
-                        KeyValueItem(key: "Return / Tab", value: "Insert file path"),
+                        KeyValueItem(key: "↑ / ↓", value: "Select shortcut or file"),
+                        KeyValueItem(key: "Return / Tab", value: "Run shortcut or insert file path"),
                         KeyValueItem(key: "Escape", value: "Close popup"),
                     ]
                 ),
@@ -415,8 +415,13 @@ enum ManualTopic: String, CaseIterable, Identifiable {
                     body: "Some commands (such as /config, /permissions, /model) open in a full interactive terminal popup sheet, where you can use the interactive CLI interface. The popup closes automatically when the command finishes."
                 ),
                 ManualSection(
+                    title: "Agent-Specific Commands",
+                    body: "Each command targets an agent: built-in commands are Claude Code only, while custom commands can target Claude Code, Codex, ACP, or all agents. The popup only lists commands available to the current session's agent.",
+                    note: "Set a command's agent in its editor under Settings → Commands."
+                ),
+                ManualSection(
                     title: "Managing Commands",
-                    body: "Click the / button in the toolbar, or open Settings → Slash Commands to add, edit, delete, or disable custom commands. Built-in commands can be edited and enabled or disabled in the app.",
+                    body: "Click the / button in the toolbar, or open Settings → Commands to add, edit, delete, or disable custom commands. Built-in commands can be edited and enabled or disabled in the app.",
                     note: "JSON import/export backs up or shares custom commands only. Built-in commands in imported files are ignored."
                 ),
             ]
@@ -439,11 +444,11 @@ enum ManualTopic: String, CaseIterable, Identifiable {
                     note: "Screenshots can be pasted directly — they are automatically attached as images."
                 ),
                 ManualSection(
-                    title: "@ File References",
-                    body: "Type @ in the input field to open a project file search popup. Files are filtered in real time as you type.",
+                    title: "@ Mentions",
+                    body: "Type @ in the input field to open the mention popup. It lists your shortcuts on top and project files below, both filtered in real time as you type.",
                     items: [
-                        KeyValueItem(key: "↑ / ↓", value: "Select item"),
-                        KeyValueItem(key: "Return / Tab", value: "Insert file path into message"),
+                        KeyValueItem(key: "↑ / ↓", value: "Select shortcut or file"),
+                        KeyValueItem(key: "Return / Tab", value: "Run shortcut or insert file path"),
                         KeyValueItem(key: "Escape", value: "Close popup"),
                     ]
                 ),
@@ -462,20 +467,20 @@ enum ManualTopic: String, CaseIterable, Identifiable {
         case .customShortcuts:
             [
                 ManualSection(
-                    title: "What are Shortcut Buttons?",
-                    body: "Quick-access buttons shown at the top of the chat area. Run frequently used messages or shell commands with a single click."
+                    title: "What are Shortcuts?",
+                    body: "Saved snippets for frequently used messages or shell commands. Type @ in the input field to open the mention popup and pick a shortcut from the list."
                 ),
                 ManualSection(
-                    title: "Adding a Shortcut",
-                    body: "Click the ⚡ button in the toolbar to open the Shortcut Manager, or press the + button on the right side of the shortcut bar. You can set a name, message/command, icon, and color."
+                    title: "Using a Shortcut",
+                    body: "Type @ to open the popup, continue typing to filter, then press Return or Tab. A message shortcut is inserted into the input field for you to review and send; a terminal-command shortcut runs immediately."
                 ),
                 ManualSection(
                     title: "Terminal Command Mode",
-                    body: "Enable the \"Run as terminal command\" option to execute the shortcut as a shell command in the inspector terminal instead of sending it as a chat message. The project directory is used as the working directory."
+                    body: "Enable the \"Run as terminal command\" option to execute the shortcut as a shell command in the inspector terminal instead of inserting it as a chat message. The project directory is used as the working directory."
                 ),
                 ManualSection(
                     title: "Managing Shortcuts",
-                    body: "Open Settings → Shortcuts to reorder, edit, or delete shortcuts. Shortcut configurations are saved per project.",
+                    body: "Open Settings → Commands and switch to the Shortcuts segment to add, edit, or delete shortcuts.",
                     note: "JSON import/export is supported for backing up or sharing your shortcut set."
                 ),
             ]
@@ -617,7 +622,7 @@ enum ManualTopic: String, CaseIterable, Identifiable {
             [
                 ManualSection(
                     title: "Opening Settings",
-                    body: "Choose RxCode → Settings from the menu bar or press ⌘, to open the Settings window. Settings are organized into four tabs: General, Message, Slash Commands, and Shortcuts."
+                    body: "Choose RxCode → Settings from the menu bar or press ⌘, to open the Settings window. Settings are organized into tabs including General, Message, and Commands."
                 ),
                 ManualSection(
                     title: "General Tab",
@@ -657,8 +662,8 @@ enum ManualTopic: String, CaseIterable, Identifiable {
                     ]
                 ),
                 ManualSection(
-                    title: "Slash Commands & Shortcuts Tabs",
-                    body: "The Slash Commands tab manages built-in and custom commands — edit, enable/disable, add, or delete. JSON import/export covers custom commands only. The Shortcuts tab manages shortcut buttons with JSON import/export support."
+                    title: "Commands Tab",
+                    body: "The Commands tab has two segments. Slash Commands manages built-in and custom commands — edit, enable/disable, add, delete, or set an agent scope; JSON import/export covers custom commands only. Shortcuts manages your @-triggered shortcuts with JSON import/export support."
                 ),
                 ManualSection(
                     title: "Checking for Updates",

@@ -38,6 +38,7 @@ struct SessionsList: View {
         glassThreadList
             .navigationTitle("Threads")
             .toolbar { toolbarContent }
+            .toolbar(usesSelection ? .automatic : .hidden, for: .tabBar)
             .sheet(isPresented: $showingNewThread) {
                 NewThreadSheet(projectID: projectID) { newSessionID in
                     selected = newSessionID
@@ -47,16 +48,22 @@ struct SessionsList: View {
             .searchable(
                 text: $searchText,
                 placement: .navigationBarDrawer(displayMode: .automatic),
-                prompt: "Search threads"
+                prompt: "Global search"
             )
             .autocorrectionDisabled(true)
             .textInputAutocapitalization(.never)
-            .onChange(of: searchText) { _, _ in
+            .onChange(of: searchText) { _, newValue in
                 // Restart paging so search results always begin at the top.
                 displayLimit = Self.pageSize
+                state.updateSearchQuery(newValue)
+            }
+            .onDisappear {
+                state.updateSearchQuery("")
             }
             .overlay {
-                if filtered.isEmpty && !searchText.isEmpty {
+                if usesDesktopSearch, !state.isSearching, desktopSearchHits.isEmpty {
+                    ContentUnavailableView.search(text: searchText)
+                } else if !usesDesktopSearch, filtered.isEmpty && !searchText.isEmpty {
                     ContentUnavailableView.search(text: searchText)
                 } else if filtered.isEmpty && searchText.isEmpty {
                     emptyStateView
@@ -83,26 +90,30 @@ struct SessionsList: View {
     private var glassThreadList: some View {
         ScrollView {
             LazyVStack(spacing: 10) {
-                GlassEffectContainer(spacing: 12) {
-                    ForEach(visible) { session in
-                        GlassThreadCard(
-                            session: session,
-                            isSelected: selected == session.id,
-                            usesNavigationLink: !usesSelection,
-                            onSelect: usesSelection ? { selected = session.id } : nil
-                        )
-                        .glassEffectID(session.id, in: glassNamespace)
-                        .onAppear {
-                            if session.id == visible.last?.id { loadMore() }
-                        }
-                        .contextMenu {
-                            threadContextMenu(for: session)
+                if usesDesktopSearch {
+                    desktopSearchResults
+                } else {
+                    GlassEffectContainer(spacing: 12) {
+                        ForEach(visible) { session in
+                            GlassThreadCard(
+                                session: session,
+                                isSelected: selected == session.id,
+                                usesNavigationLink: !usesSelection,
+                                onSelect: usesSelection ? { selected = session.id } : nil
+                            )
+                            .glassEffectID(session.id, in: glassNamespace)
+                            .onAppear {
+                                if session.id == visible.last?.id { loadMore() }
+                            }
+                            .contextMenu {
+                                threadContextMenu(for: session)
+                            }
                         }
                     }
-                }
 
-                if displayLimit < filtered.count {
-                    loadingIndicator
+                    if displayLimit < filtered.count {
+                        loadingIndicator
+                    }
                 }
             }
             .padding(.horizontal, 16)
@@ -110,6 +121,29 @@ struct SessionsList: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .animation(.spring(duration: 0.3), value: filtered.map(\.id))
+    }
+
+    @ViewBuilder
+    private var desktopSearchResults: some View {
+        if state.isSearching {
+            HStack(spacing: 8) {
+                ProgressView()
+                Text("Searching…")
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 40)
+        } else if !desktopSearchHits.isEmpty {
+            GlassEffectContainer(spacing: 12) {
+                ForEach(desktopSearchHits) { hit in
+                    SearchThreadHitCard(
+                        hit: hit,
+                        project: projectsByID[hit.projectID],
+                        namespace: glassNamespace
+                    )
+                }
+            }
+        }
     }
 
     // MARK: - Context Menu
@@ -177,6 +211,18 @@ struct SessionsList: View {
         Array(filtered.prefix(displayLimit))
     }
 
+    private var usesDesktopSearch: Bool {
+        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var desktopSearchHits: [SearchHit] {
+        state.searchThreadHits
+    }
+
+    private var projectsByID: [UUID: Project] {
+        Dictionary(uniqueKeysWithValues: state.projects.map { ($0.id, $0) })
+    }
+
     private func loadMore() {
         guard displayLimit < filtered.count else { return }
         displayLimit = min(displayLimit + Self.pageSize, filtered.count)
@@ -216,6 +262,12 @@ struct MobileRunProfilesView: View {
         state.runTasks(for: projectID)
     }
 
+    /// Desktop-detected runnables for this project, or an empty set until the
+    /// detection request resolves.
+    private var detected: DetectedRunnables {
+        state.detectedRunnablesByProject[projectID] ?? DetectedRunnables()
+    }
+
     var body: some View {
         List {
             if !tasks.isEmpty {
@@ -246,15 +298,15 @@ struct MobileRunProfilesView: View {
                 Button("Done") { dismiss() }
             }
             ToolbarItem(placement: .primaryAction) {
-                Button {
-                    editingProfile = Self.newProfile(projectID: projectID)
-                } label: {
-                    Image(systemName: "plus")
-                }
+                addMenu
             }
+        }
+        .task {
+            await state.requestRunnableDetection(projectID: projectID)
         }
         .refreshable {
             await state.refreshSnapshot()
+            await state.requestRunnableDetection(projectID: projectID)
         }
         .sheet(item: $editingProfile) { profile in
             NavigationStack {
@@ -398,13 +450,127 @@ struct MobileRunProfilesView: View {
         }
     }
 
-    private static func newProfile(projectID: UUID) -> RunProfile {
+    /// "+" menu: blank profiles plus everything the desktop auto-detected for
+    /// this project. Picking a detected entry materializes a pre-filled profile.
+    private var addMenu: some View {
+        Menu {
+            Section("New") {
+                Button {
+                    editingProfile = Self.newProfile(projectID: projectID, type: .bash)
+                } label: {
+                    Label("Bash Configuration", systemImage: "terminal")
+                }
+                Button {
+                    editingProfile = Self.newProfile(projectID: projectID, type: .xcode)
+                } label: {
+                    Label("Xcode Configuration", systemImage: "hammer.fill")
+                }
+                Button {
+                    editingProfile = Self.newProfile(projectID: projectID, type: .make)
+                } label: {
+                    Label("Make Configuration", systemImage: "wrench.and.screwdriver.fill")
+                }
+            }
+
+            if !detected.xcode.isEmpty {
+                Section("Detected · Xcode") {
+                    ForEach(detected.xcode) { runnable in
+                        Button {
+                            editingProfile = Self.profile(from: runnable, projectID: projectID)
+                        } label: {
+                            Label(runnable.displayName, systemImage: "hammer.fill")
+                        }
+                    }
+                }
+            }
+            if !detected.make.isEmpty {
+                Section("Detected · Make") {
+                    ForEach(detected.make) { runnable in
+                        Button {
+                            editingProfile = Self.profile(from: runnable, projectID: projectID)
+                        } label: {
+                            Label(runnable.displayName, systemImage: "wrench.and.screwdriver.fill")
+                        }
+                    }
+                }
+            }
+            if !detected.npm.isEmpty {
+                Section("Detected · Scripts") {
+                    ForEach(detected.npm) { runnable in
+                        Button {
+                            editingProfile = Self.profile(from: runnable, projectID: projectID)
+                        } label: {
+                            Label(runnable.displayName, systemImage: "shippingbox.fill")
+                        }
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "plus")
+        }
+    }
+
+    private static func newProfile(projectID: UUID, type: RunProfileType) -> RunProfile {
         let now = Date()
+        switch type {
+        case .bash:
+            return RunProfile(
+                projectId: projectID,
+                name: "New Bash Configuration",
+                type: .bash,
+                bash: BashRunConfig(),
+                createdAt: now,
+                updatedAt: now
+            )
+        case .xcode:
+            return RunProfile(
+                projectId: projectID,
+                name: "New Xcode Configuration",
+                type: .xcode,
+                xcode: XcodeRunConfig(),
+                createdAt: now,
+                updatedAt: now
+            )
+        case .make:
+            return RunProfile(
+                projectId: projectID,
+                name: "New Make Configuration",
+                type: .make,
+                make: MakeRunConfig(),
+                createdAt: now,
+                updatedAt: now
+            )
+        }
+    }
+
+    /// Materialize a desktop-detected runnable into an editable `RunProfile`,
+    /// mirroring the desktop's `RunConfigurationsView.addProfile(from:)`.
+    private static func profile(from runnable: DetectedRunnable, projectID: UUID) -> RunProfile {
+        let now = Date()
+        if let xcode = runnable.xcode {
+            return RunProfile(
+                projectId: projectID,
+                name: runnable.displayName,
+                type: .xcode,
+                xcode: xcode,
+                createdAt: now,
+                updatedAt: now
+            )
+        }
+        if let make = runnable.make {
+            return RunProfile(
+                projectId: projectID,
+                name: runnable.displayName,
+                type: .make,
+                make: make,
+                createdAt: now,
+                updatedAt: now
+            )
+        }
         return RunProfile(
             projectId: projectID,
-            name: "New Bash Configuration",
-            type: .bash,
-            bash: BashRunConfig(),
+            name: runnable.displayName,
+            bash: BashRunConfig(command: runnable.command),
             createdAt: now,
             updatedAt: now
         )
@@ -564,122 +730,4 @@ extension MobileAppState {
         )
     }
     .environmentObject(state)
-}
-
-private struct MobileRunProfileEditorView: View {
-    @EnvironmentObject private var state: MobileAppState
-    @Environment(\.dismiss) private var dismiss
-    @State private var draft: RunProfile
-    let projectID: UUID
-
-    init(profile: RunProfile, projectID: UUID) {
-        self._draft = State(initialValue: profile)
-        self.projectID = projectID
-    }
-
-    var body: some View {
-        Form {
-            Section("Configuration") {
-                TextField("Name", text: $draft.name)
-                Picker("Type", selection: Binding(
-                    get: { draft.type },
-                    set: { type in
-                        draft.type = type
-                        if type == .xcode, draft.xcode == nil { draft.xcode = XcodeRunConfig() }
-                        if type == .make, draft.make == nil { draft.make = MakeRunConfig() }
-                    }
-                )) {
-                    Text("Bash").tag(RunProfileType.bash)
-                    Text("Xcode").tag(RunProfileType.xcode)
-                    Text("Make").tag(RunProfileType.make)
-                }
-            }
-
-            switch draft.type {
-            case .bash:
-                bashSection
-            case .xcode:
-                xcodeSection
-            case .make:
-                makeSection
-            }
-        }
-        .navigationTitle(draft.name.isEmpty ? "Run Profile" : draft.name)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") { dismiss() }
-            }
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Save") {
-                    var saved = draft
-                    saved.projectId = projectID
-                    saved.updatedAt = Date()
-                    Task {
-                        await state.saveRunProfile(saved, projectID: projectID)
-                        dismiss()
-                    }
-                }
-                .disabled(draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-        }
-    }
-
-    private var bashSection: some View {
-        Section("Command") {
-            TextEditor(text: $draft.bash.command)
-                .font(.system(.body, design: .monospaced))
-                .frame(minHeight: 90)
-            TextField("Working Directory", text: $draft.bash.workingDirectory, prompt: Text("Project root"))
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled(true)
-        }
-    }
-
-    private var xcodeSection: some View {
-        Section("Xcode") {
-            let xcode = Binding(
-                get: { draft.xcode ?? XcodeRunConfig() },
-                set: { draft.xcode = $0 }
-            )
-            TextField("Project / Workspace", text: xcode.container, prompt: Text("App.xcodeproj"))
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled(true)
-            Toggle("Use Workspace", isOn: xcode.isWorkspace)
-            TextField("Scheme", text: xcode.scheme)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled(true)
-            TextField("Configuration", text: xcode.configuration)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled(true)
-            Picker("Action", selection: xcode.action) {
-                ForEach(XcodeAction.allCases, id: \.self) { action in
-                    Text(action.rawValue.capitalized).tag(action)
-                }
-            }
-            TextField("Destination", text: xcode.destination, prompt: Text("Optional xcodebuild destination"))
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled(true)
-        }
-    }
-
-    private var makeSection: some View {
-        Section("Make") {
-            let make = Binding(
-                get: { draft.make ?? MakeRunConfig() },
-                set: { draft.make = $0 }
-            )
-            TextField("Makefile", text: make.makefile, prompt: Text("Makefile"))
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled(true)
-            TextField("Target", text: make.target)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled(true)
-            TextField("Arguments", text: make.arguments)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled(true)
-            TextField("Working Directory", text: $draft.bash.workingDirectory, prompt: Text("Project root"))
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled(true)
-        }
-    }
 }

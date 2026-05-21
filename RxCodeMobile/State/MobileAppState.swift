@@ -72,6 +72,14 @@ final class MobileAppState: ObservableObject {
     @Published var runTasks: [MobileRunTaskSnapshot] = []
     @Published var inFlightRunProfileRequests: Set<UUID> = []
     @Published var lastRunProfileError: String?
+    /// Auto-detected runnables (Xcode schemes, npm scripts, Make targets) per
+    /// project. Produced by the desktop's `RunProfileDetector` and requested on
+    /// demand when the run profile screen opens — never computed on mobile.
+    @Published var detectedRunnablesByProject: [UUID: DetectedRunnables] = [:]
+    /// Projects with an in-flight detection request, keyed by project id.
+    @Published var runnableDetectInFlight: Set<UUID> = []
+    @Published var runnableDetectError: String?
+    var pendingRunnableDetectRequestID: UUID?
 
     // MARK: - Remote desktop config: Skills
 
@@ -146,6 +154,10 @@ final class MobileAppState: ObservableObject {
     @Published var searchProjectIDs: [UUID] = []
     @Published var searchThreadHits: [SearchHit] = []
     @Published var isSearching: Bool = false
+    /// Whether the mobile app has received its first snapshot from the desktop
+    /// since launch or pairing. Used to show a loading state instead of
+    /// "No Projects" when waiting for the initial sync.
+    @Published var hasReceivedInitialSnapshot: Bool = false
     var pendingSearchID: UUID?
     var searchDebounceTask: Task<Void, Never>?
 

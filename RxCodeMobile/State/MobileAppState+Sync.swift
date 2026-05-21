@@ -245,6 +245,29 @@ extension MobileAppState {
         }
     }
 
+    /// Ask the desktop to scan a project for runnable Xcode schemes, npm
+    /// scripts, and Make targets. The desktop owns all detection logic; mobile
+    /// only renders the result in the run profile editor.
+    func requestRunnableDetection(projectID: UUID) async {
+        guard isPaired else {
+            logger.error("[RunProfiles] detection dropped because mobile is not paired project=\(projectID.uuidString, privacy: .public)")
+            return
+        }
+        let payload = RunnableDetectRequestPayload(projectID: projectID)
+        pendingRunnableDetectRequestID = payload.clientRequestID
+        runnableDetectInFlight.insert(projectID)
+        runnableDetectError = nil
+        do {
+            try await client.send(.runnableDetectRequest(payload), toHex: pairedDesktopPubkey)
+            logger.info("[RunProfiles] sent detection request id=\(payload.clientRequestID.uuidString, privacy: .public) project=\(projectID.uuidString, privacy: .public)")
+        } catch {
+            pendingRunnableDetectRequestID = nil
+            runnableDetectInFlight.remove(projectID)
+            runnableDetectError = "Failed to request detection: \(error.localizedDescription)"
+            logger.error("[RunProfiles] detection send failed project=\(projectID.uuidString, privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     /// Update the search query and dispatch a debounced search request to the
     /// paired desktop. Empty queries clear results without hitting the network.
     /// Stale requests are discarded by `clientRequestID`.
@@ -359,6 +382,7 @@ extension MobileAppState {
     }
 
     func clearDesktopMirror() {
+        hasReceivedInitialSnapshot = false
         projects = []
         sessions = []
         branchBriefings = []

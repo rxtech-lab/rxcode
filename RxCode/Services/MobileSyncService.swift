@@ -596,6 +596,7 @@ extension Notification.Name {
     static let mobileSyncRunProfileMutationRequested = Notification.Name("mobileSync.runProfileMutationRequested")
     static let mobileSyncRunProfileRunRequested = Notification.Name("mobileSync.runProfileRunRequested")
     static let mobileSyncRunProfileStopRequested = Notification.Name("mobileSync.runProfileStopRequested")
+    static let mobileSyncRunnableDetectRequested = Notification.Name("mobileSync.runnableDetectRequested")
     static let mobileSyncSkillCatalogRequested = Notification.Name("mobileSync.skillCatalogRequested")
     static let mobileSyncSkillMutationRequested = Notification.Name("mobileSync.skillMutationRequested")
     static let mobileSyncSkillSourceMutationRequested = Notification.Name("mobileSync.skillSourceMutationRequested")

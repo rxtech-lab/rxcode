@@ -1,54 +1,8 @@
 import Foundation
 import RxCodeCore
 
-/// Source of an auto-detected runnable shown in the "+" picker of the Run
-/// Configurations dialog.
-enum RunnableSource: String, Sendable, Hashable {
-    case xcode
-    case npm
-    case make
-}
-
-/// A single auto-detected runnable. Pre-fills either a bash command (npm,
-/// make) or a structured Xcode config (when `xcode` is non-nil) when the user
-/// picks it from the "+" menu. Not persisted on its own — selecting one
-/// materializes a normal `RunProfile`.
-struct DetectedRunnable: Identifiable, Hashable, Sendable {
-    let id: String
-    let source: RunnableSource
-    let displayName: String
-    let command: String
-    /// Present when `source == .xcode`. The dialog materializes these as
-    /// `.xcode`-typed profiles instead of bash configurations.
-    let xcode: XcodeRunConfig?
-    /// Present when `source == .make`. The dialog materializes these as
-    /// `.make`-typed profiles instead of bash configurations.
-    let make: MakeRunConfig?
-
-    init(
-        id: String,
-        source: RunnableSource,
-        displayName: String,
-        command: String,
-        xcode: XcodeRunConfig? = nil,
-        make: MakeRunConfig? = nil
-    ) {
-        self.id = id
-        self.source = source
-        self.displayName = displayName
-        self.command = command
-        self.xcode = xcode
-        self.make = make
-    }
-}
-
-struct DetectedRunnables: Sendable, Hashable {
-    var xcode: [DetectedRunnable] = []
-    var npm: [DetectedRunnable] = []
-    var make: [DetectedRunnable] = []
-
-    var isEmpty: Bool { xcode.isEmpty && npm.isEmpty && make.isEmpty }
-}
+// `RunnableSource`, `DetectedRunnable`, and `DetectedRunnables` live in
+// `RxCodeCore` so the sync protocol can carry detection results to mobile.
 
 /// Read-only scanner that surfaces Xcode schemes, npm scripts, and Make
 /// targets at a project root. Errors are swallowed — a broken `xcodebuild`

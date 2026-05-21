@@ -70,7 +70,9 @@ const (
 	// consumes it directly, so `apns_payload` is forwarded verbatim.
 	pushModeLiveActivity = "liveactivity"
 	// pushModeBackground is a silent content-available push used to refresh
-	// the home-screen widget; `apns_payload` is forwarded verbatim.
+	// the home-screen widget. The widget snapshot inside `apns_payload` is
+	// E2E-encrypted to the recipient device (under `encWidget`); the relay
+	// forwards `apns_payload` verbatim and never decrypts it.
 	pushModeBackground = "background"
 )
 
@@ -95,10 +97,11 @@ type PushRequest struct {
 
 // pushHandler returns an http.HandlerFunc that signs and forwards APNs pushes.
 //
-// Auth is intentionally minimal in v1: any client may submit, since the alert
-// payload itself is E2E-encrypted to the recipient device. Live Activity and
-// widget payloads are not encrypted (ActivityKit / WidgetKit consume them
-// directly); a future hardening pass should require a signed sender token.
+// Auth is intentionally minimal in v1: any client may submit, since both the
+// alert and the widget payloads are themselves E2E-encrypted to the recipient
+// device. Only Live Activity content-state is unencrypted (ActivityKit
+// consumes it directly); a future hardening pass should require a signed
+// sender token.
 func pushHandler(sender *PushSender) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -219,9 +222,11 @@ func buildAlertNotification(sender *PushSender, req *PushRequest) (*apns2.Notifi
 }
 
 // buildRawNotification forwards the desktop-built APNs payload verbatim. Used
-// for Live Activity and background (widget) pushes, whose payloads cannot be
-// E2E encrypted because the OS consumes them directly. When `liveActivityTopic`
-// is set, the APNs topic is suffixed with `.push-type.liveactivity` as Apple
+// for Live Activity and background (widget) pushes. Live Activity content-state
+// cannot be E2E encrypted (ActivityKit consumes it directly); the widget
+// background push carries an E2E-encrypted blob the app decrypts itself. Either
+// way the relay forwards `apns_payload` untouched. When `liveActivityTopic` is
+// set, the APNs topic is suffixed with `.push-type.liveactivity` as Apple
 // requires for Live Activity pushes.
 func buildRawNotification(
 	sender *PushSender,

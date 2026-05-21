@@ -1,6 +1,6 @@
-import SwiftUI
 import RxCodeCore
 import RxCodeSync
+import SwiftUI
 import TipKit
 
 struct ProjectsSidebar: View {
@@ -8,6 +8,8 @@ struct ProjectsSidebar: View {
     @Binding var selected: UUID?
     @Binding var showingBriefing: Bool
     var showsBriefingItem = true
+    /// When true, uses Button with selection callback (iPad split view).
+    /// When false, uses NavigationLink for stack-based navigation (iPhone).
     var usesSelection = true
     @State private var searchText = ""
     @State private var showingRemoteFolderPicker = false
@@ -34,19 +36,23 @@ struct ProjectsSidebar: View {
             .refreshable {
                 await state.refreshSnapshot()
             }
-            .searchable(
-                text: $searchText,
-                placement: .navigationBarDrawer(displayMode: .automatic),
-                prompt: "Search projects and threads"
-            )
-            .popoverTip(MobileTips.SearchTip(), arrowEdge: .top)
+            .modifier(ProjectSidebarSearchModifier(isEnabled: showsSearch, searchText: $searchText))
+            .modifier(ProjectSidebarSearchTipModifier(isEnabled: showsSearch))
             .autocorrectionDisabled(true)
             .textInputAutocapitalization(.never)
             .onChange(of: searchText) { _, newValue in
-                state.updateSearchQuery(newValue)
+                if showsSearch {
+                    state.updateSearchQuery(newValue)
+                }
             }
             .onDisappear {
                 state.updateSearchQuery("")
+            }
+            .onChange(of: showsSearch) { _, newValue in
+                if !newValue {
+                    searchText = ""
+                    state.updateSearchQuery("")
+                }
             }
             .onChange(of: state.lastCreatedProjectID) { _, newValue in
                 guard let newValue else { return }
@@ -59,7 +65,7 @@ struct ProjectsSidebar: View {
 
     @ViewBuilder
     private var content: some View {
-        if searchText.isEmpty {
+        if !showsSearch || searchText.isEmpty {
             defaultContent
         } else {
             searchResultsContent
@@ -76,6 +82,7 @@ struct ProjectsSidebar: View {
                 if showsBriefingItem {
                     BriefingNavigationCard(
                         isSelected: showingBriefing,
+                        usesNavigationLink: false, // Briefing always uses callback
                         namespace: glassNamespace
                     ) {
                         selected = nil
@@ -94,11 +101,13 @@ struct ProjectsSidebar: View {
                                 activeJobCount: activeJobCount(for: project.id),
                                 lastActivity: lastActivity(for: project.id),
                                 isSelected: selected == project.id,
-                                namespace: glassNamespace
-                            ) {
-                                selected = project.id
-                                showingBriefing = false
-                            }
+                                usesNavigationLink: !usesSelection,
+                                namespace: glassNamespace,
+                                onSelect: usesSelection ? {
+                                    selected = project.id
+                                    showingBriefing = false
+                                } : nil
+                            )
                         }
                     }
                 } else {
@@ -154,11 +163,13 @@ struct ProjectsSidebar: View {
                                         activeJobCount: activeJobCount(for: project.id),
                                         lastActivity: lastActivity(for: project.id),
                                         isSelected: selected == project.id,
-                                        namespace: glassNamespace
-                                    ) {
-                                        selected = project.id
-                                        showingBriefing = false
-                                    }
+                                        usesNavigationLink: !usesSelection,
+                                        namespace: glassNamespace,
+                                        onSelect: usesSelection ? {
+                                            selected = project.id
+                                            showingBriefing = false
+                                        } : nil
+                                    )
                                 }
                             }
                         }
@@ -224,6 +235,10 @@ struct ProjectsSidebar: View {
 
     // MARK: - Helpers
 
+    private var showsSearch: Bool {
+        !usesSelection
+    }
+
     private func threadCount(for projectID: UUID) -> Int {
         state.sessions.filter { $0.projectId == projectID && !$0.isArchived }.count
     }
@@ -247,50 +262,91 @@ struct ProjectsSidebar: View {
     }
 }
 
+private struct ProjectSidebarSearchModifier: ViewModifier {
+    let isEnabled: Bool
+    @Binding var searchText: String
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content.searchable(
+                text: $searchText,
+                placement: .navigationBarDrawer(displayMode: .automatic),
+                prompt: "Search projects and threads"
+            )
+        } else {
+            content
+        }
+    }
+}
+
+private struct ProjectSidebarSearchTipModifier: ViewModifier {
+    let isEnabled: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content.popoverTip(MobileTips.SearchTip(), arrowEdge: .top)
+        } else {
+            content
+        }
+    }
+}
+
 // MARK: - Briefing Navigation Card
 
 private struct BriefingNavigationCard: View {
     let isSelected: Bool
+    var usesNavigationLink: Bool = false
     let namespace: Namespace.ID
-    let onTap: () -> Void
+    var onSelect: (() -> Void)?
 
     var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 14) {
-                // Icon
-                ZStack {
-                    Circle()
-                        .fill(briefingGradient.opacity(0.15))
-                        .frame(width: 44, height: 44)
-
-                    Image(systemName: "doc.text.fill")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(briefingGradient)
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Briefing")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(.primary)
-
-                    Text("Daily summary of your projects")
-                        .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer(minLength: 0)
-
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
+        if usesNavigationLink {
+            // Not used for briefing, but keeping pattern consistent
+            Button { onSelect?() } label: { cardContent }
+                .buttonStyle(GlassProjectCardButtonStyle(isSelected: isSelected))
+                .glassEffectID("briefing", in: namespace)
+        } else {
+            Button { onSelect?() } label: { cardContent }
+                .buttonStyle(GlassProjectCardButtonStyle(isSelected: isSelected))
+                .glassEffectID("briefing", in: namespace)
         }
-        .buttonStyle(GlassProjectCardButtonStyle(isSelected: isSelected))
-        .glassEffectID("briefing", in: namespace)
+    }
+
+    private var cardContent: some View {
+        HStack(spacing: 14) {
+            // Icon
+            ZStack {
+                Circle()
+                    .fill(briefingGradient.opacity(0.15))
+                    .frame(width: 44, height: 44)
+
+                Image(systemName: "doc.text.fill")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(briefingGradient)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Briefing")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.primary)
+
+                Text("Daily summary of your projects")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 0)
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
     }
 
     private var briefingGradient: LinearGradient {
@@ -313,81 +369,98 @@ private struct GlassProjectCard: View {
     let activeJobCount: Int
     let lastActivity: Date?
     let isSelected: Bool
+    /// When true, uses NavigationLink for stack-based navigation (iPhone).
+    /// When false, uses Button with onSelect callback for selection-based navigation (iPad).
+    var usesNavigationLink: Bool = true
     let namespace: Namespace.ID
-    let onTap: () -> Void
+    var onSelect: (() -> Void)?
 
     var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 14) {
-                // Project icon
-                projectIcon
+        if usesNavigationLink {
+            NavigationLink(value: project.id) {
+                cardContent
+            }
+            .buttonStyle(GlassProjectCardButtonStyle(isSelected: isSelected))
+            .glassEffectID(project.id.uuidString, in: namespace)
+        } else {
+            Button {
+                onSelect?()
+            } label: {
+                cardContent
+            }
+            .buttonStyle(GlassProjectCardButtonStyle(isSelected: isSelected))
+            .glassEffectID(project.id.uuidString, in: namespace)
+        }
+    }
 
-                // Content
-                VStack(alignment: .leading, spacing: 6) {
-                    // Title
-                    Text(project.name)
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
+    private var cardContent: some View {
+        HStack(spacing: 14) {
+            // Project icon
+            projectIcon
 
-                    // Path
-                    Text(Self.truncatedPath(project.path))
-                        .font(.system(size: 12))
+            // Content
+            VStack(alignment: .leading, spacing: 6) {
+                // Title
+                Text(project.name)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                // Path
+                Text(Self.truncatedPath(project.path))
+                    .font(.system(size: 12))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+
+                // Metadata row - uses FlowLayout to wrap gracefully on narrow sidebars
+                FlowLayout(spacing: 8) {
+                    // Thread count
+                    if threadCount > 0 {
+                        HStack(spacing: 4) {
+                            Image(systemName: "bubble.left.and.bubble.right")
+                                .font(.system(size: 10, weight: .medium))
+                            Text("\(threadCount)")
+                                .font(.system(size: 12, weight: .medium))
+                        }
+                        .foregroundStyle(.secondary)
+                    }
+
+                    // Active jobs
+                    if activeJobCount > 0 {
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(.green)
+                                .frame(width: 6, height: 6)
+                            Text("\(activeJobCount) active")
+                                .font(.system(size: 12, weight: .medium))
+                        }
+                        .foregroundStyle(.green)
+                    }
+
+                    // Last activity
+                    if let lastActivity {
+                        HStack(spacing: 4) {
+                            Image(systemName: "clock")
+                                .font(.system(size: 10))
+                            Text(compactElapsed(since: lastActivity))
+                                .font(.system(size: 12))
+                        }
                         .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-
-                    // Metadata row
-                    HStack(spacing: 10) {
-                        // Thread count
-                        if threadCount > 0 {
-                            HStack(spacing: 4) {
-                                Image(systemName: "bubble.left.and.bubble.right")
-                                    .font(.system(size: 10, weight: .medium))
-                                Text("\(threadCount)")
-                                    .font(.system(size: 12, weight: .medium))
-                            }
-                            .foregroundStyle(.secondary)
-                        }
-
-                        // Active jobs
-                        if activeJobCount > 0 {
-                            HStack(spacing: 4) {
-                                Circle()
-                                    .fill(.green)
-                                    .frame(width: 6, height: 6)
-                                Text("\(activeJobCount) active")
-                                    .font(.system(size: 12, weight: .medium))
-                            }
-                            .foregroundStyle(.green)
-                        }
-
-                        // Last activity
-                        if let lastActivity {
-                            HStack(spacing: 4) {
-                                Image(systemName: "clock")
-                                    .font(.system(size: 10))
-                                Text(compactElapsed(since: lastActivity))
-                                    .font(.system(size: 12))
-                            }
-                            .foregroundStyle(.tertiary)
-                        }
                     }
                 }
-
-                Spacer(minLength: 0)
-
-                // Chevron
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.tertiary)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
+
+            Spacer(minLength: 0)
+
+            // Chevron
+            Image(systemName: "chevron.right")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.tertiary)
         }
-        .buttonStyle(GlassProjectCardButtonStyle(isSelected: isSelected))
-        .glassEffectID(project.id.uuidString, in: namespace)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
     }
 
     private var projectIcon: some View {
@@ -442,7 +515,7 @@ private struct GlassProjectCard: View {
 
 // MARK: - Search Thread Hit Card
 
-private struct SearchThreadHitCard: View {
+struct SearchThreadHitCard: View {
     let hit: SearchHit
     let project: Project?
     let namespace: Namespace.ID
@@ -535,6 +608,55 @@ private struct GlassProjectCardButtonStyle: ButtonStyle {
         } else {
             return .regular.interactive()
         }
+    }
+}
+
+// MARK: - Flow Layout
+
+/// A layout that arranges views horizontally and wraps to the next line when needed.
+/// Used for metadata rows that need to adapt to narrow sidebar widths on iPad.
+private struct FlowLayout: Layout {
+    var spacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        return layout(sizes: sizes, containerWidth: proposal.width ?? .infinity).size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        let offsets = layout(sizes: sizes, containerWidth: bounds.width).offsets
+
+        for (index, subview) in subviews.enumerated() {
+            subview.place(
+                at: CGPoint(x: bounds.minX + offsets[index].x, y: bounds.minY + offsets[index].y),
+                proposal: ProposedViewSize(sizes[index])
+            )
+        }
+    }
+
+    private func layout(sizes: [CGSize], containerWidth: CGFloat) -> (offsets: [CGPoint], size: CGSize) {
+        var offsets: [CGPoint] = []
+        var currentX: CGFloat = 0
+        var currentY: CGFloat = 0
+        var lineHeight: CGFloat = 0
+        var maxWidth: CGFloat = 0
+
+        for size in sizes {
+            if currentX + size.width > containerWidth && currentX > 0 {
+                // Wrap to next line
+                currentX = 0
+                currentY += lineHeight + spacing
+                lineHeight = 0
+            }
+
+            offsets.append(CGPoint(x: currentX, y: currentY))
+            lineHeight = max(lineHeight, size.height)
+            currentX += size.width + spacing
+            maxWidth = max(maxWidth, currentX - spacing)
+        }
+
+        return (offsets, CGSize(width: maxWidth, height: currentY + lineHeight))
     }
 }
 
@@ -680,3 +802,51 @@ private struct GlassProjectCardButtonStyle: ButtonStyle {
     .environmentObject(state)
 }
 
+#Preview("Projects Sidebar - iPhone (NavigationLink)") {
+    @Previewable @State var selected: UUID? = nil
+    @Previewable @State var showingBriefing = false
+
+    let state = MobileAppState()
+    let projectIDs = [UUID(), UUID()]
+
+    state.projects = [
+        Project(
+            id: projectIDs[0],
+            name: "RxCode",
+            path: "/Users/developer/Desktop/rxlab/RxCode"
+        ),
+        Project(
+            id: projectIDs[1],
+            name: "MyApp",
+            path: "/Users/developer/Projects/MyApp"
+        )
+    ]
+
+    state.sessions = [
+        SessionSummary(
+            id: "1",
+            projectId: projectIDs[0],
+            title: "Building feature",
+            updatedAt: Date(),
+            isPinned: false,
+            isArchived: false,
+            isStreaming: true,
+            attention: nil,
+            todos: nil,
+            hasUncheckedCompletion: false
+        )
+    ]
+
+    return NavigationStack {
+        ProjectsSidebar(
+            selected: $selected,
+            showingBriefing: $showingBriefing,
+            showsBriefingItem: false,
+            usesSelection: false
+        )
+        .navigationDestination(for: UUID.self) { projectID in
+            Text("Sessions for project \(projectID)")
+        }
+    }
+    .environmentObject(state)
+}

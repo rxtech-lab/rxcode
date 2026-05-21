@@ -3,40 +3,38 @@ import RxCodeCore
 
 #if os(macOS)
 
-// MARK: - @ File Search Popup
+// MARK: - @ Mention Popup (Shortcuts + Files)
 
-struct AtFilePopup: View {
-    let entries: [AtFileEntry]
-    let onSelect: (String) -> Void
+/// Popup shown when the user types `@` in the chat input. Lists matching
+/// shortcuts on top and project files below. `selectedIndex` is a single flat
+/// index spanning both sections: `0..<shortcuts.count` selects a shortcut,
+/// `shortcuts.count..<(shortcuts.count + files.count)` selects a file.
+struct AtMentionPopup: View {
+    let shortcuts: [ChatShortcut]
+    let files: [AtFileEntry]
+    let onSelectShortcut: (ChatShortcut) -> Void
+    let onSelectFile: (String) -> Void
     @Binding var selectedIndex: Int
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Header
-            HStack {
-                Image(systemName: "doc.text.magnifyingglass")
-                    .font(.system(size: ClaudeTheme.size(10)))
-                    .foregroundStyle(ClaudeTheme.textTertiary)
-                Text("File Search", bundle: .module)
-                    .font(.system(size: ClaudeTheme.size(11), weight: .medium))
-                    .foregroundStyle(ClaudeTheme.textTertiary)
-                Spacer()
-                Text("\(entries.count)")
-                    .font(.system(size: ClaudeTheme.size(10)))
-                    .foregroundStyle(ClaudeTheme.textTertiary)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-
-            Divider()
-                .foregroundStyle(ClaudeTheme.borderSubtle)
-
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
-                            fileRowButton(entry, isSelected: index == selectedIndex)
-                                .id(index)
+                        if !shortcuts.isEmpty {
+                            sectionHeader(icon: "bolt.fill", title: "Shortcuts", count: shortcuts.count)
+                            ForEach(Array(shortcuts.enumerated()), id: \.element.id) { index, shortcut in
+                                shortcutRowButton(shortcut, isSelected: index == selectedIndex)
+                                    .id(index)
+                            }
+                        }
+                        if !files.isEmpty {
+                            sectionHeader(icon: "doc.text.magnifyingglass", title: "Files", count: files.count)
+                            ForEach(Array(files.enumerated()), id: \.element.id) { index, entry in
+                                let flatIndex = shortcuts.count + index
+                                fileRowButton(entry, isSelected: flatIndex == selectedIndex)
+                                    .id(flatIndex)
+                            }
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -59,9 +57,69 @@ struct AtFilePopup: View {
     }
 
     @ViewBuilder
+    private func sectionHeader(icon: String, title: LocalizedStringKey, count: Int) -> some View {
+        HStack {
+            Image(systemName: icon)
+                .font(.system(size: ClaudeTheme.size(10)))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+            Text(title, bundle: .module)
+                .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+            Spacer()
+            Text("\(count)")
+                .font(.system(size: ClaudeTheme.size(10)))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(ClaudeTheme.surfaceElevated)
+    }
+
+    @ViewBuilder
+    private func shortcutRowButton(_ shortcut: ChatShortcut, isSelected: Bool) -> some View {
+        Button {
+            onSelectShortcut(shortcut)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: shortcut.isTerminalCommand ? "terminal" : "bolt")
+                    .font(.system(size: ClaudeTheme.size(13)))
+                    .foregroundStyle(isSelected ? ClaudeTheme.accent : ClaudeTheme.textTertiary)
+                    .frame(width: 20)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(shortcut.name)
+                        .font(.system(size: ClaudeTheme.size(13), weight: .medium))
+                        .foregroundStyle(isSelected ? ClaudeTheme.accent : ClaudeTheme.textPrimary)
+
+                    Text(shortcut.message)
+                        .font(.system(size: ClaudeTheme.size(11), design: shortcut.isTerminalCommand ? .monospaced : .default))
+                        .foregroundStyle(ClaudeTheme.textTertiary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                if shortcut.isTerminalCommand {
+                    Text("terminal", bundle: .module)
+                        .font(.system(size: ClaudeTheme.size(9)))
+                        .foregroundStyle(ClaudeTheme.textTertiary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(ClaudeTheme.surfaceSecondary, in: Capsule())
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(isSelected ? ClaudeTheme.accentSubtle : Color.clear)
+    }
+
+    @ViewBuilder
     private func fileRowButton(_ entry: AtFileEntry, isSelected: Bool) -> some View {
         Button {
-            onSelect(entry.relativePath)
+            onSelectFile(entry.relativePath)
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: entry.icon)
@@ -91,7 +149,6 @@ struct AtFilePopup: View {
         .padding(.vertical, 8)
         .background(isSelected ? ClaudeTheme.accentSubtle : Color.clear)
     }
-
 }
 
 // MARK: - AtFileEntry

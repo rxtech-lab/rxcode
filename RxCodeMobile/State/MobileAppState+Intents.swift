@@ -80,9 +80,9 @@ extension MobileAppState {
         try? await client.send(.newSessionRequest(payload), toHex: pairedDesktopPubkey)
     }
 
-    func requestRemoteFolder(path: String? = nil) async {
+    func requestRemoteFolder(path: String? = nil, includeFiles: Bool = false) async {
         guard isPaired else { return }
-        let request = FolderTreeRequestPayload(path: path, depth: 1)
+        let request = FolderTreeRequestPayload(path: path, depth: 1, includeFiles: includeFiles)
         pendingFolderTreeRequestID = request.clientRequestID
         remoteFolderIsLoading = true
         remoteFolderError = nil

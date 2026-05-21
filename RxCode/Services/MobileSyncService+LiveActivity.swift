@@ -1,0 +1,383 @@
+import Foundation
+import AppKit
+import Combine
+import CryptoKit
+import RxCodeCore
+import RxCodeSync
+import os.log
+
+extension MobileSyncService {
+
+    // MARK: - Live Activity & widget push
+
+    /// Fold a session update into the streaming-job set and the aggregate Live
+    /// Activity, then push any resulting Live Activity / widget changes.
+    /// Called for every `broadcastSessionUpdate`.
+    func updateJobTracking(
+        sessionID: String,
+        kind: SessionUpdatePayload.Kind,
+        isStreaming: Bool?,
+        summary: RxCodeSync.SessionSummary?,
+        previousSessionID: String?
+    ) {
+        if let previousSessionID, previousSessionID != sessionID {
+            streamingSessionIDs.remove(previousSessionID)
+            if let previousIdx = trackedJobs.firstIndex(where: { $0.sessionID == previousSessionID }) {
+                if let summary {
+                    trackedJobs[previousIdx] = makeJobContent(from: summary)
+                } else {
+                    trackedJobs.remove(at: previousIdx)
+                }
+                lastPushedJobsSignature = ""
+            }
+        }
+        let streaming: Bool?
+        switch kind {
+        case .streamingStarted: streaming = true
+        case .streamingFinished: streaming = false
+        default: streaming = isStreaming
+        }
+        if let streaming {
+            if streaming { streamingSessionIDs.insert(sessionID) }
+            else { streamingSessionIDs.remove(sessionID) }
+        }
+        // Summaries carry title/progress/todos — they drive the Live Activity.
+        if let summary {
+            foldSummaryIntoJobs(summary)
+            pushJobsActivity()
+        }
+        pushWidgetUpdateIfJobCountChanged()
+    }
+
+    /// Merge one session summary into `trackedJobs`.
+    ///
+    /// A running session is inserted or updated. A finished session updates
+    /// the job only if it is already tracked, and is otherwise ignored — the
+    /// aggregate activity follows jobs it saw start. When a new job begins
+    /// while every tracked job is already done, the previous (acknowledged)
+    /// batch is cleared so the activity starts a fresh list.
+    func foldSummaryIntoJobs(_ summary: RxCodeSync.SessionSummary) {
+        let content = makeJobContent(from: summary)
+        if let idx = trackedJobs.firstIndex(where: { $0.sessionID == summary.id }) {
+            trackedJobs[idx] = content
+        } else if summary.isStreaming {
+            if !trackedJobs.isEmpty, trackedJobs.allSatisfy(\.isDone) {
+                trackedJobs.removeAll()
+                lastPushedJobsSignature = ""
+            }
+            trackedJobs.append(content)
+        }
+        pruneTrackedJobs()
+    }
+
+    /// Cap the tracked-job list, dropping the oldest finished jobs first so a
+    /// long-lived device never accumulates an unbounded history.
+    func pruneTrackedJobs() {
+        let cap = 6
+        while trackedJobs.count > cap {
+            if let doneIdx = trackedJobs.firstIndex(where: \.isDone) {
+                trackedJobs.remove(at: doneIdx)
+            } else {
+                trackedJobs.removeFirst()
+            }
+        }
+    }
+
+    func makeJobContent(from summary: RxCodeSync.SessionSummary) -> JobContent {
+        JobContent(
+            sessionID: summary.id,
+            title: summary.title,
+            projectName: projectNameResolver?(summary.projectId) ?? "",
+            todoDone: summary.progress?.done ?? 0,
+            todoTotal: summary.progress?.total ?? 0,
+            currentStep: summary.todos?.first { $0.status == .inProgress }?.activeForm,
+            isDone: !summary.isStreaming
+        )
+    }
+
+    // MARK: Aggregate Live Activity
+
+    /// Concatenated per-job signatures — identifies a distinct rendered state.
+    var jobsSignature: String {
+        trackedJobs.map(\.signature).joined(separator: ";")
+    }
+
+    /// `true` once every tracked job has finished.
+    var allJobsDone: Bool {
+        !trackedJobs.isEmpty && trackedJobs.allSatisfy(\.isDone)
+    }
+
+    /// `true` when some paired device has registered the aggregate activity's
+    /// update token — i.e. the activity exists and can be pushed `update`s.
+    var hasAnyActivityToken: Bool {
+        pairedDevices.contains { !($0.liveActivityTokens ?? []).isEmpty }
+    }
+
+    /// Drive the single aggregate Live Activity from `trackedJobs`.
+    ///
+    /// The activity is created once with a push-to-start and then reused for
+    /// the lifetime of the device session: it is never ended or auto-dismissed
+    /// by the desktop, only updated. One activity for every job keeps re-runs
+    /// off the scarce iOS push-to-start budget; the user dismisses it.
+    func pushJobsActivity() {
+        guard !trackedJobs.isEmpty else { return }
+        let staleAfter: TimeInterval = allJobsDone ? 8 * 3600 : 3600
+        if hasAnyActivityToken {
+            let signature = jobsSignature
+            guard signature != lastPushedJobsSignature else {
+                logger.debug("[LiveActivity] jobs activity unchanged — skip update")
+                return
+            }
+            lastPushedJobsSignature = signature
+            logger.info("[LiveActivity] jobs activity update jobs=\(self.trackedJobs.count, privacy: .public) running=\(self.trackedJobs.filter { !$0.isDone }.count, privacy: .public)")
+            sendJobsActivityUpdate(staleAfter: staleAfter)
+        } else if jobsActivityLocallyStarted {
+            // The activity exists locally; its update token has not been
+            // minted yet. The first push goes out when that token registers.
+            logger.debug("[LiveActivity] jobs activity started locally — awaiting update token")
+        } else {
+            scheduleJobsActivityStart()
+        }
+    }
+
+    /// Schedule the push-to-start after a short delay. A foregrounded device
+    /// starts the activity itself (no push-to-start budget) and reports it
+    /// within a second or two, cancelling this task. Only a backgrounded
+    /// device ends up actually receiving the push-to-start.
+    func scheduleJobsActivityStart() {
+        guard pendingStartTask == nil else { return }
+        logger.info("[LiveActivity] scheduling jobs activity push-to-start in 5s")
+        pendingStartTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled, let self else { return }
+            self.pendingStartTask = nil
+            guard !self.trackedJobs.isEmpty else { return }
+            guard !self.hasAnyActivityToken, !self.jobsActivityLocallyStarted else {
+                self.logger.info("[LiveActivity] push-to-start skipped — a device already has the activity")
+                return
+            }
+            self.sendJobsActivityStart()
+        }
+    }
+
+    /// Cancel a pending push-to-start — the activity already exists.
+    func cancelJobsActivityStart() {
+        if pendingStartTask != nil {
+            pendingStartTask?.cancel()
+            pendingStartTask = nil
+            logger.debug("[LiveActivity] pending push-to-start cancelled")
+        }
+    }
+
+    /// Push a `start` for the aggregate activity to every device with a
+    /// push-to-start token.
+    func sendJobsActivityStart() {
+        let devices = pairedDevices.filter { ($0.liveActivityStartToken?.isEmpty == false) }
+        guard !devices.isEmpty else {
+            logger.warning("[LiveActivity] start skipped — no paired device has a push-to-start token (pairedDevices=\(self.pairedDevices.count, privacy: .public))")
+            return
+        }
+        guard let pushURL = Self.pushEndpointURL(from: relayURL) else {
+            logger.error("[LiveActivity] start skipped — cannot derive push endpoint from relay \(self.relayURL.absoluteString, privacy: .public)")
+            return
+        }
+        let now = Date()
+        let staleAfter: TimeInterval = allJobsDone ? 8 * 3600 : 3600
+        let payload: [String: Any] = ["aps": [
+            "timestamp": Int(now.timeIntervalSince1970),
+            "event": "start",
+            "content-state": jobsContentStateDict(at: now),
+            "attributes-type": "RxCodeJobActivityAttributes",
+            "attributes": [String: Any](),
+            "stale-date": Int(now.addingTimeInterval(staleAfter).timeIntervalSince1970),
+        ]]
+        lastPushedJobsSignature = jobsSignature
+        logger.info("[LiveActivity] start jobs activity devices=\(devices.count, privacy: .public) jobs=\(self.trackedJobs.count, privacy: .public)")
+        for device in devices {
+            guard let token = device.liveActivityStartToken else { continue }
+            logger.info("[LiveActivity] start → posting push startTokenPrefix=\(String(token.prefix(12)), privacy: .public) deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
+            Task {
+                await postRawPush(deviceToken: token, pushType: "liveactivity",
+                                  apnsPayload: payload, collapseID: nil, device: device, pushURL: pushURL)
+            }
+        }
+    }
+
+    /// Push an `update` for the aggregate activity. `staleAfter` sets when the
+    /// activity dims — long for the terminal all-done state, which stays on
+    /// screen until the user dismisses it. No `end` is ever sent.
+    func sendJobsActivityUpdate(staleAfter: TimeInterval) {
+        let now = Date()
+        let payload: [String: Any] = ["aps": [
+            "timestamp": Int(now.timeIntervalSince1970),
+            "event": "update",
+            "content-state": jobsContentStateDict(at: now),
+            "stale-date": Int(now.addingTimeInterval(staleAfter).timeIntervalSince1970),
+        ]]
+        pushToActivityTokens(payload: payload)
+    }
+
+    /// Push an `end` event that clears an orphaned aggregate activity — one
+    /// left running by a previous desktop session that crashed or quit
+    /// mid-job and never delivered the finishing update. `dismissal-date` is
+    /// set to now so iOS removes it promptly instead of letting it linger on
+    /// screen for the system's default window.
+    func sendJobsActivityEnd(deviceToken: String, device: PairedDevice) {
+        guard let pushURL = Self.pushEndpointURL(from: relayURL) else {
+            logger.error("[LiveActivity] end skipped — cannot derive push endpoint from relay \(self.relayURL.absoluteString, privacy: .public)")
+            return
+        }
+        let now = Date()
+        let payload: [String: Any] = ["aps": [
+            "timestamp": Int(now.timeIntervalSince1970),
+            "event": "end",
+            "content-state": ["jobs": [[String: Any]](), "updatedAt": now.timeIntervalSince1970],
+            "dismissal-date": Int(now.timeIntervalSince1970),
+        ]]
+        logger.info("[LiveActivity] end → posting push tokenPrefix=\(String(deviceToken.prefix(12)), privacy: .public) deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
+        Task {
+            await postRawPush(deviceToken: deviceToken, pushType: "liveactivity",
+                              apnsPayload: payload, collapseID: "rxcode-jobs-activity",
+                              device: device, pushURL: pushURL)
+        }
+    }
+
+    /// Build the ActivityKit `content-state` dict. Field names mirror
+    /// `RxCodeJobActivityAttributes.ContentState` in the widget target.
+    func jobsContentStateDict(at date: Date) -> [String: Any] {
+        let jobs: [[String: Any]] = trackedJobs.map { job in
+            var dict: [String: Any] = [
+                "id": job.sessionID,
+                "phase": job.isDone ? "done" : "running",
+                "title": job.title,
+                "projectName": job.projectName,
+                "todoDone": job.todoDone,
+                "todoTotal": job.todoTotal,
+            ]
+            if let step = job.currentStep, !step.isEmpty {
+                dict["currentStep"] = step
+            }
+            return dict
+        }
+        return ["jobs": jobs, "updatedAt": date.timeIntervalSince1970]
+    }
+
+    /// Push a Live Activity payload to every registered aggregate-activity
+    /// token (one per paired device).
+    func pushToActivityTokens(payload: [String: Any]) {
+        guard let pushURL = Self.pushEndpointURL(from: relayURL) else {
+            logger.error("[LiveActivity] update skipped — cannot derive push endpoint from relay \(self.relayURL.absoluteString, privacy: .public)")
+            return
+        }
+        var matched = 0
+        for device in pairedDevices {
+            for ref in (device.liveActivityTokens ?? []) {
+                matched += 1
+                logger.info("[LiveActivity] push → activity token activity=\(ref.activityID, privacy: .public) tokenPrefix=\(String(ref.token.prefix(12)), privacy: .public) deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
+                Task {
+                    await postRawPush(deviceToken: ref.token, pushType: "liveactivity",
+                                      apnsPayload: payload, collapseID: "rxcode-jobs-activity",
+                                      device: device, pushURL: pushURL)
+                }
+            }
+        }
+        if matched == 0 {
+            logger.warning("[LiveActivity] update has no registered activity token — the mobile never reported one")
+        }
+    }
+
+    func pushWidgetUpdateIfJobCountChanged() {
+        guard streamingSessionIDs.count != lastWidgetJobCount else { return }
+        pushWidgetUpdate()
+    }
+
+    /// Push the current ongoing-job count and agent usage to every paired
+    /// device as a silent background notification, refreshing the home-screen
+    /// widget. Also called by `AppState` when rate-limit usage refreshes.
+    func pushWidgetUpdate() {
+        let jobCount = streamingSessionIDs.count
+        lastWidgetJobCount = jobCount
+        let devices = pairedDevices.filter { ($0.apnsToken?.isEmpty == false) }
+        guard !devices.isEmpty, let pushURL = Self.pushEndpointURL(from: relayURL) else { return }
+        let usage = usageSnapshotProvider?()
+        var widget: [String: Any] = [
+            "jobs": jobCount,
+            "updatedAt": Date().timeIntervalSince1970,
+        ]
+        if let cc = usage?.cc { widget["cc"] = cc }
+        if let codex = usage?.codex { widget["codex"] = codex }
+        let payload: [String: Any] = ["aps": ["content-available": 1], "widget": widget]
+        for device in devices {
+            guard let token = device.apnsToken else { continue }
+            Task {
+                await postRawPush(deviceToken: token, pushType: "background",
+                                  apnsPayload: payload, collapseID: "rxcode-widget",
+                                  device: device, pushURL: pushURL)
+            }
+        }
+    }
+
+    /// POST a raw (Live Activity or background) push to the relay `/push`
+    /// endpoint. Failures are logged and swallowed — these are best-effort.
+    func postRawPush(
+        deviceToken: String,
+        pushType: String,
+        apnsPayload: [String: Any],
+        collapseID: String?,
+        device: PairedDevice,
+        pushURL: URL
+    ) async {
+        var bodyDict: [String: Any] = [
+            "device_token": deviceToken,
+            "push_type": pushType,
+            "apns_payload": apnsPayload,
+        ]
+        if let collapseID { bodyDict["collapse_id"] = collapseID }
+        do {
+            let httpBody = try JSONSerialization.data(withJSONObject: bodyDict)
+            var request = URLRequest(url: pushURL)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = httpBody
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else { return }
+            guard (200..<300).contains(http.statusCode) else {
+                logger.error("[Push] \(pushType, privacy: .public) relay rejected status=\(http.statusCode, privacy: .public) body=\(Self.responseBodyString(data), privacy: .public) deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
+                return
+            }
+            if let pushResponse = try? JSONDecoder().decode(APNsPushResponse.self, from: data) {
+                if (200..<300).contains(pushResponse.statusCode) {
+                    logger.info("[Push] \(pushType, privacy: .public) accepted apnsStatus=\(pushResponse.statusCode, privacy: .public) apnsID=\(pushResponse.apnsID ?? "<nil>", privacy: .public) deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
+                } else {
+                    logger.error("[Push] \(pushType, privacy: .public) apns rejected status=\(pushResponse.statusCode, privacy: .public) reason=\(pushResponse.reason, privacy: .public) deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
+                }
+            } else {
+                logger.info("[Push] \(pushType, privacy: .public) relay accepted httpStatus=\(http.statusCode, privacy: .public) (no APNs detail in response) deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
+            }
+        } catch {
+            logger.error("[Push] \(pushType, privacy: .public) failed deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
+    }
+}
+
+/// Latest content the desktop knows for one job in the aggregate Live
+/// Activity. Stored in `MobileSyncService.trackedJobs` in start order.
+struct JobContent {
+    var sessionID: String
+    var title: String
+    var projectName: String
+    var todoDone: Int
+    var todoTotal: Int
+    var currentStep: String?
+    /// `true` once the job has finished. It shows the "done" phase but stays
+    /// in the aggregate list so the activity can report the completed batch.
+    var isDone: Bool
+
+    /// Identifies a distinct rendered state for one job, so an update only
+    /// pushes on a real change rather than on every session event. Includes
+    /// `title` so the activity refreshes when the desktop swaps in an
+    /// AI-summarized title.
+    var signature: String {
+        "\(sessionID)|\(isDone ? "done" : "run")|\(title)|\(todoDone)/\(todoTotal)|\(currentStep ?? "")"
+    }
+}

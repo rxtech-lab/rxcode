@@ -758,7 +758,7 @@ final class AppState {
     let acpRegistryService = ACPRegistryService()
     let openAISummarization = OpenAISummarizationService()
     let foundationModelSummarization = FoundationModelSummarizationService()
-    let persistence: PersistenceService
+    let persistence: any AppStatePersistenceService
     let marketplace = MarketplaceService()
     let mcp: MCPService
     let threadStore: ThreadStore
@@ -853,7 +853,10 @@ final class AppState {
     /// in the (window-less) Settings sheet.
     var activeProjectPath: String?
 
-    init() {
+    init(
+        persistence injectedPersistence: (any AppStatePersistenceService)? = nil,
+        startBackgroundServices: Bool = true
+    ) {
         let metaStore = self.metaStore
         let cliStore = CLISessionStore(metaStore: metaStore)
         self.cliStore = cliStore
@@ -862,7 +865,7 @@ final class AppState {
         self.codex = CodexAppServer()
         let acp = ACPService()
         self.acp = acp
-        self.persistence = PersistenceService(metaStore: metaStore, cliStore: cliStore)
+        self.persistence = injectedPersistence ?? PersistenceService(metaStore: metaStore, cliStore: cliStore)
         self.mcp = MCPService(claudeService: claude)
         self.threadStore = ThreadStore.make()
         self.runService.onTasksChanged = { [weak self] in
@@ -871,37 +874,39 @@ final class AppState {
             }
         }
 
-        // Bridge ACP `session/request_permission` and Codex in-band permission
-        // requests into the existing PermissionServer.
-        let permission = self.permission
-        let codex = self.codex
-        let ideMCPServer = self.ideMCPServer
-        Task {
-            await acp.setPermissionServer(permission)
-            await codex.setPermissionServer(permission)
-            await ideMCPServer.setHandler(self)
-        }
+        if startBackgroundServices {
+            // Bridge ACP `session/request_permission` and Codex in-band permission
+            // requests into the existing PermissionServer.
+            let permission = self.permission
+            let codex = self.codex
+            let ideMCPServer = self.ideMCPServer
+            Task {
+                await acp.setPermissionServer(permission)
+                await codex.setPermissionServer(permission)
+                await ideMCPServer.setHandler(self)
+            }
 
-        // Boot the on-device thread search index in the background. The actor
-        // loads cached chunks on `start`, then kicks off a one-time backfill
-        // of any threads that don't have chunks yet.
-        let searchService = self.searchService
-        let memoryService = self.memoryService
-        let threadStore = self.threadStore
-        let persistence = self.persistence
-        Task.detached(priority: .utility) { [weak self] in
-            await searchService.start(threadStore: threadStore)
-            await memoryService.start(threadStore: threadStore)
-            await searchService.backfillIfNeeded(
-                loadAll: { @MainActor in threadStore.loadAllSummaries() },
-                loadFull: { @MainActor summary -> ChatSession? in
-                    let cwd = self?.projects.first(where: { $0.id == summary.projectId })?.path ?? ""
-                    return await persistence.loadFullSession(summary: summary, cwd: cwd)
-                }
-            )
-        }
+            // Boot the on-device thread search index in the background. The actor
+            // loads cached chunks on `start`, then kicks off a one-time backfill
+            // of any threads that don't have chunks yet.
+            let searchService = self.searchService
+            let memoryService = self.memoryService
+            let threadStore = self.threadStore
+            let persistence = self.persistence
+            Task.detached(priority: .utility) { [weak self] in
+                await searchService.start(threadStore: threadStore)
+                await memoryService.start(threadStore: threadStore)
+                await searchService.backfillIfNeeded(
+                    loadAll: { @MainActor in threadStore.loadAllSummaries() },
+                    loadFull: { @MainActor summary -> ChatSession? in
+                        let cwd = self?.projects.first(where: { $0.id == summary.projectId })?.path ?? ""
+                        return await persistence.loadFullSession(summary: summary, cwd: cwd)
+                    }
+                )
+            }
 
-        setupMobileSyncBridge()
+            setupMobileSyncBridge()
+        }
     }
 
 

@@ -257,11 +257,17 @@ extension AppState: IDEToolHandling {
             throw IDEToolError.invalidArguments("missing 'content'")
         }
         let scope = arguments["scope"]?.stringValue ?? "project"
+        let kind = arguments["kind"]?.stringValue ?? "fact"
+        guard Self.shouldAcceptAgentMemoryAdd(content: content, kind: kind) else {
+            throw IDEToolError.invalidArguments(
+                "memory_add requires an explicit user preference, future instruction, or remember-this request"
+            )
+        }
         let projectId = try parseOptionalProjectId(arguments["project_id"]?.stringValue)
         guard let item = await addMemoryItem(
             content: content,
             projectId: projectId,
-            kind: arguments["kind"]?.stringValue ?? "fact",
+            kind: kind,
             scope: scope
         ) else {
             throw IDEToolError.handlerFailed("Memory could not be embedded or stored.")

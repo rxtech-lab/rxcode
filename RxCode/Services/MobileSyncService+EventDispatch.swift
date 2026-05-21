@@ -68,6 +68,8 @@ extension MobileSyncService {
                     jobsActivityLocallyStarted = false
                     lastPushedJobsSignature = ""
                     cancelJobsActivityStart()
+                    pendingJobsPushTask?.cancel()
+                    pendingJobsPushTask = nil
                 }
                 logger.info("[LiveActivity] aggregate activity dismissed by user activity=\(t.activityID ?? "<nil>", privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
             } else if t.activityStartedLocally == true {
@@ -94,12 +96,15 @@ extension MobileSyncService {
                 } else {
                     // One aggregate activity per device — replace any prior token.
                     pairedDevices[idx].liveActivityTokens = [
-                        LiveActivityTokenRef(activityID: activityID, sessionID: "", token: activityToken)
+                        LiveActivityTokenRef(activityID: activityID, token: activityToken)
                     ]
                     logger.info("[LiveActivity] aggregate activity token registered activity=\(activityID, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
                     // Push the latest known state straight away so a freshly
                     // started activity isn't left blank until the next change.
+                    pendingJobsPushTask?.cancel()
+                    pendingJobsPushTask = nil
                     lastPushedJobsSignature = jobsSignature
+                    lastJobsPushDate = Date()
                     sendJobsActivityUpdate(staleAfter: allJobsDone ? 8 * 3600 : 3600)
                 }
             }

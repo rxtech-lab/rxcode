@@ -275,14 +275,15 @@ actor OpenAISummarizationService {
             : existingMemories.map { "- id: \($0.id)\n  content: \($0.content)" }.joined(separator: "\n")
 
         return """
-        Decide whether the latest chat turn contains durable user memory for a local coding IDE.
+        Decide whether the latest chat turn contains explicit durable user memory for a local coding IDE.
 
-        Return [] unless the turn contains information that is likely to be useful in future, separate agent runs.
-        Store only stable preferences, recurring workflow instructions, project-specific decisions, naming conventions, or durable facts that would help future agent runs.
-        Prefer facts stated by the user. Use the assistant response only to capture confirmed outcomes or project decisions.
-        Do not save routine requests, one-off tasks, bug reports, temporary debugging details, implementation steps, command requests, secrets, API keys, credentials, or vague observations.
+        Return [] unless the user explicitly asks to remember something, states a stable preference, or gives a recurring instruction for future/next-time agent runs.
+        Store only the user's reusable preference, recurring workflow instruction, naming convention, or explicitly requested remember-this note.
+        For recurring instructions, preserve the recurrence marker in the memory text, such as "Always...", "Never...", "From now on...", "By default...", or "Next time...".
+        Use the assistant response only to confirm the exact wording of an explicit user-requested memory.
+        Do not save routine requests, one-off tasks, bug reports, temporary debugging details, implementation steps, command requests, build/test results, files changed, tool availability, secrets, API keys, credentials, or vague observations.
         Do not add memory simply because the user sent a message. Most user messages should produce [].
-        Add at most 1-3 memories, and only when each memory is clearly reusable beyond the current conversation.
+        Add at most 1-2 memories, and only when each memory is clearly reusable beyond the current conversation.
         If an existing memory should be refined, return an update operation with its id. If a memory is no longer valid because the user corrected it, return delete.
 
         Reply with ONLY a JSON array. No markdown. Each entry must be one of:

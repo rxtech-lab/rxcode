@@ -6,11 +6,10 @@ import RxCodeCore
 import RxCodeSync
 import os.log
 
-/// One per-activity Live Activity push token registered by a paired mobile.
-/// The desktop targets `update`/`end` pushes at `token`, scoped to `sessionID`.
+/// The single aggregate Live Activity push token registered by a paired
+/// mobile. The desktop targets `update`/`end` pushes at `token`.
 struct LiveActivityTokenRef: Codable, Sendable, Hashable {
     var activityID: String
-    var sessionID: String
     var token: String
 }
 
@@ -115,6 +114,16 @@ final class MobileSyncService: ObservableObject {
     /// a foregrounded device can start the activity locally instead; this task
     /// is cancelled once a device reports it did.
     var pendingStartTask: Task<Void, Never>?
+    /// Minimum spacing between aggregate Live Activity update pushes. Coalesces
+    /// bursts of job/todo events so APNs's scarce Live Activity budget isn't
+    /// exhausted — otherwise the terminal "done" push gets dropped and the
+    /// activity stalls on "running".
+    static let jobsPushInterval: TimeInterval = 30
+    /// When the last aggregate update push actually went out.
+    var lastJobsPushDate: Date?
+    /// Pending trailing push that flushes coalesced changes at the end of the
+    /// throttle window; cancelled if the activity goes away first.
+    var pendingJobsPushTask: Task<Void, Never>?
     /// Last widget job count pushed, so a widget push only fires on a change.
     var lastWidgetJobCount: Int = -1
 
@@ -171,6 +180,8 @@ final class MobileSyncService: ObservableObject {
     func stop() {
         eventTask?.cancel()
         eventTask = nil
+        pendingJobsPushTask?.cancel()
+        pendingJobsPushTask = nil
         Task { await client.stop() }
     }
 

@@ -16,6 +16,16 @@ extension AppState {
         await memoryService.search(query, projectId: projectId, limit: limit)
     }
 
+    func systemPromptMemoryItems(projectId: UUID?) async -> [MemoryItem] {
+        let items = await memoryService.allMemories()
+        return items.filter { item in
+            if let memoryProjectId = item.projectId {
+                guard memoryProjectId == projectId else { return false }
+            }
+            return Self.shouldInjectMemoryIntoSystemPrompt(item)
+        }
+    }
+
     @discardableResult
     func addMemoryItem(content: String, projectId: UUID?, kind: String = "fact", scope: String = "project") async -> MemoryItem? {
         guard memoryEnabled else { return nil }
@@ -57,17 +67,35 @@ extension AppState {
         memoryRevision &+= 1
     }
 
-    func memoryContextSystemPrompt(for hits: [MemoryService.Hit]) -> String {
-        guard memoryEnabled, memoryInjectEnabled, !hits.isEmpty else { return "" }
-        let lines = hits.prefix(memoryMaxContextItems).enumerated().map { idx, hit in
-            "\(idx + 1). \(hit.item.content)"
+    func memoryContextSystemPrompt(
+        systemItems: [MemoryItem],
+        relatedHits: [MemoryService.Hit]
+    ) -> String {
+        guard memoryEnabled, memoryInjectEnabled, !systemItems.isEmpty || !relatedHits.isEmpty else { return "" }
+
+        let systemIds = Set(systemItems.map(\.id))
+        let systemLines = systemItems.enumerated().map { idx, item in
+            "\(idx + 1). \(item.content)"
         }.joined(separator: "\n")
+        let relatedLines = relatedHits
+            .filter { !systemIds.contains($0.item.id) }
+            .prefix(memoryMaxContextItems)
+            .enumerated()
+            .map { idx, hit in
+                "\(idx + 1). \(hit.item.content)"
+            }
+            .joined(separator: "\n")
+        let sections = [
+            systemLines.isEmpty ? nil : "Always apply these saved user preferences and recurring instructions:\n\(systemLines)",
+            relatedLines.isEmpty ? nil : "Related memories for this turn:\n\(relatedLines)"
+        ].compactMap { $0 }.joined(separator: "\n\n")
+
         return """
         # Relevant user memory
 
         The notes below are durable user/project memories saved locally in RxCode. Use them as background context for this turn. They may be incomplete or stale; the current user message still has priority.
 
-        \(lines)
+        \(sections)
         """
     }
 
@@ -91,6 +119,7 @@ extension AppState {
         let userMessage = lastUserMessageText(in: messages)
         let finalResponse = lastAssistantResponseText(in: messages)
         guard !userMessage.isEmpty, !finalResponse.isEmpty else { return }
+        guard Self.hasExplicitMemoryIntent(userMessage) else { return }
         let sourceMessageId = messages.last(where: { $0.role == .user && !$0.isError })?.id
         let summary = allSessionSummaries.first(where: { $0.id == sessionId })
             ?? summaryFor(sessionId: sessionId, projectId: projectId)

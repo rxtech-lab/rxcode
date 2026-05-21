@@ -2,7 +2,39 @@ import Foundation
 import RxCodeCore
 import os
 
-actor PersistenceService {
+protocol AppStatePersistenceService: Actor {
+    func saveProjects(_ projects: [Project]) throws
+    func loadProjects() -> [Project]
+
+    func saveSession(_ session: ChatSession, persistTitle: Bool) async throws
+    func loadLegacySessions(for projectId: UUID) -> [ChatSession.Summary]
+    func loadAllLegacySessionSummaries() -> [ChatSession.Summary]
+    func deleteSession(projectId: UUID, sessionId: String, origin: SessionOrigin, cwd: String?) async throws
+    func loadFullSession(summary: ChatSession.Summary, cwd: String) async -> ChatSession?
+    nonisolated func legacySessionURL(projectId: UUID, sessionId: String) -> URL
+    nonisolated func loadLegacySessionSync(projectId: UUID, sessionId: String) -> ChatSession?
+
+    func saveRunProfiles(_ profiles: [RunProfile], projectId: UUID) throws
+    func loadRunProfiles(projectId: UUID) -> [RunProfile]
+
+    func saveACPClients(_ clients: [ACPClientSpec]) throws
+    func loadACPClients() -> [ACPClientSpec]
+    nonisolated func acpRegistrySnapshotURL() -> URL
+
+    func saveCustomRepos(_ repos: [CustomRepo]) throws
+    func loadCustomRepos() -> [CustomRepo]
+
+    func saveGitHubUser(_ user: GitHubUser) throws
+    func loadGitHubUser() -> GitHubUser?
+}
+
+extension AppStatePersistenceService {
+    func saveSession(_ session: ChatSession) async throws {
+        try await saveSession(session, persistTitle: false)
+    }
+}
+
+actor PersistenceService: AppStatePersistenceService {
 
     private let baseURL: URL
     private let metaStore: SessionMetaStore

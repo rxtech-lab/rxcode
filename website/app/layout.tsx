@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Inter, JetBrains_Mono } from "next/font/google";
+import { GoogleAnalytics } from "./analytics";
 import "./globals.css";
+import { PageViewTracker } from "./page-view-tracker";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -63,7 +65,11 @@ export default function RootLayout({
       lang="en"
       className={`${inter.variable} ${geist.variable} ${jetbrainsMono.variable}`}
     >
-      <body className="min-h-screen flex flex-col">{children}</body>
+      <body className="min-h-screen flex flex-col">
+        {children}
+        <PageViewTracker />
+      </body>
+      <GoogleAnalytics />
     </html>
   );
 }

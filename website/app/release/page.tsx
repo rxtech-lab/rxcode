@@ -8,6 +8,7 @@ import {
   getLatestRelease,
   type AppReleaseNote,
 } from "../lib/release";
+import { TrackedLink } from "../tracked-link";
 
 const GITHUB_REPO_URL = "https://github.com/rxtech-lab/rxcode";
 
@@ -122,12 +123,15 @@ function ReleaseList({
       <section className="max-w-[var(--container-max)] mx-auto px-6 pt-4">
         <div className="bg-surface border border-surface-variant p-8 text-center text-on-surface-variant">
           <p>Release notes are temporarily unavailable.</p>
-          <a
+          <TrackedLink
             href={latestDmg}
+            analyticsEventName="download_button_click"
+            analyticsLabel="Download latest build"
+            analyticsLocation="release_empty_state"
             className="mt-6 inline-flex items-center justify-center gap-2 border border-outline px-6 py-3 font-mono text-xs tracking-widest uppercase hover:border-primary hover:text-primary transition-colors"
           >
             Download latest build
-          </a>
+          </TrackedLink>
         </div>
       </section>
     );
@@ -196,12 +200,15 @@ function ReleaseCard({
         </div>
         <div className="flex flex-wrap gap-3">
           {release.enclosureUrl && (
-            <a
+            <TrackedLink
               href={release.enclosureUrl}
+              analyticsEventName="download_button_click"
+              analyticsLabel={`Download ${tag}`}
+              analyticsLocation="release_card"
               className="inline-flex items-center justify-center gap-2 bg-primary text-on-primary px-5 py-2.5 font-mono text-[11px] tracking-widest uppercase border border-primary hover:bg-transparent hover:text-primary transition-colors active:scale-95"
             >
               Download .dmg
-            </a>
+            </TrackedLink>
           )}
           {release.link && (
             <a

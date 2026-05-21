@@ -349,7 +349,7 @@ struct MobileChatView: View {
                     .environment(\.chatTrackedMessageID, trackedUserMessageID)
                     .environment(\.chatTrackedMessageGeometry, updateLatestUserMinY)
                 }
-                .scrollDismissesKeyboard(.interactively)
+                .mobileDismissesKeyboardOnScroll(.interactively)
                 .onGeometryChange(for: CGRect.self) { proxy in
                     proxy.frame(in: .global)
                 } action: { rect in

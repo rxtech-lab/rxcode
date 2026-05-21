@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { AgentTalkFeature } from "./agent-talk-feature";
 import { formatSize, getLatestRelease } from "./lib/release";
+import { TrackedLink } from "./tracked-link";
 
 const GITHUB_REPO_URL = "https://github.com/rxtech-lab/rxcode";
 
@@ -202,12 +203,15 @@ function TopNav({
             </a>
           </div>
         </div>
-        <a
+        <TrackedLink
           href={release.dmgUrl}
+          analyticsEventName="download_button_click"
+          analyticsLabel="Download for macOS"
+          analyticsLocation="top_nav"
           className="hidden sm:inline-flex items-center gap-2 bg-primary text-on-primary px-4 py-2 font-mono text-[11px] tracking-widest uppercase border border-primary hover:bg-transparent hover:text-primary transition-colors"
         >
           Download for macOS
-        </a>
+        </TrackedLink>
       </div>
     </nav>
   );
@@ -244,8 +248,11 @@ function Hero({
         </p>
 
         <div className="mt-10 flex flex-col sm:flex-row gap-3">
-          <a
+          <TrackedLink
             href={release.dmgUrl}
+            analyticsEventName="download_button_click"
+            analyticsLabel={`Download for macOS ${release.tag}`}
+            analyticsLocation="hero"
             className="inline-flex items-center justify-center gap-3 bg-primary text-on-primary px-8 py-3.5 font-mono text-xs tracking-widest uppercase border border-primary hover:bg-transparent hover:text-primary transition-colors active:scale-95"
           >
             <AppleIcon className="w-4 h-4" />
@@ -255,7 +262,7 @@ function Hero({
               {release.tag}
               {sizeLabel ? ` · ${sizeLabel}` : ""}
             </span>
-          </a>
+          </TrackedLink>
           <a
             href={GITHUB_REPO_URL}
             target="_blank"
@@ -466,8 +473,11 @@ function MobileCompanion() {
             ))}
           </ul>
           {appStoreUrl ? (
-            <a
+            <TrackedLink
               href={appStoreUrl}
+              analyticsEventName="app_store_button_click"
+              analyticsLabel="Download on the App Store"
+              analyticsLocation="mobile_companion"
               target="_blank"
               rel="noreferrer"
               className="mt-8 inline-block w-fit hover:opacity-85 transition-opacity active:scale-95"
@@ -480,7 +490,7 @@ function MobileCompanion() {
                 unoptimized
                 className="h-[52px] w-auto"
               />
-            </a>
+            </TrackedLink>
           ) : null}
         </div>
         <div className="grid grid-cols-2 gap-4 sm:gap-5">
@@ -523,13 +533,16 @@ function CTA({
           start driving your agents visually.
         </p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
-          <a
+          <TrackedLink
             href={release.dmgUrl}
+            analyticsEventName="download_button_click"
+            analyticsLabel={`Download RxCode ${release.tag}`}
+            analyticsLocation="cta"
             className="inline-flex items-center justify-center gap-3 bg-primary text-on-primary px-8 py-3.5 font-mono text-xs tracking-widest uppercase border border-primary hover:bg-transparent hover:text-primary transition-colors active:scale-95"
           >
             <AppleIcon className="w-4 h-4" />
             Download RxCode {release.tag}
-          </a>
+          </TrackedLink>
           <Link
             href="/release"
             className="inline-flex items-center justify-center gap-2 border border-outline text-on-surface px-8 py-3.5 font-mono text-xs tracking-widest uppercase hover:border-primary hover:text-primary transition-colors active:scale-95"

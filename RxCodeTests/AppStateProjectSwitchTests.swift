@@ -9,7 +9,7 @@ final class AppStateProjectSwitchTests: XCTestCase {
     private var window: WindowState!
 
     override func setUp() async throws {
-        appState = AppState()
+        appState = AppState(startBackgroundServices: false)
         window = WindowState()
     }
 

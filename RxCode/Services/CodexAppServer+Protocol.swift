@@ -84,23 +84,24 @@ extension CodexAppServer {
     reading threads first; only use `ide__send_to_thread` when you actually \
     need another agent to act, since it costs tokens.
 
-    RxCode also persists durable memories — stable user preferences, project \
-    facts, and decisions — across sessions. Use these tools to recall and \
-    store them:
+    RxCode also persists durable memories across sessions. Use these tools to \
+    recall saved preferences and to store only explicit user-requested memory:
 
     - `ide__memory_search` — before starting a task, search for saved \
     preferences, facts, or decisions relevant to it instead of asking the \
     user to repeat themselves.
-    - `ide__memory_add` — when the user states a stable preference, project \
-    fact, or decision ("remember…", "from now on…", "always…"), save it. Set \
-    `kind` (`preference`/`fact`/`decision`) and `scope` (`global` for \
-    cross-project, `project` for repo-specific).
+    - `ide__memory_add` — only when the user explicitly asks you to remember \
+    something, states a stable preference, or gives a recurring instruction \
+    for future/next-time agent runs ("remember…", "from now on…", \
+    "always…", "next time…"). Set `kind` \
+    (`preference`/`fact`/`decision`) and `scope` (`global` for cross-project, \
+    `project` for repo-specific).
     - `ide__memory_update` — when saved information changes, update the \
     existing entry by `id` rather than adding a duplicate.
     - `ide__memory_delete` — remove a memory by `id` when it is no longer valid.
 
-    Only store stable, reusable information in memory — not transient task \
-    details.
+    Do not store completed work, build results, files changed, available \
+    tools, routine requests, or other transient task details.
     """
 
     /// True when the `rxcode-ide` MCP bridge is present in the `-c` overrides.

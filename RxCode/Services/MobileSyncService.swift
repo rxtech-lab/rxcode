@@ -6,11 +6,10 @@ import RxCodeCore
 import RxCodeSync
 import os.log
 
-/// One per-activity Live Activity push token registered by a paired mobile.
-/// The desktop targets `update`/`end` pushes at `token`, scoped to `sessionID`.
+/// The single aggregate Live Activity push token registered by a paired
+/// mobile. The desktop targets `update`/`end` pushes at `token`.
 struct LiveActivityTokenRef: Codable, Sendable, Hashable {
     var activityID: String
-    var sessionID: String
     var token: String
 }
 
@@ -100,11 +99,16 @@ final class MobileSyncService: ObservableObject {
     /// background push. Set by `AppState`; `nil` before that.
     var usageSnapshotProvider: (@MainActor () -> (cc: Double?, codex: Double?))?
 
-    /// Session ids currently streaming — the live job count for the widget.
-    var streamingSessionIDs: Set<String> = []
+    /// Pure state machine behind the aggregate Live Activity — the tracked-job
+    /// list and the streaming-session set. The folding logic lives here so it
+    /// can be unit-tested without the service's networking; this service layers
+    /// the throttled APNs pushes on top.
+    var jobsTracker = JobActivityTracker()
     /// Every job tracked by the single aggregate Live Activity: those still
     /// running plus recently finished ones, in start order.
-    var trackedJobs: [JobContent] = []
+    var trackedJobs: [JobContent] { jobsTracker.trackedJobs }
+    /// Session ids currently streaming — the live job count for the widget.
+    var streamingSessionIDs: Set<String> { jobsTracker.streamingSessionIDs }
     /// `true` once a foregrounded device reported it started the activity
     /// locally; suppresses the push-to-start until the activity goes away.
     var jobsActivityLocallyStarted = false
@@ -115,6 +119,16 @@ final class MobileSyncService: ObservableObject {
     /// a foregrounded device can start the activity locally instead; this task
     /// is cancelled once a device reports it did.
     var pendingStartTask: Task<Void, Never>?
+    /// Minimum spacing between aggregate Live Activity update pushes. Coalesces
+    /// bursts of job/todo events so APNs's scarce Live Activity budget isn't
+    /// exhausted — otherwise the terminal "done" push gets dropped and the
+    /// activity stalls on "running".
+    static let jobsPushInterval: TimeInterval = 5
+    /// When the last aggregate update push actually went out.
+    var lastJobsPushDate: Date?
+    /// Pending trailing push that flushes coalesced changes at the end of the
+    /// throttle window; cancelled if the activity goes away first.
+    var pendingJobsPushTask: Task<Void, Never>?
     /// Last widget job count pushed, so a widget push only fires on a change.
     var lastWidgetJobCount: Int = -1
 
@@ -171,6 +185,8 @@ final class MobileSyncService: ObservableObject {
     func stop() {
         eventTask?.cancel()
         eventTask = nil
+        pendingJobsPushTask?.cancel()
+        pendingJobsPushTask = nil
         Task { await client.stop() }
     }
 

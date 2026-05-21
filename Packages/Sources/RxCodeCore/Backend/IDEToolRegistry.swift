@@ -198,7 +198,7 @@ public enum IDEToolRegistry {
         ),
         IDETool(
             name: "ide__memory_add",
-            description: "Add a durable memory to RxCode. Use only for stable user preferences, project facts, or decisions that should help future work.",
+            description: "Add a durable memory to RxCode. Use only when the user explicitly asks to remember something, states a stable preference, or gives a recurring instruction for future/next-time agent runs. Do not save completed work, build results, files changed, available tools, or other transient task details.",
             visibility: .alwaysIDEOnly,
             inputSchema: .object([
                 "type": .string("object"),

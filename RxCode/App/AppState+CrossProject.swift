@@ -235,8 +235,9 @@ extension AppState {
 
         let resolvedMemoryContext: String
         if memoryEnabled, memoryInjectEnabled {
+            let systemItems = await systemPromptMemoryItems(projectId: projectId)
             let hits = await memoryService.search(prompt, projectId: projectId, limit: memoryMaxContextItems)
-            resolvedMemoryContext = memoryContextSystemPrompt(for: hits)
+            resolvedMemoryContext = memoryContextSystemPrompt(systemItems: systemItems, relatedHits: hits)
         } else {
             resolvedMemoryContext = ""
         }

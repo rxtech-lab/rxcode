@@ -336,10 +336,35 @@ actor IDEMCPServer {
     // MARK: - Helpers
 
     private static func toolDescriptor(_ tool: IDETool) -> [String: Any] {
-        [
+        var descriptor: [String: Any] = [
             "name": tool.name,
             "description": tool.description,
             "inputSchema": tool.inputSchema.toAny() ?? [:]
+        ]
+        if let annotations = toolAnnotations(for: tool) {
+            descriptor["annotations"] = annotations
+        }
+        return descriptor
+    }
+
+    private static func toolAnnotations(for tool: IDETool) -> [String: Any]? {
+        let readOnlyTools: Set<String> = [
+            "ide__get_running_jobs",
+            "ide__get_job_output",
+            "ide__get_projects",
+            "ide__get_threads",
+            "ide__get_thread_messages",
+            "ide__get_thread_detail",
+            "ide__memory_search",
+            "ide__get_usage",
+        ]
+
+        guard readOnlyTools.contains(tool.name) else { return nil }
+        return [
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false,
         ]
     }
 

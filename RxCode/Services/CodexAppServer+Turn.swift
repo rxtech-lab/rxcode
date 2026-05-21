@@ -321,8 +321,48 @@ extension CodexAppServer {
             try Self.writeJSONLine(Self.response(id: requestId, result: [
                 "decision": .string(decision == .allow ? "accept" : "reject")
             ]), to: stdin)
+        case "mcpServer/elicitation/request":
+            let toolUseId = Self.firstString(in: params, keys: ["elicitationId", "elicitation_id", "requestId", "request_id"]) ?? requestId
+            let serverName = Self.firstString(in: params, keys: ["serverName", "server_name", "server"]) ?? "mcp"
+            let request = params["request"]?.objectValue ?? params
+            let meta = request["_meta"]?.objectValue
+                ?? request["meta"]?.objectValue
+                ?? params["_meta"]?.objectValue
+                ?? params["meta"]?.objectValue
+                ?? [:]
+            let toolTitle = Self.firstString(in: meta, keys: ["tool_title", "toolTitle", "tool", "name"])
+            let toolName = toolTitle.map { "mcp__\(serverName)__\($0)" } ?? "mcp__\(serverName)"
+            var input = params
+            if let message = Self.firstString(in: request, keys: ["message"]) {
+                input["message"] = .string(message)
+            }
+            if let toolParams = meta["tool_params"] ?? meta["toolParams"] {
+                input["tool_params"] = toolParams
+            }
+
+            let decision = await permissionServer.requestDecision(
+                toolUseId: toolUseId,
+                sessionId: activeThreadId,
+                toolName: toolName,
+                toolInput: input,
+                mode: permissionMode
+            )
+            let approved = Self.isApprovalDecision(decision)
+            try Self.writeJSONLine(Self.response(id: requestId, result: [
+                "action": .string(approved ? "accept" : "decline"),
+                "content": approved ? .object([:]) : .null,
+                "_meta": .null,
+            ]), to: stdin)
         default:
             try Self.writeJSONLine(Self.response(id: requestId, result: [:]), to: stdin)
         }
+    }
+
+    static func isApprovalDecision(_ decision: PermissionDecision) -> Bool {
+        if decision == .allow { return true }
+        if case .allowAlwaysCommand = decision { return true }
+        if case .allowSessionTool = decision { return true }
+        if case .allowAndSetMode = decision { return true }
+        return false
     }
 }

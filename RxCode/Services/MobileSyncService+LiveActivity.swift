@@ -20,72 +20,31 @@ extension MobileSyncService {
         summary: RxCodeSync.SessionSummary?,
         previousSessionID: String?
     ) {
-        if let previousSessionID, previousSessionID != sessionID {
-            streamingSessionIDs.remove(previousSessionID)
-            if let previousIdx = trackedJobs.firstIndex(where: { $0.sessionID == previousSessionID }) {
-                if let summary {
-                    trackedJobs[previousIdx] = makeJobContent(from: summary)
-                } else {
-                    trackedJobs.remove(at: previousIdx)
-                }
-                lastPushedJobsSignature = ""
-            }
-        }
-        let streaming: Bool?
+        let streamingOverride: Bool?
         switch kind {
-        case .streamingStarted: streaming = true
-        case .streamingFinished: streaming = false
-        default: streaming = isStreaming
-        }
-        if let streaming {
-            if streaming { streamingSessionIDs.insert(sessionID) }
-            else { streamingSessionIDs.remove(sessionID) }
+        case .streamingStarted: streamingOverride = true
+        case .streamingFinished: streamingOverride = false
+        default: streamingOverride = isStreaming
         }
         // Summaries carry title/progress/todos — they drive the Live Activity.
-        if let summary {
-            foldSummaryIntoJobs(summary)
-            pushJobsActivity()
+        let content = summary.map { makeJobContent(from: $0) }
+        let result = jobsTracker.ingest(
+            sessionID: sessionID,
+            content: content,
+            streamingOverride: streamingOverride,
+            previousSessionID: previousSessionID
+        )
+        if result.batchReset {
+            // A finished batch was cleared or a job re-keyed — force the next
+            // push out instead of letting the signature dedup swallow it.
+            lastPushedJobsSignature = ""
+        }
+        if content != nil {
+            // A complete → running transition wakes the activity up at once;
+            // ordinary changes go through the throttle.
+            pushJobsActivity(immediate: result.resumedWork)
         }
         pushWidgetUpdateIfJobCountChanged()
-    }
-
-    /// Merge one session summary into `trackedJobs`.
-    ///
-    /// A running session is inserted or updated. A finished session updates
-    /// the job only if it is already tracked, and is otherwise ignored — the
-    /// aggregate activity follows jobs it saw start. When a new job begins
-    /// while every tracked job is already done, the previous (acknowledged)
-    /// batch is cleared so the activity starts a fresh list.
-    func foldSummaryIntoJobs(_ summary: RxCodeSync.SessionSummary) {
-        let content = makeJobContent(from: summary)
-        if let idx = trackedJobs.firstIndex(where: { $0.sessionID == summary.id }) {
-            // A finished job the user has already viewed is frozen: keep it on
-            // the activity exactly as last rendered and stop it generating
-            // further pushes. The running → done transition still applies
-            // because the existing entry is not yet done+read at that point.
-            guard !(trackedJobs[idx].isDone && trackedJobs[idx].isRead) else { return }
-            trackedJobs[idx] = content
-        } else if summary.isStreaming {
-            if !trackedJobs.isEmpty, trackedJobs.allSatisfy(\.isDone) {
-                trackedJobs.removeAll()
-                lastPushedJobsSignature = ""
-            }
-            trackedJobs.append(content)
-        }
-        pruneTrackedJobs()
-    }
-
-    /// Cap the tracked-job list, dropping the oldest finished jobs first so a
-    /// long-lived device never accumulates an unbounded history.
-    func pruneTrackedJobs() {
-        let cap = 6
-        while trackedJobs.count > cap {
-            if let doneIdx = trackedJobs.firstIndex(where: \.isDone) {
-                trackedJobs.remove(at: doneIdx)
-            } else {
-                trackedJobs.removeFirst()
-            }
-        }
     }
 
     func makeJobContent(from summary: RxCodeSync.SessionSummary) -> JobContent {
@@ -107,14 +66,10 @@ extension MobileSyncService {
     // MARK: Aggregate Live Activity
 
     /// Concatenated per-job signatures — identifies a distinct rendered state.
-    var jobsSignature: String {
-        trackedJobs.map(\.signature).joined(separator: ";")
-    }
+    var jobsSignature: String { jobsTracker.jobsSignature }
 
     /// `true` once every tracked job has finished.
-    var allJobsDone: Bool {
-        !trackedJobs.isEmpty && trackedJobs.allSatisfy(\.isDone)
-    }
+    var allJobsDone: Bool { jobsTracker.allJobsDone }
 
     /// `true` when some paired device has registered the aggregate activity's
     /// update token — i.e. the activity exists and can be pushed `update`s.
@@ -134,7 +89,10 @@ extension MobileSyncService {
     /// into a single trailing push. This keeps bursts of job/todo events from
     /// exhausting the APNs Live Activity budget — the cause of the activity
     /// stalling on "running" after a job has finished.
-    func pushJobsActivity() {
+    ///
+    /// `immediate` skips the throttle window — used when work resumes after
+    /// every job had finished, so the activity wakes up at once.
+    func pushJobsActivity(immediate: Bool = false) {
         guard !trackedJobs.isEmpty else { return }
         if hasAnyActivityToken {
             guard jobsSignature != lastPushedJobsSignature else {
@@ -142,7 +100,7 @@ extension MobileSyncService {
                 return
             }
             let elapsed = lastJobsPushDate.map { Date().timeIntervalSince($0) }
-            if let elapsed, elapsed < Self.jobsPushInterval {
+            if !immediate, let elapsed, elapsed < Self.jobsPushInterval {
                 // Inside the throttle window — coalesce into a trailing push.
                 // A pending task already covers later changes: when it fires
                 // it re-reads `trackedJobs`, so the latest state is sent.
@@ -399,33 +357,5 @@ extension MobileSyncService {
         } catch {
             logger.error("[Push] \(pushType, privacy: .public) failed deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public): \(error.localizedDescription, privacy: .public)")
         }
-    }
-}
-
-/// Latest content the desktop knows for one job in the aggregate Live
-/// Activity. Stored in `MobileSyncService.trackedJobs` in start order.
-struct JobContent {
-    var sessionID: String
-    var title: String
-    var projectName: String
-    var todoDone: Int
-    var todoTotal: Int
-    var currentStep: String?
-    /// `true` once the job has finished. It shows the "done" phase but stays
-    /// in the aggregate list so the activity can report the completed batch.
-    var isDone: Bool
-    /// `true` once the job has finished and the user has viewed it. A read job
-    /// is frozen — later summaries no longer mutate the tracked entry, so an
-    /// acknowledged job stops generating Live Activity pushes while staying
-    /// visible. Deliberately excluded from `signature`: a read-state flip
-    /// alone must never trigger a push.
-    var isRead: Bool
-
-    /// Identifies a distinct rendered state for one job, so an update only
-    /// pushes on a real change rather than on every session event. Includes
-    /// `title` so the activity refreshes when the desktop swaps in an
-    /// AI-summarized title.
-    var signature: String {
-        "\(sessionID)|\(isDone ? "done" : "run")|\(title)|\(todoDone)/\(todoTotal)|\(currentStep ?? "")"
     }
 }

@@ -99,11 +99,16 @@ final class MobileSyncService: ObservableObject {
     /// background push. Set by `AppState`; `nil` before that.
     var usageSnapshotProvider: (@MainActor () -> (cc: Double?, codex: Double?))?
 
-    /// Session ids currently streaming — the live job count for the widget.
-    var streamingSessionIDs: Set<String> = []
+    /// Pure state machine behind the aggregate Live Activity — the tracked-job
+    /// list and the streaming-session set. The folding logic lives here so it
+    /// can be unit-tested without the service's networking; this service layers
+    /// the throttled APNs pushes on top.
+    var jobsTracker = JobActivityTracker()
     /// Every job tracked by the single aggregate Live Activity: those still
     /// running plus recently finished ones, in start order.
-    var trackedJobs: [JobContent] = []
+    var trackedJobs: [JobContent] { jobsTracker.trackedJobs }
+    /// Session ids currently streaming — the live job count for the widget.
+    var streamingSessionIDs: Set<String> { jobsTracker.streamingSessionIDs }
     /// `true` once a foregrounded device reported it started the activity
     /// locally; suppresses the push-to-start until the activity goes away.
     var jobsActivityLocallyStarted = false
@@ -118,7 +123,7 @@ final class MobileSyncService: ObservableObject {
     /// bursts of job/todo events so APNs's scarce Live Activity budget isn't
     /// exhausted — otherwise the terminal "done" push gets dropped and the
     /// activity stalls on "running".
-    static let jobsPushInterval: TimeInterval = 30
+    static let jobsPushInterval: TimeInterval = 5
     /// When the last aggregate update push actually went out.
     var lastJobsPushDate: Date?
     /// Pending trailing push that flushes coalesced changes at the end of the

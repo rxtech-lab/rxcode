@@ -230,7 +230,7 @@ public struct RequestSnapshotPayload: Codable, Sendable {
 public struct MobileUsageSnapshot: Codable, Sendable, Equatable {
     /// Claude Code usage: 5-hour and 7-day limits.
     public let claudeCode: RateLimitUsage?
-    /// Codex usage: 5-hour and 24-hour limits.
+    /// Codex usage: 5-hour and 7-day limits.
     public let codex: RateLimitUsage?
 
     public init(claudeCode: RateLimitUsage? = nil, codex: RateLimitUsage? = nil) {

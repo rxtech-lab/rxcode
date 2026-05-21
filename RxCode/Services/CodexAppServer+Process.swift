@@ -27,7 +27,7 @@ extension CodexAppServer {
                 if Self.idString(object["id"]) == "2", let result = object["result"] {
                     let usage = Self.parseCodexRateLimits(from: result)
                     if let usage {
-                        logger.info("Codex rate limits 5h=\(usage.fiveHourPercent)% 24h=\(usage.twentyFourHourPercent ?? 0)%")
+                        logger.info("Codex rate limits 5h=\(usage.fiveHourPercent)% 7d=\(usage.sevenDayPercent)%")
                     } else {
                         logger.warning("Codex account/rateLimits/read returned no parseable limits")
                     }

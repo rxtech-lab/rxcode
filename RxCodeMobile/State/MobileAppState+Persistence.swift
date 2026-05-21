@@ -78,17 +78,33 @@ extension MobileAppState {
     }
 
     func upsertPairedDesktop(_ desktop: PairedDesktop) {
-        if let index = pairedDesktops.firstIndex(where: { $0.pubkeyHex == desktop.pubkeyHex }) {
+        // Match by composite id (pubkey + relay) so the same Mac paired via
+        // different relays creates distinct entries instead of replacing.
+        if let index = pairedDesktops.firstIndex(where: { $0.id == desktop.id }) {
             let existing = pairedDesktops[index]
             pairedDesktops[index] = PairedDesktop(
                 pubkeyHex: desktop.pubkeyHex,
                 displayName: desktop.displayName,
                 pairedAt: existing.pairedAt,
-                lastSeen: desktop.lastSeen ?? existing.lastSeen
+                lastSeen: desktop.lastSeen ?? existing.lastSeen,
+                relayURL: desktop.relayURL ?? existing.relayURL
             )
         } else {
             pairedDesktops.append(desktop)
         }
+    }
+
+    /// Rename a paired desktop locally.
+    func renamePairedDesktop(_ desktop: PairedDesktop, to newName: String) {
+        guard let index = pairedDesktops.firstIndex(where: { $0.id == desktop.id }) else { return }
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        pairedDesktops[index].displayName = trimmed
+        if desktop.pubkeyHex == pairedDesktopPubkey {
+            pairedDesktopName = trimmed
+        }
+        savePairedDesktops()
+        logger.info("[MobileSync] renamed desktop desktopKey=\(String(desktop.pubkeyHex.prefix(12)), privacy: .public) newName=\(trimmed, privacy: .public)")
     }
 
     func acceptsActiveDesktopPayload(from pubkeyHex: String, type: String) -> Bool {
@@ -101,8 +117,12 @@ extension MobileAppState {
 
     func removePairedDesktopAfterRemoteUnpair(_ desktop: PairedDesktop) async {
         let wasActive = desktop.pubkeyHex == pairedDesktopPubkey
-        pairedDesktops.removeAll { $0.pubkeyHex == desktop.pubkeyHex }
-        await client.removePeer(desktop.pubkeyHex)
+        pairedDesktops.removeAll { $0.id == desktop.id }
+        // Only remove the crypto peer if no other pairings use the same pubkey
+        // (e.g., same Mac paired via different relays).
+        if !pairedDesktops.contains(where: { $0.pubkeyHex == desktop.pubkeyHex }) {
+            await client.removePeer(desktop.pubkeyHex)
+        }
         if wasActive {
             clearDesktopMirror()
             setActiveDesktop(pubkeyHex: pairedDesktops.first?.pubkeyHex)
@@ -120,8 +140,10 @@ extension MobileAppState {
         var seen: Set<String> = []
         var result: [PairedDesktop] = []
         for desktop in desktops {
-            guard !desktop.pubkeyHex.isEmpty, !seen.contains(desktop.pubkeyHex) else { continue }
-            seen.insert(desktop.pubkeyHex)
+            // Use composite id (pubkey + relay) for deduplication so the same
+            // Mac paired via different relays appears as distinct entries.
+            guard !desktop.pubkeyHex.isEmpty, !seen.contains(desktop.id) else { continue }
+            seen.insert(desktop.id)
             result.append(desktop)
         }
         return result

@@ -24,11 +24,60 @@ extension MobileSyncService {
         }
     }
 
+    /// Handle events from a specific relay server (multi-relay support).
+    func handle(event: RelayClient.Event, forServer server: SavedRelayServer) {
+        switch event {
+        case .stateChanged(let s):
+            relayConnectionStates[server.id] = s
+            // Update global connectionState to reflect aggregate status
+            updateAggregateConnectionState()
+            logger.info("[MobileSync] relay state=\(String(describing: s), privacy: .public) server=\(server.name, privacy: .public)")
+        case .deliveryFailed(let toHex):
+            logger.warning("[MobileSync] relay delivery failed to mobileKey=\(String(toHex.prefix(12)), privacy: .public) server=\(server.name, privacy: .public)")
+        case .inbound(let inbound):
+            handleInbound(inbound, fromServer: server)
+        }
+    }
+
+    /// Update aggregate connection state based on all relay states.
+    private func updateAggregateConnectionState() {
+        let states = Array(relayConnectionStates.values)
+        if states.isEmpty {
+            connectionState = .disconnected
+        } else if states.contains(.connected) {
+            connectionState = .connected
+        } else if states.contains(.connecting) {
+            connectionState = .connecting
+        } else if let reconnecting = states.first(where: {
+            if case .reconnecting = $0 { return true }
+            return false
+        }) {
+            connectionState = reconnecting
+        } else {
+            connectionState = .disconnected
+        }
+    }
+
+    /// Handle inbound messages from a specific relay server.
+    private func handleInbound(_ inbound: RelayClient.Inbound, fromServer server: SavedRelayServer) {
+        // Route to standard handler but track which server the message came from
+        // This allows pairing to know which relay was used
+        if case .pairRequest = inbound.payload {
+            pairingRelayServerID = server.id
+        }
+        handleInbound(inbound, viaClient: additionalClients[server.id])
+    }
+
     func handleInbound(_ inbound: RelayClient.Inbound) {
+        handleInbound(inbound, viaClient: nil)
+    }
+
+    private func handleInbound(_ inbound: RelayClient.Inbound, viaClient: SyncClient?) {
+        let activeClient = viaClient ?? client
         switch inbound.payload {
         case .pairRequest(let req):
             pendingPairing = req
-            Task { try? await client.addPeer(req.mobilePubkeyHex) }
+            Task { try? await activeClient.addPeer(req.mobilePubkeyHex) }
         case .unpair:
             guard isPairedPeer(inbound.fromHex) else { return }
             handleRemoteUnpair(pubkeyHex: inbound.fromHex)
@@ -327,7 +376,7 @@ extension MobileSyncService {
             )
         case .ping:
             guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "ping") else { return }
-            Task { try? await client.send(.pong(PongPayload()), toHex: inbound.fromHex) }
+            Task { try? await activeClient.send(.pong(PongPayload()), toHex: inbound.fromHex) }
         default:
             break
         }
@@ -366,8 +415,9 @@ extension MobileSyncService {
     /// Send a payload to a single peer (used by AppState when replying to
     /// `request_snapshot` etc).
     func send(_ payload: Payload, toHex hex: String) async {
+        let targetClient = clientForPeer(hex)
         do {
-            try await client.send(payload, toHex: hex)
+            try await targetClient.send(payload, toHex: hex)
             logger.debug("[MobileSync] sent type=\(payload.logName, privacy: .public) to mobileKey=\(String(hex.prefix(12)), privacy: .public)")
         } catch {
             logger.error("[MobileSync] send failed type=\(payload.logName, privacy: .public) to mobileKey=\(String(hex.prefix(12)), privacy: .public): \(error.localizedDescription, privacy: .public)")

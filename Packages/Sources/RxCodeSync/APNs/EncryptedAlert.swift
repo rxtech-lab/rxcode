@@ -60,15 +60,28 @@ public struct WidgetSnapshotPayload: Codable, Sendable {
     public let jobs: Int?
     /// Claude Code 5-hour utilization (0...100), or `nil` to leave untouched.
     public let cc: Double?
+    /// Claude Code 7-day utilization (0...100), or `nil` to leave untouched.
+    public let ccWeekly: Double?
     /// Codex 5-hour utilization (0...100), or `nil` to leave untouched.
     public let codex: Double?
+    /// Codex 7-day utilization (0...100), or `nil` to leave untouched.
+    public let codexWeekly: Double?
     /// When the desktop produced this snapshot, unix seconds.
     public let updatedAt: Double
 
-    public init(jobs: Int? = nil, cc: Double? = nil, codex: Double? = nil, updatedAt: Double) {
+    public init(
+        jobs: Int? = nil,
+        cc: Double? = nil,
+        ccWeekly: Double? = nil,
+        codex: Double? = nil,
+        codexWeekly: Double? = nil,
+        updatedAt: Double
+    ) {
         self.jobs = jobs
         self.cc = cc
+        self.ccWeekly = ccWeekly
         self.codex = codex
+        self.codexWeekly = codexWeekly
         self.updatedAt = updatedAt
     }
 }

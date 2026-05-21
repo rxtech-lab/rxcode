@@ -74,6 +74,24 @@ enum RxCodeTips {
         }
     }
 
+    struct AddRelayServerTip: Tip {
+        var title: Text {
+            Text("Add a relay server")
+        }
+
+        var message: Text? {
+            Text("Connect to relay servers to sync with your mobile devices remotely. You can add multiple relays and connect to all of them simultaneously.")
+        }
+
+        var image: Image? {
+            Image(systemName: "antenna.radiowaves.left.and.right")
+        }
+
+        var options: [any TipOption] {
+            Tips.MaxDisplayCount(1)
+        }
+    }
+
     struct SummarizationModelTip: Tip {
         var title: Text {
             Text("Set the summarization model")

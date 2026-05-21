@@ -7,11 +7,11 @@
 //  iOS app into the shared App Group and refreshed via background APNs pushes.
 //
 
-import WidgetKit
 import SwiftUI
+import WidgetKit
 
 /// RxCode terracotta accent (#D97757).
-private let rxAccent = Color(red: 0xD9 / 255, green: 0x77 / 255, blue: 0x57 / 255)
+private let rxAccent = Color(red: 0xd9 / 255, green: 0x77 / 255, blue: 0x57 / 255)
 
 // MARK: - Timeline
 
@@ -24,7 +24,14 @@ struct RxCodeWidgetProvider: TimelineProvider {
     func placeholder(in context: Context) -> RxCodeWidgetEntry {
         RxCodeWidgetEntry(
             date: Date(),
-            data: RxCodeWidgetData(jobCount: 2, ccUsagePercent: 45, codexUsagePercent: 12, updatedAt: 0)
+            data: RxCodeWidgetData(
+                jobCount: 2,
+                ccUsagePercent: 45,
+                ccWeeklyUsagePercent: 18,
+                codexUsagePercent: 12,
+                codexWeeklyUsagePercent: 7,
+                updatedAt: 0
+            )
         )
     }
 
@@ -58,11 +65,19 @@ struct RxCodeWidgetEntryView: View {
     }
 
     private var smallBody: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 6) {
             jobsHeader
             Spacer(minLength: 0)
-            usageRow(label: "CC", percent: entry.data.ccUsagePercent)
-            usageRow(label: "CX", percent: entry.data.codexUsagePercent)
+            providerUsageRow(
+                label: "CC",
+                fiveHour: entry.data.ccUsagePercent,
+                weekly: entry.data.ccWeeklyUsagePercent
+            )
+            providerUsageRow(
+                label: "CX",
+                fiveHour: entry.data.codexUsagePercent,
+                weekly: entry.data.codexWeeklyUsagePercent
+            )
         }
     }
 
@@ -76,9 +91,17 @@ struct RxCodeWidgetEntryView: View {
                     .foregroundStyle(.tertiary)
             }
             Divider()
-            VStack(alignment: .leading, spacing: 12) {
-                usageRow(label: "Claude Code", percent: entry.data.ccUsagePercent)
-                usageRow(label: "Codex", percent: entry.data.codexUsagePercent)
+            VStack(alignment: .leading, spacing: 10) {
+                providerUsageRow(
+                    label: "Claude Code",
+                    fiveHour: entry.data.ccUsagePercent,
+                    weekly: entry.data.ccWeeklyUsagePercent
+                )
+                providerUsageRow(
+                    label: "Codex",
+                    fiveHour: entry.data.codexUsagePercent,
+                    weekly: entry.data.codexWeeklyUsagePercent
+                )
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -107,18 +130,41 @@ struct RxCodeWidgetEntryView: View {
     }
 
     @ViewBuilder
-    private func usageRow(label: String, percent: Double?) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack {
+    private func providerUsageRow(label: String, fiveHour: Double?, weekly: Double?) -> some View {
+        VStack(alignment: .leading, spacing: family == .systemSmall ? 2 : 4) {
+            HStack(alignment: .firstTextBaseline) {
                 Text(label)
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Spacer()
-                Text(percent.map { "\(Int($0.rounded()))%" } ?? "—")
-                    .font(.caption2.weight(.semibold).monospacedDigit())
-                    .foregroundStyle(percent == nil ? .secondary : .primary)
             }
-            UsageBar(percent: percent)
+            // 5-hour usage with solid bar
+            usageBarRow(
+                period: "5h",
+                percent: fiveHour,
+                barStyle: .solid
+            )
+            // 7-day usage with striped/dimmed bar
+            usageBarRow(
+                period: "7d",
+                percent: weekly,
+                barStyle: .dimmed
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func usageBarRow(period: String, percent: Double?, barStyle: UsageBarStyle) -> some View {
+        HStack(spacing: family == .systemSmall ? 4 : 6) {
+            Text(period)
+                .font(.system(size: family == .systemSmall ? 8 : 9, weight: .medium, design: .rounded))
+                .foregroundStyle(.tertiary)
+                .frame(width: family == .systemSmall ? 14 : 16, alignment: .trailing)
+            UsageBar(percent: percent, style: barStyle)
+            Text(percent.map { "\(Int($0.rounded()))%" } ?? "—")
+                .font(.system(size: family == .systemSmall ? 9 : 10, weight: .semibold, design: .rounded).monospacedDigit())
+                .foregroundStyle(percent == nil ? .tertiary : (barStyle == .solid ? .primary : .secondary))
+                .frame(width: family == .systemSmall ? 24 : 28, alignment: .trailing)
         }
     }
 
@@ -131,20 +177,27 @@ struct RxCodeWidgetEntryView: View {
     }
 }
 
+/// Style variants for usage bars to differentiate 5h vs 7d.
+private enum UsageBarStyle {
+    case solid   // 5-hour: full opacity, prominent
+    case dimmed  // 7-day: reduced opacity, subtler
+}
+
 /// A thin capsule usage bar that tints toward red as utilization climbs.
 private struct UsageBar: View {
     let percent: Double?
+    var style: UsageBarStyle = .solid
 
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
-                Capsule().fill(Color.secondary.opacity(0.22))
+                Capsule().fill(Color.secondary.opacity(style == .solid ? 0.22 : 0.12))
                 Capsule()
-                    .fill(tint)
+                    .fill(tint.opacity(style == .solid ? 1.0 : 0.5))
                     .frame(width: geo.size.width * fraction)
             }
         }
-        .frame(height: 5)
+        .frame(height: style == .solid ? 6 : 4)
     }
 
     private var fraction: Double {
@@ -179,12 +232,32 @@ struct RxCodeWidget: Widget {
 #Preview(as: .systemSmall) {
     RxCodeWidget()
 } timeline: {
-    RxCodeWidgetEntry(date: .now, data: RxCodeWidgetData(jobCount: 3, ccUsagePercent: 64, codexUsagePercent: 22, updatedAt: Date().timeIntervalSince1970))
+    RxCodeWidgetEntry(
+        date: .now,
+        data: RxCodeWidgetData(
+            jobCount: 3,
+            ccUsagePercent: 64,
+            ccWeeklyUsagePercent: 31,
+            codexUsagePercent: 22,
+            codexWeeklyUsagePercent: 14,
+            updatedAt: Date().timeIntervalSince1970
+        )
+    )
     RxCodeWidgetEntry(date: .now, data: .empty)
 }
 
 #Preview(as: .systemMedium) {
     RxCodeWidget()
 } timeline: {
-    RxCodeWidgetEntry(date: .now, data: RxCodeWidgetData(jobCount: 1, ccUsagePercent: 91, codexUsagePercent: nil, updatedAt: Date().timeIntervalSince1970))
+    RxCodeWidgetEntry(
+        date: .now,
+        data: RxCodeWidgetData(
+            jobCount: 1,
+            ccUsagePercent: 91,
+            ccWeeklyUsagePercent: 67,
+            codexUsagePercent: nil,
+            codexWeeklyUsagePercent: nil,
+            updatedAt: Date().timeIntervalSince1970
+        )
+    )
 }

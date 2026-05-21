@@ -219,7 +219,7 @@ private struct MenuBarContentView: View {
     private var secondaryLimitLabel: String {
         switch appState.selectedAgentProvider {
         case .claudeCode: return "7-day limit"
-        case .codex: return "24-hour limit"
+        case .codex: return "7-day limit"
         case .acp: return "Usage"
         }
     }
@@ -227,7 +227,7 @@ private struct MenuBarContentView: View {
     private var secondaryLimitPercent: Double? {
         switch appState.selectedAgentProvider {
         case .claudeCode: return selectedUsage?.sevenDayPercent
-        case .codex: return selectedUsage?.twentyFourHourPercent
+        case .codex: return selectedUsage?.sevenDayPercent
         case .acp: return nil
         }
     }
@@ -235,7 +235,7 @@ private struct MenuBarContentView: View {
     private var secondaryLimitResetsAt: Date? {
         switch appState.selectedAgentProvider {
         case .claudeCode: return selectedUsage?.sevenDayResetsAt
-        case .codex: return selectedUsage?.twentyFourHourResetsAt
+        case .codex: return selectedUsage?.sevenDayResetsAt
         case .acp: return nil
         }
     }

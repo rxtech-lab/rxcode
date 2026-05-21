@@ -170,13 +170,13 @@ struct StatusLineView: View {
                 body: "Tracks usage against Codex's rolling 5-hour limit. Resets gradually as older requests age out."
             )
             rateLimitSegment(
-                label: String(localized: "24h", bundle: .module),
+                label: String(localized: "7d", bundle: .module),
                 icon: "calendar",
-                percent: rateLimit?.twentyFourHourPercent,
-                resetsAt: rateLimit?.twentyFourHourResetsAt,
+                percent: rateLimit?.sevenDayPercent,
+                resetsAt: rateLimit?.sevenDayResetsAt,
                 isPresented: $showSevenDayPopover,
-                title: "24-hour rate limit",
-                body: "Tracks usage against Codex's rolling 24-hour limit. Resets gradually as older requests age out."
+                title: "7-day rate limit",
+                body: "Tracks usage against Codex's rolling 7-day limit. Resets gradually as older requests age out."
             )
         case .acp:
             EmptyView()

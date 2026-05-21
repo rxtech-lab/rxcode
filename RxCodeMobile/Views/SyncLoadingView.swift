@@ -9,7 +9,11 @@ private let logger = Logger(subsystem: "com.idealapp.RxCode", category: "SyncLoa
 /// When timed out, shows a timeout screen with retry button.
 struct SyncLoadingView: View {
     var isTimedOut: Bool = false
+    var pairedDesktops: [PairedDesktop] = []
+    var activeDesktopID: String?
     var onRetry: (() -> Void)?
+    var onSelectDesktop: ((PairedDesktop) -> Void)?
+    var onPairNewDesktop: (() -> Void)?
 
     @State private var pulseScale: CGFloat = 1.0
     @State private var orbRotation: Double = 0
@@ -51,7 +55,7 @@ struct SyncLoadingView: View {
                         .foregroundStyle(.primary)
 
                     HStack(spacing: 6) {
-                        Text("Connecting to your desktop")
+                        Text("Connecting to \(activeDesktopDisplayName)")
                             .font(.body)
                             .foregroundStyle(.secondary)
 
@@ -107,40 +111,114 @@ struct SyncLoadingView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                // Retry button
-                Button {
-                    onRetry?()
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 16, weight: .semibold))
-                        Text("Try Again")
-                            .font(.body.weight(.semibold))
-                    }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 32)
-                    .padding(.vertical, 14)
-                    .background(
-                        LinearGradient(
-                            colors: [
-                                ClaudeTheme.accent,
-                                ClaudeTheme.accent.opacity(0.85)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .clipShape(Capsule())
-                    .shadow(color: ClaudeTheme.accent.opacity(0.3), radius: 12, x: 0, y: 6)
-                }
-                .buttonStyle(.plain)
-                .padding(.top, 8)
+                desktopPickerView
+
+                timeoutActions
 
                 Spacer()
                 Spacer()
             }
             .padding(.horizontal, 40)
         }
+    }
+
+    private var timeoutActions: some View {
+        VStack(spacing: 12) {
+            Button {
+                onRetry?()
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 16, weight: .semibold))
+                    Text("Try Again")
+                        .font(.body.weight(.semibold))
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 32)
+                .padding(.vertical, 14)
+                .background(
+                    LinearGradient(
+                        colors: [
+                            ClaudeTheme.accent,
+                            ClaudeTheme.accent.opacity(0.85)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .clipShape(Capsule())
+                .shadow(color: ClaudeTheme.accent.opacity(0.3), radius: 12, x: 0, y: 6)
+            }
+            .buttonStyle(.plain)
+
+            if let onPairNewDesktop {
+                Button {
+                    onPairNewDesktop()
+                } label: {
+                    Label("Pair New Mac", systemImage: "plus.circle")
+                        .font(.body.weight(.semibold))
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 10)
+                }
+                .buttonStyle(.glass)
+                .foregroundStyle(.primary)
+            }
+        }
+        .padding(.top, 8)
+    }
+
+    @ViewBuilder
+    private var desktopPickerView: some View {
+        if pairedDesktops.count > 1 {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Connect to", systemImage: "desktopcomputer")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+
+                Picker("Mac", selection: desktopSelection) {
+                    ForEach(pairedDesktops) { desktop in
+                        Text(desktopPickerTitle(desktop))
+                            .tag(desktop.id)
+                    }
+                }
+                .pickerStyle(.menu)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(.white.opacity(0.18))
+                }
+            }
+            .frame(maxWidth: 320)
+            .padding(.top, 4)
+        }
+    }
+
+    private var desktopSelection: Binding<String> {
+        Binding(
+            get: {
+                activeDesktopID ?? pairedDesktops.first?.id ?? ""
+            },
+            set: { selectedID in
+                guard let desktop = pairedDesktops.first(where: { $0.id == selectedID }) else { return }
+                onSelectDesktop?(desktop)
+            }
+        )
+    }
+
+    private func desktopPickerTitle(_ desktop: PairedDesktop) -> String {
+        let name = desktop.displayName.isEmpty ? "Unknown Mac" : desktop.displayName
+        guard let relay = desktop.relayDisplayName else { return name }
+        return "\(name) (\(relay))"
+    }
+
+    private var activeDesktopDisplayName: String {
+        guard let desktop = pairedDesktops.first(where: { $0.id == activeDesktopID }) else {
+            return "your Mac"
+        }
+        return desktop.displayName.isEmpty ? "Unknown Mac" : desktop.displayName
     }
 
     private var timeoutIconView: some View {

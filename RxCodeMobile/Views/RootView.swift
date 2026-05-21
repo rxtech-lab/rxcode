@@ -25,6 +25,7 @@ struct RootView: View {
     @State private var projectsPath = NavigationPath()
     @State private var minimumLoadingTimeElapsed = false
     @State private var connectionTimedOut = false
+    @State private var showPairingSheet = false
 
     var body: some View {
         Group {
@@ -37,6 +38,21 @@ struct RootView: View {
         .sheet(item: $state.pendingPermission) { req in
             PermissionApprovalSheet(request: req)
                 .environmentObject(state)
+        }
+        .sheet(isPresented: $showPairingSheet) {
+            NavigationStack {
+                OnboardingView(showsCancelButton: true) {
+                    showPairingSheet = false
+                    connectionTimedOut = false
+                    minimumLoadingTimeElapsed = false
+                    Task {
+                        await retryConnection()
+                    }
+                }
+                .environmentObject(state)
+                .navigationTitle("Pair New Mac")
+                .navigationBarTitleDisplayMode(.inline)
+            }
         }
         .mobileDismissesKeyboardOnScroll()
     }
@@ -58,11 +74,24 @@ struct RootView: View {
             if !shouldShowContent {
                 SyncLoadingView(
                     isTimedOut: connectionTimedOut,
+                    pairedDesktops: state.pairedDesktops,
+                    activeDesktopID: state.activePairedDesktop?.id,
                     onRetry: {
                         connectionTimedOut = false
                         Task {
                             await retryConnection()
                         }
+                    },
+                    onSelectDesktop: { desktop in
+                        connectionTimedOut = false
+                        minimumLoadingTimeElapsed = false
+                        Task {
+                            await state.switchPairedDesktop(desktop)
+                            await retryConnection()
+                        }
+                    },
+                    onPairNewDesktop: {
+                        showPairingSheet = true
                     }
                 )
                 .transition(.splashTransition)

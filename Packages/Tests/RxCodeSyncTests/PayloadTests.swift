@@ -115,11 +115,9 @@ struct PayloadTests {
                     ),
                     codex: RateLimitUsage(
                         fiveHourPercent: 7,
-                        sevenDayPercent: 0,
-                        twentyFourHourPercent: 55,
+                        sevenDayPercent: 55,
                         fiveHourResetsAt: nil,
-                        sevenDayResetsAt: nil,
-                        twentyFourHourResetsAt: Date(timeIntervalSince1970: 300)
+                        sevenDayResetsAt: Date(timeIntervalSince1970: 300)
                     )
                 )
             )
@@ -135,7 +133,8 @@ struct PayloadTests {
         #expect(snapshot.usage?.hasAnyUsage == true)
         #expect(snapshot.usage?.claudeCode?.fiveHourPercent == 42)
         #expect(snapshot.usage?.claudeCode?.sevenDayResetsAt == Date(timeIntervalSince1970: 200))
-        #expect(snapshot.usage?.codex?.twentyFourHourPercent == 55)
+        #expect(snapshot.usage?.codex?.sevenDayPercent == 55)
+        #expect(snapshot.usage?.codex?.sevenDayResetsAt == Date(timeIntervalSince1970: 300))
     }
 
     @Test("snapshot without usage decodes to nil")

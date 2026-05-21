@@ -1,16 +1,8 @@
-import SwiftUI
 import CoreImage.CIFilterBuiltins
 import RxCodeCore
 import RxCodeSync
+import SwiftUI
 import TipKit
-
-/// How the relay server is chosen in the Mobile settings tab.
-private enum RelayMode: Hashable {
-    /// One of the RxLab-hosted relays from the published catalog.
-    case hosted
-    /// A free-form relay URL typed by the user (e.g. a self-hosted relay).
-    case custom
-}
 
 /// "Mobile" tab in SettingsView. Lists paired iOS / iPadOS devices and lets
 /// the user pair a new one via QR code or unpair existing devices.
@@ -18,28 +10,12 @@ struct MobileSettingsTab: View {
     @StateObject private var sync = MobileSyncService.shared
     @State private var catalog = RelayPresetCatalog.shared
     @State private var showPairingSheet = false
-    @State private var relayMode: RelayMode
-    @State private var selectedPresetID: String?
-    @State private var customURLText: String
+    @State private var showAddRelaySheet = false
     @State private var testNotificationDeviceID: String?
     @State private var testNotificationAlert: TestNotificationAlert?
-
-    init() {
-        let current = MobileSyncService.shared.relayURL
-        let match = RelayPresetCatalog.bundledPresets.first {
-            MobileSettingsTab.normalize($0.url) == MobileSettingsTab.normalize(current.absoluteString)
-        }
-        _customURLText = State(initialValue: current.absoluteString)
-        if let match {
-            _relayMode = State(initialValue: .hosted)
-            _selectedPresetID = State(initialValue: match.id)
-        } else {
-            _relayMode = State(initialValue: .custom)
-            let fallback = RelayPresetCatalog.bundledPresets.first { $0.recommended == true }
-                ?? RelayPresetCatalog.bundledPresets.first
-            _selectedPresetID = State(initialValue: fallback?.id)
-        }
-    }
+    @State private var deviceBeingRenamed: PairedDevice?
+    @State private var renameText: String = ""
+    @State private var relayToEdit: SavedRelayServer?
 
     var body: some View {
         ScrollView {
@@ -53,10 +29,15 @@ struct MobileSettingsTab: View {
         }
         .task {
             await catalog.refresh()
-            reconcileWithCatalog()
         }
         .sheet(isPresented: $showPairingSheet) {
-            PairingSheet(sync: sync)
+            PairingSheet(sync: sync, catalog: catalog)
+        }
+        .sheet(isPresented: $showAddRelaySheet) {
+            RelayServerEditorSheet(sync: sync, catalog: catalog, existingServer: nil)
+        }
+        .sheet(item: $relayToEdit) { server in
+            RelayServerEditorSheet(sync: sync, catalog: catalog, existingServer: server)
         }
         .alert(item: $testNotificationAlert) { alert in
             Alert(
@@ -64,6 +45,26 @@ struct MobileSettingsTab: View {
                 message: Text(alert.message),
                 dismissButton: .default(Text("OK"))
             )
+        }
+        .alert(
+            "Rename Device",
+            isPresented: Binding(
+                get: { deviceBeingRenamed != nil },
+                set: { if !$0 { deviceBeingRenamed = nil } }
+            )
+        ) {
+            TextField("Device name", text: $renameText)
+            Button("Cancel", role: .cancel) {
+                deviceBeingRenamed = nil
+            }
+            Button("Save") {
+                if let device = deviceBeingRenamed {
+                    sync.renameDevice(device, to: renameText)
+                }
+                deviceBeingRenamed = nil
+            }
+        } message: {
+            Text("Enter a new name for this device.")
         }
     }
 
@@ -80,154 +81,145 @@ struct MobileSettingsTab: View {
 
     private var relaySection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Relay server")
-                .font(.headline)
-            Text("All sync traffic flows through this relay, end-to-end encrypted. Use an RxLab-hosted relay, or point RxCode at your own — self-host with github.com/rxlab/rxcode-relay.")
+            HStack {
+                Text("Relay servers")
+                    .font(.headline)
+                Spacer()
+                Button {
+                    showAddRelaySheet = true
+                } label: {
+                    Label("Add server", systemImage: "plus.circle.fill")
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .popoverTip(RxCodeTips.AddRelayServerTip(), arrowEdge: .top)
+            }
+            Text("All sync traffic flows through relay servers, end-to-end encrypted. Add relay servers to connect with your mobile devices remotely.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            Picker("Relay mode", selection: $relayMode) {
-                Text("Hosted server").tag(RelayMode.hosted)
-                Text("Custom URL").tag(RelayMode.custom)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-
-            switch relayMode {
-            case .hosted:
-                hostedRelayPicker
-            case .custom:
-                customRelayField
-            }
-
-            HStack(spacing: 10) {
-                Button("Apply", action: applyRelay)
-                    .disabled(!canApply)
-                if relayMode == .hosted, catalog.isLoading {
-                    ProgressView().controlSize(.small)
+            // List of relay servers with connection status
+            VStack(spacing: 8) {
+                ForEach(sync.savedRelayServers) { server in
+                    relayServerRow(server)
                 }
-                Spacer()
-            }
 
-            connectionBadge
+                if sync.savedRelayServers.isEmpty {
+                    Label("No relay servers", systemImage: "antenna.radiowaves.left.and.right.slash")
+                }
+            }
         }
     }
 
-    @ViewBuilder
-    private var hostedRelayPicker: some View {
-        if catalog.presets.isEmpty {
-            Text("No hosted relays are available right now. Switch to Custom URL to enter one manually.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        } else {
-            Picker("Hosted relay", selection: $selectedPresetID) {
-                ForEach(catalog.presets) { preset in
-                    Text(preset.name).tag(Optional(preset.id))
-                }
-            }
-            .labelsHidden()
+    private func relayServerRow(_ server: SavedRelayServer) -> some View {
+        let connectionState = sync.relayConnectionStates[server.id] ?? .disconnected
+        let isConnected = connectionState == .connected
+        return HStack {
+            // Connection status indicator
+            connectionStatusIcon(for: connectionState)
+                .frame(width: 20)
 
-            if let preset = selectedPreset {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(preset.url)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(server.name)
+                        .fontWeight(.medium)
+                    if !server.isEnabled {
+                        Text("Disabled")
+                            .font(.caption2)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.secondary.opacity(0.2), in: Capsule())
+                    }
+                }
+                HStack(spacing: 4) {
+                    Text(server.displayHost ?? server.url)
                         .font(.caption)
                         .monospaced()
                         .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                    if let description = preset.description {
-                        Text(description)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                    Text("•")
+                        .foregroundStyle(.secondary)
+                    connectionStatusText(for: connectionState)
+                        .font(.caption)
                 }
             }
-        }
-    }
+            Spacer()
 
-    private var customRelayField: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            TextField("wss://host:port", text: $customURLText)
-                .textFieldStyle(.roundedBorder)
-            if !customURLText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-               parsedCustomURL == nil {
-                Text("Enter a valid ws:// or wss:// URL.")
-                    .font(.caption)
-                    .foregroundStyle(.red)
+            // Toggle enabled state
+            Toggle("", isOn: Binding(
+                get: { server.isEnabled },
+                set: { newValue in
+                    var updated = server
+                    updated.isEnabled = newValue
+                    sync.updateRelayServer(updated)
+                    if newValue {
+                        Task { await sync.startRelayServer(updated) }
+                    } else {
+                        Task { await sync.stopRelayServer(updated) }
+                    }
+                }
+            ))
+            .toggleStyle(.switch)
+            .controlSize(.small)
+
+            Button {
+                relayToEdit = server
+            } label: {
+                Image(systemName: "pencil")
             }
+            .buttonStyle(.borderless)
+            Button(role: .destructive) {
+                Task {
+                    await sync.stopRelayServer(server)
+                    sync.removeRelayServer(server)
+                }
+            } label: {
+                Image(systemName: "trash")
+            }
+            .buttonStyle(.borderless)
         }
-    }
-
-    // MARK: - Relay selection helpers
-
-    private var selectedPreset: RelayPreset? {
-        catalog.presets.first { $0.id == selectedPresetID }
-    }
-
-    /// The custom URL parsed and validated as a relay endpoint, or `nil`.
-    private var parsedCustomURL: URL? {
-        let trimmed = customURLText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: trimmed),
-              let scheme = url.scheme?.lowercased(),
-              scheme == "ws" || scheme == "wss",
-              url.host?.isEmpty == false else { return nil }
-        return url
-    }
-
-    /// The relay URL implied by the current mode and selection.
-    private var pendingRelayURL: URL? {
-        switch relayMode {
-        case .hosted: selectedPreset?.relayURL
-        case .custom: parsedCustomURL
-        }
-    }
-
-    private var canApply: Bool {
-        guard let pending = pendingRelayURL else { return false }
-        return Self.normalize(pending.absoluteString) != Self.normalize(sync.relayURL.absoluteString)
-    }
-
-    private func applyRelay() {
-        guard let url = pendingRelayURL else { return }
-        sync.updateRelay(url: url)
-    }
-
-    /// After the live catalog loads, keep a valid preset selected and upgrade a
-    /// "custom" selection to the hosted picker when the active relay turns out
-    /// to be a freshly published preset.
-    private func reconcileWithCatalog() {
-        if selectedPreset == nil {
-            selectedPresetID = catalog.presets.first { $0.recommended == true }?.id
-                ?? catalog.presets.first?.id
-        }
-        guard relayMode == .custom,
-              customURLText == sync.relayURL.absoluteString,
-              let match = catalog.presets.first(where: {
-                  Self.normalize($0.url) == Self.normalize(sync.relayURL.absoluteString)
-              })
-        else { return }
-        relayMode = .hosted
-        selectedPresetID = match.id
-    }
-
-    /// Normalize a URL string for equality checks (lowercased, no trailing `/`).
-    static func normalize(_ urlString: String) -> String {
-        var value = urlString.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        while value.hasSuffix("/") { value.removeLast() }
-        return value
+        .padding(10)
+        .background(isConnected ? Color.green.opacity(0.1) : Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
     }
 
     @ViewBuilder
-    private var connectionBadge: some View {
-        switch sync.connectionState {
+    private func connectionStatusIcon(for state: RelayClient.ConnectionState) -> some View {
+        switch state {
         case .disconnected:
-            Label("Disconnected", systemImage: "circle.slash").foregroundStyle(.secondary)
+            Image(systemName: "circle.slash")
+                .foregroundStyle(.secondary)
         case .connecting:
-            Label("Connecting…", systemImage: "circle.dotted").foregroundStyle(.orange)
+            ProgressView()
+                .controlSize(.small)
         case .connected:
-            Label("Connected", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-        case .reconnecting(let s):
-            Label("Reconnecting in \(s)s", systemImage: "arrow.clockwise.circle").foregroundStyle(.orange)
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+        case .reconnecting:
+            Image(systemName: "arrow.clockwise.circle")
+                .foregroundStyle(.orange)
         }
+    }
+
+    @ViewBuilder
+    private func connectionStatusText(for state: RelayClient.ConnectionState) -> some View {
+        switch state {
+        case .disconnected:
+            Text("Disconnected")
+                .foregroundStyle(.secondary)
+        case .connecting:
+            Text("Connecting…")
+                .foregroundStyle(.orange)
+        case .connected:
+            Text("Connected")
+                .foregroundStyle(.green)
+        case .reconnecting(let seconds):
+            Text("Reconnecting in \(seconds)s")
+                .foregroundStyle(.orange)
+        }
+    }
+
+    /// Check if any relay server is connected.
+    private var hasConnectedRelay: Bool {
+        sync.relayConnectionStates.values.contains(.connected)
     }
 
     private var pairedSection: some View {
@@ -242,8 +234,8 @@ struct MobileSettingsTab: View {
                     Label("Pair new device", systemImage: "plus.circle.fill")
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(sync.connectionState != .connected)
-                .help(sync.connectionState == .connected ? "" : "Connect to the relay before pairing a device.")
+                .disabled(!hasConnectedRelay)
+                .help(hasConnectedRelay ? "" : "Connect to a relay server before pairing a device.")
                 .popoverTip(RxCodeTips.MobileConnectionTip(), arrowEdge: .top)
             }
 
@@ -283,10 +275,26 @@ struct MobileSettingsTab: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                    if let relay = device.relayDisplayName {
+                        Text("•")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Label(relay, systemImage: "antenna.radiowaves.left.and.right")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             Spacer()
             testNotificationButton(for: device)
+            Button {
+                renameText = device.displayName
+                deviceBeingRenamed = device
+            } label: {
+                Image(systemName: "pencil")
+            }
+            .buttonStyle(.borderless)
+            .help("Rename device")
             Button(role: .destructive) {
                 Task { await sync.unpair(device) }
             } label: {
@@ -353,6 +361,151 @@ private struct TestNotificationAlert: Identifiable {
     let message: String
 }
 
+// MARK: - Relay Server Editor Sheet
+
+private struct RelayServerEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var sync: MobileSyncService
+    @State var catalog: RelayPresetCatalog
+    let existingServer: SavedRelayServer?
+
+    @State private var name: String = ""
+    @State private var url: String = ""
+    @State private var selectedPresetID: String?
+    @State private var usePreset: Bool = false
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Text(existingServer == nil ? "Add Relay Server" : "Edit Relay Server")
+                .font(.title2)
+                .fontWeight(.semibold)
+
+            VStack(alignment: .leading, spacing: 12) {
+                // Option to pick from presets
+                if !catalog.presets.isEmpty {
+                    Toggle("Use hosted relay", isOn: $usePreset)
+
+                    if usePreset {
+                        Picker("Select relay", selection: $selectedPresetID) {
+                            Text("Choose…").tag(nil as String?)
+                            ForEach(catalog.presets) { preset in
+                                Text(preset.name).tag(Optional(preset.id))
+                            }
+                        }
+                        .labelsHidden()
+
+                        if let preset = catalog.presets.first(where: { $0.id == selectedPresetID }) {
+                            Text(preset.url)
+                                .font(.caption)
+                                .monospaced()
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                if !usePreset {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Name")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        TextField("My Relay Server", text: $name)
+                            .textFieldStyle(.roundedBorder)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("URL")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        TextField("wss://relay.example.com", text: $url)
+                            .textFieldStyle(.roundedBorder)
+                        if !url.isEmpty && !isValidURL {
+                            Text("Enter a valid ws:// or wss:// URL.")
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                        }
+                    }
+                }
+            }
+
+            HStack {
+                Button("Cancel", role: .cancel) {
+                    dismiss()
+                }
+                Spacer()
+                Button(existingServer == nil ? "Add" : "Save") {
+                    save()
+                    dismiss()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!canSave)
+            }
+        }
+        .frame(width: 340)
+        .padding(24)
+        .onAppear {
+            if let server = existingServer {
+                name = server.name
+                url = server.url
+            }
+        }
+    }
+
+    private var isValidURL: Bool {
+        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let parsed = URL(string: trimmed),
+              let scheme = parsed.scheme?.lowercased(),
+              scheme == "ws" || scheme == "wss",
+              parsed.host?.isEmpty == false else { return false }
+        return true
+    }
+
+    private var canSave: Bool {
+        if usePreset {
+            return selectedPresetID != nil
+        }
+        return !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && isValidURL
+    }
+
+    private func save() {
+        if usePreset, let presetID = selectedPresetID,
+           let preset = catalog.presets.first(where: { $0.id == presetID })
+        {
+            let server = SavedRelayServer(
+                name: preset.name,
+                url: preset.url
+            )
+            sync.addRelayServer(server)
+            // Start connection to the new server
+            Task { await sync.startRelayServer(server) }
+        } else {
+            let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmedURL = url.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            if let existing = existingServer {
+                var updated = existing
+                updated.name = trimmedName
+                updated.url = trimmedURL
+                sync.updateRelayServer(updated)
+                // Restart if URL changed
+                if existing.url != trimmedURL {
+                    Task {
+                        await sync.stopRelayServer(existing)
+                        await sync.startRelayServer(updated)
+                    }
+                }
+            } else {
+                let server = SavedRelayServer(
+                    name: trimmedName,
+                    url: trimmedURL
+                )
+                sync.addRelayServer(server)
+                // Start connection to the new server
+                Task { await sync.startRelayServer(server) }
+            }
+        }
+    }
+}
+
 // MARK: - Pairing sheet
 
 private struct PairingSheet: View {
@@ -361,6 +514,27 @@ private struct PairingSheet: View {
     @State private var token: PairingToken?
     @State private var qrImage: NSImage?
     @State private var autoReloadTask: Task<Void, Never>?
+    @State private var selectedServerID: UUID?
+
+    init(sync: MobileSyncService, catalog: RelayPresetCatalog) {
+        self.sync = sync
+        // Select first connected server by default
+        let firstConnected = sync.savedRelayServers.first { server in
+            sync.relayConnectionStates[server.id] == .connected
+        }
+        self._selectedServerID = State(initialValue: firstConnected?.id ?? sync.savedRelayServers.first?.id)
+    }
+
+    /// Only show servers that are connected.
+    private var connectedServers: [SavedRelayServer] {
+        sync.savedRelayServers.filter { server in
+            sync.relayConnectionStates[server.id] == .connected
+        }
+    }
+
+    private var selectedServer: SavedRelayServer? {
+        sync.savedRelayServers.first { $0.id == selectedServerID }
+    }
 
     var body: some View {
         VStack(spacing: 18) {
@@ -385,18 +559,27 @@ private struct PairingSheet: View {
                 Spacer()
             }
         }
-        .frame(width: 360)
+        .frame(width: 400)
         .padding(24)
         .onAppear { startPairing() }
         .onDisappear {
             autoReloadTask?.cancel()
             autoReloadTask = nil
         }
+        .onChange(of: selectedServerID) { _, _ in
+            startPairing()
+        }
     }
 
     private func startPairing() {
         autoReloadTask?.cancel()
-        let fresh = sync.beginPairing()
+        guard let server = selectedServer,
+              let fresh = sync.beginPairing(viaServer: server)
+        else {
+            token = nil
+            qrImage = nil
+            return
+        }
         token = fresh
         qrImage = nil
         if let qrString = try? fresh.qrString() {
@@ -417,7 +600,32 @@ private struct PairingSheet: View {
 
     @ViewBuilder
     private func qrView(_ image: NSImage) -> some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 12) {
+            // Relay server picker (only connected servers)
+            if connectedServers.count > 1 {
+                HStack {
+                    Text("Relay:")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Picker("Relay server", selection: $selectedServerID) {
+                        ForEach(connectedServers) { server in
+                            Text(server.name).tag(Optional(server.id))
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(maxWidth: 200)
+                }
+            } else if let server = selectedServer {
+                HStack(spacing: 4) {
+                    Text("Via:")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(server.name)
+                        .font(.caption)
+                        .fontWeight(.medium)
+                }
+            }
+
             Image(nsImage: image)
                 .interpolation(.none)
                 .resizable()
@@ -432,7 +640,7 @@ private struct PairingSheet: View {
             Button {
                 startPairing()
             } label: {
-                Label("Force reload", systemImage: "arrow.clockwise")
+                Label("Regenerate", systemImage: "arrow.clockwise")
             }
             .buttonStyle(.bordered)
         }

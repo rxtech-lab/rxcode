@@ -23,8 +23,25 @@ struct PairedDesktop: Codable, Identifiable, Equatable, Hashable {
     var displayName: String
     var pairedAt: Date
     var lastSeen: Date?
+    /// The relay server URL this desktop was paired through.
+    var relayURL: String?
 
-    var id: String { pubkeyHex }
+    /// Composite id: same Mac paired via different relays produces distinct entries.
+    var id: String {
+        let normalizedRelay = (relayURL ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return "\(pubkeyHex)::\(normalizedRelay)"
+    }
+
+    /// Human-readable relay host for display (e.g. "relay.example.com").
+    var relayDisplayName: String? {
+        guard let urlString = relayURL,
+              let url = URL(string: urlString),
+              let host = url.host else { return nil }
+        return host
+    }
 }
 
 /// Single source of truth for the mobile app. Owns the `SyncClient`, the
@@ -239,7 +256,16 @@ final class MobileAppState: ObservableObject {
     var localPublicKeyHex: String { identity.publicKeyHex }
 
     var activePairedDesktop: PairedDesktop? {
-        pairedDesktops.first { $0.pubkeyHex == pairedDesktopPubkey }
+        // Match both pubkey and relay to identify the correct pairing when the
+        // same Mac is paired via multiple relays.
+        let currentRelay = relayURL.absoluteString.lowercased()
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return pairedDesktops.first { desktop in
+            guard desktop.pubkeyHex == pairedDesktopPubkey else { return false }
+            let desktopRelay = (desktop.relayURL ?? "").lowercased()
+                .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            return desktopRelay == currentRelay
+        } ?? pairedDesktops.first { $0.pubkeyHex == pairedDesktopPubkey }
     }
 
     func start() {

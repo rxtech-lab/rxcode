@@ -326,14 +326,26 @@ struct OnboardingView: View {
             Task {
                 onboardingLogger.info("starting pair task displayName=\(displayName, privacy: .public)")
                 await state.pair(with: token, displayName: displayName)
-                onboardingLogger.info("pair task finished isPaired=\(state.isPaired, privacy: .public)")
-                if state.isPaired, state.pairedDesktopPubkey == token.desktopPubkeyHex {
-                    onPairingCompleted?()
-                }
+                // pair() only sends the request; wait for the desktop to accept.
+                // The pairingStatus changes to .idle on success or .failed on error.
+                onboardingLogger.info("pair request sent, waiting for ack...")
+                await waitForPairingResult(expectedPubkey: token.desktopPubkeyHex)
             }
         } catch {
             onboardingLogger.error("token parse failed: \(error.localizedDescription, privacy: .public)")
             pairingError = "Unrecognized QR. Try scanning the one from the Mac app."
+        }
+    }
+
+    /// Waits for the pairing handshake to complete (success or failure).
+    private func waitForPairingResult(expectedPubkey: String) async {
+        // Wait until pairingStatus is no longer .inProgress
+        while state.pairingStatus == .inProgress {
+            try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+        }
+        onboardingLogger.info("pair task finished isPaired=\(state.isPaired, privacy: .public) status=\(String(describing: state.pairingStatus), privacy: .public)")
+        if state.isPaired, state.pairedDesktopPubkey == expectedPubkey {
+            onPairingCompleted?()
         }
     }
 

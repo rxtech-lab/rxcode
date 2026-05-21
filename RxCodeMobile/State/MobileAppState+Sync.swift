@@ -332,7 +332,9 @@ extension MobileAppState {
         let snapshot = RxCodeWidgetData(
             jobCount: jobCount,
             ccUsagePercent: desktopUsage?.claudeCode?.fiveHourPercent,
+            ccWeeklyUsagePercent: desktopUsage?.claudeCode?.sevenDayPercent,
             codexUsagePercent: desktopUsage?.codex?.fiveHourPercent,
+            codexWeeklyUsagePercent: desktopUsage?.codex?.sevenDayPercent,
             updatedAt: Date().timeIntervalSince1970
         )
         RxCodeWidgetStore.save(snapshot)
@@ -346,9 +348,14 @@ extension MobileAppState {
     }
 
     func switchPairedDesktop(_ desktop: PairedDesktop) async {
-        guard pairedDesktops.contains(where: { $0.pubkeyHex == desktop.pubkeyHex }) else { return }
-        guard desktop.pubkeyHex != pairedDesktopPubkey else { return }
+        guard pairedDesktops.contains(where: { $0.id == desktop.id }) else { return }
+        // Allow switching even to the same pubkey if it's a different relay pairing
+        guard desktop.id != activePairedDesktop?.id else { return }
         clearDesktopMirror()
+        // Switch to the relay this pairing uses, then set the active desktop
+        if let relayString = desktop.relayURL, let relayURL = URL(string: relayString) {
+            await updateRelayForPairingIfNeeded(relayURL)
+        }
         setActiveDesktop(pubkeyHex: desktop.pubkeyHex)
         savePairedDesktops()
         try? await client.addPeer(desktop.pubkeyHex)
@@ -357,10 +364,11 @@ extension MobileAppState {
     }
 
     func removePairedDesktop(_ desktop: PairedDesktop) async {
-        let wasActive = desktop.pubkeyHex == pairedDesktopPubkey
-        try? await client.send(.unpair(UnpairPayload(reason: "mobile")), toHex: desktop.pubkeyHex)
-        pairedDesktops.removeAll { $0.pubkeyHex == desktop.pubkeyHex }
-        await client.removePeer(desktop.pubkeyHex)
+        let wasActive = desktop.id == activePairedDesktop?.id
+        let pubkeyHex = desktop.pubkeyHex
+
+        // Optimistically remove from UI first for immediate feedback
+        pairedDesktops.removeAll { $0.id == desktop.id }
 
         if wasActive {
             clearDesktopMirror()
@@ -369,6 +377,13 @@ extension MobileAppState {
             setActiveDesktop(pubkeyHex: pairedDesktopPubkey)
         }
         savePairedDesktops()
+
+        // Notify desktop and clean up peer connection (best-effort, ignore failures)
+        try? await client.send(.unpair(UnpairPayload(reason: "mobile")), toHex: pubkeyHex)
+        // Only remove the crypto peer if no other pairings use the same pubkey
+        if !pairedDesktops.contains(where: { $0.pubkeyHex == pubkeyHex }) {
+            await client.removePeer(pubkeyHex)
+        }
 
         if wasActive, isPaired {
             await requestSnapshot()

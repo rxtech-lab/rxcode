@@ -69,16 +69,17 @@ extension CodexAppServer {
 
         guard !windows.isEmpty else { return nil }
         let fiveHour = windows.first { $0.durationMinutes == 300 } ?? windows.first
-        let twentyFourHour = windows.first { $0.durationMinutes == 1_440 }
+        let sevenDay = windows.first { $0.durationMinutes == 10_080 }
             ?? windows.first { $0.durationMinutes != fiveHour?.durationMinutes }
             ?? windows.dropFirst().first
+        let twentyFourHour = windows.first { $0.durationMinutes == 1_440 }
 
         return RateLimitUsage(
             fiveHourPercent: fiveHour?.percent ?? 0,
-            sevenDayPercent: 0,
+            sevenDayPercent: sevenDay?.percent ?? 0,
             twentyFourHourPercent: twentyFourHour?.percent,
             fiveHourResetsAt: fiveHour?.resetsAt,
-            sevenDayResetsAt: nil,
+            sevenDayResetsAt: sevenDay?.resetsAt,
             twentyFourHourResetsAt: twentyFourHour?.resetsAt
         )
     }

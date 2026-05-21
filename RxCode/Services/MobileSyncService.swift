@@ -29,8 +29,18 @@ struct PairedDevice: Codable, Identifiable, Sendable, Hashable {
     var liveActivityTokens: [LiveActivityTokenRef]?
     var pairedAt: Date
     var lastSeen: Date?
+    /// The relay server URL this device was paired through.
+    var relayURL: String?
 
     var id: String { pubkeyHex }
+
+    /// Human-readable relay host for display (e.g. "relay.example.com").
+    var relayDisplayName: String? {
+        guard let urlString = relayURL,
+              let url = URL(string: urlString),
+              let host = url.host else { return nil }
+        return host
+    }
 }
 
 /// Result of a pairing handshake propagated to the SwiftUI pairing sheet.
@@ -64,6 +74,36 @@ enum MobilePushError: LocalizedError {
     }
 }
 
+/// A saved relay server configuration, stored in UserDefaults.
+struct SavedRelayServer: Codable, Identifiable, Hashable {
+    var id: UUID
+    var name: String
+    var url: String
+    var addedAt: Date
+    /// Whether this relay should be connected (user preference).
+    var isEnabled: Bool
+
+    /// Human-readable relay host for display (e.g. "relay.example.com").
+    var displayHost: String? {
+        guard let parsed = URL(string: url), let host = parsed.host else { return nil }
+        return host
+    }
+
+    init(id: UUID = UUID(), name: String, url: String, addedAt: Date = .now, isEnabled: Bool = true) {
+        self.id = id
+        self.name = name
+        self.url = url
+        self.addedAt = addedAt
+        self.isEnabled = isEnabled
+    }
+}
+
+/// Connection state for a single relay server.
+struct RelayConnectionInfo: Identifiable {
+    let id: UUID  // matches SavedRelayServer.id
+    var state: RelayClient.ConnectionState
+}
+
 /// Bridges the desktop app to paired mobile devices over the E2E-encrypted
 /// relay channel. Owns the long-term `DeviceIdentity`, the `SyncClient`, and
 /// the persistent paired-device list.
@@ -77,14 +117,22 @@ final class MobileSyncService: ObservableObject {
     @Published var isPairing: Bool = false
     @Published var pendingPairing: PairRequestPayload?
     @Published var relayURL: URL
+    @Published var savedRelayServers: [SavedRelayServer] = []
+    /// Connection state per relay server (keyed by SavedRelayServer.id).
+    @Published var relayConnectionStates: [UUID: RelayClient.ConnectionState] = [:]
 
     let logger = Logger(subsystem: "com.idealapp.RxCode", category: "MobileSync")
     let identity: DeviceIdentity
     var client: SyncClient
+    /// Additional clients for multi-relay support (keyed by SavedRelayServer.id).
+    var additionalClients: [UUID: SyncClient] = [:]
+    var additionalEventTasks: [UUID: Task<Void, Never>] = [:]
     var subscribedSessions: [String: String] = [:]
     var eventTask: Task<Void, Never>?
     var pairingToken: PairingToken?
     var pairingContinuation: CheckedContinuation<PairingOutcome, Never>?
+    /// The relay server ID currently being used for pairing.
+    var pairingRelayServerID: UUID?
 
     /// The single AppState reference is set in init order from RxCodeApp,
     /// because AppState owns the storage layer and the streaming loop.
@@ -95,9 +143,14 @@ final class MobileSyncService: ObservableObject {
     /// Resolves a project's display name for Live Activity attributes. Set by
     /// `AppState` after initialization; `nil` before that.
     var projectNameResolver: (@MainActor (UUID) -> String?)?
-    /// Supplies the current Claude Code / Codex 5-hour usage for the widget
+    /// Supplies the current Claude Code / Codex usage for the widget
     /// background push. Set by `AppState`; `nil` before that.
-    var usageSnapshotProvider: (@MainActor () -> (cc: Double?, codex: Double?))?
+    var usageSnapshotProvider: (@MainActor () -> (
+        cc: Double?,
+        ccWeekly: Double?,
+        codex: Double?,
+        codexWeekly: Double?
+    ))?
 
     /// Pure state machine behind the aggregate Live Activity — the tracked-job
     /// list and the streaming-session set. The folding logic lives here so it
@@ -145,6 +198,7 @@ final class MobileSyncService: ObservableObject {
         }
         self.client = SyncClient(identity: identity, relayURL: initial)
         loadPairedDevices()
+        loadSavedRelayServers()
     }
 
     static func logFatalKeychain(_ error: Error) {
@@ -160,26 +214,102 @@ final class MobileSyncService: ObservableObject {
     /// Begin (or resume) the relay connection. Safe to call multiple times.
     func start() {
         Task { @MainActor in
-            logger.info("[MobileSync] starting relay=\(self.relayURL.absoluteString, privacy: .public) pairedDevices=\(self.pairedDevices.count, privacy: .public) desktopKey=\(String(self.identity.publicKeyHex.prefix(12)), privacy: .public)")
-            for device in pairedDevices {
-                do {
-                    try await client.addPeer(device.pubkeyHex)
-                    logger.info("[MobileSync] added paired peer mobileKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
-                } catch {
-                    logger.error("[MobileSync] failed to add paired peer mobileKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public): \(error.localizedDescription, privacy: .public)")
-                }
+            // Start all enabled relay servers
+            for server in savedRelayServers where server.isEnabled {
+                await startRelayServer(server)
             }
-            // Subscribe to events BEFORE calling start() so we don't miss the
-            // initial .connecting / .connected state transitions.
-            let events = await client.events()
-            eventTask?.cancel()
-            eventTask = Task { @MainActor in
-                for await event in events {
-                    self.handle(event: event)
-                }
+
+            // If no saved servers, we have nothing to connect to
+            if savedRelayServers.isEmpty {
+                logger.info("[MobileSync] no relay servers configured — waiting for user to add one")
             }
-            await client.start()
         }
+    }
+
+    /// Start connection to a specific relay server.
+    func startRelayServer(_ server: SavedRelayServer) async {
+        guard let url = URL(string: server.url) else {
+            logger.error("[MobileSync] invalid relay URL for server=\(server.name, privacy: .public)")
+            return
+        }
+
+        // Check if already connected
+        if additionalClients[server.id] != nil {
+            logger.info("[MobileSync] relay already started server=\(server.name, privacy: .public)")
+            return
+        }
+
+        logger.info("[MobileSync] starting relay server=\(server.name, privacy: .public) url=\(server.url, privacy: .public) desktopKey=\(String(self.identity.publicKeyHex.prefix(12)), privacy: .public)")
+
+        let newClient = SyncClient(identity: identity, relayURL: url)
+        additionalClients[server.id] = newClient
+
+        // Add all paired devices that use this relay
+        for device in pairedDevices where Self.normalize(device.relayURL ?? "") == Self.normalize(server.url) {
+            do {
+                try await newClient.addPeer(device.pubkeyHex)
+                logger.info("[MobileSync] added paired peer mobileKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public) to relay=\(server.name, privacy: .public)")
+            } catch {
+                logger.error("[MobileSync] failed to add paired peer mobileKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public): \(error.localizedDescription, privacy: .public)")
+            }
+        }
+
+        // Subscribe to events
+        let events = await newClient.events()
+        additionalEventTasks[server.id]?.cancel()
+        additionalEventTasks[server.id] = Task { @MainActor [weak self] in
+            for await event in events {
+                self?.handle(event: event, forServer: server)
+            }
+        }
+
+        await newClient.start()
+    }
+
+    /// Stop connection to a specific relay server.
+    func stopRelayServer(_ server: SavedRelayServer) async {
+        additionalEventTasks[server.id]?.cancel()
+        additionalEventTasks.removeValue(forKey: server.id)
+
+        if let client = additionalClients.removeValue(forKey: server.id) {
+            await client.stop()
+            logger.info("[MobileSync] stopped relay server=\(server.name, privacy: .public)")
+        }
+
+        relayConnectionStates.removeValue(forKey: server.id)
+    }
+
+    /// Normalize a URL string for comparison.
+    static func normalize(_ urlString: String) -> String {
+        urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    }
+
+    /// Find the SyncClient that handles a device based on its relay URL.
+    func clientForDevice(_ device: PairedDevice) -> SyncClient? {
+        guard let deviceRelayURL = device.relayURL else { return nil }
+        let normalizedDeviceURL = Self.normalize(deviceRelayURL)
+        for server in savedRelayServers {
+            if Self.normalize(server.url) == normalizedDeviceURL {
+                return additionalClients[server.id]
+            }
+        }
+        return nil
+    }
+
+    /// Find the SyncClient that should be used for a paired mobile key.
+    ///
+    /// Multirelay connections keep one client per relay server. Replies must
+    /// go back through the relay used by the paired device, not the legacy
+    /// single-relay client, otherwise request/response flows time out.
+    func clientForPeer(_ pubkeyHex: String) -> SyncClient {
+        guard let device = pairedDevices.first(where: { $0.pubkeyHex == pubkeyHex }),
+              let deviceClient = clientForDevice(device)
+        else {
+            return client
+        }
+        return deviceClient
     }
 
     func stop() {
@@ -187,7 +317,19 @@ final class MobileSyncService: ObservableObject {
         eventTask = nil
         pendingJobsPushTask?.cancel()
         pendingJobsPushTask = nil
-        Task { await client.stop() }
+
+        // Stop all relay server connections
+        for (serverID, task) in additionalEventTasks {
+            task.cancel()
+            additionalEventTasks.removeValue(forKey: serverID)
+        }
+        Task {
+            for (serverID, client) in additionalClients {
+                await client.stop()
+                additionalClients.removeValue(forKey: serverID)
+            }
+        }
+        relayConnectionStates.removeAll()
     }
 
     /// Update the configured relay URL, persist it, and reconnect.
@@ -208,9 +350,17 @@ final class MobileSyncService: ObservableObject {
     // MARK: - Pairing
 
     /// Generate a fresh pairing token + show it as QR. Token expires in 2 min.
-    func beginPairing() -> PairingToken {
+    /// - Parameter server: The relay server to pair through. If nil, uses the first enabled server.
+    func beginPairing(viaServer server: SavedRelayServer? = nil) -> PairingToken? {
+        let targetServer = server ?? savedRelayServers.first(where: { $0.isEnabled })
+        guard let targetServer else {
+            logger.warning("[Pairing] no relay server available for pairing")
+            return nil
+        }
+
+        pairingRelayServerID = targetServer.id
         let token = PairingToken(
-            relayURL: relayURL.absoluteString,
+            relayURL: targetServer.url,
             desktopPubkeyHex: identity.publicKeyHex,
             oneTimeSecretHex: PairingToken.makeOneTimeSecret(),
             expiresAt: Date.now.addingTimeInterval(120),
@@ -233,6 +383,12 @@ final class MobileSyncService: ObservableObject {
     /// Accept the pending pair request shown to the user in the pairing sheet.
     func acceptPendingPairing() async {
         guard let pending = pendingPairing else { return }
+
+        // Get the relay server and client used for this pairing
+        let pairingServer = pairingRelayServerID.flatMap { id in savedRelayServers.first { $0.id == id } }
+        let pairingClient = pairingRelayServerID.flatMap { additionalClients[$0] }
+        let relayURLString = pairingServer?.url ?? pairingToken?.relayURL ?? ""
+
         let device = PairedDevice(
             pubkeyHex: pending.mobilePubkeyHex,
             displayName: pending.displayName,
@@ -240,47 +396,82 @@ final class MobileSyncService: ObservableObject {
             apnsToken: nil,
             apnsEnvironment: nil,
             pairedAt: .now,
-            lastSeen: .now
+            lastSeen: .now,
+            relayURL: relayURLString
         )
         pairedDevices.removeAll { $0.pubkeyHex == device.pubkeyHex }
         pairedDevices.append(device)
         savePairedDevices()
-        try? await client.addPeer(device.pubkeyHex)
-        let ack = PairAckPayload(accepted: true, desktopName: localDeviceName)
-        try? await client.send(.pairAck(ack), toHex: device.pubkeyHex)
+
+        if let pairingClient {
+            try? await pairingClient.addPeer(device.pubkeyHex)
+            let ack = PairAckPayload(accepted: true, desktopName: localDeviceName)
+            try? await pairingClient.send(.pairAck(ack), toHex: device.pubkeyHex)
+        }
+
         isPairing = false
         pendingPairing = nil
         pairingToken = nil
+        pairingRelayServerID = nil
         pairingContinuation?.resume(returning: .accepted(device))
         pairingContinuation = nil
+        logger.info("[Pairing] accepted mobile=\(pending.displayName, privacy: .public) mobileKey=\(String(pending.mobilePubkeyHex.prefix(12)), privacy: .public) relay=\(relayURLString, privacy: .public)")
     }
 
     func cancelPairing() {
         Task {
             if let pending = pendingPairing {
-                let ack = PairAckPayload(accepted: false, desktopName: localDeviceName, reason: "rejected")
-                try? await client.addPeer(pending.mobilePubkeyHex)
-                try? await client.send(.pairAck(ack), toHex: pending.mobilePubkeyHex)
-                await client.removePeer(pending.mobilePubkeyHex)
+                let pairingClient = pairingRelayServerID.flatMap { additionalClients[$0] }
+                if let pairingClient {
+                    let ack = PairAckPayload(accepted: false, desktopName: localDeviceName, reason: "rejected")
+                    try? await pairingClient.addPeer(pending.mobilePubkeyHex)
+                    try? await pairingClient.send(.pairAck(ack), toHex: pending.mobilePubkeyHex)
+                    await pairingClient.removePeer(pending.mobilePubkeyHex)
+                }
             }
         }
         isPairing = false
         pendingPairing = nil
         pairingToken = nil
+        pairingRelayServerID = nil
         pairingContinuation?.resume(returning: .cancelled)
         pairingContinuation = nil
     }
 
     /// Remove a paired device and notify it before forgetting its pubkey.
     func unpair(_ device: PairedDevice) async {
-        try? await client.send(.unpair(UnpairPayload(reason: "desktop")), toHex: device.pubkeyHex)
-        pairedDevices.removeAll { $0.pubkeyHex == device.pubkeyHex }
+        let pubkeyHex = device.pubkeyHex
+
+        // Optimistically remove from UI first for immediate feedback
+        pairedDevices.removeAll { $0.pubkeyHex == pubkeyHex }
         savePairedDevices()
-        subscribedSessions.removeValue(forKey: device.pubkeyHex)
-        await client.removePeer(device.pubkeyHex)
+        subscribedSessions.removeValue(forKey: pubkeyHex)
+
+        // Notify mobile and clean up peer connection (best-effort, ignore failures)
+        if let deviceClient = clientForDevice(device) {
+            try? await deviceClient.send(.unpair(UnpairPayload(reason: "desktop")), toHex: pubkeyHex)
+            await deviceClient.removePeer(pubkeyHex)
+        }
+    }
+
+    /// Rename a paired device locally.
+    func renameDevice(_ device: PairedDevice, to newName: String) {
+        guard let index = pairedDevices.firstIndex(where: { $0.pubkeyHex == device.pubkeyHex }) else { return }
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        pairedDevices[index].displayName = trimmed
+        savePairedDevices()
+        logger.info("[MobileSync] renamed device mobileKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public) newName=\(trimmed, privacy: .public)")
     }
 
     // MARK: - Notification fan-out
+
+    /// Broadcast a message to all connected relay clients.
+    private func broadcastToAllClients(_ payload: RxCodeSync.Payload) async {
+        for client in additionalClients.values {
+            await client.broadcast(payload)
+        }
+    }
 
     /// Send a notification to every paired device.
     ///
@@ -291,7 +482,7 @@ final class MobileSyncService: ObservableObject {
     ///   offline, so a finished thread still surfaces a banner.
     func broadcastNotification(_ payload: NotificationPayload) {
         Task {
-            await client.broadcast(.notification(payload))
+            await broadcastToAllClients(.notification(payload))
             await fanoutAPNs(payload)
         }
     }
@@ -302,11 +493,15 @@ final class MobileSyncService: ObservableObject {
     func fanoutAPNs(_ payload: NotificationPayload) async {
         let devices = pairedDevices.filter { ($0.apnsToken?.isEmpty == false) }
         guard !devices.isEmpty else { return }
-        guard let pushURL = Self.pushEndpointURL(from: relayURL) else {
-            logger.error("[APNs] cannot derive push endpoint from relay URL \(self.relayURL.absoluteString, privacy: .public)")
-            return
-        }
+
         for device in devices {
+            // Find the relay URL for this device
+            guard let relayURLString = device.relayURL,
+                  let relayURL = URL(string: relayURLString),
+                  let pushURL = Self.pushEndpointURL(from: relayURL) else {
+                logger.error("[APNs] cannot derive push endpoint for device=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
+                continue
+            }
             do {
                 try await sendAPNsPush(payload, to: device, pushURL: pushURL)
             } catch {
@@ -322,7 +517,9 @@ final class MobileSyncService: ObservableObject {
         guard let token = device.apnsToken, !token.isEmpty else {
             throw MobilePushError.missingDeviceToken
         }
-        guard let peer = await client.peer(forHex: device.pubkeyHex) else {
+        // Find the client for this device's relay
+        let deviceClient = clientForDevice(device)
+        guard let peer = await deviceClient?.peer(forHex: device.pubkeyHex) else {
             throw MobilePushError.unknownPeer
         }
 
@@ -377,10 +574,14 @@ final class MobileSyncService: ObservableObject {
         guard let token = device.apnsToken, !token.isEmpty else {
             throw MobilePushError.missingDeviceToken
         }
-        guard let peer = await client.peer(forHex: device.pubkeyHex) else {
+        // Find the client for this device's relay
+        let deviceClient = clientForDevice(device)
+        guard let peer = await deviceClient?.peer(forHex: device.pubkeyHex) else {
             throw MobilePushError.unknownPeer
         }
-        guard let pushURL = Self.pushEndpointURL(from: relayURL) else {
+        guard let relayURLString = device.relayURL,
+              let deviceRelayURL = URL(string: relayURLString),
+              let pushURL = Self.pushEndpointURL(from: deviceRelayURL) else {
             throw MobilePushError.invalidRelayURL
         }
 
@@ -451,7 +652,7 @@ final class MobileSyncService: ObservableObject {
                 summary: summary,
                 previousSessionID: previousSessionID
             )
-            await client.broadcast(.sessionUpdate(payload))
+            await broadcastToAllClients(.sessionUpdate(payload))
         }
         updateJobTracking(
             sessionID: sessionID,
@@ -467,13 +668,13 @@ final class MobileSyncService: ObservableObject {
     /// surface the same queue banner + question sheet.
     func broadcastQuestionQueue(_ questions: [PendingQuestionPayload]) {
         Task {
-            await client.broadcast(.questionQueue(QuestionQueuePayload(questions: questions)))
+            await broadcastToAllClients(.questionQueue(QuestionQueuePayload(questions: questions)))
         }
     }
 
     func broadcastRunTaskUpdate(_ task: MobileRunTaskSnapshot) {
         Task {
-            await client.broadcast(.runTaskUpdate(RunTaskUpdatePayload(task: task)))
+            await broadcastToAllClients(.runTaskUpdate(RunTaskUpdatePayload(task: task)))
         }
     }
 
@@ -500,6 +701,53 @@ final class MobileSyncService: ObservableObject {
         } catch {
             logger.error("save paired_devices.json: \(error.localizedDescription)")
         }
+    }
+
+    // MARK: - Saved Relay Servers
+
+    private static let savedRelayServersKey = "mobileSync.savedRelayServers"
+
+    func loadSavedRelayServers() {
+        guard let data = UserDefaults.standard.data(forKey: Self.savedRelayServersKey) else { return }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        savedRelayServers = (try? decoder.decode([SavedRelayServer].self, from: data)) ?? []
+    }
+
+    func saveSavedRelayServers() {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        do {
+            let data = try encoder.encode(savedRelayServers)
+            UserDefaults.standard.set(data, forKey: Self.savedRelayServersKey)
+        } catch {
+            logger.error("save relay servers: \(error.localizedDescription)")
+        }
+    }
+
+    func addRelayServer(_ server: SavedRelayServer) {
+        // Avoid duplicates by URL
+        let normalizedURL = server.url.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        if savedRelayServers.contains(where: {
+            $0.url.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "/")) == normalizedURL
+        }) {
+            return
+        }
+        savedRelayServers.append(server)
+        saveSavedRelayServers()
+        logger.info("[MobileSync] added relay server name=\(server.name, privacy: .public) url=\(server.url, privacy: .public)")
+    }
+
+    func removeRelayServer(_ server: SavedRelayServer) {
+        savedRelayServers.removeAll { $0.id == server.id }
+        saveSavedRelayServers()
+        logger.info("[MobileSync] removed relay server name=\(server.name, privacy: .public)")
+    }
+
+    func updateRelayServer(_ server: SavedRelayServer) {
+        guard let index = savedRelayServers.firstIndex(where: { $0.id == server.id }) else { return }
+        savedRelayServers[index] = server
+        saveSavedRelayServers()
     }
 
     static func pushEndpointURL(from relayURL: URL) -> URL? {

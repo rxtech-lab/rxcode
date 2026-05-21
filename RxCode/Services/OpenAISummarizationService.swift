@@ -153,6 +153,22 @@ actor OpenAISummarizationService {
         return await generateSummary(prompt: prompt, endpoint: endpoint, apiKey: apiKey, model: model, maxTokens: 256)
     }
 
+    func generateMemoryOperations(
+        existingMemories: [(id: String, content: String)],
+        userMessage: String,
+        finalResponse: String,
+        endpoint: String,
+        apiKey: String,
+        model: String
+    ) async -> String? {
+        let prompt = Self.memoryExtractionPrompt(
+            existingMemories: existingMemories,
+            userMessage: userMessage,
+            finalResponse: finalResponse
+        )
+        return await generateSummary(prompt: prompt, endpoint: endpoint, apiKey: apiKey, model: model, maxTokens: 512)
+    }
+
     func generateBranchBriefing(
         threadSummaries: [(title: String, summary: String)],
         endpoint: String,
@@ -246,6 +262,42 @@ actor OpenAISummarizationService {
         Thread summaries (newest first):
 
         \(joined)
+        """
+    }
+
+    static func memoryExtractionPrompt(
+        existingMemories: [(id: String, content: String)],
+        userMessage: String,
+        finalResponse: String
+    ) -> String {
+        let existing = existingMemories.isEmpty
+            ? "None"
+            : existingMemories.map { "- id: \($0.id)\n  content: \($0.content)" }.joined(separator: "\n")
+
+        return """
+        Decide whether the latest chat turn contains durable user memory for a local coding IDE.
+
+        Return [] unless the turn contains information that is likely to be useful in future, separate agent runs.
+        Store only stable preferences, recurring workflow instructions, project-specific decisions, naming conventions, or durable facts that would help future agent runs.
+        Prefer facts stated by the user. Use the assistant response only to capture confirmed outcomes or project decisions.
+        Do not save routine requests, one-off tasks, bug reports, temporary debugging details, implementation steps, command requests, secrets, API keys, credentials, or vague observations.
+        Do not add memory simply because the user sent a message. Most user messages should produce [].
+        Add at most 1-3 memories, and only when each memory is clearly reusable beyond the current conversation.
+        If an existing memory should be refined, return an update operation with its id. If a memory is no longer valid because the user corrected it, return delete.
+
+        Reply with ONLY a JSON array. No markdown. Each entry must be one of:
+        {"action":"add","content":"memory text","kind":"preference|fact|decision","scope":"project|global"}
+        {"action":"update","id":"existing-id","content":"new memory text","kind":"preference|fact|decision","scope":"project|global"}
+        {"action":"delete","id":"existing-id"}
+
+        Existing related memories:
+        \(existing)
+
+        Latest user message:
+        \(String(userMessage.prefix(3000)))
+
+        Final assistant response:
+        \(String(finalResponse.prefix(3000)))
         """
     }
 

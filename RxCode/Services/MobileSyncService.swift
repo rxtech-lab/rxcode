@@ -670,6 +670,31 @@ final class MobileSyncService: ObservableObject {
         pushToActivityTokens(payload: payload)
     }
 
+    /// Push an `end` event that clears an orphaned aggregate activity — one
+    /// left running by a previous desktop session that crashed or quit
+    /// mid-job and never delivered the finishing update. `dismissal-date` is
+    /// set to now so iOS removes it promptly instead of letting it linger on
+    /// screen for the system's default window.
+    private func sendJobsActivityEnd(deviceToken: String, device: PairedDevice) {
+        guard let pushURL = Self.pushEndpointURL(from: relayURL) else {
+            logger.error("[LiveActivity] end skipped — cannot derive push endpoint from relay \(self.relayURL.absoluteString, privacy: .public)")
+            return
+        }
+        let now = Date()
+        let payload: [String: Any] = ["aps": [
+            "timestamp": Int(now.timeIntervalSince1970),
+            "event": "end",
+            "content-state": ["jobs": [[String: Any]](), "updatedAt": now.timeIntervalSince1970],
+            "dismissal-date": Int(now.timeIntervalSince1970),
+        ]]
+        logger.info("[LiveActivity] end → posting push tokenPrefix=\(String(deviceToken.prefix(12)), privacy: .public) deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
+        Task {
+            await postRawPush(deviceToken: deviceToken, pushType: "liveactivity",
+                              apnsPayload: payload, collapseID: "rxcode-jobs-activity",
+                              device: device, pushURL: pushURL)
+        }
+    }
+
     /// Build the ActivityKit `content-state` dict. Field names mirror
     /// `RxCodeJobActivityAttributes.ContentState` in the widget target.
     private func jobsContentStateDict(at date: Date) -> [String: Any] {
@@ -859,15 +884,25 @@ final class MobileSyncService: ObservableObject {
                 logger.info("[LiveActivity] device started aggregate activity locally mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public) — deferred push-to-start cancelled")
             } else if let activityToken = t.activityTokenHex, !activityToken.isEmpty,
                       let activityID = t.activityID {
-                // One aggregate activity per device — replace any prior token.
-                pairedDevices[idx].liveActivityTokens = [
-                    LiveActivityTokenRef(activityID: activityID, sessionID: "", token: activityToken)
-                ]
-                logger.info("[LiveActivity] aggregate activity token registered activity=\(activityID, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
                 cancelJobsActivityStart()
-                // Push the latest known state straight away so a freshly
-                // started activity isn't left blank until the next change.
-                if !trackedJobs.isEmpty {
+                if trackedJobs.isEmpty {
+                    // This (fresh) desktop process tracks no jobs, yet the
+                    // device still has a job activity registered — it is an
+                    // orphan left behind by a previous desktop session that
+                    // crashed or quit mid-job and never delivered the
+                    // finishing update. End it so it doesn't sit stuck on
+                    // "Working" forever, and drop the now-dead token.
+                    logger.info("[LiveActivity] activity token from device with no tracked jobs — ending orphaned activity activity=\(activityID, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+                    sendJobsActivityEnd(deviceToken: activityToken, device: pairedDevices[idx])
+                    pairedDevices[idx].liveActivityTokens = nil
+                } else {
+                    // One aggregate activity per device — replace any prior token.
+                    pairedDevices[idx].liveActivityTokens = [
+                        LiveActivityTokenRef(activityID: activityID, sessionID: "", token: activityToken)
+                    ]
+                    logger.info("[LiveActivity] aggregate activity token registered activity=\(activityID, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+                    // Push the latest known state straight away so a freshly
+                    // started activity isn't left blank until the next change.
                     lastPushedJobsSignature = jobsSignature
                     sendJobsActivityUpdate(staleAfter: allJobsDone ? 8 * 3600 : 3600)
                 }

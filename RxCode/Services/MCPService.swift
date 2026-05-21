@@ -256,10 +256,25 @@ actor MCPService {
         }
     }
 
-    func codexConfigOverrides(projectPath: String?) async -> [String] {
+    /// Build the `-c` overrides handed to the Codex app-server child. If
+    /// `bridgeCommand` is non-nil an extra `rxcode-ide` stdio MCP server is
+    /// emitted — the local MCP polyfill / introspection server that exposes
+    /// IDE-only tools (cross-project chat, thread history, running jobs,
+    /// usage, durable memory).
+    func codexConfigOverrides(
+        projectPath: String?,
+        bridgeCommand: (command: String, args: [String])? = nil
+    ) async -> [String] {
         do {
             let config = try loadConfig()
             var pairs: [String] = []
+            if let bridge = bridgeCommand {
+                // Emit the full inline table — a partial override fails codex's
+                // validation when the server isn't already defined in
+                // ~/.codex/config.toml.
+                let table = "{enabled=true,command=\(tomlString(bridge.command)),args=\(tomlArray(bridge.args))}"
+                pairs += ["-c", "mcp_servers.rxcode-ide=\(table)"]
+            }
             for record in config.servers.sorted(by: { $0.name < $1.name }) {
                 // Always emit the full inline table. A bare `enabled=false`
                 // override fails codex's validation ("invalid transport") when

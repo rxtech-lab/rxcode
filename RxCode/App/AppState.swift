@@ -515,6 +515,33 @@ final class AppState {
     var threadSummaryRevision = 0
     var branchBriefingRevision = 0
 
+    // MARK: - Memory
+
+    var memoryEnabled: Bool = (UserDefaults.standard.object(forKey: "memoryEnabled") as? Bool) ?? true {
+        didSet { UserDefaults.standard.set(memoryEnabled, forKey: "memoryEnabled") }
+    }
+
+    var memoryAutoCreateEnabled: Bool = (UserDefaults.standard.object(forKey: "memoryAutoCreateEnabled") as? Bool) ?? true {
+        didSet { UserDefaults.standard.set(memoryAutoCreateEnabled, forKey: "memoryAutoCreateEnabled") }
+    }
+
+    var memoryInjectEnabled: Bool = (UserDefaults.standard.object(forKey: "memoryInjectEnabled") as? Bool) ?? true {
+        didSet { UserDefaults.standard.set(memoryInjectEnabled, forKey: "memoryInjectEnabled") }
+    }
+
+    var memoryMaxContextItems: Int = (UserDefaults.standard.object(forKey: "memoryMaxContextItems") as? Int) ?? 5 {
+        didSet {
+            let clamped = max(1, min(12, memoryMaxContextItems))
+            if clamped != memoryMaxContextItems {
+                memoryMaxContextItems = clamped
+                return
+            }
+            UserDefaults.standard.set(memoryMaxContextItems, forKey: "memoryMaxContextItems")
+        }
+    }
+
+    var memoryRevision = 0
+
     // MARK: - Notifications
 
     var notificationsEnabled: Bool = (UserDefaults.standard.object(forKey: "notificationsEnabled") as? Bool) ?? true {
@@ -945,6 +972,7 @@ final class AppState {
     let mcp: MCPService
     let threadStore: ThreadStore
     let searchService = ThreadSearchService()
+    let memoryService = MemoryService()
     /// Live progress for a user-triggered full reindex. `nil` when idle.
     var reindexProgress: (done: Int, total: Int)? = nil
     let runService = RunService()
@@ -1067,10 +1095,12 @@ final class AppState {
         // loads cached chunks on `start`, then kicks off a one-time backfill
         // of any threads that don't have chunks yet.
         let searchService = self.searchService
+        let memoryService = self.memoryService
         let threadStore = self.threadStore
         let persistence = self.persistence
         Task.detached(priority: .utility) { [weak self] in
             await searchService.start(threadStore: threadStore)
+            await memoryService.start(threadStore: threadStore)
             await searchService.backfillIfNeeded(
                 loadAll: { @MainActor in threadStore.loadAllSummaries() },
                 loadFull: { @MainActor summary -> ChatSession? in
@@ -3361,6 +3391,239 @@ final class AppState {
         reindexProgress = nil
     }
 
+    // MARK: - Memory
+
+    func allMemoryItems() async -> [MemoryItem] {
+        await memoryService.allMemories()
+    }
+
+    func searchMemoryItems(query: String, projectId: UUID? = nil, limit: Int = 50) async -> [MemoryService.Hit] {
+        await memoryService.search(query, projectId: projectId, limit: limit)
+    }
+
+    @discardableResult
+    func addMemoryItem(content: String, projectId: UUID?, kind: String = "fact", scope: String = "project") async -> MemoryItem? {
+        guard memoryEnabled else { return nil }
+        let item = await memoryService.addMemory(
+            content: content,
+            projectId: scope == "global" ? nil : projectId,
+            sessionId: nil,
+            sourceMessageId: nil,
+            kind: normalizedMemoryKind(kind),
+            scope: normalizedMemoryScope(scope)
+        )
+        if item != nil { memoryRevision &+= 1 }
+        return item
+    }
+
+    @discardableResult
+    func updateMemoryItem(id: String, content: String, projectId: UUID?, kind: String, scope: String) async -> MemoryItem? {
+        guard memoryEnabled else { return nil }
+        let item = await memoryService.updateMemory(
+            id: id,
+            content: content,
+            projectId: scope == "global" ? nil : projectId,
+            sessionId: nil,
+            sourceMessageId: nil,
+            kind: normalizedMemoryKind(kind),
+            scope: normalizedMemoryScope(scope)
+        )
+        if item != nil { memoryRevision &+= 1 }
+        return item
+    }
+
+    func deleteMemoryItem(id: String) async {
+        await memoryService.deleteMemory(id: id)
+        memoryRevision &+= 1
+    }
+
+    func deleteAllMemoryItems(projectId: UUID? = nil) async {
+        await memoryService.deleteAll(projectId: projectId)
+        memoryRevision &+= 1
+    }
+
+    private func memoryContextSystemPrompt(for hits: [MemoryService.Hit]) -> String {
+        guard memoryEnabled, memoryInjectEnabled, !hits.isEmpty else { return "" }
+        let lines = hits.prefix(memoryMaxContextItems).enumerated().map { idx, hit in
+            "\(idx + 1). \(hit.item.content)"
+        }.joined(separator: "\n")
+        return """
+        # Relevant user memory
+
+        The notes below are durable user/project memories saved locally in RxCode. Use them as background context for this turn. They may be incomplete or stale; the current user message still has priority.
+
+        \(lines)
+        """
+    }
+
+    private func memoryContextPromptPrefix(for context: String, prompt: String) -> String {
+        let trimmed = context.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return prompt }
+        return """
+        \(trimmed)
+
+        User request:
+        \(prompt)
+        """
+    }
+
+    private func scheduleMemoryExtraction(
+        sessionId: String,
+        projectId: UUID,
+        messages: [ChatMessage]
+    ) {
+        guard memoryEnabled, memoryAutoCreateEnabled else { return }
+        let userMessage = lastUserMessageText(in: messages)
+        let finalResponse = lastAssistantResponseText(in: messages)
+        guard !userMessage.isEmpty, !finalResponse.isEmpty else { return }
+        let sourceMessageId = messages.last(where: { $0.role == .user && !$0.isError })?.id
+        let summary = allSessionSummaries.first(where: { $0.id == sessionId })
+            ?? summaryFor(sessionId: sessionId, projectId: projectId)
+
+        Task { [weak self] in
+            guard let self else { return }
+            await self.extractAndStoreMemories(
+                sessionId: sessionId,
+                projectId: projectId,
+                sourceMessageId: sourceMessageId,
+                userMessage: userMessage,
+                finalResponse: finalResponse,
+                summary: summary
+            )
+        }
+    }
+
+    private func extractAndStoreMemories(
+        sessionId: String,
+        projectId: UUID,
+        sourceMessageId: UUID?,
+        userMessage: String,
+        finalResponse: String,
+        summary: ChatSession.Summary
+    ) async {
+        let relatedHits = await memoryService.search(
+            "\(userMessage)\n\(finalResponse)",
+            projectId: projectId,
+            limit: 6
+        )
+        let related = relatedHits.map { (id: $0.item.id, content: $0.item.content) }
+        guard let raw = await generateMemoryOperations(
+            existingMemories: related,
+            userMessage: userMessage,
+            finalResponse: finalResponse,
+            summary: summary
+        ) else { return }
+        let operations = Self.parseMemoryOperations(raw)
+        guard !operations.isEmpty else { return }
+
+        var changed = false
+        for operation in operations {
+            switch operation.action {
+            case "add":
+                guard let content = operation.content?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      !content.isEmpty else { continue }
+                let scope = normalizedMemoryScope(operation.scope)
+                let existing = await memoryService.search(content, projectId: projectId, limit: 1)
+                if let best = existing.first, best.score > 0.94 { continue }
+                if await memoryService.addMemory(
+                    content: content,
+                    projectId: scope == "global" ? nil : projectId,
+                    sessionId: sessionId,
+                    sourceMessageId: sourceMessageId,
+                    kind: normalizedMemoryKind(operation.kind),
+                    scope: scope
+                ) != nil {
+                    changed = true
+                }
+            case "update":
+                guard let id = operation.id,
+                      let content = operation.content?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      !content.isEmpty else { continue }
+                let scope = normalizedMemoryScope(operation.scope)
+                if await memoryService.updateMemory(
+                    id: id,
+                    content: content,
+                    projectId: scope == "global" ? nil : projectId,
+                    sessionId: sessionId,
+                    sourceMessageId: sourceMessageId,
+                    kind: normalizedMemoryKind(operation.kind),
+                    scope: scope
+                ) != nil {
+                    changed = true
+                }
+            case "delete":
+                guard let id = operation.id else { continue }
+                await memoryService.deleteMemory(id: id)
+                changed = true
+            default:
+                continue
+            }
+        }
+        if changed {
+            memoryRevision &+= 1
+        }
+    }
+
+    private struct MemoryOperation {
+        let action: String
+        let id: String?
+        let content: String?
+        let kind: String?
+        let scope: String?
+    }
+
+    private static func parseMemoryOperations(_ raw: String) -> [MemoryOperation] {
+        let trimmed = stripJSONFence(raw)
+        guard let range = jsonArrayRange(in: trimmed) else { return [] }
+        let json = String(trimmed[range])
+        guard let data = json.data(using: .utf8),
+              let array = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+        else { return [] }
+        return array.compactMap { entry in
+            guard let action = entry["action"] as? String else { return nil }
+            return MemoryOperation(
+                action: action.lowercased(),
+                id: entry["id"] as? String,
+                content: entry["content"] as? String,
+                kind: entry["kind"] as? String,
+                scope: entry["scope"] as? String
+            )
+        }
+    }
+
+    private static func stripJSONFence(_ raw: String) -> String {
+        var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.hasPrefix("```") {
+            var lines = text.components(separatedBy: "\n")
+            if !lines.isEmpty { lines.removeFirst() }
+            if lines.last?.trimmingCharacters(in: .whitespacesAndNewlines) == "```" {
+                lines.removeLast()
+            }
+            text = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return text
+    }
+
+    private static func jsonArrayRange(in text: String) -> Range<String.Index>? {
+        guard let start = text.firstIndex(of: "["),
+              let end = text.lastIndex(of: "]"),
+              start <= end else { return nil }
+        return start..<text.index(after: end)
+    }
+
+    private func normalizedMemoryKind(_ value: String?) -> String {
+        switch value?.lowercased() {
+        case "preference", "decision", "fact":
+            return value!.lowercased()
+        default:
+            return "fact"
+        }
+    }
+
+    private func normalizedMemoryScope(_ value: String?) -> String {
+        value?.lowercased() == "global" ? "global" : "project"
+    }
+
     // MARK: - Agent Backends
 
     /// Looks up the `AgentBackend` for the given provider. Used by
@@ -4903,6 +5166,14 @@ final class AppState {
             }
         }
 
+        let resolvedMemoryContext: String
+        if memoryEnabled, memoryInjectEnabled {
+            let hits = await memoryService.search(prompt, projectId: projectId, limit: memoryMaxContextItems)
+            resolvedMemoryContext = memoryContextSystemPrompt(for: hits)
+        } else {
+            resolvedMemoryContext = ""
+        }
+
         switch agentProvider {
         case .claudeCode:
             // Allocate a per-session IDE-MCP port so the Claude agent can call
@@ -4924,14 +5195,25 @@ final class AppState {
                     briefing: briefing.briefing
                 )
             }
+            appendExtraSystemPrompt(resolvedMemoryContext)
             if let skillContext = await marketplace.promptContext(for: .claudeCode) {
                 appendExtraSystemPrompt(skillContext)
             }
         case .codex:
-            mcpCodexOverrides = await mcp.codexConfigOverrides(projectPath: cwd)
+            // Allocate a per-session IDE-MCP port so the Codex agent can call
+            // IDE-only tools — cross-project chat, thread history, running
+            // jobs, usage, durable memory. The bridge is a perl one-liner
+            // Codex runs as the `rxcode-ide` stdio MCP server child.
+            let idePort = await ideMCPServer.allocate(
+                sessionKey: sessionKey,
+                capabilities: AgentProvider.codex.staticCapabilities
+            )
+            let bridge = idePort.map { IDEMCPServer.bridgeCommand(forPort: $0) }
+            mcpCodexOverrides = await mcp.codexConfigOverrides(projectPath: cwd, bridgeCommand: bridge)
             mcpCodexOverrides += await marketplace.codexConfigOverrides()
+            resolvedPrompt = memoryContextPromptPrefix(for: resolvedMemoryContext, prompt: resolvedPrompt)
             if let skillContext = await marketplace.promptContext(for: .codex) {
-                resolvedPrompt = "\(skillContext)\n\nUser request:\n\(prompt)"
+                resolvedPrompt = "\(skillContext)\n\nUser request:\n\(resolvedPrompt)"
             }
             resolvedSendMode = registerMode
         case .acp:
@@ -4948,8 +5230,9 @@ final class AppState {
                 projectPath: cwd,
                 bridgeCommand: bridge
             )
+            resolvedPrompt = memoryContextPromptPrefix(for: resolvedMemoryContext, prompt: resolvedPrompt)
             if let skillContext = await marketplace.promptContext(for: .acp) {
-                resolvedPrompt = "\(skillContext)\n\nUser request:\n\(prompt)"
+                resolvedPrompt = "\(skillContext)\n\nUser request:\n\(resolvedPrompt)"
             }
             // `model` may be a composite `<clientId>::<model>` key (from the picker)
             // or a bare model id (from a per-session override).
@@ -5393,6 +5676,11 @@ final class AppState {
                             sessionId: resultEvent.sessionId,
                             projectId: projectId,
                             cwd: cwd,
+                            messages: stateForSession(sessionKey).messages
+                        )
+                        scheduleMemoryExtraction(
+                            sessionId: resultEvent.sessionId,
+                            projectId: projectId,
                             messages: stateForSession(sessionKey).messages
                         )
 
@@ -6760,6 +7048,42 @@ final class AppState {
         }
     }
 
+    private func generateMemoryOperations(
+        existingMemories: [(id: String, content: String)],
+        userMessage: String,
+        finalResponse: String,
+        summary: ChatSession.Summary
+    ) async -> String? {
+        switch summarizationProvider {
+        case .selectedClient:
+            let provider = summary.agentProvider
+            let model = summary.model ?? selectedSummarizationModel(for: provider)
+            return await generateMemoryOperations(
+                existingMemories: existingMemories,
+                userMessage: userMessage,
+                finalResponse: finalResponse,
+                provider: provider,
+                model: model
+            )
+        case .openAI:
+            guard !openAISummarizationModel.isEmpty else { return nil }
+            return await openAISummarization.generateMemoryOperations(
+                existingMemories: existingMemories,
+                userMessage: userMessage,
+                finalResponse: finalResponse,
+                endpoint: openAISummarizationEndpoint,
+                apiKey: openAISummarizationAPIKey,
+                model: openAISummarizationModel
+            )
+        case .appleFoundationModel:
+            return await foundationModelSummarization.generateMemoryOperations(
+                existingMemories: existingMemories,
+                userMessage: userMessage,
+                finalResponse: finalResponse
+            )
+        }
+    }
+
     /// Generates a commit message for the staged changes in the given project.
     /// Routes through the configured `summarizationProvider`. Returns nil on
     /// failure or when no provider is configured. Public so the Changes view
@@ -6982,6 +7306,33 @@ final class AppState {
         case .codex:
             return await codex.generateBranchBriefing(
                 threadSummaries: threadSummaries,
+                model: model
+            )
+        case .acp:
+            return nil
+        }
+    }
+
+    private func generateMemoryOperations(
+        existingMemories: [(id: String, content: String)],
+        userMessage: String,
+        finalResponse: String,
+        provider: AgentProvider,
+        model: String?
+    ) async -> String? {
+        switch provider {
+        case .claudeCode:
+            return await claude.generateMemoryOperations(
+                existingMemories: existingMemories,
+                userMessage: userMessage,
+                finalResponse: finalResponse,
+                model: model ?? "haiku"
+            )
+        case .codex:
+            return await codex.generateMemoryOperations(
+                existingMemories: existingMemories,
+                userMessage: userMessage,
+                finalResponse: finalResponse,
                 model: model
             )
         case .acp:
@@ -7334,6 +7685,7 @@ final class AppState {
         threadStore.deleteAll(projectId: project.id)
         let projectId = project.id
         Task.detached(priority: .utility) { [searchService] in await searchService.removeProject(id: projectId) }
+        Task.detached(priority: .utility) { [memoryService] in await memoryService.deleteAll(projectId: projectId) }
         allSessionSummaries.removeAll { $0.projectId == project.id }
 
         // Remove from projects list and persist

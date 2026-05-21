@@ -42,6 +42,14 @@ extension AppState: IDEToolHandling {
             return await handleGetThreads(arguments: arguments)
         case "ide__get_thread_messages", "ide__get_thread_detail":
             return try await handleGetThreadMessages(arguments: arguments)
+        case "ide__memory_search":
+            return try await handleMemorySearch(arguments: arguments)
+        case "ide__memory_add":
+            return try await handleMemoryAdd(arguments: arguments)
+        case "ide__memory_update":
+            return try await handleMemoryUpdate(arguments: arguments)
+        case "ide__memory_delete":
+            return try await handleMemoryDelete(arguments: arguments)
         case "ide__send_to_thread":
             return try await handleSendToThread(arguments: arguments)
         case "ide__get_usage":
@@ -232,6 +240,67 @@ extension AppState: IDEToolHandling {
     }
 
     @MainActor
+    private func handleMemorySearch(arguments: JSONValue) async throws -> JSONValue {
+        guard let query = arguments["query"]?.stringValue, !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw IDEToolError.invalidArguments("missing 'query'")
+        }
+        let projectId = try parseOptionalProjectId(arguments["project_id"]?.stringValue)
+        let requestedLimit = Int(arguments["limit"]?.numberValue ?? 20)
+        let limit = max(1, min(requestedLimit, 100))
+        let hits = await searchMemoryItems(query: query, projectId: projectId, limit: limit)
+        return jsonTextResult(.array(hits.map { memoryJSON(item: $0.item, score: $0.score) }))
+    }
+
+    @MainActor
+    private func handleMemoryAdd(arguments: JSONValue) async throws -> JSONValue {
+        guard let content = arguments["content"]?.stringValue, !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw IDEToolError.invalidArguments("missing 'content'")
+        }
+        let scope = arguments["scope"]?.stringValue ?? "project"
+        let projectId = try parseOptionalProjectId(arguments["project_id"]?.stringValue)
+        guard let item = await addMemoryItem(
+            content: content,
+            projectId: projectId,
+            kind: arguments["kind"]?.stringValue ?? "fact",
+            scope: scope
+        ) else {
+            throw IDEToolError.handlerFailed("Memory could not be embedded or stored.")
+        }
+        return jsonTextResult(memoryJSON(item: item, score: nil))
+    }
+
+    @MainActor
+    private func handleMemoryUpdate(arguments: JSONValue) async throws -> JSONValue {
+        guard let id = arguments["id"]?.stringValue, !id.isEmpty else {
+            throw IDEToolError.invalidArguments("missing 'id'")
+        }
+        guard let content = arguments["content"]?.stringValue, !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw IDEToolError.invalidArguments("missing 'content'")
+        }
+        let scope = arguments["scope"]?.stringValue ?? "project"
+        let projectId = try parseOptionalProjectId(arguments["project_id"]?.stringValue)
+        guard let item = await updateMemoryItem(
+            id: id,
+            content: content,
+            projectId: projectId,
+            kind: arguments["kind"]?.stringValue ?? "fact",
+            scope: scope
+        ) else {
+            throw IDEToolError.handlerFailed("Memory \(id) could not be updated.")
+        }
+        return jsonTextResult(memoryJSON(item: item, score: nil))
+    }
+
+    @MainActor
+    private func handleMemoryDelete(arguments: JSONValue) async throws -> JSONValue {
+        guard let id = arguments["id"]?.stringValue, !id.isEmpty else {
+            throw IDEToolError.invalidArguments("missing 'id'")
+        }
+        await deleteMemoryItem(id: id)
+        return textResult("Deleted memory \(id).")
+    }
+
+    @MainActor
     private func handleSendToThread(arguments: JSONValue) async throws -> JSONValue {
         guard let prompt = arguments["prompt"]?.stringValue, !prompt.isEmpty else {
             throw IDEToolError.invalidArguments("missing 'prompt'")
@@ -284,6 +353,37 @@ extension AppState: IDEToolHandling {
         } catch let error as CrossProjectSendError {
             throw IDEToolError.handlerFailed(error.localizedDescription)
         }
+    }
+
+    private func parseOptionalProjectId(_ raw: String?) throws -> UUID? {
+        guard let raw, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        guard let id = UUID(uuidString: raw) else {
+            throw IDEToolError.invalidArguments("'project_id' is not a valid UUID: \(raw)")
+        }
+        return id
+    }
+
+    private func memoryJSON(item: MemoryItem, score: Float?) -> JSONValue {
+        var obj: [String: JSONValue] = [
+            "id": .string(item.id),
+            "content": .string(item.content),
+            "kind": .string(item.kind),
+            "scope": .string(item.scope),
+            "created_at": .string(ISO8601DateFormatter().string(from: item.createdAt)),
+            "updated_at": .string(ISO8601DateFormatter().string(from: item.updatedAt)),
+            "project_id": item.projectId.map { .string($0.uuidString) } ?? .null,
+            "session_id": item.sessionId.map { .string($0) } ?? .null,
+        ]
+        if let sourceMessageId = item.sourceMessageId {
+            obj["source_message_id"] = .string(sourceMessageId.uuidString)
+        }
+        if let lastUsedAt = item.lastUsedAt {
+            obj["last_used_at"] = .string(ISO8601DateFormatter().string(from: lastUsedAt))
+        }
+        if let score {
+            obj["score"] = .number(Double(score))
+        }
+        return .object(obj)
     }
 
     private func handleGetUsage() async -> JSONValue {

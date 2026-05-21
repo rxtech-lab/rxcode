@@ -75,7 +75,18 @@ final class MobileLiveActivityCoordinator {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] sessions in
                 self?.startActivityIfNeeded(for: sessions)
+                if #available(iOS 16.2, *) {
+                    self?.reconcileActivities(for: sessions)
+                }
             }
+            .store(in: &cancellables)
+        // The desktop drives the activity and never ends it, so a lost
+        // finishing push can leave it stuck on "Working". Re-check whenever
+        // the app is foregrounded — the moment the user is most likely to be
+        // looking at a stalled activity and expecting it gone.
+        NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.reconcileActivities() }
             .store(in: &cancellables)
     }
 
@@ -268,6 +279,86 @@ final class MobileLiveActivityCoordinator {
         return RxCodeJobActivityAttributes.ContentState(
             jobs: jobs, updatedAt: Date().timeIntervalSince1970
         )
+    }
+
+    // MARK: - Stalled-activity reconciliation
+
+    /// Longest a job activity may go without a desktop update before, with the
+    /// relay also down, it is treated as dead and ended. A live job refreshes
+    /// the activity far more often; a window this long only ever catches an
+    /// activity whose desktop crashed or quit mid-job.
+    private let staleActivityEndThreshold: TimeInterval = 2 * 3600
+
+    /// Reconcile every live job activity against the latest app state. Safe
+    /// from any trigger except the `$sessions` sink, where app state has not
+    /// yet committed the new value — pass it explicitly there instead.
+    private func reconcileActivities() {
+        guard #available(iOS 16.2, *) else { return }
+        reconcileActivities(for: state?.sessions ?? [])
+    }
+
+    /// Heal a job Live Activity the desktop left stalled.
+    ///
+    /// The desktop drives the aggregate activity over APNs and never ends it
+    /// itself, so a finishing `update` that is lost — a dropped push, or a
+    /// desktop that crashed or quit mid-job — pins the activity on "Working"
+    /// forever. This reconciles it against the two truths the device still
+    /// holds:
+    ///
+    ///  - the desktop's mirrored session list, delivered over the live relay:
+    ///    a job the activity still calls `running` whose session the desktop
+    ///    reports present-and-not-streaming has actually finished — flip it to
+    ///    `done`. An absent session is left untouched: the mirror may simply
+    ///    be incomplete, which is not evidence the job finished.
+    ///  - the relay connection: if the relay is down and the activity has not
+    ///    been refreshed within `staleActivityEndThreshold`, the desktop is
+    ///    unreachable and the activity can never recover — end it.
+    @available(iOS 16.2, *)
+    private func reconcileActivities(for sessions: [SessionSummary]) {
+        let activities = Activity<RxCodeJobActivityAttributes>.activities
+        guard !activities.isEmpty else { return }
+        let relayConnected: Bool = {
+            if case .connected = state?.connectionState { return true }
+            return false
+        }()
+        let now = Date()
+        for activity in activities {
+            let content = activity.content.state
+            // A done activity is a valid terminal state — leave it alone.
+            guard content.deduplicatedJobs.contains(where: { $0.phase == .running }) else {
+                continue
+            }
+
+            // The desktop is unreachable and the activity has gone stale well
+            // past any live job's update cadence — it can never recover. End
+            // it rather than leave a dead "Working" indicator on screen.
+            let age = now.timeIntervalSince1970 - content.updatedAt
+            if !relayConnected, age > staleActivityEndThreshold {
+                logger.warning("[LiveActivity] ending stalled activity id=\(activity.id, privacy: .public) — relay down, \(Int(age), privacy: .public)s since last desktop update")
+                Task { await activity.end(nil, dismissalPolicy: .immediate) }
+                continue
+            }
+
+            // The desktop is reachable: trust its mirrored session list.
+            guard relayConnected else { continue }
+            var jobs = content.jobs
+            var healed = false
+            for idx in jobs.indices where jobs[idx].phase == .running {
+                guard let session = sessions.first(where: { $0.id == jobs[idx].id }),
+                      !session.isStreaming
+                else { continue }
+                jobs[idx].phase = .done
+                healed = true
+            }
+            guard healed else { continue }
+            let healedState = RxCodeJobActivityAttributes.ContentState(
+                jobs: jobs, updatedAt: now.timeIntervalSince1970
+            )
+            logger.warning("[LiveActivity] healing stalled activity id=\(activity.id, privacy: .public) — desktop's finishing update was lost; marking finished jobs done")
+            Task {
+                await activity.update(ActivityContent(state: healedState, staleDate: nil))
+            }
+        }
     }
 
     /// Ensure at most one Live Activity exists. iOS can still spawn a second

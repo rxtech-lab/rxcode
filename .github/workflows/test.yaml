@@ -8,6 +8,20 @@ on:
   push:
 
 jobs:
+  lint:
+    name: swiftlint
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install SwiftLint
+        run: brew list swiftlint >/dev/null 2>&1 || brew install swiftlint
+
+      - name: Run SwiftLint
+        run: make lint-ci
+
   test-packages:
     name: swift test (Packages)
     runs-on: self-hosted

@@ -1,0 +1,29 @@
+included:
+  - RxCode
+  - RxCodeTests
+  - RxCodeUITests
+  - RxCodeMobile
+  - RxCodeMobileTests
+  - RxCodeMobileUITests
+  - RxCodeMobileNotificationService
+  - RxCodeWidget
+  - Packages/Sources
+  - Packages/Tests
+
+excluded:
+  - build
+  - DerivedData
+  - Packages/.build
+  - Packages/build
+
+only_rules:
+  - file_length
+
+allow_zero_lintable_files: false
+check_for_updates: false
+reporter: xcode
+
+file_length:
+  warning: 800
+  error: 1200
+  ignore_comment_only_lines: true

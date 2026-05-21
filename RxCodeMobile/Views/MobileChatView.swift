@@ -63,6 +63,7 @@ struct MobileChatView: View {
     /// and should be pinned to the top of the viewport.
     @State private var awaitingSentUserMessage = false
     @State private var distanceFromBottom: CGFloat = 0
+    @State private var minimumThreadLoadElapsed = false
 
     private static let bottomAnchorID = "message-list-bottom"
     /// Distance from the bottom past which the "scroll to bottom" button shows.
@@ -83,9 +84,13 @@ struct MobileChatView: View {
             .animation(.easeInOut(duration: 0.2), value: queuedMessages.count)
             .animation(.easeInOut(duration: 0.2), value: sessionQuestions.count)
             .animation(.easeInOut(duration: 0.2), value: pendingPlans.count)
+            .animation(.easeInOut(duration: 0.25), value: shouldShowThreadLoading)
             .navigationBarTitleDisplayMode(.inline)
             .navigationTitle(title)
             .toolbar { threadActionsToolbar }
+            .task(id: sessionID) {
+                await runThreadLoadingGate()
+            }
             .sheet(isPresented: $showingQueueSheet) {
                 QueuedMessagesSheet(
                     messages: queuedMessages,
@@ -488,6 +493,17 @@ struct MobileChatView: View {
             } action: { newValue in
                 composerMinY = newValue
             }
+
+            if shouldShowThreadLoading {
+                MobileThreadLoadingOverlay()
+                    .transition(
+                        .asymmetric(
+                            insertion: .opacity.combined(with: .scale(scale: 0.98)),
+                            removal: .opacity.combined(with: .move(edge: .bottom))
+                        )
+                    )
+                    .zIndex(3)
+            }
         }
     }
 
@@ -540,6 +556,11 @@ struct MobileChatView: View {
         state.isLoadingMoreMessages(sessionID: sessionID)
     }
 
+    private var shouldShowThreadLoading: Bool {
+        !MobileDraftSessionID.isDraft(sessionID)
+            && (!minimumThreadLoadElapsed || state.isLoadingThreadMessages(sessionID: sessionID))
+    }
+
     private var queuedMessages: [QueuedUserMessage] {
         state.queuedMessages(sessionID: sessionID)
     }
@@ -558,6 +579,21 @@ struct MobileChatView: View {
     /// Plans still awaiting a decision — what the plan banner surfaces.
     private var pendingPlans: [PendingPlan] {
         sessionPlans.filter { !$0.isDecided && !$0.isStreaming }
+    }
+
+    // MARK: - Initial loading
+
+    private func runThreadLoadingGate() async {
+        minimumThreadLoadElapsed = false
+        do {
+            try await Task.sleep(for: .seconds(1))
+        } catch {
+            return
+        }
+        guard !Task.isCancelled else { return }
+        withAnimation(.easeInOut(duration: 0.25)) {
+            minimumThreadLoadElapsed = true
+        }
     }
 
     // MARK: - Message paging

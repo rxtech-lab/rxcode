@@ -106,6 +106,7 @@ extension MobileAppState {
                 } else if messagesBySession[active] == nil {
                     messagesBySession[active] = []
                 }
+                loadingThreadMessageSessions.remove(active)
                 activeSessionID = active
             }
             hasReceivedInitialSnapshot = true
@@ -361,6 +362,9 @@ extension MobileAppState {
             }
             if loadingMoreSessions.remove(previous) != nil {
                 loadingMoreSessions.insert(update.sessionID)
+            }
+            if loadingThreadMessageSessions.remove(previous) != nil {
+                loadingThreadMessageSessions.insert(update.sessionID)
             }
             if activeSessionID == previous {
                 activeSessionID = update.sessionID

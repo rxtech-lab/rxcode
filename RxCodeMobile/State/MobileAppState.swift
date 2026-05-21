@@ -152,6 +152,9 @@ final class MobileAppState: ObservableObject {
     @Published var sessionsWithMoreMessages: Set<String> = []
     /// Sessions with an in-flight `load_more_messages` request.
     @Published var loadingMoreSessions: Set<String> = []
+    /// Sessions whose initial message page is being refreshed after opening the
+    /// chat detail view.
+    @Published var loadingThreadMessageSessions: Set<String> = []
     /// Maps an outstanding load-more request ID to its session, so a late
     /// `more_messages` reply lands on the right thread.
     var pendingLoadMoreRequests: [UUID: String] = [:]

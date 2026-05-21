@@ -47,6 +47,12 @@ extension MobileAppState {
         loadingMoreSessions.contains(sessionID)
     }
 
+    /// Whether the initial message window for a newly opened thread is still
+    /// being refreshed from the desktop.
+    func isLoadingThreadMessages(sessionID: String) -> Bool {
+        loadingThreadMessageSessions.contains(sessionID)
+    }
+
     /// Mirror of the desktop's per-session queue, surfaced via `SessionSummary`.
     func queuedMessages(sessionID: String) -> [QueuedUserMessage] {
         sessions.first(where: { $0.id == sessionID })?.queuedMessages ?? []
@@ -187,6 +193,7 @@ extension MobileAppState {
     /// Archive a thread. Optimistically flips `isArchived` so the row drops out
     /// of the active list right away.
     func archiveThread(sessionID: String) async {
+        loadingThreadMessageSessions.remove(sessionID)
         replaceSession(sessionID: sessionID) { current in
             SessionSummary(
                 id: current.id,
@@ -210,6 +217,7 @@ extension MobileAppState {
         messagesBySession.removeValue(forKey: sessionID)
         sessionsWithMoreMessages.remove(sessionID)
         loadingMoreSessions.remove(sessionID)
+        loadingThreadMessageSessions.remove(sessionID)
         if activeSessionID == sessionID { activeSessionID = nil }
         await sendThreadAction(sessionID: sessionID, action: .delete)
     }
@@ -276,7 +284,18 @@ extension MobileAppState {
     func subscribe(to sessionID: String?) async {
         activeSessionID = sessionID
         guard isPaired else { return }
+        if let sessionID {
+            loadingThreadMessageSessions = [sessionID]
+        } else {
+            loadingThreadMessageSessions.removeAll()
+        }
         let payload = SubscribeSessionPayload(sessionID: sessionID)
-        try? await client.send(.subscribeSession(payload), toHex: pairedDesktopPubkey)
+        do {
+            try await client.send(.subscribeSession(payload), toHex: pairedDesktopPubkey)
+        } catch {
+            if let sessionID {
+                loadingThreadMessageSessions.remove(sessionID)
+            }
+        }
     }
 }

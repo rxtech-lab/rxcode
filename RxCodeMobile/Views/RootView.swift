@@ -185,8 +185,8 @@ struct RootView: View {
 
     private var phoneTabs: some View {
         TabView(selection: $selectedTab) {
-            NavigationStack {
-                MobileBriefingView()
+            NavigationStack(path: $briefingDetailPath) {
+                MobileBriefingView(onCloseChat: { closeBriefingChat() })
             }
             .tabItem {
                 Label("Briefing", systemImage: "doc.text")
@@ -342,11 +342,19 @@ struct RootView: View {
     /// desktop-driven focus changes).
     private func openActiveSession(_ sessionID: String?) {
         guard let sessionID else { return }
-        // Skip navigation if we're already viewing this session in briefing detail
-        if showingBriefing && briefingDetailPath.count > 0 {
+        // Skip navigation if we're already inside the briefing detail flow.
+        if isViewingBriefingDetail {
             return
         }
         navigate(toSession: sessionID, projectID: nil)
+    }
+
+    private var isViewingBriefingDetail: Bool {
+        guard !briefingDetailPath.isEmpty else { return false }
+        if compactClass == .compact {
+            return selectedTab == .briefing
+        }
+        return showingBriefing
     }
 
     /// Consume a pending APNs deep link (set by a notification tap) and navigate
@@ -367,21 +375,20 @@ struct RootView: View {
     /// view is driven by `selectedSession`. Keeping the two mechanisms separate
     /// avoids pushing the same chat page twice.
     private func navigate(toSession sessionID: String, projectID: UUID?) {
-        guard let projectID = projectID
-            ?? state.sessions.first(where: { $0.id == sessionID })?.projectId
-        else { return }
-
         selectedTab = .projects
         showingBriefing = false
 
         if compactClass == .compact {
             var path = NavigationPath()
-            path.append(projectID)
             path.append(sessionID)
             if projectsPath != path {
                 projectsPath = path
             }
         } else {
+            guard let projectID = projectID
+                ?? state.sessions.first(where: { $0.id == sessionID })?.projectId
+            else { return }
+
             selectedProject = projectID
             selectedSession = sessionID
         }

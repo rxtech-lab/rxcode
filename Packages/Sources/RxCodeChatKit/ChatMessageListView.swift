@@ -33,7 +33,13 @@ public struct ChatMessageListView: View {
         ForEach(chatMessageGroups(messages, minGroupSize: transientGroupMinSize)) { group in
             if group.isTransientGroup {
                 ChatTransientGroupSummaryView(messages: group.messages)
-                    .id(group.id)
+                    .background(alignment: .top) {
+                        ForEach(group.messages.map(\.id), id: \.self) { messageID in
+                            Color.clear
+                                .frame(height: 1)
+                                .id(messageID)
+                        }
+                    }
                     .transition(messageFadeTransition(role: .assistant))
                     .chatMessageListRowStyle()
             } else if let message = group.messages.first {

@@ -315,7 +315,6 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
             textColor: NSColor(ClaudeTheme.textPrimary),
             placeholder: String(localized: "Type a message...", bundle: .module),
             onReturn: handleReturnKey,
-            onShiftReturn: handleShiftReturnKey,
             onUpArrow: { handleUpArrow() == .handled },
             onDownArrow: { handleDownArrow() == .handled },
             onTab: { handleTab() == .handled },
@@ -772,9 +771,6 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
         sendMessage()
     }
 
-    private func handleShiftReturnKey() {
-        windowState.inputText.append("\n")
-    }
 }
 
 // IMETextView's NSScrollView doesn't surface intrinsic height, so a hidden Text at the same

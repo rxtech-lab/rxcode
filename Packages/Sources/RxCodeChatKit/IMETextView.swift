@@ -17,7 +17,6 @@ struct IMETextView: NSViewRepresentable {
     var textColor: NSColor
     var placeholder: String = ""
     var onReturn: () -> Void
-    var onShiftReturn: () -> Void
     var onUpArrow: () -> Bool
     var onDownArrow: () -> Bool
     var onTab: () -> Bool
@@ -104,7 +103,6 @@ struct IMETextView: NSViewRepresentable {
 
     private func applyCallbacks(to textView: _IMETextView) {
         textView.onReturn = onReturn
-        textView.onShiftReturn = onShiftReturn
         textView.onUpArrow = onUpArrow
         textView.onDownArrow = onDownArrow
         textView.onTab = onTab
@@ -217,7 +215,6 @@ fileprivate final class ChipLayoutManager: NSLayoutManager, @unchecked Sendable 
 
 fileprivate final class _IMETextView: NSTextView {
     var onReturn: () -> Void = {}
-    var onShiftReturn: () -> Void = {}
     var onUpArrow: () -> Bool = { false }
     var onDownArrow: () -> Bool = { false }
     var onTab: () -> Bool = { false }
@@ -274,10 +271,11 @@ fileprivate final class _IMETextView: NSTextView {
 
     override func keyDown(with event: NSEvent) {
         // Shift+Enter: NSTextView doesn't bind this to a doCommand by default. Force-commit any
-        // composing IME text, then fire the newline callback (which appends "\n" via the binding).
+        // composing IME text, then insert the newline through NSTextView so AppKit updates the
+        // insertion point and scroll position together.
         if event.keyCode == 36, event.modifierFlags.contains(.shift) {
             commitMarkedTextIfNeeded()
-            onShiftReturn()
+            insertShiftReturnNewline()
             return
         }
         // Shift+Tab: NSTextView routes this to insertBacktab: which we intercept here so it
@@ -406,6 +404,24 @@ fileprivate final class _IMETextView: NSTextView {
               NSMaxRange(range) <= (storage.string as NSString).length else { return }
         let composing = (storage.string as NSString).substring(with: range)
         insertText(composing, replacementRange: range)
+    }
+
+    private func insertShiftReturnNewline() {
+        insertText("\n", replacementRange: selectedRange())
+        revealInsertionPoint()
+    }
+
+    private func revealInsertionPoint() {
+        let textLength = (string as NSString).length
+        let location = min(max(selectedRange().location, 0), textLength)
+        let caretRange = NSRange(location: location, length: 0)
+        scrollRangeToVisible(caretRange)
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let textLength = (self.string as NSString).length
+            let location = min(max(self.selectedRange().location, 0), textLength)
+            self.scrollRangeToVisible(NSRange(location: location, length: 0))
+        }
     }
 }
 #endif

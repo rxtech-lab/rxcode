@@ -19,6 +19,8 @@ struct SyncLoadingView: View {
     @State private var orbRotation: Double = 0
     @State private var shimmerOffset: CGFloat = -200
     @State private var appeared = false
+    @State private var animationStartTask: Task<Void, Never>?
+    @State private var shimmerTask: Task<Void, Never>?
 
     var body: some View {
         let _ = logger.debug("SyncLoadingView body: isTimedOut=\(self.isTimedOut)")
@@ -76,10 +78,14 @@ struct SyncLoadingView: View {
             .padding(.horizontal, 40)
         }
         .onAppear {
+            resetAnimations()
             startAnimations()
             withAnimation(.easeOut(duration: 0.6)) {
                 appeared = true
             }
+        }
+        .onDisappear {
+            stopAnimations()
         }
     }
 
@@ -480,36 +486,55 @@ struct SyncLoadingView: View {
     }
 
     private func startAnimations() {
-        // Pulse animation
-        withAnimation(
-            .easeInOut(duration: 2.0)
-            .repeatForever(autoreverses: true)
-        ) {
-            pulseScale = 1.12
-        }
+        animationStartTask?.cancel()
+        animationStartTask = Task { @MainActor in
+            await Task.yield()
+            guard !Task.isCancelled, !isTimedOut else { return }
 
-        // Orbit rotation - use a very large target value with proportionally long duration
-        // 5 seconds per 360 degrees = 5000 seconds for 360,000 degrees
-        withAnimation(
-            .linear(duration: 5000)
-            .repeatForever(autoreverses: false)
-        ) {
-            orbRotation = 360 * 1000
-        }
+            withAnimation(
+                .easeInOut(duration: 2.0)
+                .repeatForever(autoreverses: true)
+            ) {
+                pulseScale = 1.12
+            }
 
-        // Shimmer animation - reset and loop manually for smooth continuous effect
-        startShimmerLoop()
+            withAnimation(
+                .linear(duration: 5.0)
+                .repeatForever(autoreverses: false)
+            ) {
+                orbRotation = 360
+            }
+
+            startShimmerLoop()
+        }
+    }
+
+    private func resetAnimations() {
+        stopAnimations()
+        pulseScale = 1.0
+        orbRotation = 0
+        shimmerOffset = -200
+        appeared = false
+    }
+
+    private func stopAnimations() {
+        animationStartTask?.cancel()
+        animationStartTask = nil
+        shimmerTask?.cancel()
+        shimmerTask = nil
     }
 
     private func startShimmerLoop() {
-        shimmerOffset = -200
-        withAnimation(.easeInOut(duration: 1.8)) {
-            shimmerOffset = 200
-        }
-        // Schedule next loop
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) { [self] in
-            if appeared && !isTimedOut {
-                startShimmerLoop()
+        shimmerTask?.cancel()
+        shimmerTask = Task { @MainActor in
+            while !Task.isCancelled {
+                shimmerOffset = -200
+                await Task.yield()
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeInOut(duration: 1.8)) {
+                    shimmerOffset = 200
+                }
+                try? await Task.sleep(for: .milliseconds(1800))
             }
         }
     }

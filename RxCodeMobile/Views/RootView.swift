@@ -378,18 +378,27 @@ struct RootView: View {
         selectedTab = .projects
         showingBriefing = false
 
+        // Resolve the owning project so the navigation stack keeps its
+        // Projects → Threads → Chat hierarchy. Draft sessions encode the
+        // project in their ID; synced sessions are looked up in `state`.
+        let resolvedProjectID = projectID
+            ?? state.sessions.first(where: { $0.id == sessionID })?.projectId
+            ?? MobileDraftSessionID.projectID(from: sessionID)
+
         if compactClass == .compact {
+            // Push the project level before the chat so the back button
+            // returns to the thread list, not the project list.
             var path = NavigationPath()
+            if let resolvedProjectID {
+                path.append(resolvedProjectID)
+            }
             path.append(sessionID)
             if projectsPath != path {
                 projectsPath = path
             }
         } else {
-            guard let projectID = projectID
-                ?? state.sessions.first(where: { $0.id == sessionID })?.projectId
-            else { return }
-
-            selectedProject = projectID
+            guard let resolvedProjectID else { return }
+            selectedProject = resolvedProjectID
             selectedSession = sessionID
         }
     }

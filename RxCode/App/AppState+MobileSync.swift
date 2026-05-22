@@ -510,13 +510,10 @@ extension AppState {
             switch request.operation {
             case .switchExisting:
                 try await switchToExistingBranch(trimmed, in: window)
+                updateMobilePendingWorktree(from: window, projectID: project.id)
             case .createNew:
                 try await attachWorktree(branch: trimmed, in: window)
-                if let path = window.pendingWorktreePath,
-                   let branch = window.pendingWorktreeBranch
-                {
-                    mobilePendingWorktrees[project.id] = MobilePendingWorktree(path: path, branch: branch)
-                }
+                updateMobilePendingWorktree(from: window, projectID: project.id)
             }
         } catch {
             await replyBranchOpResult(
@@ -530,6 +527,16 @@ extension AppState {
 
         await replyBranchOpResult(request: request, ok: true, errorMessage: nil, toHex: fromHex)
         scheduleMobileSnapshotBroadcast()
+    }
+
+    private func updateMobilePendingWorktree(from window: WindowState, projectID: UUID) {
+        if let path = window.pendingWorktreePath,
+           let branch = window.pendingWorktreeBranch
+        {
+            mobilePendingWorktrees[projectID] = MobilePendingWorktree(path: path, branch: branch)
+        } else {
+            mobilePendingWorktrees.removeValue(forKey: projectID)
+        }
     }
 
     func replyBranchOpResult(

@@ -44,6 +44,9 @@ struct MobileChatView: View {
     /// page. A single `scrollTo` can fire before the lazy stack has realized the
     /// old anchor row.
     @State private var loadMoreRestoreTask: Task<Void, Never>?
+    /// Re-asserts the just-sent message pin while lazy row geometry, dynamic
+    /// spacer height, and keyboard-driven composer movement settle.
+    @State private var pinToTopTask: Task<Void, Never>?
     /// Re-asserts the first scroll-to-bottom while the lazy stack and composer
     /// geometry settle on thread entry.
     @State private var initialScrollTask: Task<Void, Never>?
@@ -78,9 +81,18 @@ struct MobileChatView: View {
     /// Set by `handleSend`; the next appended user message is the one we sent
     /// and should be pinned to the top of the viewport.
     @State private var awaitingSentUserMessage = false
+    /// User message for the active turn. Its trailing spacer persists even
+    /// after manual scroll and shrinks as the assistant response fills in.
+    @State private var activeTurnUserMessageID: UUID?
+    /// Immediate spacer reduction used while SwiftUI has not yet reported the
+    /// streaming indicator's new tail geometry.
+    @State private var pendingIndicatorSpacerReduction: CGFloat = 0
     /// True only for the active send flow where the just-sent user message is
-    /// intentionally pinned to the top while the assistant response grows below.
+    /// actively kept at the top while layout and keyboard geometry settle.
     @State private var isPinningLatestTurnToTop = false
+    /// Prevents stale/user scroll phase callbacks from immediately canceling a
+    /// new programmatic top-pin before it has settled.
+    @State private var canReleasePinnedTurnByScroll = false
     @State private var distanceFromBottom: CGFloat = 0
     @State private var minimumThreadLoadElapsed = false
     @State private var isThreadLoadingOverlayVisible = true
@@ -100,6 +112,9 @@ struct MobileChatView: View {
     /// Load older messages once the viewport scrolls within this many points
     /// of the top.
     private static let loadMoreThreshold: CGFloat = 150
+    /// Approximate indicator height plus LazyVStack spacing. Cleared once the
+    /// tail marker reports the indicator in measured geometry.
+    private static let streamingIndicatorEstimatedHeight: CGFloat = 36
 
     var body: some View {
         activeThreadLayout
@@ -422,6 +437,13 @@ struct MobileChatView: View {
                 .onScrollGeometryChange(for: CGFloat.self) { geo in
                     geo.contentOffset.y
                 } action: { oldOffsetY, offsetY in
+                    if isUserDragging,
+                       isPinningLatestTurnToTop,
+                       canReleasePinnedTurnByScroll,
+                       offsetY > oldOffsetY + Self.userScrollUpDelta
+                    {
+                        releasePinnedTurnToBottom(proxy: proxy)
+                    }
                     // A deliberate upward drag means the user wants to read
                     // history — stop the stream from pulling them back down.
                     // Gated on `isUserDragging` so keyboard/layout-induced
@@ -449,31 +471,48 @@ struct MobileChatView: View {
                 .onChange(of: messages.last?.id) { _, _ in
                     // Keyed on the last message id so a prepended older page
                     // (which leaves the tail unchanged) doesn't yank the view.
-                    guard didEstablishInitialScroll else {
-                        // First page of messages arrived after the view
-                        // appeared — jump straight to the newest one.
-                        establishInitialScroll(proxy: proxy, reason: "messagesArrived")
-                        return
-                    }
                     guard let last = messages.last else { return }
                     if last.role == .user, awaitingSentUserMessage {
                         // The message we just sent round-tripped back from the
-                        // desktop — pin it to the top of the viewport.
+                        // desktop — pin it to the top of the viewport. Handle
+                        // this before initial-scroll gating so the first
+                        // message in an empty thread is pinned too.
                         awaitingSentUserMessage = false
                         autoScrollEnabled = false
+                        activeTurnUserMessageID = last.id
                         isPinningLatestTurnToTop = true
+                        initialScrollTask?.cancel()
+                        isEstablishingInitialScroll = false
+                        didEstablishInitialScroll = true
+                        isInitialMessageListHidden = false
                         pinSentMessageToTop(last.id, proxy: proxy)
+                    } else if !didEstablishInitialScroll {
+                        // First page of messages arrived after the view
+                        // appeared — jump straight to the newest one.
+                        establishInitialScroll(proxy: proxy, reason: "messagesArrived")
+                    } else if repinActiveTurnIfNeeded(proxy: proxy) {
+                        return
                     } else if autoScrollEnabled {
                         withAnimation { proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom) }
                     }
                 }
                 .onChange(of: messages.last?.content) { _, _ in
-                    guard didEstablishInitialScroll, autoScrollEnabled else { return }
+                    guard didEstablishInitialScroll else { return }
+                    if repinActiveTurnIfNeeded(proxy: proxy) { return }
+                    guard autoScrollEnabled else { return }
                     withAnimation { proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom) }
                 }
                 .onChange(of: isStreaming) { _, streaming in
                     // Keep the newly appeared loading indicator in view.
-                    guard streaming, didEstablishInitialScroll, autoScrollEnabled else { return }
+                    if !streaming {
+                        pendingIndicatorSpacerReduction = 0
+                    }
+                    guard streaming, didEstablishInitialScroll else { return }
+                    if activeTurnUserMessageID != nil {
+                        pendingIndicatorSpacerReduction = Self.streamingIndicatorEstimatedHeight
+                    }
+                    if repinActiveTurnIfNeeded(proxy: proxy) { return }
+                    guard autoScrollEnabled else { return }
                     withAnimation { proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom) }
                 }
                 .onChange(of: isLoadingMore) { _, loading in
@@ -490,6 +529,13 @@ struct MobileChatView: View {
                         // prepend isn't jarring.
                         settleScroll(proxy: proxy, to: anchor, anchor: .top)
                     }
+                }
+                .onChange(of: composerMinY) { oldValue, newValue in
+                    handleComposerBoundaryChange(
+                        oldValue: oldValue,
+                        newValue: newValue,
+                        proxy: proxy
+                    )
                 }
                 .overlay(alignment: .bottomLeading) {
                     if !isNearBottom {
@@ -743,6 +789,16 @@ struct MobileChatView: View {
         }
     }
 
+    private func scrollToBottomAfterLayout(proxy: ScrollViewProxy) {
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(16))
+            guard didEstablishInitialScroll, autoScrollEnabled else { return }
+            withAnimation(.easeInOut(duration: 0.2)) {
+                proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom)
+            }
+        }
+    }
+
     /// Jump straight to the latest message the first time the thread's content
     /// is available, so an opened thread starts at the bottom instead of the
     /// top. The deferred scroll covers the lazy stack not having measured its
@@ -823,7 +879,10 @@ struct MobileChatView: View {
         // it is pinned to the top. Suppress bottom-follow so the streaming
         // reply fills the space below the question instead of yanking past it.
         awaitingSentUserMessage = true
+        activeTurnUserMessageID = nil
+        pendingIndicatorSpacerReduction = 0
         isPinningLatestTurnToTop = false
+        canReleasePinnedTurnByScroll = false
         autoScrollEnabled = false
         Task {
             await state.sendUserMessage(trimmed, sessionID: sessionID)
@@ -833,10 +892,10 @@ struct MobileChatView: View {
 
     // MARK: - Pin to top
 
-    /// The latest user message — the row pinned to the top on send and the
-    /// reference point for the dynamic tail spacer.
+    /// The user message whose geometry drives the active turn spacer. During a
+    /// send this stays attached to that turn even if the user manually scrolls.
     private var trackedUserMessageID: UUID? {
-        messages.last(where: { $0.role == .user })?.id
+        activeTurnUserMessageID ?? messages.last(where: { $0.role == .user })?.id
     }
 
     /// Visible chat area above the floating composer. `composerMinY` rides up
@@ -860,26 +919,74 @@ struct MobileChatView: View {
         return coveredHeight + 12
     }
 
-    /// Extra spacer used only while a freshly sent user message is pinned to the
-    /// top. The fixed composer clearance is rendered separately so initial
-    /// thread entry can scroll to the visual bottom without landing in this
-    /// expandable space.
+    /// Extra spacer for the active turn. It starts large enough for the sent
+    /// user message to sit at the top, then shrinks as the assistant response
+    /// grows into that space. Manual scroll releases active top-following, but
+    /// the spacer remains attached to the turn so the layout can recover.
     private var pinTailSpacerExtraHeight: CGFloat {
-        guard isPinningLatestTurnToTop else { return 0 }
-        guard availableHeight > 0 else { return 0 }
+        guard activeTurnUserMessageID != nil else { return 0 }
+        guard scrollViewHeight > 0 else { return 0 }
         let latestTurnHeight = max(0, tailSpacerMinY - latestUserMinY)
-        return max(0, availableHeight - latestTurnHeight - minTailSpacer)
+            + pendingIndicatorSpacerReduction
+        return max(0, scrollViewHeight - latestTurnHeight - minTailSpacer)
     }
 
     /// Pin a freshly sent user message to the top of the viewport.
     private func pinSentMessageToTop(_ id: UUID, proxy: ScrollViewProxy) {
-        // Defer one runloop so the dynamic tail spacer grows before we scroll —
-        // otherwise there is not enough content to reach the top.
-        DispatchQueue.main.async {
-            withAnimation(.easeInOut(duration: 0.25)) {
-                proxy.scrollTo(id, anchor: .top)
+        pinToTopTask?.cancel()
+        canReleasePinnedTurnByScroll = false
+        pinToTopTask = Task { @MainActor in
+            // Give SwiftUI one frame to realize the new row, then keep
+            // asserting the pin while the tracked-row geometry, tail spacer,
+            // streaming indicator, and keyboard layout settle.
+            try? await Task.sleep(for: .milliseconds(16))
+            for attempt in 0 ..< 12 {
+                guard !Task.isCancelled else { return }
+                if attempt == 0 {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        proxy.scrollTo(id, anchor: .top)
+                    }
+                } else {
+                    var transaction = Transaction()
+                    transaction.animation = nil
+                    withTransaction(transaction) {
+                        proxy.scrollTo(id, anchor: .top)
+                    }
+                }
+                try? await Task.sleep(for: .milliseconds(16))
             }
+            guard !Task.isCancelled, isPinningLatestTurnToTop else { return }
+            canReleasePinnedTurnByScroll = true
         }
+    }
+
+    private func handleComposerBoundaryChange(
+        oldValue: CGFloat,
+        newValue: CGFloat,
+        proxy: ScrollViewProxy
+    ) {
+        guard didEstablishInitialScroll, abs(newValue - oldValue) > 0.5 else { return }
+        if isPinningLatestTurnToTop, let id = activeTurnUserMessageID ?? trackedUserMessageID {
+            pinSentMessageToTop(id, proxy: proxy)
+        } else if autoScrollEnabled {
+            scrollToBottomAfterLayout(proxy: proxy)
+        }
+    }
+
+    private func repinActiveTurnIfNeeded(proxy: ScrollViewProxy) -> Bool {
+        guard isPinningLatestTurnToTop, let id = activeTurnUserMessageID else {
+            return false
+        }
+        pinSentMessageToTop(id, proxy: proxy)
+        return true
+    }
+
+    private func releasePinnedTurnToBottom(proxy: ScrollViewProxy) {
+        pinToTopTask?.cancel()
+        canReleasePinnedTurnByScroll = false
+        isPinningLatestTurnToTop = false
+        autoScrollEnabled = true
+        scrollToBottomAfterLayout(proxy: proxy)
     }
 
     /// `minY` of the latest user message — fed back from `ChatMessageListView`.
@@ -894,9 +1001,15 @@ struct MobileChatView: View {
     /// height of the latest turn.
     private func updateTailSpacerMinY(_ value: CGFloat) {
         guard abs(value - tailSpacerMinY) > 0.5 else { return }
+        let oldValue = tailSpacerMinY
         var t = Transaction()
         t.animation = nil
-        withTransaction(t) { tailSpacerMinY = value }
+        withTransaction(t) {
+            tailSpacerMinY = value
+            if pendingIndicatorSpacerReduction > 0, value > oldValue {
+                pendingIndicatorSpacerReduction = 0
+            }
+        }
     }
 
     private func handleStop() {
@@ -941,6 +1054,8 @@ struct MobileChatView: View {
 
     private func scrollToBottomFromButton(_ proxy: ScrollViewProxy) {
         mobileChatLogger.debug("[ScrollButton] scroll immediate")
+        pinToTopTask?.cancel()
+        canReleasePinnedTurnByScroll = false
         isPinningLatestTurnToTop = false
         withAnimation(.easeInOut(duration: 0.2)) {
             proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom)

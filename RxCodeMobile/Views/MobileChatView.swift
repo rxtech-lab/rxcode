@@ -490,7 +490,7 @@ struct MobileChatView: View {
                         isEstablishingInitialScroll = false
                         didEstablishInitialScroll = true
                         isInitialMessageListHidden = false
-                        pinSentMessageToTop(last.id, proxy: proxy)
+                        pinSentMessageToTop(last.id, proxy: proxy, animated: true)
                     } else if !didEstablishInitialScroll {
                         // First page of messages arrived after the view
                         // appeared — jump straight to the newest one.
@@ -937,7 +937,7 @@ struct MobileChatView: View {
     }
 
     /// Pin a freshly sent user message to the top of the viewport.
-    private func pinSentMessageToTop(_ id: UUID, proxy: ScrollViewProxy) {
+    private func pinSentMessageToTop(_ id: UUID, proxy: ScrollViewProxy, animated: Bool) {
         pinToTopTask?.cancel()
         canReleasePinnedTurnByScroll = false
         pinToTopTask = Task { @MainActor in
@@ -945,11 +945,13 @@ struct MobileChatView: View {
             // asserting the pin while the tracked-row geometry, tail spacer,
             // streaming indicator, and keyboard layout settle.
             try? await Task.sleep(for: .milliseconds(16))
-            guard !Task.isCancelled else { return }
-            withAnimation(.easeInOut(duration: Self.pinToTopAnimationSeconds)) {
-                proxy.scrollTo(id, anchor: .top)
+            if animated {
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeInOut(duration: Self.pinToTopAnimationSeconds)) {
+                    proxy.scrollTo(id, anchor: .top)
+                }
+                try? await Task.sleep(for: Self.pinToTopAnimationDuration)
             }
-            try? await Task.sleep(for: Self.pinToTopAnimationDuration)
             for _ in 0 ..< 8 {
                 guard !Task.isCancelled else { return }
                 var transaction = Transaction()
@@ -971,7 +973,7 @@ struct MobileChatView: View {
     ) {
         guard didEstablishInitialScroll, abs(newValue - oldValue) > 0.5 else { return }
         if isPinningLatestTurnToTop, let id = activeTurnUserMessageID ?? trackedUserMessageID {
-            pinSentMessageToTop(id, proxy: proxy)
+            pinSentMessageToTop(id, proxy: proxy, animated: false)
         } else if autoScrollEnabled {
             scrollToBottomAfterLayout(proxy: proxy)
         }
@@ -981,7 +983,7 @@ struct MobileChatView: View {
         guard isPinningLatestTurnToTop, let id = activeTurnUserMessageID else {
             return false
         }
-        pinSentMessageToTop(id, proxy: proxy)
+        pinSentMessageToTop(id, proxy: proxy, animated: false)
         return true
     }
 

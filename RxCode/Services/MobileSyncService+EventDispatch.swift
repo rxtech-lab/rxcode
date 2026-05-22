@@ -85,7 +85,7 @@ extension MobileSyncService {
             if let idx = pairedDevices.firstIndex(where: { $0.pubkeyHex == inbound.fromHex }) {
                 logger.info("[APNs] token received mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public) tokenPrefix=\(String(t.tokenHex.prefix(12)), privacy: .public) environment=\(t.environment, privacy: .public)")
                 pairedDevices[idx].apnsToken = t.tokenHex
-                pairedDevices[idx].apnsEnvironment = t.environment
+                pairedDevices[idx].apnsEnvironment = Self.normalizedAPNSEnvironment(t.environment)
                 pairedDevices[idx].lastSeen = .now
                 for staleIdx in pairedDevices.indices where staleIdx != idx && pairedDevices[staleIdx].apnsToken == t.tokenHex {
                     logger.warning("[APNs] clearing duplicate token from stale mobileKey=\(String(self.pairedDevices[staleIdx].pubkeyHex.prefix(12)), privacy: .public) currentMobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public) tokenPrefix=\(String(t.tokenHex.prefix(12)), privacy: .public)")

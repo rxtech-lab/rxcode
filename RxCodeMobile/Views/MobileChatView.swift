@@ -832,7 +832,7 @@ struct MobileChatView: View {
         initialScrollTask?.cancel()
         initialScrollTask = Task { @MainActor in
             do {
-                try await Task.sleep(for: .milliseconds(500))
+                try await Task.sleep(for: .milliseconds(800))
             } catch {
                 isEstablishingInitialScroll = false
                 return

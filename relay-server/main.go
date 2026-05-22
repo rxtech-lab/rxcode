@@ -79,7 +79,7 @@ func main() {
 		if len(keyPEM) > 0 && *apnsKeyPath == "" {
 			source = "env(APNS_KEY_B64)"
 		}
-		log.Printf("APNs sender enabled (topic=%s production=%v key=%s)", *apnsTopic, *apnsProduction, source)
+		log.Printf("APNs sender enabled (topic=%s default_production=%v key=%s)", *apnsTopic, *apnsProduction, source)
 	} else {
 		log.Printf("APNs sender disabled (set APNS_KEY_B64 or -apns-key to enable)")
 	}

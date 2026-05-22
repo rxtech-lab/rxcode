@@ -36,7 +36,8 @@ extension MobileAppState {
             mobilePubkeyHex: identity.publicKeyHex,
             displayName: displayName,
             platform: UIDevice.current.userInterfaceIdiom == .pad ? "iPadOS" : "iOS",
-            appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+            appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0",
+            apnsEnvironment: Self.currentAPNsEnvironment
         )
         do {
             logger.info("sending pair request via relay=\(self.relayURL.absoluteString, privacy: .public)")

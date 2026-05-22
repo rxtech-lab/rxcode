@@ -212,6 +212,13 @@ final class MobileAppState: ObservableObject {
     static let legacyDesktopPubkeyKey = "mobileSync.desktopPubkey"
     static let legacyDesktopNameKey = "mobileSync.desktopName"
     static let mobilePubkeyKey = "mobileSync.mobilePubkey"
+    static var currentAPNsEnvironment: String {
+        #if DEBUG
+        "sandbox"
+        #else
+        "production"
+        #endif
+    }
 
     init() {
         let stored = UserDefaults.standard.string(forKey: "mobileSync.relayURL")

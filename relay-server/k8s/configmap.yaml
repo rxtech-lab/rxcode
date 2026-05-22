@@ -10,6 +10,8 @@ data:
   RELAY_ADDR: ":8787"
   # APNs topic must equal the RxCode Mobile bundle identifier exactly.
   APNS_TOPIC: "com.idealapp.RxCode.Mobile"
+  # Fallback only for old desktop builds that omit per-device APNs environment.
+  # Current desktop clients send sandbox/production per paired device.
   APNS_PRODUCTION: "true"
   # Cluster-level Redis (namespace `redis`), reused as the pub/sub backplane
   # so the relay can run multiple replicas. Reachable from any namespace via

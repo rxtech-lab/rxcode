@@ -42,11 +42,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     func application(_ application: UIApplication,
                      didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         let tokenHex = deviceToken.map { String(format: "%02x", $0) }.joined()
-#if DEBUG
-        let environment = "sandbox"
-#else
-        let environment = "production"
-#endif
+        let environment = MobileAppState.currentAPNsEnvironment
         logger.info("[APNs] registered tokenPrefix=\(String(tokenHex.prefix(12)), privacy: .public) environment=\(environment, privacy: .public)")
         mobileState?.reportAPNsToken(hex: tokenHex, environment: environment)
     }

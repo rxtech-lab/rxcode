@@ -123,10 +123,12 @@ jobs:
           # CODE_SIGNING_ALLOWED=NO won't link a valid .app. Ad-hoc sign the
           # device build instead — no certificate or provisioning profile
           # required, just enough to produce a verifiable bundle.
+          # Release configuration: DEBUG is undefined here, so this also
+          # catches code wrongly placed outside an `#if DEBUG` guard.
           set -o pipefail && xcodebuild \
             -project RxCode.xcodeproj \
             -scheme RxCodeMobile \
-            -configuration Debug \
+            -configuration Release \
             -destination 'generic/platform=iOS' \
             CODE_SIGN_IDENTITY="-" \
             CODE_SIGN_STYLE=Manual \

@@ -30,6 +30,10 @@ public final class ChatBridge {
     public var appVersion: String = ""
     public var claudeVersion: String?
     public var codexVersion: String?
+    /// Changes when the local composer begins a new send. Message containers
+    /// use this to clear any active-turn scroll state before AppState appends
+    /// the next user row, matching the mobile send flow.
+    public var sendRequestID: UUID?
 
     /// User decision summaries for `ExitPlanMode` tool calls in the current session,
     /// keyed by `toolCallId`. Pushed by AppState from per-session state and persisted
@@ -62,6 +66,10 @@ public final class ChatBridge {
 
     public func send() async {
         await sendHandler?()
+    }
+
+    public func markUserSendRequested() {
+        sendRequestID = UUID()
     }
 
     public func cancelStreaming() async {

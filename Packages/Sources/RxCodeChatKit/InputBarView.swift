@@ -642,6 +642,7 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
             windowState.inputText = cmd.command + " "
         } else {
             windowState.inputText = ""
+            chatBridge.markUserSendRequested()
             Task { await chatBridge.sendSlashCommand(cmd.command) }
         }
     }
@@ -750,6 +751,7 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
             return
         }
 
+        chatBridge.markUserSendRequested()
         Task { await chatBridge.send() }
         resetIMEState()
     }

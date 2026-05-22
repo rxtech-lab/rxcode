@@ -31,9 +31,24 @@ struct MessageListView: View {
     /// Latest scroll phase — gates auto-scroll so it never fires while the user
     /// is driving the scroll.
     @State private var scrollPhase: ScrollPhase = .idle
+    /// Re-asserts a freshly sent user message at the top while lazy layout,
+    /// streaming rows, and the dynamic tail spacer settle.
+    @State private var pinToTopTask: Task<Void, Never>?
+    @State private var scrollViewHeight: CGFloat = 0
+    @State private var latestUserMinY: CGFloat = 0
+    @State private var tailSpacerMinY: CGFloat = 0
+    @State private var activeTurnUserMessageID: UUID?
+    @State private var isPinningLatestTurnToTop = false
+    @State private var canReleasePinnedTurnByScroll = false
+    @State private var pendingIndicatorSpacerReduction: CGFloat = 0
 
     private static let log = Logger(subsystem: "com.claudework", category: "MessageListView")
     private static let bottomAnchorID = "message-list-bottom-anchor"
+    private static let endOfScreenAnchorID = "message-list-end-of-screen"
+    private static let userScrollDownDelta: CGFloat = 4
+    private static let streamingIndicatorEstimatedHeight: CGFloat = 36
+    private static let pinToTopAnimationDuration: Duration = .milliseconds(320)
+    private static let pinToTopAnimationSeconds: Double = 0.32
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -41,7 +56,7 @@ struct MessageListView: View {
         }
     }
 
-    /// The rows inside the `List` — extracted so the type-checker handles the
+    /// The rows inside the scroll content — extracted so the type-checker handles the
     /// content separately from the long modifier chain in `messageList`.
     @ViewBuilder
     private var messageListRows: some View {
@@ -80,6 +95,24 @@ struct MessageListView: View {
                 .chatMessageListRowStyle()
         }
 
+        Color.clear
+            .frame(height: 1)
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.frame(in: .named(chatContentCoordinateSpace)).minY
+            } action: { newValue in
+                updateTailSpacerMinY(newValue)
+            }
+
+        Color.clear
+            .frame(height: 1)
+            .id(Self.endOfScreenAnchorID)
+
+        Color.clear
+            .frame(height: minTailSpacer)
+
+        Color.clear
+            .frame(height: pinTailSpacerExtraHeight)
+
         bottomAnchor
     }
 
@@ -89,18 +122,24 @@ struct MessageListView: View {
         Color.clear
             .frame(height: 1)
             .id(Self.bottomAnchorID)
-            .listRowInsets(EdgeInsets())
-            .listRowSeparator(.hidden)
-            .listRowBackground(Color.clear)
     }
 
     private func messageList(proxy: ScrollViewProxy) -> some View {
-        let base = List { messageListRows }
-            .listStyle(.plain)
-            .contentMargins(.top, 16, for: .scrollContent)
-            .scrollContentBackground(.hidden)
-            .environment(\.defaultMinListRowHeight, 0)
+        let base = ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                messageListRows
+            }
+            .padding(.top, 16)
+            .coordinateSpace(.named(chatContentCoordinateSpace))
+            .environment(\.chatTrackedMessageID, trackedUserMessageID)
+            .environment(\.chatTrackedMessageGeometry, updateLatestUserMinY)
+        }
             .opacity(isSessionReady ? 1 : 0)
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.height
+            } action: { newValue in
+                scrollViewHeight = newValue
+            }
             .onScrollGeometryChange(for: ScrollSample.self) { geo in
                 ScrollSample(contentHeight: geo.contentSize.height, visibleMaxY: geo.visibleRect.maxY)
             } action: { _, sample in
@@ -110,8 +149,28 @@ struct MessageListView: View {
                 // un-sticks it. Suppressed while the user drives the scroll so
                 // auto-scroll never fights a drag.
                 let decision = anchor.apply(contentHeight: sample.contentHeight, visibleMaxY: sample.visibleMaxY)
-                if decision == .scrollToBottom, !isUserDrivenScroll {
+                if decision == .scrollToBottom, !isUserDrivenScroll, !isPinningLatestTurnToTop {
+                    logScrollState(
+                        "geometry.scrollToBottom",
+                        extra: "contentHeight=\(sample.contentHeight) visibleMaxY=\(sample.visibleMaxY)"
+                    )
                     scrollToBottomDebounced(proxy)
+                } else if decision == .scrollToBottom {
+                    logScrollState(
+                        "geometry.suppressedBottom",
+                        extra: "contentHeight=\(sample.contentHeight) visibleMaxY=\(sample.visibleMaxY) userDriven=\(isUserDrivenScroll) pinning=\(isPinningLatestTurnToTop)"
+                    )
+                }
+            }
+            .onScrollGeometryChange(for: CGFloat.self) { geo in
+                geo.contentOffset.y
+            } action: { oldOffsetY, offsetY in
+                if isUserDrivenScroll,
+                   isPinningLatestTurnToTop,
+                   canReleasePinnedTurnByScroll,
+                   offsetY > oldOffsetY + Self.userScrollDownDelta
+                {
+                    releasePinnedTurnToBottom(proxy: proxy)
                 }
             }
             .onScrollPhaseChange { _, newPhase in
@@ -127,6 +186,16 @@ struct MessageListView: View {
             }
             .onChange(of: chatBridge.isStreaming) { old, new in
                 handleStreamingChange(old: old, new: new, proxy: proxy)
+            }
+            .onChange(of: chatBridge.sendRequestID) { _, _ in
+                prepareForNewUserSend()
+            }
+            .onChange(of: chatBridge.messages.last?.id) { _, _ in
+                handleLastMessageChange(proxy: proxy)
+            }
+            .onChange(of: chatBridge.messages.last?.content) { _, _ in
+                guard isSessionReady else { return }
+                if repinActiveTurnIfNeeded(proxy: proxy) { return }
             }
             .onChange(of: isSessionReady) { _, new in
                 Self.log.info("[MessageList.ready] isSessionReady=\(new) sid=\(windowState.currentSessionId ?? "<nil>", privacy: .public) settled=\(settledItems.count)")
@@ -154,9 +223,19 @@ struct MessageListView: View {
         // Detect that case via chatBridge.isStreaming and keep the list visible.
         if chatBridge.isStreaming {
             rebuildSettledItems()
-            anchor.resetToBottom()
-            settleAtBottom(proxy: proxy, reason: "sessionTask.streaming")
             if !isSessionReady { isSessionReady = true }
+            if let latest = chatBridge.messages.last, latest.role == .user {
+                activeTurnUserMessageID = latest.id
+                isPinningLatestTurnToTop = true
+                pendingIndicatorSpacerReduction = Self.streamingIndicatorEstimatedHeight
+                pinSentMessageToTop(latest.id, proxy: proxy)
+            } else if repinActiveTurnIfNeeded(proxy: proxy) {
+                // Keep the mobile-style top pin across the pending-session-id
+                // to real-session-id swap that can happen after streaming starts.
+            } else if !chatBridge.messages.isEmpty || !settledItems.isEmpty {
+                anchor.resetToBottom()
+                settleAtBottom(proxy: proxy, reason: "sessionTask.streaming")
+            }
             Self.log.info("[MessageList.task] streaming-path settled=\(settledItems.count) sid=\(sid, privacy: .public)")
             return
         }
@@ -164,6 +243,11 @@ struct MessageListView: View {
         scrollTask?.cancel()
         settleScrollTask?.cancel()
         readyTask?.cancel()
+        pinToTopTask?.cancel()
+        activeTurnUserMessageID = nil
+        isPinningLatestTurnToTop = false
+        canReleasePinnedTurnByScroll = false
+        pendingIndicatorSpacerReduction = 0
         rebuildSettledItems()
         Self.log.info("[MessageList.task] post-rebuild settled=\(settledItems.count) sid=\(sid, privacy: .public) isLoadingFromDisk=\(chatBridge.isLoadingFromDisk)")
         // Empty sessions appear instantly — unless we're still loading persisted
@@ -179,7 +263,7 @@ struct MessageListView: View {
             return
         }
         // Re-assert the bottom across several frames: a single scroll can fire
-        // before `List` has realized the freshly-rebuilt rows, stranding the
+        // before the lazy stack has realized the freshly-rebuilt rows, stranding the
         // view at the top — which the fade-in would then reveal.
         settleAtBottom(proxy: proxy, reason: "sessionOpen")
         anchor.resetToBottom()
@@ -208,12 +292,23 @@ struct MessageListView: View {
     }
 
     private func handleStreamingChange(old: Bool, new: Bool, proxy: ScrollViewProxy) {
+        logScrollState("streamingChange", extra: "old=\(old) new=\(new) lastRole=\(chatBridge.messages.last?.role.rawValue ?? "<nil>")")
+        if !old && new,
+           let activeTurnUserMessageID,
+           chatBridge.messages.last?.id == activeTurnUserMessageID,
+           chatBridge.messages.last?.role == .user
+        {
+            pendingIndicatorSpacerReduction = Self.streamingIndicatorEstimatedHeight
+            if repinActiveTurnIfNeeded(proxy: proxy) { return }
+        }
         // Only react when streaming ends — the settled list doesn't change at start.
         guard old && !new else { return }
+        pendingIndicatorSpacerReduction = 0
         rebuildSettledItems()
+        if repinActiveTurnIfNeeded(proxy: proxy) { return }
         anchor.resetToBottom()
         // The just-finished turn moves out of `StreamingMessageView` and into
-        // the settled list. That row handoff makes `List` reload and can
+        // the settled list. That row handoff makes the scroll content reload and can
         // momentarily snap the offset; re-assert the bottom across the handoff.
         settleAtBottom(proxy: proxy, reason: "streamingEnded")
     }
@@ -232,6 +327,33 @@ struct MessageListView: View {
         var t = Transaction()
         t.animation = nil
         withTransaction(t) { settledItems = messages }
+    }
+
+    private func handleLastMessageChange(proxy: ScrollViewProxy) {
+        guard isSessionReady, !chatBridge.isLoadingFromDisk else { return }
+        rebuildSettledItems()
+        guard let last = chatBridge.messages.last else { return }
+        logScrollState("lastMessageChange", extra: "lastRole=\(last.role.rawValue) lastID=\(last.id.uuidString)")
+        if last.role == .user {
+            activeTurnUserMessageID = last.id
+            pendingIndicatorSpacerReduction = chatBridge.isStreaming ? Self.streamingIndicatorEstimatedHeight : 0
+            isPinningLatestTurnToTop = true
+            canReleasePinnedTurnByScroll = false
+            pinSentMessageToTop(last.id, proxy: proxy)
+            return
+        }
+        if repinActiveTurnIfNeeded(proxy: proxy) { return }
+    }
+
+    private func prepareForNewUserSend() {
+        logScrollState("prepareForNewUserSend")
+        scrollTask?.cancel()
+        settleScrollTask?.cancel()
+        pinToTopTask?.cancel()
+        activeTurnUserMessageID = nil
+        isPinningLatestTurnToTop = false
+        canReleasePinnedTurnByScroll = false
+        pendingIndicatorSpacerReduction = 0
     }
 
     /// If streaming, returns only completed messages excluding the last consecutive (non-error) assistant sequence.
@@ -264,7 +386,28 @@ struct MessageListView: View {
         }
     }
 
+    /// The user message whose geometry drives the active turn spacer.
+    private var trackedUserMessageID: UUID? {
+        activeTurnUserMessageID ?? settledItems.last(where: { $0.role == .user })?.id
+    }
+
+    private var minTailSpacer: CGFloat {
+        16
+    }
+
+    /// Extra spacer for the active turn. It starts large enough for the sent
+    /// user message to sit at the top, then shrinks as the assistant response
+    /// grows into that space.
+    private var pinTailSpacerExtraHeight: CGFloat {
+        guard activeTurnUserMessageID != nil else { return 0 }
+        guard scrollViewHeight > 0 else { return 0 }
+        let latestTurnHeight = max(0, tailSpacerMinY - latestUserMinY)
+            + pendingIndicatorSpacerReduction
+        return max(0, scrollViewHeight - latestTurnHeight - minTailSpacer)
+    }
+
     private func scrollToBottom(_ proxy: ScrollViewProxy) {
+        logScrollState("scrollToBottom.now")
         proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom)
     }
 
@@ -272,16 +415,18 @@ struct MessageListView: View {
     /// change, so a burst of streaming deltas collapses into a single scroll.
     private func scrollToBottomDebounced(_ proxy: ScrollViewProxy) {
         scrollTask?.cancel()
+        logScrollState("scrollToBottom.debounceScheduled")
         scrollTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(50))
             guard !Task.isCancelled, !isUserDrivenScroll else { return }
+            logScrollState("scrollToBottom.debounceFired")
             scrollToBottom(proxy)
         }
     }
 
     /// Re-assert the bottom on every frame for a short window.
     ///
-    /// A single scroll can land before `List` has realized the freshly-rebuilt
+    /// A single scroll can land before the lazy stack has realized the freshly-rebuilt
     /// rows (session open / disk load), or while the streaming→settled row
     /// handoff is still reloading the list — in both cases the offset snaps to
     /// the top. Re-asserting corrects the snap within a frame, before it becomes
@@ -297,6 +442,92 @@ struct MessageListView: View {
                 try? await Task.sleep(for: .milliseconds(16))
             }
         }
+    }
+
+    /// Pin a freshly sent user message to the top of the viewport.
+    private func pinSentMessageToTop(_ id: UUID, proxy: ScrollViewProxy) {
+        scrollTask?.cancel()
+        settleScrollTask?.cancel()
+        pinToTopTask?.cancel()
+        canReleasePinnedTurnByScroll = false
+        logScrollState("pinTop.scheduled", extra: "target=\(id.uuidString)")
+        pinToTopTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(16))
+            guard !Task.isCancelled else { return }
+            logScrollState("pinTop.animated", extra: "target=\(id.uuidString)")
+            withAnimation(.easeInOut(duration: Self.pinToTopAnimationSeconds)) {
+                proxy.scrollTo(id, anchor: .top)
+            }
+            try? await Task.sleep(for: Self.pinToTopAnimationDuration)
+            for attempt in 0..<8 {
+                guard !Task.isCancelled else { return }
+                if attempt == 0 || attempt == 7 {
+                    logScrollState("pinTop.settle", extra: "target=\(id.uuidString) attempt=\(attempt)")
+                }
+                var transaction = Transaction()
+                transaction.animation = nil
+                withTransaction(transaction) {
+                    proxy.scrollTo(id, anchor: .top)
+                }
+                try? await Task.sleep(for: .milliseconds(16))
+            }
+            guard !Task.isCancelled, isPinningLatestTurnToTop else { return }
+            canReleasePinnedTurnByScroll = true
+            logScrollState("pinTop.armedRelease", extra: "target=\(id.uuidString)")
+        }
+    }
+
+    private func repinActiveTurnIfNeeded(proxy: ScrollViewProxy) -> Bool {
+        guard isPinningLatestTurnToTop, let id = activeTurnUserMessageID else {
+            return false
+        }
+        pinSentMessageToTop(id, proxy: proxy)
+        return true
+    }
+
+    private func releasePinnedTurnToBottom(proxy: ScrollViewProxy) {
+        logScrollState("pinTop.releaseToBottom")
+        pinToTopTask?.cancel()
+        canReleasePinnedTurnByScroll = false
+        isPinningLatestTurnToTop = false
+        pendingIndicatorSpacerReduction = 0
+        anchor.resetToBottom()
+        scrollToBottomDebounced(proxy)
+    }
+
+    /// `minY` of the latest user message — fed back from `ChatMessageListView`.
+    private func updateLatestUserMinY(_ value: CGFloat) {
+        guard abs(value - latestUserMinY) > 0.5 else { return }
+        var transaction = Transaction()
+        transaction.animation = nil
+        withTransaction(transaction) { latestUserMinY = value }
+        logScrollState("latestUserMinY.updated", extra: "value=\(value)")
+    }
+
+    /// `minY` of the tail spacer — its distance from the user message is the
+    /// height of the latest turn.
+    private func updateTailSpacerMinY(_ value: CGFloat) {
+        guard abs(value - tailSpacerMinY) > 0.5 else { return }
+        let oldValue = tailSpacerMinY
+        var transaction = Transaction()
+        transaction.animation = nil
+        withTransaction(transaction) {
+            tailSpacerMinY = value
+            if pendingIndicatorSpacerReduction > 0, value > oldValue {
+                pendingIndicatorSpacerReduction = 0
+            }
+        }
+        logScrollState("tailSpacerMinY.updated", extra: "value=\(value) old=\(oldValue)")
+    }
+
+    private func logScrollState(_ label: String, extra: String = "") {
+        let active = activeTurnUserMessageID?.uuidString ?? "<nil>"
+        let latestTurnHeight = max(0, tailSpacerMinY - latestUserMinY) + pendingIndicatorSpacerReduction
+        let extraSpacer = pinTailSpacerExtraHeight
+        let suffix = extra.isEmpty ? "" : " \(extra)"
+        Self.log.info(
+            "[ScrollPin] \(label, privacy: .public) sid=\(windowState.currentSessionId ?? "<nil>", privacy: .public) active=\(active, privacy: .public) pinning=\(isPinningLatestTurnToTop) releaseArmed=\(canReleasePinnedTurnByScroll) userDriven=\(isUserDrivenScroll) stream=\(chatBridge.isStreaming) scrollH=\(Double(scrollViewHeight), privacy: .public) userY=\(Double(latestUserMinY), privacy: .public) tailY=\(Double(tailSpacerMinY), privacy: .public) turnH=\(Double(latestTurnHeight), privacy: .public) minTail=\(Double(minTailSpacer), privacy: .public) extraSpacer=\(Double(extraSpacer), privacy: .public) pendingReduce=\(Double(pendingIndicatorSpacerReduction), privacy: .public)\(suffix, privacy: .public)"
+        )
     }
 }
 

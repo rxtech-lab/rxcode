@@ -115,6 +115,8 @@ struct MobileChatView: View {
     /// Approximate indicator height plus LazyVStack spacing. Cleared once the
     /// tail marker reports the indicator in measured geometry.
     private static let streamingIndicatorEstimatedHeight: CGFloat = 36
+    private static let pinToTopAnimationDuration: Duration = .milliseconds(320)
+    private static let pinToTopAnimationSeconds: Double = 0.32
 
     var body: some View {
         activeThreadLayout
@@ -943,18 +945,17 @@ struct MobileChatView: View {
             // asserting the pin while the tracked-row geometry, tail spacer,
             // streaming indicator, and keyboard layout settle.
             try? await Task.sleep(for: .milliseconds(16))
-            for attempt in 0 ..< 12 {
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: Self.pinToTopAnimationSeconds)) {
+                proxy.scrollTo(id, anchor: .top)
+            }
+            try? await Task.sleep(for: Self.pinToTopAnimationDuration)
+            for _ in 0 ..< 8 {
                 guard !Task.isCancelled else { return }
-                if attempt == 0 {
-                    withAnimation(.easeInOut(duration: 0.25)) {
-                        proxy.scrollTo(id, anchor: .top)
-                    }
-                } else {
-                    var transaction = Transaction()
-                    transaction.animation = nil
-                    withTransaction(transaction) {
-                        proxy.scrollTo(id, anchor: .top)
-                    }
+                var transaction = Transaction()
+                transaction.animation = nil
+                withTransaction(transaction) {
+                    proxy.scrollTo(id, anchor: .top)
                 }
                 try? await Task.sleep(for: .milliseconds(16))
             }

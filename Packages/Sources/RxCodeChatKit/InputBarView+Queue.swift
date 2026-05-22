@@ -111,10 +111,12 @@ extension InputBarView {
     }
 
     func sendQueuedNow(_ id: UUID) {
+        chatBridge.markUserSendRequested()
         Task { await chatBridge.sendQueuedNow(id: id) }
     }
 
     func sendAllQueuedAsOne() {
+        chatBridge.markUserSendRequested()
         Task { await chatBridge.sendAllQueuedAsOne() }
     }
 

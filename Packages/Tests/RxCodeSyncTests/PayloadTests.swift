@@ -5,6 +5,28 @@ import RxCodeCore
 
 @Suite("Mobile sync payloads")
 struct PayloadTests {
+    @Test("pair request carries APNs environment")
+    func pairRequestCarriesAPNsEnvironment() throws {
+        let payload = Payload.pairRequest(
+            PairRequestPayload(
+                mobilePubkeyHex: String(repeating: "a", count: 64),
+                displayName: "iPhone",
+                platform: "iOS",
+                appVersion: "1.2.3",
+                apnsEnvironment: "sandbox"
+            )
+        )
+
+        let data = try JSONEncoder().encode(payload)
+        let decoded = try JSONDecoder().decode(Payload.self, from: data)
+        guard case .pairRequest(let request) = decoded else {
+            Issue.record("Expected pair request payload")
+            return
+        }
+
+        #expect(request.apnsEnvironment == "sandbox")
+    }
+
     @Test("snapshot carries briefing and settings data")
     func snapshotCarriesBriefingAndSettingsData() throws {
         let projectId = UUID(uuidString: "11111111-2222-3333-4444-555555555555")!

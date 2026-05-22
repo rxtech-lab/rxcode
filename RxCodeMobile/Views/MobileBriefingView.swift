@@ -58,6 +58,7 @@ struct MobileBriefingView: View {
                                         )
                                     }
                                     .buttonStyle(.plain)
+                                    .accessibilityIdentifier("briefing-card-\(group.id)")
                                 }
                             }
                         }
@@ -302,6 +303,7 @@ struct BriefingListView: View {
                             }
                             .buttonStyle(BriefingListCardButtonStyle(isSelected: selectedGroup == group.key))
                             .glassEffectID(group.id, in: glassNamespace)
+                            .accessibilityIdentifier("briefing-list-card-\(group.id)")
                         }
                     }
                 }
@@ -310,6 +312,7 @@ struct BriefingListView: View {
             .padding(.vertical, 12)
         }
         .scrollDismissesKeyboard(.interactively)
+        .accessibilityIdentifier("briefing-list-screen")
         .navigationTitle("Briefing")
         .toolbar {
             if hasAnyData {

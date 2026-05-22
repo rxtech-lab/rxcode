@@ -19,6 +19,7 @@ envelopes (`{v, to, from, nonce, ct}`) and a destination pubkey.
     ```json
     {
       "device_token": "<hex APNs token>",
+      "apns_environment": "sandbox",        // "sandbox" or "production"
       "encrypted_alert": "<base64 ciphertext>",
       "category": "permission_request",     // optional
       "collapse_id": "<id>"                  // optional
@@ -30,6 +31,7 @@ envelopes (`{v, to, from, nonce, ct}`) and a destination pubkey.
     ```json
     {
       "device_token": "<hex push-to-start or per-activity token>",
+      "apns_environment": "sandbox",
       "push_type": "liveactivity",
       "apns_payload": { "aps": { "event": "update", "content-state": { … } } },
       "collapse_id": "<id>"                  // optional
@@ -39,10 +41,14 @@ envelopes (`{v, to, from, nonce, ct}`) and a destination pubkey.
     `.push-type.liveactivity`. Live Activity content-state is **not** E2E
     encrypted — ActivityKit consumes it directly.
   - **`background`** — silent `content-available` push used to refresh the
-    home-screen widget. Body is `{ "device_token", "push_type": "background",
-    "apns_payload" }`; the payload is forwarded verbatim at low priority.
+    home-screen widget. Body is `{ "device_token", "apns_environment",
+    "push_type": "background", "apns_payload" }`; the payload is forwarded
+    verbatim at low priority.
 
   The relay signs a JWT with the configured APNs auth key and forwards the push.
+  It keeps both sandbox and production APNs clients alive, then routes each
+  push by `apns_environment`. If older desktop clients omit the field,
+  `APNS_PRODUCTION` is used as a compatibility default.
 - `GET  /healthz` — liveness probe.
 
 ## Run locally
@@ -71,7 +77,7 @@ missing file is non-fatal — the relay just uses whatever's in the process env.
 | `-apns-key-id`      | `APNS_KEY_ID`      | 10-char Key ID from the Apple developer portal.      |
 | `-apns-team-id`     | `APNS_TEAM_ID`     | 10-char Team ID.                                     |
 | `-apns-topic`       | `APNS_TOPIC`       | iOS app bundle identifier (e.g. `app.rxlab.rxcodemobile`). |
-| `-apns-production`  | `APNS_PRODUCTION`  | `true` for production endpoint, else sandbox.        |
+| `-apns-production`  | `APNS_PRODUCTION`  | Compatibility default when a push omits `apns_environment`. |
 | `-redis-url`        | `REDIS_URL`        | Redis URL for the multi-node backplane. Empty = single-node. |
 
 `APNS_KEY_B64` wins over `APNS_KEY_PATH` when both are set. Both standard and
@@ -88,7 +94,7 @@ APNS_KEY_B64=MIGTAgEAMBM...                # base64 of your .p8 file
 APNS_KEY_ID=ABCDE12345
 APNS_TEAM_ID=YYYYYYYYYY
 APNS_TOPIC=app.rxlab.rxcodemobile
-APNS_PRODUCTION=false
+APNS_PRODUCTION=false                    # fallback only for old desktop builds
 ```
 
 Encode the `.p8` ready for the file:
@@ -129,9 +135,10 @@ No bind-mount needed — the key lives only in the container environment.
 - Generate a `.p8` auth key in https://developer.apple.com/account/resources/authkeys/list.
 - `-apns-topic` must equal the iOS app's bundle identifier exactly
   (`com.idealapp.RxCode.Mobile`).
-- Sandbox (`-apns-production=false`) is required for `xcrun simctl push` and
-  development builds; production builds and TestFlight require
-  `-apns-production=true`.
+- Sandbox APNs is required for development/debug builds; production APNs is
+  required for TestFlight/App Store builds. The mobile app reports this as
+  `sandbox` or `production`, the desktop stores it per paired device, and the
+  relay chooses the matching APNs endpoint for every push.
 - The auth key file is sensitive — mount it via a secrets manager / Docker
   secret in production. Never commit `.p8` files.
 

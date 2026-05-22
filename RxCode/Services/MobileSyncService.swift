@@ -394,7 +394,7 @@ final class MobileSyncService: ObservableObject {
             displayName: pending.displayName,
             platform: pending.platform,
             apnsToken: nil,
-            apnsEnvironment: nil,
+            apnsEnvironment: Self.normalizedAPNSEnvironment(pending.apnsEnvironment),
             pairedAt: .now,
             lastSeen: .now,
             relayURL: relayURLString
@@ -540,7 +540,8 @@ final class MobileSyncService: ObservableObject {
             deviceToken: token,
             encryptedAlert: encryptedAlertData.base64EncodedString(),
             category: payload.kind.rawValue,
-            collapseID: Self.notificationCollapseID(for: payload, device: device)
+            collapseID: Self.notificationCollapseID(for: payload, device: device),
+            apnsEnvironment: Self.apnsEnvironmentForPush(device)
         )
 
         var request = URLRequest(url: pushURL)
@@ -601,7 +602,8 @@ final class MobileSyncService: ObservableObject {
             deviceToken: token,
             encryptedAlert: encryptedAlertData.base64EncodedString(),
             category: "test_notification",
-            collapseID: Self.testNotificationCollapseID(for: device)
+            collapseID: Self.testNotificationCollapseID(for: device),
+            apnsEnvironment: Self.apnsEnvironmentForPush(device)
         )
 
         var request = URLRequest(url: pushURL)
@@ -780,6 +782,34 @@ final class MobileSyncService: ObservableObject {
         return components.url
     }
 
+    func pushEndpointURL(for device: PairedDevice) -> URL? {
+        if let relayURLString = device.relayURL, let deviceRelayURL = URL(string: relayURLString) {
+            return Self.pushEndpointURL(from: deviceRelayURL)
+        }
+        return Self.pushEndpointURL(from: relayURL)
+    }
+
+    static func apnsEnvironmentForPush(_ device: PairedDevice) -> String? {
+        normalizedAPNSEnvironment(device.apnsEnvironment)
+    }
+
+    static func normalizedAPNSEnvironment(_ environment: String?) -> String? {
+        guard let raw = environment?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased(),
+              !raw.isEmpty
+        else { return nil }
+
+        switch raw {
+        case "production", "prod", "release":
+            return "production"
+        case "sandbox", "development", "dev", "debug":
+            return "sandbox"
+        default:
+            return raw
+        }
+    }
+
     static func responseBodyString(_ data: Data) -> String {
         let raw = String(data: data, encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -803,12 +833,14 @@ struct APNsPushRequest: Codable {
     let encryptedAlert: String
     let category: String?
     let collapseID: String?
+    let apnsEnvironment: String?
 
     enum CodingKeys: String, CodingKey {
         case deviceToken = "device_token"
         case encryptedAlert = "encrypted_alert"
         case category
         case collapseID = "collapse_id"
+        case apnsEnvironment = "apns_environment"
     }
 }
 
@@ -816,11 +848,13 @@ struct APNsPushResponse: Codable {
     let statusCode: Int
     let reason: String
     let apnsID: String?
+    let apnsEnvironment: String?
 
     enum CodingKeys: String, CodingKey {
         case statusCode = "status_code"
         case reason
         case apnsID = "apns_id"
+        case apnsEnvironment = "apns_environment"
     }
 }
 

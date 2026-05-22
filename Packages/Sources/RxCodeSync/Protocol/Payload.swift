@@ -137,11 +137,19 @@ public struct PairRequestPayload: Codable, Sendable {
     public let displayName: String
     public let platform: String
     public let appVersion: String
-    public init(mobilePubkeyHex: String, displayName: String, platform: String, appVersion: String) {
+    public let apnsEnvironment: String?
+    public init(
+        mobilePubkeyHex: String,
+        displayName: String,
+        platform: String,
+        appVersion: String,
+        apnsEnvironment: String? = nil
+    ) {
         self.mobilePubkeyHex = mobilePubkeyHex
         self.displayName = displayName
         self.platform = platform
         self.appVersion = appVersion
+        self.apnsEnvironment = apnsEnvironment
     }
 }
 

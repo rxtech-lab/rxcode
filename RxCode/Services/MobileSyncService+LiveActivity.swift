@@ -176,10 +176,6 @@ extension MobileSyncService {
             logger.warning("[LiveActivity] start skipped — no paired device has a push-to-start token (pairedDevices=\(self.pairedDevices.count, privacy: .public))")
             return
         }
-        guard let pushURL = Self.pushEndpointURL(from: relayURL) else {
-            logger.error("[LiveActivity] start skipped — cannot derive push endpoint from relay \(self.relayURL.absoluteString, privacy: .public)")
-            return
-        }
         let now = Date()
         let staleAfter: TimeInterval = allJobsDone ? 8 * 3600 : 3600
         let payload: [String: Any] = ["aps": [
@@ -195,6 +191,10 @@ extension MobileSyncService {
         logger.info("[LiveActivity] start jobs activity devices=\(devices.count, privacy: .public) jobs=\(self.trackedJobs.count, privacy: .public)")
         for device in devices {
             guard let token = device.liveActivityStartToken else { continue }
+            guard let pushURL = pushEndpointURL(for: device) else {
+                logger.error("[LiveActivity] start skipped — cannot derive push endpoint deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
+                continue
+            }
             logger.info("[LiveActivity] start → posting push startTokenPrefix=\(String(token.prefix(12)), privacy: .public) deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
             Task {
                 await postRawPush(deviceToken: token, pushType: "liveactivity",
@@ -223,8 +223,8 @@ extension MobileSyncService {
     /// set to now so iOS removes it promptly instead of letting it linger on
     /// screen for the system's default window.
     func sendJobsActivityEnd(deviceToken: String, device: PairedDevice) {
-        guard let pushURL = Self.pushEndpointURL(from: relayURL) else {
-            logger.error("[LiveActivity] end skipped — cannot derive push endpoint from relay \(self.relayURL.absoluteString, privacy: .public)")
+        guard let pushURL = pushEndpointURL(for: device) else {
+            logger.error("[LiveActivity] end skipped — cannot derive push endpoint deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
             return
         }
         let now = Date()
@@ -265,12 +265,12 @@ extension MobileSyncService {
     /// Push a Live Activity payload to every registered aggregate-activity
     /// token (one per paired device).
     func pushToActivityTokens(payload: [String: Any]) {
-        guard let pushURL = Self.pushEndpointURL(from: relayURL) else {
-            logger.error("[LiveActivity] update skipped — cannot derive push endpoint from relay \(self.relayURL.absoluteString, privacy: .public)")
-            return
-        }
         var matched = 0
         for device in pairedDevices {
+            guard let pushURL = pushEndpointURL(for: device) else {
+                logger.error("[LiveActivity] update skipped — cannot derive push endpoint deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
+                continue
+            }
             for ref in (device.liveActivityTokens ?? []) {
                 matched += 1
                 logger.info("[LiveActivity] push → activity token activity=\(ref.activityID, privacy: .public) tokenPrefix=\(String(ref.token.prefix(12)), privacy: .public) deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
@@ -301,7 +301,7 @@ extension MobileSyncService {
         let jobCount = streamingSessionIDs.count
         lastWidgetJobCount = jobCount
         let devices = pairedDevices.filter { ($0.apnsToken?.isEmpty == false) }
-        guard !devices.isEmpty, let pushURL = Self.pushEndpointURL(from: relayURL) else { return }
+        guard !devices.isEmpty else { return }
         let usage = usageSnapshotProvider?()
         let snapshot = WidgetSnapshotPayload(
             jobs: jobCount,
@@ -313,6 +313,10 @@ extension MobileSyncService {
         )
         for device in devices {
             guard let token = device.apnsToken else { continue }
+            guard let pushURL = pushEndpointURL(for: device) else {
+                logger.error("[Push] widget push skipped — cannot derive push endpoint deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
+                continue
+            }
             Task {
                 await sendWidgetPush(snapshot, to: device, token: token, pushURL: pushURL)
             }
@@ -328,7 +332,8 @@ extension MobileSyncService {
         token: String,
         pushURL: URL
     ) async {
-        guard let peer = await client.peer(forHex: device.pubkeyHex) else {
+        let deviceClient = clientForDevice(device) ?? client
+        guard let peer = await deviceClient.peer(forHex: device.pubkeyHex) else {
             logger.error("[Push] widget push skipped — unknown peer deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
             return
         }
@@ -364,6 +369,9 @@ extension MobileSyncService {
             "apns_payload": apnsPayload,
         ]
         if let collapseID { bodyDict["collapse_id"] = collapseID }
+        if let environment = Self.apnsEnvironmentForPush(device) {
+            bodyDict["apns_environment"] = environment
+        }
         do {
             let httpBody = try JSONSerialization.data(withJSONObject: bodyDict)
             var request = URLRequest(url: pushURL)

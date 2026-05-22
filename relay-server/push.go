@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/sideshow/apns2"
 	"github.com/sideshow/apns2/token"
@@ -15,9 +16,18 @@ import (
 
 // PushSender wraps APNs HTTP/2 client.
 type PushSender struct {
-	client *apns2.Client
-	topic  string
+	developmentClient  *apns2.Client
+	productionClient   *apns2.Client
+	topic              string
+	defaultEnvironment APNSEnvironment
 }
+
+type APNSEnvironment string
+
+const (
+	apnsEnvironmentSandbox    APNSEnvironment = "sandbox"
+	apnsEnvironmentProduction APNSEnvironment = "production"
+)
 
 // NewPushSender loads the APNs auth key and prepares the HTTP/2 client.
 //
@@ -49,13 +59,16 @@ func NewPushSender(keyPath string, keyPEM []byte, keyID, teamID, topic string, p
 		KeyID:   keyID,
 		TeamID:  teamID,
 	}
-	client := apns2.NewTokenClient(tok)
+	defaultEnvironment := apnsEnvironmentSandbox
 	if production {
-		client = client.Production()
-	} else {
-		client = client.Development()
+		defaultEnvironment = apnsEnvironmentProduction
 	}
-	return &PushSender{client: client, topic: topic}, nil
+	return &PushSender{
+		developmentClient:  apns2.NewTokenClient(tok).Development(),
+		productionClient:   apns2.NewTokenClient(tok).Production(),
+		topic:              topic,
+		defaultEnvironment: defaultEnvironment,
+	}, nil
 }
 
 // Push delivery modes accepted by POST /push.
@@ -87,6 +100,12 @@ type PushRequest struct {
 	EncryptedAlertB64 string `json:"encrypted_alert,omitempty"`
 	Category          string `json:"category,omitempty"`
 	CollapseID        string `json:"collapse_id,omitempty"`
+	// APNSEnvironment selects the APNs endpoint for this device token. Accepted
+	// values are "sandbox" and "production". Empty falls back to the relay's
+	// APNS_PRODUCTION default for compatibility with older desktop builds.
+	APNSEnvironment string `json:"apns_environment,omitempty"`
+	// Environment is accepted as a compatibility alias for APNSEnvironment.
+	Environment string `json:"environment,omitempty"`
 	// PushType selects the delivery mode: "" / "alert", "liveactivity", or
 	// "background". Unknown values are rejected.
 	PushType string `json:"push_type,omitempty"`
@@ -131,6 +150,11 @@ func pushHandler(sender *PushSender) http.HandlerFunc {
 		if mode == "" {
 			mode = pushModeAlert
 		}
+		environment, err := sender.environmentForRequest(&req)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 
 		var notif *apns2.Notification
 		switch mode {
@@ -151,37 +175,66 @@ func pushHandler(sender *PushSender) http.HandlerFunc {
 
 		payloadBytes, _ := notif.Payload.([]byte)
 		log.Printf(
-			"apns push send: mode=%s device=%s category=%q collapse_id=%q payload_bytes=%d",
-			mode, short(req.DeviceToken), req.Category, req.CollapseID, len(payloadBytes),
+			"apns push send: mode=%s environment=%s device=%s category=%q collapse_id=%q payload_bytes=%d",
+			mode, environment, short(req.DeviceToken), req.Category, req.CollapseID, len(payloadBytes),
 		)
 
-		res, err := sender.client.Push(notif)
+		res, err := sender.clientForEnvironment(environment).Push(notif)
 		if err != nil {
 			log.Printf(
-				"apns push transport error: %v mode=%s device=%s category=%q",
-				err, mode, short(req.DeviceToken), req.Category,
+				"apns push transport error: %v mode=%s environment=%s device=%s category=%q",
+				err, mode, environment, short(req.DeviceToken), req.Category,
 			)
 			http.Error(w, "apns push failed", http.StatusBadGateway)
 			return
 		}
 		if res.Sent() {
 			log.Printf(
-				"apns push sent: mode=%s status=%d apns_id=%s device=%s",
-				mode, res.StatusCode, res.ApnsID, short(req.DeviceToken),
+				"apns push sent: mode=%s environment=%s status=%d apns_id=%s device=%s",
+				mode, environment, res.StatusCode, res.ApnsID, short(req.DeviceToken),
 			)
 		} else {
 			log.Printf(
-				"apns push rejected: mode=%s status=%d reason=%q apns_id=%s device=%s",
-				mode, res.StatusCode, res.Reason, res.ApnsID, short(req.DeviceToken),
+				"apns push rejected: mode=%s environment=%s status=%d reason=%q apns_id=%s device=%s",
+				mode, environment, res.StatusCode, res.Reason, res.ApnsID, short(req.DeviceToken),
 			)
 		}
 		resp := map[string]any{
-			"status_code": res.StatusCode,
-			"reason":      res.Reason,
-			"apns_id":     res.ApnsID,
+			"status_code":      res.StatusCode,
+			"reason":           res.Reason,
+			"apns_id":          res.ApnsID,
+			"apns_environment": string(environment),
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(resp)
+	}
+}
+
+func (s *PushSender) environmentForRequest(req *PushRequest) (APNSEnvironment, error) {
+	raw := req.APNSEnvironment
+	if raw == "" {
+		raw = req.Environment
+	}
+	return parseAPNSEnvironment(raw, s.defaultEnvironment)
+}
+
+func (s *PushSender) clientForEnvironment(environment APNSEnvironment) *apns2.Client {
+	if environment == apnsEnvironmentProduction {
+		return s.productionClient
+	}
+	return s.developmentClient
+}
+
+func parseAPNSEnvironment(raw string, fallback APNSEnvironment) (APNSEnvironment, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "":
+		return fallback, nil
+	case "sandbox", "development", "dev":
+		return apnsEnvironmentSandbox, nil
+	case "production", "prod", "release":
+		return apnsEnvironmentProduction, nil
+	default:
+		return "", fmt.Errorf("unknown apns_environment")
 	}
 }
 

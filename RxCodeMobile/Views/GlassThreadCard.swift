@@ -20,11 +20,15 @@ struct GlassThreadCard: View {
     }
     
     var body: some View {
+        // The UI-test identifier is applied directly on the button of each
+        // branch — applying it to an enclosing container does not reach the
+        // button element XCUITest queries.
         if usesNavigationLink {
             NavigationLink(value: session.id) {
                 cardContent
             }
             .buttonStyle(GlassCardButtonStyle(isSelected: isSelected))
+            .accessibilityIdentifier("thread-row-\(session.id)")
         } else {
             Button {
                 onSelect?()
@@ -32,6 +36,7 @@ struct GlassThreadCard: View {
                 cardContent
             }
             .buttonStyle(GlassCardButtonStyle(isSelected: isSelected))
+            .accessibilityIdentifier("thread-row-\(session.id)")
         }
     }
     

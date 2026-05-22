@@ -24,7 +24,7 @@ jobs:
 
   test-packages:
     name: swift test (Packages)
-    runs-on: self-hosted
+    runs-on: [self-hosted, regular]
 
     steps:
       - name: Checkout code
@@ -49,7 +49,7 @@ jobs:
 
   test-xcode:
     name: xcodebuild test (RxCode)
-    runs-on: self-hosted
+    runs-on: [self-hosted, regular]
 
     steps:
       - name: Checkout code
@@ -136,3 +136,83 @@ jobs:
             CODE_SIGNING_ALLOWED=YES \
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
             build | xcpretty
+
+  test-mobile:
+    name: xcodebuild test (RxCodeMobile UI - ${{ matrix.label }})
+    runs-on: [self-hosted, ui-tests]
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: iPhone
+            device-prefix: iPhone
+            test-plan: MobileUITestPlan-iPhone
+          - label: iPad
+            device-prefix: iPad
+            test-plan: MobileUITestPlan-iPad
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install xcpretty
+        run: gem install xcpretty
+
+      - name: Resolve simulator
+        id: sim
+        run: |
+          # Pick the first available simulator matching the device family, so
+          # the job survives Xcode bumping its bundled simulator models.
+          UDID=$(xcrun simctl list devices available --json | python3 -c "
+          import json, sys
+          devices = json.load(sys.stdin)['devices']
+          prefix = '${{ matrix.device-prefix }}'
+          for runtime in devices:
+              for d in devices[runtime]:
+                  if d['name'].startswith(prefix):
+                      print(d['udid']); sys.exit(0)
+          ")
+          if [ -z "$UDID" ]; then
+            echo "No '${{ matrix.device-prefix }}' simulator found. Available devices:"
+            xcrun simctl list devices available
+            exit 1
+          fi
+          echo "Using ${{ matrix.device-prefix }} simulator $UDID"
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare simulator
+        run: |
+          # Erase first: the app persists pairing in UserDefaults/Keychain, and
+          # a clean device guarantees the UI-test mock pairing path is taken.
+          xcrun simctl shutdown "${{ steps.sim.outputs.udid }}" || true
+          xcrun simctl erase "${{ steps.sim.outputs.udid }}"
+          xcrun simctl boot "${{ steps.sim.outputs.udid }}"
+          xcrun simctl bootstatus "${{ steps.sim.outputs.udid }}"
+
+      - name: Run UI tests
+        run: |
+          set -o pipefail && xcodebuild \
+            -project RxCode.xcodeproj \
+            -scheme RxCodeMobile \
+            -configuration Debug \
+            -testPlan ${{ matrix.test-plan }} \
+            -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}" \
+            -resultBundlePath "TestResults-${{ matrix.label }}.xcresult" \
+            -enableCodeCoverage NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            test | xcpretty
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-ui-test-results-${{ matrix.label }}
+          path: TestResults-${{ matrix.label }}.xcresult
+          retention-days: 14

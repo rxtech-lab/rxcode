@@ -265,6 +265,11 @@ struct MobileSettingsTab: View {
                         Label("Push", systemImage: "bell.fill")
                             .font(.caption)
                             .foregroundStyle(.green)
+                        if let environment = apnsEnvironmentLabel(for: device) {
+                            Text("• \(environment)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     } else {
                         Label("Live channel only", systemImage: "bell.slash")
                             .font(.caption)
@@ -352,6 +357,23 @@ struct MobileSettingsTab: View {
             return "Connect to the relay before sending a test notification."
         }
         return "Send a push notification to \(device.displayName)."
+    }
+
+    private func apnsEnvironmentLabel(for device: PairedDevice) -> String? {
+        guard let raw = device.apnsEnvironment?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased(),
+              !raw.isEmpty
+        else { return nil }
+
+        switch raw {
+        case "sandbox", "development", "dev", "debug":
+            return "Sandbox"
+        case "production", "prod", "release":
+            return "Production"
+        default:
+            return raw.capitalized
+        }
     }
 }
 

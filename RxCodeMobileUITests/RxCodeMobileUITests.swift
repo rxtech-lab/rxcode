@@ -1,41 +1,19 @@
-//
-//  RxCodeMobileUITests.swift
-//  RxCodeMobileUITests
-//
-//  Created by Qiwei Li on 5/19/26.
-//
-
 import XCTest
 
+/// Smoke test for the mock-server pipeline: confirms the app skips pairing,
+/// connects to the in-process mock relay, applies the snapshot, and reaches the
+/// main UI. Runs on any device idiom.
 final class RxCodeMobileUITests: XCTestCase {
 
-    override func setUpWithError() throws {
-        // Put setup code here. This method is called before the invocation of each test method in the class.
-
-        // In UI tests it is usually best to stop immediately when a failure occurs.
-        continueAfterFailure = false
-
-        // In UI tests it’s important to set the initial state - such as interface orientation - required for your tests before they run. The setUp method is a good place to do this.
-    }
-
-    override func tearDownWithError() throws {
-        // Put teardown code here. This method is called after the invocation of each test method in the class.
-    }
-
     @MainActor
-    func testExample() throws {
-        // UI tests must launch the application that they test.
-        let app = XCUIApplication()
-        app.launch()
+    func testLaunchesPastPairingIntoMainUI() throws {
+        let session = try UITestRunner.launch(.any, on: self)
 
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
-    }
-
-    @MainActor
-    func testLaunchPerformance() throws {
-        // This measures how long it takes to launch your application.
-        measure(metrics: [XCTApplicationLaunchMetric()]) {
-            XCUIApplication().launch()
-        }
+        // A fixture project name on screen proves the whole pipeline worked:
+        // launch args → skip pairing → mock relay handshake → snapshot applied.
+        XCTAssertTrue(
+            session.app.staticTexts["Project Alpha"].waitForExistence(timeout: 25),
+            "Main UI never appeared — the mock pairing/snapshot pipeline failed."
+        )
     }
 }

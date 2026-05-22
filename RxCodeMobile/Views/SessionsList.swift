@@ -121,6 +121,7 @@ struct SessionsList: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .animation(.spring(duration: 0.3), value: filtered.map(\.id))
+        .accessibilityIdentifier("thread-list-screen")
     }
 
     @ViewBuilder

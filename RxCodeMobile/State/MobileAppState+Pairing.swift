@@ -36,7 +36,8 @@ extension MobileAppState {
             mobilePubkeyHex: identity.publicKeyHex,
             displayName: displayName,
             platform: UIDevice.current.userInterfaceIdiom == .pad ? "iPadOS" : "iOS",
-            appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+            appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0",
+            apnsEnvironment: Self.currentAPNsEnvironment
         )
         do {
             logger.info("sending pair request via relay=\(self.relayURL.absoluteString, privacy: .public)")
@@ -115,3 +116,28 @@ extension MobileAppState {
         }
     }
 }
+
+#if DEBUG
+extension MobileAppState {
+    /// Injects a synthetic paired desktop matching the UI-test mock relay
+    /// server, so `RootView` shows the main UI instead of `OnboardingView` and
+    /// the app syncs against the mock. No-op unless launched with `-uitest-mock`.
+    /// Called at the end of `init()` after `loadPairedDesktops()`.
+    func applyUITestPairingIfNeeded() {
+        guard UITestSupport.isActive,
+              let desktopHex = UITestSupport.desktopPubkeyHex,
+              !desktopHex.isEmpty else { return }
+        let desktop = PairedDesktop(
+            pubkeyHex: desktopHex,
+            displayName: "Mock Desktop",
+            pairedAt: .now,
+            lastSeen: .now,
+            relayURL: relayURL.absoluteString
+        )
+        pairedDesktops = [desktop]
+        setActiveDesktop(pubkeyHex: desktopHex)
+        savePairedDesktops()
+        logger.info("[UITest] injected mock pairing desktopKey=\(String(desktopHex.prefix(12)), privacy: .public) relay=\(self.relayURL.absoluteString, privacy: .public)")
+    }
+}
+#endif

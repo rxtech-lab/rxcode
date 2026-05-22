@@ -689,7 +689,6 @@ extension MobileAppState {
         return state
     }
 }
-#endif
 
 #Preview("Sessions List") {
     let state = MobileAppState.preview
@@ -731,3 +730,4 @@ extension MobileAppState {
     }
     .environmentObject(state)
 }
+#endif

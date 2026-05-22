@@ -1,0 +1,30 @@
+{
+  "configurations" : [
+    {
+      "id" : "B1A2C3D4-0002-0002-0002-000000000002",
+      "name" : "iPad UI",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "codeCoverage" : false,
+    "testTimeoutsEnabled" : true
+  },
+  "testTargets" : [
+    {
+      "selectedTests" : [
+        "RxCodeMobileUITests\/testLaunchesPastPairingIntoMainUI()",
+        "iPadNavigationUITests\/testBriefingSplitKeepsListVisible()",
+        "iPadNavigationUITests\/testProjectsSplitKeepsThreadListVisible()"
+      ],
+      "target" : {
+        "containerPath" : "container:RxCode.xcodeproj",
+        "identifier" : "DF230B682FBC7368008929A6",
+        "name" : "RxCodeMobileUITests"
+      }
+    }
+  ],
+  "version" : 1
+}

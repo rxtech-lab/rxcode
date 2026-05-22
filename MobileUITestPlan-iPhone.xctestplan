@@ -1,0 +1,30 @@
+{
+  "configurations" : [
+    {
+      "id" : "B1A2C3D4-0001-0001-0001-000000000001",
+      "name" : "iPhone UI",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "codeCoverage" : false,
+    "testTimeoutsEnabled" : true
+  },
+  "testTargets" : [
+    {
+      "selectedTests" : [
+        "RxCodeMobileUITests\/testLaunchesPastPairingIntoMainUI()",
+        "iPhoneNavigationUITests\/testBriefingFlowReturnsToDetailAfterBack()",
+        "iPhoneNavigationUITests\/testProjectsFlowReturnsToThreadListAfterBack()"
+      ],
+      "target" : {
+        "containerPath" : "container:RxCode.xcodeproj",
+        "identifier" : "DF230B682FBC7368008929A6",
+        "name" : "RxCodeMobileUITests"
+      }
+    }
+  ],
+  "version" : 1
+}

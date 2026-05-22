@@ -376,12 +376,16 @@ private struct GlassProjectCard: View {
     var onSelect: (() -> Void)?
 
     var body: some View {
+        // The UI-test identifier is applied directly on the button of each
+        // branch — applying it to an enclosing container does not reach the
+        // button element XCUITest queries.
         if usesNavigationLink {
             NavigationLink(value: project.id) {
                 cardContent
             }
             .buttonStyle(GlassProjectCardButtonStyle(isSelected: isSelected))
             .glassEffectID(project.id.uuidString, in: namespace)
+            .accessibilityIdentifier("project-row-\(project.id.uuidString)")
         } else {
             Button {
                 onSelect?()
@@ -390,6 +394,7 @@ private struct GlassProjectCard: View {
             }
             .buttonStyle(GlassProjectCardButtonStyle(isSelected: isSelected))
             .glassEffectID(project.id.uuidString, in: namespace)
+            .accessibilityIdentifier("project-row-\(project.id.uuidString)")
         }
     }
 

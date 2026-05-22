@@ -221,27 +221,41 @@ final class MobileAppState: ObservableObject {
     }
 
     init() {
+        // UI-test seam: rewrites the relay URL and clears stale pairing before
+        // the reads below. No-op outside Debug builds / UI-test launches.
+        UITestSupport.applyDefaultsOverrides()
         let stored = UserDefaults.standard.string(forKey: "mobileSync.relayURL")
         let initial = URL(string: stored ?? Self.defaultRelayURLString)
             ?? URL(string: Self.defaultRelayURLString)!
         self.relayURL = initial
-        do {
-            // Shared access group lets the Notification Service Extension
-            // read the private key for decrypting APNs alerts. The bare group
-            // suffix is matched against the (already-expanded) entitlement —
-            // never pass the literal `$(AppIdentifierPrefix)…` here, that's a
-            // build-time substitution and is meaningless at runtime.
-            self.identity = try DeviceIdentity.loadOrCreate(
-                accessGroup: Self.keychainAccessGroup
-            )
-        } catch {
-            Logger(subsystem: "com.idealapp.RxCodeMobile", category: "MobileAppState")
-                .error("[MobileIdentity] load failed accessGroup=\(Self.keychainAccessGroup, privacy: .public): \(error.localizedDescription, privacy: .public)")
-            fatalError("Failed to load mobile device identity: \(error)")
+        if UITestSupport.isActive {
+            // UI tests run an unsigned build, where the shared Keychain access
+            // group is unavailable and `loadOrCreate` would trap. The mock
+            // relay learns the mobile public key from each envelope, so an
+            // ephemeral per-launch identity is sufficient and skips the Keychain.
+            self.identity = DeviceIdentity(privateKey: Curve25519.KeyAgreement.PrivateKey())
+        } else {
+            do {
+                // Shared access group lets the Notification Service Extension
+                // read the private key for decrypting APNs alerts. The bare
+                // group suffix is matched against the (already-expanded)
+                // entitlement — never pass the literal `$(AppIdentifierPrefix)…`
+                // here, that's a build-time substitution, meaningless at runtime.
+                self.identity = try DeviceIdentity.loadOrCreate(
+                    accessGroup: Self.keychainAccessGroup
+                )
+            } catch {
+                Logger(subsystem: "com.idealapp.RxCodeMobile", category: "MobileAppState")
+                    .error("[MobileIdentity] load failed accessGroup=\(Self.keychainAccessGroup, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                fatalError("Failed to load mobile device identity: \(error)")
+            }
         }
         self.client = SyncClient(identity: identity, relayURL: initial)
         logger.info("[MobileIdentity] loaded publicKey=\(String(self.identity.publicKeyHex.prefix(12)), privacy: .public) accessGroup=\(Self.keychainAccessGroup, privacy: .public)")
         loadPairedDesktops()
+        #if DEBUG
+        applyUITestPairingIfNeeded()
+        #endif
     }
 
     /// Bare suffix as declared (post-`$(AppIdentifierPrefix)`) in

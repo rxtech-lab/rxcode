@@ -402,7 +402,10 @@ struct MobileChatView: View {
                     .coordinateSpace(.named(chatContentCoordinateSpace))
                     .environment(\.chatTrackedMessageID, trackedUserMessageID)
                     .environment(\.chatTrackedMessageGeometry, updateLatestUserMinY)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("chat-message-list")
                 }
+                .accessibilityIdentifier("chat-screen")
                 .mobileDismissesKeyboardOnScroll(.interactively)
                 .onGeometryChange(for: CGRect.self) { proxy in
                     proxy.frame(in: .global)

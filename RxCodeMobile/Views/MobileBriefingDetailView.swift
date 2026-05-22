@@ -20,6 +20,7 @@ struct MobileBriefingDetailView: View {
             .padding(.vertical, 20)
         }
         .scrollContentBackground(.hidden)
+        .accessibilityIdentifier("briefing-detail-screen")
         .navigationTitle(projectName)
         .navigationBarTitleDisplayMode(.inline)
         .refreshable {
@@ -176,6 +177,7 @@ struct MobileBriefingDetailView: View {
                                 ThreadCard(thread: thread, namespace: glassNamespace)
                             }
                             .buttonStyle(.plain)
+                            .accessibilityIdentifier("briefing-thread-row-\(thread.sessionId)")
                         }
                     }
                 }

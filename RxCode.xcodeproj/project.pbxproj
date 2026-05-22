@@ -117,6 +117,8 @@
 		DF230B692FBC7368008929A6 /* RxCodeMobileUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RxCodeMobileUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		DF230BAB2FBC9001008929A6 /* RxCodeMobileNotificationService.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RxCodeMobileNotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		DF23F7352FB8C3EC008929A6 /* icon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = icon.icon; sourceTree = "<group>"; };
+		DF5B0DDA2FC023BE000CE36F /* MobileUITestPlan-iPhone.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = "MobileUITestPlan-iPhone.xctestplan"; sourceTree = "<group>"; };
+		DF5B0DDC2FC023C8000CE36F /* MobileUITestPlan-iPad.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = "MobileUITestPlan-iPad.xctestplan"; sourceTree = "<group>"; };
 		DFA0CCC02FB4CC01005991E1 /* PlanDecisionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlanDecisionTests.swift; sourceTree = "<group>"; };
 		DFA0CCC12FB4CC01005991E1 /* PlanCardViewTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlanCardViewTests.swift; sourceTree = "<group>"; };
 		DFA0CCD52FB4CC02005991E1 /* HistoryListArchiveFilterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HistoryListArchiveFilterTests.swift; sourceTree = "<group>"; };
@@ -321,6 +323,8 @@
 			isa = PBXGroup;
 			children = (
 				DF23F7352FB8C3EC008929A6 /* icon.icon */,
+				DF5B0DDC2FC023C8000CE36F /* MobileUITestPlan-iPad.xctestplan */,
+				DF5B0DDA2FC023BE000CE36F /* MobileUITestPlan-iPhone.xctestplan */,
 				DF06DCC62FB8552B005991E1 /* UnitTestPlan.xctestplan */,
 				6E17B00D2FC8000100A10001 /* UITestplan.xctestplan */,
 				E673353A2F7356F600FD26C7 /* RxCode */,

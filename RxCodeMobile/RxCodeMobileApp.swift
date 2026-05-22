@@ -15,6 +15,11 @@ struct RxCodeMobileApp: App {
             .displayFrequency(.immediate),
             .datastoreLocation(.applicationDefault),
         ])
+        // Suppress TipKit popovers during UI tests — they overlay the UI and
+        // intercept taps. No-op outside a UI-test launch.
+        if UITestSupport.isActive {
+            Tips.hideAllTipsForTesting()
+        }
     }
 
     var body: some Scene {

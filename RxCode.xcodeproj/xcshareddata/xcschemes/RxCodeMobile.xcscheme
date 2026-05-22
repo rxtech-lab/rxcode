@@ -28,30 +28,15 @@
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES">
-      <Testables>
-         <TestableReference
-            skipped = "NO"
-            parallelizable = "YES">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "DF230B5E2FBC7368008929A6"
-               BuildableName = "RxCodeMobileTests.xctest"
-               BlueprintName = "RxCodeMobileTests"
-               ReferencedContainer = "container:RxCode.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
-         <TestableReference
-            skipped = "NO"
-            parallelizable = "YES">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "DF230B682FBC7368008929A6"
-               BuildableName = "RxCodeMobileUITests.xctest"
-               BlueprintName = "RxCodeMobileUITests"
-               ReferencedContainer = "container:RxCode.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
-      </Testables>
+      <TestPlans>
+         <TestPlanReference
+            reference = "container:MobileUITestPlan-iPhone.xctestplan"
+            default = "YES">
+         </TestPlanReference>
+         <TestPlanReference
+            reference = "container:MobileUITestPlan-iPad.xctestplan">
+         </TestPlanReference>
+      </TestPlans>
    </TestAction>
    <LaunchAction
       buildConfiguration = "Debug"

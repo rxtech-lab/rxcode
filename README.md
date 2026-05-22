@@ -1,156 +1,169 @@
 # RxCode
 
-**The terminal was for the few. RxCode is for everyone.**
+**A native macOS command center for AI coding agents.**
 
-RxCode is a lightweight native macOS desktop client for Claude Code, Codex, and Agent Client Protocol (ACP) clients such as Gemini CLI and OpenCode. It brings the CLI agent workflow into a project-centric GUI with streaming chat, repository switching, file browsing, Git status, permissions, terminal access, and per-project notes.
+RxCode brings Claude Code, Codex, and Agent Client Protocol (ACP) clients into one SwiftUI workspace. It keeps the real agent runtimes underneath, but gives them a project-first desktop UI with streaming chat, permission approvals, Git context, run commands, natural-language search, mobile sync, and briefing views.
 
-![Platform](https://img.shields.io/badge/platform-macOS%2015.0%2B-blue)
+![Platform](https://img.shields.io/badge/platform-macOS%2026.0%2B-blue)
 ![Swift](https://img.shields.io/badge/Swift-6.x-orange)
-![Version](https://img.shields.io/badge/version-1.2.0-blue)
 ![License](https://img.shields.io/badge/license-Apache%202.0-green)
 
----
+<p align="center">
+  <img src="website/public/screenshot/screenshot1.png" alt="RxCode showing an active coding session with a diff and streaming response" width="900">
+</p>
+
+## Why RxCode
+
+AI coding agents are powerful, but their best workflows are still scattered across terminal sessions, editor windows, branch checkouts, and chat history. RxCode keeps those pieces in one native Mac app:
+
+- Choose Claude Code, Codex, or an ACP client per session.
+- Run commands and project tasks without leaving the editor.
+- Work with multiple agents at the same time, backed by Git worktrees.
+- Search all sessions with natural language.
+- Let Apple's Foundation Model handle lightweight local summarization tasks when available.
+- Review what changed through a persistent briefing and change-tracking panel.
+- Pair RxCode Mobile through end-to-end encrypted sync.
 
 ## Screenshots
 
-![RxCode Screenshot](docs/screenshot.png)
+| Workspace | Native macOS UI |
+| --- | --- |
+| <img src="website/public/screenshot/screenshot1.png" alt="Active RxCode coding session" width="430"> | <img src="website/public/screenshot/screenshot2.png" alt="RxCode native macOS workspace" width="430"> |
 
----
+| ACP clients | Run commands |
+| --- | --- |
+| <img src="website/public/screenshot/acp1.png" alt="RxCode ACP client session" width="430"> | <img src="website/public/screenshot/run-profile.png" alt="RxCode run profile controls and command output" width="430"> |
 
-## Why RxCode?
+| Open in editor | Track changes |
+| --- | --- |
+| <img src="website/public/screenshot/openineditor.png" alt="RxCode editor menu with Cursor, VS Code, Zed, Xcode, Finder, Terminal, and Warp" width="240"> | <img src="website/public/screenshot/changes-track.png" alt="RxCode thread change-tracking panel" width="430"> |
 
-The terminal is a wall. For most people who aren't developers, it's a closed door — install a CLI, generate SSH keys, approve every tool call without a real preview of what it's about to do. None of that is hard for engineers; all of it is hard for everyone else. The terminal was for the few, and it still is.
+## Agent Runtime Support
 
-RxCode was built so my non-developer coworkers could use Claude Code, Codex, and ACP-compatible clients without learning a shell first. It doesn't reinvent the agent. It talks to the real runtimes underneath: `claude` for Claude Code, the Codex app-server through the `codex` CLI for Codex sessions, and ACP clients installed from the public registry. Your existing CLI setup stays the source of truth when you bring your own runtime. What sits on top is a native Mac app:
+RxCode supports both first-party CLI agents and ACP-compatible runtimes:
 
-- Approval modals that surface the actual diff before any tool runs, with risk-aware Allow / Allow Session / Deny options.
-- Per-project windows you can run in parallel — switch tabs, double-click to spin off a window, keep streams alive in the background.
-- Drag-and-drop attachments, smart paste for images, file paths, URLs, and long text.
-- GitHub OAuth that handles SSH key setup for you, so `git clone` just works.
-- An inspector with a file tree, Git status, embedded terminal, and a per-project memo pad.
+- **Claude Code**: stream chats, approve tools, inspect diffs, and keep Claude Code sessions attached to project history.
+- **Codex**: run Codex in the same workspace with model, effort, permission, and usage controls.
+- **OpenCode and more ACP clients**: install and run compatible clients such as OpenCode, Gemini CLI, and other registry agents.
+- **Cursor and editor handoff**: open projects and files in Cursor, VS Code, Zed, Xcode, JetBrains IDEs, Finder, Terminal, or Warp.
 
-Same agents, no terminal required.
+<p align="center">
+  <img src="website/public/screenshot/acp2.png" alt="RxCode Settings window showing ACP client registry installation" width="760">
+</p>
 
----
+## Run Commands Inside RxCode
 
-## What RxCode Adds
+Run profiles let you keep repeatable project commands close to the chat. Define build, test, dev-server, or custom shell tasks, launch them from the toolbar, and inspect output inside RxCode instead of switching to a separate terminal.
 
-| RxCode feature | Why it matters |
-|---------------|----------------|
-| **Native macOS app** | Built with SwiftUI, not Electron. The current v1.2.0 release is about 5.6 MB to download and about 13 MB unpacked, without bundling a browser runtime. |
-| **Claude Code, Codex, and ACP support** | Choose the agent runtime per session. RxCode detects installed `claude` and `codex` binaries, surfaces available models, and also runs ACP-compatible clients such as Gemini CLI and OpenCode. |
-| **ACP registry installer** | Browse the public ACP registry from Settings, install compatible clients directly, and add registry agents to the chat model picker without manual setup. |
-| **Project-centric workspace** | Register multiple local repositories, switch between them from project tabs, or open a project in its own window for parallel sessions. In-progress streams keep running in the background while you switch. |
-| **Custom slash commands** | Add, edit, disable, import, and export custom slash commands. Built-in commands can be edited locally, while JSON import/export stays custom-only. |
-| **Shortcut buttons** | Create quick buttons for prompts or terminal commands you run repeatedly. Terminal-command shortcuts can launch directly into RxCode's interactive terminal popup. |
-| **Built-in file explorer with Git status** | Browse and search project files, toggle hidden files, preview or edit files, inspect Git status, and switch branches from the sidebar. |
-| **Rich-text memo pad per project** | Keep project-specific notes in the inspector panel with headings, lists, checkboxes, links, and Markdown copy/paste support. |
-| **Embedded terminal** | Use a SwiftTerm-based terminal in the inspector, plus interactive terminal popups for commands such as `/config`, `/permissions`, and `/model`. |
+The app also includes a SwiftTerm-powered terminal for interactive work, slash-command flows, and quick command shortcuts.
 
----
+## Concurrent Chatting With Git Worktrees
 
-## Features
+RxCode is built for parallel agent work. You can open multiple project windows, keep streams running in the background, and attach sessions to Git worktrees so each agent can work on an isolated branch.
+
+That makes it practical to ask one agent to update UI, another to fix tests, and another to inspect implementation details while the main repository stays readable.
+
+## Natural-Language Global Search
+
+Use the global search overlay to find prior agent work by meaning, not only by exact text. RxCode indexes local thread history on device, ranks results semantically, and can surface matching snippets from archived and active sessions.
+
+## Local Lightweight AI With Apple Foundation Model
+
+When Apple's Foundation Model is available, RxCode can use the local LLM for lightweight tasks such as session titles, response summaries, notification summaries, and commit-message suggestions. Larger coding turns still run through the selected agent runtime.
+
+## Briefing And Change Tracking
+
+The briefing section keeps you oriented when several sessions are moving at once. It summarizes what changed, keeps branch-level context visible, and pairs with the thread change panel so you can see files, additions, deletions, and session outcomes without reopening every chat.
+
+<p align="center">
+  <img src="website/public/screenshot/changes-track.png" alt="RxCode thread review panel listing files changed by an agent session" width="520">
+</p>
+
+## Mobile App
+
+RxCode Mobile mirrors the desktop workspace over an end-to-end encrypted sync channel and is designed to support the same core workflows as the desktop app. From your phone you can browse projects, search threads, start or follow agent sessions, review briefings, manage synced desktop context, and preview a website running on the host machine through the in-app browser.
+
+| Projects | Search | New session |
+| --- | --- | --- |
+| <img src="website/public/screenshot/mobile-screenshot-1.PNG" alt="RxCode Mobile projects list" width="190"> | <img src="website/public/screenshot/mobile-screenshot-2.PNG" alt="RxCode Mobile natural-language thread search" width="190"> | <img src="website/public/screenshot/mobile-screenshot-3.PNG" alt="RxCode Mobile starting a new agent thread" width="190"> |
+
+| Live chat | Host preview | Briefing |
+| --- | --- | --- |
+| <img src="website/public/screenshot/mobile-screenshot-4.PNG" alt="RxCode Mobile live agent conversation" width="190"> | <img src="website/public/screenshot/mobile-screenshot-6.png" alt="RxCode Mobile in-app browser previewing a host website" width="190"> | <img src="website/public/screenshot/mobile-screenshot-5.PNG" alt="RxCode Mobile briefing view" width="190"> |
+
+## Coming Soon: RxCoding Agent
+
+RxCoding Agent is a planned UI-first coding agent built purely in Swift. It will use the endpoint you provide to code through RxCode's native interface, while keeping the app's project browser, permission flow, run profiles, briefings, and mobile sync as the control surface.
+
+## More Features
 
 | Feature | Description |
-|---------|-------------|
-| **Streaming Chat** | Real-time Claude Code, Codex, and ACP client conversations with Markdown rendering, tool call visualization, diff views, and error bubbles for failed empty responses. |
-| **Multi-Project Workspace** | Register local folders or GitHub repositories, switch freely, and keep per-project session history. |
-| **Dedicated Project Windows** | Double-click a project tab to open it in an independent window and work across multiple repositories at once. |
-| **Per-Session Controls** | Choose model, permission mode, and effort level per session from the chat toolbar. Defaults are configurable in Settings. |
-| **Permission Modes** | Ask, Accept Edits, Plan, Auto, and Bypass modes mirror Claude Code's permission model and can be changed from the toolbar. |
-| **Permission Management** | Risk-based approve/deny UI with Allow, Allow Session, Deny, and 5-minute auto-deny handling. |
-| **Effort Levels** | Auto, Low, Medium, High, XHigh, and Max reasoning controls for each session. |
-| **Model Selection** | Claude Code aliases, Codex models, and ACP-advertised models with localized descriptions, including Opus, Sonnet, Haiku, 1M context, plan variants, GPT coding models, and client-provided model lists. |
-| **File Attachments** | Drag-and-drop files and images. Smart paste detects images, file paths, URLs, and long text. |
-| **Attachment Auto-Preview Settings** | Toggle automatic preview chips separately for URLs, file paths, images, and long text. |
-| **Slash Commands** | Built-in and custom command system with built-in command edits/toggles and custom-command JSON import/export. |
-| **Shortcut Buttons** | Configurable quick-access buttons for frequent prompts and terminal commands. |
-| **Message Queue** | Queue messages while Claude is responding; cancel queued items with ESC or the remove button. |
-| **Status Line** | Project path, model, 5-hour and 7-day rate limits, context usage, and response time at a glance. |
-| **Built-in Terminal** | SwiftTerm-powered inspector terminal with reset support, plus full interactive terminal sheets. |
-| **File Explorer** | Project file tree with search, hidden-file toggle, syntax-highlighted preview, file editing, and `@path` insertion. |
-| **Git Status** | Sidebar Git status summary with changed-file counts, branch display, and local/remote branch switching. |
-| **GitHub Integration** | OAuth device flow, Keychain token storage, SSH key management, repository browsing, and cloning. |
-| **Memo Panel** | Per-project rich-text memo pad with headings, lists, checkboxes, links, and persistent storage. |
-| **Skill Marketplace** | Browse and install OpenAI Agent Skills and compatible skill catalogs from Settings, refreshed with a 5-minute cache and enabled for supported coding agents. |
-| **Themes and Font Controls** | Six accent themes plus independent font size controls for the interface and message area. |
-| **Focus Mode** | Optional focused chat layout that can be enabled from Settings. |
-| **Notifications** | Optional system notifications with response previews while RxCode is in the background. |
-| **Localization** | Full English and Korean UI. |
-| **User Guide** | Built-in in-app help guide accessible from the toolbar and Settings. |
-| **Auto-update** | Sparkle-based update checking on launch, with manual checks from the app menu. |
+| --- | --- |
+| **Permission approvals** | Risk-aware approvals for tool calls, with diff previews where available. |
+| **MCP configuration** | Configure MCP servers for supported agents from Settings. |
+| **GitHub integration** | OAuth device flow, Keychain token storage, SSH key management, repository browsing, and cloning. |
+| **File explorer** | Browse files, preview content, edit files, inspect Git status, and insert paths into prompts. |
+| **Session controls** | Choose agent, model, effort, and permission mode per session. |
+| **Menu bar status** | Monitor active work and Claude Code or Codex usage without opening the main window. |
+| **Shortcut buttons** | Save frequent prompts and terminal commands as one-click actions. |
+| **Skill marketplace** | Browse and install compatible coding-agent skills from Settings. |
+| **Themes and fonts** | Customize accent themes and interface or message font sizes. |
 
----
+<p align="center">
+  <img src="website/public/screenshot/mcp.png" alt="RxCode Settings window showing MCP server configuration" width="430">
+  <img src="website/public/screenshot/menubar.png" alt="RxCode menu bar extra showing usage and session progress" width="300">
+</p>
 
 ## Requirements
 
-- **macOS 26.0** or later
-- At least one supported agent runtime installed and authenticated:
-  - **[Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code)**
-  - **Codex CLI**
-  - **ACP-compatible clients**, installed from Settings -> ACP Clients -> Registry or configured externally
-- **Xcode with Swift 6.2+ toolchain** for building the current source tree
-
----
+- macOS 26.0 or later
+- At least one supported agent runtime:
+  - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code)
+  - Codex CLI
+  - An ACP-compatible client installed from Settings or configured externally
+- Xcode with the Swift 6.2+ toolchain to build from source
 
 ## Installation
 
-1. Download the latest `RxCode-x.y.z.zip` from the [Releases](https://github.com/ttnear/RxCode/releases) page.
-2. Unzip and move `RxCode.app` to your `Applications` folder.
-3. Launch `RxCode.app`.
+1. Download the latest RxCode release from [GitHub Releases](https://github.com/rxtech-lab/rxcode/releases).
+2. Move `RxCode.app` to `Applications`.
+3. Launch RxCode and connect your agent runtimes from Settings.
 
-### First Launch on macOS 26
+If macOS blocks the first launch, open **System Settings -> Privacy & Security** and choose **Open Anyway** for `RxCode.app`.
 
-macOS 26 blocks the first launch of any downloaded app, even notarized ones, and routes approval through System Settings instead of the old right-click -> Open flow.
+## Build From Source
 
-When you see **"Apple could not verify 'RxCode.app' is free of malware..."**:
-
-1. Click **Done** on the dialog.
-2. Open **System Settings -> Privacy & Security**.
-3. Scroll to the Security section and click **Open Anyway** next to `RxCode.app`.
-4. Confirm with your password or Touch ID.
-
-After this one-time approval, RxCode launches normally. The app is signed with a Developer ID certificate and notarized by Apple. This prompt is standard macOS behavior, not a security warning specific to RxCode.
-
----
-
-## Build from Source
+Open the project in Xcode:
 
 ```bash
 open RxCode.xcodeproj
 ```
 
-For a CLI build:
+Build from the command line:
 
 ```bash
 xcodebuild -project RxCode.xcodeproj -scheme RxCode -configuration Debug build
 ```
 
-For tests:
+Create a release build:
 
 ```bash
-xcodebuild test -project RxCode.xcodeproj -scheme RxCode -destination 'platform=macOS'
-swift test --package-path Packages
+xcodebuild -project RxCode.xcodeproj -scheme RxCode -configuration Release build
 ```
-
-For a signed release ZIP, use the release scripts under `scripts/`.
-
----
 
 ## Project Structure
 
 | Path | Purpose |
-|------|---------|
-| `RxCode/` | macOS app target: app entry point, views, services, resources, and integrations. |
-| `Packages/Sources/RxCodeCore/` | Shared models, theme, utilities, Git helpers, and pure core logic. |
+| --- | --- |
+| `RxCode/` | macOS app target with SwiftUI views, services, resources, and integrations. |
+| `Packages/Sources/RxCodeCore/` | Shared models, theme, utilities, sync protocol, and core logic. |
 | `Packages/Sources/RxCodeChatKit/` | Reusable chat UI, message rendering, input bar, slash commands, shortcuts, diffs, and status line. |
+| `RxCodeWidget/` | Widget and Live Activity surfaces for active work and usage. |
 | `RxCodeTests/` | App-level XCTest coverage. |
-| `Packages/Tests/` | Swift Testing coverage for core utilities. |
-| `release_notes/` | Human-readable release notes used for publishing. |
+| `Packages/Tests/` | Swift package tests. |
+| `website/` | Public website and screenshot assets used by this README. |
 | `scripts/` | Build, notarization, Sparkle signing, and release automation. |
-
----
 
 ## License
 
-Apache License 2.0. See the [LICENSE](LICENSE) file for details.
+Apache License 2.0. See [LICENSE](LICENSE) for details.

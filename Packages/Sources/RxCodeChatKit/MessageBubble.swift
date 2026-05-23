@@ -296,10 +296,11 @@ struct MessageBubble: View {
     // MARK: - Assistant Text Bubble
 
     private func assistantTextBubble(text: String, blockId: String, showsCursor: Bool) -> some View {
-        MarkdownContentView(
+        StreamingFadeInMarkdownContent(
             text: text,
             showsTrailingCursor: showsCursor,
-            isCursorVisible: cursorVisible
+            isCursorVisible: cursorVisible,
+            isStreaming: message.isStreaming
         )
         .frame(maxWidth: .infinity, alignment: .leading)
         .foregroundStyle(ClaudeTheme.textPrimary)
@@ -320,6 +321,104 @@ struct MessageBubble: View {
         }
         .onHover { hoveredBlockId = $0 ? blockId : nil }
         .accessibilityLabel("Assistant: \(text)")
+    }
+
+    private struct StreamingFadeInMarkdownContent: View {
+        let text: String
+        let showsTrailingCursor: Bool
+        let isCursorVisible: Bool
+        let isStreaming: Bool
+
+        private static let fadeDuration: TimeInterval = 0.35
+
+        @State private var committedText: String
+        @State private var fadingText: String?
+        @State private var fadingOpacity: Double = 1
+        @State private var fadeTask: Task<Void, Never>?
+
+        init(text: String, showsTrailingCursor: Bool, isCursorVisible: Bool, isStreaming: Bool) {
+            self.text = text
+            self.showsTrailingCursor = showsTrailingCursor
+            self.isCursorVisible = isCursorVisible
+            self.isStreaming = isStreaming
+            _committedText = State(initialValue: text)
+        }
+
+        var body: some View {
+            content
+            .onChange(of: text) { _, newText in
+                guard newText != currentText else { return }
+                if isStreaming {
+                    fadeIn(newText)
+                } else {
+                    fadeTask?.cancel()
+                    committedText = newText
+                    fadingText = nil
+                    fadingOpacity = 1
+                }
+            }
+            .onChange(of: isStreaming) { _, streaming in
+                guard !streaming else { return }
+                fadeTask?.cancel()
+                committedText = text
+                fadingText = nil
+                fadingOpacity = 1
+            }
+            .onDisappear {
+                fadeTask?.cancel()
+            }
+        }
+
+        @ViewBuilder
+        private var content: some View {
+            if let fadingText {
+                ZStack(alignment: .topLeading) {
+                    MarkdownContentView(
+                        text: fadingText,
+                        showsTrailingCursor: showsTrailingCursor,
+                        isCursorVisible: isCursorVisible
+                    )
+                    .opacity(fadingOpacity)
+
+                    MarkdownContentView(
+                        text: committedText,
+                        showsTrailingCursor: false,
+                        isCursorVisible: false
+                    )
+                }
+            } else {
+                MarkdownContentView(
+                    text: committedText,
+                    showsTrailingCursor: showsTrailingCursor,
+                    isCursorVisible: isCursorVisible
+                )
+            }
+        }
+
+        private var currentText: String {
+            fadingText ?? committedText
+        }
+
+        private func fadeIn(_ newText: String) {
+            fadeTask?.cancel()
+            committedText = currentText
+            fadingText = newText
+            fadingOpacity = 0
+            fadeTask = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(16))
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeOut(duration: Self.fadeDuration)) {
+                    fadingOpacity = 1
+                }
+                try? await Task.sleep(for: .milliseconds(Int(Self.fadeDuration * 1_000)))
+                guard !Task.isCancelled, fadingText == newText else { return }
+                withTransaction(Transaction(animation: nil)) {
+                    committedText = newText
+                    fadingText = nil
+                    fadingOpacity = 1
+                }
+            }
+        }
     }
 
     private func streamingCursorBlockId(in renderBlocks: [AssistantRenderBlock]) -> String? {

@@ -36,7 +36,11 @@ struct MobileAppRobot {
     // MARK: - Chat
 
     var chatScreen: XCUIElement { element(id: "chat-screen") }
-    var chatMessageList: XCUIElement { element(id: "chat-message-list") }
+    var anyTranscriptMessage: XCUIElement {
+        app.staticTexts
+            .matching(NSPredicate(format: "label CONTAINS %@", "Assistant reply inside"))
+            .firstMatch
+    }
 
     // MARK: - Queries
 
@@ -151,13 +155,8 @@ struct MobileAppRobot {
             file: file, line: line
         )
         XCTAssertTrue(
-            chatMessageList.waitForExistence(timeout: timeout),
-            "Message list was not shown",
-            file: file, line: line
-        )
-        XCTAssertGreaterThan(
-            chatMessageList.staticTexts.count, 0,
-            "Message list rendered no text",
+            anyTranscriptMessage.waitForExistence(timeout: timeout),
+            "Transcript message was not shown",
             file: file, line: line
         )
     }

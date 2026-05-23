@@ -43,20 +43,21 @@ struct MessageListView: View {
     @State private var pendingIndicatorSpacerReduction: CGFloat = 0
     @State private var activeTurnMaxMeasuredHeight: CGFloat = 0
     @State private var lastBottomScrollDate = Date.distantPast
+    @State private var shouldScrollToBottom = false
+    @State private var isAtBottom = true
+    @State private var scrollRequestTask: Task<Void, Never>?
 
     private static let log = Logger(subsystem: "com.claudework", category: "MessageListView")
     private static let bottomAnchorID = "message-list-bottom-anchor"
     private static let endOfScreenAnchorID = "message-list-end-of-screen"
     private static let userScrollDownDelta: CGFloat = 4
     private static let streamingIndicatorEstimatedHeight: CGFloat = 36
-    private static let contentGrowthBottomScrollInterval: TimeInterval = 2
+    private static let contentGrowthBottomScrollInterval: TimeInterval = 1
     private static let pinToTopAnimationDuration: Duration = .milliseconds(320)
     private static let pinToTopAnimationSeconds: Double = 0.32
 
     var body: some View {
-        ScrollViewReader { proxy in
-            messageList(proxy: proxy)
-        }
+        messageList
     }
 
     /// The rows inside the scroll content — extracted so the type-checker handles the
@@ -127,79 +128,36 @@ struct MessageListView: View {
             .id(Self.bottomAnchorID)
     }
 
-    private func messageList(proxy: ScrollViewProxy) -> some View {
-        let base = ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                messageListRows
-            }
-            .padding(.top, 16)
-            .coordinateSpace(.named(chatContentCoordinateSpace))
-            .environment(\.chatTrackedMessageID, trackedUserMessageID)
-            .environment(\.chatTrackedMessageGeometry, updateLatestUserMinY)
+    private var messageList: some View {
+        let base = ChatTranscriptList(
+            items: transcriptItems,
+            isStreaming: chatBridge.isStreaming,
+            shouldScrollToBottom: shouldScrollToBottom,
+            isAtBottom: $isAtBottom
+        ) { accessory in
+            transcriptAccessory(accessory)
         }
-            .opacity(isSessionReady ? 1 : 0)
-            .onGeometryChange(for: CGFloat.self) { proxy in
-                proxy.size.height
-            } action: { newValue in
-                scrollViewHeight = newValue
-            }
-            .onScrollGeometryChange(for: ScrollSample.self) { geo in
-                ScrollSample(contentHeight: geo.contentSize.height, visibleMaxY: geo.visibleRect.maxY)
-            } action: { _, sample in
-                // Route the geometry change through AutoScrollAnchor so content
-                // growth (streaming text, an Edit/Bash card expanding) keeps the
-                // list glued to the bottom — only a deliberate user scroll
-                // un-sticks it. Suppressed while the user drives the scroll so
-                // auto-scroll never fights a drag.
-                let decision = anchor.apply(contentHeight: sample.contentHeight, visibleMaxY: sample.visibleMaxY)
-                if decision == .scrollToBottom, !isUserDrivenScroll, !isPinningLatestTurnToTop {
-                    logScrollState(
-                        "geometry.scrollToBottom",
-                        extra: "contentHeight=\(sample.contentHeight) visibleMaxY=\(sample.visibleMaxY)"
-                    )
-                    scrollToBottomDebounced(proxy)
-                } else if decision == .scrollToBottom {
-                    logScrollState(
-                        "geometry.suppressedBottom",
-                        extra: "contentHeight=\(sample.contentHeight) visibleMaxY=\(sample.visibleMaxY) userDriven=\(isUserDrivenScroll) pinning=\(isPinningLatestTurnToTop)"
-                    )
-                }
-            }
-            .onScrollGeometryChange(for: CGFloat.self) { geo in
-                geo.contentOffset.y
-            } action: { oldOffsetY, offsetY in
-                if isDirectUserScroll,
-                   isPinningLatestTurnToTop,
-                   canReleasePinnedTurnByScroll,
-                   offsetY > oldOffsetY + Self.userScrollDownDelta
-                {
-                    releasePinnedTurnToBottom(proxy: proxy)
-                }
-            }
-            .onScrollPhaseChange { _, newPhase in
-                scrollPhase = newPhase
-            }
+            .opacity(isSessionReady || shouldShowEndLoadingIndicator ? 1 : 0)
         let scrolling = base
             .task(id: windowState.currentSessionId) {
-                await handleSessionTask(proxy: proxy)
+                await handleSessionTask()
             }
         return scrolling
             .onChange(of: chatBridge.isLoadingFromDisk) { _, isLoading in
-                handleLoadingChange(isLoading, proxy: proxy)
+                handleLoadingChange(isLoading)
             }
             .onChange(of: chatBridge.isStreaming) { old, new in
-                handleStreamingChange(old: old, new: new, proxy: proxy)
+                handleStreamingChange(old: old, new: new)
             }
             .onChange(of: chatBridge.sendRequestID) { _, _ in
                 prepareForNewUserSend()
             }
             .onChange(of: chatBridge.messages.last?.id) { _, _ in
-                handleLastMessageChange(proxy: proxy)
+                handleLastMessageChange()
             }
             .onChange(of: chatBridge.messages.last?.content) { _, _ in
                 guard isSessionReady else { return }
-                guard !isPinningLatestTurnToTop else { return }
-                scrollToBottomDebounced(proxy)
+                requestScrollToBottom()
             }
             .onChange(of: isSessionReady) { _, new in
                 Self.log.info("[MessageList.ready] isSessionReady=\(new) sid=\(windowState.currentSessionId ?? "<nil>", privacy: .public) settled=\(settledItems.count)")
@@ -217,7 +175,7 @@ struct MessageListView: View {
 
     // MARK: - Session lifecycle
 
-    private func handleSessionTask(proxy: ScrollViewProxy) async {
+    private func handleSessionTask() async {
         let sid = windowState.currentSessionId ?? "<nil>"
         Self.log.info("[MessageList.task] fired sid=\(sid, privacy: .public) bridgeMessages=\(chatBridge.messages.count) isStreaming=\(chatBridge.isStreaming) isLoadingFromDisk=\(chatBridge.isLoadingFromDisk)")
         // When the CLI emits its first `system:init` event mid-stream, AppState
@@ -228,19 +186,7 @@ struct MessageListView: View {
         if chatBridge.isStreaming {
             rebuildSettledItems()
             if !isSessionReady { isSessionReady = true }
-            if let latest = chatBridge.messages.last, latest.role == .user {
-                startActiveTurn(latest.id)
-                isPinningLatestTurnToTop = true
-                pendingIndicatorSpacerReduction = Self.streamingIndicatorEstimatedHeight
-                updateActiveTurnMaxMeasuredHeight()
-                pinSentMessageToTop(latest.id, proxy: proxy, animated: true)
-            } else if repinActiveTurnIfNeeded(proxy: proxy) {
-                // Keep the mobile-style top pin across the pending-session-id
-                // to real-session-id swap that can happen after streaming starts.
-            } else if !chatBridge.messages.isEmpty || !settledItems.isEmpty {
-                anchor.resetToBottom()
-                settleAtBottom(proxy: proxy, reason: "sessionTask.streaming")
-            }
+            requestScrollToBottom()
             Self.log.info("[MessageList.task] streaming-path settled=\(settledItems.count) sid=\(sid, privacy: .public)")
             return
         }
@@ -250,6 +196,7 @@ struct MessageListView: View {
         settleScrollTask?.cancel()
         readyTask?.cancel()
         pinToTopTask?.cancel()
+        scrollRequestTask?.cancel()
         activeTurnUserMessageID = nil
         isPinningLatestTurnToTop = false
         canReleasePinnedTurnByScroll = false
@@ -272,13 +219,13 @@ struct MessageListView: View {
         // Re-assert the bottom across several frames: a single scroll can fire
         // before the lazy stack has realized the freshly-rebuilt rows, stranding the
         // view at the top — which the fade-in would then reveal.
-        settleAtBottom(proxy: proxy, reason: "sessionOpen")
+        requestScrollToBottom()
         anchor.resetToBottom()
         try? await Task.sleep(for: .milliseconds(48))  // let the first re-asserts land before fade-in
         withAnimation(.easeIn(duration: 0.15)) { isSessionReady = true }
     }
 
-    private func handleLoadingChange(_ isLoading: Bool, proxy: ScrollViewProxy) {
+    private func handleLoadingChange(_ isLoading: Bool) {
         let sid = windowState.currentSessionId ?? "<nil>"
         Self.log.info("[MessageList.onLoadChange] isLoading=\(isLoading) sid=\(sid, privacy: .public) bridgeMessages=\(chatBridge.messages.count) settled=\(settledItems.count)")
         // When a background disk load finishes for a freshly switched session,
@@ -287,7 +234,7 @@ struct MessageListView: View {
         rebuildSettledItems()
         Self.log.info("[MessageList.onLoadChange] post-rebuild settled=\(settledItems.count) sid=\(sid, privacy: .public)")
         readyTask?.cancel()
-        settleAtBottom(proxy: proxy, reason: "loadFinished")
+        requestScrollToBottom()
         anchor.resetToBottom()
         // Fade-in lives on `readyTask` so the content-growth path
         // (`scrollToBottomDebounced`, which owns `scrollTask`) cannot cancel it.
@@ -298,27 +245,20 @@ struct MessageListView: View {
         }
     }
 
-    private func handleStreamingChange(old: Bool, new: Bool, proxy: ScrollViewProxy) {
+    private func handleStreamingChange(old: Bool, new: Bool) {
         logScrollState("streamingChange", extra: "old=\(old) new=\(new) lastRole=\(chatBridge.messages.last?.role.rawValue ?? "<nil>")")
-        if !old && new,
-           let activeTurnUserMessageID,
-           chatBridge.messages.last?.id == activeTurnUserMessageID,
-           chatBridge.messages.last?.role == .user
-        {
-            pendingIndicatorSpacerReduction = Self.streamingIndicatorEstimatedHeight
-            updateActiveTurnMaxMeasuredHeight()
-            if repinActiveTurnIfNeeded(proxy: proxy) { return }
-        }
         // Only react when streaming ends — the settled list doesn't change at start.
-        guard old && !new else { return }
+        guard old && !new else {
+            requestScrollToBottom()
+            return
+        }
         pendingIndicatorSpacerReduction = 0
         rebuildSettledItems()
-        if repinActiveTurnIfNeeded(proxy: proxy) { return }
         anchor.resetToBottom()
         // The just-finished turn moves out of `StreamingMessageView` and into
         // the settled list. That row handoff makes the scroll content reload and can
         // momentarily snap the offset; re-assert the bottom across the handoff.
-        settleAtBottom(proxy: proxy, reason: "streamingEnded")
+        requestScrollToBottom()
     }
 
     // MARK: - Helpers
@@ -326,6 +266,55 @@ struct MessageListView: View {
     @ViewBuilder
     private func messageRows(_ messages: some RandomAccessCollection<ChatMessage>) -> some View {
         ChatMessageListView(messages: Array(messages))
+    }
+
+    private var transcriptItems: [ChatTranscriptListItem] {
+        var items: [ChatTranscriptListItem] = [
+            .accessory(.init(id: "desktop-top-padding", kind: .topPadding)),
+        ]
+        items += ChatTranscriptListItem.items(for: settledItems)
+
+        if !windowState.focusMode {
+            let activeMessages = activeResponseMessages(from: chatBridge.messages)
+            let transientMinSize = activeMessages.contains(where: \.isStreaming) ? 1 : 2
+            items += ChatTranscriptListItem.items(for: activeMessages, transientGroupMinSize: transientMinSize)
+        }
+
+        if shouldShowEndLoadingIndicator {
+            items.append(.accessory(.init(id: "desktop-end-loading-indicator", kind: .loadingNext)))
+        }
+
+        if !chatBridge.isStreaming && !settledItems.isEmpty {
+            items.append(.accessory(.init(id: "desktop-web-preview", kind: .webPreview)))
+        }
+        return items
+    }
+
+    private var shouldShowEndLoadingIndicator: Bool {
+        (chatBridge.isLoadingFromDisk && chatBridge.messages.isEmpty)
+            || (chatBridge.isStreaming && !chatBridge.hasPendingPlanDecision)
+    }
+
+    @ViewBuilder
+    private func transcriptAccessory(_ accessory: ChatTranscriptAccessory) -> some View {
+        switch accessory.kind {
+        case .topPadding:
+            Color.clear.frame(height: 16)
+        case .loadingNext, .streamingIndicator:
+            HStack(alignment: .top, spacing: 0) {
+                StreamingIndicatorView(
+                    isThinking: chatBridge.isThinking,
+                    startDate: chatBridge.streamingStartDate,
+                    agentProvider: chatBridge.agentProvider,
+                    outputTokens: chatBridge.liveOutputTokens
+                )
+                Spacer(minLength: 40)
+            }
+        case .webPreview:
+            WebPreviewButton(messages: settledItems)
+        case .loadingPrevious, .custom:
+            EmptyView()
+        }
     }
 
     // MARK: - Settled Items
@@ -337,21 +326,14 @@ struct MessageListView: View {
         withTransaction(t) { settledItems = messages }
     }
 
-    private func handleLastMessageChange(proxy: ScrollViewProxy) {
+    private func handleLastMessageChange() {
         guard isSessionReady, !chatBridge.isLoadingFromDisk else { return }
         rebuildSettledItems()
         guard let last = chatBridge.messages.last else { return }
         logScrollState("lastMessageChange", extra: "lastRole=\(last.role.rawValue) lastID=\(last.id.uuidString)")
-        if last.role == .user {
-            startActiveTurn(last.id)
-            pendingIndicatorSpacerReduction = chatBridge.isStreaming ? Self.streamingIndicatorEstimatedHeight : 0
-            updateActiveTurnMaxMeasuredHeight()
-            isPinningLatestTurnToTop = true
-            canReleasePinnedTurnByScroll = false
-            pinSentMessageToTop(last.id, proxy: proxy, animated: true)
-            return
+        if last.role != .user {
+            requestScrollToBottom()
         }
-        if repinActiveTurnIfNeeded(proxy: proxy) { return }
     }
 
     private func prepareForNewUserSend() {
@@ -360,11 +342,29 @@ struct MessageListView: View {
         scrollTask = nil
         settleScrollTask?.cancel()
         pinToTopTask?.cancel()
+        scrollRequestTask?.cancel()
         activeTurnUserMessageID = nil
         isPinningLatestTurnToTop = false
         canReleasePinnedTurnByScroll = false
         pendingIndicatorSpacerReduction = 0
         activeTurnMaxMeasuredHeight = 0
+    }
+
+    private func requestScrollToBottom() {
+        scrollRequestTask?.cancel()
+        shouldScrollToBottom = false
+        scrollRequestTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(10))
+            guard !Task.isCancelled else { return }
+            shouldScrollToBottom = true
+        }
+    }
+
+    /// Returns the last consecutive assistant sequence (including streaming turn) while streaming.
+    /// Returns an empty array when not streaming so no separate streaming rows render.
+    private func activeResponseMessages(from messages: [ChatMessage]) -> [ChatMessage] {
+        guard messages.last?.isStreaming == true else { return [] }
+        return chatSuppressPlanReadyFollowups(in: Array(messages[chatStreamingBoundaryIndex(in: messages)...]))
     }
 
     /// If streaming, returns only completed messages excluding the last consecutive (non-error) assistant sequence.
@@ -433,8 +433,8 @@ struct MessageListView: View {
     }
 
     /// Coalesced scroll-to-bottom for content growth. Streaming can update the
-    /// geometry once per token; keep bottom-follow to at most one scroll every
-    /// couple of seconds so it doesn't fight SwiftUI's lazy layout.
+    /// geometry once per token; keep bottom-follow to at most one scroll per
+    /// second so it doesn't fight SwiftUI's lazy layout.
     private func scrollToBottomDebounced(_ proxy: ScrollViewProxy) {
         guard scrollTask == nil else { return }
         logScrollState("scrollToBottom.debounceScheduled")

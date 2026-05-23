@@ -147,7 +147,7 @@ extension AppState {
         }
 
         if sessionStates[session.id]?.isStreaming == true {
-            flushPendingUpdates(for: session.id)
+            flushPendingUpdates(for: session.id, forceText: true)
         }
 
         updateState(session.id) { $0.hasUncheckedCompletion = false }

@@ -6,7 +6,7 @@ import RxCodeSync
 import SwiftUI
 
 extension AppState {
-    // MARK: - Text Delta Throttle (50ms)
+    // MARK: - Text Delta Grouping
 
     func startFlushTimer(for sessionKey: String) {
         stopFlushTimer(for: sessionKey)
@@ -26,13 +26,27 @@ extension AppState {
         sessionStates[sessionKey]?.flushTask = nil
     }
 
-    func flushPendingUpdates(for key: String) {
+    func flushPendingUpdates(for key: String, forceText: Bool = false) {
         guard var state = sessionStates[key] else { return }
 
         let hasText = !state.textDeltaBuffer.isEmpty
         let hasToolResults = !state.pendingToolResults.isEmpty
+        let textGroup: String?
+        if hasText {
+            if forceText || hasToolResults {
+                textGroup = state.textDeltaBuffer
+                state.textDeltaBuffer = ""
+            } else if let group = Self.nextStreamingTextGroup(from: state.textDeltaBuffer) {
+                textGroup = group.text
+                state.textDeltaBuffer = group.remainder
+            } else {
+                textGroup = nil
+            }
+        } else {
+            textGroup = nil
+        }
 
-        guard hasText || hasToolResults else { return }
+        guard textGroup != nil || hasToolResults else { return }
 
         let prevMessages = state.messages
 
@@ -95,9 +109,7 @@ extension AppState {
         }
 
         // 2. Text delta flush
-        if hasText {
-            let buffered = state.textDeltaBuffer
-            state.textDeltaBuffer = ""
+        if let buffered = textGroup, !buffered.isEmpty {
             if let idx = lastStreamingAssistantIdx() {
                 if state.needsNewMessage {
                     // New Claude turn after receiving tool result — start a new ChatMessage
@@ -116,6 +128,41 @@ extension AppState {
 
         sessionStates[key] = state
         broadcastMobileMessageDiff(sessionKey: key, prev: prevMessages, next: state.messages, isStreaming: state.isStreaming)
+    }
+
+    private static let streamingTextGroupTokenCount = 10
+
+    private static func nextStreamingTextGroup(from text: String) -> (text: String, remainder: String)? {
+        var tokenCount = 0
+        var isInsideToken = false
+        var index = text.startIndex
+
+        while index < text.endIndex {
+            let character = text[index]
+            if character.isWhitespace {
+                if isInsideToken {
+                    isInsideToken = false
+                    if tokenCount >= streamingTextGroupTokenCount {
+                        var splitIndex = text.index(after: index)
+                        while splitIndex < text.endIndex, text[splitIndex].isWhitespace {
+                            splitIndex = text.index(after: splitIndex)
+                        }
+                        return (String(text[..<splitIndex]), String(text[splitIndex...]))
+                    }
+                }
+            } else if !isInsideToken {
+                tokenCount += 1
+                isInsideToken = true
+                if tokenCount > streamingTextGroupTokenCount {
+                    return (String(text[..<index]), String(text[index...]))
+                }
+            }
+
+            index = text.index(after: index)
+        }
+
+        guard tokenCount >= streamingTextGroupTokenCount else { return nil }
+        return (text, "")
     }
 
     // MARK: - Stream Event Handler
@@ -145,7 +192,7 @@ extension AppState {
                       let name = contentBlock["name"] as? String else { return }
                 let toolCall = ToolCall(id: id, name: name, input: [:])
                 // Flush the text buffer first so text blocks are committed before tools
-                flushPendingUpdates(for: sessionKey)
+                flushPendingUpdates(for: sessionKey, forceText: true)
                 updateState(sessionKey) { state in
                     state.isThinking = false
                     // needsNewMessage: new Claude turn after tool result — create a new ChatMessage
@@ -242,7 +289,7 @@ extension AppState {
 
     func detachCurrentStream(in window: WindowState) {
         let key = window.currentSessionId ?? window.newSessionKey
-        flushPendingUpdates(for: key)
+        flushPendingUpdates(for: key, forceText: true)
         stopFlushTimer(for: key)
     }
 
@@ -259,7 +306,7 @@ extension AppState {
         // nor the streaming view and vanishes until the next turn. Clearing
         // isStreaming here also stops processStream's end-of-stream cleanup
         // from re-finalizing the cancelled message while we suspend.
-        flushPendingUpdates(for: key)
+        flushPendingUpdates(for: key, forceText: true)
         stopFlushTimer(for: key)
 
         updateState(key) { state in

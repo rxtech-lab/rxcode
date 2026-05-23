@@ -97,6 +97,8 @@ struct MobileChatView: View {
     @State private var canReleasePinnedTurnByScroll = false
     @State private var distanceFromBottom: CGFloat = 0
     @State private var lastAutoBottomScrollDate = Date.distantPast
+    @State private var packageShouldScrollToBottom = false
+    @State private var packageScrollRequestTask: Task<Void, Never>?
     @State private var minimumThreadLoadElapsed = false
     @State private var isThreadLoadingOverlayVisible = true
     @State private var threadLoadingHideTask: Task<Void, Never>?
@@ -368,204 +370,99 @@ struct MobileChatView: View {
 
     private var activeThreadLayout: some View {
         ZStack(alignment: .bottom) {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 12) {
-                        if isLoadingMore {
-                            loadMoreSpinner
-                        }
-                        ChatMessageListView(messages: messages)
-                        if isStreaming {
-                            MobileStreamingIndicator(isThinking: isThinking)
-                                .transition(.opacity)
-                        }
-                        Color.clear
-                            .frame(height: 1)
-                            .onGeometryChange(for: CGFloat.self) { proxy in
-                                proxy.frame(in: .named(chatContentCoordinateSpace)).minY
-                            } action: { newValue in
-                                updateTailSpacerMinY(newValue)
-                            }
-                        Color.clear
-                            .frame(height: 1)
-                            .id(Self.endOfScreenAnchorID)
-                        Color.clear
-                            .frame(height: minTailSpacer)
-                        // Extra tail spacer: pads the latest turn only while a
-                        // freshly sent user message is pinned to the top, and
-                        // shrinks as the assistant response grows.
-                        Color.clear
-                            .frame(height: pinTailSpacerExtraHeight)
-                        Color.clear
-                            .frame(height: 1)
-                            .id(Self.bottomAnchorID)
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 8)
-                    .opacity(isInitialMessageListHidden && !messages.isEmpty ? 0 : 1)
-                    .animation(.easeInOut(duration: 0.2), value: isStreaming)
-                    .animation(.easeInOut(duration: 0.2), value: isLoadingMore)
-                    .animation(.easeInOut(duration: 0.18), value: isInitialMessageListHidden)
-                    .coordinateSpace(.named(chatContentCoordinateSpace))
-                    .environment(\.chatTrackedMessageID, trackedUserMessageID)
-                    .environment(\.chatTrackedMessageGeometry, updateLatestUserMinY)
-                    .accessibilityElement(children: .contain)
-                    .accessibilityIdentifier("chat-message-list")
-                }
-                .accessibilityIdentifier("chat-screen")
-                .mobileDismissesKeyboardOnScroll(.interactively)
-                .onGeometryChange(for: CGRect.self) { proxy in
-                    proxy.frame(in: .global)
-                } action: { rect in
-                    scrollViewHeight = rect.height
-                    scrollViewMinY = rect.minY
-                }
-                .onScrollPhaseChange { _, newPhase, _ in
-                    isUserDragging = newPhase == .tracking
-                        || newPhase == .interacting
-                        || newPhase == .decelerating
-                }
-                .onScrollGeometryChange(for: CGFloat.self) { geo in
-                    geo.contentSize.height - geo.visibleRect.maxY
-                } action: { _, distanceFromBottom in
-                    self.distanceFromBottom = distanceFromBottom
-                    let near = distanceFromBottom <= Self.nearBottomThreshold
-                    if isNearBottom != near {
-                        mobileChatLogger.debug(
-                            "[ScrollButton] visibility near=\(near, privacy: .public) distance=\(Double(distanceFromBottom), privacy: .public)"
-                        )
-                        isNearBottom = near
-                    }
-                    // Returning to the true bottom re-arms auto-follow.
-                    if distanceFromBottom <= Self.atBottomThreshold {
-                        autoScrollEnabled = true
-                        if isUserDragging {
-                            isPinningLatestTurnToTop = false
-                        }
-                    }
-                }
-                .onScrollGeometryChange(for: CGFloat.self) { geo in
-                    geo.contentOffset.y
-                } action: { oldOffsetY, offsetY in
-                    if isUserDragging,
-                       isPinningLatestTurnToTop,
-                       canReleasePinnedTurnByScroll,
-                       offsetY > oldOffsetY + Self.userScrollUpDelta
-                    {
-                        releasePinnedTurnToBottom(proxy: proxy)
-                    }
-                    // A deliberate upward drag means the user wants to read
-                    // history — stop the stream from pulling them back down.
-                    // Gated on `isUserDragging` so keyboard/layout-induced
-                    // offset shifts don't disable auto-follow.
-                    if isUserDragging, offsetY < oldOffsetY - Self.userScrollUpDelta {
-                        autoScrollEnabled = false
-                    }
-                    if isUserDragging, offsetY < Self.loadMoreThreshold {
-                        triggerLoadMoreIfNeeded()
-                    }
-                }
-                .onAppear {
-                    // A cached thread already has its messages — jump straight
-                    // to the newest one. Threads loaded async are handled by
-                    // the `messages.last?.id` change below.
-                    establishInitialScroll(proxy: proxy, reason: "onAppear")
-                }
-                .task {
-                    // Let the initial scroll-to-bottom settle before arming the
-                    // scroll-up "load more" trigger, so opening a thread doesn't
-                    // immediately page in older history.
-                    try? await Task.sleep(for: .seconds(0.8))
-                    didSettleInitialScroll = true
-                }
-                .onChange(of: messages.last?.id) { _, _ in
-                    // Keyed on the last message id so a prepended older page
-                    // (which leaves the tail unchanged) doesn't yank the view.
-                    guard let last = messages.last else { return }
-                    if last.role == .user, awaitingSentUserMessage {
-                        // The message we just sent round-tripped back from the
-                        // desktop — pin it to the top of the viewport. Handle
-                        // this before initial-scroll gating so the first
-                        // message in an empty thread is pinned too.
-                        awaitingSentUserMessage = false
-                        autoScrollEnabled = false
-                        activeTurnUserMessageID = last.id
-                        isPinningLatestTurnToTop = true
-                        initialScrollTask?.cancel()
-                        isEstablishingInitialScroll = false
-                        didEstablishInitialScroll = true
-                        isInitialMessageListHidden = false
-                        pinSentMessageToTop(last.id, proxy: proxy, animated: true)
-                    } else if !didEstablishInitialScroll {
-                        // First page of messages arrived after the view
-                        // appeared — jump straight to the newest one.
-                        establishInitialScroll(proxy: proxy, reason: "messagesArrived")
-                    } else if repinActiveTurnIfNeeded(proxy: proxy) {
-                        return
-                    } else if autoScrollEnabled {
-                        scrollToBottomDebounced(proxy: proxy, reason: "lastMessage")
-                    }
-                }
-                .onChange(of: messages.last?.content) { _, _ in
-                    guard didEstablishInitialScroll else { return }
-                    if repinActiveTurnIfNeeded(proxy: proxy) { return }
-                    guard autoScrollEnabled else { return }
-                    scrollToBottomDebounced(proxy: proxy, reason: "messageContent")
-                }
-                .onChange(of: isStreaming) { _, streaming in
-                    // Keep the newly appeared loading indicator in view.
-                    if !streaming {
-                        pendingIndicatorSpacerReduction = 0
-                    }
-                    guard streaming, didEstablishInitialScroll else { return }
-                    if activeTurnUserMessageID != nil {
-                        pendingIndicatorSpacerReduction = Self.streamingIndicatorEstimatedHeight
-                    }
-                    if repinActiveTurnIfNeeded(proxy: proxy) { return }
-                    guard autoScrollEnabled else { return }
-                    scrollToBottomDebounced(proxy: proxy, reason: "streamingStarted")
-                }
-                .onChange(of: isLoadingMore) { _, loading in
-                    guard !loading, let anchor = pendingTopAnchorID else { return }
-                    pendingTopAnchorID = nil
-                    if autoScrollEnabled {
-                        // The page was pulled in to fill a near-empty screen
-                        // on open — keep the newest message in view instead of
-                        // jumping up to the freshly prepended history.
-                        settleScroll(proxy: proxy, to: Self.bottomAnchorID, anchor: .bottom)
-                    } else {
-                        // The user scrolled up to read history: restore the
-                        // viewport to the message that was on top so the
-                        // prepend isn't jarring.
-                        settleScroll(proxy: proxy, to: anchor, anchor: .top)
-                    }
-                }
-                .onChange(of: composerMinY) { oldValue, newValue in
-                    handleComposerBoundaryChange(
-                        oldValue: oldValue,
-                        newValue: newValue,
-                        proxy: proxy
-                    )
-                }
-                .overlay(alignment: .bottomLeading) {
-                    if !isNearBottom {
-                        scrollToBottomButton(proxy: proxy)
-                            .padding(.leading, 16)
-                            .padding(.bottom, scrollToBottomButtonBottomPadding)
-                            .transition(.scale.combined(with: .opacity))
-                            .zIndex(1)
-                            .onAppear {
-                                mobileChatLogger.debug(
-                                    "[ScrollButton] appeared bottomPadding=\(Double(scrollToBottomButtonBottomPadding), privacy: .public)"
-                                )
-                            }
-                            .onDisappear {
-                                mobileChatLogger.debug("[ScrollButton] disappeared")
-                            }
-                    }
-                }
-                .animation(.spring(duration: 0.25), value: isNearBottom)
+            ChatTranscriptList(
+                items: mobileTranscriptItems,
+                isStreaming: isStreaming,
+                shouldScrollToBottom: packageShouldScrollToBottom,
+                isAtBottom: $isNearBottom,
+                hasMorePrevious: {
+                    didSettleInitialScroll
+                        && state.hasMoreMessages(sessionID: sessionID)
+                        && !state.isLoadingMoreMessages(sessionID: sessionID)
+                },
+                loadMorePrevious: loadMorePreviousMessages,
+                rowPadding: EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16),
+                accessibilityIdentifier: "chat-message-list"
+            ) { accessory in
+                mobileTranscriptAccessory(accessory)
             }
+            .opacity(isInitialMessageListHidden && !messages.isEmpty ? 0 : 1)
+            .animation(.easeInOut(duration: 0.2), value: isStreaming)
+            .animation(.easeInOut(duration: 0.2), value: isLoadingMore)
+            .animation(.easeInOut(duration: 0.18), value: isInitialMessageListHidden)
+            .mobileDismissesKeyboardOnScroll(.interactively)
+            .onGeometryChange(for: CGRect.self) { proxy in
+                proxy.frame(in: .global)
+            } action: { rect in
+                scrollViewHeight = rect.height
+                scrollViewMinY = rect.minY
+            }
+            .onAppear {
+                establishInitialPackageScroll(reason: "onAppear")
+            }
+            .task {
+                try? await Task.sleep(for: .seconds(0.8))
+                didSettleInitialScroll = true
+            }
+            .onChange(of: isNearBottom) { _, nearBottom in
+                if nearBottom {
+                    autoScrollEnabled = true
+                    isPinningLatestTurnToTop = false
+                } else if didEstablishInitialScroll {
+                    autoScrollEnabled = false
+                }
+            }
+            .onChange(of: messages.last?.id) { _, _ in
+                guard let last = messages.last else { return }
+                if last.role == .user, awaitingSentUserMessage {
+                    awaitingSentUserMessage = false
+                    autoScrollEnabled = false
+                    activeTurnUserMessageID = last.id
+                    isPinningLatestTurnToTop = true
+                    didEstablishInitialScroll = true
+                    isInitialMessageListHidden = false
+                    return
+                }
+                if !didEstablishInitialScroll {
+                    establishInitialPackageScroll(reason: "messagesArrived")
+                } else if autoScrollEnabled {
+                    requestPackageScrollToBottom(reason: "lastMessage")
+                }
+            }
+            .onChange(of: messages.last?.content) { _, _ in
+                guard didEstablishInitialScroll, autoScrollEnabled else { return }
+                requestPackageScrollToBottom(reason: "messageContent")
+            }
+            .onChange(of: isStreaming) { _, streaming in
+                if !streaming {
+                    pendingIndicatorSpacerReduction = 0
+                    isPinningLatestTurnToTop = false
+                }
+                guard didEstablishInitialScroll, autoScrollEnabled else { return }
+                requestPackageScrollToBottom(reason: streaming ? "streamingStarted" : "streamingEnded")
+            }
+            .onChange(of: composerMinY) { oldValue, newValue in
+                guard didEstablishInitialScroll, abs(newValue - oldValue) > 0.5, autoScrollEnabled else { return }
+                requestPackageScrollToBottom(reason: "composer")
+            }
+            .overlay(alignment: .bottomLeading) {
+                if !isNearBottom {
+                    scrollToBottomButton()
+                        .padding(.leading, 16)
+                        .padding(.bottom, scrollToBottomButtonBottomPadding)
+                        .transition(.scale.combined(with: .opacity))
+                        .zIndex(1)
+                        .onAppear {
+                            mobileChatLogger.debug(
+                                "[ScrollButton] appeared bottomPadding=\(Double(scrollToBottomButtonBottomPadding), privacy: .public)"
+                            )
+                        }
+                        .onDisappear {
+                            mobileChatLogger.debug("[ScrollButton] disappeared")
+                        }
+                }
+            }
+            .animation(.spring(duration: 0.25), value: isNearBottom)
 
             VStack(spacing: 0) {
                 if !queuedMessages.isEmpty {
@@ -610,6 +507,47 @@ struct MobileChatView: View {
                         )
                     )
                     .zIndex(3)
+            }
+        }
+        .accessibilityIdentifier("chat-screen")
+    }
+
+    private var mobileTranscriptItems: [ChatTranscriptListItem] {
+        var items: [ChatTranscriptListItem] = [
+            .accessory(.init(id: "mobile-top-padding", kind: .topPadding)),
+        ]
+        if isLoadingMore {
+            items.append(.accessory(.init(id: "mobile-loading-previous", kind: .loadingPrevious)))
+        }
+        items += ChatTranscriptListItem.items(for: messages)
+        if shouldShowEndLoadingIndicator {
+            items.append(.accessory(.init(id: "mobile-end-loading-indicator", kind: .loadingNext)))
+        }
+        items.append(.accessory(.init(id: "mobile-bottom-spacer", kind: .custom)))
+        return items
+    }
+
+    private var shouldShowEndLoadingIndicator: Bool {
+        isStreaming || (isThreadLoadingMessages && messages.isEmpty)
+    }
+
+    @ViewBuilder
+    private func mobileTranscriptAccessory(_ accessory: ChatTranscriptAccessory) -> some View {
+        switch accessory.kind {
+        case .topPadding:
+            Color.clear.frame(height: 8)
+        case .loadingPrevious:
+            loadMoreSpinner
+        case .loadingNext, .streamingIndicator:
+            MobileStreamingIndicator(isThinking: isThinking)
+                .transition(.opacity)
+        case .webPreview:
+            EmptyView()
+        case .custom:
+            if accessory.id == "mobile-bottom-spacer" {
+                Color.clear.frame(height: minTailSpacer)
+            } else {
+                EmptyView()
             }
         }
     }
@@ -780,6 +718,10 @@ struct MobileChatView: View {
         }
     }
 
+    private func loadMorePreviousMessages() async throws {
+        _ = await state.loadMoreMessages(sessionID: sessionID)
+    }
+
     /// Scroll restoration after prepending older messages needs to survive lazy
     /// layout and row grouping changes. Repeating the same non-animated scroll
     /// across a handful of frames keeps the original anchor visible without
@@ -804,6 +746,36 @@ struct MobileChatView: View {
             try? await Task.sleep(for: .milliseconds(16))
             guard didEstablishInitialScroll, autoScrollEnabled else { return }
             scrollToBottomDebounced(proxy: proxy, reason: "layout")
+        }
+    }
+
+    private func establishInitialPackageScroll(reason: String) {
+        guard !didEstablishInitialScroll else {
+            isInitialMessageListHidden = false
+            return
+        }
+        guard !messages.isEmpty else { return }
+        didEstablishInitialScroll = true
+        isInitialMessageListHidden = true
+        requestPackageScrollToBottom(reason: reason)
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(180))
+            withAnimation(.easeInOut(duration: 0.18)) {
+                isInitialMessageListHidden = false
+            }
+        }
+    }
+
+    private func requestPackageScrollToBottom(reason: String) {
+        packageScrollRequestTask?.cancel()
+        packageShouldScrollToBottom = false
+        mobileChatLogger.debug(
+            "[MessageList] scrollToBottom requested reason=\(reason, privacy: .public) session=\(sessionID, privacy: .public)"
+        )
+        packageScrollRequestTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(10))
+            guard !Task.isCancelled else { return }
+            packageShouldScrollToBottom = true
         }
     }
 
@@ -1036,7 +1008,7 @@ struct MobileChatView: View {
 
     // MARK: - Scroll to bottom button
 
-    private func scrollToBottomButton(proxy: ScrollViewProxy) -> some View {
+    private func scrollToBottomButton() -> some View {
         Button {
             mobileChatLogger.info(
                 "[ScrollButton] tap session=\(sessionID, privacy: .public) messages=\(messages.count, privacy: .public) distance=\(Double(distanceFromBottom), privacy: .public) padding=\(Double(scrollToBottomButtonBottomPadding), privacy: .public)"
@@ -1045,7 +1017,8 @@ struct MobileChatView: View {
             isUserDragging = false
             autoBottomScrollTask?.cancel()
             autoBottomScrollTask = nil
-            scrollToBottomFromButton(proxy)
+            isPinningLatestTurnToTop = false
+            requestPackageScrollToBottom(reason: "button")
         } label: {
             Image(systemName: "arrow.down")
                 .font(.system(size: 14, weight: .semibold))

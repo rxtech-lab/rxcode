@@ -34,7 +34,7 @@ struct SessionStreamState {
     var streamTask: Task<Void, Never>?
     var hasUncheckedCompletion = false
 
-    // Text delta buffer (50ms throttle)
+    // Text delta buffer (10-token grouped flush)
     var textDeltaBuffer = ""
     var pendingToolResults: [(toolUseId: String, content: String, isError: Bool)] = []
     var flushTask: Task<Void, Never>?

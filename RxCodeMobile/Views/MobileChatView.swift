@@ -50,6 +50,8 @@ struct MobileChatView: View {
     /// Re-asserts the first scroll-to-bottom while the lazy stack and composer
     /// geometry settle on thread entry.
     @State private var initialScrollTask: Task<Void, Never>?
+    /// Owns coalesced automatic bottom-follow while streamed content grows.
+    @State private var autoBottomScrollTask: Task<Void, Never>?
     /// Prevents repeated scheduling while the delayed initial scroll is
     /// waiting for the first loaded page to finish laying out.
     @State private var isEstablishingInitialScroll = false
@@ -94,6 +96,7 @@ struct MobileChatView: View {
     /// new programmatic top-pin before it has settled.
     @State private var canReleasePinnedTurnByScroll = false
     @State private var distanceFromBottom: CGFloat = 0
+    @State private var lastAutoBottomScrollDate = Date.distantPast
     @State private var minimumThreadLoadElapsed = false
     @State private var isThreadLoadingOverlayVisible = true
     @State private var threadLoadingHideTask: Task<Void, Never>?
@@ -115,6 +118,8 @@ struct MobileChatView: View {
     /// Approximate indicator height plus LazyVStack spacing. Cleared once the
     /// tail marker reports the indicator in measured geometry.
     private static let streamingIndicatorEstimatedHeight: CGFloat = 36
+    /// Maximum automatic bottom-follow cadence while content streams in.
+    private static let autoBottomScrollInterval: TimeInterval = 2
     private static let pinToTopAnimationDuration: Duration = .milliseconds(320)
     private static let pinToTopAnimationSeconds: Double = 0.32
 
@@ -498,14 +503,14 @@ struct MobileChatView: View {
                     } else if repinActiveTurnIfNeeded(proxy: proxy) {
                         return
                     } else if autoScrollEnabled {
-                        withAnimation { proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom) }
+                        scrollToBottomDebounced(proxy: proxy, reason: "lastMessage")
                     }
                 }
                 .onChange(of: messages.last?.content) { _, _ in
                     guard didEstablishInitialScroll else { return }
                     if repinActiveTurnIfNeeded(proxy: proxy) { return }
                     guard autoScrollEnabled else { return }
-                    withAnimation { proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom) }
+                    scrollToBottomDebounced(proxy: proxy, reason: "messageContent")
                 }
                 .onChange(of: isStreaming) { _, streaming in
                     // Keep the newly appeared loading indicator in view.
@@ -518,7 +523,7 @@ struct MobileChatView: View {
                     }
                     if repinActiveTurnIfNeeded(proxy: proxy) { return }
                     guard autoScrollEnabled else { return }
-                    withAnimation { proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom) }
+                    scrollToBottomDebounced(proxy: proxy, reason: "streamingStarted")
                 }
                 .onChange(of: isLoadingMore) { _, loading in
                     guard !loading, let anchor = pendingTopAnchorID else { return }
@@ -798,9 +803,7 @@ struct MobileChatView: View {
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(16))
             guard didEstablishInitialScroll, autoScrollEnabled else { return }
-            withAnimation(.easeInOut(duration: 0.2)) {
-                proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom)
-            }
+            scrollToBottomDebounced(proxy: proxy, reason: "layout")
         }
     }
 
@@ -883,6 +886,8 @@ struct MobileChatView: View {
         // The sent message round-trips through the desktop; when it comes back
         // it is pinned to the top. Suppress bottom-follow so the streaming
         // reply fills the space below the question instead of yanking past it.
+        autoBottomScrollTask?.cancel()
+        autoBottomScrollTask = nil
         awaitingSentUserMessage = true
         activeTurnUserMessageID = nil
         pendingIndicatorSpacerReduction = 0
@@ -938,6 +943,8 @@ struct MobileChatView: View {
 
     /// Pin a freshly sent user message to the top of the viewport.
     private func pinSentMessageToTop(_ id: UUID, proxy: ScrollViewProxy, animated: Bool) {
+        autoBottomScrollTask?.cancel()
+        autoBottomScrollTask = nil
         pinToTopTask?.cancel()
         canReleasePinnedTurnByScroll = false
         pinToTopTask = Task { @MainActor in
@@ -1036,6 +1043,8 @@ struct MobileChatView: View {
             )
             autoScrollEnabled = true
             isUserDragging = false
+            autoBottomScrollTask?.cancel()
+            autoBottomScrollTask = nil
             scrollToBottomFromButton(proxy)
         } label: {
             Image(systemName: "arrow.down")
@@ -1063,11 +1072,42 @@ struct MobileChatView: View {
         pinToTopTask?.cancel()
         canReleasePinnedTurnByScroll = false
         isPinningLatestTurnToTop = false
+        lastAutoBottomScrollDate = Date()
         withAnimation(.easeInOut(duration: 0.2)) {
             proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom)
         }
         DispatchQueue.main.async {
             mobileChatLogger.debug("[ScrollButton] scroll deferred")
+            withAnimation(.easeInOut(duration: 0.2)) {
+                proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom)
+            }
+        }
+    }
+
+    /// Coalesces automatic bottom-follow while streaming content grows. Explicit
+    /// user actions and initial thread positioning still scroll immediately.
+    private func scrollToBottomDebounced(proxy: ScrollViewProxy, reason: String) {
+        guard autoBottomScrollTask == nil else { return }
+        let elapsed = Date().timeIntervalSince(lastAutoBottomScrollDate)
+        let delay = max(0, Self.autoBottomScrollInterval - elapsed)
+        mobileChatLogger.debug(
+            "[AutoScroll] scheduled reason=\(reason, privacy: .public) delay=\(delay, privacy: .public) session=\(sessionID, privacy: .public)"
+        )
+        autoBottomScrollTask = Task { @MainActor in
+            if delay > 0 {
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            }
+            guard !Task.isCancelled else { return }
+            autoBottomScrollTask = nil
+            guard didEstablishInitialScroll,
+                  autoScrollEnabled,
+                  !isUserDragging,
+                  !isPinningLatestTurnToTop
+            else { return }
+            lastAutoBottomScrollDate = Date()
+            mobileChatLogger.debug(
+                "[AutoScroll] fired reason=\(reason, privacy: .public) session=\(sessionID, privacy: .public)"
+            )
             withAnimation(.easeInOut(duration: 0.2)) {
                 proxy.scrollTo(Self.bottomAnchorID, anchor: .bottom)
             }

@@ -180,7 +180,7 @@ extension MobileAppState {
             logger.info("[RunProfiles] sent save request id=\(payload.clientRequestID.uuidString, privacy: .public) project=\(projectID.uuidString, privacy: .public) profile=\(profile.id.uuidString, privacy: .public) desktopKey=\(String(self.pairedDesktopPubkey.prefix(12)), privacy: .public)")
         } catch {
             inFlightRunProfileRequests.remove(payload.clientRequestID)
-            lastRunProfileError = "Failed to send run profile update: \(error.localizedDescription)"
+            lastRunProfileError = String(localized: "Failed to send run profile update: \(error.localizedDescription)")
             logger.error("[RunProfiles] save send failed id=\(payload.clientRequestID.uuidString, privacy: .public) project=\(projectID.uuidString, privacy: .public) profile=\(profile.id.uuidString, privacy: .public): \(error.localizedDescription, privacy: .public)")
         }
     }
@@ -202,7 +202,7 @@ extension MobileAppState {
             logger.info("[RunProfiles] sent delete request id=\(payload.clientRequestID.uuidString, privacy: .public) project=\(projectID.uuidString, privacy: .public) profile=\(profileID.uuidString, privacy: .public)")
         } catch {
             inFlightRunProfileRequests.remove(payload.clientRequestID)
-            lastRunProfileError = "Failed to send run profile delete: \(error.localizedDescription)"
+            lastRunProfileError = String(localized: "Failed to send run profile delete: \(error.localizedDescription)")
             logger.error("[RunProfiles] delete send failed id=\(payload.clientRequestID.uuidString, privacy: .public) project=\(projectID.uuidString, privacy: .public) profile=\(profileID.uuidString, privacy: .public): \(error.localizedDescription, privacy: .public)")
         }
     }
@@ -219,7 +219,7 @@ extension MobileAppState {
             logger.info("[RunProfiles] sent run request id=\(payload.clientRequestID.uuidString, privacy: .public) project=\(projectID.uuidString, privacy: .public) profile=\(profileID.uuidString, privacy: .public)")
         } catch {
             inFlightRunProfileRequests.remove(payload.clientRequestID)
-            lastRunProfileError = "Failed to send run request: \(error.localizedDescription)"
+            lastRunProfileError = String(localized: "Failed to send run request: \(error.localizedDescription)")
             logger.error("[RunProfiles] run send failed id=\(payload.clientRequestID.uuidString, privacy: .public) project=\(projectID.uuidString, privacy: .public) profile=\(profileID.uuidString, privacy: .public): \(error.localizedDescription, privacy: .public)")
         }
     }
@@ -240,7 +240,7 @@ extension MobileAppState {
             logger.info("[RunProfiles] sent stop request id=\(payload.clientRequestID.uuidString, privacy: .public) task=\(task.taskId.uuidString, privacy: .public) project=\(task.projectId.uuidString, privacy: .public) profile=\(task.profileId.uuidString, privacy: .public)")
         } catch {
             inFlightRunProfileRequests.remove(payload.clientRequestID)
-            lastRunProfileError = "Failed to send stop request: \(error.localizedDescription)"
+            lastRunProfileError = String(localized: "Failed to send stop request: \(error.localizedDescription)")
             logger.error("[RunProfiles] stop send failed id=\(payload.clientRequestID.uuidString, privacy: .public) task=\(task.taskId.uuidString, privacy: .public): \(error.localizedDescription, privacy: .public)")
         }
     }
@@ -263,7 +263,7 @@ extension MobileAppState {
         } catch {
             pendingRunnableDetectRequestID = nil
             runnableDetectInFlight.remove(projectID)
-            runnableDetectError = "Failed to request detection: \(error.localizedDescription)"
+            runnableDetectError = String(localized: "Failed to request detection: \(error.localizedDescription)")
             logger.error("[RunProfiles] detection send failed project=\(projectID.uuidString, privacy: .public): \(error.localizedDescription, privacy: .public)")
         }
     }

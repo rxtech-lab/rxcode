@@ -11,7 +11,7 @@ extension MobileAppState {
     func pair(with token: PairingToken, displayName: String) async {
         guard !token.isExpired,
               let desktopKey = token.desktopPublicKey else {
-            failPairing("Invalid or expired pairing code.")
+            failPairing(String(localized: "Invalid or expired pairing code."))
             return
         }
         pairingStatus = .inProgress
@@ -29,7 +29,7 @@ extension MobileAppState {
         try? await client.addPeer(desktopHex)
         guard await waitForRelayConnection() else {
             logger.error("pairing relay connection timed out relay=\(self.relayURL.absoluteString, privacy: .public)")
-            failPairing("Couldn't connect to the relay from the QR code. Check the relay address and try again.")
+            failPairing(String(localized: "Couldn't connect to the relay from the QR code. Check the relay address and try again."))
             return
         }
         let req = PairRequestPayload(
@@ -44,7 +44,7 @@ extension MobileAppState {
             try await client.send(.pairRequest(req), toHex: desktopHex)
         } catch {
             logger.error("pair request send failed: \(error.localizedDescription, privacy: .public)")
-            failPairing("Couldn't reach the relay. Check your network and try again.")
+            failPairing(String(localized: "Couldn't reach the relay. Check your network and try again."))
             return
         }
         _ = desktopKey  // silence unused
@@ -57,7 +57,7 @@ extension MobileAppState {
             await pair(with: token, displayName: displayName)
         } catch {
             logger.error("pairing deeplink parse failed: \(error.localizedDescription, privacy: .public)")
-            failPairing("Unrecognized pairing link. Generate a new QR code on your Mac.")
+            failPairing(String(localized: "Unrecognized pairing link. Generate a new QR code on your Mac."))
         }
     }
 
@@ -110,7 +110,7 @@ extension MobileAppState {
                 guard let self else { return }
                 guard self.pairingStatus == .inProgress else { return }
                 self.failPairing(
-                    "Your Mac didn't respond. Make sure RxCode is open and connected, then try again."
+                    String(localized: "Your Mac didn't respond. Make sure RxCode is open and connected, then try again.")
                 )
             }
         }

@@ -236,13 +236,13 @@ struct MobileSettingsView: View {
                 if let claude = usage.claudeCode {
                     Section("Claude Code Usage") {
                         MetricBar(
-                            label: "5-hour limit",
+                            label: String(localized: "5-hour limit"),
                             percent: claude.fiveHourPercent,
                             valueText: Self.percentText(claude.fiveHourPercent),
                             caption: Self.resetCaption(claude.fiveHourResetsAt)
                         )
                         MetricBar(
-                            label: "7-day limit",
+                            label: String(localized: "7-day limit"),
                             percent: claude.sevenDayPercent,
                             valueText: Self.percentText(claude.sevenDayPercent),
                             caption: Self.resetCaption(claude.sevenDayResetsAt)
@@ -252,13 +252,13 @@ struct MobileSettingsView: View {
                 if let codex = usage.codex {
                     Section("Codex Usage") {
                         MetricBar(
-                            label: "5-hour limit",
+                            label: String(localized: "5-hour limit"),
                             percent: codex.fiveHourPercent,
                             valueText: Self.percentText(codex.fiveHourPercent),
                             caption: Self.resetCaption(codex.fiveHourResetsAt)
                         )
                         MetricBar(
-                            label: "7-day limit",
+                            label: String(localized: "7-day limit"),
                             percent: codex.sevenDayPercent,
                             valueText: Self.percentText(codex.sevenDayPercent),
                             caption: Self.resetCaption(codex.sevenDayResetsAt)
@@ -282,15 +282,15 @@ struct MobileSettingsView: View {
         if let metrics = state.desktopHostMetrics {
             Section {
                 MetricBar(
-                    label: "CPU",
+                    label: String(localized: "CPU"),
                     percent: metrics.cpuUsagePercent,
                     valueText: Self.percentText(metrics.cpuUsagePercent)
                 )
                 MetricBar(
-                    label: "Memory",
+                    label: String(localized: "Memory"),
                     percent: metrics.memoryUsedPercent,
                     valueText: Self.formatBytes(metrics.memoryUsedBytes),
-                    caption: "of \(Self.formatBytes(metrics.memoryTotalBytes))"
+                    caption: String(localized: "of \(Self.formatBytes(metrics.memoryTotalBytes))")
                 )
                 HStack {
                     Text("Thermal")
@@ -319,7 +319,7 @@ struct MobileSettingsView: View {
     /// desktop didn't report a reset time.
     private static func resetCaption(_ date: Date?) -> String? {
         guard let date else { return nil }
-        return "Resets \(date.formatted(.relative(presentation: .named)))"
+        return String(localized: "Resets \(date.formatted(.relative(presentation: .named)))")
     }
 
     private static func formatBytes(_ bytes: UInt64) -> String {
@@ -328,11 +328,11 @@ struct MobileSettingsView: View {
 
     private static func thermalLabel(_ state: HostMetricsSnapshot.ThermalState) -> String {
         switch state {
-        case .nominal: return "Normal"
-        case .fair: return "Fair"
-        case .serious: return "Serious"
-        case .critical: return "Critical"
-        case .unknown: return "Unknown"
+        case .nominal: return String(localized: "Normal")
+        case .fair: return String(localized: "Fair")
+        case .serious: return String(localized: "Serious")
+        case .critical: return String(localized: "Critical")
+        case .unknown: return String(localized: "Unknown")
         }
     }
 
@@ -358,13 +358,21 @@ struct MobileSettingsView: View {
                 MobileSettingsUpdatePayload(autoArchiveEnabled: value)
             })
             Stepper(
-                "Archive after \(settings.archiveRetentionDays) day\(settings.archiveRetentionDays == 1 ? "" : "s")",
+                archiveRetentionLabel(days: settings.archiveRetentionDays),
                 value: settingBinding(settings.archiveRetentionDays) { value in
                     MobileSettingsUpdatePayload(archiveRetentionDays: value)
                 },
                 in: 1 ... 365
             )
             .disabled(!settings.autoArchiveEnabled)
+        }
+    }
+
+    private func archiveRetentionLabel(days: Int) -> String {
+        if days == 1 {
+            String(localized: "Archive after \(days) day")
+        } else {
+            String(localized: "Archive after \(days) days")
         }
     }
 
@@ -486,11 +494,11 @@ struct MobileSettingsView: View {
 
     private func effortDisplayName(_ effort: String) -> String {
         switch effort {
-        case "low": return "Low"
-        case "medium": return "Medium"
-        case "high": return "High"
-        case "xhigh": return "Extra High"
-        case "max": return "Max"
+        case "low": return String(localized: "Low")
+        case "medium": return String(localized: "Medium")
+        case "high": return String(localized: "High")
+        case "xhigh": return String(localized: "Extra High")
+        case "max": return String(localized: "Max")
         default: return effort.capitalized
         }
     }
@@ -505,7 +513,7 @@ struct MobileSettingsView: View {
         case .disconnected:
             Label("Disconnected", systemImage: "circle.slash").foregroundStyle(.secondary)
         case .reconnecting(let seconds):
-            Label("Reconnecting in \(seconds)s", systemImage: "arrow.clockwise.circle").foregroundStyle(.orange)
+            Label(String(localized: "Reconnecting in \(seconds)s"), systemImage: "arrow.clockwise.circle").foregroundStyle(.orange)
         }
     }
 }

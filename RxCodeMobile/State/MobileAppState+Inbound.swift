@@ -52,7 +52,7 @@ extension MobileAppState {
                     await self.reportAPNsTokenIfPending()
                 }
             } else {
-                failPairing("Your Mac declined the pairing request.")
+                failPairing(String(localized: "Your Mac declined the pairing request."))
             }
         case .unpair:
             guard let desktop = pairedDesktops.first(where: { $0.pubkeyHex == inbound.fromHex }) else { return }
@@ -148,7 +148,7 @@ extension MobileAppState {
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "branch_op_result") else { return }
             inFlightBranchOps.remove(result.clientRequestID)
             if !result.ok {
-                lastBranchOpError = result.errorMessage ?? "Branch operation failed."
+                lastBranchOpError = result.errorMessage ?? String(localized: "Branch operation failed.")
             }
         case .folderTreeResult(let result):
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "folder_tree_result") else { return }
@@ -159,7 +159,7 @@ extension MobileAppState {
                 remoteFolderRoot = root
                 remoteFolderError = nil
             } else {
-                remoteFolderError = result.errorMessage ?? "Failed to load folders."
+                remoteFolderError = result.errorMessage ?? String(localized: "Failed to load folders.")
             }
         case .createProjectResult(let result):
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "create_project_result") else { return }
@@ -174,7 +174,7 @@ extension MobileAppState {
                 remoteProjectCreateError = nil
                 Task { await self.requestSnapshot() }
             } else {
-                remoteProjectCreateError = result.errorMessage ?? "Failed to add project."
+                remoteProjectCreateError = result.errorMessage ?? String(localized: "Failed to add project.")
             }
         case .runProfileResult(let result):
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "run_profile_result") else { return }
@@ -228,7 +228,7 @@ extension MobileAppState {
             lastRunProfileError = nil
             Task { await self.requestSnapshot() }
         } else {
-            lastRunProfileError = result.errorMessage ?? "Run profile operation failed."
+            lastRunProfileError = result.errorMessage ?? String(localized: "Run profile operation failed.")
         }
     }
 
@@ -242,7 +242,7 @@ extension MobileAppState {
             runnableDetectError = nil
             logger.info("[RunProfiles] applied detection project=\(result.projectID.uuidString, privacy: .public) xcode=\(detected.xcode.count, privacy: .public) npm=\(detected.npm.count, privacy: .public) make=\(detected.make.count, privacy: .public)")
         } else {
-            runnableDetectError = result.errorMessage ?? "Failed to detect runnables."
+            runnableDetectError = result.errorMessage ?? String(localized: "Failed to detect runnables.")
         }
     }
 
@@ -255,7 +255,7 @@ extension MobileAppState {
             skillSources = result.sources
             skillCatalogError = nil
         } else {
-            skillCatalogError = result.errorMessage ?? "Failed to load skills."
+            skillCatalogError = result.errorMessage ?? String(localized: "Failed to load skills.")
         }
     }
 
@@ -266,7 +266,7 @@ extension MobileAppState {
         if result.ok {
             lastSkillError = nil
         } else {
-            lastSkillError = result.errorMessage ?? "Skill operation failed."
+            lastSkillError = result.errorMessage ?? String(localized: "Skill operation failed.")
         }
     }
 
@@ -282,7 +282,7 @@ extension MobileAppState {
         if result.ok {
             lastSkillError = nil
         } else {
-            lastSkillError = result.errorMessage ?? "Skill source operation failed."
+            lastSkillError = result.errorMessage ?? String(localized: "Skill source operation failed.")
         }
     }
 
@@ -295,7 +295,7 @@ extension MobileAppState {
             acpInstalledClients = result.installedClients
             acpRegistryError = nil
         } else {
-            acpRegistryError = result.errorMessage ?? "Failed to load the agent registry."
+            acpRegistryError = result.errorMessage ?? String(localized: "Failed to load the agent registry.")
         }
     }
 
@@ -308,7 +308,7 @@ extension MobileAppState {
         if result.ok {
             lastACPError = nil
         } else {
-            lastACPError = result.errorMessage ?? "Agent operation failed."
+            lastACPError = result.errorMessage ?? String(localized: "Agent operation failed.")
         }
     }
 
@@ -320,7 +320,7 @@ extension MobileAppState {
             mcpServers = result.servers
             mcpConfigError = nil
         } else {
-            mcpConfigError = result.errorMessage ?? "Failed to load MCP servers."
+            mcpConfigError = result.errorMessage ?? String(localized: "Failed to load MCP servers.")
         }
     }
 
@@ -330,7 +330,7 @@ extension MobileAppState {
         if result.ok {
             lastMCPError = nil
         } else {
-            lastMCPError = result.errorMessage ?? "MCP operation failed."
+            lastMCPError = result.errorMessage ?? String(localized: "MCP operation failed.")
         }
     }
 

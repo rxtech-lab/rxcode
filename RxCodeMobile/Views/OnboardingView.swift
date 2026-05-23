@@ -319,7 +319,7 @@ struct OnboardingView: View {
             onboardingLogger.info("parsed token expired=\(token.isExpired, privacy: .public)")
             onboardingLogger.info("parsed token relayURL=\(token.relayURL, privacy: .public)")
             guard !token.isExpired else {
-                pairingError = "This QR has expired. Generate a new one on your Mac."
+                pairingError = String(localized: "This QR has expired. Generate a new one on your Mac.")
                 return
             }
             pairingError = nil
@@ -333,7 +333,7 @@ struct OnboardingView: View {
             }
         } catch {
             onboardingLogger.error("token parse failed: \(error.localizedDescription, privacy: .public)")
-            pairingError = "Unrecognized QR. Try scanning the one from the Mac app."
+            pairingError = String(localized: "Unrecognized QR. Try scanning the one from the Mac app.")
         }
     }
 
@@ -355,12 +355,12 @@ struct OnboardingView: View {
         do {
             guard let data = try await item.loadTransferable(type: Data.self) else {
                 onboardingLogger.error("photo picker returned nil data")
-                pairingError = "Couldn't read the selected image."
+                pairingError = String(localized: "Couldn't read the selected image.")
                 return
             }
             guard let image = UIImage(data: data) else {
                 onboardingLogger.error("UIImage init failed bytes=\(data.count, privacy: .public)")
-                pairingError = "Couldn't read the selected image."
+                pairingError = String(localized: "Couldn't read the selected image.")
                 return
             }
             onboardingLogger.info("decoded image size=\(image.size.debugDescription, privacy: .public)")
@@ -369,11 +369,11 @@ struct OnboardingView: View {
                 handleScan(payload)
             } else {
                 onboardingLogger.error("no QR found in photo")
-                pairingError = "No QR code found in that image."
+                pairingError = String(localized: "No QR code found in that image.")
             }
         } catch {
             onboardingLogger.error("loadTransferable error: \(error.localizedDescription, privacy: .public)")
-            pairingError = "Couldn't load the selected image."
+            pairingError = String(localized: "Couldn't load the selected image.")
         }
     }
 }

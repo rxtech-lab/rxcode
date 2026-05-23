@@ -32,7 +32,7 @@ extension MobileAppState {
 
     func requestSkillCatalog(forceRefresh: Bool = false) async {
         guard isPaired else {
-            skillCatalogError = "Connect a Mac to browse skills."
+            skillCatalogError = String(localized: "Connect a Mac to browse skills.")
             return
         }
         let payload = SkillCatalogRequestPayload(forceRefresh: forceRefresh)
@@ -45,12 +45,12 @@ extension MobileAppState {
                 if s.pendingSkillCatalogRequestID == payload.clientRequestID {
                     s.pendingSkillCatalogRequestID = nil
                     s.skillCatalogLoading = false
-                    s.skillCatalogError = "Request timed out. Check your Mac and try again."
+                    s.skillCatalogError = String(localized: "Request timed out. Check your Mac and try again.")
                 }
             }
         } catch {
             skillCatalogLoading = false
-            skillCatalogError = "Failed to request skills: \(error.localizedDescription)"
+            skillCatalogError = String(localized: "Failed to request skills: \(error.localizedDescription)")
             if pendingSkillCatalogRequestID == payload.clientRequestID {
                 pendingSkillCatalogRequestID = nil
             }
@@ -68,7 +68,7 @@ extension MobileAppState {
     func addSkillGitSource(url: String, ref: String?) async {
         let trimmedURL = url.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedURL.isEmpty else {
-            lastSkillError = "Enter a GitHub repository URL."
+            lastSkillError = String(localized: "Enter a GitHub repository URL.")
             return
         }
         let trimmedRef = ref?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -87,7 +87,7 @@ extension MobileAppState {
 
     func mutateSkill(_ pluginID: String, operation: SkillMutationRequestPayload.Operation) async {
         guard isPaired else {
-            lastSkillError = "Connect a Mac first."
+            lastSkillError = String(localized: "Connect a Mac first.")
             return
         }
         guard !inFlightSkillMutations.contains(pluginID) else { return }
@@ -98,12 +98,12 @@ extension MobileAppState {
             try await client.send(.skillMutationRequest(payload), toHex: pairedDesktopPubkey)
             scheduleTimeout(Self.remoteConfigTimeout) { s in
                 if s.inFlightSkillMutations.remove(pluginID) != nil {
-                    s.lastSkillError = "Request timed out. Check your Mac and try again."
+                    s.lastSkillError = String(localized: "Request timed out. Check your Mac and try again.")
                 }
             }
         } catch {
             inFlightSkillMutations.remove(pluginID)
-            lastSkillError = "Failed to send request: \(error.localizedDescription)"
+            lastSkillError = String(localized: "Failed to send request: \(error.localizedDescription)")
         }
     }
 
@@ -115,7 +115,7 @@ extension MobileAppState {
         ref: String? = nil
     ) async {
         guard isPaired else {
-            lastSkillError = "Connect a Mac first."
+            lastSkillError = String(localized: "Connect a Mac first.")
             return
         }
         guard !inFlightSkillSourceMutations.contains(key) else { return }
@@ -133,13 +133,13 @@ extension MobileAppState {
             scheduleTimeout(Self.remoteConfigTimeout) { s in
                 if let key = s.skillSourceMutationKeys.removeValue(forKey: payload.clientRequestID) {
                     s.inFlightSkillSourceMutations.remove(key)
-                    s.lastSkillError = "Request timed out. Check your Mac and try again."
+                    s.lastSkillError = String(localized: "Request timed out. Check your Mac and try again.")
                 }
             }
         } catch {
             skillSourceMutationKeys.removeValue(forKey: payload.clientRequestID)
             inFlightSkillSourceMutations.remove(key)
-            lastSkillError = "Failed to send request: \(error.localizedDescription)"
+            lastSkillError = String(localized: "Failed to send request: \(error.localizedDescription)")
         }
     }
 
@@ -147,7 +147,7 @@ extension MobileAppState {
 
     func requestACPRegistry(forceRefresh: Bool = false) async {
         guard isPaired else {
-            acpRegistryError = "Connect a Mac to manage agents."
+            acpRegistryError = String(localized: "Connect a Mac to manage agents.")
             return
         }
         let payload = ACPRegistryRequestPayload(forceRefresh: forceRefresh)
@@ -160,12 +160,12 @@ extension MobileAppState {
                 if s.pendingACPRegistryRequestID == payload.clientRequestID {
                     s.pendingACPRegistryRequestID = nil
                     s.acpRegistryLoading = false
-                    s.acpRegistryError = "Request timed out. Check your Mac and try again."
+                    s.acpRegistryError = String(localized: "Request timed out. Check your Mac and try again.")
                 }
             }
         } catch {
             acpRegistryLoading = false
-            acpRegistryError = "Failed to request agents: \(error.localizedDescription)"
+            acpRegistryError = String(localized: "Failed to request agents: \(error.localizedDescription)")
             if pendingACPRegistryRequestID == payload.clientRequestID {
                 pendingACPRegistryRequestID = nil
             }
@@ -192,7 +192,7 @@ extension MobileAppState {
         enabled: Bool? = nil
     ) async {
         guard isPaired else {
-            lastACPError = "Connect a Mac first."
+            lastACPError = String(localized: "Connect a Mac first.")
             return
         }
         guard !inFlightACPMutations.contains(key) else { return }
@@ -211,13 +211,13 @@ extension MobileAppState {
             scheduleTimeout(timeout) { s in
                 if s.acpMutationKeys.removeValue(forKey: payload.clientRequestID) != nil {
                     s.inFlightACPMutations.remove(key)
-                    s.lastACPError = "Request timed out. Check your Mac and try again."
+                    s.lastACPError = String(localized: "Request timed out. Check your Mac and try again.")
                 }
             }
         } catch {
             acpMutationKeys.removeValue(forKey: payload.clientRequestID)
             inFlightACPMutations.remove(key)
-            lastACPError = "Failed to send request: \(error.localizedDescription)"
+            lastACPError = String(localized: "Failed to send request: \(error.localizedDescription)")
         }
     }
 
@@ -225,7 +225,7 @@ extension MobileAppState {
 
     func requestMCPConfig() async {
         guard isPaired else {
-            mcpConfigError = "Connect a Mac to manage MCP servers."
+            mcpConfigError = String(localized: "Connect a Mac to manage MCP servers.")
             return
         }
         let payload = MCPConfigRequestPayload()
@@ -238,12 +238,12 @@ extension MobileAppState {
                 if s.pendingMCPConfigRequestID == payload.clientRequestID {
                     s.pendingMCPConfigRequestID = nil
                     s.mcpConfigLoading = false
-                    s.mcpConfigError = "Request timed out. Check your Mac and try again."
+                    s.mcpConfigError = String(localized: "Request timed out. Check your Mac and try again.")
                 }
             }
         } catch {
             mcpConfigLoading = false
-            mcpConfigError = "Failed to request MCP servers: \(error.localizedDescription)"
+            mcpConfigError = String(localized: "Failed to request MCP servers: \(error.localizedDescription)")
             if pendingMCPConfigRequestID == payload.clientRequestID {
                 pendingMCPConfigRequestID = nil
             }
@@ -269,7 +269,7 @@ extension MobileAppState {
         enabled: Bool? = nil
     ) async {
         guard isPaired else {
-            lastMCPError = "Connect a Mac first."
+            lastMCPError = String(localized: "Connect a Mac first.")
             return
         }
         guard !inFlightMCPMutations.contains(serverName) else { return }
@@ -285,12 +285,12 @@ extension MobileAppState {
             try await client.send(.mcpMutationRequest(payload), toHex: pairedDesktopPubkey)
             scheduleTimeout(Self.remoteConfigTimeout) { s in
                 if s.inFlightMCPMutations.remove(serverName) != nil {
-                    s.lastMCPError = "Request timed out. Check your Mac and try again."
+                    s.lastMCPError = String(localized: "Request timed out. Check your Mac and try again.")
                 }
             }
         } catch {
             inFlightMCPMutations.remove(serverName)
-            lastMCPError = "Failed to send request: \(error.localizedDescription)"
+            lastMCPError = String(localized: "Failed to send request: \(error.localizedDescription)")
         }
     }
 }

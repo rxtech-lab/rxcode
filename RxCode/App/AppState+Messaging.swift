@@ -423,7 +423,7 @@ extension AppState {
         for sessionKey: String,
         extraMutations: ((inout SessionStreamState) -> Void)? = nil
     ) {
-        flushPendingUpdates(for: sessionKey)
+        flushPendingUpdates(for: sessionKey, forceText: true)
         updateState(sessionKey) { state in
             state.flushTask?.cancel()
             state.flushTask = nil

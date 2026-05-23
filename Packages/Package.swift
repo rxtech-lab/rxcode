@@ -6,6 +6,7 @@ let package = Package(
     defaultLocalization: "en",
     platforms: [.macOS(.v15), .iOS(.v18)],
     products: [
+        .library(name: "MessageList", targets: ["MessageList"]),
         .library(name: "RxCodeCore", targets: ["RxCodeCore"]),
         .library(name: "RxCodeChatKit", targets: ["RxCodeChatKit"]),
         .library(name: "RxCodeSync", targets: ["RxCodeSync"]),
@@ -17,12 +18,20 @@ let package = Package(
     ],
     targets: [
         .target(
+            name: "MessageList",
+            path: "Sources/MessageList",
+            swiftSettings: [
+                .defaultIsolation(MainActor.self),
+            ]
+        ),
+        .target(
             name: "RxCodeCore",
             path: "Sources/RxCodeCore"
         ),
         .target(
             name: "RxCodeChatKit",
             dependencies: [
+                "MessageList",
                 "RxCodeCore",
                 .product(name: "Textual", package: "textual"),
                 .product(name: "MarkdownUI", package: "swift-markdown-ui"),
@@ -39,6 +48,14 @@ let package = Package(
             name: "RxCodeSync",
             dependencies: ["RxCodeCore"],
             path: "Sources/RxCodeSync"
+        ),
+        .testTarget(
+            name: "MessageListTests",
+            dependencies: [
+                "MessageList",
+                .product(name: "ViewInspector", package: "ViewInspector"),
+            ],
+            path: "Tests/MessageListTests"
         ),
         .testTarget(
             name: "RxCodeCoreTests",

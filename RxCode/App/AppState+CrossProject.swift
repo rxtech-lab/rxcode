@@ -582,7 +582,7 @@ extension AppState {
                         return false
                     }
                     if hasToolUse {
-                        flushPendingUpdates(for: sessionKey)
+                        flushPendingUpdates(for: sessionKey, forceText: true)
                     }
 
                     updateState(sessionKey) { state in

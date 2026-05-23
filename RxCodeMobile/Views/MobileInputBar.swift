@@ -143,7 +143,9 @@ struct MobileInputBar: View {
     }
 
     private var placeholder: String {
-        isStreaming ? "Queue a message..." : "Message…"
+        isStreaming
+            ? String(localized: "Queue a message...")
+            : String(localized: "Message…")
     }
 
     private var animatedBorderGradient: AnyShapeStyle {

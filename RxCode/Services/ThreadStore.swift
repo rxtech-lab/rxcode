@@ -149,6 +149,40 @@ final class ThreadStore {
         save()
     }
 
+    func upsertThreadSummaryTitle(
+        sessionId: String,
+        projectId: UUID,
+        branch: String,
+        title: String,
+        updatedAt: Date = .now
+    ) {
+        if let existing = fetchThreadSummary(sessionId: sessionId) {
+            existing.applyTitle(
+                projectId: projectId,
+                branch: branch,
+                title: title,
+                updatedAt: updatedAt
+            )
+        } else {
+            let seed = ThreadSummaryItem.titleSeed(
+                sessionId: sessionId,
+                projectId: projectId,
+                branch: branch,
+                title: title,
+                updatedAt: updatedAt
+            )
+            context.insert(ThreadSummaryRecord(
+                sessionId: seed.sessionId,
+                projectId: seed.projectId,
+                branch: seed.branch,
+                title: seed.title,
+                summary: seed.summary,
+                updatedAt: seed.updatedAt
+            ))
+        }
+        save()
+    }
+
     func upsertBranchBriefing(projectId: UUID, branch: String, briefing: String, updatedAt: Date = .now) {
         if let existing = fetchBranchBriefing(projectId: projectId, branch: branch) {
             existing.apply(briefing: briefing, updatedAt: updatedAt)
@@ -457,24 +491,34 @@ final class ThreadStore {
     /// Append edit hunks to the file's row for this session, creating the row if it
     /// does not yet exist. Hunks are aggregated across turns; `containsWrite` becomes
     /// sticky once any Write contributes.
+    ///
+    /// `originalContent` is the file's contents captured at the very first edit
+    /// to this path within this session. It's stored only on row creation —
+    /// subsequent calls preserve the original snapshot rather than overwriting
+    /// it, so the diff view always compares against the true thread-start state.
     func appendFileEdit(
         sessionId: String,
         path: String,
         hunks: [PreviewFile.EditHunk],
-        containsWrite: Bool
+        containsWrite: Bool,
+        originalContent: String? = nil
     ) {
         guard !hunks.isEmpty else { return }
         let name = (path as NSString).lastPathComponent
         if let existing = fetchFileEdit(sessionId: sessionId, path: path) {
             existing.append(hunks: hunks, containsWrite: containsWrite)
             existing.name = name
+            if existing.originalContent == nil, let originalContent {
+                existing.originalContent = originalContent
+            }
         } else {
             context.insert(ThreadFileEdit(
                 sessionId: sessionId,
                 path: path,
                 name: name,
                 hunks: hunks,
-                containsWrite: containsWrite
+                containsWrite: containsWrite,
+                originalContent: originalContent
             ))
         }
         save()

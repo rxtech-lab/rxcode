@@ -8,11 +8,15 @@
 
 /* Begin PBXBuildFile section */
 		101010102FCB100000000002 /* AppStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 101010102FCB100000000001 /* AppStateTests.swift */; };
+		101010112FCB100000000002 /* BranchBriefingPromptContextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 101010112FCB100000000001 /* BranchBriefingPromptContextTests.swift */; };
 		33993F0F87CF4DB09F2813A8 /* AppStateProjectSwitchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4381E755142272EB2DAA9C96 /* AppStateProjectSwitchTests.swift */; };
+		5C2222222FCB200000000002 /* BriefingThreadRowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C2222222FCB200000000001 /* BriefingThreadRowTests.swift */; };
+		5C3333332FCB400000000002 /* ThreadStoreThreadSummaryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3333332FCB400000000001 /* ThreadStoreThreadSummaryTests.swift */; };
 		6E17B0012FC8000100A10001 /* LocalAIProviderAcceptanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E17B0002FC8000100A10001 /* LocalAIProviderAcceptanceTests.swift */; };
 		92E180F9B311F3C72D5DE6B7 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A9993BB72A5307039A88B729 /* Cocoa.framework */; };
 		DCA8CF4A05C959C4A6EB391F /* RxCodeCore in Frameworks */ = {isa = PBXBuildFile; productRef = CCDF9594876099576D4FD46E /* RxCodeCore */; };
 		DF06CCD12FB4CAB5005991E1 /* ViewInspector in Frameworks */ = {isa = PBXBuildFile; productRef = DF06CCD02FB4CAB5005991E1 /* ViewInspector */; };
+		DF06CCD22FCB3001005991E1 /* ViewInspector in Frameworks */ = {isa = PBXBuildFile; productRef = DF06CCD02FB4CAB5005991E1 /* ViewInspector */; };
 		DF06DCC72FB8552B005991E1 /* UnitTestPlan.xctestplan in Resources */ = {isa = PBXBuildFile; fileRef = DF06DCC62FB8552B005991E1 /* UnitTestPlan.xctestplan */; };
 		DF22D8282FBE025C00E3ABFD /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DF22D8272FBE025C00E3ABFD /* WidgetKit.framework */; };
 		DF22D82A2FBE025C00E3ABFD /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DF22D8292FBE025C00E3ABFD /* SwiftUI.framework */; };
@@ -102,7 +106,10 @@
 
 /* Begin PBXFileReference section */
 		101010102FCB100000000001 /* AppStateTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppStateTests.swift; sourceTree = "<group>"; };
+		101010112FCB100000000001 /* BranchBriefingPromptContextTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BranchBriefingPromptContextTests.swift; sourceTree = "<group>"; };
 		4381E755142272EB2DAA9C96 /* AppStateProjectSwitchTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppStateProjectSwitchTests.swift; sourceTree = "<group>"; };
+		5C2222222FCB200000000001 /* BriefingThreadRowTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BriefingThreadRowTests.swift; sourceTree = "<group>"; };
+		5C3333332FCB400000000001 /* ThreadStoreThreadSummaryTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ThreadStoreThreadSummaryTests.swift; sourceTree = "<group>"; };
 		6E17B0002FC8000100A10001 /* LocalAIProviderAcceptanceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LocalAIProviderAcceptanceTests.swift; sourceTree = "<group>"; };
 		6E17B0032FC8000100A10001 /* RxCodeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RxCodeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		6E17B00D2FC8000100A10001 /* UITestplan.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = UITestplan.xctestplan; sourceTree = "<group>"; };
@@ -119,6 +126,7 @@
 		DF23F7352FB8C3EC008929A6 /* icon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = icon.icon; sourceTree = "<group>"; };
 		DF5B0DDA2FC023BE000CE36F /* MobileUITestPlan-iPhone.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = "MobileUITestPlan-iPhone.xctestplan"; sourceTree = "<group>"; };
 		DF5B0DDC2FC023C8000CE36F /* MobileUITestPlan-iPad.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = "MobileUITestPlan-iPad.xctestplan"; sourceTree = "<group>"; };
+		DF5B0DDE2FCB300100CE36F /* MobileUnitTestPlan.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = MobileUnitTestPlan.xctestplan; sourceTree = "<group>"; };
 		DFA0CCC02FB4CC01005991E1 /* PlanDecisionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlanDecisionTests.swift; sourceTree = "<group>"; };
 		DFA0CCC12FB4CC01005991E1 /* PlanCardViewTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlanCardViewTests.swift; sourceTree = "<group>"; };
 		DFA0CCD52FB4CC02005991E1 /* HistoryListArchiveFilterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HistoryListArchiveFilterTests.swift; sourceTree = "<group>"; };
@@ -243,6 +251,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DF06CCD22FCB3001005991E1 /* ViewInspector in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -284,12 +293,15 @@
 			isa = PBXGroup;
 			children = (
 				101010102FCB100000000001 /* AppStateTests.swift */,
+				101010112FCB100000000001 /* BranchBriefingPromptContextTests.swift */,
 				4381E755142272EB2DAA9C96 /* AppStateProjectSwitchTests.swift */,
 				DFA0CCC02FB4CC01005991E1 /* PlanDecisionTests.swift */,
 				DFA0CCC12FB4CC01005991E1 /* PlanCardViewTests.swift */,
-				DFA0CCD52FB4CC02005991E1 /* HistoryListArchiveFilterTests.swift */,
-				E62000002FCB000100000001 /* MemoryIntentTests.swift */,
-			);
+					DFA0CCD52FB4CC02005991E1 /* HistoryListArchiveFilterTests.swift */,
+					5C2222222FCB200000000001 /* BriefingThreadRowTests.swift */,
+					5C3333332FCB400000000001 /* ThreadStoreThreadSummaryTests.swift */,
+					E62000002FCB000100000001 /* MemoryIntentTests.swift */,
+				);
 			path = RxCodeTests;
 			sourceTree = "<group>";
 		};
@@ -325,6 +337,7 @@
 				DF23F7352FB8C3EC008929A6 /* icon.icon */,
 				DF5B0DDC2FC023C8000CE36F /* MobileUITestPlan-iPad.xctestplan */,
 				DF5B0DDA2FC023BE000CE36F /* MobileUITestPlan-iPhone.xctestplan */,
+				DF5B0DDE2FCB300100CE36F /* MobileUnitTestPlan.xctestplan */,
 				DF06DCC62FB8552B005991E1 /* UnitTestPlan.xctestplan */,
 				6E17B00D2FC8000100A10001 /* UITestplan.xctestplan */,
 				E673353A2F7356F600FD26C7 /* RxCode */,
@@ -469,6 +482,7 @@
 			);
 			name = RxCodeMobileTests;
 			packageProductDependencies = (
+				DF06CCD02FB4CAB5005991E1 /* ViewInspector */,
 			);
 			productName = RxCodeMobileTests;
 			productReference = DF230B5F2FBC7368008929A6 /* RxCodeMobileTests.xctest */;
@@ -694,12 +708,15 @@
 			buildActionMask = 2147483647;
 			files = (
 				101010102FCB100000000002 /* AppStateTests.swift in Sources */,
+				101010112FCB100000000002 /* BranchBriefingPromptContextTests.swift in Sources */,
 				33993F0F87CF4DB09F2813A8 /* AppStateProjectSwitchTests.swift in Sources */,
 				DFA0CCD12FB4CC01005991E1 /* PlanDecisionTests.swift in Sources */,
-				DFA0CCD22FB4CC01005991E1 /* PlanCardViewTests.swift in Sources */,
-				DFA0CCE12FB4CC02005991E1 /* HistoryListArchiveFilterTests.swift in Sources */,
-				E62000012FCB000100000001 /* MemoryIntentTests.swift in Sources */,
-			);
+					DFA0CCD22FB4CC01005991E1 /* PlanCardViewTests.swift in Sources */,
+					DFA0CCE12FB4CC02005991E1 /* HistoryListArchiveFilterTests.swift in Sources */,
+					5C2222222FCB200000000002 /* BriefingThreadRowTests.swift in Sources */,
+					5C3333332FCB400000000002 /* ThreadStoreThreadSummaryTests.swift in Sources */,
+					E62000012FCB000100000001 /* MemoryIntentTests.swift in Sources */,
+				);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		DF22D8222FBE025C00E3ABFD /* Sources */ = {

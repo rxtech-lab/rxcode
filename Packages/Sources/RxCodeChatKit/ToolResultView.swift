@@ -7,6 +7,7 @@ struct ToolResultView: View {
     @State private var isExpanded: Bool
     @State private var isDiffExpanded = false
     @State private var showBashSheet = false
+    @State private var showMCPDetailSheet = false
     @Environment(WindowState.self) private var windowState
 
     /// Lowercased tool name (avoids repeated lowercased() calls)
@@ -51,7 +52,7 @@ struct ToolResultView: View {
         Group {
             if isCardTool {
                 cardBody
-                    .bubbleStyle(toolCall.isError ? .toolError : .tool)
+                    .bubbleStyle(displayIsError ? .toolError : .tool)
                     .padding(.vertical, 6)
                     .transition(.asymmetric(
                         insertion: .opacity
@@ -103,7 +104,7 @@ struct ToolResultView: View {
                         Spacer()
 
                         Group {
-                            if toolCall.isError {
+                            if displayIsError {
                                 Image(systemName: "exclamationmark.circle.fill")
                                     .foregroundStyle(ClaudeTheme.statusError)
                                     .font(.caption)
@@ -165,7 +166,7 @@ struct ToolResultView: View {
                                     result,
                                     size: ClaudeTheme.messageSize(12),
                                     design: .monospaced,
-                                    color: toolCall.isError ? ClaudeTheme.statusError : ClaudeTheme.textPrimary
+                                    color: displayIsError ? ClaudeTheme.statusError : ClaudeTheme.textPrimary
                                 )
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             }
@@ -196,7 +197,9 @@ struct ToolResultView: View {
     private var minimalBody: some View {
         VStack(alignment: .leading, spacing: 4) {
             Button {
-                if isBashTool, toolCall.result != nil {
+                if isMCPTool {
+                    showMCPDetailSheet = true
+                } else if isBashTool, toolCall.result != nil {
                     showBashSheet = true
                 } else {
                     withAnimation(.easeInOut(duration: 0.2)) {
@@ -205,7 +208,7 @@ struct ToolResultView: View {
                 }
             } label: {
                 HStack(spacing: 6) {
-                    if toolCall.isError {
+                    if displayIsError {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.system(size: ClaudeTheme.messageSize(11)))
                             .foregroundStyle(ClaudeTheme.statusError)
@@ -226,19 +229,19 @@ struct ToolResultView: View {
                     }
                 }
                 .font(.system(size: ClaudeTheme.messageSize(12)))
-                .foregroundStyle(toolCall.isError ? ClaudeTheme.statusError : ClaudeTheme.textTertiary)
+                .foregroundStyle(displayIsError ? ClaudeTheme.statusError : ClaudeTheme.textTertiary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
-            if isExpanded, !isBashTool, let result = toolCall.result, !result.isEmpty {
+            if isExpanded, !isBashTool, !isMCPTool, let result = toolCall.result, !result.isEmpty {
                 ScrollView {
                     ChatTextContentView(
                         result,
                         size: ClaudeTheme.messageSize(12),
                         design: .monospaced,
-                        color: toolCall.isError ? ClaudeTheme.statusError : ClaudeTheme.textSecondary
+                        color: displayIsError ? ClaudeTheme.statusError : ClaudeTheme.textSecondary
                     )
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -249,10 +252,24 @@ struct ToolResultView: View {
         .sheet(isPresented: $showBashSheet) {
             BashTerminalSheet(toolCall: toolCall)
         }
+        .sheet(isPresented: $showMCPDetailSheet) {
+            MCPToolDetailSheet(toolCall: toolCall)
+                .mcpToolDetailSheetPresentation()
+        }
     }
 
     private var isBashTool: Bool {
         toolNameLower == "bash"
+    }
+
+    private var isMCPTool: Bool {
+        ToolCategory(toolName: toolCall.name) == .mcp
+    }
+
+    private var displayIsError: Bool {
+        guard toolCall.isError else { return false }
+        let result = toolCall.result?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return !(isMCPTool && result.isEmpty)
     }
 
     private var isCardTool: Bool {
@@ -453,7 +470,8 @@ struct ToolResultView: View {
             case .execution: return ClaudeTheme.accent
             case .fileModification: return ClaudeTheme.statusWarning
             case .readOnly: return ClaudeTheme.textSecondary
-            case .mcp, .unknown: return ClaudeTheme.textTertiary
+            case .mcp: return ClaudeTheme.accent
+            case .unknown: return ClaudeTheme.textTertiary
             }
         }
     }
@@ -490,10 +508,10 @@ struct ToolResultView: View {
                                 .font(.system(size: ClaudeTheme.messageSize(12)))
                                 .foregroundStyle(ClaudeTheme.textTertiary)
                             fileActionLink(label: "diff") {
-                                windowState.diffFile = PreviewFile(
+                                windowState.diffFile = Self.editDiffPreviewFile(
                                     path: filePath,
                                     name: fileName,
-                                    editHunks: hunks
+                                    hunks: hunks
                                 )
                             }
                         }
@@ -513,6 +531,19 @@ struct ToolResultView: View {
         }
     }
 
+    nonisolated static func editDiffPreviewFile(
+        path: String,
+        name: String,
+        hunks: [PreviewFile.EditHunk]
+    ) -> PreviewFile {
+        PreviewFile(
+            path: path,
+            name: name,
+            editHunks: hunks,
+            showFullFileDiff: true
+        )
+    }
+
     private var inputSummary: String {
         if toolNameLower == "agent" {
             if let desc = toolCall.input["description"]?.stringValue {
@@ -530,6 +561,10 @@ struct ToolResultView: View {
                 return "\(toolDescriptionPrefix) — \(name)"
             }
             return toolDescriptionPrefix
+        }
+
+        if isMCPTool {
+            return mcpDisplayName
         }
 
         if let filePath = toolCall.input["file_path"]?.stringValue {
@@ -554,6 +589,15 @@ struct ToolResultView: View {
         return toolDescriptionPrefix
     }
 
+    private var mcpDisplayName: String {
+        if toolNameLower == "mcptoolcall" {
+            return "MCP tool call"
+        }
+        return toolCall.name
+            .replacingOccurrences(of: "mcp__", with: "")
+            .replacingOccurrences(of: "__", with: " / ")
+    }
+
     private var toolDescriptionPrefix: String {
         switch toolNameLower {
         case "read": "Read file"
@@ -567,7 +611,162 @@ struct ToolResultView: View {
         case "agent": "Subagent"
         case "skill": "Skill"
         case InteractiveTerminalState.toolName: "Interactive terminal"
-        default: toolCall.name
+        default: isMCPTool ? "MCP tool" : toolCall.name
         }
+    }
+}
+
+struct MCPToolDetailSheet: View {
+    let toolCall: ToolCall
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                Image(systemName: "puzzlepiece.extension")
+                    .font(.system(size: ClaudeTheme.messageSize(16), weight: .medium))
+                    .foregroundStyle(ClaudeTheme.accent)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(displayName)
+                        .font(.system(size: ClaudeTheme.messageSize(15), weight: .semibold))
+                        .foregroundStyle(ClaudeTheme.textPrimary)
+                    Text(statusText)
+                        .font(.system(size: ClaudeTheme.messageSize(12)))
+                        .foregroundStyle(statusColor)
+                }
+
+                Spacer()
+
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: ClaudeTheme.messageSize(12), weight: .semibold))
+                        .frame(width: 24, height: 24)
+                }
+                .buttonStyle(.plain)
+                .help("Close")
+            }
+            .padding(16)
+
+            ClaudeThemeDivider()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    JSONCodeBlock(title: "Call Params", code: Self.prettyJSONString(.object(toolCall.input)))
+                    JSONCodeBlock(title: "Result", code: Self.prettyResultString(toolCall.result))
+                }
+                .padding(16)
+            }
+        }
+        .mcpToolDetailFrame()
+        .background(ClaudeTheme.surfacePrimary)
+    }
+
+    private var displayName: String {
+        if toolCall.name.lowercased() == "mcptoolcall" {
+            return "MCP tool call"
+        }
+        return toolCall.name
+            .replacingOccurrences(of: "mcp__", with: "")
+            .replacingOccurrences(of: "__", with: " / ")
+    }
+
+    private var statusText: String {
+        if toolCall.isError, !(toolCall.result ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "Failed"
+        }
+        if toolCall.result != nil {
+            return "Completed"
+        }
+        return "Running"
+    }
+
+    private var statusColor: Color {
+        statusText == "Failed" ? ClaudeTheme.statusError : ClaudeTheme.textTertiary
+    }
+
+    private static func prettyResultString(_ result: String?) -> String {
+        guard let result else { return "null" }
+        if result.isEmpty { return "\"\"" }
+        if let data = result.data(using: .utf8),
+           let object = try? JSONSerialization.jsonObject(with: data),
+           JSONSerialization.isValidJSONObject(object),
+           let pretty = try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys]),
+           let string = String(data: pretty, encoding: .utf8) {
+            return string
+        }
+        return prettyJSONString(.string(result))
+    }
+
+    private static func prettyJSONString(_ value: JSONValue) -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        guard let data = try? encoder.encode(value),
+              let string = String(data: data, encoding: .utf8)
+        else {
+            return value.description
+        }
+        return string
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func mcpToolDetailSheetPresentation() -> some View {
+#if os(iOS)
+        self
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+#else
+        self
+#endif
+    }
+
+    @ViewBuilder
+    func mcpToolDetailFrame() -> some View {
+#if os(macOS)
+        self.frame(minWidth: 640, minHeight: 460)
+#else
+        self.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+#endif
+    }
+}
+
+private struct JSONCodeBlock: View {
+    let title: String
+    let code: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text(title)
+                    .font(.system(size: ClaudeTheme.messageSize(12), weight: .medium))
+                    .foregroundStyle(ClaudeTheme.textSecondary)
+                Spacer()
+                Text("json")
+                    .font(.system(size: ClaudeTheme.messageSize(11), weight: .medium, design: .monospaced))
+                    .foregroundStyle(ClaudeTheme.textTertiary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(ClaudeTheme.codeHeaderBackground)
+
+            ScrollView([.horizontal, .vertical]) {
+                Text(SyntaxHighlighter.highlight(code, language: "json", fontSize: ClaudeTheme.messageSize(12)))
+                    .textSelection(.enabled)
+                    .fixedSize()
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 240)
+            .background(ClaudeTheme.codeBackground)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
+        .overlay(
+            RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
+                .strokeBorder(ClaudeTheme.border, lineWidth: 0.5)
+        )
     }
 }

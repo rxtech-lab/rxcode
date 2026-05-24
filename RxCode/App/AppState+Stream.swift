@@ -95,14 +95,29 @@ extension AppState {
                     }
                     if !editPersistInfos.isEmpty {
                         for info in editPersistInfos {
-                            threadStore.appendFileEdit(
-                                sessionId: key,
-                                path: info.path,
-                                hunks: info.hunks,
-                                containsWrite: info.isWrite
-                            )
+                            // Pull the snapshot task created at tool_use time
+                            // (see `captureEditingFileSnapshot`). Persist via
+                            // an awaiting MainActor Task so the original-content
+                            // field reflects the file as it stood before the
+                            // edit ran, instead of post-edit content.
+                            let snapshotTask = state.editingFileSnapshotTasks[info.path]
+                            let pathLocal = info.path
+                            let hunksLocal = info.hunks
+                            let isWriteLocal = info.isWrite
+                            let keyLocal = key
+                            Task { @MainActor [weak self] in
+                                let snapshot = await snapshotTask?.value ?? nil
+                                guard let self else { return }
+                                self.threadStore.appendFileEdit(
+                                    sessionId: keyLocal,
+                                    path: pathLocal,
+                                    hunks: hunksLocal,
+                                    containsWrite: isWriteLocal,
+                                    originalContent: snapshot
+                                )
+                                self.threadFileEditsRevision &+= 1
+                            }
                         }
-                        threadFileEditsRevision &+= 1
                     }
                 }
             }
@@ -266,6 +281,19 @@ extension AppState {
                    let blockIdx = state.messages[msgIdx].toolCallIndex(id: toolId)
                 {
                     state.messages[msgIdx].blocks[blockIdx].toolCall?.input = parsed
+                    if let toolName = state.messages[msgIdx].blocks[blockIdx].toolCall?.name {
+                        // Kick off the pre-edit file snapshot now that the tool
+                        // input (and therefore `file_path`) is finally known.
+                        // ACP runtimes hit `captureEditingFileSnapshot` from
+                        // their `.assistant` block; the Claude streaming path
+                        // never delivers `file_path` until input_json_delta
+                        // finishes, so this is the earliest point it can run.
+                        Self.captureEditingFileSnapshot(
+                            toolName: toolName,
+                            input: parsed,
+                            state: &state
+                        )
+                    }
                     if let toolName = state.messages[msgIdx].blocks[blockIdx].toolCall?.name,
                        toolName.lowercased() == "todowrite"
                     {

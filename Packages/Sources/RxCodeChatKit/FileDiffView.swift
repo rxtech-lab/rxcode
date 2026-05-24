@@ -8,6 +8,12 @@ public struct FileDiffView: View {
     public let fileName: String
     public let editHunks: [PreviewFile.EditHunk]
     public let gitDiffMode: PreviewFile.GitDiffMode?
+    public let showFullFileDiff: Bool
+    /// Optional pre-edit snapshot. When provided alongside `showFullFileDiff`,
+    /// the view diffs this snapshot against the current on-disk content
+    /// directly — bypassing hunk reverse-application. This gives an exact diff
+    /// even when other agents have concurrently modified the file.
+    public let originalContent: String?
     @Environment(WindowState.self) private var windowState
     @State private var diffLines: [DiffLine] = []
     @State private var isLoading = true
@@ -17,12 +23,16 @@ public struct FileDiffView: View {
         filePath: String,
         fileName: String,
         editHunks: [PreviewFile.EditHunk] = [],
-        gitDiffMode: PreviewFile.GitDiffMode? = nil
+        gitDiffMode: PreviewFile.GitDiffMode? = nil,
+        showFullFileDiff: Bool = false,
+        originalContent: String? = nil
     ) {
         self.filePath = filePath
         self.fileName = fileName
         self.editHunks = editHunks
         self.gitDiffMode = gitDiffMode
+        self.showFullFileDiff = showFullFileDiff
+        self.originalContent = originalContent
     }
 
     public var body: some View {
@@ -139,8 +149,33 @@ public struct FileDiffView: View {
         isLoading = true
         defer { isLoading = false }
 
+        // Preferred path when both showFullFileDiff and an originalContent
+        // snapshot are available: diff the snapshot directly against the
+        // current file contents. This is exact under concurrent edits — no
+        // hunk reverse-application, no orphan "unmatched change" headers.
+        if showFullFileDiff, let original = originalContent {
+            let path = filePath
+            diffLines = await Task.detached(priority: .userInitiated) {
+                let current = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
+                return FileDiffView.buildSnapshotDiffLines(original: original, current: current)
+            }.value
+            return
+        }
+
         if !editHunks.isEmpty {
             let hunks = editHunks
+            let path = filePath
+            if showFullFileDiff,
+               let fullFileLines = await Task.detached(priority: .userInitiated, operation: { () -> [DiffLine]? in
+                   guard let contents = try? String(contentsOfFile: path, encoding: .utf8) else {
+                       return nil
+                   }
+                   return FileDiffView.buildFullFileEditDiffLines(currentContent: contents, hunks: hunks)
+               }).value {
+                diffLines = fullFileLines
+                return
+            }
+
             diffLines = await Task.detached(priority: .userInitiated) {
                 FileDiffView.buildEditDiffLines(from: hunks)
             }.value
@@ -198,19 +233,200 @@ public struct FileDiffView: View {
         guard !raw.isEmpty else { return [] }
         var lines = raw.components(separatedBy: "\n")
         if lines.last == "" { lines.removeLast() }
-        return lines.map { line in
-            if line.hasPrefix("+") && !line.hasPrefix("+++") {
-                return DiffLine(text: line, kind: .added)
-            } else if line.hasPrefix("-") && !line.hasPrefix("---") {
-                return DiffLine(text: line, kind: .removed)
-            } else if line.hasPrefix("@@") {
-                return DiffLine(text: line, kind: .hunk)
-            } else if line.hasPrefix("diff ") || line.hasPrefix("index ") || line.hasPrefix("---") || line.hasPrefix("+++") {
-                return DiffLine(text: line, kind: .meta)
+        var oldLine = 0
+        var newLine = 0
+        var result: [DiffLine] = []
+        result.reserveCapacity(lines.count)
+        for line in lines {
+            if line.hasPrefix("@@") {
+                if let (o, n) = parseHunkHeader(line) {
+                    oldLine = o
+                    newLine = n
+                }
+                result.append(DiffLine(text: line, kind: .hunk))
+            } else if line.hasPrefix("+++") || line.hasPrefix("---") || line.hasPrefix("diff ") || line.hasPrefix("index ") {
+                result.append(DiffLine(text: line, kind: .meta))
+            } else if line.hasPrefix("+") {
+                result.append(DiffLine(text: line, kind: .added, oldLineNumber: nil, newLineNumber: newLine))
+                newLine += 1
+            } else if line.hasPrefix("-") {
+                result.append(DiffLine(text: line, kind: .removed, oldLineNumber: oldLine, newLineNumber: nil))
+                oldLine += 1
             } else {
-                return DiffLine(text: line, kind: .context)
+                result.append(DiffLine(text: line, kind: .context, oldLineNumber: oldLine, newLineNumber: newLine))
+                oldLine += 1
+                newLine += 1
             }
         }
+        return result
+    }
+
+    /// Parses a `@@ -oldStart,oldCount +newStart,newCount @@` header and
+    /// returns the starting line numbers (1-based). Returns nil for malformed
+    /// headers.
+    private nonisolated static func parseHunkHeader(_ line: String) -> (oldStart: Int, newStart: Int)? {
+        // Expected shape: `@@ -<old>[,<count>] +<new>[,<count>] @@ <context>`
+        let scanner = Scanner(string: line)
+        scanner.charactersToBeSkipped = nil
+        guard scanner.scanString("@@") != nil,
+              scanner.scanString(" -") != nil,
+              let oldStart = scanner.scanInt() else { return nil }
+        _ = scanner.scanString(",")
+        _ = scanner.scanInt()
+        guard scanner.scanString(" +") != nil,
+              let newStart = scanner.scanInt() else { return nil }
+        return (oldStart, newStart)
+    }
+
+    nonisolated static func buildFullFileEditDiffLines(
+        currentContent: String,
+        hunks: [PreviewFile.EditHunk]
+    ) -> [DiffLine] {
+        return buildCurrentContentDiffLines(currentContent: currentContent, hunks: hunks)
+    }
+
+    /// Build a unified diff between two full-file snapshots. Used when a
+    /// pre-edit snapshot is available (captured at tool_use time), so we can
+    /// render an exact diff without ever reverse-applying hunks.
+    nonisolated static func buildSnapshotDiffLines(
+        original: String,
+        current: String
+    ) -> [DiffLine] {
+        let originalLines = contentLines(original)
+        let currentLines = contentLines(current)
+        return computeUnifiedDiffLines(old: originalLines, new: currentLines)
+    }
+
+    /// Build a unified diff that shows the full current file with the hunks
+    /// rendered inline on top of it. Works by reverse-applying each hunk
+    /// (newString → oldString) against the current content to reconstruct the
+    /// pre-edit state, then running a proper line diff between the pre-edit
+    /// and current lines. Hunks that can't be reverse-applied — pure
+    /// deletions (empty newString) or hunks whose newString no longer appears
+    /// in the file — become "orphan" hunks rendered at the top with a header,
+    /// so a deleted line is still visible even though its exact original
+    /// position can't be recovered.
+    private nonisolated static func buildCurrentContentDiffLines(
+        currentContent: String,
+        hunks: [PreviewFile.EditHunk]
+    ) -> [DiffLine] {
+        let currentLines = contentLines(currentContent)
+        guard !currentLines.isEmpty else {
+            return buildEditDiffLines(from: hunks)
+        }
+
+        var reconstructed = currentContent
+        var orphans: [PreviewFile.EditHunk] = []
+
+        for hunk in hunks.reversed() {
+            if hunk.newString.isEmpty {
+                if !hunk.oldString.isEmpty {
+                    orphans.insert(hunk, at: 0)
+                }
+                continue
+            }
+            if let range = reconstructed.range(of: hunk.newString) {
+                reconstructed.replaceSubrange(range, with: hunk.oldString)
+            } else if !hunk.oldString.isEmpty {
+                orphans.insert(hunk, at: 0)
+            }
+        }
+
+        let preEditLines = contentLines(reconstructed)
+        let unifiedLines = computeUnifiedDiffLines(old: preEditLines, new: currentLines)
+
+        guard !orphans.isEmpty else { return unifiedLines }
+
+        var result: [DiffLine] = []
+        for (idx, orphan) in orphans.enumerated() {
+            let header = orphans.count > 1
+                ? "@@ unmatched change \(idx + 1)/\(orphans.count) @@"
+                : "@@ unmatched change @@"
+            result.append(DiffLine(text: header, kind: .hunk))
+            for line in contentLines(orphan.oldString) {
+                result.append(DiffLine(text: "-\(line)", kind: .removed))
+            }
+            for line in contentLines(orphan.newString) {
+                result.append(DiffLine(text: "+\(line)", kind: .added))
+            }
+        }
+        result.append(contentsOf: unifiedLines)
+        return result
+    }
+
+    private nonisolated static func computeUnifiedDiffLines(
+        old: [String],
+        new: [String]
+    ) -> [DiffLine] {
+        let diff = new.difference(from: old)
+        var removalIndices = Set<Int>()
+        var insertionElements: [Int: String] = [:]
+        for change in diff {
+            switch change {
+            case .remove(let offset, _, _):
+                removalIndices.insert(offset)
+            case .insert(let offset, let element, _):
+                insertionElements[offset] = element
+            }
+        }
+
+        var lines: [DiffLine] = []
+        var oldIdx = 0
+        var newIdx = 0
+
+        while oldIdx < old.count || newIdx < new.count {
+            if oldIdx < old.count, removalIndices.contains(oldIdx) {
+                lines.append(DiffLine(
+                    text: "-\(old[oldIdx])",
+                    kind: .removed,
+                    oldLineNumber: oldIdx + 1,
+                    newLineNumber: nil
+                ))
+                oldIdx += 1
+            } else if newIdx < new.count, let added = insertionElements[newIdx] {
+                lines.append(DiffLine(
+                    text: "+\(added)",
+                    kind: .added,
+                    oldLineNumber: nil,
+                    newLineNumber: newIdx + 1
+                ))
+                newIdx += 1
+            } else if oldIdx < old.count, newIdx < new.count {
+                lines.append(DiffLine(
+                    text: " \(new[newIdx])",
+                    kind: .context,
+                    oldLineNumber: oldIdx + 1,
+                    newLineNumber: newIdx + 1
+                ))
+                oldIdx += 1
+                newIdx += 1
+            } else if oldIdx < old.count {
+                lines.append(DiffLine(
+                    text: " \(old[oldIdx])",
+                    kind: .context,
+                    oldLineNumber: oldIdx + 1,
+                    newLineNumber: nil
+                ))
+                oldIdx += 1
+            } else if newIdx < new.count {
+                lines.append(DiffLine(
+                    text: " \(new[newIdx])",
+                    kind: .context,
+                    oldLineNumber: nil,
+                    newLineNumber: newIdx + 1
+                ))
+                newIdx += 1
+            }
+        }
+
+        return lines
+    }
+
+    private nonisolated static func contentLines(_ content: String) -> [String] {
+        guard !content.isEmpty else { return [] }
+        var lines = content.components(separatedBy: "\n")
+        if lines.last == "" { lines.removeLast() }
+        return lines
     }
 }
 
@@ -233,6 +449,19 @@ struct DiffLine {
 
     let text: String
     let kind: Kind
+    /// 1-based line number in the pre-edit file (left gutter). Nil for added,
+    /// hunk, meta, or orphan rows that have no pre-edit position.
+    let oldLineNumber: Int?
+    /// 1-based line number in the current file (right gutter). Nil for removed,
+    /// hunk, meta, or orphan rows that have no post-edit position.
+    let newLineNumber: Int?
+
+    nonisolated init(text: String, kind: Kind, oldLineNumber: Int? = nil, newLineNumber: Int? = nil) {
+        self.text = text
+        self.kind = kind
+        self.oldLineNumber = oldLineNumber
+        self.newLineNumber = newLineNumber
+    }
 }
 
 // MARK: - NSTextView-based Renderer (TextKit2)
@@ -360,21 +589,54 @@ private struct DiffTextRenderer: NSViewRepresentable {
             let fontSize: CGFloat = 12
             let font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
             let gutterColor = NSColor(ClaudeTheme.textTertiary).withAlphaComponent(0.6)
-            let gutterDigits = max(String(lines.count).count, 2)
-            let blankPrefix = String(repeating: " ", count: gutterDigits) + "  "
+
+            // GitHub-style two-column gutter: left = pre-edit line number,
+            // right = post-edit line number. When one side is entirely empty
+            // (e.g. a Write that created the file from nothing — every row is
+            // pure addition), collapse to a single column so we don't waste
+            // gutter width on a permanently blank lane.
+            let maxOld = lines.compactMap(\.oldLineNumber).max() ?? 0
+            let maxNew = lines.compactMap(\.newLineNumber).max() ?? 0
+            let showOld = maxOld > 0
+            let showNew = maxNew > 0
+            let oldDigits = max(String(maxOld).count, 2)
+            let newDigits = max(String(maxNew).count, 2)
+            let oldBlank = String(repeating: " ", count: oldDigits)
+            let newBlank = String(repeating: " ", count: newDigits)
 
             let addedBg = NSColor(ClaudeTheme.statusSuccess).withAlphaComponent(0.14)
             let removedBg = NSColor(ClaudeTheme.statusError).withAlphaComponent(0.14)
 
-            let result = NSMutableAttributedString()
-            for (index, line) in lines.enumerated() {
-                let prefix: String
-                if line.kind == .meta {
-                    prefix = blankPrefix
-                } else {
-                    let n = String(index + 1)
-                    prefix = String(repeating: " ", count: gutterDigits - n.count) + n + "  "
+            func pad(_ n: Int?, width: Int, blank: String) -> String {
+                guard let n else { return blank }
+                let s = String(n)
+                if s.count >= width { return s }
+                return String(repeating: " ", count: width - s.count) + s
+            }
+
+            func gutterPrefix(for line: DiffLine) -> String {
+                let isHeader = line.kind == .meta || line.kind == .hunk
+                switch (showOld, showNew) {
+                case (true, true):
+                    if isHeader { return oldBlank + " " + newBlank + " " }
+                    return pad(line.oldLineNumber, width: oldDigits, blank: oldBlank)
+                        + " "
+                        + pad(line.newLineNumber, width: newDigits, blank: newBlank)
+                        + " "
+                case (true, false):
+                    if isHeader { return oldBlank + " " }
+                    return pad(line.oldLineNumber, width: oldDigits, blank: oldBlank) + " "
+                case (false, true):
+                    if isHeader { return newBlank + " " }
+                    return pad(line.newLineNumber, width: newDigits, blank: newBlank) + " "
+                case (false, false):
+                    return ""
                 }
+            }
+
+            let result = NSMutableAttributedString()
+            for line in lines {
+                let prefix = gutterPrefix(for: line)
 
                 let rowBg: NSColor? = {
                     switch line.kind {

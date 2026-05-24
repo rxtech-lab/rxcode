@@ -286,7 +286,7 @@ public enum AppTheme: String, CaseIterable, Identifiable {
 
     public var id: String { rawValue }
 
-    public var displayName: String {
+    public var displayName: LocalizedStringResource {
         switch self {
         case .claude:   "Terracotta (Default)"
         case .ocean:    "Ocean (Blue)"
@@ -295,6 +295,10 @@ public enum AppTheme: String, CaseIterable, Identifiable {
         case .midnight: "Midnight (Indigo)"
         case .amber:    "Amber (Yellow)"
         }
+    }
+
+    public var displayNameText: String {
+        String(localized: displayName)
     }
 
     public var colors: ThemeColors {

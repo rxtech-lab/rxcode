@@ -389,12 +389,22 @@ public struct SyncFileEdit: Codable, Sendable, Identifiable {
     /// True if any contributing tool was Write — old content was overwritten.
     public let containsWrite: Bool
     public let hunks: [SyncEditHunk]
+    /// Optional full-file before/after diff for mobile detail views. Older
+    /// desktop builds omit this and mobile falls back to `hunks`.
+    public let fullFileDiff: String?
 
-    public init(path: String, name: String, containsWrite: Bool, hunks: [SyncEditHunk]) {
+    public init(
+        path: String,
+        name: String,
+        containsWrite: Bool,
+        hunks: [SyncEditHunk],
+        fullFileDiff: String? = nil
+    ) {
         self.path = path
         self.name = name
         self.containsWrite = containsWrite
         self.hunks = hunks
+        self.fullFileDiff = fullFileDiff
     }
 }
 
@@ -639,4 +649,3 @@ public struct PongPayload: Codable, Sendable {
     public let t: Date
     public init(t: Date = .now) { self.t = t }
 }
-

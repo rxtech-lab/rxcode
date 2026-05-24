@@ -179,6 +179,21 @@ extension CodexAppServer {
         return cleanSummary(raw, limit: 3000)
     }
 
+    func determineMemoryInjectionIntent(
+        content: String,
+        kind: String,
+        scope: String,
+        model: String?
+    ) async -> String? {
+        let prompt = OpenAISummarizationService.memoryInjectionIntentPrompt(
+            content: content,
+            kind: kind,
+            scope: scope
+        )
+        guard let raw = await generateCodexPlainSummary(prompt: prompt, model: model) else { return nil }
+        return cleanSummary(raw, limit: 16)
+    }
+
     func generateBranchBriefing(
         threadSummaries: [(title: String, summary: String)],
         model: String?

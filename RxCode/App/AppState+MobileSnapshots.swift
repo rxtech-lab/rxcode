@@ -450,7 +450,7 @@ extension AppState {
             selectedEffort: selectedEffort,
             permissionMode: permissionMode,
             summarizationProvider: summarizationProvider.rawValue,
-            summarizationProviderDisplayName: summarizationProvider.displayName,
+            summarizationProviderDisplayName: summarizationProvider.displayNameText,
             openAISummarizationEndpoint: openAISummarizationEndpoint,
             openAISummarizationModel: openAISummarizationModel,
             notificationsEnabled: notificationsEnabled,
@@ -462,7 +462,7 @@ extension AppState {
             availableModels: models,
             modelSections: sections,
             availableSummarizationProviders: SummarizationProvider.availableCases.map {
-                SummarizationProviderOption(id: $0.rawValue, displayName: $0.displayName)
+                SummarizationProviderOption(id: $0.rawValue, displayName: $0.displayNameText)
             },
             openAISummarizationModels: openAISummarizationModels
         )
@@ -714,16 +714,32 @@ extension AppState {
         let resolvedID = resolveCurrentSessionId(request.sessionID)
 
         // This Turn: every file edited in the thread session (SwiftData history).
-        let turnEdits = threadStore.fetchFileEdits(sessionId: resolvedID).map { edit -> SyncFileEdit in
-            let summary = edit.toSummary()
-            return SyncFileEdit(
-                path: summary.path,
-                name: summary.name,
-                containsWrite: summary.containsWrite,
-                hunks: summary.hunks.map {
-                    SyncEditHunk(oldString: $0.oldString, newString: $0.newString)
+        let editSummaries = threadStore.fetchFileEdits(sessionId: resolvedID).map { $0.toSummary() }
+        let turnEdits = await withTaskGroup(of: (Int, SyncFileEdit).self) { group in
+            for (index, summary) in editSummaries.enumerated() {
+                group.addTask {
+                    let fullFileDiff = await Self.mobileFullFileDiff(
+                        path: summary.path,
+                        hunks: summary.hunks,
+                        originalContent: summary.originalContent
+                    )
+                    return (index, SyncFileEdit(
+                        path: summary.path,
+                        name: summary.name,
+                        containsWrite: summary.containsWrite,
+                        hunks: summary.hunks.map {
+                            SyncEditHunk(oldString: $0.oldString, newString: $0.newString)
+                        },
+                        fullFileDiff: fullFileDiff
+                    ))
                 }
-            )
+            }
+
+            var ordered = Array<SyncFileEdit?>(repeating: nil, count: editSummaries.count)
+            for await (index, edit) in group {
+                ordered[index] = edit
+            }
+            return ordered.compactMap(\.self)
         }
 
         func reply(ok: Bool, error: String?, uncommitted: [SyncGitChange]) async {
@@ -770,6 +786,129 @@ extension AppState {
             )
         }
         await reply(ok: true, error: nil, uncommitted: uncommitted)
+    }
+
+    nonisolated private static func mobileFullFileDiff(
+        path: String,
+        hunks: [PreviewFile.EditHunk],
+        originalContent: String?
+    ) async -> String? {
+        await Task.detached(priority: .utility) { () -> String? in
+            guard let currentContent = try? String(contentsOfFile: path, encoding: .utf8) else {
+                return nil
+            }
+            // When the thread captured a pre-edit snapshot, diff that against
+            // the current file directly. This produces a correct diff for
+            // sequences that hunk reverse-apply can't handle — e.g.
+            // edit-then-revert where the inserted lines no longer appear on
+            // disk, which otherwise rendered as a plain context-only dump.
+            if let originalContent {
+                return snapshotDiff(original: originalContent, current: currentContent)
+            }
+            return fullFileDiff(currentContent: currentContent, hunks: hunks)
+        }.value
+    }
+
+    nonisolated private static func fullFileDiff(currentContent: String, hunks: [PreviewFile.EditHunk]) -> String {
+        return currentContentDiff(currentContent: currentContent, hunks: hunks)
+    }
+
+    /// Build a unified diff string from a pre-edit snapshot and the file's
+    /// current content. Mirrors `FileDiffView.buildSnapshotDiffLines` on
+    /// macOS but emits the wire-format string the mobile renderer parses.
+    nonisolated private static func snapshotDiff(original: String, current: String) -> String {
+        let oldLines = contentLines(original)
+        let newLines = contentLines(current)
+        let diff = newLines.difference(from: oldLines)
+        var removalIndices = Set<Int>()
+        var insertionElements: [Int: String] = [:]
+        for change in diff {
+            switch change {
+            case .remove(let offset, _, _):
+                removalIndices.insert(offset)
+            case .insert(let offset, let element, _):
+                insertionElements[offset] = element
+            }
+        }
+
+        var lines: [String] = []
+        var oldIdx = 0
+        var newIdx = 0
+        while oldIdx < oldLines.count || newIdx < newLines.count {
+            if oldIdx < oldLines.count, removalIndices.contains(oldIdx) {
+                lines.append("-\(oldLines[oldIdx])")
+                oldIdx += 1
+            } else if newIdx < newLines.count, let added = insertionElements[newIdx] {
+                lines.append("+\(added)")
+                newIdx += 1
+            } else if oldIdx < oldLines.count, newIdx < newLines.count {
+                lines.append(" \(newLines[newIdx])")
+                oldIdx += 1
+                newIdx += 1
+            } else if oldIdx < oldLines.count {
+                lines.append(" \(oldLines[oldIdx])")
+                oldIdx += 1
+            } else if newIdx < newLines.count {
+                lines.append(" \(newLines[newIdx])")
+                newIdx += 1
+            }
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    nonisolated private static func currentContentDiff(
+        currentContent: String,
+        hunks: [PreviewFile.EditHunk]
+    ) -> String {
+        var lines = contentLines(currentContent).map { " \($0)" }
+        guard !lines.isEmpty else {
+            return hunks.flatMap { hunk in
+                contentLines(hunk.oldString).map { "-\($0)" } + contentLines(hunk.newString).map { "+\($0)" }
+            }.joined(separator: "\n")
+        }
+
+        for hunk in hunks {
+            let addedLines = contentLines(hunk.newString)
+            guard !addedLines.isEmpty else { continue }
+            let matchStart = firstRange(of: addedLines, in: lines.map(contentWithoutDiffMarker))
+            guard let matchStart else { continue }
+
+            let removedLines = contentLines(hunk.oldString)
+            if !removedLines.isEmpty {
+                lines.insert(contentsOf: removedLines.map { "-\($0)" }, at: matchStart)
+            }
+
+            let addedStart = matchStart + removedLines.count
+            for offset in addedLines.indices where addedStart + offset < lines.count {
+                lines[addedStart + offset] = "+\(addedLines[offset])"
+            }
+        }
+
+        return lines.joined(separator: "\n")
+    }
+
+    nonisolated private static func firstRange(of needle: [String], in haystack: [String]) -> Int? {
+        guard !needle.isEmpty, needle.count <= haystack.count else { return nil }
+        for start in 0...(haystack.count - needle.count) {
+            if Array(haystack[start..<(start + needle.count)]) == needle {
+                return start
+            }
+        }
+        return nil
+    }
+
+    nonisolated private static func contentWithoutDiffMarker(_ text: String) -> String {
+        guard let first = text.first, first == " " || first == "+" || first == "-" else {
+            return text
+        }
+        return String(text.dropFirst())
+    }
+
+    nonisolated private static func contentLines(_ content: String) -> [String] {
+        guard !content.isEmpty else { return [] }
+        var lines = content.components(separatedBy: "\n")
+        if lines.last == "" { lines.removeLast() }
+        return lines
     }
 
     /// User-triggered full reindex of every thread. Wipes cached embeddings,

@@ -202,13 +202,21 @@ public struct MessageList<Message: MessageListItem, RowContent: View>: View {
     }
 
     private var pinTailSpacerHeight: CGFloat {
-        guard pinning.pinnedUserMessageID != nil, scrollViewHeight > 0 else { return 0 }
-        let turnHeight = max(activeTurnMaxMeasuredHeight, rawActiveTurnMeasuredHeight)
-        return max(0, scrollViewHeight - turnHeight - 16)
+        guard pinning.isPinningUserMessage, scrollViewHeight > 0 else { return 0 }
+        return max(0, scrollViewHeight - activeTurnHeight - MessageListConstants.minimumPinnedTailSpacing)
     }
 
     private var rawActiveTurnMeasuredHeight: CGFloat {
         max(0, tailMarkerMinY - latestUserMinY)
+    }
+
+    private var activeTurnHeight: CGFloat {
+        max(activeTurnMaxMeasuredHeight, rawActiveTurnMeasuredHeight)
+    }
+
+    private var pinnedTurnFillsViewport: Bool {
+        guard scrollViewHeight > 0 else { return false }
+        return activeTurnHeight >= scrollViewHeight - MessageListConstants.minimumPinnedTailSpacing
     }
 
     private var isAnchoredAtBottom: Bool {
@@ -221,6 +229,22 @@ public struct MessageList<Message: MessageListItem, RowContent: View>: View {
 
     private var latestUserMessageID: Message.ID? {
         messages.last { $0.isUserMessage }?.id
+    }
+
+    private var hasContentAfterPinnedUserMessage: Bool {
+        guard let pinnedID = pinning.pinnedUserMessageID,
+              let pinnedIndex = messages.firstIndex(where: { $0.id == pinnedID })
+        else { return false }
+
+        let nextIndex = messages.index(after: pinnedIndex)
+        guard nextIndex < messages.endIndex else { return false }
+        return messages[nextIndex...].contains { !$0.isMessageListAccessory }
+    }
+
+    private var shouldReleasePinnedUserMessageForFilledTurn: Bool {
+        pinning.isPinningUserMessage
+            && hasContentAfterPinnedUserMessage
+            && pinnedTurnFillsViewport
     }
 
     private var messageListChangeToken: MessageListChangeToken<Message.ID> {
@@ -237,6 +261,11 @@ public struct MessageList<Message: MessageListItem, RowContent: View>: View {
             visibleMaxY: metrics.visibleMaxY
         )
         updateIsAtBottomBinding(anchor.isNearBottom)
+
+        if shouldReleasePinnedUserMessageForFilledTurn, !isUserDrivenScroll {
+            releasePinnedUserMessage(proxy: proxy)
+        }
+
         if decision == .scrollToBottom,
            isAtBottom,
            isStreaming,
@@ -426,7 +455,7 @@ public struct MessageList<Message: MessageListItem, RowContent: View>: View {
     }
 
     private func updateActiveTurnMaxMeasuredHeight() {
-        guard pinning.pinnedUserMessageID != nil else { return }
+        guard pinning.isPinningUserMessage else { return }
         let measured = rawActiveTurnMeasuredHeight
         guard measured > activeTurnMaxMeasuredHeight + 0.5 else { return }
         var transaction = Transaction()
@@ -492,6 +521,7 @@ private nonisolated enum MessageListConstants {
     static let tailMarkerID = "message-list-tail-marker"
     static let coordinateSpaceName = "message-list-content"
     static let loadThreshold: CGFloat = 96
+    static let minimumPinnedTailSpacing: CGFloat = 16
     static let userScrollDownDelta: CGFloat = 4
     static let layoutSettleDelayNanoseconds: UInt64 = 16_000_000
     static let streamingBottomScrollInterval: TimeInterval = 2

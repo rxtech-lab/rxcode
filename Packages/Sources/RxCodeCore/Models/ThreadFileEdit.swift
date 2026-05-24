@@ -14,6 +14,12 @@ public final class ThreadFileEdit {
     public var hunksData: Data
     public var firstEditedAt: Date
     public var updatedAt: Date
+    /// Full file content captured the first time this session's stream sees an
+    /// Edit/MultiEdit/Write tool_use for this path. Used by the diff inspector
+    /// as the "before" side of the diff so concurrent edits from other agents
+    /// don't break hunk anchoring. Optional for legacy rows persisted before
+    /// snapshot capture was added — those still render via hunk reverse-apply.
+    public var originalContent: String?
 
     public init(
         sessionId: String,
@@ -21,6 +27,7 @@ public final class ThreadFileEdit {
         name: String,
         hunks: [PreviewFile.EditHunk],
         containsWrite: Bool,
+        originalContent: String? = nil,
         firstEditedAt: Date = .now,
         updatedAt: Date = .now
     ) {
@@ -29,6 +36,7 @@ public final class ThreadFileEdit {
         self.name = name
         self.containsWrite = containsWrite
         self.hunksData = Self.encode(hunks)
+        self.originalContent = originalContent
         self.firstEditedAt = firstEditedAt
         self.updatedAt = updatedAt
     }
@@ -49,7 +57,7 @@ public final class ThreadFileEdit {
     }
 
     public func toSummary() -> FileEditSummary {
-        FileEditSummary(path: path, name: name, hunks: hunks, containsWrite: containsWrite)
+        FileEditSummary(path: path, name: name, hunks: hunks, containsWrite: containsWrite, originalContent: originalContent)
     }
 
     private static func encode(_ hunks: [PreviewFile.EditHunk]) -> Data {

@@ -169,6 +169,18 @@ actor OpenAISummarizationService {
         return await generateSummary(prompt: prompt, endpoint: endpoint, apiKey: apiKey, model: model, maxTokens: 512)
     }
 
+    func determineMemoryInjectionIntent(
+        content: String,
+        kind: String,
+        scope: String,
+        endpoint: String,
+        apiKey: String,
+        model: String
+    ) async -> String? {
+        let prompt = Self.memoryInjectionIntentPrompt(content: content, kind: kind, scope: scope)
+        return await generateSummary(prompt: prompt, endpoint: endpoint, apiKey: apiKey, model: model, maxTokens: 8)
+    }
+
     func generateBranchBriefing(
         threadSummaries: [(title: String, summary: String)],
         endpoint: String,
@@ -299,6 +311,23 @@ actor OpenAISummarizationService {
 
         Final assistant response:
         \(String(finalResponse.prefix(3000)))
+        """
+    }
+
+    static func memoryInjectionIntentPrompt(content: String, kind: String, scope: String) -> String {
+        """
+        Decide whether this saved memory should be injected into every future agent system prompt.
+
+        Reply with ONLY true or false.
+
+        Return true only when the memory captures the user's durable intent: a reusable preference, recurring workflow instruction, naming/style convention, default behavior, "always/never" rule, or explicitly requested remember-this note.
+
+        Return false for ordinary facts, completed work, build/test results, files changed, temporary task state, one-off decisions, tool availability, debugging details, or any memory that is useful only when retrieved by related search.
+
+        Memory kind: \(kind)
+        Memory scope: \(scope)
+        Memory content:
+        \(String(content.prefix(1200)))
         """
     }
 

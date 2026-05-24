@@ -93,6 +93,16 @@ struct SessionStreamState {
     /// Prevents the early (first-text-delta) trigger and the `.result` fallback
     /// from kicking off duplicate generations on the same session.
     var titleGenerationTriggered: Bool = false
+
+    /// File-content snapshots captured the first time this session's stream sees
+    /// an Edit/MultiEdit/Write tool_use for a given path. Used by the "This
+    /// thread" diff inspector so the rendered diff compares (file-before-this-
+    /// thread-touched-it) vs (file-on-disk-now), instead of trying to reverse-
+    /// apply hunks against the current file — which breaks when concurrent
+    /// agents modify the same file. The task is kicked off at tool_use time so
+    /// the read can race ahead of the actual file write. The persistence layer
+    /// awaits the task when the matching tool_result lands.
+    var editingFileSnapshotTasks: [String: Task<String?, Never>] = [:]
 }
 
 enum SummarizationProvider: String, CaseIterable, Identifiable {
@@ -102,12 +112,16 @@ enum SummarizationProvider: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    var displayName: String {
+    var displayName: LocalizedStringResource {
         switch self {
         case .selectedClient: return "Thread Model"
         case .openAI: return "OpenAI-Compatible Endpoint"
         case .appleFoundationModel: return "Apple Foundation Model"
         }
+    }
+
+    var displayNameText: String {
+        String(localized: displayName)
     }
 
     /// Returns the providers that should be offered to the user right now.
@@ -332,6 +346,7 @@ final class AppState {
     }
 
     var memoryRevision = 0
+    @ObservationIgnored var memoryInjectionIntentCache: [String: Bool] = [:]
 
     // MARK: - Notifications
 

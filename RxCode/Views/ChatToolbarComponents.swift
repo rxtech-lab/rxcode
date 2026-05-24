@@ -49,14 +49,14 @@ struct ChatToolbarControls: View {
                         Button {
                             appState.setSessionPermissionMode(mode, in: windowState)
                         } label: {
-                            Text(LocalizedStringKey(mode.displayName))
+                            Text(mode.displayName)
                             if effectiveMode == mode { Image(systemName: "checkmark") }
                         }
                     }
                 }
             } label: {
                 controlLabel(
-                    title: effectiveMode.displayName,
+                    title: effectiveMode.displayNameText,
                     icon: nil,
                     isAccent: placement == .composer,
                     isActive: false
@@ -64,7 +64,7 @@ struct ChatToolbarControls: View {
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
-            .help("Permission mode: \(effectiveMode.displayName)")
+            .help("Permission mode: \(effectiveMode.displayNameText)")
             .accessibilityIdentifier("permission-mode-menu")
 
             Menu {
@@ -102,7 +102,7 @@ struct ChatToolbarControls: View {
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
-            .help("Model: \(effectiveProvider.displayName) · \(appState.modelDisplayLabel(effectiveModel, provider: effectiveProvider))")
+            .help("Model: \(effectiveProvider.displayNameText) · \(appState.modelDisplayLabel(effectiveModel, provider: effectiveProvider))")
             .accessibilityIdentifier("provider-model-menu")
             .popoverTip(RxCodeTips.AgentSelectionTip(), arrowEdge: .top)
 

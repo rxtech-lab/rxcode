@@ -43,8 +43,9 @@ public struct ChangeDiffView: View {
     @ViewBuilder
     private func unifiedRows(_ diff: String) -> some View {
         let lines = diff.components(separatedBy: .newlines)
-        ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+        ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
             diffRow(
+                lineNumber: unifiedLineNumber(line: line, offset: index),
                 text: line.isEmpty ? " " : line,
                 color: unifiedColor(line),
                 background: unifiedBackground(line)
@@ -66,25 +67,40 @@ public struct ChangeDiffView: View {
             let added = hunk.newString
                 .components(separatedBy: .newlines)
                 .map { ("+ " + $0, ClaudeTheme.statusSuccess, ClaudeTheme.statusSuccess.opacity(0.06)) }
-            ForEach(Array((removed + added).enumerated()), id: \.offset) { _, item in
-                diffRow(text: item.0, color: item.1, background: item.2)
+            ForEach(Array((removed + added).enumerated()), id: \.offset) { offset, item in
+                diffRow(lineNumber: offset + 1, text: item.0, color: item.1, background: item.2)
             }
         }
     }
 
     // MARK: - Shared row
 
-    private func diffRow(text: String, color: Color, background: Color) -> some View {
-        ChatTextContentView(
-            text,
-            size: ClaudeTheme.messageSize(12),
-            design: .monospaced,
-            color: color
-        )
-        .frame(maxWidth: .infinity, alignment: .leading)
+    private func diffRow(lineNumber: Int? = nil, text: String, color: Color, background: Color) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(lineNumber.map(String.init) ?? "")
+                .font(.system(size: ClaudeTheme.messageSize(11), design: .monospaced))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+                .frame(width: 34, alignment: .trailing)
+                .accessibilityIdentifier("diff-line-number")
+
+            ChatTextContentView(
+                text,
+                size: ClaudeTheme.messageSize(12),
+                design: .monospaced,
+                color: color
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
         .padding(.horizontal, 8)
         .padding(.vertical, 1)
         .background(background)
+    }
+
+    private func unifiedLineNumber(line: String, offset: Int) -> Int? {
+        if line.hasPrefix("diff ") || line.hasPrefix("index ") || line.hasPrefix("---") || line.hasPrefix("+++") || line.hasPrefix("@@") {
+            return nil
+        }
+        return offset + 1
     }
 
     private func unifiedColor(_ line: String) -> Color {

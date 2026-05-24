@@ -174,7 +174,11 @@ struct MobileBriefingDetailView: View {
                     VStack(spacing: 12) {
                         ForEach(threads) { thread in
                             NavigationLink(value: thread.sessionId) {
-                                ThreadCard(thread: thread, namespace: glassNamespace)
+                                MobileBriefingThreadCard(
+                                    thread: thread,
+                                    isStreaming: isThreadStreaming(thread.sessionId),
+                                    namespace: glassNamespace
+                                )
                             }
                             .buttonStyle(.plain)
                             .accessibilityIdentifier("briefing-thread-row-\(thread.sessionId)")
@@ -207,6 +211,10 @@ struct MobileBriefingDetailView: View {
         .glassEffect(.regular, in: .rect(cornerRadius: 16))
     }
 
+    private func isThreadStreaming(_ sessionId: String) -> Bool {
+        state.sessions.first(where: { $0.id == sessionId })?.isStreaming ?? false
+    }
+
     // MARK: - Accent Gradient
 
     private var accentGradient: LinearGradient {
@@ -223,8 +231,9 @@ struct MobileBriefingDetailView: View {
 
 // MARK: - Thread Card
 
-private struct ThreadCard: View {
+struct MobileBriefingThreadCard: View {
     let thread: MobileThreadSummary
+    let isStreaming: Bool
     let namespace: Namespace.ID
 
     var body: some View {
@@ -257,9 +266,13 @@ private struct ThreadCard: View {
                     )
                 }
                 
-                Text(thread.updatedAt.formatted(.relative(presentation: .named)))
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                if isStreaming {
+                    MobileBriefingThreadLoadingBadge()
+                } else {
+                    Text(thread.updatedAt.formatted(.relative(presentation: .named)))
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
             }
 
             Spacer(minLength: 0)
@@ -274,5 +287,31 @@ private struct ThreadCard: View {
         .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 16))
         .glassEffectID(thread.id, in: namespace)
         .contentShape(.rect(cornerRadius: 16))
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var accessibilityLabel: String {
+        let title = thread.title.isEmpty ? "Untitled" : thread.title
+        if isStreaming {
+            return "\(title), response in progress"
+        }
+        return title
+    }
+}
+
+private struct MobileBriefingThreadLoadingBadge: View {
+    var body: some View {
+        HStack(spacing: 5) {
+            ProgressView()
+                .controlSize(.mini)
+
+            Text("Response in progress")
+                .font(.caption2.weight(.semibold))
+                .lineLimit(1)
+        }
+        .foregroundStyle(.tint)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(.tint.opacity(0.12), in: Capsule())
     }
 }

@@ -523,7 +523,7 @@ private struct BriefingListCard: View {
                             Circle()
                                 .fill(.green)
                                 .frame(width: 5, height: 5)
-                            Text("\(activeJobCount) active")
+                            Text("\(activeJobCount) active", tableName: "Localizable")
                                 .font(.system(size: 11, weight: .medium))
                         }
                         .foregroundStyle(.green)
@@ -789,7 +789,7 @@ private struct ActiveJobsChip: View {
                 .frame(width: 6, height: 6)
                 .opacity(isPulsing ? 0.35 : 1)
                 .scaleEffect(isPulsing ? 0.85 : 1)
-            Text("\(count) active")
+            Text("\(count) active", tableName: "Localizable")
                 .font(.caption.weight(.medium))
         }
         .foregroundStyle(.green)
@@ -801,7 +801,7 @@ private struct ActiveJobsChip: View {
                 isPulsing = true
             }
         }
-        .accessibilityLabel("\(count) active jobs")
+        .accessibilityLabel(Text("\(count) active jobs", tableName: "Localizable"))
     }
 }
 

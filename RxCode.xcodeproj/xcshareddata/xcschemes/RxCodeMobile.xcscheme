@@ -36,6 +36,9 @@
          <TestPlanReference
             reference = "container:MobileUITestPlan-iPad.xctestplan">
          </TestPlanReference>
+         <TestPlanReference
+            reference = "container:MobileUnitTestPlan.xctestplan">
+         </TestPlanReference>
       </TestPlans>
    </TestAction>
    <LaunchAction

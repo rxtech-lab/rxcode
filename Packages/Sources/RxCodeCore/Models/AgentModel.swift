@@ -5,12 +5,16 @@ public enum AgentProvider: String, Codable, CaseIterable, Sendable, Hashable {
     case codex
     case acp
 
-    public var displayName: String {
+    public var displayName: LocalizedStringResource {
         switch self {
         case .claudeCode: return "Claude Code"
         case .codex: return "Codex"
         case .acp: return "ACP"
         }
+    }
+
+    public var displayNameText: String {
+        String(localized: displayName)
     }
 
     /// Default `SessionOrigin` for sessions originated by this provider.

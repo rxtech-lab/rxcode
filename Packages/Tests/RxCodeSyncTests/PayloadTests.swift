@@ -5,6 +5,55 @@ import RxCodeCore
 
 @Suite("Mobile sync payloads")
 struct PayloadTests {
+    @Test("thread changes carry optional full-file diff")
+    func threadChangesCarryFullFileDiff() throws {
+        let payload = Payload.threadChangesResult(
+            ThreadChangesResultPayload(
+                clientRequestID: UUID(uuidString: "11111111-2222-3333-4444-555555555555")!,
+                sessionID: "thread-1",
+                ok: true,
+                turnEdits: [
+                    SyncFileEdit(
+                        path: "/tmp/example.swift",
+                        name: "example.swift",
+                        containsWrite: false,
+                        hunks: [SyncEditHunk(oldString: "old", newString: "new")],
+                        fullFileDiff: "--- before\n+++ after\n@@ full file @@\n-old\n+new"
+                    )
+                ],
+                uncommitted: []
+            )
+        )
+
+        let data = try JSONEncoder().encode(payload)
+        let decoded = try JSONDecoder().decode(Payload.self, from: data)
+        guard case .threadChangesResult(let result) = decoded else {
+            Issue.record("Expected thread changes result payload")
+            return
+        }
+
+        #expect(result.turnEdits.first?.fullFileDiff?.contains("@@ full file @@") == true)
+    }
+
+    @Test("thread changes decode when full-file diff is absent")
+    func threadChangesDecodeWithoutFullFileDiff() throws {
+        let json = """
+        {
+          "path": "/tmp/example.swift",
+          "name": "example.swift",
+          "containsWrite": false,
+          "hunks": [
+            { "oldString": "old", "newString": "new" }
+          ]
+        }
+        """.data(using: .utf8)!
+
+        let decoded = try JSONDecoder().decode(SyncFileEdit.self, from: json)
+
+        #expect(decoded.fullFileDiff == nil)
+        #expect(decoded.hunks.first?.newString == "new")
+    }
+
     @Test("pair request carries APNs environment")
     func pairRequestCarriesAPNsEnvironment() throws {
         let payload = Payload.pairRequest(

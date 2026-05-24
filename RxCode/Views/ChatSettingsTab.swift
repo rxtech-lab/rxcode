@@ -355,7 +355,7 @@ struct ChatSettingsTab: View {
 
             Picker("", selection: $appState.permissionMode) {
                 ForEach(PermissionMode.allCases, id: \.self) { mode in
-                    Text(LocalizedStringKey(mode.displayName)).tag(mode)
+                    Text(mode.displayName).tag(mode)
                 }
             }
             .labelsHidden()

@@ -249,7 +249,8 @@ public struct ToolCall: Identifiable, Codable, Sendable, Equatable {
     /// Completed read/execution tools may have an empty result, but the chat UI
     /// still needs the block so it can count them in the collapsed tool summary.
     public var keepsEmptyResult: Bool {
-        isKeepAlways || ToolCategory(toolName: name).isTransient
+        let category = ToolCategory(toolName: name)
+        return isKeepAlways || category.isTransient || category == .mcp
     }
 
     public init(
@@ -356,11 +357,23 @@ public struct FileEditSummary: Identifiable, Sendable {
     /// True if any contributing tool was Write — old content was overwritten,
     /// not surgically edited.
     public let containsWrite: Bool
+    /// File contents captured at the moment this thread first touched the path.
+    /// When present, the diff view uses it as the "before" side and the
+    /// current file on disk as the "after" side, instead of reconstructing
+    /// from hunks.
+    public let originalContent: String?
 
-    public init(path: String, name: String, hunks: [PreviewFile.EditHunk], containsWrite: Bool) {
+    public init(
+        path: String,
+        name: String,
+        hunks: [PreviewFile.EditHunk],
+        containsWrite: Bool,
+        originalContent: String? = nil
+    ) {
         self.path = path
         self.name = name
         self.hunks = hunks
         self.containsWrite = containsWrite
+        self.originalContent = originalContent
     }
 }

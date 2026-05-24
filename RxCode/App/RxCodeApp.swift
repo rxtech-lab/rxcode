@@ -66,8 +66,10 @@ struct RxCodeApp: App {
             }
             CommandMenu("Theme") {
                 ForEach(AppTheme.allCases) { theme in
-                    Button(theme.displayName) {
+                    Button {
                         appState.selectedTheme = theme
+                    } label: {
+                        Text(theme.displayName)
                     }
                     .disabled(appState.selectedTheme == theme)
                 }
@@ -281,7 +283,7 @@ private struct MenuBarContentView: View {
 
     private var header: some View {
         HStack {
-            Text("\(appState.selectedAgentProvider.displayName) Usage")
+            Text("\(appState.selectedAgentProvider.displayNameText) Usage")
                 .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)

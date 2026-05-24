@@ -102,6 +102,27 @@ extension AppState {
             archivedAt: stillPlaceholder.archivedAt
         )
         await renameSession(session, to: title)
+        await storeThreadSummaryTitle(session.summary, title: title)
+    }
+
+    func storeThreadSummaryTitle(_ summary: ChatSession.Summary, title: String) async {
+        let projectPath = projects.first(where: { $0.id == summary.projectId })?.path
+        let branchPath = summary.worktreePath ?? projectPath
+        let currentBranch: String?
+        if let branchPath {
+            currentBranch = await GitHelper.currentBranch(at: branchPath)
+        } else {
+            currentBranch = nil
+        }
+        let branch = summary.worktreeBranch ?? currentBranch ?? "unknown"
+
+        threadStore.upsertThreadSummaryTitle(
+            sessionId: summary.id,
+            projectId: summary.projectId,
+            branch: branch,
+            title: title
+        )
+        threadSummaryRevision &+= 1
     }
 
     func generateSessionTitle(firstUserMessage: String, summary: ChatSession.Summary) async -> String? {

@@ -16,14 +16,37 @@ extension AppState {
         await memoryService.search(query, projectId: projectId, limit: limit)
     }
 
-    func systemPromptMemoryItems(projectId: UUID?) async -> [MemoryItem] {
+    func systemPromptMemoryItems(projectId: UUID?, provider: AgentProvider, model: String?) async -> [MemoryItem] {
         let items = await memoryService.allMemories()
-        return items.filter { item in
+        var injected: [MemoryItem] = []
+        for item in items {
             if let memoryProjectId = item.projectId {
-                guard memoryProjectId == projectId else { return false }
+                guard memoryProjectId == projectId else { continue }
             }
-            return Self.shouldInjectMemoryIntoSystemPrompt(item)
+            if await shouldInjectMemoryIntoSystemPrompt(item, provider: provider, model: model) {
+                injected.append(item)
+            }
         }
+        return injected
+    }
+
+    func shouldInjectMemoryIntoSystemPrompt(_ item: MemoryItem, provider: AgentProvider, model: String?) async -> Bool {
+        let cacheKey = memoryInjectionIntentCacheKey(for: item, provider: provider, model: model)
+        if let cached = memoryInjectionIntentCache[cacheKey] {
+            return cached
+        }
+
+        let rawDecision = await generateMemoryInjectionIntent(
+            content: item.content,
+            kind: item.kind,
+            scope: item.scope,
+            provider: provider,
+            model: model
+        )
+        let decision = Self.parseMemoryInjectionDecision(rawDecision)
+            ?? Self.fallbackShouldInjectMemoryIntoSystemPrompt(item)
+        memoryInjectionIntentCache[cacheKey] = decision
+        return decision
     }
 
     @discardableResult
@@ -110,6 +133,70 @@ extension AppState {
         """
     }
 
+    private func generateMemoryInjectionIntent(
+        content: String,
+        kind: String,
+        scope: String,
+        provider: AgentProvider,
+        model: String?
+    ) async -> String? {
+        switch summarizationProvider {
+        case .selectedClient:
+            let selectedModel = model ?? selectedSummarizationModel(for: provider)
+            switch provider {
+            case .claudeCode:
+                return await claude.determineMemoryInjectionIntent(
+                    content: content,
+                    kind: kind,
+                    scope: scope,
+                    model: selectedModel ?? "haiku"
+                )
+            case .codex:
+                return await codex.determineMemoryInjectionIntent(
+                    content: content,
+                    kind: kind,
+                    scope: scope,
+                    model: selectedModel
+                )
+            case .acp:
+                return nil
+            }
+        case .openAI:
+            guard !openAISummarizationModel.isEmpty else { return nil }
+            return await openAISummarization.determineMemoryInjectionIntent(
+                content: content,
+                kind: kind,
+                scope: scope,
+                endpoint: openAISummarizationEndpoint,
+                apiKey: openAISummarizationAPIKey,
+                model: openAISummarizationModel
+            )
+        case .appleFoundationModel:
+            return await foundationModelSummarization.determineMemoryInjectionIntent(
+                content: content,
+                kind: kind,
+                scope: scope
+            )
+        }
+    }
+
+    private func memoryInjectionIntentCacheKey(for item: MemoryItem, provider: AgentProvider, model: String?) -> String {
+        [
+            item.id,
+            item.updatedAt.timeIntervalSince1970.description,
+            item.kind,
+            item.scope,
+            item.content,
+            summarizationProvider.rawValue,
+            provider.rawValue,
+            model ?? "",
+            selectedAgentProvider.rawValue,
+            selectedModel,
+            openAISummarizationEndpoint,
+            openAISummarizationModel
+        ].joined(separator: "\u{1f}")
+    }
+
     func scheduleMemoryExtraction(
         sessionId: String,
         projectId: UUID,
@@ -119,7 +206,6 @@ extension AppState {
         let userMessage = lastUserMessageText(in: messages)
         let finalResponse = lastAssistantResponseText(in: messages)
         guard !userMessage.isEmpty, !finalResponse.isEmpty else { return }
-        guard Self.hasExplicitMemoryIntent(userMessage) else { return }
         let sourceMessageId = messages.last(where: { $0.role == .user && !$0.isError })?.id
         let summary = allSessionSummaries.first(where: { $0.id == sessionId })
             ?? summaryFor(sessionId: sessionId, projectId: projectId)
@@ -233,6 +319,19 @@ extension AppState {
                 scope: entry["scope"] as? String
             )
         }
+    }
+
+    static func parseMemoryInjectionDecision(_ raw: String?) -> Bool? {
+        guard let raw else { return nil }
+        let trimmed = stripJSONFence(raw)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
+            .lowercased()
+        if ["true", "yes", "inject"].contains(trimmed) { return true }
+        if ["false", "no", "skip"].contains(trimmed) { return false }
+        if trimmed.hasPrefix("true") { return true }
+        if trimmed.hasPrefix("false") { return false }
+        return nil
     }
 
     static func stripJSONFence(_ raw: String) -> String {

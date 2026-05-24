@@ -94,12 +94,12 @@ struct MCPServerEditorSheet: View {
                 .foregroundStyle(.secondary)
             Picker("", selection: $scope) {
                 ForEach(MCPScope.allCases) { s in
-                    Text(LocalizedStringKey(s.displayName)).tag(s)
+                    Text(s.displayName).tag(s)
                 }
             }
             .labelsHidden()
             .pickerStyle(.segmented)
-            Text(LocalizedStringKey(scope.subtitle))
+            Text(scope.subtitle)
                 .font(.system(size: ClaudeTheme.size(10)))
                 .foregroundStyle(.secondary)
         }
@@ -112,7 +112,7 @@ struct MCPServerEditorSheet: View {
                 .foregroundStyle(.secondary)
             Picker("", selection: $spec.transport) {
                 ForEach(MCPTransport.allCases) { t in
-                    Text(verbatim: t.displayName).tag(t)
+                    Text(verbatim: t.displayNameText).tag(t)
                 }
             }
             .labelsHidden()

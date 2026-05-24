@@ -1,0 +1,25 @@
+{
+  "configurations" : [
+    {
+      "id" : "B1A2C3D4-0003-0003-0003-000000000003",
+      "name" : "Mobile Unit",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "codeCoverage" : false,
+    "testTimeoutsEnabled" : true
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:RxCode.xcodeproj",
+        "identifier" : "DF230B5E2FBC7368008929A6",
+        "name" : "RxCodeMobileTests"
+      }
+    }
+  ],
+  "version" : 1
+}

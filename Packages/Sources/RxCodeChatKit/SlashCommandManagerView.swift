@@ -318,9 +318,16 @@ public struct SlashCommandManagerView: View {
     /// Capsule showing which agent a command applies to.
     @ViewBuilder
     private func agentScopeBadge(_ provider: AgentProvider?) -> some View {
-        let label = provider?.displayName ?? String(localized: "All Agents", bundle: .module)
         let tint: Color = provider == nil ? .secondary : Color.accentColor
-        Text(label)
+        if let provider {
+            agentScopeBadgeLabel(Text(provider.displayName), tint: tint)
+        } else {
+            agentScopeBadgeLabel(Text("All Agents", bundle: .module), tint: tint)
+        }
+    }
+
+    private func agentScopeBadgeLabel(_ label: Text, tint: Color) -> some View {
+        label
             .font(.system(size: ClaudeTheme.size(9), weight: .medium))
             .foregroundStyle(tint)
             .padding(.horizontal, 5)

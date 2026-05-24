@@ -132,7 +132,7 @@ struct StatusLineView: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .help("Client: \(chatBridge.agentProvider.displayName)")
+        .help("Client: \(chatBridge.agentProvider.displayNameText)")
     }
 
     // MARK: - Usage Segments

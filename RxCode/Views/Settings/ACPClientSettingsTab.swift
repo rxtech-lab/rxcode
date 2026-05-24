@@ -8,7 +8,7 @@ private enum ACPClientSettingsPage: String, CaseIterable, Identifiable {
 
     var id: Self { self }
 
-    var title: String {
+    var title: LocalizedStringResource {
         switch self {
         case .installed: return "Installed"
         case .registry: return "Registry"

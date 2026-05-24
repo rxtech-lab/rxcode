@@ -8,6 +8,57 @@ public enum AppStorageKeys {
     /// Persisted visibility of the right inspector sidebar. Views read this
     /// directly with `@AppStorage` so the panel can be reliably toggled.
     public static let showRightSidebar = "showRightSidebar"
+    /// Last visible width of the right inspector sidebar. The panel reads this
+    /// as its split-view ideal width on the next launch.
+    public static let rightInspectorWidth = "rightInspectorWidth"
+}
+
+// MARK: - RightInspectorPanelLayout
+
+public enum RightInspectorPanelLayout {
+    public static let minimumWidth: Double = 420
+    public static let defaultWidth: Double = 520
+    public static let maximumWidth: Double = 1_200
+    public static let minimumMainContentWidth: Double = 480
+
+    public static func maximumWidth(in containerWidth: CGFloat) -> CGFloat {
+        guard containerWidth.isFinite, containerWidth > 0 else {
+            return CGFloat(maximumWidth)
+        }
+        let availableWidth = Double(containerWidth) - minimumMainContentWidth
+        return CGFloat(max(minimumWidth, min(maximumWidth, availableWidth)))
+    }
+
+    public static func restoredWidth(from storedWidth: Double, maxAllowedWidth: CGFloat? = nil) -> CGFloat {
+        guard storedWidth.isFinite, storedWidth >= minimumWidth else {
+            return clamp(defaultWidth, maxAllowedWidth: maxAllowedWidth)
+        }
+        return clamp(storedWidth, maxAllowedWidth: maxAllowedWidth)
+    }
+
+    public static func persistedWidth(from measuredWidth: CGFloat, isVisible: Bool) -> Double? {
+        guard isVisible, measuredWidth.isFinite, measuredWidth >= CGFloat(minimumWidth) else {
+            return nil
+        }
+        return Double(measuredWidth)
+    }
+
+    public static func resizedWidth(
+        startWidth: Double,
+        leadingEdgeTranslation: CGFloat,
+        maxAllowedWidth: CGFloat
+    ) -> Double {
+        let proposedWidth = startWidth - Double(leadingEdgeTranslation)
+        return Double(clamp(proposedWidth, maxAllowedWidth: maxAllowedWidth))
+    }
+
+    private static func clamp(_ width: Double, maxAllowedWidth: CGFloat?) -> CGFloat {
+        let upperBound = max(
+            minimumWidth,
+            min(maximumWidth, Double(maxAllowedWidth ?? CGFloat(maximumWidth)))
+        )
+        return CGFloat(max(minimumWidth, min(width, upperBound)))
+    }
 }
 
 // MARK: - InspectorTab
@@ -16,6 +67,18 @@ public enum InspectorTab: String, CaseIterable {
     case memo = "Memo"
     case terminal = "Terminal"
     case run = "Run"
+
+    public var title: LocalizedStringResource {
+        switch self {
+        case .memo: "Memo"
+        case .terminal: "Terminal"
+        case .run: "Run"
+        }
+    }
+
+    public var titleText: String {
+        String(localized: title)
+    }
 
     public var icon: String {
         switch self {
@@ -32,6 +95,18 @@ public enum InspectorReviewTab: String, CaseIterable, Sendable {
     case thisThread = "This thread"
     case changes = "Changes"
     case branch = "Branch"
+
+    public var title: LocalizedStringResource {
+        switch self {
+        case .thisThread: "This thread"
+        case .changes: "Changes"
+        case .branch: "Branch"
+        }
+    }
+
+    public var titleText: String {
+        String(localized: title)
+    }
 }
 
 // MARK: - InspectorMode
@@ -39,6 +114,17 @@ public enum InspectorReviewTab: String, CaseIterable, Sendable {
 public enum InspectorMode: String, CaseIterable, Sendable {
     case review = "Review"
     case inspector = "Inspector"
+
+    public var title: LocalizedStringResource {
+        switch self {
+        case .review: "Review"
+        case .inspector: "Inspector"
+        }
+    }
+
+    public var titleText: String {
+        String(localized: title)
+    }
 }
 
 // MARK: - QueuedMessage
@@ -121,7 +207,8 @@ public final class WindowState {
     /// Invoked by the question sheet when the user submits answers for an
     /// `AskUserQuestion` tool prompt. Parameters: (toolUseId, answersByQuestionIndex).
     /// Set by `AppState` at window init.
-    public var submitQuestionAnswersHandler: (@MainActor @Sendable (String, [Int: AskUserQuestion.Answer]) -> Void)?
+    public var submitQuestionAnswersHandler:
+        (@MainActor @Sendable (String, [Int: AskUserQuestion.Answer]) -> Void)?
 
     /// Invoked by the question sheet when the user dismisses without answering.
     /// Resolves the underlying PreToolUse hook as `deny`. Parameter: toolUseId.
@@ -146,23 +233,29 @@ public final class WindowState {
     /// Persisted to UserDefaults so the inspector remembers whether the user
     /// last looked at Review or Inspector. Defaults to Review on first launch.
     public var inspectorMode: InspectorMode = WindowState.loadInspectorMode() {
-        didSet { UserDefaults.standard.set(inspectorMode.rawValue, forKey: WindowState.inspectorModeKey) }
+        didSet {
+            UserDefaults.standard.set(inspectorMode.rawValue, forKey: WindowState.inspectorModeKey)
+        }
     }
     /// Persisted to UserDefaults. Defaults to Terminal so the Cmd+T workflow
     /// keeps working out of the box when the user opens Inspector mode.
     public var inspectorTab: InspectorTab = WindowState.loadInspectorTab() {
-        didSet { UserDefaults.standard.set(inspectorTab.rawValue, forKey: WindowState.inspectorTabKey) }
+        didSet {
+            UserDefaults.standard.set(inspectorTab.rawValue, forKey: WindowState.inspectorTabKey)
+        }
     }
     private static let inspectorModeKey = "inspectorMode"
     private static let inspectorTabKey = "inspectorTab"
     private static func loadInspectorMode() -> InspectorMode {
         guard let raw = UserDefaults.standard.string(forKey: inspectorModeKey),
-              let mode = InspectorMode(rawValue: raw) else { return .review }
+            let mode = InspectorMode(rawValue: raw)
+        else { return .review }
         return mode
     }
     private static func loadInspectorTab() -> InspectorTab {
         guard let raw = UserDefaults.standard.string(forKey: inspectorTabKey),
-              let tab = InspectorTab(rawValue: raw) else { return .terminal }
+            let tab = InspectorTab(rawValue: raw)
+        else { return .terminal }
         return tab
     }
     /// Currently-selected run profile in the toolbar picker. Persisted only in
@@ -177,12 +270,16 @@ public final class WindowState {
     /// Observed by `RightInspectorPanel`; the value itself is meaningless — only the change matters.
     public var clearTerminalRequest: UUID?
     public var inspectorReviewTab: InspectorReviewTab = WindowState.loadInspectorReviewTab() {
-        didSet { UserDefaults.standard.set(inspectorReviewTab.rawValue, forKey: WindowState.inspectorReviewTabKey) }
+        didSet {
+            UserDefaults.standard.set(
+                inspectorReviewTab.rawValue, forKey: WindowState.inspectorReviewTabKey)
+        }
     }
     private static let inspectorReviewTabKey = "inspectorReviewTab"
     private static func loadInspectorReviewTab() -> InspectorReviewTab {
         guard let raw = UserDefaults.standard.string(forKey: inspectorReviewTabKey),
-              let tab = InspectorReviewTab(rawValue: raw) else { return .thisThread }
+            let tab = InspectorReviewTab(rawValue: raw)
+        else { return .thisThread }
         return tab
     }
     public var inspectorFile: PreviewFile?

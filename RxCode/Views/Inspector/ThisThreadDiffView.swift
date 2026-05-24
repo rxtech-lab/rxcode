@@ -60,7 +60,9 @@ struct ThisThreadFileRow: View {
             windowState.diffFile = PreviewFile(
                 path: summary.path,
                 name: summary.name,
-                editHunks: summary.hunks
+                editHunks: summary.hunks,
+                showFullFileDiff: true,
+                originalContent: summary.originalContent
             )
         } label: {
             HStack(spacing: 8) {

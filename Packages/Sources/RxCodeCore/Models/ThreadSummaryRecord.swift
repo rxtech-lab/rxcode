@@ -26,6 +26,34 @@ public struct ThreadSummaryItem: Identifiable, Sendable, Equatable {
         self.summary = summary
         self.updatedAt = updatedAt
     }
+
+    public static func titleSeed(
+        sessionId: String,
+        projectId: UUID,
+        branch: String,
+        title: String,
+        updatedAt: Date = .now
+    ) -> ThreadSummaryItem {
+        ThreadSummaryItem(
+            sessionId: sessionId,
+            projectId: projectId,
+            branch: branch,
+            title: title,
+            summary: "",
+            updatedAt: updatedAt
+        )
+    }
+
+    public func updatingTitle(projectId: UUID, branch: String, title: String, updatedAt: Date = .now) -> ThreadSummaryItem {
+        ThreadSummaryItem(
+            sessionId: sessionId,
+            projectId: projectId,
+            branch: branch,
+            title: title,
+            summary: summary,
+            updatedAt: updatedAt
+        )
+    }
 }
 
 @Model
@@ -58,6 +86,13 @@ public final class ThreadSummaryRecord {
         self.branch = branch
         self.title = title
         self.summary = summary
+        self.updatedAt = updatedAt
+    }
+
+    public func applyTitle(projectId: UUID, branch: String, title: String, updatedAt: Date = .now) {
+        self.projectId = projectId
+        self.branch = branch
+        self.title = title
         self.updatedAt = updatedAt
     }
 

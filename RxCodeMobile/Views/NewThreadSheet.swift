@@ -38,7 +38,7 @@ struct NewThreadSheet: View {
     }
 
     private var projectName: String {
-        state.projects.first(where: { $0.id == projectID })?.name ?? "this project"
+        state.projects.first(where: { $0.id == projectID })?.name ?? String(localized: "this project")
     }
 
     var body: some View {
@@ -60,7 +60,7 @@ struct NewThreadSheet: View {
                 .padding(.top, 12)
                 .padding(.bottom, 32)
             }
-            .scrollDismissesKeyboard(.interactively)
+            .mobileDismissesKeyboardOnScroll(.interactively)
             .background(Color(.systemGroupedBackground).ignoresSafeArea())
             .navigationTitle("New Thread")
             .navigationBarTitleDisplayMode(.inline)
@@ -71,8 +71,6 @@ struct NewThreadSheet: View {
                 }
             }
         }
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
         .interactiveDismissDisabled(true)
         .onAppear {
             seedConfigIfNeeded()
@@ -361,7 +359,7 @@ struct NewThreadConfigStrip: View {
         return seen.map { provider in
             AgentModelSection(
                 id: provider.rawValue,
-                title: provider.displayName,
+                title: provider.displayNameText,
                 provider: provider,
                 models: flatModels.filter { $0.provider == provider }
             )
@@ -379,7 +377,7 @@ struct NewThreadConfigStrip: View {
             return match.displayName
         }
         if let id = selectedModelID, !id.isEmpty { return id }
-        return selectedProvider?.displayName ?? "Model"
+        return selectedProvider?.displayNameText ?? String(localized: "Model")
     }
 
     private var modelMenu: some View {
@@ -429,7 +427,11 @@ struct NewThreadConfigStrip: View {
                     selectedPermissionMode = mode
                 } label: {
                     HStack {
-                        Label(mode.displayName, systemImage: mode.systemImage)
+                        Label {
+                            Text(mode.displayName)
+                        } icon: {
+                            Image(systemName: mode.systemImage)
+                        }
                         if selectedPermissionMode == mode {
                             Spacer()
                             Image(systemName: "checkmark")
@@ -438,7 +440,7 @@ struct NewThreadConfigStrip: View {
                 }
             }
         } label: {
-            chipLabel(icon: selectedPermissionMode.systemImage, title: selectedPermissionMode.displayName)
+            chipLabel(icon: selectedPermissionMode.systemImage, title: selectedPermissionMode.displayNameText)
         }
     }
 
@@ -454,15 +456,19 @@ struct NewThreadConfigStrip: View {
         } label: {
             chipLabel(
                 icon: PermissionMode.plan.systemImage,
-                title: "Plan",
+                title: PermissionMode.plan.displayNameText,
                 showsChevron: false,
                 active: planModeEnabled
             )
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Plan mode")
-        .accessibilityValue(planModeEnabled ? "On" : "Off")
+        .accessibilityValue(Text(planModeAccessibilityValue))
         .popoverTip(MobileTips.PlanModeTip(), arrowEdge: .top)
+    }
+
+    private var planModeAccessibilityValue: LocalizedStringResource {
+        planModeEnabled ? "On" : "Off"
     }
 
     // MARK: Chip
@@ -513,7 +519,7 @@ struct CreateBranchSheet: View {
         branchText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var validationError: String? {
+    private var validationError: LocalizedStringResource? {
         if trimmed.isEmpty { return "Branch name is required." }
         if trimmed.hasSuffix("/") { return "Branch name cannot end with “/”." }
         if trimmed == "rxcode/" { return "Add a branch name after the prefix." }

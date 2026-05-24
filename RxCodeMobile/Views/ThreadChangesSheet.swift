@@ -129,9 +129,7 @@ struct ThreadChangesSheet: View {
                     ThreadChangeDetailView(
                         title: edit.name,
                         subtitle: edit.path,
-                        diff: .hunks(edit.hunks.map {
-                            PreviewFile.EditHunk(oldString: $0.oldString, newString: $0.newString)
-                        }),
+                        diff: turnDiff(edit),
                         truncated: false
                     )
                 } label: {
@@ -147,6 +145,15 @@ struct ThreadChangesSheet: View {
             .listStyle(.plain)
             .refreshable { await load() }
         }
+    }
+
+    private func turnDiff(_ edit: SyncFileEdit) -> ThreadChangeDetailView.Diff {
+        if let fullFileDiff = edit.fullFileDiff, !fullFileDiff.isEmpty {
+            return .unified(fullFileDiff)
+        }
+        return .hunks(edit.hunks.map {
+            PreviewFile.EditHunk(oldString: $0.oldString, newString: $0.newString)
+        })
     }
 
     // MARK: - Uncommitted

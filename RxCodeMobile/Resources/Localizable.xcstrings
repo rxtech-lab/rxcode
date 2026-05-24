@@ -181,6 +181,23 @@
         }
       }
     },
+    "Accept Edits" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Accept Edits"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "接受编辑"
+          }
+        }
+      }
+    },
     "Action" : {
       "localizations" : {
         "en" : {
@@ -225,6 +242,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "添加"
+          }
+        }
+      }
+    },
+    "Add a branch name after the prefix." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Add a branch name after the prefix."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在前缀后添加分支名称。"
           }
         }
       }
@@ -605,6 +638,23 @@
         }
       }
     },
+    "Ask" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Ask"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "询问"
+          }
+        }
+      }
+    },
     "Assistant has a question" : {
       "localizations" : {
         "en" : {
@@ -633,6 +683,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "附件自动预览"
+          }
+        }
+      }
+    },
+    "Auto" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Auto"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动"
           }
         }
       }
@@ -718,10 +785,68 @@
       }
     },
     "Branch name" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Branch name"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分支名称"
+          }
+        }
+      }
+    },
+    "Branch name cannot end with “/”." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Branch name cannot end with “/”."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分支名称不能以“/”结尾。"
+          }
+        }
+      }
+    },
+    "Branch name is required." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Branch name is required."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分支名称为必填项。"
+          }
+        }
+      }
     },
     "Branch operation failed" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Branch operation failed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分支操作失败"
+          }
+        }
+      }
     },
     "Branch operation failed." : {
       "localizations" : {
@@ -805,6 +930,23 @@
     },
     "Browser Error" : {
 
+    },
+    "Bypass" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Bypass"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "绕过"
+          }
+        }
+      }
     },
     "Cancel" : {
       "localizations" : {
@@ -919,7 +1061,20 @@
       }
     },
     "Close" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Close"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭"
+          }
+        }
+      }
     },
     "Close — answer later from the queue" : {
       "localizations" : {
@@ -1084,6 +1239,22 @@
         }
       }
     },
+    "Connect to your Mac and try again." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Connect to your Mac and try again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接到你的 Mac 后重试。"
+          }
+        }
+      }
+    },
     "Connecting to %@" : {
       "localizations" : {
         "en" : {
@@ -1149,7 +1320,20 @@
       }
     },
     "Contents" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Contents"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "内容"
+          }
+        }
+      }
     },
     "Control desktop summaries" : {
       "localizations" : {
@@ -1281,7 +1465,20 @@
       }
     },
     "Create" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Create"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建"
+          }
+        }
+      }
     },
     "Create a profile to run a command on your Mac." : {
       "localizations" : {
@@ -1300,16 +1497,68 @@
       }
     },
     "Create branch" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Create branch"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建分支"
+          }
+        }
+      }
     },
     "Create new branch…" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Create new branch…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建分支…"
+          }
+        }
+      }
     },
     "Created from %@" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Created from %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从 %@ 创建"
+          }
+        }
+      }
     },
     "Created from the project's current branch" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Created from the project's current branch"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从项目的当前分支创建"
+          }
+        }
+      }
     },
     "Critical" : {
       "localizations" : {
@@ -1472,10 +1721,36 @@
       }
     },
     "Describe a task, paste a snippet, or ask a question." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Describe a task, paste a snippet, or ask a question."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "描述任务、粘贴片段或提问。"
+          }
+        }
+      }
     },
     "Describe what to build…" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Describe what to build…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "描述要构建的内容…"
+          }
+        }
+      }
     },
     "Desktop Behavior" : {
       "localizations" : {
@@ -1663,7 +1938,20 @@
       }
     },
     "Empty Folder" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Empty Folder"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "空文件夹"
+          }
+        }
+      }
     },
     "Enable Plan before sending a new thread so the desktop agent drafts a read-only plan first." : {
       "localizations" : {
@@ -2070,10 +2358,36 @@
       }
     },
     "Folders" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Folders"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件夹"
+          }
+        }
+      }
     },
     "Folders Unavailable" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Folders Unavailable"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件夹不可用"
+          }
+        }
+      }
     },
     "Git Source" : {
       "localizations" : {
@@ -2342,7 +2656,20 @@
       }
     },
     "Loading folders" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Loading folders"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在加载文件夹"
+          }
+        }
+      }
     },
     "Loading messages" : {
 
@@ -2741,6 +3068,23 @@
         }
       }
     },
+    "No branch" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "No branch"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无分支"
+          }
+        }
+      }
+    },
     "No briefings for the current branch." : {
       "localizations" : {
         "en" : {
@@ -2871,7 +3215,20 @@
       }
     },
     "No Folders" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "No Folders"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有文件夹"
+          }
+        }
+      }
     },
     "No MCP servers configured. Tap + to add one." : {
       "localizations" : {
@@ -2890,7 +3247,20 @@
       }
     },
     "No models available" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "No models available"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有可用模型"
+          }
+        }
+      }
     },
     "No Projects" : {
       "localizations" : {
@@ -3115,7 +3485,20 @@
       }
     },
     "Off" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Off"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭"
+          }
+        }
+      }
     },
     "OK" : {
       "localizations" : {
@@ -3134,7 +3517,20 @@
       }
     },
     "On" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "On"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开启"
+          }
+        }
+      }
     },
     "Open **RxCode** on your Mac." : {
       "localizations" : {
@@ -3316,8 +3712,38 @@
         }
       }
     },
+    "Plan" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Plan"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "计划"
+          }
+        }
+      }
+    },
     "Plan mode" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Plan mode"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "计划模式"
+          }
+        }
+      }
     },
     "Plan ready to review" : {
       "extractionState" : "stale",
@@ -3972,7 +4398,20 @@
       }
     },
     "Select Folder" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Select Folder"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择文件夹"
+          }
+        }
+      }
     },
     "Select which Mac this device controls. Removing one pairing does not reset this device's identity." : {
       "localizations" : {
@@ -4271,7 +4710,20 @@
       }
     },
     "Switch branch" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Switch branch"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换分支"
+          }
+        }
+      }
     },
     "Switch to %@" : {
       "localizations" : {
@@ -4373,10 +4825,36 @@
 
     },
     "This location has no visible folders." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This location has no visible folders."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此位置没有可见文件夹。"
+          }
+        }
+      }
     },
     "This location has nothing to show." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This location has nothing to show."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此位置没有可显示内容。"
+          }
+        }
+      }
     },
     "this Mac" : {
       "extractionState" : "stale",
@@ -4407,6 +4885,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "这会永久删除该对话及其所有消息。此操作无法撤销。"
+          }
+        }
+      }
+    },
+    "this project" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "this project"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此项目"
           }
         }
       }
@@ -4616,7 +5110,20 @@
       }
     },
     "Unable to Add Project" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Unable to Add Project"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法添加项目"
+          }
+        }
+      }
     },
     "Unable to connect to your Mac. Make sure RxCode is running on your desktop and both devices are on the same network." : {
       "localizations" : {
@@ -4635,7 +5142,20 @@
       }
     },
     "Unable to Load Folder" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Unable to Load Folder"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法加载文件夹"
+          }
+        }
+      }
     },
     "Uncommitted" : {
       "localizations" : {
@@ -4665,6 +5185,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "未知"
+          }
+        }
+      }
+    },
+    "Unknown error." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Unknown error."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未知错误。"
           }
         }
       }
@@ -4905,7 +5441,20 @@
       }
     },
     "What should we build in %@?" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "What should we build in %@?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要在 %@ 中构建什么？"
+          }
+        }
+      }
     },
     "Working Directory" : {
       "localizations" : {
@@ -4951,6 +5500,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Xcode 配置"
+          }
+        }
+      }
+    },
+    "Xcode Project" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Xcode Project"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Xcode 项目"
           }
         }
       }

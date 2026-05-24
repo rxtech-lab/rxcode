@@ -394,7 +394,7 @@ private struct MCPServerRow: View {
     }
 
     private var transportBadge: some View {
-        Text(verbatim: server.transport.displayName)
+        Text(verbatim: server.transport.displayNameText)
             .font(.system(size: ClaudeTheme.size(10), weight: .medium))
             .padding(.horizontal, 6)
             .padding(.vertical, 2)

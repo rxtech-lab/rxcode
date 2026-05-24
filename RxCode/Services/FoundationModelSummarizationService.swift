@@ -109,6 +109,19 @@ actor FoundationModelSummarizationService {
         return cleanSummary(raw, limit: 3000)
     }
 
+    func determineMemoryInjectionIntent(content: String, kind: String, scope: String) async -> String? {
+        let prompt = OpenAISummarizationService.memoryInjectionIntentPrompt(
+            content: content,
+            kind: kind,
+            scope: scope
+        )
+        let raw = await respond(
+            instructions: "You classify durable IDE memories. Output only true or false.",
+            prompt: prompt
+        )
+        return cleanSummary(raw, limit: 16)
+    }
+
     func generateBranchBriefing(
         threadSummaries: [(title: String, summary: String)]
     ) async -> String? {

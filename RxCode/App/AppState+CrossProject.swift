@@ -187,6 +187,20 @@ extension AppState {
         """
     }
 
+    static func promptWithBackgroundContext(_ contexts: [String], prompt: String) -> String {
+        let context = contexts
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n\n")
+        guard !context.isEmpty else { return prompt }
+        return """
+        \(context)
+
+        User request:
+        \(prompt)
+        """
+    }
+
     func processStream(
         streamId: UUID,
         prompt: String,
@@ -235,11 +249,22 @@ extension AppState {
 
         let resolvedMemoryContext: String
         if memoryEnabled, memoryInjectEnabled {
-            let systemItems = await systemPromptMemoryItems(projectId: projectId)
+            let systemItems = await systemPromptMemoryItems(projectId: projectId, provider: agentProvider, model: model)
             let hits = await memoryService.search(prompt, projectId: projectId, limit: memoryMaxContextItems)
             resolvedMemoryContext = memoryContextSystemPrompt(systemItems: systemItems, relatedHits: hits)
         } else {
             resolvedMemoryContext = ""
+        }
+
+        let branchBriefingContext: String
+        if let branch = await GitHelper.currentBranch(at: cwd),
+           let briefing = threadStore.branchBriefingItem(projectId: projectId, branch: branch) {
+            branchBriefingContext = Self.branchBriefingSystemPrompt(
+                branch: branch,
+                briefing: briefing.briefing
+            )
+        } else {
+            branchBriefingContext = ""
         }
 
         switch agentProvider {
@@ -256,13 +281,7 @@ extension AppState {
             mcpClaudeConfigPath = await mcp.writeClaudeConfig(projectPath: cwd, bridgeCommand: bridge)
             // Surface the accumulated briefing for the project's current branch
             // to the agent as background context via `--append-system-prompt`.
-            if let branch = await GitHelper.currentBranch(at: cwd),
-               let briefing = threadStore.branchBriefingItem(projectId: projectId, branch: branch) {
-                extraSystemPrompt = Self.branchBriefingSystemPrompt(
-                    branch: branch,
-                    briefing: briefing.briefing
-                )
-            }
+            appendExtraSystemPrompt(branchBriefingContext)
             appendExtraSystemPrompt(resolvedMemoryContext)
             if let skillContext = await marketplace.promptContext(for: .claudeCode) {
                 appendExtraSystemPrompt(skillContext)
@@ -279,7 +298,10 @@ extension AppState {
             let bridge = idePort.map { IDEMCPServer.bridgeCommand(forPort: $0) }
             mcpCodexOverrides = await mcp.codexConfigOverrides(projectPath: cwd, bridgeCommand: bridge)
             mcpCodexOverrides += await marketplace.codexConfigOverrides()
-            resolvedPrompt = memoryContextPromptPrefix(for: resolvedMemoryContext, prompt: resolvedPrompt)
+            resolvedPrompt = Self.promptWithBackgroundContext(
+                [branchBriefingContext, resolvedMemoryContext],
+                prompt: resolvedPrompt
+            )
             if let skillContext = await marketplace.promptContext(for: .codex) {
                 resolvedPrompt = "\(skillContext)\n\nUser request:\n\(resolvedPrompt)"
             }
@@ -298,7 +320,10 @@ extension AppState {
                 projectPath: cwd,
                 bridgeCommand: bridge
             )
-            resolvedPrompt = memoryContextPromptPrefix(for: resolvedMemoryContext, prompt: resolvedPrompt)
+            resolvedPrompt = Self.promptWithBackgroundContext(
+                [branchBriefingContext, resolvedMemoryContext],
+                prompt: resolvedPrompt
+            )
             if let skillContext = await marketplace.promptContext(for: .acp) {
                 resolvedPrompt = "\(skillContext)\n\nUser request:\n\(resolvedPrompt)"
             }
@@ -604,6 +629,19 @@ extension AppState {
                                 }
                             case .toolUse(let id, let name, let input):
                                 state.isThinking = false
+                                // Kick off a file-content snapshot before any Edit/Write
+                                // tool actually runs. The detached read races with the
+                                // CLI's file write — on typical small source files the
+                                // read wins, giving us the true pre-edit state to diff
+                                // against. The persistence step (in `flushPendingUpdates`
+                                // when the tool_result lands) awaits this task, so we
+                                // capture whatever the read produced even if it lost
+                                // the race.
+                                Self.captureEditingFileSnapshot(
+                                    toolName: name,
+                                    input: input,
+                                    state: &state
+                                )
                                 // Merge updates by id: ACP agents may re-emit the same toolUse
                                 // with additional input (e.g. diff content arriving via a
                                 // follow-up tool_call_update). Patch the existing block in
@@ -695,7 +733,7 @@ extension AppState {
                         window.currentSessionId = resultEvent.sessionId
                         if resultEvent.isError {
                             let errText = await consumeAgentStderr(agentProvider: agentProvider, streamId: streamId)
-                                ?? "\(agentProvider.displayName) returned an error."
+                                ?? "\(agentProvider.displayNameText) returned an error."
                             addErrorMessage(errText, in: window)
                         }
                     }
@@ -890,6 +928,47 @@ extension AppState {
             return await codex.consumeStderr(for: streamId)
         case .acp:
             return await acp.consumeStderr(for: streamId)
+        }
+    }
+
+    // MARK: - Editing File Snapshot Capture
+
+    /// Detects Edit/MultiEdit/Write tool_use events and kicks off a detached
+    /// read of every target file's current on-disk contents. The read result
+    /// is cached on `state.editingFileSnapshotTasks` keyed by absolute path,
+    /// and only the FIRST tool_use per (session, path) starts a read — later
+    /// edits in the same thread keep diffing against the original snapshot.
+    ///
+    /// Handles both the Claude/Anthropic shape (`file_path` in input) and the
+    /// Codex `changes: [{ path, diff }]` shape. Tools that don't touch files
+    /// (Bash, Read, etc.) are skipped.
+    nonisolated static func captureEditingFileSnapshot(
+        toolName: String,
+        input: [String: JSONValue],
+        state: inout SessionStreamState
+    ) {
+        let nameLower = toolName.lowercased()
+        let editToolNames: Set<String> = ["edit", "multiedit", "multi_edit", "write"]
+        guard editToolNames.contains(nameLower) else { return }
+
+        var paths: [String] = []
+        if let path = input["file_path"]?.stringValue {
+            paths.append(path)
+        }
+        if nameLower == "edit", let changes = input["changes"]?.arrayValue {
+            for change in changes {
+                if let obj = change.objectValue,
+                   let path = obj["path"]?.stringValue {
+                    paths.append(path)
+                }
+            }
+        }
+
+        for path in paths where state.editingFileSnapshotTasks[path] == nil {
+            let capturedPath = path
+            state.editingFileSnapshotTasks[path] = Task.detached(priority: .userInitiated) {
+                try? String(contentsOfFile: capturedPath, encoding: .utf8)
+            }
         }
     }
 

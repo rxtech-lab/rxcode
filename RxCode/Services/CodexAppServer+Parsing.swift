@@ -4,6 +4,10 @@ import os
 
 extension CodexAppServer {
     func toolName(from item: [String: JSONValue]) -> String? {
+        if let mcpName = mcpToolName(from: item) {
+            return mcpName
+        }
+
         if let type = Self.firstString(in: item, keys: ["type", "kind"]) {
             let normalizedType = type.lowercased()
             if normalizedType.contains("command") { return "Bash" }
@@ -13,6 +17,93 @@ extension CodexAppServer {
         }
         guard let name = Self.firstString(in: item, keys: ["name", "toolName"]) else { return nil }
         return name.lowercased().contains("message") ? "message" : name
+    }
+
+    private func mcpToolName(from item: [String: JSONValue]) -> String? {
+        let type = Self.firstString(in: item, keys: ["type", "kind"])?.lowercased()
+        let looksLikeMCP = type?.contains("mcp") == true
+            || item["serverName"] != nil
+            || item["server_name"] != nil
+            || item["server"] != nil
+
+        guard looksLikeMCP else { return nil }
+
+        let rawToolName = Self.firstString(in: item, keys: [
+            "toolName", "tool_name", "name"
+        ]).flatMap { value -> String? in
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, trimmed.lowercased() != "mcptoolcall" else { return nil }
+            return trimmed
+        }
+        let serverName = Self.firstString(in: item, keys: [
+            "serverName", "server_name", "server", "mcpServerName", "mcp_server_name"
+        ])?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let rawToolName, rawToolName.hasPrefix("mcp__") {
+            return rawToolName
+        }
+        if let serverName, !serverName.isEmpty, let rawToolName {
+            return "mcp__\(serverName)__\(rawToolName)"
+        }
+        if let rawToolName {
+            return "mcp__\(rawToolName)"
+        }
+        if let serverName, !serverName.isEmpty {
+            return "mcp__\(serverName)"
+        }
+        return "mcpToolCall"
+    }
+
+    static func toolOutput(from item: [String: JSONValue]) -> String {
+        if let output = firstPresentValue(in: item, keys: ["output", "result", "summary", "message"]) {
+            return stringForToolOutput(output)
+        }
+        if let error = item["error"], toolValueIndicatesError(error) {
+            return stringForToolOutput(error)
+        }
+        return ""
+    }
+
+    static func toolValueIndicatesError(_ value: JSONValue?) -> Bool {
+        guard let value else { return false }
+        switch value {
+        case .null:
+            return false
+        case .bool(let flag):
+            return flag
+        case .string(let text):
+            let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return !normalized.isEmpty && normalized != "false" && normalized != "null" && normalized != "none"
+        case .number(let number):
+            return number != 0
+        case .array(let values):
+            return !values.isEmpty
+        case .object(let object):
+            return !object.isEmpty
+        }
+    }
+
+    private static func firstPresentValue(in object: [String: JSONValue], keys: [String]) -> JSONValue? {
+        for key in keys {
+            if let value = object[key], !value.isNull {
+                return value
+            }
+        }
+        return nil
+    }
+
+    private static func stringForToolOutput(_ value: JSONValue) -> String {
+        if let string = value.stringValue {
+            return string
+        }
+        return prettyJSONString(value) ?? value.description
+    }
+
+    private static func prettyJSONString(_ value: JSONValue) -> String? {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        guard let data = try? encoder.encode(value) else { return nil }
+        return String(data: data, encoding: .utf8)
     }
 
     static func parseModels(from value: JSONValue) -> [AgentModel] {

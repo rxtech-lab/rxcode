@@ -25,34 +25,39 @@ struct ProjectWindowView: View {
     var body: some View {
         Group {
             if windowState.isInitialized {
-                HSplitView {
-                    NavigationSplitView(columnVisibility: $columnVisibility) {
-                        sidebarContent
-                    } detail: {
-                        detailContent
-                    }
-                    .background {
-                        Button("") {
-                            columnVisibility = (columnVisibility == .all) ? .detailOnly : .all
+                GeometryReader { proxy in
+                    HStack(spacing: 0) {
+                        NavigationSplitView(columnVisibility: $columnVisibility) {
+                            sidebarContent
+                        } detail: {
+                            detailContent
                         }
-                        .keyboardShortcut("3", modifiers: .command)
-                        .hidden()
-                    }
-                    .id(appState.themeRevision)
-                    .navigationTitle(navigationTitleText)
-                    .onChange(of: showRightSidebar) { _, isShowing in
-                        if isShowing, !inspectorStarted { inspectorStarted = true }
-                    }
-                    .onChange(of: appState.focusMode) { _, newValue in
-                        windowState.focusMode = newValue
-                    }
-                    .onAppear {
-                        windowState.focusMode = appState.focusMode
-                        if showRightSidebar { inspectorStarted = true }
-                    }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background {
+                            Button("") {
+                                columnVisibility = (columnVisibility == .all) ? .detailOnly : .all
+                            }
+                            .keyboardShortcut("3", modifiers: .command)
+                            .hidden()
+                        }
+                        .id(appState.themeRevision)
+                        .navigationTitle(navigationTitleText)
+                        .onChange(of: showRightSidebar) { _, isShowing in
+                            if isShowing, !inspectorStarted { inspectorStarted = true }
+                        }
+                        .onChange(of: appState.focusMode) { _, newValue in
+                            windowState.focusMode = newValue
+                        }
+                        .onAppear {
+                            windowState.focusMode = appState.focusMode
+                            if showRightSidebar { inspectorStarted = true }
+                        }
 
-                    if inspectorStarted {
-                        RightInspectorPanel()
+                        if inspectorStarted {
+                            RightInspectorPanel(
+                                maxAllowedWidth: RightInspectorPanelLayout.maximumWidth(in: proxy.size.width)
+                            )
+                        }
                     }
                 }
             } else {
@@ -75,7 +80,9 @@ struct ProjectWindowView: View {
                 filePath: file.path,
                 fileName: file.name,
                 editHunks: file.editHunks,
-                gitDiffMode: file.gitDiffMode
+                gitDiffMode: file.gitDiffMode,
+                showFullFileDiff: file.showFullFileDiff,
+                originalContent: file.originalContent
             )
                 .frame(minWidth: 1000, idealWidth: 1400, maxWidth: 1920,
                        minHeight: 600, idealHeight: 1000, maxHeight: 1200)

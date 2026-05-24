@@ -10,7 +10,7 @@ public enum PermissionMode: String, CaseIterable, Sendable, Codable {
     case auto
     case bypassPermissions
 
-    public var displayName: String {
+    public var displayName: LocalizedStringResource {
         switch self {
         case .default: return "Ask"
         case .acceptEdits: return "Accept Edits"
@@ -18,6 +18,10 @@ public enum PermissionMode: String, CaseIterable, Sendable, Codable {
         case .auto: return "Auto"
         case .bypassPermissions: return "Bypass"
         }
+    }
+
+    public var displayNameText: String {
+        String(localized: displayName)
     }
 
     public var systemImage: String {

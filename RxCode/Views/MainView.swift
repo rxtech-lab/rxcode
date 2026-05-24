@@ -26,6 +26,13 @@ struct MainView: View {
         case history = "History"
         case files = "Files"
 
+        var title: LocalizedStringResource {
+            switch self {
+            case .history: "History"
+            case .files: "Files"
+            }
+        }
+
         var icon: String {
             switch self {
             case .files: "folder"
@@ -56,32 +63,37 @@ struct MainView: View {
     }
 
     private var mainContent: some View {
-        HSplitView {
-            navigationContent
-                .id(appState.themeRevision)
-                .onChange(of: showRightSidebar) { _, isShowing in
-                    if isShowing, !inspectorStarted { inspectorStarted = true }
-                }
-                .onChange(of: appState.focusMode) { _, newValue in
-                    windowState.focusMode = newValue
-                }
-                .onAppear {
-                    windowState.focusMode = appState.focusMode
-                    // The panel is built lazily; if it was left open in a
-                    // previous launch, start it now so it reappears.
-                    if showRightSidebar { inspectorStarted = true }
-                }
-                .toolbar(removing: .title)
-                .toolbarBackground(.hidden, for: .windowToolbar)
-                .background(UnifiedTitleBarAccessor())
-                .accessibilityElement(children: .contain)
-                .accessibilityIdentifier("rxcode-main-view")
-                .toolbar {
-                    toolbarContent
-                }
+        GeometryReader { proxy in
+            HStack(spacing: 0) {
+                navigationContent
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .id(appState.themeRevision)
+                    .onChange(of: showRightSidebar) { _, isShowing in
+                        if isShowing, !inspectorStarted { inspectorStarted = true }
+                    }
+                    .onChange(of: appState.focusMode) { _, newValue in
+                        windowState.focusMode = newValue
+                    }
+                    .onAppear {
+                        windowState.focusMode = appState.focusMode
+                        // The panel is built lazily; if it was left open in a
+                        // previous launch, start it now so it reappears.
+                        if showRightSidebar { inspectorStarted = true }
+                    }
+                    .toolbar(removing: .title)
+                    .toolbarBackground(.hidden, for: .windowToolbar)
+                    .background(UnifiedTitleBarAccessor())
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("rxcode-main-view")
+                    .toolbar {
+                        toolbarContent
+                    }
 
-            if inspectorStarted {
-                RightInspectorPanel()
+                if inspectorStarted {
+                    RightInspectorPanel(
+                        maxAllowedWidth: RightInspectorPanelLayout.maximumWidth(in: proxy.size.width)
+                    )
+                }
             }
         }
     }
@@ -266,7 +278,9 @@ struct MainView: View {
                 filePath: file.path,
                 fileName: file.name,
                 editHunks: file.editHunks,
-                gitDiffMode: file.gitDiffMode
+                gitDiffMode: file.gitDiffMode,
+                showFullFileDiff: file.showFullFileDiff,
+                originalContent: file.originalContent
             )
             .frame(minWidth: 1000, idealWidth: 1400, maxWidth: 1920,
                    minHeight: 600, idealHeight: 1000, maxHeight: 1200)
@@ -402,7 +416,7 @@ struct InspectorTabControl: View {
                     selection = tab
                     onTabClick(tab)
                 } label: {
-                    Text(LocalizedStringKey(tab.rawValue))
+                    Text(tab.title)
                         .font(.system(size: ClaudeTheme.size(13), weight: .medium))
                         .lineLimit(1)
                         .fixedSize(horizontal: true, vertical: false)
@@ -436,7 +450,7 @@ struct ClaudeSegmentedControl: View {
                     HStack(spacing: 4) {
                         Image(systemName: tab.icon)
                             .font(.system(size: ClaudeTheme.size(10), weight: .medium))
-                        Text(LocalizedStringKey(tab.rawValue))
+                        Text(tab.title)
                             .font(.system(size: ClaudeTheme.size(12), weight: .medium))
                     }
                     .frame(maxWidth: .infinity)

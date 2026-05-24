@@ -9,12 +9,16 @@ public enum MCPTransport: String, Codable, Sendable, CaseIterable, Identifiable 
 
     public var id: String { rawValue }
 
-    public var displayName: String {
+    public var displayName: LocalizedStringResource {
         switch self {
         case .stdio: return "stdio"
         case .http:  return "HTTP"
         case .sse:   return "SSE"
         }
+    }
+
+    public var displayNameText: String {
+        String(localized: displayName)
     }
 }
 
@@ -25,7 +29,7 @@ public enum MCPScope: String, Codable, Sendable, CaseIterable, Identifiable {
 
     public var id: String { rawValue }
 
-    public var displayName: String {
+    public var displayName: LocalizedStringResource {
         switch self {
         case .user:    return "User"
         case .project: return "Project"
@@ -33,12 +37,20 @@ public enum MCPScope: String, Codable, Sendable, CaseIterable, Identifiable {
         }
     }
 
-    public var subtitle: String {
+    public var displayNameText: String {
+        String(localized: displayName)
+    }
+
+    public var subtitle: LocalizedStringResource {
         switch self {
         case .user:    return "Available in all projects"
         case .project: return "Shared via .mcp.json"
         case .local:   return "This project, this machine only"
         }
+    }
+
+    public var subtitleText: String {
+        String(localized: subtitle)
     }
 }
 
@@ -49,12 +61,16 @@ public enum MCPProjectOverride: String, Codable, Sendable, CaseIterable, Identif
 
     public var id: String { rawValue }
 
-    public var displayName: String {
+    public var displayName: LocalizedStringResource {
         switch self {
         case .inherit: return "Inherit"
         case .enabled: return "On"
         case .disabled: return "Off"
         }
+    }
+
+    public var displayNameText: String {
+        String(localized: displayName)
     }
 }
 

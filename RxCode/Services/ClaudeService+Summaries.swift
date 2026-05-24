@@ -120,6 +120,20 @@ extension ClaudeCodeServer {
         return await generatePlainSummary(prompt: prompt, model: model, limit: 3000)
     }
 
+    func determineMemoryInjectionIntent(
+        content: String,
+        kind: String,
+        scope: String,
+        model: String = "claude-haiku-4-5-20251001"
+    ) async -> String? {
+        let prompt = OpenAISummarizationService.memoryInjectionIntentPrompt(
+            content: content,
+            kind: kind,
+            scope: scope
+        )
+        return await generatePlainSummary(prompt: prompt, model: model, limit: 16)
+    }
+
     func generateBranchBriefing(
         threadSummaries: [(title: String, summary: String)],
         model: String = "claude-haiku-4-5-20251001"

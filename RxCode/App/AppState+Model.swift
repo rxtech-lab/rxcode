@@ -29,8 +29,8 @@ extension AppState {
 
     func availableAgentModelSections() -> [(id: String, title: String, provider: AgentProvider, iconURL: String?, models: [AgentModel])] {
         var sections: [(id: String, title: String, provider: AgentProvider, iconURL: String?, models: [AgentModel])] = [
-            ("claudeCode", AgentProvider.claudeCode.displayName, .claudeCode, nil, Self.availableClaudeModels),
-            ("codex", AgentProvider.codex.displayName, .codex, nil, Self.availableCodexModels(codexModels)),
+            ("claudeCode", AgentProvider.claudeCode.displayNameText, .claudeCode, nil, Self.availableClaudeModels),
+            ("codex", AgentProvider.codex.displayNameText, .codex, nil, Self.availableCodexModels(codexModels)),
         ]
 
         // Each enabled ACP client becomes its own section, titled with the

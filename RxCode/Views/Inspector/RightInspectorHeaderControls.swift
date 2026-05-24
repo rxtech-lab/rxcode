@@ -14,7 +14,7 @@ struct ModeSwitchControl: View {
                 Button {
                     withAnimation(.easeInOut(duration: 0.18)) { selection = mode }
                 } label: {
-                    Text(LocalizedStringKey(mode.rawValue))
+                    Text(mode.title)
                         .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
                         .lineLimit(1)
                         .fixedSize(horizontal: true, vertical: false)
@@ -45,7 +45,7 @@ struct ModeSwitchControl: View {
 /// Shared chevron-down dropdown label used by both Review and Inspector mode.
 struct HeaderPickerLabel: View {
     let icon: String?
-    let title: String
+    let title: LocalizedStringResource
     @State private var isHovered = false
 
     var body: some View {
@@ -55,7 +55,7 @@ struct HeaderPickerLabel: View {
                     .font(.system(size: ClaudeTheme.size(11), weight: .semibold))
                     .foregroundStyle(ClaudeTheme.textSecondary)
             }
-            Text(LocalizedStringKey(title))
+            Text(title)
                 .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
                 .foregroundStyle(ClaudeTheme.textPrimary)
             Image(systemName: "chevron.down")
@@ -90,13 +90,13 @@ struct ReviewTabPicker: View {
                     selection = tab
                 } label: {
                     HStack {
-                        Text(LocalizedStringKey(tab.rawValue))
+                        Text(tab.title)
                         if selection == tab { Image(systemName: "checkmark") }
                     }
                 }
             }
         } label: {
-            HeaderPickerLabel(icon: nil, title: selection.rawValue)
+            HeaderPickerLabel(icon: nil, title: selection.title)
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
@@ -119,13 +119,13 @@ struct InspectorTabPicker: View {
                 } label: {
                     HStack {
                         Image(systemName: tab.icon)
-                        Text(LocalizedStringKey(tab.rawValue))
+                        Text(tab.title)
                         if selection == tab { Image(systemName: "checkmark") }
                     }
                 }
             }
         } label: {
-            HeaderPickerLabel(icon: selection.icon, title: selection.rawValue)
+            HeaderPickerLabel(icon: selection.icon, title: selection.title)
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)

@@ -136,8 +136,7 @@ public enum SyntaxHighlighter {
                     let start = i
                     i += 3
                     while i + 2 < chars.count, !(chars[i] == "\"" && chars[i + 1] == "\"" && chars[i + 2] == "\"") {
-                        if chars[i] == "\\" { i += 1 }
-                        i += 1
+                        advanceStringScanner(&i, chars: chars)
                     }
                     if i + 2 < chars.count { i += 3 } else { i = chars.count }
                     tokens.append(Token(text: String(chars[start..<i]), kind: .string))
@@ -147,8 +146,7 @@ public enum SyntaxHighlighter {
                 let start = i
                 i += 1
                 while i < chars.count, chars[i] != "\"", chars[i] != "\n" {
-                    if chars[i] == "\\" { i += 1 }
-                    i += 1
+                    advanceStringScanner(&i, chars: chars)
                 }
                 if i < chars.count, chars[i] == "\"" { i += 1 }
                 tokens.append(Token(text: String(chars[start..<i]), kind: .string))
@@ -160,8 +158,7 @@ public enum SyntaxHighlighter {
                 let start = i
                 i += 1
                 while i < chars.count, chars[i] != "'", chars[i] != "\n" {
-                    if chars[i] == "\\" { i += 1 }
-                    i += 1
+                    advanceStringScanner(&i, chars: chars)
                 }
                 if i < chars.count, chars[i] == "'" { i += 1 }
                 tokens.append(Token(text: String(chars[start..<i]), kind: .string))
@@ -222,6 +219,14 @@ public enum SyntaxHighlighter {
         }
 
         return tokens
+    }
+
+    private static func advanceStringScanner(_ index: inout Int, chars: [Character]) {
+        if chars[index] == "\\", index + 1 < chars.count {
+            index += 2
+        } else {
+            index += 1
+        }
     }
 
     private static func languageConfig(for ext: String) -> LanguageConfig {

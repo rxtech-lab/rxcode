@@ -9,7 +9,7 @@ struct RemoteFolderPickerView: View {
     /// Describes a "pick an entry" job — a file or bundle the user taps to
     /// select, rather than navigating into.
     struct EntryPick {
-        let title: String
+        let title: LocalizedStringResource
         let startPath: String?
         /// Ask the desktop to include plain files in the tree.
         let includeFiles: Bool
@@ -25,7 +25,7 @@ struct RemoteFolderPickerView: View {
         case addProject
         /// Hands the chosen folder path back to the caller. `startPath` is where
         /// browsing begins (`nil` = the picker roots).
-        case pickFolder(title: String, startPath: String?, onSelect: (String) -> Void)
+        case pickFolder(title: LocalizedStringResource, startPath: String?, onSelect: (String) -> Void)
         /// Hands back a file or bundle the user taps in the tree.
         case pickEntry(EntryPick)
     }
@@ -50,7 +50,7 @@ struct RemoteFolderPickerView: View {
         return nil
     }
 
-    private var navigationTitle: String {
+    private var navigationTitle: LocalizedStringResource {
         switch mode {
         case .addProject: return "Add Project"
         case .pickFolder(let title, _, _): return title
@@ -105,12 +105,12 @@ struct RemoteFolderPickerView: View {
         .alert("Unable to Load Folder", isPresented: folderErrorBinding) {
             Button("OK", role: .cancel) { state.remoteFolderError = nil }
         } message: {
-            Text(state.remoteFolderError ?? "Unknown error.")
+            Text(state.remoteFolderError ?? String(localized: "Unknown error."))
         }
         .alert("Unable to Add Project", isPresented: createErrorBinding) {
             Button("OK", role: .cancel) { state.remoteProjectCreateError = nil }
         } message: {
-            Text(state.remoteProjectCreateError ?? "Unknown error.")
+            Text(state.remoteProjectCreateError ?? String(localized: "Unknown error."))
         }
         .onChange(of: state.lastCreatedProjectID) { _, newValue in
             if case .addProject = mode, newValue != nil {
@@ -126,23 +126,16 @@ struct RemoteFolderPickerView: View {
                     currentFolderRow(currentNode)
                 }
 
-                Section(includeFiles ? "Contents" : "Folders") {
+                Section {
                     if currentNode.children.isEmpty, !state.remoteFolderIsLoading {
-                        ContentUnavailableView(
-                            includeFiles ? "Empty Folder" : "No Folders",
-                            systemImage: "folder",
-                            description: Text(
-                                includeFiles
-                                    ? "This location has nothing to show."
-                                    : "This location has no visible folders."
-                            )
-                        )
-                        .listRowBackground(Color.clear)
+                        emptyFolderView
                     } else {
                         ForEach(currentNode.children) { child in
                             childRow(child)
                         }
                     }
+                } header: {
+                    Text(contentsSectionTitle)
                 }
             } else if state.remoteFolderIsLoading {
                 loadingRow
@@ -150,7 +143,7 @@ struct RemoteFolderPickerView: View {
                 ContentUnavailableView(
                     "Folders Unavailable",
                     systemImage: "wifi.exclamationmark",
-                    description: Text(state.remoteFolderError ?? "Connect to your Mac and try again.")
+                    description: Text(state.remoteFolderError ?? String(localized: "Connect to your Mac and try again."))
                 )
                 .listRowBackground(Color.clear)
             }
@@ -171,7 +164,7 @@ struct RemoteFolderPickerView: View {
                     } label: {
                         Image(systemName: isPickFolder ? "checkmark" : "plus")
                     }
-                    .accessibilityLabel(isPickFolder ? "Select Folder" : "Add Project")
+                    .accessibilityLabel(Text(confirmButtonAccessibilityLabel))
                     .disabled(!canConfirmCurrentFolder || state.remoteProjectCreateInFlight)
                 }
 
@@ -188,6 +181,33 @@ struct RemoteFolderPickerView: View {
                     ProgressView()
                 }
             }
+        }
+    }
+
+    private var contentsSectionTitle: LocalizedStringResource {
+        includeFiles ? "Contents" : "Folders"
+    }
+
+    private var confirmButtonAccessibilityLabel: LocalizedStringResource {
+        isPickFolder ? "Select Folder" : "Add Project"
+    }
+
+    @ViewBuilder
+    private var emptyFolderView: some View {
+        if includeFiles {
+            ContentUnavailableView(
+                "Empty Folder",
+                systemImage: "folder",
+                description: Text("This location has nothing to show.")
+            )
+            .listRowBackground(Color.clear)
+        } else {
+            ContentUnavailableView(
+                "No Folders",
+                systemImage: "folder",
+                description: Text("This location has no visible folders.")
+            )
+            .listRowBackground(Color.clear)
         }
     }
 

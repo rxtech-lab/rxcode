@@ -221,8 +221,8 @@ extension CodexAppServer {
     func emitToolCompletion(item: [String: JSONValue], continuation: AsyncStream<StreamEvent>.Continuation) {
         guard let name = toolName(from: item), name != "message" else { return }
         let id = Self.firstString(in: item, keys: ["id", "itemId", "callId"]) ?? UUID().uuidString
-        let output = Self.firstString(in: item, keys: ["output", "result", "summary", "message"]) ?? ""
-        let isError = item["error"] != nil || item["isError"]?.boolValue == true
+        let output = Self.toolOutput(from: item)
+        let isError = Self.toolValueIndicatesError(item["error"]) || item["isError"]?.boolValue == true
         continuation.yield(.user(UserMessage(toolUseId: id, content: output, isError: isError)))
     }
 

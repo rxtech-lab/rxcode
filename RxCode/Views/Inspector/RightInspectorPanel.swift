@@ -17,8 +17,11 @@ struct InspectorTerminal: Identifiable {
 }
 
 struct RightInspectorPanel: View {
+    let maxAllowedWidth: CGFloat
+
     @Environment(WindowState.self) private var windowState
     @AppStorage(AppStorageKeys.showRightSidebar) private var showRightSidebar = false
+    @AppStorage(AppStorageKeys.rightInspectorWidth) private var rightInspectorWidth = RightInspectorPanelLayout.defaultWidth
 
     // Per-thread terminal storage. Each session/thread can have multiple
     // terminals; all stay alive across thread switches.
@@ -27,9 +30,17 @@ struct RightInspectorPanel: View {
     @State private var memoClearID: UUID? = nil
     @State private var terminalFocusID: UUID? = nil
     @State private var memoFocusID: UUID? = nil
+    @State private var resizeStartWidth: Double?
 
     private var currentSessionKey: String {
         windowState.currentSessionId ?? windowState.newSessionKey
+    }
+
+    private var visibleWidth: CGFloat {
+        RightInspectorPanelLayout.restoredWidth(
+            from: rightInspectorWidth,
+            maxAllowedWidth: maxAllowedWidth
+        )
     }
 
     private var currentTerminals: [InspectorTerminal] {
@@ -154,9 +165,13 @@ struct RightInspectorPanel: View {
                 .frame(width: 0.5)
         }
         .frame(
-            minWidth: showRightSidebar ? 420 : 0,
-            maxWidth: showRightSidebar ? .infinity : 0
+            width: showRightSidebar ? visibleWidth : 0
         )
+        .overlay(alignment: .leading) {
+            if showRightSidebar {
+                resizeHandle
+            }
+        }
         .opacity(showRightSidebar ? 1 : 0)
         .clipped()
         .background(terminalShortcuts)
@@ -268,5 +283,35 @@ struct RightInspectorPanel: View {
         case .branch:
             BranchInfoView()
         }
+    }
+
+    private var resizeHandle: some View {
+        Rectangle()
+            .fill(Color.clear)
+            .frame(width: 8)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        let startWidth = resizeStartWidth ?? Double(visibleWidth)
+                        resizeStartWidth = startWidth
+                        rightInspectorWidth = RightInspectorPanelLayout.resizedWidth(
+                            startWidth: startWidth,
+                            leadingEdgeTranslation: value.translation.width,
+                            maxAllowedWidth: maxAllowedWidth
+                        )
+                    }
+                    .onEnded { _ in
+                        resizeStartWidth = nil
+                    }
+            )
+            .onHover { hovering in
+                if hovering {
+                    NSCursor.resizeLeftRight.push()
+                } else {
+                    NSCursor.pop()
+                }
+            }
+            .accessibilityHidden(true)
     }
 }

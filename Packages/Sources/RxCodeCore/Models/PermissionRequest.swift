@@ -32,7 +32,7 @@ public struct PermissionRequest: Identifiable, Sendable {
 
 // MARK: - Tool Category
 
-public enum ToolCategory: Sendable {
+public enum ToolCategory: Sendable, Equatable {
     case readOnly
     case fileModification
     case execution
@@ -48,7 +48,8 @@ public enum ToolCategory: Sendable {
         case "bash", "execute":
             self = .execution
         default:
-            if toolName.lowercased().hasPrefix("mcp__") {
+            let normalized = toolName.lowercased()
+            if normalized.hasPrefix("mcp__") || normalized == "mcptoolcall" {
                 self = .mcp
             } else {
                 self = .unknown

@@ -138,6 +138,9 @@ struct MobileChatView: View {
             .navigationTitle(title)
             .toolbar { threadActionsToolbar }
             .task(id: sessionID) {
+                AnalyticsService.shared.log(.threadOpened, parameters: [
+                    "session_id": sessionID,
+                ])
                 await runThreadLoadingGate()
             }
             .task(id: resolvedSessionID) {

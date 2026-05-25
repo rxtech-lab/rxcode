@@ -28,10 +28,12 @@ import app.rxlab.rxcode.proto.ThreadActionRequestPayload
 import app.rxlab.rxcode.proto.ThreadChangesRequestPayload
 import app.rxlab.rxcode.proto.UserMessagePayload
 import app.rxlab.rxcode.pairing.PairingToken
+import app.rxlab.rxcode.push.FcmTokenReporter
 import app.rxlab.rxcode.relay.RelayClient
 import app.rxlab.rxcode.store.PairedDesktop
 import app.rxlab.rxcode.store.PairingStore
 import app.rxlab.rxcode.sync.SyncClient
+import com.google.firebase.messaging.FirebaseMessaging
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Job
@@ -59,6 +61,7 @@ import java.util.UUID
 class MobileAppState @Inject constructor(
     private val store: PairingStore,
     private val client: SyncClient,
+    private val fcmTokenReporter: FcmTokenReporter,
 ) : ViewModel() {
     private val _state = MutableStateFlow(MobileState(relayUrl = defaultRelayUrl()))
     val state: StateFlow<MobileState> = _state.asStateFlow()
@@ -80,7 +83,13 @@ class MobileAppState @Inject constructor(
             // first inbound envelope decrypts cleanly.
             _state.value.pairedDesktops.forEach { client.addPeer(it.pubkeyHex) }
             client.start()
-            if (_state.value.isPaired) requestSnapshot("client_start")
+            if (_state.value.isPaired) {
+                requestSnapshot("client_start")
+                // Re-publish the FCM token on every cold start. Existing pairings
+                // made before this device had Firebase wired up never delivered
+                // a token, so the desktop shows "No push" forever otherwise.
+                refreshAndReportFcmToken("client_start")
+            }
         }
     }
 
@@ -194,6 +203,7 @@ class MobileAppState @Inject constructor(
         _state.update { it.copy(pairing = PairingStatus.Idle) }
         client.addPeer(fromHex)
         Log.w(TAG, "pairing stored for desktop ${fromHex.take(12)} (${desktop.displayName})")
+        refreshAndReportFcmToken("paired")
         requestSnapshot("paired")
     }
 
@@ -209,7 +219,23 @@ class MobileAppState @Inject constructor(
             val nextMessages = current.messagesBySession.toMutableMap()
             val moreSet = current.sessionsWithMoreMessages.toMutableSet()
             val loadingMore = current.loadingMoreSessions.toMutableSet()
+            val nextRedirects = current.sessionIDRedirects.toMutableMap()
             val active = snap.data.activeSessionID
+            // When the desktop tells us about a real session ID and our local
+            // activeSessionID is still the optimistic draft from
+            // `startNewSession`, set up a redirect so any composable still
+            // holding the draft id (e.g. the chat screen we just navigated to)
+            // resolves through to the real id and sees the snapshot's messages.
+            val currentActive = current.activeSessionID
+            if (active != null && currentActive != null && currentActive != active && isDraftSessionId(currentActive)) {
+                nextRedirects[currentActive] = active
+                val carried = nextMessages.remove(currentActive)
+                if (carried != null && carried.isNotEmpty()) {
+                    val existing = nextMessages[active].orEmpty()
+                    val existingIDs = existing.map { it.id }.toHashSet()
+                    nextMessages[active] = carried.filter { it.id !in existingIDs } + existing
+                }
+            }
             if (active != null) {
                 val msgs = snap.data.activeSessionMessages
                 if (msgs != null) {
@@ -224,6 +250,7 @@ class MobileAppState @Inject constructor(
                 projects = snap.data.projects,
                 sessions = snap.data.sessions.sortedWith(SessionSort),
                 activeSessionID = active ?: current.activeSessionID,
+                sessionIDRedirects = nextRedirects,
                 messagesBySession = nextMessages,
                 sessionsWithMoreMessages = moreSet,
                 loadingMoreSessions = loadingMore,
@@ -361,6 +388,23 @@ class MobileAppState @Inject constructor(
         }
     }
 
+    /**
+     * Buffers a session id from a tapped FCM notification. `RxCodeApp`
+     * observes [MobileState.pendingNotificationSessionID] and routes the UI
+     * (switch to Projects tab + select the session) once the app has finished
+     * splash/onboarding gating. Buffered values survive cold launch because
+     * `MainActivity` re-posts them on every `onCreate`/`onNewIntent`.
+     */
+    fun openThreadFromNotification(sessionId: String) {
+        if (sessionId.isBlank()) return
+        Log.i(TAG, "notification tap -> open thread sessionID=${sessionId.take(8)}")
+        _state.update { it.copy(pendingNotificationSessionID = sessionId) }
+    }
+
+    fun consumePendingNotificationDeepLink() {
+        _state.update { it.copy(pendingNotificationSessionID = null) }
+    }
+
     fun selectSession(sessionId: String?) {
         val resolvedSessionId = sessionId?.let { _state.value.resolveSessionId(it) }
         _state.update {
@@ -418,7 +462,12 @@ class MobileAppState @Inject constructor(
         }
     }
 
-    fun startNewSession(projectId: UUID, initialText: String? = null, planMode: Boolean = false, permissionMode: PermissionMode? = null) {
+    fun startNewSession(
+        projectId: UUID,
+        initialText: String? = null,
+        planMode: Boolean = false,
+        permissionMode: PermissionMode? = null,
+    ): String {
         val draftId = draftSessionId(projectId)
         _state.update { it.copy(activeSessionID = draftId, messagesBySession = it.messagesBySession + (draftId to emptyList())) }
         viewModelScope.launch {
@@ -434,6 +483,7 @@ class MobileAppState @Inject constructor(
                 _state.value.activeDesktopPubkey,
             )
         }
+        return draftId
     }
 
     /**
@@ -748,6 +798,21 @@ class MobileAppState @Inject constructor(
     // MARK: - Helpers
 
     private fun isActiveDesktop(fromHex: String): Boolean = _state.value.activeDesktopPubkey == fromHex
+
+    private fun refreshAndReportFcmToken(reason: String) {
+        try {
+            FirebaseMessaging.getInstance().token
+                .addOnSuccessListener { token ->
+                    viewModelScope.launch { fcmTokenReporter.report(token) }
+                    Log.w(TAG, "FCM token refresh requested reason=$reason token=${token.take(12)}")
+                }
+                .addOnFailureListener { error ->
+                    Log.w(TAG, "FCM token refresh failed reason=$reason: ${error.message}")
+                }
+        } catch (t: Throwable) {
+            Log.w(TAG, "FCM token unavailable reason=$reason: ${t.message}")
+        }
+    }
 
     companion object {
         private const val TAG = "MobileAppState"

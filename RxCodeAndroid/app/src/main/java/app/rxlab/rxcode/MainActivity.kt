@@ -1,11 +1,16 @@
 package app.rxlab.rxcode
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.DisposableEffect
@@ -20,6 +25,7 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import app.rxlab.rxcode.pairing.PairingToken
+import app.rxlab.rxcode.push.RxCodeFirebaseMessagingService
 import app.rxlab.rxcode.state.MobileAppState
 import app.rxlab.rxcode.ui.RxCodeApp
 import app.rxlab.rxcode.ui.theme.RxCodeTheme
@@ -29,12 +35,17 @@ import dagger.hilt.android.AndroidEntryPoint
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     private var pendingDeeplink by mutableStateOf<String?>(null)
+    private var pendingNotificationSessionID by mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Log.w(TAG, "MainActivity.onCreate data=${intent?.dataString?.let { "present" } ?: "none"}")
+        Log.w(TAG, "MainActivity.onCreate data=${intent?.dataString?.let { "present" } ?: "none"} notifSession=${intent?.getStringExtra(RxCodeFirebaseMessagingService.EXTRA_SESSION_ID)?.let { "present" } ?: "none"}")
         enableEdgeToEdge()
+        requestNotificationPermissionIfNeeded()
         pendingDeeplink = intent?.dataString
+        pendingNotificationSessionID = intent
+            ?.getStringExtra(RxCodeFirebaseMessagingService.EXTRA_SESSION_ID)
+            ?.takeIf { it.isNotBlank() }
         setContent {
             RxCodeTheme {
                 val vm: MobileAppState = hiltViewModel()
@@ -58,6 +69,12 @@ class MainActivity : ComponentActivity() {
                         pendingDeeplink = null
                     }
                 }
+                LaunchedEffect(pendingNotificationSessionID) {
+                    pendingNotificationSessionID?.let { sid ->
+                        vm.openThreadFromNotification(sid)
+                        pendingNotificationSessionID = null
+                    }
+                }
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -71,8 +88,21 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        Log.w(TAG, "MainActivity.onNewIntent data=${intent.dataString?.let { "present" } ?: "none"}")
+        Log.w(TAG, "MainActivity.onNewIntent data=${intent.dataString?.let { "present" } ?: "none"} notifSession=${intent.getStringExtra(RxCodeFirebaseMessagingService.EXTRA_SESSION_ID)?.let { "present" } ?: "none"}")
         intent.dataString?.let { pendingDeeplink = it }
+        intent.getStringExtra(RxCodeFirebaseMessagingService.EXTRA_SESSION_ID)
+            ?.takeIf { it.isNotBlank() }
+            ?.let { pendingNotificationSessionID = it }
+    }
+
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1001)
     }
 
     private companion object {

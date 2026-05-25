@@ -22,6 +22,10 @@ extension AppState {
     func selectProject(_ project: Project, in window: WindowState) {
         guard window.selectedProject?.id != project.id else { return }
 
+        AnalyticsService.shared.log(.projectOpened, parameters: [
+            "project_id": project.id.uuidString,
+        ])
+
         saveDraft(in: window)
         saveQueue(in: window)
 

@@ -28,6 +28,8 @@ struct PairedDevice: Codable, Identifiable, Sendable, Hashable {
     var pubkeyHex: String
     var displayName: String
     var platform: String
+    var pushProvider: String?
+    var pushToken: String?
     var apnsToken: String?
     var apnsEnvironment: String?
     /// Device-wide Live Activity push-to-start token (iOS 17.2+). Lets the
@@ -64,6 +66,8 @@ struct PairedDevice: Codable, Identifiable, Sendable, Hashable {
         case pubkeyHex
         case displayName
         case platform
+        case pushProvider
+        case pushToken
         case apnsToken
         case apnsEnvironment
         case liveActivityStartToken
@@ -88,6 +92,7 @@ enum MobilePushError: LocalizedError {
     case invalidRelayURL
     case relayRejected(status: Int, body: String)
     case apnsRejected(status: Int, reason: String)
+    case fcmRejected(status: Int, reason: String)
 
     var errorDescription: String? {
         switch self {
@@ -101,6 +106,8 @@ enum MobilePushError: LocalizedError {
             "Relay rejected the push request (\(status)): \(body)"
         case .apnsRejected(let status, let reason):
             "APNs rejected the notification (\(status)): \(reason)"
+        case .fcmRejected(let status, let reason):
+            "FCM rejected the notification (\(status)): \(reason)"
         }
     }
 }
@@ -433,6 +440,8 @@ final class MobileSyncService: ObservableObject {
             pubkeyHex: pending.mobilePubkeyHex,
             displayName: pending.displayName,
             platform: pending.platform,
+            pushProvider: nil,
+            pushToken: nil,
             apnsToken: nil,
             apnsEnvironment: Self.normalizedAPNSEnvironment(pending.apnsEnvironment),
             pairedAt: .now,
@@ -531,7 +540,32 @@ final class MobileSyncService: ObservableObject {
     func broadcastNotification(_ payload: NotificationPayload) {
         Task {
             await broadcastToAllClients(.notification(payload))
-            await fanoutAPNs(payload)
+            await fanoutPush(payload)
+        }
+    }
+
+    func fanoutPush(_ payload: NotificationPayload) async {
+        let devices = pairedDevices.filter { Self.pushToken(for: $0)?.isEmpty == false }
+        guard !devices.isEmpty else { return }
+
+        for device in devices {
+            guard let relayURLString = device.relayURL,
+                  let relayURL = URL(string: relayURLString),
+                  let pushURL = Self.pushEndpointURL(from: relayURL) else {
+                logger.error("[Push] cannot derive push endpoint for device=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
+                continue
+            }
+
+            do {
+                switch Self.pushProvider(for: device) {
+                case "fcm":
+                    try await sendFCMPush(payload, to: device, pushURL: pushURL)
+                default:
+                    try await sendAPNsPush(payload, to: device, pushURL: pushURL)
+                }
+            } catch {
+                logger.error("[Push] fan-out failed provider=\(Self.pushProvider(for: device), privacy: .public) deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public): \(error.localizedDescription, privacy: .public)")
+            }
         }
     }
 
@@ -562,7 +596,7 @@ final class MobileSyncService: ObservableObject {
     /// endpoint. Throws on a missing token, unknown peer, or relay/APNs
     /// rejection so callers can log the specific failure.
     func sendAPNsPush(_ payload: NotificationPayload, to device: PairedDevice, pushURL: URL) async throws {
-        guard let token = device.apnsToken, !token.isEmpty else {
+        guard let token = Self.apnsToken(for: device), !token.isEmpty else {
             throw MobilePushError.missingDeviceToken
         }
         // Find the client for this device's relay
@@ -585,6 +619,7 @@ final class MobileSyncService: ObservableObject {
         )
         let encryptedAlertData = try JSONEncoder().encode(encrypted)
         let body = APNsPushRequest(
+            provider: nil,
             deviceToken: token,
             encryptedAlert: encryptedAlertData.base64EncodedString(),
             category: payload.kind.rawValue,
@@ -613,14 +648,84 @@ final class MobileSyncService: ObservableObject {
         guard (200..<300).contains(pushResponse.statusCode) else {
             throw MobilePushError.apnsRejected(
                 status: pushResponse.statusCode,
-                reason: pushResponse.reason
+                reason: pushResponse.reason ?? "Unknown error"
+            )
+        }
+    }
+
+    func sendFCMPush(_ payload: NotificationPayload, to device: PairedDevice, pushURL: URL) async throws {
+        guard let token = Self.pushToken(for: device), !token.isEmpty else {
+            throw MobilePushError.missingDeviceToken
+        }
+        let deviceClient = clientForDevice(device)
+        guard let peer = await deviceClient?.peer(forHex: device.pubkeyHex) else {
+            throw MobilePushError.unknownPeer
+        }
+
+        let plaintext = AlertPlaintext(
+            title: payload.title,
+            body: payload.body,
+            sessionID: payload.sessionID,
+            projectID: payload.projectID,
+            kind: payload.kind.rawValue
+        )
+        let encrypted = try APNsCrypto.seal(
+            plaintext: plaintext,
+            sender: identity.privateKey,
+            recipient: peer
+        )
+        let encryptedAlertData = try JSONEncoder().encode(encrypted)
+        let body = PushRequest(
+            provider: "fcm",
+            deviceToken: token,
+            encryptedAlert: encryptedAlertData.base64EncodedString(),
+            category: payload.kind.rawValue,
+            collapseID: Self.notificationCollapseID(for: payload, device: device),
+            apnsEnvironment: nil
+        )
+
+        var request = URLRequest(url: pushURL)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(body)
+
+        logger.info("[FCM] sending push kind=\(payload.kind.rawValue, privacy: .public) deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public) tokenPrefix=\(String(token.prefix(12)), privacy: .public)")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw MobilePushError.relayRejected(status: -1, body: "No HTTP response")
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            throw MobilePushError.relayRejected(
+                status: http.statusCode,
+                body: Self.responseBodyString(data)
+            )
+        }
+        let pushResponse = try JSONDecoder().decode(PushResponse.self, from: data)
+        guard (200..<300).contains(pushResponse.statusCode) else {
+            throw MobilePushError.fcmRejected(
+                status: pushResponse.statusCode,
+                reason: pushResponse.reason ?? "Unknown error"
             )
         }
     }
 
     /// Send one APNs-backed test notification to a paired device.
     func sendTestNotification(to device: PairedDevice) async throws {
-        guard let token = device.apnsToken, !token.isEmpty else {
+        if Self.pushProvider(for: device) == "fcm" {
+            guard let deviceRelayURL = pushEndpointURL(for: device) else {
+                throw MobilePushError.invalidRelayURL
+            }
+            let payload = NotificationPayload(
+                kind: .generic,
+                title: "RxCode test notification",
+                body: "Notifications are working for \(device.displayName)."
+            )
+            try await sendFCMPush(payload, to: device, pushURL: deviceRelayURL)
+            return
+        }
+
+        guard let token = Self.apnsToken(for: device), !token.isEmpty else {
             throw MobilePushError.missingDeviceToken
         }
         // Find the client for this device's relay
@@ -647,6 +752,7 @@ final class MobileSyncService: ObservableObject {
         )
         let encryptedAlertData = try JSONEncoder().encode(encrypted)
         let body = APNsPushRequest(
+            provider: nil,
             deviceToken: token,
             encryptedAlert: encryptedAlertData.base64EncodedString(),
             category: "test_notification",
@@ -674,7 +780,7 @@ final class MobileSyncService: ObservableObject {
         guard (200..<300).contains(pushResponse.statusCode) else {
             throw MobilePushError.apnsRejected(
                 status: pushResponse.statusCode,
-                reason: pushResponse.reason
+                reason: pushResponse.reason ?? "Unknown error"
             )
         }
     }
@@ -897,6 +1003,30 @@ final class MobileSyncService: ObservableObject {
         normalizedAPNSEnvironment(device.apnsEnvironment)
     }
 
+    static func pushProvider(for device: PairedDevice) -> String {
+        let raw = device.pushProvider?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        if raw?.isEmpty == false {
+            return raw!
+        }
+        return (device.apnsToken?.isEmpty == false) ? "apns" : "unknown"
+    }
+
+    static func pushToken(for device: PairedDevice) -> String? {
+        if let token = device.pushToken, !token.isEmpty {
+            return token
+        }
+        return device.apnsToken
+    }
+
+    static func apnsToken(for device: PairedDevice) -> String? {
+        if pushProvider(for: device) == "apns", let token = device.pushToken, !token.isEmpty {
+            return token
+        }
+        return device.apnsToken
+    }
+
     static func normalizedAPNSEnvironment(_ environment: String?) -> String? {
         guard let raw = environment?
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -932,7 +1062,8 @@ final class MobileSyncService: ObservableObject {
     }
 }
 
-struct APNsPushRequest: Codable {
+struct PushRequest: Codable {
+    let provider: String?
     let deviceToken: String
     let encryptedAlert: String
     let category: String?
@@ -940,6 +1071,7 @@ struct APNsPushRequest: Codable {
     let apnsEnvironment: String?
 
     enum CodingKeys: String, CodingKey {
+        case provider
         case deviceToken = "device_token"
         case encryptedAlert = "encrypted_alert"
         case category
@@ -948,19 +1080,27 @@ struct APNsPushRequest: Codable {
     }
 }
 
-struct APNsPushResponse: Codable {
+typealias APNsPushRequest = PushRequest
+
+struct PushResponse: Codable {
+    let provider: String?
     let statusCode: Int
-    let reason: String
+    let reason: String?
     let apnsID: String?
     let apnsEnvironment: String?
+    let messageID: String?
 
     enum CodingKeys: String, CodingKey {
+        case provider
         case statusCode = "status_code"
         case reason
         case apnsID = "apns_id"
         case apnsEnvironment = "apns_environment"
+        case messageID = "message_id"
     }
 }
+
+typealias APNsPushResponse = PushResponse
 
 extension Notification.Name {
     static let mobileSyncSnapshotRequested = Notification.Name("mobileSync.snapshotRequested")

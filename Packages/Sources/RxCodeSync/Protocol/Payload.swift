@@ -11,6 +11,7 @@ public enum Payload: Sendable {
     case pairAck(PairAckPayload)
     case unpair(UnpairPayload)
     case apnsToken(APNsTokenPayload)
+    case pushToken(PushTokenPayload)
     case liveActivityToken(LiveActivityTokenPayload)
     case requestSnapshot(RequestSnapshotPayload)
     case snapshot(SnapshotPayload)
@@ -75,6 +76,7 @@ public extension Payload {
         case .pairAck: return "pair_ack"
         case .unpair: return "unpair"
         case .apnsToken: return "apns_token"
+        case .pushToken: return "push_token"
         case .liveActivityToken: return "live_activity_token"
         case .requestSnapshot: return "request_snapshot"
         case .snapshot: return "snapshot"
@@ -180,6 +182,18 @@ public struct APNsTokenPayload: Codable, Sendable {
     public let environment: String
     public init(tokenHex: String, environment: String) {
         self.tokenHex = tokenHex
+        self.environment = environment
+    }
+}
+
+public struct PushTokenPayload: Codable, Sendable {
+    public let provider: String
+    public let token: String
+    public let environment: String?
+
+    public init(provider: String, token: String, environment: String? = nil) {
+        self.provider = provider
+        self.token = token
         self.environment = environment
     }
 }
@@ -675,6 +689,7 @@ extension Payload: Codable {
         case pairAck = "pair_ack"
         case unpair
         case apnsToken = "apns_token"
+        case pushToken = "push_token"
         case liveActivityToken = "live_activity_token"
         case requestSnapshot = "request_snapshot"
         case snapshot
@@ -743,6 +758,7 @@ extension Payload: Codable {
         case .pairAck: self = .pairAck(try container.decode(PairAckPayload.self, forKey: .data))
         case .unpair: self = .unpair(try container.decode(UnpairPayload.self, forKey: .data))
         case .apnsToken: self = .apnsToken(try container.decode(APNsTokenPayload.self, forKey: .data))
+        case .pushToken: self = .pushToken(try container.decode(PushTokenPayload.self, forKey: .data))
         case .liveActivityToken: self = .liveActivityToken(try container.decode(LiveActivityTokenPayload.self, forKey: .data))
         case .requestSnapshot: self = .requestSnapshot(try container.decode(RequestSnapshotPayload.self, forKey: .data))
         case .snapshot: self = .snapshot(try container.decode(SnapshotPayload.self, forKey: .data))
@@ -807,6 +823,7 @@ extension Payload: Codable {
         case .pairAck(let p): try container.encode(TypeKey.pairAck.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .unpair(let p): try container.encode(TypeKey.unpair.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .apnsToken(let p): try container.encode(TypeKey.apnsToken.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .pushToken(let p): try container.encode(TypeKey.pushToken.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .liveActivityToken(let p): try container.encode(TypeKey.liveActivityToken.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .requestSnapshot(let p): try container.encode(TypeKey.requestSnapshot.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .snapshot(let p): try container.encode(TypeKey.snapshot.rawValue, forKey: .type); try container.encode(p, forKey: .data)

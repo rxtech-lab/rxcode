@@ -40,7 +40,13 @@ struct ChangesView: View {
                 .onChange(of: appState.isStreaming(in: windowState)) { old, new in
                     if old && !new { triggerRefresh(at: project.path) }
                 }
-                .onAppear { startWatching(at: project.path) }
+                .onAppear {
+                    startWatching(at: project.path)
+                    AnalyticsService.shared.log(.diffViewOpened, parameters: [
+                        "project_id": project.id.uuidString,
+                        "surface": "inspector_changes",
+                    ])
+                }
                 .onDisappear { stopWatching() }
                 .onChange(of: project.path) { _, newPath in
                     Task { @MainActor in

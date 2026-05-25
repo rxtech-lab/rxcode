@@ -254,7 +254,7 @@ struct MobileSettingsTab: View {
 
     private func pairedRow(_ device: PairedDevice) -> some View {
         HStack {
-            Image(systemName: device.platform.lowercased().contains("ipad") ? "ipad" : "iphone")
+            Image(systemName: Self.deviceIconName(for: device))
                 .font(.title2)
                 .frame(width: 28)
             VStack(alignment: .leading, spacing: 2) {
@@ -264,11 +264,11 @@ struct MobileSettingsTab: View {
                     onlineStatePill(for: device)
                 }
                 HStack(spacing: 6) {
-                    if let token = device.apnsToken, !token.isEmpty {
+                    if let token = MobileSyncService.pushToken(for: device), !token.isEmpty {
                         Label("Push", systemImage: "bell.fill")
                             .font(.caption)
                             .foregroundStyle(.green)
-                        if let environment = apnsEnvironmentLabel(for: device) {
+                        if let environment = pushChannelLabel(for: device) {
                             Text("• \(environment)")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -346,7 +346,7 @@ struct MobileSettingsTab: View {
                     .labelStyle(.iconOnly)
             }
             .buttonStyle(.borderless)
-            .disabled(device.apnsToken?.isEmpty ?? true || sync.connectionState != .connected)
+            .disabled(MobileSyncService.pushToken(for: device)?.isEmpty ?? true || sync.connectionState != .connected)
             .help(testNotificationHelp(for: device))
         }
     }
@@ -371,13 +371,30 @@ struct MobileSettingsTab: View {
     }
 
     private func testNotificationHelp(for device: PairedDevice) -> String {
-        if device.apnsToken?.isEmpty ?? true {
-            return "Open RxCode Mobile on this device once so it can register for push notifications."
+        if MobileSyncService.pushToken(for: device)?.isEmpty ?? true {
+            let app = MobileSyncService.pushProvider(for: device) == "fcm" ? "RxCode on Android" : "RxCode Mobile"
+            return "Open \(app) on this device once so it can register for push notifications."
         }
         if sync.connectionState != .connected {
             return "Connect to the relay before sending a test notification."
         }
         return "Send a push notification to \(device.displayName)."
+    }
+
+    private static func deviceIconName(for device: PairedDevice) -> String {
+        let platform = device.platform.lowercased()
+        if platform.contains("ipad") { return "ipad" }
+        if platform.contains("android") { return "candybarphone" }
+        return "iphone"
+    }
+
+    /// Provider-aware suffix shown next to the green "Push" badge. APNs shows
+    /// sandbox/production; FCM shows "FCM" so it's clear how the push lands.
+    private func pushChannelLabel(for device: PairedDevice) -> String? {
+        switch MobileSyncService.pushProvider(for: device) {
+        case "fcm": return "FCM"
+        default: return apnsEnvironmentLabel(for: device)
+        }
     }
 
     private func apnsEnvironmentLabel(for device: PairedDevice) -> String? {

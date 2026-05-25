@@ -232,6 +232,10 @@ struct NewThreadSheet: View {
             .max(by: { $0.updatedAt < $1.updatedAt })
         guard let newest else { return }
         awaitingFromSessionIDs = nil
+        AnalyticsService.shared.log(.threadCreated, parameters: [
+            "project_id": projectID.uuidString,
+            "session_id": newest.id,
+        ])
         onSessionCreated(newest.id)
         dismiss()
     }

@@ -62,6 +62,11 @@ jobs:
       - name: Install xcpretty
         run: gem install xcpretty
 
+      - name: Write Firebase config
+        env:
+          FIREBASE_MACOS_B64: ${{ secrets.FIREBASE_MACOS_B64 }}
+        run: ./scripts/ci/write-firebase-config.sh
+
       - name: Run Xcode tests
         run: |
           set -o pipefail && xcodebuild \
@@ -90,6 +95,11 @@ jobs:
       - name: Install xcpretty
         run: gem install xcpretty
 
+      - name: Write Firebase config
+        env:
+          FIREBASE_MACOS_B64: ${{ secrets.FIREBASE_MACOS_B64 }}
+        run: ./scripts/ci/write-firebase-config.sh
+
       - name: Build (no signing)
         run: |
           set -o pipefail && xcodebuild \
@@ -115,6 +125,11 @@ jobs:
 
       - name: Install xcpretty
         run: gem install xcpretty
+
+      - name: Write Firebase config
+        env:
+          FIREBASE_IOS_B64: ${{ secrets.FIREBASE_IOS_B64 }}
+        run: ./scripts/ci/write-firebase-config.sh
 
       - name: Build mobile app (ad-hoc signing)
         run: |
@@ -162,6 +177,11 @@ jobs:
 
       - name: Install xcpretty
         run: gem install xcpretty
+
+      - name: Write Firebase config
+        env:
+          FIREBASE_IOS_B64: ${{ secrets.FIREBASE_IOS_B64 }}
+        run: ./scripts/ci/write-firebase-config.sh
 
       - name: Resolve simulator
         id: sim
@@ -232,6 +252,11 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
+
+      - name: Write Firebase config
+        env:
+          FIREBASE_ANDROID_B64: ${{ secrets.FIREBASE_ANDROID_B64 }}
+        run: ./scripts/ci/write-firebase-config.sh
 
       - name: Assemble debug APK
         working-directory: RxCodeAndroid

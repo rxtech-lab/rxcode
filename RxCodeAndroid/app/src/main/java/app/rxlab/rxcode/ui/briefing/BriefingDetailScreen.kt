@@ -42,7 +42,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -50,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import app.rxlab.rxcode.proto.MobileThreadSummary
 import app.rxlab.rxcode.state.MobileAppState
 import app.rxlab.rxcode.state.MobileState
+import app.rxlab.rxcode.ui.sheets.NewThreadSheet
 import app.rxlab.rxcode.ui.util.HapticEvent
 import app.rxlab.rxcode.ui.util.RxMarkdownText
 import app.rxlab.rxcode.ui.util.rememberHaptics
@@ -71,7 +74,7 @@ fun BriefingDetailScreen(
     groupKey: BriefingGroupKey,
     onBack: () -> Unit,
     onOpenSession: (String) -> Unit,
-    onNewThread: () -> Unit,
+    onNewThread: (sessionId: String) -> Unit,
     selectedSessionId: String? = null,
 ) {
     val haptics = rememberHaptics()
@@ -95,6 +98,8 @@ fun BriefingDetailScreen(
     }
     val isInitializingGit = groupKey.projectId in state.pendingBranchOps
     val isUnknownBranch = groupKey.branch.equals("unknown", ignoreCase = true)
+    val branchInfo = state.projectBranches[groupKey.projectId]
+    var newThreadOpen by remember { mutableStateOf(false) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -114,7 +119,7 @@ fun BriefingDetailScreen(
                 icon = { Icon(Icons.Outlined.Add, contentDescription = null) },
                 onClick = {
                     haptics.play(HapticEvent.LightTap)
-                    onNewThread()
+                    newThreadOpen = true
                 },
             )
         },
@@ -171,6 +176,21 @@ fun BriefingDetailScreen(
                 }
             }
         }
+    }
+
+    if (newThreadOpen) {
+        NewThreadSheet(
+            viewModel = viewModel,
+            projectId = groupKey.projectId,
+            projectName = project?.name,
+            branchInfo = branchInfo,
+            preferredBranch = groupKey.branch.takeIf { !isUnknownBranch },
+            onDismiss = { newThreadOpen = false },
+            onSessionCreated = { sessionId ->
+                newThreadOpen = false
+                onNewThread(sessionId)
+            },
+        )
     }
 }
 

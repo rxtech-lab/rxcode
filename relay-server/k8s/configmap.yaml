@@ -17,3 +17,7 @@ data:
   # so the relay can run multiple replicas. Reachable from any namespace via
   # this FQDN; auth-less. Remove this key to fall back to single-node mode.
   REDIS_URL: "redis://redis.redis.svc.cluster.local:6379"
+  # Firebase project ID used when forwarding Android pushes via the FCM HTTP v1
+  # API. The corresponding service-account JSON is provided through
+  # FCM_SERVICE_ACCOUNT_B64 in `secrets.yaml`. Non-sensitive on its own.
+  FCM_PROJECT_ID: "xcode-64741"

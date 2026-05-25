@@ -39,6 +39,7 @@ struct RxCodeApp: App {
     private let updateService = UpdateService.shared
 
     init() {
+        FirebaseBootstrap.configure()
         try? Tips.configure([
             .displayFrequency(.immediate),
             .datastoreLocation(.applicationDefault),

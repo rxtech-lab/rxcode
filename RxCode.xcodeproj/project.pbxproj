@@ -42,6 +42,10 @@
 		E6D001032FA0000100000001 /* RxCodeCore in Frameworks */ = {isa = PBXBuildFile; productRef = E6D001012FA0000100000001 /* RxCodeCore */; };
 		E6D001042FA0000100000001 /* RxCodeChatKit in Frameworks */ = {isa = PBXBuildFile; productRef = E6D001022FA0000100000001 /* RxCodeChatKit */; };
 		E6D001072FA0000100000001 /* RxCodeSync in Frameworks */ = {isa = PBXBuildFile; productRef = E6D001062FA0000100000001 /* RxCodeSync */; };
+		FB0000030000000000000001 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = FB0000010000000000000001 /* FirebaseAnalytics */; };
+		FB0000040000000000000001 /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = FB0000020000000000000001 /* FirebaseCrashlytics */; };
+		FB0000070000000000000001 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = FB0000050000000000000001 /* FirebaseAnalytics */; };
+		FB0000080000000000000001 /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = FB0000060000000000000001 /* FirebaseCrashlytics */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -244,6 +248,8 @@
 				DF230BA32FBC73BA008929A6 /* RxCodeSync in Frameworks */,
 				DF230BA12FBC73BA008929A6 /* RxCodeCore in Frameworks */,
 				DF230B9F2FBC73BA008929A6 /* RxCodeChatKit in Frameworks */,
+				FB0000070000000000000001 /* FirebaseAnalytics in Frameworks */,
+				FB0000080000000000000001 /* FirebaseCrashlytics in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -283,6 +289,8 @@
 				E6D001042FA0000100000001 /* RxCodeChatKit in Frameworks */,
 				E6D001072FA0000100000001 /* RxCodeSync in Frameworks */,
 				DF23FF1D2FBB42F7008929A6 /* WaterfallGrid in Frameworks */,
+				FB0000030000000000000001 /* FirebaseAnalytics in Frameworks */,
+				FB0000040000000000000001 /* FirebaseCrashlytics in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -459,6 +467,8 @@
 				DF230B9E2FBC73BA008929A6 /* RxCodeChatKit */,
 				DF230BA02FBC73BA008929A6 /* RxCodeCore */,
 				DF230BA22FBC73BA008929A6 /* RxCodeSync */,
+				FB0000050000000000000001 /* FirebaseAnalytics */,
+				FB0000060000000000000001 /* FirebaseCrashlytics */,
 			);
 			productName = RxCodeMobile;
 			productReference = DF230B4F2FBC7367008929A6 /* RxCodeMobile.app */;
@@ -560,6 +570,8 @@
 				E6D001022FA0000100000001 /* RxCodeChatKit */,
 				E6D001062FA0000100000001 /* RxCodeSync */,
 				DF23FF1C2FBB42F7008929A6 /* WaterfallGrid */,
+				FB0000010000000000000001 /* FirebaseAnalytics */,
+				FB0000020000000000000001 /* FirebaseCrashlytics */,
 			);
 			productName = RxCode;
 			productReference = E67335382F7356F600FD26C7 /* RxCode.app */;
@@ -614,6 +626,7 @@
 				E6D001002FA0000100000001 /* XCLocalSwiftPackageReference "Packages" */,
 				DF06CCCF2FB4CAB5005991E1 /* XCRemoteSwiftPackageReference "ViewInspector" */,
 				DF23FF1B2FBB42F7008929A6 /* XCRemoteSwiftPackageReference "WaterfallGrid" */,
+				FB0000000000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = E67335392F7356F600FD26C7 /* Products */;
@@ -1466,6 +1479,14 @@
 				minimumVersion = 2.0.0;
 			};
 		};
+		FB0000000000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 11.4.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -1546,6 +1567,26 @@
 			isa = XCSwiftPackageProductDependency;
 			package = E6D001002FA0000100000001 /* XCLocalSwiftPackageReference "Packages" */;
 			productName = RxCodeSync;
+		};
+		FB0000010000000000000001 /* FirebaseAnalytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FB0000000000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalytics;
+		};
+		FB0000020000000000000001 /* FirebaseCrashlytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FB0000000000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCrashlytics;
+		};
+		FB0000050000000000000001 /* FirebaseAnalytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FB0000000000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalytics;
+		};
+		FB0000060000000000000001 /* FirebaseCrashlytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FB0000000000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCrashlytics;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

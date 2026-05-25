@@ -39,6 +39,8 @@ func main() {
 	apnsTeamID := flag.String("apns-team-id", os.Getenv("APNS_TEAM_ID"), "APNs Team ID (env: APNS_TEAM_ID)")
 	apnsTopic := flag.String("apns-topic", os.Getenv("APNS_TOPIC"), "APNs topic / iOS bundle ID (env: APNS_TOPIC)")
 	apnsProduction := flag.Bool("apns-production", envBool("APNS_PRODUCTION", false), "use production APNs endpoint instead of sandbox (env: APNS_PRODUCTION)")
+	fcmProjectID := flag.String("fcm-project-id", os.Getenv("FCM_PROJECT_ID"), "Firebase project ID (env: FCM_PROJECT_ID)")
+	fcmServiceAccountPath := flag.String("fcm-service-account", os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"), "path to Firebase service-account JSON (env: GOOGLE_APPLICATION_CREDENTIALS)")
 	redisURL := flag.String("redis-url", os.Getenv("REDIS_URL"), "Redis URL for the multi-node pub/sub backplane; empty runs single-node (env: REDIS_URL)")
 	flag.Parse()
 
@@ -84,10 +86,30 @@ func main() {
 		log.Printf("APNs sender disabled (set APNS_KEY_B64 or -apns-key to enable)")
 	}
 
+	var fcmSender *FCMSender
+	fcmJSON, fcmSource, err := loadFCMServiceAccount(
+		*fcmServiceAccountPath,
+		os.Getenv("FCM_SERVICE_ACCOUNT_JSON"),
+		os.Getenv("FCM_SERVICE_ACCOUNT_B64"),
+	)
+	if err != nil {
+		log.Fatalf("load FCM service account: %v", err)
+	}
+	if len(fcmJSON) > 0 {
+		p, err := NewFCMSender(*fcmProjectID, fcmJSON)
+		if err != nil {
+			log.Fatalf("init FCM sender: %v", err)
+		}
+		fcmSender = p
+		log.Printf("FCM sender enabled (project=%s key=%s)", p.projectID, fcmSource)
+	} else {
+		log.Printf("FCM sender disabled (set FCM_SERVICE_ACCOUNT_B64, FCM_SERVICE_ACCOUNT_JSON, or GOOGLE_APPLICATION_CREDENTIALS to enable)")
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", hub.ServeWS)
-	mux.HandleFunc("/push", pushHandler(pushSender))
-	mux.HandleFunc("/healthz", healthHandler(hub, pushSender))
+	mux.HandleFunc("/push", pushHandler(pushSender, fcmSender))
+	mux.HandleFunc("/healthz", healthHandler(hub, pushSender, fcmSender))
 
 	srv := &http.Server{
 		Addr:              *addr,

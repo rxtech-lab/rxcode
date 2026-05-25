@@ -30,6 +30,12 @@ struct ThisThreadDiffView: View {
                 }
                 .padding(12)
             }
+            .onAppear {
+                AnalyticsService.shared.log(.diffViewOpened, parameters: [
+                    "surface": "this_thread",
+                    "file_count": summaries.count,
+                ])
+            }
         }
     }
 }

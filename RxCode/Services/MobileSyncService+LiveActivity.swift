@@ -388,7 +388,7 @@ extension MobileSyncService {
                 if (200..<300).contains(pushResponse.statusCode) {
                     logger.info("[Push] \(pushType, privacy: .public) accepted apnsStatus=\(pushResponse.statusCode, privacy: .public) apnsID=\(pushResponse.apnsID ?? "<nil>", privacy: .public) deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
                 } else {
-                    logger.error("[Push] \(pushType, privacy: .public) apns rejected status=\(pushResponse.statusCode, privacy: .public) reason=\(pushResponse.reason, privacy: .public) deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
+                    logger.error("[Push] \(pushType, privacy: .public) apns rejected status=\(pushResponse.statusCode, privacy: .public) reason=\(pushResponse.reason ?? "<nil>", privacy: .public) deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
                 }
             } else {
                 logger.info("[Push] \(pushType, privacy: .public) relay accepted httpStatus=\(http.statusCode, privacy: .public) (no APNs detail in response) deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")

@@ -76,6 +76,24 @@ struct PayloadTests {
         #expect(request.apnsEnvironment == "sandbox")
     }
 
+    @Test("push token carries provider and token")
+    func pushTokenCarriesProviderAndToken() throws {
+        let payload = Payload.pushToken(
+            PushTokenPayload(provider: "fcm", token: "fcm-token")
+        )
+
+        let data = try JSONEncoder().encode(payload)
+        let decoded = try JSONDecoder().decode(Payload.self, from: data)
+        guard case .pushToken(let token) = decoded else {
+            Issue.record("Expected push token payload")
+            return
+        }
+
+        #expect(token.provider == "fcm")
+        #expect(token.token == "fcm-token")
+        #expect(token.environment == nil)
+    }
+
     @Test("snapshot carries briefing and settings data")
     func snapshotCarriesBriefingAndSettingsData() throws {
         let projectId = UUID(uuidString: "11111111-2222-3333-4444-555555555555")!

@@ -97,6 +97,8 @@ extension MobileSyncService {
         case .apnsToken(let t):
             if let idx = pairedDevices.firstIndex(where: { $0.pubkeyHex == inbound.fromHex }) {
                 logger.info("[APNs] token received mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public) tokenPrefix=\(String(t.tokenHex.prefix(12)), privacy: .public) environment=\(t.environment, privacy: .public)")
+                pairedDevices[idx].pushProvider = "apns"
+                pairedDevices[idx].pushToken = t.tokenHex
                 pairedDevices[idx].apnsToken = t.tokenHex
                 pairedDevices[idx].apnsEnvironment = Self.normalizedAPNSEnvironment(t.environment)
                 pairedDevices[idx].lastSeen = .now
@@ -108,6 +110,33 @@ extension MobileSyncService {
                 savePairedDevices()
             } else {
                 logger.warning("[APNs] token received for unknown mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public) tokenPrefix=\(String(t.tokenHex.prefix(12)), privacy: .public) environment=\(t.environment, privacy: .public)")
+            }
+        case .pushToken(let t):
+            let provider = t.provider.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard !provider.isEmpty, !t.token.isEmpty else {
+                logger.warning("[Push] ignored empty token provider=\(provider, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+                return
+            }
+            if let idx = pairedDevices.firstIndex(where: { $0.pubkeyHex == inbound.fromHex }) {
+                logger.info("[Push] token received provider=\(provider, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public) tokenPrefix=\(String(t.token.prefix(12)), privacy: .public)")
+                pairedDevices[idx].pushProvider = provider
+                pairedDevices[idx].pushToken = t.token
+                if provider == "apns" {
+                    pairedDevices[idx].apnsToken = t.token
+                    pairedDevices[idx].apnsEnvironment = Self.normalizedAPNSEnvironment(t.environment)
+                }
+                pairedDevices[idx].lastSeen = .now
+                for staleIdx in pairedDevices.indices where staleIdx != idx && pairedDevices[staleIdx].pushProvider == provider && pairedDevices[staleIdx].pushToken == t.token {
+                    logger.warning("[Push] clearing duplicate \(provider, privacy: .public) token from stale mobileKey=\(String(self.pairedDevices[staleIdx].pubkeyHex.prefix(12)), privacy: .public) currentMobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public) tokenPrefix=\(String(t.token.prefix(12)), privacy: .public)")
+                    pairedDevices[staleIdx].pushToken = nil
+                    if provider == "apns" {
+                        pairedDevices[staleIdx].apnsToken = nil
+                        pairedDevices[staleIdx].apnsEnvironment = nil
+                    }
+                }
+                savePairedDevices()
+            } else {
+                logger.warning("[Push] token received for unknown mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public) provider=\(provider, privacy: .public) tokenPrefix=\(String(t.token.prefix(12)), privacy: .public)")
             }
         case .liveActivityToken(let t):
             guard let idx = pairedDevices.firstIndex(where: { $0.pubkeyHex == inbound.fromHex }) else {

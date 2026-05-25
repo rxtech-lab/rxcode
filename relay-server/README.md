@@ -1,6 +1,6 @@
 # rxcode-relay
 
-Stateless WebSocket relay + APNs forwarder for the RxCode desktop ↔ mobile sync channel.
+Stateless WebSocket relay + APNs/FCM forwarder for the RxCode desktop ↔ mobile sync channel.
 
 The relay never decrypts payloads. All sync messages are E2E encrypted between
 device pairs using Curve25519 + ChaCha20-Poly1305; the relay only sees opaque
@@ -13,8 +13,9 @@ envelopes (`{v, to, from, nonce, ct}`) and a destination pubkey.
   already prevents reading or forging messages. Drop-on-offline: if the
   recipient pubkey isn't currently connected, the envelope is dropped and the
   sender receives a `delivery_failed` notice.
-- `POST /push` — desktop submits APNs pushes. The `push_type` field selects
-  one of three delivery modes (defaults to `alert`):
+- `POST /push` — desktop submits APNs or FCM pushes. The optional `provider`
+  field selects `"apns"` (default) or `"fcm"`. For APNs, the `push_type` field
+  selects one of three delivery modes (defaults to `alert`):
   - **`alert`** (or omitted) — encrypted banner. Body:
     ```json
     {
@@ -49,6 +50,18 @@ envelopes (`{v, to, from, nonce, ct}`) and a destination pubkey.
   It keeps both sandbox and production APNs clients alive, then routes each
   push by `apns_environment`. If older desktop clients omit the field,
   `APNS_PRODUCTION` is used as a compatibility default.
+  - **FCM alert** — encrypted Android banner. Body:
+    ```json
+    {
+      "provider": "fcm",
+      "device_token": "<FCM registration token>",
+      "encrypted_alert": "<base64 ciphertext>",
+      "category": "permission_request",
+      "collapse_id": "<id>"
+    }
+    ```
+    The relay sends an FCM HTTP v1 data message. The Android app decrypts
+    `enc` locally and renders the system notification itself.
 - `GET  /healthz` — liveness probe.
 
 ## Run locally
@@ -78,6 +91,10 @@ missing file is non-fatal — the relay just uses whatever's in the process env.
 | `-apns-team-id`     | `APNS_TEAM_ID`     | 10-char Team ID.                                     |
 | `-apns-topic`       | `APNS_TOPIC`       | iOS app bundle identifier (e.g. `app.rxlab.rxcodemobile`). |
 | `-apns-production`  | `APNS_PRODUCTION`  | Compatibility default when a push omits `apns_environment`. |
+| `-fcm-project-id`   | `FCM_PROJECT_ID`   | Firebase project ID. Optional if the service-account JSON contains `project_id`. |
+| `-fcm-service-account` | `GOOGLE_APPLICATION_CREDENTIALS` | Path to Firebase service-account JSON. |
+| *(none)*            | `FCM_SERVICE_ACCOUNT_JSON` | Raw Firebase service-account JSON. |
+| *(none)*            | `FCM_SERVICE_ACCOUNT_B64` | Base64-encoded Firebase service-account JSON, preferred for container secrets. |
 | `-redis-url`        | `REDIS_URL`        | Redis URL for the multi-node backplane. Empty = single-node. |
 
 `APNS_KEY_B64` wins over `APNS_KEY_PATH` when both are set. Both standard and
@@ -95,6 +112,8 @@ APNS_KEY_ID=ABCDE12345
 APNS_TEAM_ID=YYYYYYYYYY
 APNS_TOPIC=app.rxlab.rxcodemobile
 APNS_PRODUCTION=false                    # fallback only for old desktop builds
+FCM_PROJECT_ID=your-firebase-project
+FCM_SERVICE_ACCOUNT_B64=ewogICJ0eXBlIjog... # base64 of service account JSON
 ```
 
 Encode the `.p8` ready for the file:

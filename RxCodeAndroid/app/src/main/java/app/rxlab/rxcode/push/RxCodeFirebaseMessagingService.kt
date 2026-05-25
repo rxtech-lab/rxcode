@@ -78,12 +78,18 @@ class RxCodeFirebaseMessagingService : FirebaseMessagingService() {
     @SuppressLint("MissingPermission")
     private fun showNotification(alert: AlertPlaintext) {
         ensureChannel()
+        val notifID = notificationID(alert)
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            alert.sessionID?.takeIf { it.isNotBlank() }?.let { putExtra(EXTRA_SESSION_ID, it) }
+            alert.projectID?.takeIf { it.isNotBlank() }?.let { putExtra(EXTRA_PROJECT_ID, it) }
         }
+        // Use the per-alert notif id as the request code so notifications for
+        // different threads each get their own PendingIntent (and don't share
+        // extras via FLAG_UPDATE_CURRENT).
         val pendingIntent = PendingIntent.getActivity(
             this,
-            0,
+            notifID,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
@@ -97,7 +103,7 @@ class RxCodeFirebaseMessagingService : FirebaseMessagingService() {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .build()
         try {
-            NotificationManagerCompat.from(this).notify(notificationID(alert), notification)
+            NotificationManagerCompat.from(this).notify(notifID, notification)
         } catch (security: SecurityException) {
             Log.w(TAG, "notification permission missing; dropping FCM alert")
         }
@@ -119,7 +125,9 @@ class RxCodeFirebaseMessagingService : FirebaseMessagingService() {
     private fun notificationID(alert: AlertPlaintext): Int =
         (alert.sessionID ?: alert.projectID ?: alert.kind ?: alert.title).hashCode()
 
-    private companion object {
+    companion object {
+        const val EXTRA_SESSION_ID = "app.rxlab.rxcode.extra.SESSION_ID"
+        const val EXTRA_PROJECT_ID = "app.rxlab.rxcode.extra.PROJECT_ID"
         private const val TAG = "RxCodeFCM"
         private const val CHANNEL_ID = "rxcode_notifications"
     }

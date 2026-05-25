@@ -1,6 +1,7 @@
 import Foundation
 import Network
 import os.log
+import RxCodeCore
 import RxCodeSync
 import SwiftUI
 import WebKit
@@ -163,6 +164,10 @@ struct MobileInAppBrowserView: View {
             await observePageNavigations()
         }
         .onAppear {
+            AnalyticsService.shared.log(.inAppBrowserOpened, parameters: [
+                "has_proxy": proxyInfo != nil,
+                "host": loadedURL?.host ?? "",
+            ])
             guard let loadedURL, webPage.url == nil else { return }
             logger.info("[WebBrowserSync] webview initial load url=\(loadedURL.absoluteString, privacy: .public) hasProxy=\((proxyInfo != nil), privacy: .public)")
             webPage.load(loadedURL)

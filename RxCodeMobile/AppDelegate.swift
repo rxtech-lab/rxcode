@@ -22,6 +22,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        FirebaseBootstrap.configure()
         UNUserNotificationCenter.current().delegate = self
         logger.info("[APNs] notification delegate installed")
         Task {

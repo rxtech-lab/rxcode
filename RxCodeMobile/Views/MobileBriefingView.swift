@@ -83,6 +83,9 @@ struct MobileBriefingView: View {
         .refreshable {
             await state.refreshSnapshot()
         }
+        .onAppear {
+            AnalyticsService.shared.log(.briefingListOpened)
+        }
         .navigationDestination(for: BriefingGroupKey.self) { key in
             MobileBriefingDetailView(groupKey: key, onOpenSession: onOpenSession)
         }

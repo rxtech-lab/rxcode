@@ -87,6 +87,12 @@ struct MobileRunProfileEditorView: View {
             folderPickerSheet(for: pick)
                 .mobileSheetPresentation()
         }
+        .onAppear {
+            AnalyticsService.shared.log(.runProfileEditorOpened, parameters: [
+                "project_id": projectID.uuidString,
+                "profile_type": String(describing: draft.type),
+            ])
+        }
     }
 
     /// Builds the remote file-sheet for whichever field requested it. The

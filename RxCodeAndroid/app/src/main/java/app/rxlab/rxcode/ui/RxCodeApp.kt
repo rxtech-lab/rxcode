@@ -76,6 +76,17 @@ fun RxCodeApp(state: MobileState, viewModel: MobileAppState) {
     var currentTab by rememberSaveable { mutableStateOf(RootTab.Briefing.name) }
     val tab = RootTab.valueOf(currentTab)
 
+    // FCM notification tap: select the target session and switch to Projects
+    // (where ProjectsPaneScreen reacts to `activeSessionID` and pushes the
+    // chat detail). Buffered in state by MobileAppState so we route the UI
+    // even if the tap arrived during the splash/onboarding gate above.
+    LaunchedEffect(state.pendingNotificationSessionID) {
+        val sid = state.pendingNotificationSessionID ?: return@LaunchedEffect
+        viewModel.selectSession(sid)
+        currentTab = RootTab.Projects.name
+        viewModel.consumePendingNotificationDeepLink()
+    }
+
     NavigationSuiteScaffold(
         navigationSuiteItems = {
             RootTab.allTabs.forEach { t ->

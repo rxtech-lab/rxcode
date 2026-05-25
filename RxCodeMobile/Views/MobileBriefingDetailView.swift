@@ -13,7 +13,7 @@ struct MobileBriefingDetailView: View {
     @State private var isInitializingGit = false
 
     var body: some View {
-        ScrollView {
+        ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: 24) {
                 headerCard
                 summaryCard
@@ -23,6 +23,7 @@ struct MobileBriefingDetailView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 20)
         }
+        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
         .scrollContentBackground(.hidden)
         .accessibilityIdentifier("briefing-detail-screen")
         .navigationTitle(projectName)
@@ -51,6 +52,12 @@ struct MobileBriefingDetailView: View {
         }
         .refreshable {
             await state.refreshSnapshot()
+        }
+        .onAppear {
+            AnalyticsService.shared.log(.briefingDetailOpened, parameters: [
+                "project_id": groupKey.projectId.uuidString,
+                "branch": groupKey.branch,
+            ])
         }
     }
 
@@ -102,6 +109,9 @@ struct MobileBriefingDetailView: View {
                 Text(projectName)
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(.primary)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+                    .fixedSize(horizontal: false, vertical: true)
                 
                 HStack(spacing: 12) {
                     // Branch chip — falls back to an Init Git action when the
@@ -179,6 +189,8 @@ struct MobileBriefingDetailView: View {
                     color: .primary,
                     lineSpacing: 4
                 )
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
             } else {
                 HStack(spacing: 10) {
                     Image(systemName: "text.justify.leading")
@@ -328,6 +340,8 @@ struct MobileBriefingThreadCard: View {
                         lineSpacing: 2,
                         maximumNumberOfLines: 3
                     )
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
                 }
                 
                 if isStreaming {

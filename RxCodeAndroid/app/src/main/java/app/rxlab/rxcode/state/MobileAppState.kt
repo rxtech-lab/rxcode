@@ -83,7 +83,13 @@ class MobileAppState @Inject constructor(
             // first inbound envelope decrypts cleanly.
             _state.value.pairedDesktops.forEach { client.addPeer(it.pubkeyHex) }
             client.start()
-            if (_state.value.isPaired) requestSnapshot("client_start")
+            if (_state.value.isPaired) {
+                requestSnapshot("client_start")
+                // Re-publish the FCM token on every cold start. Existing pairings
+                // made before this device had Firebase wired up never delivered
+                // a token, so the desktop shows "No push" forever otherwise.
+                refreshAndReportFcmToken("client_start")
+            }
         }
     }
 
@@ -380,6 +386,23 @@ class MobileAppState @Inject constructor(
             )
             Log.i(TAG, "snapshot requested ($reason)")
         }
+    }
+
+    /**
+     * Buffers a session id from a tapped FCM notification. `RxCodeApp`
+     * observes [MobileState.pendingNotificationSessionID] and routes the UI
+     * (switch to Projects tab + select the session) once the app has finished
+     * splash/onboarding gating. Buffered values survive cold launch because
+     * `MainActivity` re-posts them on every `onCreate`/`onNewIntent`.
+     */
+    fun openThreadFromNotification(sessionId: String) {
+        if (sessionId.isBlank()) return
+        Log.i(TAG, "notification tap -> open thread sessionID=${sessionId.take(8)}")
+        _state.update { it.copy(pendingNotificationSessionID = sessionId) }
+    }
+
+    fun consumePendingNotificationDeepLink() {
+        _state.update { it.copy(pendingNotificationSessionID = null) }
     }
 
     fun selectSession(sessionId: String?) {

@@ -25,6 +25,7 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import app.rxlab.rxcode.pairing.PairingToken
+import app.rxlab.rxcode.push.RxCodeFirebaseMessagingService
 import app.rxlab.rxcode.state.MobileAppState
 import app.rxlab.rxcode.ui.RxCodeApp
 import app.rxlab.rxcode.ui.theme.RxCodeTheme
@@ -34,13 +35,17 @@ import dagger.hilt.android.AndroidEntryPoint
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     private var pendingDeeplink by mutableStateOf<String?>(null)
+    private var pendingNotificationSessionID by mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Log.w(TAG, "MainActivity.onCreate data=${intent?.dataString?.let { "present" } ?: "none"}")
+        Log.w(TAG, "MainActivity.onCreate data=${intent?.dataString?.let { "present" } ?: "none"} notifSession=${intent?.getStringExtra(RxCodeFirebaseMessagingService.EXTRA_SESSION_ID)?.let { "present" } ?: "none"}")
         enableEdgeToEdge()
         requestNotificationPermissionIfNeeded()
         pendingDeeplink = intent?.dataString
+        pendingNotificationSessionID = intent
+            ?.getStringExtra(RxCodeFirebaseMessagingService.EXTRA_SESSION_ID)
+            ?.takeIf { it.isNotBlank() }
         setContent {
             RxCodeTheme {
                 val vm: MobileAppState = hiltViewModel()
@@ -64,6 +69,12 @@ class MainActivity : ComponentActivity() {
                         pendingDeeplink = null
                     }
                 }
+                LaunchedEffect(pendingNotificationSessionID) {
+                    pendingNotificationSessionID?.let { sid ->
+                        vm.openThreadFromNotification(sid)
+                        pendingNotificationSessionID = null
+                    }
+                }
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -77,8 +88,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        Log.w(TAG, "MainActivity.onNewIntent data=${intent.dataString?.let { "present" } ?: "none"}")
+        Log.w(TAG, "MainActivity.onNewIntent data=${intent.dataString?.let { "present" } ?: "none"} notifSession=${intent.getStringExtra(RxCodeFirebaseMessagingService.EXTRA_SESSION_ID)?.let { "present" } ?: "none"}")
         intent.dataString?.let { pendingDeeplink = it }
+        intent.getStringExtra(RxCodeFirebaseMessagingService.EXTRA_SESSION_ID)
+            ?.takeIf { it.isNotBlank() }
+            ?.let { pendingNotificationSessionID = it }
     }
 
     private fun requestNotificationPermissionIfNeeded() {

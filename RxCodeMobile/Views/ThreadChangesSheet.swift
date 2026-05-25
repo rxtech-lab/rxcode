@@ -52,6 +52,11 @@ struct ThreadChangesSheet: View {
             }
         }
         .task { await load() }
+        .onAppear {
+            AnalyticsService.shared.log(.diffViewOpened, parameters: [
+                "session_id": sessionID,
+            ])
+        }
     }
 
     private func load() async {

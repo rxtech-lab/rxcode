@@ -72,6 +72,14 @@ data class MobileState(
 
     val hasReceivedInitialSnapshot: Boolean = false,
     val lastError: String? = null,
+
+    /**
+     * Set by [MobileAppState.openThreadFromNotification] when an FCM
+     * notification tap should route the UI to a specific thread. Consumed by
+     * `RxCodeApp`, which selects the session and switches to the Projects tab,
+     * then clears it via [MobileAppState.consumePendingNotificationDeepLink].
+     */
+    val pendingNotificationSessionID: String? = null,
 ) {
     val isPaired: Boolean get() = activeDesktopPubkey.isNotEmpty()
 

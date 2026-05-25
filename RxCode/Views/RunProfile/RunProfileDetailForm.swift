@@ -59,6 +59,12 @@ struct RunProfileDetailForm: View {
             )
         }
         .formStyle(.grouped)
+        .onAppear {
+            AnalyticsService.shared.log(.runProfileEditorOpened, parameters: [
+                "project_id": project.id.uuidString,
+                "profile_type": profile.type.rawValue,
+            ])
+        }
     }
 
     // MARK: - Command sections

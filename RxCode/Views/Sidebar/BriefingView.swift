@@ -127,6 +127,9 @@ struct BriefingView: View {
         .task(id: projectPathsKey) {
             await refreshCurrentBranches()
         }
+        .onAppear {
+            AnalyticsService.shared.log(.briefingListOpened)
+        }
     }
 
     /// True when there is at least one briefing or thread summary persisted, regardless

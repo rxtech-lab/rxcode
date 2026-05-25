@@ -59,6 +59,15 @@ struct ProjectsSidebar: View {
                 guard let newValue else { return }
                 selected = newValue
                 showingBriefing = false
+                AnalyticsService.shared.log(.newProjectStarted, parameters: [
+                    "project_id": newValue.uuidString,
+                ])
+            }
+            .onChange(of: selected) { _, newValue in
+                guard let newValue else { return }
+                AnalyticsService.shared.log(.projectOpened, parameters: [
+                    "project_id": newValue.uuidString,
+                ])
             }
     }
 

@@ -72,9 +72,19 @@ extension MobileAppState {
             pairedDesktops.first { $0.pubkeyHex == requested }
         } ?? pairedDesktops.first
 
-        pairedDesktopPubkey = resolved?.pubkeyHex ?? ""
+        let previousKey = pairedDesktopPubkey
+        let newKey = resolved?.pubkeyHex ?? ""
+        pairedDesktopPubkey = newKey
         pairedDesktopName = resolved?.displayName ?? ""
         isPaired = resolved != nil
+
+        // Reset the snapshot sequence gate so the first snapshot from a
+        // freshly-selected desktop is always accepted — the seq counters are
+        // per-desktop (each Mac restarts from 1) and would otherwise be
+        // misinterpreted as "stale" relative to the previous peer.
+        if previousKey != newKey {
+            lastAppliedSnapshotSeq = nil
+        }
     }
 
     func upsertPairedDesktop(_ desktop: PairedDesktop) {

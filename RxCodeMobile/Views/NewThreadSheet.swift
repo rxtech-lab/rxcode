@@ -209,6 +209,11 @@ struct NewThreadSheet: View {
         )
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         Task {
+            // Make sure the desktop has parked the picked branch's worktree
+            // before the new session spawns; otherwise the two payloads race
+            // and the thread lands on the project root instead of the
+            // selected branch's worktree.
+            await state.waitForPendingBranchOps()
             await state.requestNewSession(
                 projectID: projectID,
                 initialText: body,
@@ -249,6 +254,12 @@ struct NewThreadConfigStrip: View {
     @Binding var planModeEnabled: Bool
     @State private var showingCreateBranch = false
     @State private var didApplyPreferredBranch = false
+    /// Optimistically tracks the branch the user picked in this sheet so the
+    /// chip label updates immediately. The desktop's `projectBranches` snapshot
+    /// only reflects the main repo's branch, which doesn't change when the
+    /// thread is parked on a worktree — without this local override the chip
+    /// would stay stuck on the initial branch.
+    @State private var pickedBranch: String?
 
     private let columns = [
         GridItem(.flexible(), spacing: 12),
@@ -285,6 +296,11 @@ struct NewThreadConfigStrip: View {
         .onChange(of: state.projectBranches[projectID]) { _, _ in
             applyPreferredBranchIfNeeded()
         }
+        .onChange(of: state.lastBranchOpError) { _, newValue in
+            // Revert the optimistic pick so the chip falls back to the
+            // desktop's actual current branch when the op failed.
+            if newValue != nil { pickedBranch = nil }
+        }
         .alert(
             "Branch operation failed",
             isPresented: branchOpErrorBinding,
@@ -311,7 +327,7 @@ struct NewThreadConfigStrip: View {
     }
 
     private var currentBranch: String? {
-        state.projectBranches[projectID] ?? preferredBranch
+        pickedBranch ?? state.projectBranches[projectID] ?? preferredBranch
     }
 
     /// When the sheet was opened from a context that knows the desired branch
@@ -326,6 +342,7 @@ struct NewThreadConfigStrip: View {
             return
         }
         didApplyPreferredBranch = true
+        pickedBranch = target
         Task { await state.switchProjectBranch(projectID: projectID, branch: target) }
     }
 
@@ -335,6 +352,7 @@ struct NewThreadConfigStrip: View {
                 Section("Switch branch") {
                     ForEach(branchList, id: \.self) { name in
                         Button {
+                            pickedBranch = name
                             Task { await state.switchProjectBranch(projectID: projectID, branch: name) }
                         } label: {
                             HStack {

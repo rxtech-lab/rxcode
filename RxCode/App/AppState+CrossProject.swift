@@ -381,6 +381,18 @@ extension AppState {
 
         startFlushTimer(for: sessionKey)
 
+        // Reset the watchdog clock at the start so the first event window is
+        // measured from when we actually began awaiting the stream, not from
+        // an earlier turn that was finalized on this same session state.
+        updateState(sessionKey) { $0.lastStreamEventDate = Date() }
+        let watchdogTask = startStreamWatchdog(
+            streamId: streamId,
+            sessionKey: sessionKey,
+            agentProvider: agentProvider,
+            in: window
+        )
+        defer { watchdogTask.cancel() }
+
         var eventCount = 0
         var lastEventTime = Date()
 
@@ -389,6 +401,7 @@ extension AppState {
                 eventCount += 1
                 let gap = Date().timeIntervalSince(lastEventTime)
                 lastEventTime = Date()
+                updateState(sessionKey) { $0.lastStreamEventDate = lastEventTime }
 
                 guard !Task.isCancelled else {
                     logger.info("[Stream:UI] task cancelled after \(eventCount) events")

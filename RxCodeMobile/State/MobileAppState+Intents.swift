@@ -323,6 +323,22 @@ extension MobileAppState {
         lastBranchOpError = nil
     }
 
+    /// Block until every in-flight branch op has been acknowledged by the
+    /// desktop (or the timeout elapses). The new-thread sheet calls this
+    /// before firing `requestNewSession` so the desktop has finished parking
+    /// the picked branch's worktree into `mobilePendingWorktrees` before the
+    /// session spawns — otherwise the two payloads race and the new thread
+    /// lands at the project root instead of on the picked branch.
+    func waitForPendingBranchOps(timeout: Duration = .seconds(5)) async {
+        guard !inFlightBranchOps.isEmpty else { return }
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+        while !inFlightBranchOps.isEmpty {
+            if clock.now >= deadline { return }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+    }
+
     func subscribe(to sessionID: String?) async {
         let sessionID = sessionID.map(resolveSessionID)
         activeSessionID = sessionID

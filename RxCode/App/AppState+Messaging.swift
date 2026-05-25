@@ -255,9 +255,16 @@ extension AppState {
 
         let sessionKey = window.currentSessionId!
 
-        // Apply initialMessages if provided
-        if let initial = initialMessages {
+        // Apply initialMessages if provided. Refuse to clobber an already-
+        // populated in-memory list with an empty array — `editAndResend` is
+        // the only documented caller and always supplies a non-empty truncated
+        // history, so an empty `initial` would be a regression that erases
+        // the user's chat.
+        if let initial = initialMessages, !initial.isEmpty {
             updateState(sessionKey) { $0.messages = initial }
+        } else if let initial = initialMessages, initial.isEmpty {
+            let existing = sessionStates[sessionKey]?.messages.count ?? 0
+            logger.error("[sendPrompt] refusing to overwrite \(existing) messages with empty initialMessages for session=\(sessionKey, privacy: .public)")
         }
 
         let wasFirstUserMessage = (sessionStates[sessionKey]?.messages.filter { $0.role == .user }.count ?? 0) == 0
@@ -436,6 +443,7 @@ extension AppState {
             state.activeToolInputBuffer = ""
             state.textDeltaBuffer = ""
             state.pendingToolResults.removeAll()
+            state.lastStreamEventDate = nil
 
             extraMutations?(&state)
 

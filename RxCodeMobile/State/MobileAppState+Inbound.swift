@@ -59,9 +59,20 @@ extension MobileAppState {
             Task { await self.removePairedDesktopAfterRemoteUnpair(desktop) }
         case .snapshot(let snap):
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "snapshot") else { return }
+            // Drop out-of-order snapshots so a delayed older snapshot doesn't
+            // overwrite a fresher one that already landed. The desktop stamps
+            // `seq` monotonically per send; legacy desktops send `nil` and we
+            // accept those unconditionally (no sequencing to enforce).
+            if let incoming = snap.seq {
+                if let applied = lastAppliedSnapshotSeq, incoming <= applied {
+                    logger.warning("[MobileSync] dropped stale snapshot seq=\(incoming, privacy: .public) lastApplied=\(applied, privacy: .public) from desktopKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+                    return
+                }
+                lastAppliedSnapshotSeq = incoming
+            }
             let profileProjectCount = snap.runProfiles?.count ?? 0
             let profileTotal = snap.runProfiles?.reduce(0) { $0 + $1.profiles.count } ?? 0
-            logger.info("[MobileSync] applying snapshot projects=\(snap.projects.count, privacy: .public) sessions=\(snap.sessions.count, privacy: .public) runProfileProjects=\(profileProjectCount, privacy: .public) runProfileTotal=\(profileTotal, privacy: .public) runTasks=\(snap.runTasks?.count ?? 0, privacy: .public) from desktopKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+            logger.info("[MobileSync] applying snapshot seq=\(snap.seq ?? 0, privacy: .public) projects=\(snap.projects.count, privacy: .public) sessions=\(snap.sessions.count, privacy: .public) runProfileProjects=\(profileProjectCount, privacy: .public) runProfileTotal=\(profileTotal, privacy: .public) runTasks=\(snap.runTasks?.count ?? 0, privacy: .public) from desktopKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
             projects = snap.projects
             sessions = snap.sessions
             branchBriefings = snap.branchBriefings ?? []
@@ -95,14 +106,24 @@ extension MobileAppState {
             if let active = snap.activeSessionID {
                 if let messages = snap.activeSessionMessages {
                     // The snapshot carries only the most recent page; replacing
-                    // the window resets paging to that page.
-                    messagesBySession[active] = messages
-                    if snap.activeSessionHasMore == true {
-                        sessionsWithMoreMessages.insert(active)
+                    // the window resets paging to that page. Guard against the
+                    // pathological case where an empty page arrives for a
+                    // session we already have content for — never clobber a
+                    // populated thread with []. (Seq-drop above handles the
+                    // common stale-snapshot case; this is a belt-and-suspenders
+                    // guard for any future code path that might send [].)
+                    let existing = messagesBySession[active]?.count ?? 0
+                    if !messages.isEmpty || existing == 0 {
+                        messagesBySession[active] = messages
+                        if snap.activeSessionHasMore == true {
+                            sessionsWithMoreMessages.insert(active)
+                        } else {
+                            sessionsWithMoreMessages.remove(active)
+                        }
+                        loadingMoreSessions.remove(active)
                     } else {
-                        sessionsWithMoreMessages.remove(active)
+                        logger.warning("[MobileSync] refused to overwrite \(existing) messages with empty page for session=\(active, privacy: .public)")
                     }
-                    loadingMoreSessions.remove(active)
                 } else if messagesBySession[active] == nil {
                     messagesBySession[active] = []
                 }

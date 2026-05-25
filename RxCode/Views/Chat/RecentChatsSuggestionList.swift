@@ -11,6 +11,7 @@ struct RecentChatsSuggestionList: View {
     @State private var renamingSession: ChatSession?
     @State private var renameText = ""
     @State private var sessionToDelete: ChatSession?
+    @State private var sessionToArchive: ChatSession?
 
     var body: some View {
         if shouldShow {
@@ -41,6 +42,23 @@ struct RecentChatsSuggestionList: View {
                     Text("\"\(session.title)\" will be deleted. This action cannot be undone.")
                 } else {
                     Text("This session will be deleted. This action cannot be undone.")
+                }
+            }
+            .alert("Archive Chat", isPresented: isArchivingSessionBinding) {
+                Button("Archive", role: .destructive) {
+                    if let session = sessionToArchive {
+                        Task { await appState.archiveSession(session, in: windowState) }
+                    }
+                    sessionToArchive = nil
+                }
+                Button("Cancel", role: .cancel) {
+                    sessionToArchive = nil
+                }
+            } message: {
+                if let session = sessionToArchive {
+                    Text("\"\(session.title)\" will be archived. Archived chats are hidden from the active list and can be restored from Archived.")
+                } else {
+                    Text("This chat will be archived. Archived chats are hidden from the active list and can be restored from Archived.")
                 }
             }
             .alert("Rename Session", isPresented: isRenamingBinding) {
@@ -108,12 +126,12 @@ struct RecentChatsSuggestionList: View {
             }
 
             Button {
-                Task {
-                    if summary.isArchived {
+                if summary.isArchived {
+                    Task {
                         await appState.unarchiveSession(chatSession, in: windowState)
-                    } else {
-                        await appState.archiveSession(chatSession, in: windowState)
                     }
+                } else {
+                    sessionToArchive = chatSession
                 }
             } label: {
                 if summary.isArchived {
@@ -166,6 +184,13 @@ struct RecentChatsSuggestionList: View {
         Binding(
             get: { sessionToDelete != nil },
             set: { if !$0 { sessionToDelete = nil } }
+        )
+    }
+
+    private var isArchivingSessionBinding: Binding<Bool> {
+        Binding(
+            get: { sessionToArchive != nil },
+            set: { if !$0 { sessionToArchive = nil } }
         )
     }
 

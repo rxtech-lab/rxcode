@@ -181,6 +181,17 @@ final class MobileAppState: ObservableObject {
     /// since launch or pairing. Used to show a loading state instead of
     /// "No Projects" when waiting for the initial sync.
     @Published var hasReceivedInitialSnapshot: Bool = false
+
+    /// Sequence number of the most recently applied snapshot from the desktop.
+    /// `nil` until the first stamped snapshot lands. Inbound snapshots whose
+    /// seq is not strictly greater than this are dropped — the desktop may
+    /// send a fresher snapshot before an older one finishes traversing the
+    /// relay, and applying the older one would replace freshly-streamed
+    /// `activeSessionMessages` with a stale page (the symptom users see as
+    /// "my chat suddenly went back in time" or "the streaming text vanished").
+    /// Reset to `nil` on unpair / desktop switch so the next first-snapshot
+    /// from a fresh desktop is always accepted.
+    var lastAppliedSnapshotSeq: UInt64?
     var pendingSearchID: UUID?
     var searchDebounceTask: Task<Void, Never>?
 

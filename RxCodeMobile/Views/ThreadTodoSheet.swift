@@ -126,7 +126,7 @@ struct ThreadTodoSheet: View {
                     .foregroundStyle(.tertiary)
                     .italic()
             } else {
-                VStack(alignment: .leading, spacing: 10) {
+                LazyVStack(alignment: .leading, spacing: 10) {
                     ForEach(todos) { todo in
                         todoRow(todo)
                     }

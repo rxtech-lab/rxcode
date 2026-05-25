@@ -216,3 +216,32 @@ jobs:
           name: mobile-ui-test-results-${{ matrix.label }}
           path: TestResults-${{ matrix.label }}.xcresult
           retention-days: 14
+
+  build-android:
+    name: gradle build (RxCodeAndroid)
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up JDK 17
+        uses: useblacksmith/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Gradle
+        uses: useblacksmith/setup-gradle@v6
+
+      - name: Assemble debug APK
+        working-directory: RxCodeAndroid
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Upload debug APK
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: RxCodeAndroid-debug-apk
+          path: RxCodeAndroid/app/build/outputs/apk/debug/*.apk
+          retention-days: 7

@@ -707,6 +707,13 @@ extension AppState {
         if sessionStates[summary.id] == nil,
            let full = await persistence.loadFullSession(summary: summary, cwd: project.path) {
             updateState(summary.id) { state in
+                // Skip the assignment when persistence returned an empty thread
+                // (e.g. corrupted JSONL that decoded to no messages). The state
+                // we just created is also empty, so this is a no-op cosmetic
+                // guard — but it stops a future caller from accidentally
+                // overwriting a non-empty in-memory list if this branch is
+                // ever reached for a session that re-appeared mid-call.
+                guard !full.messages.isEmpty || state.messages.isEmpty else { return }
                 state.messages = full.messages
             }
         }

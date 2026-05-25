@@ -69,7 +69,32 @@ extension ClaudeCodeServer {
                         }
                     )
                 } catch {
+                    // Distinguish "could not launch the CLI" (binary missing,
+                    // posix_spawn failed) from "launched but stdin write to
+                    // send the user prompt failed" (CLI exited immediately,
+                    // broken pipe). Both end the stream, but the latter is a
+                    // legitimate runtime hang surfaced through `.result` so
+                    // the UI shows a real error bubble instead of a generic
+                    // "No response received".
                     log.error("[Stream] spawn failed: \(error.localizedDescription)")
+                    let description: String
+                    if case ClaudeError.spawnFailed(let msg) = error {
+                        description = "Failed to start Claude CLI: \(msg)"
+                    } else if case ClaudeError.binaryNotFound = error {
+                        description = "Claude CLI binary not found."
+                    } else {
+                        description = "Failed to send to Claude CLI: \(error.localizedDescription)"
+                    }
+                    continuation.yield(.user(UserMessage(
+                        toolUseId: nil,
+                        content: description,
+                        isError: true
+                    )))
+                    continuation.yield(.result(ResultEvent(
+                        durationMs: nil, totalCostUsd: nil,
+                        sessionId: sessionId ?? streamId.uuidString,
+                        isError: true, totalTurns: nil, usage: nil, contextWindow: nil
+                    )))
                     continuation.finish()
                     return
                 }
@@ -625,10 +650,16 @@ extension ClaudeCodeServer {
 
     /// Serialize a dictionary to JSON and write to stdin as one NDJSON line.
     /// Non-isolated to allow use from `spawnProcess` after `try proc.run()`.
+    ///
+    /// Uses the Swift-throwing `write(contentsOf:)` rather than the legacy
+    /// `write(_:)` — the latter raises an Objective-C `NSFileHandleOperationException`
+    /// on broken-pipe (e.g. CLI already died before we sent the user message),
+    /// which Swift cannot catch and would terminate the app instead of letting
+    /// the caller surface a real error to the user.
     static func writeJSONLine(_ object: [String: Any], to handle: FileHandle) throws {
         let data = try JSONSerialization.data(withJSONObject: object, options: [])
-        handle.write(data)
-        handle.write(Data([0x0A])) // newline
+        try handle.write(contentsOf: data)
+        try handle.write(contentsOf: Data([0x0A])) // newline
     }
 
     /// Close stdin for an active stream. Call this after receiving the `result` event

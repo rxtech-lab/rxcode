@@ -151,7 +151,8 @@ extension AppState {
             hostMetrics: hostMetrics,
             runProfiles: runProfiles,
             runTasks: runTasks,
-            webProxy: webProxy
+            webProxy: webProxy,
+            seq: nextMobileSnapshotSeq()
         )
         await MobileSyncService.shared.send(.snapshot(payload), toHex: hex)
         // The snapshot doesn't carry the question queue; send it alongside so a

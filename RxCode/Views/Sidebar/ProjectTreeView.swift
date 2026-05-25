@@ -20,6 +20,7 @@ struct ProjectTreeView: View {
     @State private var renameSession: ChatSession? = nil
     @State private var renameSessionText: String = ""
     @State private var deleteSession: ChatSession? = nil
+    @State private var archiveSession: ChatSession? = nil
 
     @State private var showAllChatsSheet = false
 
@@ -101,6 +102,24 @@ struct ProjectTreeView: View {
                 Text("\"\(s.title)\" will be deleted. This action cannot be undone.")
             } else {
                 Text("This session will be deleted. This action cannot be undone.")
+            }
+        }
+        .alert("Archive Chat", isPresented: Binding(
+            get: { archiveSession != nil },
+            set: { if !$0 { archiveSession = nil } }
+        )) {
+            Button("Archive", role: .destructive) {
+                if let s = archiveSession {
+                    Task { await appState.archiveSession(s, in: windowState) }
+                }
+                archiveSession = nil
+            }
+            Button("Cancel", role: .cancel) { archiveSession = nil }
+        } message: {
+            if let s = archiveSession {
+                Text("\"\(s.title)\" will be archived. Archived chats are hidden from the active list and can be restored from Archived.")
+            } else {
+                Text("This chat will be archived. Archived chats are hidden from the active list and can be restored from Archived.")
             }
         }
         .sheet(isPresented: $showAllChatsSheet) {
@@ -246,6 +265,9 @@ private struct SummarySidebarSection: View {
                             onRenameSession: { session in
                                 renameSessionText = session.title
                                 renameSession = session
+                            },
+                            onArchiveSession: { session in
+                                archiveSession = session
                             },
                             onDeleteSession: { session in
                                 deleteSession = session
@@ -430,6 +452,7 @@ private struct ProjectChatsList: View {
     let project: Project
     let onSelectSession: (String) -> Void
     let onRenameSession: (ChatSession) -> Void
+    let onArchiveSession: (ChatSession) -> Void
     let onDeleteSession: (ChatSession) -> Void
 
     @State private var showsAllThreads = false
@@ -537,12 +560,12 @@ private struct ProjectChatsList: View {
                 Task { await appState.togglePinSession(session) }
             },
             onToggleArchive: {
-                Task {
-                    if summary.isArchived {
+                if summary.isArchived {
+                    Task {
                         await appState.unarchiveSession(session, in: windowState)
-                    } else {
-                        await appState.archiveSession(session, in: windowState)
                     }
+                } else {
+                    onArchiveSession(session)
                 }
             },
             onDelete: {

@@ -345,6 +345,14 @@ public struct SnapshotPayload: Codable, Sendable {
     /// HTTP proxy exposed by the desktop so the mobile in-app browser can open
     /// localhost development servers running on the Mac.
     public let webProxy: MobileWebProxyInfo?
+    /// Monotonically-increasing sequence number stamped by the desktop on every
+    /// outgoing snapshot. Mobile drops snapshots whose `seq` is not strictly
+    /// greater than the last one it applied, so a delayed snapshot in flight
+    /// at the moment a fresher one is sent cannot reset
+    /// `activeSessionMessages` to a stale page and "lose" recently-streamed
+    /// text. `nil` when the desktop predates snapshot sequencing — mobile
+    /// applies those as before.
+    public let seq: UInt64?
     public init(
         projects: [Project],
         sessions: [SessionSummary],
@@ -359,7 +367,8 @@ public struct SnapshotPayload: Codable, Sendable {
         hostMetrics: HostMetricsSnapshot? = nil,
         runProfiles: [MobileProjectRunProfiles]? = nil,
         runTasks: [MobileRunTaskSnapshot]? = nil,
-        webProxy: MobileWebProxyInfo? = nil
+        webProxy: MobileWebProxyInfo? = nil,
+        seq: UInt64? = nil
     ) {
         self.projects = projects
         self.sessions = sessions
@@ -375,12 +384,13 @@ public struct SnapshotPayload: Codable, Sendable {
         self.runProfiles = runProfiles
         self.runTasks = runTasks
         self.webProxy = webProxy
+        self.seq = seq
     }
 
     private enum CodingKeys: String, CodingKey {
         case projects, sessions, branchBriefings, threadSummaries, settings
         case activeSessionID, activeSessionMessages, activeSessionHasMore, projectBranches
-        case usage, hostMetrics, runProfiles, runTasks, webProxy
+        case usage, hostMetrics, runProfiles, runTasks, webProxy, seq
     }
 
     public init(from decoder: Decoder) throws {
@@ -399,6 +409,7 @@ public struct SnapshotPayload: Codable, Sendable {
         runProfiles = try c.decodeIfPresent([MobileProjectRunProfiles].self, forKey: .runProfiles)
         runTasks = try c.decodeIfPresent([MobileRunTaskSnapshot].self, forKey: .runTasks)
         webProxy = try c.decodeIfPresent(MobileWebProxyInfo.self, forKey: .webProxy)
+        seq = try c.decodeIfPresent(UInt64.self, forKey: .seq)
     }
 }
 

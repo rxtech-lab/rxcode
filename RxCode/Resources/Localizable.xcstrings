@@ -51,6 +51,9 @@
         }
       }
     },
+    "\"%@\" will be archived. Archived chats are hidden from the active list and can be restored from Archived." : {
+
+    },
     "\"%@\" will be deleted. This action cannot be undone." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1042,6 +1045,9 @@
           }
         }
       }
+    },
+    "Archive Chat" : {
+
     },
     "archived" : {
       "localizations" : {
@@ -6786,6 +6792,9 @@
           }
         }
       }
+    },
+    "This chat will be archived. Archived chats are hidden from the active list and can be restored from Archived." : {
+
     },
     "This memory will be removed from future agent context." : {
       "localizations" : {

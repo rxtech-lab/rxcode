@@ -34,6 +34,14 @@ struct SessionStreamState {
     var streamTask: Task<Void, Never>?
     var hasUncheckedCompletion = false
 
+    /// Last time any stream event (system / assistant / tool result / etc.) arrived
+    /// for the active stream. Updated in `processStream` and polled by the
+    /// inactivity watchdog so a CLI that goes silent without exiting (broken pipe
+    /// not surfaced, MCP child wedged, etc.) gets force-cleaned instead of
+    /// leaving `isStreaming`/`activeStreamId` stuck — which would block every
+    /// subsequent send into the thread.
+    var lastStreamEventDate: Date?
+
     // Text delta buffer (10-token grouped flush)
     var textDeltaBuffer = ""
     var pendingToolResults: [(toolUseId: String, content: String, isError: Bool)] = []
@@ -957,6 +965,21 @@ final class AppState {
     /// Last seen jsonl byte size per session — used as a cheap drift signal
     /// in `reconcileFromDisk` so the no-drift path skips the full mmap+parse.
     var lastReconciledJsonlSize: [String: UInt64] = [:]
+
+    /// Monotonic counter stamped into every outgoing `SnapshotPayload.seq`.
+    /// Lets mobile reject snapshots that arrive out of order — a fresher one
+    /// sent right after an older one is no longer at risk of being clobbered
+    /// when the older one finally lands on the relay. Starts at `1` so any
+    /// non-zero value distinguishes "stamped by a sequencing-aware desktop"
+    /// from the wire default (`nil`).
+    @ObservationIgnored
+    var mobileSnapshotSeq: UInt64 = 0
+
+    func nextMobileSnapshotSeq() -> UInt64 {
+        mobileSnapshotSeq &+= 1
+        if mobileSnapshotSeq == 0 { mobileSnapshotSeq = 1 } // skip wraparound zero
+        return mobileSnapshotSeq
+    }
 }
 
 // MARK: - App Errors

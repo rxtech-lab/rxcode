@@ -42,6 +42,8 @@ public struct MessageList<Message: MessageListItem, RowContent: View>: View {
     @State private var isLoadingNext = false
     @State private var previousLoadContentHeight: CGFloat?
     @State private var nextLoadContentHeight: CGFloat?
+    @State private var previousLoadCooldownUntil: Date = .distantPast
+    @State private var nextLoadCooldownUntil: Date = .distantPast
 
     public init(
         messages: [Message],
@@ -467,6 +469,7 @@ public struct MessageList<Message: MessageListItem, RowContent: View>: View {
 
     private func triggerLoadPreviousIfNeeded(contentHeight: CGFloat) {
         guard !isLoadingPrevious,
+              Date() >= previousLoadCooldownUntil,
               hasMorePrevious(),
               let loadMorePrevious,
               previousLoadContentHeight != contentHeight
@@ -475,7 +478,10 @@ public struct MessageList<Message: MessageListItem, RowContent: View>: View {
         previousLoadContentHeight = contentHeight
         isLoadingPrevious = true
         Task { @MainActor in
-            defer { isLoadingPrevious = false }
+            defer {
+                previousLoadCooldownUntil = Date().addingTimeInterval(MessageListConstants.loadMoreCooldownSeconds)
+                isLoadingPrevious = false
+            }
             do {
                 try await loadMorePrevious()
             } catch {
@@ -486,6 +492,7 @@ public struct MessageList<Message: MessageListItem, RowContent: View>: View {
 
     private func triggerLoadNextIfNeeded(contentHeight: CGFloat) {
         guard !isLoadingNext,
+              Date() >= nextLoadCooldownUntil,
               hasMore(),
               let loadMore,
               nextLoadContentHeight != contentHeight
@@ -494,7 +501,10 @@ public struct MessageList<Message: MessageListItem, RowContent: View>: View {
         nextLoadContentHeight = contentHeight
         isLoadingNext = true
         Task { @MainActor in
-            defer { isLoadingNext = false }
+            defer {
+                nextLoadCooldownUntil = Date().addingTimeInterval(MessageListConstants.loadMoreCooldownSeconds)
+                isLoadingNext = false
+            }
             do {
                 try await loadMore()
             } catch {
@@ -525,6 +535,7 @@ private nonisolated enum MessageListConstants {
     static let userScrollDownDelta: CGFloat = 4
     static let layoutSettleDelayNanoseconds: UInt64 = 16_000_000
     static let streamingBottomScrollInterval: TimeInterval = 2
+    static let loadMoreCooldownSeconds: TimeInterval = 1
     static let scrollAnimationSeconds: Double = 0.24
     static let pinAnimationDuration: Duration = .milliseconds(320)
     static let pinAnimationSeconds: Double = 0.32

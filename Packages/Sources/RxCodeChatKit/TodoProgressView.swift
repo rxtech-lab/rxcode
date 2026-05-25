@@ -83,7 +83,7 @@ public struct TodoListPopoverView: View {
                     .padding(12)
             } else {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 6) {
+                    LazyVStack(alignment: .leading, spacing: 6) {
                         ForEach(todos) { todo in
                             row(todo)
                         }

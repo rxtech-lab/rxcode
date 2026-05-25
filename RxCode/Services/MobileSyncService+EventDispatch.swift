@@ -17,8 +17,13 @@ extension MobileSyncService {
             logger.info("[MobileSync] relay state=\(String(describing: s), privacy: .public) relay=\(self.relayURL.absoluteString, privacy: .public)")
         case .deliveryFailed(let toHex):
             // Drop-on-offline policy — desktop ignores, mobile will resync on
-            // next reconnect.
-            logger.warning("[MobileSync] relay delivery failed to mobileKey=\(String(toHex.prefix(12)), privacy: .public)")
+            // next reconnect. Warn only on the online → offline transition so
+            // probe pings to a still-offline device don't spam the log.
+            if markPeerOffline(toHex) {
+                logger.warning("[MobileSync] relay delivery failed to mobileKey=\(String(toHex.prefix(12)), privacy: .public)")
+            } else {
+                logger.debug("[MobileSync] relay delivery failed (already offline) mobileKey=\(String(toHex.prefix(12)), privacy: .public)")
+            }
         case .inbound(let inbound):
             handleInbound(inbound)
         }
@@ -33,7 +38,11 @@ extension MobileSyncService {
             updateAggregateConnectionState()
             logger.info("[MobileSync] relay state=\(String(describing: s), privacy: .public) server=\(server.name, privacy: .public)")
         case .deliveryFailed(let toHex):
-            logger.warning("[MobileSync] relay delivery failed to mobileKey=\(String(toHex.prefix(12)), privacy: .public) server=\(server.name, privacy: .public)")
+            if markPeerOffline(toHex) {
+                logger.warning("[MobileSync] relay delivery failed to mobileKey=\(String(toHex.prefix(12)), privacy: .public) server=\(server.name, privacy: .public)")
+            } else {
+                logger.debug("[MobileSync] relay delivery failed (already offline) mobileKey=\(String(toHex.prefix(12)), privacy: .public) server=\(server.name, privacy: .public)")
+            }
         case .inbound(let inbound):
             handleInbound(inbound, fromServer: server)
         }
@@ -74,6 +83,10 @@ extension MobileSyncService {
 
     private func handleInbound(_ inbound: RelayClient.Inbound, viaClient: SyncClient?) {
         let activeClient = viaClient ?? client
+        // Any decrypted inbound proves the peer is currently reachable on the
+        // relay socket. Flip the cached online state so the next broadcast
+        // goes back through the live channel.
+        markPeerOnline(inbound.fromHex)
         switch inbound.payload {
         case .pairRequest(let req):
             pendingPairing = req

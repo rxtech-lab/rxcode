@@ -95,25 +95,28 @@ extension AppState {
                     }
                     if !editPersistInfos.isEmpty {
                         for info in editPersistInfos {
-                            // Pull the snapshot task created at tool_use time
-                            // (see `captureEditingFileSnapshot`). Persist via
-                            // an awaiting MainActor Task so the original-content
-                            // field reflects the file as it stood before the
-                            // edit ran, instead of post-edit content.
-                            let snapshotTask = state.editingFileSnapshotTasks[info.path]
+                            // Pre-edit snapshot was already read synchronously
+                            // at tool_use time (see `captureEditingFileSnapshot`).
+                            // Re-read the file after tool_result for the post-
+                            // edit snapshot. Together they form the snapshot
+                            // pair the diff view and sidebar counts use.
+                            let snapshot = state.editingFileSnapshots[info.path] ?? nil
                             let pathLocal = info.path
                             let hunksLocal = info.hunks
                             let isWriteLocal = info.isWrite
                             let keyLocal = key
                             Task { @MainActor [weak self] in
-                                let snapshot = await snapshotTask?.value ?? nil
+                                let modified = await Task.detached(priority: .userInitiated) {
+                                    try? String(contentsOfFile: pathLocal, encoding: .utf8)
+                                }.value
                                 guard let self else { return }
                                 self.threadStore.appendFileEdit(
                                     sessionId: keyLocal,
                                     path: pathLocal,
                                     hunks: hunksLocal,
                                     containsWrite: isWriteLocal,
-                                    originalContent: snapshot
+                                    originalContent: snapshot,
+                                    modifiedContent: modified
                                 )
                                 self.threadFileEditsRevision &+= 1
                             }

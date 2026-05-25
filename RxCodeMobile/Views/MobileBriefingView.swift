@@ -27,6 +27,7 @@ struct MobileBriefingView: View {
     @EnvironmentObject private var state: MobileAppState
     @Namespace private var glassNamespace
     var onCloseChat: () -> Void = {}
+    var onOpenSession: (String) -> Void = { _ in }
 
     /// Selected project ids for filtering. Empty = show every project.
     @State private var selectedProjectIds: Set<UUID> = []
@@ -83,7 +84,7 @@ struct MobileBriefingView: View {
             await state.refreshSnapshot()
         }
         .navigationDestination(for: BriefingGroupKey.self) { key in
-            MobileBriefingDetailView(groupKey: key)
+            MobileBriefingDetailView(groupKey: key, onOpenSession: onOpenSession)
         }
         .navigationDestination(for: String.self) { sessionID in
             MobileChatView(sessionID: sessionID, onClose: onCloseChat)
@@ -498,9 +499,9 @@ private struct BriefingListCard: View {
                     .lineLimit(1)
 
                 HStack(spacing: 6) {
-                    Image(systemName: "arrow.triangle.branch")
+                    Image(systemName: group.branch.lowercased() == "unknown" ? "plus.circle" : "arrow.triangle.branch")
                         .font(.system(size: 9, weight: .medium))
-                    Text(group.branch)
+                    Text(group.branch.lowercased() == "unknown" ? "Initialize Git" : group.branch)
                         .font(.system(size: 12))
                         .lineLimit(1)
                 }
@@ -673,9 +674,9 @@ private struct BriefingCard: View {
                         .lineLimit(1)
                     
                     HStack(spacing: 6) {
-                        Image(systemName: "arrow.triangle.branch")
+                        Image(systemName: group.branch.lowercased() == "unknown" ? "plus.circle" : "arrow.triangle.branch")
                             .font(.system(size: 10, weight: .medium))
-                        Text(group.branch)
+                        Text(group.branch.lowercased() == "unknown" ? "Initialize Git" : group.branch)
                             .font(.caption)
                             .lineLimit(1)
                     }

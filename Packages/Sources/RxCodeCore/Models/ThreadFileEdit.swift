@@ -15,11 +15,15 @@ public final class ThreadFileEdit {
     public var firstEditedAt: Date
     public var updatedAt: Date
     /// Full file content captured the first time this session's stream sees an
-    /// Edit/MultiEdit/Write tool_use for this path. Used by the diff inspector
-    /// as the "before" side of the diff so concurrent edits from other agents
-    /// don't break hunk anchoring. Optional for legacy rows persisted before
-    /// snapshot capture was added — those still render via hunk reverse-apply.
+    /// Edit/MultiEdit/Write tool_use for this path. Fixed forever once set —
+    /// the "before" side of the snapshot-pair diff. Optional for legacy rows
+    /// persisted before snapshot capture was added.
     public var originalContent: String?
+    /// Full file content re-read from disk after each successful edit
+    /// tool_result for this path. Overwritten on every subsequent edit so the
+    /// "after" side always reflects this thread's most recent committed state.
+    /// Optional for legacy rows; consumers fall back to disk read / hunks.
+    public var modifiedContent: String?
 
     public init(
         sessionId: String,
@@ -28,6 +32,7 @@ public final class ThreadFileEdit {
         hunks: [PreviewFile.EditHunk],
         containsWrite: Bool,
         originalContent: String? = nil,
+        modifiedContent: String? = nil,
         firstEditedAt: Date = .now,
         updatedAt: Date = .now
     ) {
@@ -37,6 +42,7 @@ public final class ThreadFileEdit {
         self.containsWrite = containsWrite
         self.hunksData = Self.encode(hunks)
         self.originalContent = originalContent
+        self.modifiedContent = modifiedContent
         self.firstEditedAt = firstEditedAt
         self.updatedAt = updatedAt
     }
@@ -57,7 +63,14 @@ public final class ThreadFileEdit {
     }
 
     public func toSummary() -> FileEditSummary {
-        FileEditSummary(path: path, name: name, hunks: hunks, containsWrite: containsWrite, originalContent: originalContent)
+        FileEditSummary(
+            path: path,
+            name: name,
+            hunks: hunks,
+            containsWrite: containsWrite,
+            originalContent: originalContent,
+            modifiedContent: modifiedContent
+        )
     }
 
     private static func encode(_ hunks: [PreviewFile.EditHunk]) -> Data {

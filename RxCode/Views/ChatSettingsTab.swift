@@ -28,6 +28,8 @@ struct ChatSettingsTab: View {
                 autoPreviewSection
                 Divider()
                 archiveSection
+                Divider()
+                autoDeleteSection
             }
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -158,6 +160,42 @@ struct ChatSettingsTab: View {
             }
             .disabled(!appState.autoArchiveEnabled)
             .opacity(appState.autoArchiveEnabled ? 1 : 0.5)
+        }
+    }
+
+    // MARK: - Auto-Delete Section
+
+    private var autoDeleteSection: some View {
+        @Bindable var appState = appState
+        return VStack(alignment: .leading, spacing: 12) {
+            Text("Auto-delete")
+                .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
+
+            Text("Permanently delete archived chats after the retention window. Pinned chats are never auto-deleted. This cannot be undone.")
+                .font(.system(size: ClaudeTheme.size(11)))
+                .foregroundStyle(.secondary)
+
+            Toggle(isOn: $appState.autoDeleteEnabled) {
+                Text("Auto-delete archived chats")
+            }
+            .toggleStyle(.switch)
+            .fixedSize()
+
+            HStack(spacing: 10) {
+                Text("Delete after")
+                    .font(.system(size: ClaudeTheme.size(12)))
+                    .foregroundStyle(.secondary)
+                Stepper(
+                    value: $appState.deleteRetentionDays,
+                    in: 1...365
+                ) {
+                    Text("\(appState.deleteRetentionDays) day\(appState.deleteRetentionDays == 1 ? "" : "s") after archiving")
+                        .font(.system(size: ClaudeTheme.size(13), weight: .medium))
+                }
+                .fixedSize()
+            }
+            .disabled(!appState.autoDeleteEnabled)
+            .opacity(appState.autoDeleteEnabled ? 1 : 0.5)
         }
     }
 

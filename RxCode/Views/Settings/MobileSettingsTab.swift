@@ -258,8 +258,11 @@ struct MobileSettingsTab: View {
                 .font(.title2)
                 .frame(width: 28)
             VStack(alignment: .leading, spacing: 2) {
-                Text(device.displayName)
-                    .fontWeight(.medium)
+                HStack(spacing: 6) {
+                    Text(device.displayName)
+                        .fontWeight(.medium)
+                    onlineStatePill(for: device)
+                }
                 HStack(spacing: 6) {
                     if let token = device.apnsToken, !token.isEmpty {
                         Label("Push", systemImage: "bell.fill")
@@ -309,6 +312,24 @@ struct MobileSettingsTab: View {
         }
         .padding(12)
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    @ViewBuilder
+    private func onlineStatePill(for device: PairedDevice) -> some View {
+        switch device.onlineState {
+        case .online:
+            Label("Online", systemImage: "circle.fill")
+                .font(.caption2)
+                .foregroundStyle(.green)
+                .labelStyle(.titleAndIcon)
+        case .offline:
+            Label("Offline", systemImage: "circle.fill")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .labelStyle(.titleAndIcon)
+        case .unknown:
+            EmptyView()
+        }
     }
 
     @ViewBuilder

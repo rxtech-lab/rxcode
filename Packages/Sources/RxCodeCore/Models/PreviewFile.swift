@@ -28,10 +28,15 @@ public struct PreviewFile: Identifiable, Sendable {
     public let gitDiffMode: GitDiffMode?
     public let showFullFileDiff: Bool
     /// File contents captured before this thread's first edit to the path.
-    /// When non-nil, `FileDiffView` diffs this snapshot against the current
-    /// on-disk content and ignores `editHunks` — yielding an exact diff even
-    /// when other agents have concurrently modified the file.
+    /// Fixed once set; together with `modifiedContent` forms the snapshot pair
+    /// that `FileDiffView` diffs to render this thread's changes.
     public let originalContent: String?
+    /// File contents captured immediately after the thread's most recent edit
+    /// tool_result. When both `originalContent` and `modifiedContent` are
+    /// present `FileDiffView` diffs them directly and ignores `editHunks` and
+    /// the current on-disk content — giving an exact, thread-isolated diff
+    /// even when other agents concurrently modify the file.
+    public let modifiedContent: String?
 
     public init(
         path: String,
@@ -39,7 +44,8 @@ public struct PreviewFile: Identifiable, Sendable {
         editHunks: [EditHunk] = [],
         gitDiffMode: GitDiffMode? = nil,
         showFullFileDiff: Bool = false,
-        originalContent: String? = nil
+        originalContent: String? = nil,
+        modifiedContent: String? = nil
     ) {
         self.path = path
         self.name = name
@@ -47,5 +53,6 @@ public struct PreviewFile: Identifiable, Sendable {
         self.gitDiffMode = gitDiffMode
         self.showFullFileDiff = showFullFileDiff
         self.originalContent = originalContent
+        self.modifiedContent = modifiedContent
     }
 }

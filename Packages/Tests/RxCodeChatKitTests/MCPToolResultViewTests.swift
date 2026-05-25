@@ -27,7 +27,7 @@ struct MCPToolResultViewTests {
 
         try view.inspect().find(ViewType.Button.self).tap()
 
-        let detail = MCPToolDetailSheet(toolCall: toolCall)
+        let detail = ToolCallDetailSheet(toolCall: toolCall)
         let labels = try detail.inspect().findAll(ViewType.Text.self).compactMap { try? $0.string() }
 
         #expect(labels.contains("Call Params"))
@@ -38,7 +38,7 @@ struct MCPToolResultViewTests {
 
     @Test("MCP detail sheet renders inside a narrow host")
     func detailSheetRendersInsideNarrowHost() throws {
-        let detail = MCPToolDetailSheet(toolCall: makeMCPToolCall())
+        let detail = ToolCallDetailSheet(toolCall: makeMCPToolCall())
             .frame(width: 320, height: 560)
         ViewHosting.host(view: detail)
         defer { ViewHosting.expel() }
@@ -62,7 +62,7 @@ struct MCPToolResultViewTests {
 
         try view.inspect().find(ViewType.Button.self).tap()
 
-        let detail = MCPToolDetailSheet(toolCall: toolCall)
+        let detail = ToolCallDetailSheet(toolCall: toolCall)
         let labels = try detail.inspect().findAll(ViewType.Text.self).compactMap { try? $0.string() }
         #expect(labels.contains("Call Params"))
         #expect(labels.contains("Result"))

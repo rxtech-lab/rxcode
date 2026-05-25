@@ -186,7 +186,10 @@ struct RootView: View {
     private var phoneTabs: some View {
         TabView(selection: $selectedTab) {
             NavigationStack(path: $briefingDetailPath) {
-                MobileBriefingView(onCloseChat: { closeBriefingChat() })
+                MobileBriefingView(
+                    onCloseChat: { closeBriefingChat() },
+                    onOpenSession: { briefingDetailPath.append($0) }
+                )
             }
             .tabItem {
                 Label("Briefing", systemImage: "doc.text")
@@ -258,7 +261,10 @@ struct RootView: View {
             NavigationStack(path: $briefingDetailPath) {
                 Group {
                     if let groupKey = selectedBriefingGroup {
-                        MobileBriefingDetailView(groupKey: groupKey)
+                        MobileBriefingDetailView(
+                            groupKey: groupKey,
+                            onOpenSession: { briefingDetailPath.append($0) }
+                        )
                     } else {
                         ContentUnavailableView {
                             Label("No Selection", systemImage: "doc.text")
@@ -350,11 +356,18 @@ struct RootView: View {
     }
 
     private var isViewingBriefingDetail: Bool {
-        guard !briefingDetailPath.isEmpty else { return false }
         if compactClass == .compact {
-            return selectedTab == .briefing
+            // iPhone: the path holds [briefingGroupKey, …], so a non-empty
+            // path while on the Briefing tab means a detail screen is open.
+            return selectedTab == .briefing && !briefingDetailPath.isEmpty
         }
+        // iPad: the selected group lives in `selectedBriefingGroup`, not on
+        // the path — so the path is empty while sitting on briefing detail
+        // and only grows when a thread is pushed. Either signal means the
+        // user is inside the briefing flow and a desktop-driven session
+        // change must not yank them into the projects column.
         return showingBriefing
+            && (selectedBriefingGroup != nil || !briefingDetailPath.isEmpty)
     }
 
     /// Consume a pending APNs deep link (set by a notification tap) and navigate

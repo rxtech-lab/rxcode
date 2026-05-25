@@ -7,6 +7,10 @@ struct MobileBriefingDetailView: View {
     @EnvironmentObject private var state: MobileAppState
     @Namespace private var glassNamespace
     let groupKey: BriefingGroupKey
+    var onOpenSession: (String) -> Void = { _ in }
+
+    @State private var showingNewThread = false
+    @State private var isInitializingGit = false
 
     var body: some View {
         ScrollView {
@@ -23,6 +27,27 @@ struct MobileBriefingDetailView: View {
         .accessibilityIdentifier("briefing-detail-screen")
         .navigationTitle(projectName)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showingNewThread = true
+                } label: {
+                    Image(systemName: "square.and.pencil")
+                        .font(.system(size: 16, weight: .medium))
+                }
+                .accessibilityLabel("New Thread")
+                .accessibilityIdentifier("briefing-detail-new-thread")
+            }
+        }
+        .sheet(isPresented: $showingNewThread) {
+            NewThreadSheet(
+                projectID: groupKey.projectId,
+                preferredBranch: groupKey.branch
+            ) { newSessionID in
+                onOpenSession(newSessionID)
+            }
+            .environmentObject(state)
+        }
         .refreshable {
             await state.refreshSnapshot()
         }
@@ -41,6 +66,20 @@ struct MobileBriefingDetailView: View {
 
     private var projectName: String {
         state.projects.first(where: { $0.id == groupKey.projectId })?.name ?? "Unknown Project"
+    }
+
+    private var isUnknownBranch: Bool {
+        groupKey.branch.lowercased() == "unknown"
+    }
+
+    private func initializeGit() {
+        guard !isInitializingGit else { return }
+        isInitializingGit = true
+        Task {
+            await state.initProjectGit(projectID: groupKey.projectId)
+            await state.refreshSnapshot()
+            isInitializingGit = false
+        }
     }
 
     // MARK: - Header Card
@@ -64,18 +103,42 @@ struct MobileBriefingDetailView: View {
                     .foregroundStyle(.primary)
                 
                 HStack(spacing: 12) {
-                    // Branch chip
-                    HStack(spacing: 5) {
-                        Image(systemName: "arrow.triangle.branch")
-                            .font(.system(size: 10, weight: .medium))
-                        Text(groupKey.branch)
-                            .font(.caption.weight(.medium))
+                    // Branch chip — falls back to an Init Git action when the
+                    // desktop hasn't initialized a repo (branch is "unknown").
+                    if isUnknownBranch {
+                        Button {
+                            initializeGit()
+                        } label: {
+                            HStack(spacing: 5) {
+                                if isInitializingGit {
+                                    ProgressView().controlSize(.mini)
+                                } else {
+                                    Image(systemName: "plus.circle")
+                                        .font(.system(size: 10, weight: .medium))
+                                }
+                                Text(isInitializingGit ? "Initializing…" : "Initialize Git")
+                                    .font(.caption.weight(.medium))
+                            }
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(.ultraThinMaterial, in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isInitializingGit)
+                    } else {
+                        HStack(spacing: 5) {
+                            Image(systemName: "arrow.triangle.branch")
+                                .font(.system(size: 10, weight: .medium))
+                            Text(groupKey.branch)
+                                .font(.caption.weight(.medium))
+                        }
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.ultraThinMaterial, in: Capsule())
                     }
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    
+
                     // Updated time
                     if let updatedAt = group?.updatedAt {
                         Text(updatedAt.formatted(.relative(presentation: .named)))

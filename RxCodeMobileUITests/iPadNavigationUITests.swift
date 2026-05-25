@@ -26,6 +26,31 @@ final class iPadNavigationUITests: XCTestCase {
         r.assertExists(r.briefingListScreen, "briefing list column still visible")
     }
 
+    /// Briefing split → briefing detail → New Thread → compose → send → chat
+    /// for the new thread is shown in the detail column, the briefing list
+    /// column stays visible, and the chat keeps its content after the desktop
+    /// snapshot settles (the empty-chat-after-creation regression).
+    @MainActor
+    func testNewThreadFromBriefingSplitOpensChat() throws {
+        let r = try UITestRunner.launch(.pad, on: self).robot
+
+        r.tap(r.anyBriefingListCard, "a briefing card in the list column")
+        r.assertExists(r.briefingDetailScreen, "briefing detail screen")
+
+        r.tap(r.briefingDetailNewThreadButton, "new thread button in briefing detail")
+        r.createNewThread(with: "Help me investigate the empty chat bug.")
+
+        // The chat appears in the detail column and the briefing list column
+        // stays alongside it — the split view never lost the briefing context.
+        r.assertMessagesShown()
+        r.assertExists(r.briefingListScreen, "briefing list column still visible")
+        // Sustain the chat for a beat so a delayed snapshot can't quietly
+        // navigate us into the projects split.
+        Thread.sleep(forTimeInterval: 2.0)
+        r.assertExists(r.chatScreen, "chat screen remains after snapshot settles")
+        r.assertExists(r.briefingListScreen, "briefing list column still visible after settle")
+    }
+
     /// Case 4: Projects → project → thread list → thread → messages, and the
     /// thread list column remains visible (split view keeps context).
     @MainActor

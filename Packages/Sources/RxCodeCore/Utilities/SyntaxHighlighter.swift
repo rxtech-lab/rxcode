@@ -55,6 +55,13 @@ public enum SyntaxHighlighter {
         return result
     }
 
+    /// Extract a language identifier from a filename (or path). Returns the
+    /// lowercased extension, or `nil` when the file has no extension.
+    public static func language(forFilename filename: String) -> String? {
+        let ext = (filename as NSString).pathExtension
+        return ext.isEmpty ? nil : ext.lowercased()
+    }
+
     // Normalize markdown language names → file extensions
     public static func normalizeLanguage(_ language: String) -> String {
         switch language.lowercased() {

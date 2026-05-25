@@ -26,6 +26,14 @@ struct MobileAppRobot {
     var briefingListScreen: XCUIElement { element(id: "briefing-list-screen") }
     var briefingDetailScreen: XCUIElement { element(id: "briefing-detail-screen") }
     var anyBriefingThreadRow: XCUIElement { firstButton(prefix: "briefing-thread-row-") }
+    var briefingDetailNewThreadButton: XCUIElement { element(id: "briefing-detail-new-thread") }
+
+    // MARK: - New Thread sheet
+
+    var newThreadInput: XCUIElement {
+        app.descendants(matching: .any).matching(identifier: "new-thread-input").firstMatch
+    }
+    var newThreadSendButton: XCUIElement { element(id: "new-thread-send") }
 
     // MARK: - Projects / threads
 
@@ -145,6 +153,26 @@ struct MobileAppRobot {
             "Expected to disappear: \(description)",
             file: file, line: line
         )
+    }
+
+    /// Types `text` into the New Thread sheet's prompt input and taps Send.
+    /// Waits for the sheet to dismiss so the caller can immediately assert on
+    /// whatever surface comes next.
+    func createNewThread(
+        with text: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let input = newThreadInput
+        XCTAssertTrue(
+            input.waitForExistence(timeout: timeout),
+            "New Thread input never appeared",
+            file: file, line: line
+        )
+        // `TextField` requires focus before typeText. Tap the input to focus it.
+        tapWhenReady(input)
+        input.typeText(text)
+        tap(newThreadSendButton, "New Thread send button", file: file, line: line)
     }
 
     /// Asserts the chat screen is shown with at least one message rendered.

@@ -14,23 +14,6 @@
         }
       }
     },
-    "%@ queued" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%@ queued"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ 条已排队"
-          }
-        }
-      }
-    },
     "%@, Active" : {
       "localizations" : {
         "en" : {
@@ -61,23 +44,6 @@
     },
     "%lld active jobs" : {
 
-    },
-    "%lld plans ready to review" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%lld plans ready to review"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld 个计划可查看"
-          }
-        }
-      }
     },
     "%lld queued" : {
 
@@ -177,23 +143,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "对话完成后会显示摘要"
-          }
-        }
-      }
-    },
-    "Accept Edits" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Accept Edits"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "接受编辑"
           }
         }
       }
@@ -329,23 +278,6 @@
         }
       }
     },
-    "Add Header" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Add Header"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "添加请求头"
-          }
-        }
-      }
-    },
     "Add MCP Server" : {
       "localizations" : {
         "en" : {
@@ -374,23 +306,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "添加项目"
-          }
-        }
-      }
-    },
-    "Add Variable" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Add Variable"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "添加变量"
           }
         }
       }
@@ -638,23 +553,6 @@
         }
       }
     },
-    "Ask" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Ask"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "询问"
-          }
-        }
-      }
-    },
     "Assistant has a question" : {
       "localizations" : {
         "en" : {
@@ -683,23 +581,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "附件自动预览"
-          }
-        }
-      }
-    },
-    "Auto" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Auto"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "自动"
           }
         }
       }
@@ -930,23 +811,6 @@
     },
     "Browser Error" : {
 
-    },
-    "Bypass" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Bypass"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "绕过"
-          }
-        }
-      }
     },
     "Cancel" : {
       "localizations" : {
@@ -1347,23 +1211,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "控制桌面端摘要"
-          }
-        }
-      }
-    },
-    "Could not load changes." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Could not load changes."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "无法加载变更。"
           }
         }
       }
@@ -2017,23 +1864,6 @@
         }
       }
     },
-    "Environment Variables" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Environment Variables"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "环境变量"
-          }
-        }
-      }
-    },
     "Extra High" : {
       "localizations" : {
         "en" : {
@@ -2456,23 +2286,6 @@
         }
       }
     },
-    "Headers" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Headers"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "请求头"
-          }
-        }
-      }
-    },
     "High" : {
       "localizations" : {
         "en" : {
@@ -2510,6 +2323,12 @@
           }
         }
       }
+    },
+    "Initialize Git" : {
+
+    },
+    "Initializing…" : {
+
     },
     "Input" : {
       "localizations" : {
@@ -3035,23 +2854,6 @@
         }
       }
     },
-    "Next" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Next"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "下一步"
-          }
-        }
-      }
-    },
     "No agents found." : {
       "localizations" : {
         "en" : {
@@ -3064,23 +2866,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "未找到代理。"
-          }
-        }
-      }
-    },
-    "No branch" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "No branch"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "无分支"
           }
         }
       }
@@ -3193,23 +2978,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "没有可用的差异内容。"
-          }
-        }
-      }
-    },
-    "No files have been edited in this thread yet." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "No files have been edited in this thread yet."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "此对话尚未编辑任何文件。"
           }
         }
       }
@@ -3402,23 +3170,6 @@
     "No todos for this thread." : {
 
     },
-    "No uncommitted changes." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "No uncommitted changes."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "没有未提交变更。"
-          }
-        }
-      }
-    },
     "Normal" : {
       "localizations" : {
         "en" : {
@@ -3431,23 +3182,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正常"
-          }
-        }
-      }
-    },
-    "Not connected to your Mac." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Not connected to your Mac."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未连接到你的 Mac。"
           }
         }
       }
@@ -3583,23 +3317,6 @@
     "Optional xcodebuild destination" : {
 
     },
-    "Other" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Other"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "其他"
-          }
-        }
-      }
-    },
     "Pair New Mac" : {
       "localizations" : {
         "en" : {
@@ -3712,23 +3429,6 @@
         }
       }
     },
-    "Plan" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Plan"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "计划"
-          }
-        }
-      }
-    },
     "Plan mode" : {
       "localizations" : {
         "en" : {
@@ -3741,23 +3441,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "计划模式"
-          }
-        }
-      }
-    },
-    "Plan ready to review" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Plan ready to review"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "计划可查看"
           }
         }
       }
@@ -4008,7 +3691,14 @@
       }
     },
     "Response in progress" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "响应进行中"
+          }
+        }
+      }
     },
     "Response notifications" : {
       "localizations" : {
@@ -4070,23 +3760,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "查看项目简报"
-          }
-        }
-      }
-    },
-    "Run Profile" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Run Profile"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "运行配置"
           }
         }
       }
@@ -4560,23 +4233,6 @@
     "SSE" : {
 
     },
-    "Staged" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Staged"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已暂存"
-          }
-        }
-      }
-    },
     "Start a conversation from your Mac" : {
       "localizations" : {
         "en" : {
@@ -4660,23 +4316,6 @@
         }
       }
     },
-    "Submit" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Submit"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "提交"
-          }
-        }
-      }
-    },
     "Summarization" : {
       "localizations" : {
         "en" : {
@@ -4740,6 +4379,12 @@
           }
         }
       }
+    },
+    "Switch to horizontal scroll" : {
+
+    },
+    "Switch to wrap" : {
+
     },
     "Syncing settings…" : {
       "localizations" : {
@@ -4852,23 +4497,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此位置没有可显示内容。"
-          }
-        }
-      }
-    },
-    "this Mac" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "this Mac"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "这台 Mac"
           }
         }
       }
@@ -5205,40 +4833,6 @@
         }
       }
     },
-    "Unknown Mac" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Unknown Mac"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未知 Mac"
-          }
-        }
-      }
-    },
-    "Unknown Project" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Unknown Project"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未知项目"
-          }
-        }
-      }
-    },
     "Unrecognized pairing link. Generate a new QR code on your Mac." : {
       "localizations" : {
         "en" : {
@@ -5267,57 +4861,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法识别二维码。请扫描 Mac App 中显示的二维码。"
-          }
-        }
-      }
-    },
-    "Unstaged" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Unstaged"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未暂存"
-          }
-        }
-      }
-    },
-    "Untitled" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Untitled"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未命名"
-          }
-        }
-      }
-    },
-    "Untracked" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Untracked"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未跟踪"
           }
         }
       }

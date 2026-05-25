@@ -170,6 +170,7 @@ extension AppState {
         // it does not drive thread discovery.
         allSessionSummaries = threadStore.loadAllSummaries()
         autoArchiveExpiredSessionsIfNeeded()
+        await autoDeleteExpiredSessionsIfNeeded()
         purgeStaleBranchBriefingsIfNeeded()
 
         persistedQueues = threadStore.loadAllQueues()

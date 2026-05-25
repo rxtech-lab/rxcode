@@ -592,9 +592,10 @@ struct MessageBubble: View {
     @State private var expandedTransientGroupIds: Set<String> = []
 
     private func transientToolSummary(groupId: String, tools: [ToolCall]) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
+        let isExpanded = expandedTransientGroupIds.contains(groupId)
+        return VStack(alignment: .leading, spacing: 14) {
             Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                     if expandedTransientGroupIds.contains(groupId) {
                         expandedTransientGroupIds.remove(groupId)
                     } else {
@@ -602,7 +603,6 @@ struct MessageBubble: View {
                     }
                 }
             } label: {
-                let isExpanded = expandedTransientGroupIds.contains(groupId)
                 HStack(spacing: 8) {
                     Image(systemName: "eye.slash")
                         .font(.system(size: ClaudeTheme.messageSize(13)))
@@ -610,9 +610,10 @@ struct MessageBubble: View {
                     Text(String(format: String(localized: "%lld tools executed", bundle: .module), tools.count))
                         .font(.system(size: ClaudeTheme.messageSize(13), weight: .medium))
                         .foregroundStyle(ClaudeTheme.textTertiary)
-                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                    Image(systemName: "chevron.down")
                         .font(.system(size: ClaudeTheme.messageSize(10), weight: .medium))
                         .foregroundStyle(ClaudeTheme.textTertiary)
+                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.vertical, 6)
@@ -620,12 +621,23 @@ struct MessageBubble: View {
             }
             .buttonStyle(.plain)
 
-            if expandedTransientGroupIds.contains(groupId) {
-                ForEach(tools, id: \.id) { toolCall in
-                    ToolResultView(toolCall: toolCall, isMessageStreaming: false)
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 14) {
+                    ForEach(tools, id: \.id) { toolCall in
+                        ToolResultView(toolCall: toolCall, isMessageStreaming: false)
+                            .transition(.asymmetric(
+                                insertion: .opacity.combined(with: .move(edge: .top)),
+                                removal: .opacity
+                            ))
+                    }
                 }
+                .transition(.asymmetric(
+                    insertion: .opacity.combined(with: .move(edge: .top)),
+                    removal: .opacity.combined(with: .move(edge: .top))
+                ))
             }
         }
+        .animation(.spring(response: 0.35, dampingFraction: 0.82), value: isExpanded)
     }
 
     private var bubbleShape: UnevenRoundedRectangle {

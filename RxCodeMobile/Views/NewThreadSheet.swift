@@ -13,6 +13,7 @@ struct NewThreadSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     let projectID: UUID
+    var preferredBranch: String? = nil
     let onSessionCreated: (String) -> Void
 
     @State private var text: String = ""
@@ -49,6 +50,7 @@ struct NewThreadSheet: View {
                     composer
                     NewThreadConfigStrip(
                         projectID: projectID,
+                        preferredBranch: preferredBranch,
                         selectedProvider: $selectedProvider,
                         selectedModelID: $selectedModelID,
                         selectedPermissionMode: $selectedPermissionMode,
@@ -240,11 +242,13 @@ struct NewThreadSheet: View {
 struct NewThreadConfigStrip: View {
     @EnvironmentObject private var state: MobileAppState
     let projectID: UUID
+    var preferredBranch: String? = nil
     @Binding var selectedProvider: AgentProvider?
     @Binding var selectedModelID: String?
     @Binding var selectedPermissionMode: PermissionMode
     @Binding var planModeEnabled: Bool
     @State private var showingCreateBranch = false
+    @State private var didApplyPreferredBranch = false
 
     private let columns = [
         GridItem(.flexible(), spacing: 12),
@@ -277,6 +281,10 @@ struct NewThreadConfigStrip: View {
             )
             .environmentObject(state)
         }
+        .onAppear(perform: applyPreferredBranchIfNeeded)
+        .onChange(of: state.projectBranches[projectID]) { _, _ in
+            applyPreferredBranchIfNeeded()
+        }
         .alert(
             "Branch operation failed",
             isPresented: branchOpErrorBinding,
@@ -303,7 +311,22 @@ struct NewThreadConfigStrip: View {
     }
 
     private var currentBranch: String? {
-        state.projectBranches[projectID]
+        state.projectBranches[projectID] ?? preferredBranch
+    }
+
+    /// When the sheet was opened from a context that knows the desired branch
+    /// (e.g. the briefing detail screen), ask the desktop to switch to it so
+    /// the new thread spawns on the right branch. Only fires once per sheet
+    /// presentation, and only when the desktop is on a different branch.
+    private func applyPreferredBranchIfNeeded() {
+        guard !didApplyPreferredBranch, let target = preferredBranch else { return }
+        let actual = state.projectBranches[projectID]
+        guard actual != nil, actual != target else {
+            if actual == target { didApplyPreferredBranch = true }
+            return
+        }
+        didApplyPreferredBranch = true
+        Task { await state.switchProjectBranch(projectID: projectID, branch: target) }
     }
 
     private var branchMenu: some View {

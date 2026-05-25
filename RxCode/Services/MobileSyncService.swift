@@ -13,6 +13,15 @@ struct LiveActivityTokenRef: Codable, Sendable, Hashable {
     var token: String
 }
 
+/// Whether a paired mobile is currently reachable via the relay socket.
+/// Resolved reactively from relay traffic — `unknown` until the first
+/// inbound payload or `delivery_failed` notice settles it.
+enum OnlineState: Sendable, Hashable {
+    case unknown
+    case online
+    case offline
+}
+
 /// One paired mobile device. Persisted to
 /// `~/Library/Application Support/RxCode/paired_devices.json`.
 struct PairedDevice: Codable, Identifiable, Sendable, Hashable {
@@ -32,6 +41,12 @@ struct PairedDevice: Codable, Identifiable, Sendable, Hashable {
     /// The relay server URL this device was paired through.
     var relayURL: String?
 
+    /// Reactive online presence — not persisted. Always starts `.unknown` on
+    /// launch; the first inbound/`delivery_failed` after `start()` resolves it.
+    var onlineState: OnlineState = .unknown
+    /// Wall-clock of the last `onlineState` change. Not persisted.
+    var lastOnlineTransitionAt: Date? = nil
+
     var id: String { pubkeyHex }
 
     /// Human-readable relay host for display (e.g. "relay.example.com").
@@ -40,6 +55,22 @@ struct PairedDevice: Codable, Identifiable, Sendable, Hashable {
               let url = URL(string: urlString),
               let host = url.host else { return nil }
         return host
+    }
+
+    // Persist only the long-lived fields — runtime presence (`onlineState`,
+    // `lastOnlineTransitionAt`) is intentionally excluded so a launch always
+    // begins in `.unknown` rather than restoring a possibly-stale value.
+    enum CodingKeys: String, CodingKey {
+        case pubkeyHex
+        case displayName
+        case platform
+        case apnsToken
+        case apnsEnvironment
+        case liveActivityStartToken
+        case liveActivityTokens
+        case pairedAt
+        case lastSeen
+        case relayURL
     }
 }
 
@@ -129,6 +160,12 @@ final class MobileSyncService: ObservableObject {
     var additionalEventTasks: [UUID: Task<Void, Never>] = [:]
     var subscribedSessions: [String: String] = [:]
     var eventTask: Task<Void, Never>?
+    /// Periodically pings paired peers we believe to be offline so an idle
+    /// mobile that has come back online is detected without waiting for it to
+    /// send something inbound. Started in `start()`, cancelled in `stop()`.
+    var presenceProbeTask: Task<Void, Never>?
+    /// Spacing between probe pings. One ping per offline peer per tick.
+    static let presenceProbeInterval: TimeInterval = 60
     var pairingToken: PairingToken?
     var pairingContinuation: CheckedContinuation<PairingOutcome, Never>?
     /// The relay server ID currently being used for pairing.
@@ -224,6 +261,7 @@ final class MobileSyncService: ObservableObject {
                 logger.info("[MobileSync] no relay servers configured — waiting for user to add one")
             }
         }
+        startPresenceProbeLoop()
     }
 
     /// Start connection to a specific relay server.
@@ -317,6 +355,8 @@ final class MobileSyncService: ObservableObject {
         eventTask = nil
         pendingJobsPushTask?.cancel()
         pendingJobsPushTask = nil
+        presenceProbeTask?.cancel()
+        presenceProbeTask = nil
 
         // Stop all relay server connections
         for (serverID, task) in additionalEventTasks {
@@ -389,7 +429,7 @@ final class MobileSyncService: ObservableObject {
         let pairingClient = pairingRelayServerID.flatMap { additionalClients[$0] }
         let relayURLString = pairingServer?.url ?? pairingToken?.relayURL ?? ""
 
-        let device = PairedDevice(
+        var device = PairedDevice(
             pubkeyHex: pending.mobilePubkeyHex,
             displayName: pending.displayName,
             platform: pending.platform,
@@ -399,6 +439,9 @@ final class MobileSyncService: ObservableObject {
             lastSeen: .now,
             relayURL: relayURLString
         )
+        // The mobile just completed a live pairing handshake — it is online.
+        device.onlineState = .online
+        device.lastOnlineTransitionAt = .now
         pairedDevices.removeAll { $0.pubkeyHex == device.pubkeyHex }
         pairedDevices.append(device)
         savePairedDevices()
@@ -466,10 +509,15 @@ final class MobileSyncService: ObservableObject {
 
     // MARK: - Notification fan-out
 
-    /// Broadcast a message to all connected relay clients.
+    /// Broadcast a message to all paired mobile peers that are not known to be
+    /// offline. Peers in `.unknown` state are still attempted (default-open) so
+    /// the very first send after launch isn't suppressed. Peers in `.offline`
+    /// are skipped on the relay socket; APNs fan-out runs separately and is
+    /// not gated here.
     private func broadcastToAllClients(_ payload: RxCodeSync.Payload) async {
-        for client in additionalClients.values {
-            await client.broadcast(payload)
+        for device in pairedDevices where device.onlineState != .offline {
+            let target = clientForPeer(device.pubkeyHex)
+            try? await target.send(payload, toHex: device.pubkeyHex)
         }
     }
 
@@ -677,6 +725,62 @@ final class MobileSyncService: ObservableObject {
     func broadcastRunTaskUpdate(_ task: MobileRunTaskSnapshot) {
         Task {
             await broadcastToAllClients(.runTaskUpdate(RunTaskUpdatePayload(task: task)))
+        }
+    }
+
+    // MARK: - Online presence
+
+    /// Mark a paired peer as online. Returns true if this changed the state
+    /// (so callers can suppress per-event logging on repeats). Unknown peers
+    /// are ignored.
+    @discardableResult
+    func markPeerOnline(_ pubkeyHex: String) -> Bool {
+        guard let idx = pairedDevices.firstIndex(where: { $0.pubkeyHex == pubkeyHex }) else {
+            return false
+        }
+        if pairedDevices[idx].onlineState == .online { return false }
+        pairedDevices[idx].onlineState = .online
+        pairedDevices[idx].lastOnlineTransitionAt = .now
+        return true
+    }
+
+    /// Mark a paired peer as offline. Returns true if this changed the state
+    /// (so the caller can warn once on the online → offline transition and
+    /// stay quiet on repeats).
+    @discardableResult
+    func markPeerOffline(_ pubkeyHex: String) -> Bool {
+        guard let idx = pairedDevices.firstIndex(where: { $0.pubkeyHex == pubkeyHex }) else {
+            return false
+        }
+        if pairedDevices[idx].onlineState == .offline { return false }
+        pairedDevices[idx].onlineState = .offline
+        pairedDevices[idx].lastOnlineTransitionAt = .now
+        return true
+    }
+
+    private func startPresenceProbeLoop() {
+        presenceProbeTask?.cancel()
+        presenceProbeTask = Task { @MainActor [weak self] in
+            let interval = UInt64(Self.presenceProbeInterval * 1_000_000_000)
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: interval)
+                guard !Task.isCancelled else { return }
+                await self?.probeOfflinePeers()
+            }
+        }
+    }
+
+    /// Send a `ping` to every peer currently marked offline. If the peer is
+    /// in fact reachable it will reply with `pong`, the inbound path flips
+    /// `onlineState` back to `.online`, and the next broadcast goes through.
+    /// If the peer is still offline the relay returns `delivery_failed` and
+    /// we stay quietly offline (no warning, since the transition already
+    /// fired).
+    func probeOfflinePeers() async {
+        let targets = pairedDevices.filter { $0.onlineState == .offline }
+        for device in targets {
+            let target = clientForPeer(device.pubkeyHex)
+            try? await target.send(.ping(PingPayload()), toHex: device.pubkeyHex)
         }
     }
 

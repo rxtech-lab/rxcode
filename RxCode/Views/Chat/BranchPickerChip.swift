@@ -13,8 +13,33 @@ struct BranchPickerChip: View {
     @State private var branches: [String] = []
     @State private var switchingTo: String?
     @State private var refreshTask: Task<Void, Never>?
+    @State private var isInitializingGit = false
 
     var body: some View {
+        Group {
+            if shouldShowInitGit {
+                initGitButton
+            } else {
+                branchMenu
+            }
+        }
+        .help(workingDirectoryHint)
+        .sheet(isPresented: $showCreateSheet) {
+            CreateBranchSheet(currentBranch: currentBranch) {
+                refresh()
+            }
+        }
+        .task(id: refreshKey) {
+            await refreshNow()
+        }
+        .onChange(of: refreshKey) { _, _ in refresh() }
+    }
+
+    private var shouldShowInitGit: Bool {
+        sessionWorktreeBranch == nil && currentBranch == nil
+    }
+
+    private var branchMenu: some View {
         Menu {
             if !branches.isEmpty {
                 Section("Switch branch") {
@@ -59,16 +84,42 @@ struct BranchPickerChip: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .help(workingDirectoryHint)
-        .sheet(isPresented: $showCreateSheet) {
-            CreateBranchSheet(currentBranch: currentBranch) {
-                refresh()
+    }
+
+    private var initGitButton: some View {
+        Button {
+            initializeGit()
+        } label: {
+            HStack(spacing: 4) {
+                if isInitializingGit {
+                    ProgressView().controlSize(.mini)
+                } else {
+                    Image(systemName: "plus.circle")
+                        .font(.system(size: ClaudeTheme.size(10)))
+                }
+                Text(isInitializingGit ? "Initializing…" : "Initialize Git")
+                    .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+                    .lineLimit(1)
             }
+            .foregroundStyle(ClaudeTheme.textSecondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(ClaudeTheme.surfaceSecondary, in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
         }
-        .task(id: refreshKey) {
-            await refreshNow()
+        .buttonStyle(.plain)
+        .fixedSize()
+        .disabled(isInitializingGit)
+    }
+
+    private func initializeGit() {
+        guard !isInitializingGit else { return }
+        guard let path = sessionWorktreePath ?? windowState.selectedProject?.path else { return }
+        isInitializingGit = true
+        Task {
+            _ = await GitHelper.initRepository(at: path)
+            isInitializingGit = false
+            refresh()
         }
-        .onChange(of: refreshKey) { _, _ in refresh() }
     }
 
     private var activeBranch: String? {
@@ -115,7 +166,7 @@ struct BranchPickerChip: View {
     private var displayName: String {
         if let b = sessionWorktreeBranch { return b }
         if let b = currentBranch { return b }
-        return "Work locally"
+        return ""
     }
 
     private var workingDirectoryHint: String {

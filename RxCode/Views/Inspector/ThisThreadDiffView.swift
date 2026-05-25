@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import RxCodeCore
+import RxCodeChatKit
 
 // MARK: - This Thread
 
@@ -37,15 +38,26 @@ struct ThisThreadFileRow: View {
     let summary: FileEditSummary
     @Environment(WindowState.self) private var windowState
     @State private var isHovering = false
+    @State private var snapshotStat: (added: Int, removed: Int)?
 
     private var additions: Int {
-        summary.hunks.reduce(0) { count, hunk in
+        // Prefer the snapshot-pair count when it actually found differences.
+        // When the snapshot collapsed to zero (e.g. legacy rows, or any race
+        // where original ended up equal to modified) fall back to hunk lines
+        // so a real edit still shows activity in the sidebar.
+        if let stat = snapshotStat, stat.added > 0 || stat.removed > 0 {
+            return stat.added
+        }
+        return summary.hunks.reduce(0) { count, hunk in
             count + nonEmptyLineCount(hunk.newString)
         }
     }
 
     private var deletions: Int {
-        summary.hunks.reduce(0) { count, hunk in
+        if let stat = snapshotStat, stat.added > 0 || stat.removed > 0 {
+            return stat.removed
+        }
+        return summary.hunks.reduce(0) { count, hunk in
             count + nonEmptyLineCount(hunk.oldString)
         }
     }
@@ -62,7 +74,8 @@ struct ThisThreadFileRow: View {
                 name: summary.name,
                 editHunks: summary.hunks,
                 showFullFileDiff: true,
-                originalContent: summary.originalContent
+                originalContent: summary.originalContent,
+                modifiedContent: summary.modifiedContent
             )
         } label: {
             HStack(spacing: 8) {
@@ -112,11 +125,26 @@ struct ThisThreadFileRow: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
+        .task(id: summary.modifiedContent) {
+            await computeSnapshotStat()
+        }
     }
 
     private func nonEmptyLineCount(_ s: String) -> Int {
         guard !s.isEmpty else { return 0 }
         return s.components(separatedBy: "\n").count
+    }
+
+    private func computeSnapshotStat() async {
+        guard summary.modifiedContent != nil else {
+            snapshotStat = nil
+            return
+        }
+        let original = summary.originalContent ?? ""
+        let modified = summary.modifiedContent ?? ""
+        snapshotStat = await Task.detached(priority: .userInitiated) {
+            ChangeDiffView.snapshotStat(original: original, modified: modified)
+        }.value
     }
 }
 

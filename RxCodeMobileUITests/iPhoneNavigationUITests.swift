@@ -24,6 +24,29 @@ final class iPhoneNavigationUITests: XCTestCase {
         r.assertDisappears(r.chatScreen, "chat screen after navigating back")
     }
 
+    /// Briefing tab → briefing detail → New Thread → compose → send → chat for
+    /// the new thread is shown and remains shown after the desktop snapshot
+    /// settles (the empty-chat-after-creation regression).
+    @MainActor
+    func testNewThreadFromBriefingDetailOpensChat() throws {
+        let r = try UITestRunner.launch(.phone, on: self).robot
+
+        r.tap(r.briefingTab, "Briefing tab")
+        r.tap(r.anyBriefingCard, "a briefing card")
+        r.assertExists(r.briefingDetailScreen, "briefing detail screen")
+
+        r.tap(r.briefingDetailNewThreadButton, "new thread button in briefing detail")
+        r.createNewThread(with: "Help me investigate the empty chat bug.")
+
+        // The chat screen for the freshly-created thread must appear and
+        // remain populated — i.e. the briefing navigation stack should hold
+        // it, not get reset by the snapshot-driven `activeSessionID` change.
+        r.assertMessagesShown()
+        // Sustain the assertion a bit so a delayed snapshot can't pop us off.
+        Thread.sleep(forTimeInterval: 2.0)
+        r.assertExists(r.chatScreen, "chat screen remains after snapshot settles")
+    }
+
     /// Case 3: Projects tab → project → thread list → thread → messages → back →
     /// thread list is shown again.
     @MainActor

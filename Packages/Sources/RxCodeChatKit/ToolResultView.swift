@@ -157,6 +157,15 @@ struct ToolResultView: View {
                             ClaudeThemeDivider()
                             fileChangeDiffsView(toolCall.fileChangeDiffs)
                         }
+                    } else if toolNameLower == "write",
+                              let content = toolCall.input["content"]?.stringValue {
+                        // Write creates a new file — render the content as a
+                        // pure-additions diff so the user sees `+` markers and
+                        // green highlighting just like an Edit.
+                        VStack(alignment: .leading, spacing: 6) {
+                            ClaudeThemeDivider()
+                            editDiffView(oldString: "", newString: content)
+                        }
                     } else if let result = toolCall.result, !result.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
                             ClaudeThemeDivider()
@@ -289,15 +298,21 @@ struct ToolResultView: View {
     }
 
     private var hasExpandableContent: Bool {
-        isEditTool && (
-            (toolCall.input["old_string"]?.stringValue != nil
-                && toolCall.input["new_string"]?.stringValue != nil)
-            || !toolCall.fileChangeDiffs.isEmpty
-        )
+        if isEditTool, (toolCall.input["old_string"]?.stringValue != nil
+                        && toolCall.input["new_string"]?.stringValue != nil) {
+            return true
+        }
+        if isEditTool, !toolCall.fileChangeDiffs.isEmpty {
+            return true
+        }
+        if toolNameLower == "write", toolCall.input["content"]?.stringValue != nil {
+            return true
+        }
+        return false
     }
 
     private func editHunksFromToolInput() -> [PreviewFile.EditHunk] {
-        guard isEditTool else { return [] }
+        guard isEditTool || toolNameLower == "write" else { return [] }
         return toolCall.fileEditHunks
     }
 
@@ -306,8 +321,13 @@ struct ToolResultView: View {
             old: oldString.components(separatedBy: .newlines),
             new: newString.components(separatedBy: .newlines)
         )
-        let removedLines = trimmedOld.map { ("-", $0, false) }
-        let addedLines = trimmedNew.map { ("+", $0, true) }
+        // When oldString is fully empty (new file creation) the split yields a
+        // single empty line that renders as a lone `-` row above the content.
+        // Drop it so the diff is purely additions.
+        let removedSource = oldString.isEmpty ? [] : trimmedOld
+        let addedSource = newString.isEmpty ? [] : trimmedNew
+        let removedLines = removedSource.map { ("-", $0, false) }
+        let addedLines = addedSource.map { ("+", $0, true) }
         let allLines = removedLines + addedLines
 
         let collapseThreshold = 12
@@ -388,7 +408,18 @@ struct ToolResultView: View {
     }
 
     private func rawUnifiedDiffView(_ diff: String) -> some View {
-        let lines = diff.components(separatedBy: .newlines)
+        let rawLines = diff.components(separatedBy: .newlines)
+        // Codex's `changes[].diff` for a brand-new file is sometimes just the
+        // file's content with no `+`/`-`/`@@` markers. Without prefixes the
+        // renderer would draw every line as plain text — exactly the
+        // "no diff changes shown" symptom. Detect that shape and synthesize
+        // `+` prefixes so additions render in green.
+        let hasAnyMarker = rawLines.contains {
+            $0.hasPrefix("+") || $0.hasPrefix("-") || $0.hasPrefix("@@")
+        }
+        let lines: [String] = hasAnyMarker ? rawLines : rawLines.map { line in
+            line.isEmpty ? line : "+" + line
+        }
         let collapseThreshold = 18
         let needsToggle = lines.count > collapseThreshold
         let visibleLines = needsToggle && !isDiffExpanded
@@ -506,7 +537,7 @@ struct ToolResultView: View {
                 fileActionLink(label: fileName, color: ClaudeTheme.accent) {
                     windowState.inspectorFile = PreviewFile(path: filePath, name: fileName)
                 }
-                if isEditTool, toolCall.result != nil {
+                if (isEditTool || toolNameLower == "write"), toolCall.result != nil {
                     let hunks = editHunksFromToolInput()
                     if !hunks.isEmpty {
                         HStack(spacing: 0) {

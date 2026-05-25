@@ -284,9 +284,20 @@ public extension ToolCall {
         /// body so Codex `fileChange` calls can flow through the same
         /// `ThreadFileEdit` storage as Claude Edit/MultiEdit/Write.
         public var hunk: PreviewFile.EditHunk {
+            let rawLines = diff.components(separatedBy: "\n")
+            // Some agents (notably Codex on new-file creation) emit `diff` as
+            // the file's plain content with no `+`/`-`/`@@` markers. Treat
+            // that as an all-additions hunk so sidebar counts and the diff
+            // renderer don't collapse to empty.
+            let hasAnyMarker = rawLines.contains {
+                $0.hasPrefix("+") || $0.hasPrefix("-") || $0.hasPrefix("@@")
+            }
+            if !hasAnyMarker {
+                return PreviewFile.EditHunk(oldString: "", newString: diff)
+            }
             var removed: [String] = []
             var added: [String] = []
-            for rawLine in diff.components(separatedBy: "\n") {
+            for rawLine in rawLines {
                 if rawLine.hasPrefix("---") || rawLine.hasPrefix("+++") { continue }
                 if rawLine.hasPrefix("@@") { continue }
                 if rawLine.hasPrefix("-") {

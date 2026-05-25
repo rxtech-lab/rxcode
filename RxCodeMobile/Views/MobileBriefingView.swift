@@ -499,9 +499,9 @@ private struct BriefingListCard: View {
                     .lineLimit(1)
 
                 HStack(spacing: 6) {
-                    Image(systemName: "arrow.triangle.branch")
+                    Image(systemName: group.branch.lowercased() == "unknown" ? "plus.circle" : "arrow.triangle.branch")
                         .font(.system(size: 9, weight: .medium))
-                    Text(group.branch)
+                    Text(group.branch.lowercased() == "unknown" ? "Initialize Git" : group.branch)
                         .font(.system(size: 12))
                         .lineLimit(1)
                 }
@@ -674,9 +674,9 @@ private struct BriefingCard: View {
                         .lineLimit(1)
                     
                     HStack(spacing: 6) {
-                        Image(systemName: "arrow.triangle.branch")
+                        Image(systemName: group.branch.lowercased() == "unknown" ? "plus.circle" : "arrow.triangle.branch")
                             .font(.system(size: 10, weight: .medium))
-                        Text(group.branch)
+                        Text(group.branch.lowercased() == "unknown" ? "Initialize Git" : group.branch)
                             .font(.caption)
                             .lineLimit(1)
                     }

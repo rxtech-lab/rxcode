@@ -356,11 +356,18 @@ struct RootView: View {
     }
 
     private var isViewingBriefingDetail: Bool {
-        guard !briefingDetailPath.isEmpty else { return false }
         if compactClass == .compact {
-            return selectedTab == .briefing
+            // iPhone: the path holds [briefingGroupKey, …], so a non-empty
+            // path while on the Briefing tab means a detail screen is open.
+            return selectedTab == .briefing && !briefingDetailPath.isEmpty
         }
+        // iPad: the selected group lives in `selectedBriefingGroup`, not on
+        // the path — so the path is empty while sitting on briefing detail
+        // and only grows when a thread is pushed. Either signal means the
+        // user is inside the briefing flow and a desktop-driven session
+        // change must not yank them into the projects column.
         return showingBriefing
+            && (selectedBriefingGroup != nil || !briefingDetailPath.isEmpty)
     }
 
     /// Consume a pending APNs deep link (set by a notification tap) and navigate

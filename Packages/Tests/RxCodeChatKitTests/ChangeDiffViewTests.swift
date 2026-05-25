@@ -12,12 +12,11 @@ struct ChangeDiffViewTests {
         let view = ChangeDiffView(unifiedDiff: "@@ -1,3 +1,3 @@\n one\n-two\n+TWO")
         let strings = try view.inspect().findAll(ViewType.Text.self).compactMap { try? $0.string() }
 
-        // Body text strips the leading marker. Old line numbers come from the
-        // hunk header (1 = first context row, 2 = removed row); the added row
-        // gets new line number 2.
-        #expect(strings.contains("one"))
-        #expect(strings.contains("two"))
-        #expect(strings.contains("TWO"))
+        // Each diff row renders marker + body as one concatenated Text, so we
+        // look for the marker-prefixed forms here.
+        #expect(strings.contains { $0.contains("one") })
+        #expect(strings.contains { $0.contains("two") })
+        #expect(strings.contains { $0.contains("TWO") })
     }
 
     @Test("hunk diff renders removed-then-added lines")
@@ -27,7 +26,7 @@ struct ChangeDiffViewTests {
         ])
         let strings = try view.inspect().findAll(ViewType.Text.self).compactMap { try? $0.string() }
 
-        #expect(strings.contains("old"))
-        #expect(strings.contains("new"))
+        #expect(strings.contains { $0.contains("old") })
+        #expect(strings.contains { $0.contains("new") })
     }
 }

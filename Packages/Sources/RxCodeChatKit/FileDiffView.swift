@@ -21,6 +21,7 @@ public struct FileDiffView: View {
     @State private var diffLines: [DiffLine] = []
     @State private var isLoading = true
     @State private var isCopied = false
+    @State private var diffDisplay: DiffView.LineDisplay = .wrap
 
     public init(
         filePath: String,
@@ -81,6 +82,19 @@ public struct FileDiffView: View {
 
             if !diffLines.isEmpty {
                 Button {
+                    diffDisplay = (diffDisplay == .wrap) ? .scroll : .wrap
+                } label: {
+                    Image(systemName: diffDisplay == .wrap
+                          ? "arrow.left.and.right"
+                          : "text.alignleft")
+                        .font(.system(size: ClaudeTheme.messageSize(12)))
+                        .foregroundStyle(ClaudeTheme.textSecondary)
+                }
+                .buttonStyle(.borderless)
+                .focusable(false)
+                .help(diffDisplay == .wrap ? "Switch to horizontal scroll" : "Switch to wrap")
+
+                Button {
                     let raw = diffLines.map(\.text).joined(separator: "\n")
                     copyToClipboard(raw, feedback: $isCopied)
                 } label: {
@@ -134,8 +148,12 @@ public struct FileDiffView: View {
             .frame(maxWidth: .infinity)
             .background(ClaudeTheme.codeBackground)
         } else {
-            DiffView(lines: diffLines)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            DiffView(
+                lines: diffLines,
+                display: diffDisplay,
+                language: SyntaxHighlighter.language(forFilename: fileName)
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 

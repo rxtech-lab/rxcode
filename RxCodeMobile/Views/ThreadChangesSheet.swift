@@ -327,54 +327,70 @@ struct ThreadChangeDetailView: View {
     let diff: Diff
     let truncated: Bool
 
+    @State private var diffDisplay: DiffView.LineDisplay = .wrap
+
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(subtitle)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-                    .padding(.horizontal, 8)
+        VStack(alignment: .leading, spacing: 8) {
+            Text(subtitle)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .padding(.horizontal, 8)
+                .padding(.top, 8)
 
-                if truncated {
-                    Label(
-                        "Diff truncated — open this file on your Mac for the full diff.",
-                        systemImage: "scissors"
-                    )
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 8)
-                }
-
-                diffBody
+            if truncated {
+                Label(
+                    "Diff truncated — open this file on your Mac for the full diff.",
+                    systemImage: "scissors"
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 8)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 8)
+
+            diffBody
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    diffDisplay = (diffDisplay == .wrap) ? .scroll : .wrap
+                } label: {
+                    Image(systemName: diffDisplay == .wrap
+                          ? "arrow.left.and.right"
+                          : "text.alignleft")
+                }
+                .accessibilityLabel(diffDisplay == .wrap
+                                    ? "Switch to horizontal scroll"
+                                    : "Switch to wrap")
+            }
+        }
     }
 
     @ViewBuilder
     private var diffBody: some View {
+        let language = SyntaxHighlighter.language(forFilename: title)
         switch diff {
         case .unified(let text):
             if text.isEmpty {
                 emptyDiff
             } else {
-                ChangeDiffView(unifiedDiff: text)
+                ChangeDiffView(unifiedDiff: text, display: diffDisplay, language: language)
             }
         case .hunks(let hunks):
             if hunks.isEmpty {
                 emptyDiff
             } else {
-                ChangeDiffView(hunks: hunks)
+                ChangeDiffView(hunks: hunks, display: diffDisplay, language: language)
             }
         case .snapshot(let original, let modified):
             if original == modified {
                 emptyDiff
             } else {
-                ChangeDiffView(original: original, modified: modified)
+                ChangeDiffView(original: original, modified: modified, display: diffDisplay, language: language)
             }
         }
     }

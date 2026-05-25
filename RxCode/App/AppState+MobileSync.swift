@@ -492,6 +492,21 @@ extension AppState {
             return
         }
 
+        if request.operation == .initGit {
+            if let err = await GitHelper.initRepository(at: project.path) {
+                await replyBranchOpResult(
+                    request: request,
+                    ok: false,
+                    errorMessage: err,
+                    toHex: fromHex
+                )
+                return
+            }
+            await replyBranchOpResult(request: request, ok: true, errorMessage: nil, toHex: fromHex)
+            scheduleMobileSnapshotBroadcast()
+            return
+        }
+
         let trimmed = request.branch.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             await replyBranchOpResult(
@@ -514,6 +529,8 @@ extension AppState {
             case .createNew:
                 try await attachWorktree(branch: trimmed, in: window)
                 updateMobilePendingWorktree(from: window, projectID: project.id)
+            case .initGit:
+                break // handled above
             }
         } catch {
             await replyBranchOpResult(

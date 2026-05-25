@@ -11,6 +11,7 @@ struct GitStatusView: View {
     @State private var localBranches: [String] = []
     @State private var remoteBranches: [RemoteBranch] = []
     @State private var headWatcher: (any DispatchSourceFileSystemObject)?
+    @State private var isInitializingGit = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -34,6 +35,27 @@ struct GitStatusView: View {
                         .font(.system(size: ClaudeTheme.size(12)))
                         .foregroundStyle(ClaudeTheme.textTertiary)
                     Spacer()
+                    Button {
+                        initializeGit()
+                    } label: {
+                        HStack(spacing: 4) {
+                            if isInitializingGit {
+                                ProgressView().controlSize(.mini)
+                            } else {
+                                Image(systemName: "plus.circle")
+                                    .font(.system(size: ClaudeTheme.size(10)))
+                            }
+                            Text(isInitializingGit ? "Initializing…" : "Initialize Git")
+                                .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+                        }
+                        .foregroundStyle(ClaudeTheme.textPrimary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(ClaudeTheme.surfacePrimary.opacity(0.8), in: RoundedRectangle(cornerRadius: 4))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isInitializingGit)
+                    .help("Run git init in this project")
                 }
 
             case .clean(let branch):
@@ -272,6 +294,18 @@ struct GitStatusView: View {
             let fresh = await fetchGitStatus(at: path)
             guard !Task.isCancelled else { return }
             gitStatus = fresh
+        }
+    }
+
+    private func initializeGit() {
+        guard !isInitializingGit else { return }
+        let path = projectPath
+        isInitializingGit = true
+        Task {
+            _ = await GitHelper.initRepository(at: path)
+            isInitializingGit = false
+            refresh()
+            loadBranches()
         }
     }
 }

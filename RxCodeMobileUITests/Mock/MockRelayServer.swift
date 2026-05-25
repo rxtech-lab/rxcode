@@ -32,13 +32,25 @@ nonisolated final class MockRelayServer: @unchecked Sendable {
     let desktopIdentity: DeviceIdentity
     var desktopPublicKeyHex: String { desktopIdentity.publicKeyHex }
 
-    private let fixtures: MockFixtures
+    private let baseFixtures: MockFixtures
     private let queue = DispatchQueue(label: "com.idealapp.RxCodeMobile.MockRelayServer")
 
     private var listener: NWListener?
     private var connection: NWConnection?
     /// Learned from the first decrypted envelope's `from` field.
     private var mobilePublicKey: Curve25519.KeyAgreement.PublicKey?
+
+    // MARK: - Dynamic state
+    //
+    // Sessions/threads that the test created at runtime by sending a
+    // `newSessionRequest`. The mock server treats those exactly like persisted
+    // fixture rows — they ride along in every snapshot from then on so the
+    // mobile app sees a stable thread on subsequent refreshes/subscribes,
+    // letting tests assert the chat view stays populated after creation.
+    private var dynamicSessions: [SessionSummary] = []
+    private var dynamicThreadSummaries: [MobileThreadSummary] = []
+    private var dynamicMessagesBySession: [String: [ChatMessage]] = [:]
+    private var newSessionCounter = 0
 
     /// Ephemeral port the listener bound to. Valid after `start()` returns.
     private(set) var port: UInt16 = 0
@@ -47,7 +59,7 @@ nonisolated final class MockRelayServer: @unchecked Sendable {
     var relayURL: String { "ws://127.0.0.1:\(port)/ws" }
 
     init(fixtures: MockFixtures) {
-        self.fixtures = fixtures
+        self.baseFixtures = fixtures
         // Fixed 32 bytes — guaranteed a valid private key, so `try!` is safe.
         let key = try! Curve25519.KeyAgreement.PrivateKey(
             rawRepresentation: Data(Self.desktopPrivateKeyBytes)
@@ -161,10 +173,10 @@ nonisolated final class MockRelayServer: @unchecked Sendable {
 
         switch payload {
         case .requestSnapshot(let request):
-            send(.snapshot(fixtures.snapshot(activeSessionID: request.activeSessionID)),
+            send(.snapshot(currentSnapshot(activeSessionID: request.activeSessionID)),
                  on: connection)
         case .subscribeSession(let request):
-            send(.snapshot(fixtures.snapshot(activeSessionID: request.sessionID)),
+            send(.snapshot(currentSnapshot(activeSessionID: request.sessionID)),
                  on: connection)
         case .loadMoreMessages(let request):
             // The fixture window is the whole thread, so there is nothing older.
@@ -174,10 +186,93 @@ nonisolated final class MockRelayServer: @unchecked Sendable {
                 messages: [],
                 hasMore: false
             )), on: connection)
+        case .newSessionRequest(let request):
+            let sessionID = registerNewSession(for: request)
+            send(.snapshot(currentSnapshot(activeSessionID: sessionID)), on: connection)
         default:
             // pairRequest, apnsToken, userMessage, ping, … — decrypt and ignore.
             break
         }
+    }
+
+    // MARK: - Snapshot assembly
+
+    /// Builds a `snapshot` payload reflecting the current base fixtures plus
+    /// any sessions that were created at runtime via `newSessionRequest`.
+    private func currentSnapshot(activeSessionID: String?) -> SnapshotPayload {
+        let sessions = baseFixtures.sessions + dynamicSessions
+        let threadSummaries = baseFixtures.threadSummaries + dynamicThreadSummaries
+        let messages = activeSessionID.flatMap { id in
+            dynamicMessagesBySession[id] ?? baseFixtures.messagesBySession[id]
+        }
+        return SnapshotPayload(
+            projects: baseFixtures.projects,
+            sessions: sessions,
+            branchBriefings: baseFixtures.branchBriefings,
+            threadSummaries: threadSummaries,
+            settings: nil,
+            activeSessionID: activeSessionID,
+            activeSessionMessages: messages,
+            activeSessionHasMore: false,
+            projectBranches: nil,
+            usage: nil,
+            hostMetrics: nil,
+            runProfiles: nil,
+            runTasks: nil,
+            webProxy: nil
+        )
+    }
+
+    /// Materializes a fresh session + thread summary + canned transcript for a
+    /// `newSessionRequest`, mirroring what the desktop would persist before
+    /// pushing a snapshot back. Returns the new session ID so the snapshot
+    /// reply can mark it as active.
+    private func registerNewSession(for request: NewSessionRequestPayload) -> String {
+        newSessionCounter += 1
+        let sessionID = "sess-new-\(newSessionCounter)"
+        let now = Date(timeIntervalSince1970: 1_716_000_000)
+        let title = request.initialText?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .prefix(60)
+            .description ?? "New Thread"
+        // The briefing detail's branch is plumbed through `preferredBranch`, but
+        // the mock doesn't actually receive it on the wire — fall back to the
+        // first briefing's branch for that project so the new thread lands in
+        // the same briefing group the test is asserting against.
+        let branch = baseFixtures.branchBriefings
+            .first(where: { $0.projectId == request.projectID })?.branch ?? "main"
+
+        let session = SessionSummary(
+            id: sessionID,
+            projectId: request.projectID,
+            title: title,
+            updatedAt: now,
+            isPinned: false,
+            isArchived: false
+        )
+        let summary = MobileThreadSummary(
+            sessionId: sessionID,
+            projectId: request.projectID,
+            branch: branch,
+            title: title,
+            summary: "",
+            updatedAt: now
+        )
+        var transcript: [ChatMessage] = []
+        if let text = request.initialText, !text.isEmpty {
+            transcript.append(ChatMessage(role: .user, content: text, timestamp: now))
+        }
+        transcript.append(ChatMessage(
+            role: .assistant,
+            content: "Assistant reply inside \(title).",
+            isResponseComplete: true,
+            timestamp: now
+        ))
+
+        dynamicSessions.append(session)
+        dynamicThreadSummaries.append(summary)
+        dynamicMessagesBySession[sessionID] = transcript
+        return sessionID
     }
 
     /// Seal `payload` for the mobile peer and send it as a binary WS message.

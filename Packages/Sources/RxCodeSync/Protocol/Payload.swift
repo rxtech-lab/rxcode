@@ -446,6 +446,7 @@ public struct BranchOpRequestPayload: Codable, Sendable {
     public enum Operation: String, Codable, Sendable {
         case switchExisting
         case createNew
+        case initGit
     }
 
     public let clientRequestID: UUID

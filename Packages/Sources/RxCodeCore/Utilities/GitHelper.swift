@@ -67,6 +67,12 @@ public enum GitHelper {
         return trimmed.isEmpty ? nil : trimmed
     }
 
+    /// Runs `git init` at `path`. Returns nil on success or the combined git
+    /// output on failure.
+    public static func initRepository(at path: String) async -> String? {
+        await runWithError(["init"], at: path)
+    }
+
     /// Checks out an existing branch at `path`. Returns the combined git output
     /// on failure, or nil on success.
     public static func checkout(branch: String, at path: String) async -> String? {

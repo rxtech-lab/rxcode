@@ -17,6 +17,7 @@
       "selectedTests" : [
         "RxCodeMobileUITests\/testLaunchesPastPairingIntoMainUI()",
         "iPhoneNavigationUITests\/testBriefingFlowReturnsToDetailAfterBack()",
+        "iPhoneNavigationUITests\/testNewThreadFromBriefingDetailOpensChat()",
         "iPhoneNavigationUITests\/testProjectsFlowReturnsToThreadListAfterBack()"
       ],
       "target" : {

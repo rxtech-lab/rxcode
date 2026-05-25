@@ -1,6 +1,6 @@
 import SwiftUI
 import RxCodeCore
-import DiffView
+@_exported import DiffView
 
 /// Full, non-collapsing diff renderer for a single file. Used by the mobile
 /// "View Changes" detail page, which owns a whole screen and therefore renders
@@ -8,25 +8,35 @@ import DiffView
 /// set of old/new edit-hunk pairs (thread file edits).
 ///
 /// Rendering is delegated to the shared `DiffView` package so mobile and
-/// desktop share the same GitHub-style two-column gutter layout.
+/// desktop share the same GitHub-style two-column gutter layout. The display
+/// mode (`.wrap` / `.scroll`) is owned by the caller — typically wired to a
+/// toolbar button in the surrounding view.
 public struct ChangeDiffView: View {
     private let lines: [DiffLine]
+    private let display: DiffView.LineDisplay
+    private let language: String?
 
     /// Renders a raw unified diff, e.g. `git diff` output.
-    public init(unifiedDiff: String) {
+    public init(unifiedDiff: String, display: DiffView.LineDisplay = .wrap, language: String? = nil) {
         self.lines = DiffComputation.parseUnifiedDiff(unifiedDiff)
+        self.display = display
+        self.language = language
     }
 
     /// Renders old/new replacement pairs as a removed-then-added diff.
-    public init(hunks: [PreviewFile.EditHunk]) {
+    public init(hunks: [PreviewFile.EditHunk], display: DiffView.LineDisplay = .wrap, language: String? = nil) {
         self.lines = DiffComputation.buildEditDiffLines(from: hunks)
+        self.display = display
+        self.language = language
     }
 
     /// Renders the diff between a pre-edit snapshot and a post-edit snapshot.
     /// Preferred when both snapshots are available — gives an exact, thread-
     /// isolated diff with no dependence on hunk anchoring or disk state.
-    public init(original: String, modified: String) {
+    public init(original: String, modified: String, display: DiffView.LineDisplay = .wrap, language: String? = nil) {
         self.lines = DiffComputation.buildSnapshotDiffLines(original: original, current: modified)
+        self.display = display
+        self.language = language
     }
 
     /// `+/-` counts derived from the same snapshot diff that
@@ -47,6 +57,6 @@ public struct ChangeDiffView: View {
     }
 
     public var body: some View {
-        DiffView(lines: lines, showsBackground: false)
+        DiffView(lines: lines, showsBackground: false, display: display, language: language)
     }
 }

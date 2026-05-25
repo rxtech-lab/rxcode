@@ -715,7 +715,7 @@ extension AppState {
 
         // This Turn: every file edited in the thread session (SwiftData history).
         let editSummaries = threadStore.fetchFileEdits(sessionId: resolvedID).map { $0.toSummary() }
-        let turnEdits = await withTaskGroup(of: (Int, SyncFileEdit).self) { group in
+        let unboundedEdits = await withTaskGroup(of: (Int, SyncFileEdit).self) { group in
             for (index, summary) in editSummaries.enumerated() {
                 group.addTask {
                     let fullFileDiff = await Self.mobileFullFileDiff(
@@ -743,6 +743,13 @@ extension AppState {
             }
             return ordered.compactMap(\.self)
         }
+        // The relay caps each encrypted envelope at 10 MiB. A long thread of
+        // large-file edits can easily exceed that once every file's full
+        // before/after snapshot is included, and the oversize send is dropped
+        // silently — leaving the mobile sheet stuck on "Loading changes…".
+        // Drop snapshots that would push the reply past a conservative budget;
+        // mobile falls back to `fullFileDiff` / `hunks` when snapshots are nil.
+        let turnEdits = Self.applySnapshotBudget(to: unboundedEdits)
 
         func reply(ok: Bool, error: String?, uncommitted: [SyncGitChange]) async {
             await MobileSyncService.shared.send(
@@ -788,6 +795,36 @@ extension AppState {
             )
         }
         await reply(ok: true, error: nil, uncommitted: uncommitted)
+    }
+
+    /// Strips per-file `originalContent` / `modifiedContent` once the running
+    /// total of attached snapshots would push the encoded reply past the
+    /// relay's 10 MiB envelope cap. Order is preserved so earlier files in the
+    /// thread keep their snapshot-pair diff; later files fall back to the
+    /// `fullFileDiff` already attached on each `SyncFileEdit`.
+    nonisolated private static func applySnapshotBudget(to edits: [SyncFileEdit]) -> [SyncFileEdit] {
+        // Conservative budget — leaves headroom for hunks, full-file diffs,
+        // uncommitted git changes, JSON escaping, and base64 envelope overhead.
+        let totalBudget = 4 * 1024 * 1024
+        let perFileCap = 512 * 1024
+        var remaining = totalBudget
+        return edits.map { edit in
+            let pairSize = (edit.originalContent?.utf8.count ?? 0)
+                + (edit.modifiedContent?.utf8.count ?? 0)
+            guard pairSize > 0, pairSize <= perFileCap, pairSize <= remaining else {
+                return SyncFileEdit(
+                    path: edit.path,
+                    name: edit.name,
+                    containsWrite: edit.containsWrite,
+                    hunks: edit.hunks,
+                    fullFileDiff: edit.fullFileDiff,
+                    originalContent: nil,
+                    modifiedContent: nil
+                )
+            }
+            remaining -= pairSize
+            return edit
+        }
     }
 
     nonisolated private static func mobileFullFileDiff(

@@ -277,6 +277,19 @@ extension MobileAppState {
         try? await client.send(.branchOpRequest(request), toHex: pairedDesktopPubkey)
     }
 
+    /// Tell the desktop to run `git init` at the project's root. The eventual
+    /// snapshot broadcast carries the freshly-initialized branch.
+    func initProjectGit(projectID: UUID) async {
+        guard isPaired else { return }
+        let request = BranchOpRequestPayload(
+            projectID: projectID,
+            operation: .initGit,
+            branch: ""
+        )
+        inFlightBranchOps.insert(request.clientRequestID)
+        try? await client.send(.branchOpRequest(request), toHex: pairedDesktopPubkey)
+    }
+
     func clearBranchOpError() {
         lastBranchOpError = nil
     }

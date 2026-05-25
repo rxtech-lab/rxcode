@@ -538,7 +538,11 @@ extension AppState {
         do {
             switch request.operation {
             case .switchExisting:
-                try await switchToExistingBranch(trimmed, in: window)
+                // Mobile's new-thread sheet expects each thread to spawn into
+                // its own worktree — never `git checkout` against the project
+                // root, since that would silently move main onto the picked
+                // branch and skip the worktree entirely.
+                try await attachWorktreeForExistingBranch(trimmed, in: window)
                 updateMobilePendingWorktree(from: window, projectID: project.id)
             case .createNew:
                 try await attachWorktree(branch: trimmed, in: window)

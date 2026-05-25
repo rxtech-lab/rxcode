@@ -186,6 +186,50 @@ extension AppState {
         }
     }
 
+    /// Mobile new-thread flow: spawn the next thread on `branch` via a Git
+    /// worktree, not by mutating the main project repo. Reuses an existing
+    /// linked worktree for the branch when one is around; otherwise creates a
+    /// fresh worktree off the existing branch. Falls back to leaving the
+    /// pending pointer nil only when the branch is already checked out in the
+    /// main repo (`git worktree add` would refuse), so the thread still spawns
+    /// on the right branch without misrepresenting the project root as a
+    /// worktree.
+    func attachWorktreeForExistingBranch(_ branch: String, in window: WindowState) async throws {
+        guard let project = window.selectedProject else {
+            throw AppError.noProjectSelected
+        }
+        let baseRepo = URL(fileURLWithPath: project.path)
+
+        let info = try await GitWorktreeService.shared.createWorktree(
+            baseRepo: baseRepo,
+            branch: branch
+        )
+
+        let isMainRepo = info.path.standardizedFileURL == baseRepo.standardizedFileURL
+        let newPath: String? = isMainRepo ? nil : info.path.path
+        let newBranch: String? = isMainRepo ? nil : info.branch
+
+        guard let sessionId = window.currentSessionId else {
+            window.pendingWorktreePath = newPath
+            window.pendingWorktreeBranch = newBranch
+            return
+        }
+
+        sessionStates[sessionId, default: SessionStreamState()].worktreePath = newPath
+        sessionStates[sessionId, default: SessionStreamState()].worktreeBranch = newBranch
+        if let idx = allSessionSummaries.firstIndex(where: { $0.id == sessionId }) {
+            allSessionSummaries[idx].worktreePath = newPath
+            allSessionSummaries[idx].worktreeBranch = newBranch
+            threadStore.upsert(allSessionSummaries[idx])
+        }
+        if let snap = allSessionSummaries.first(where: { $0.id == sessionId }) {
+            await updateSessionMetadata(snap.makeSession()) { s in
+                s.worktreePath = newPath
+                s.worktreeBranch = newBranch
+            }
+        }
+    }
+
     /// Switch the chat to an existing branch.
     ///
     /// If the branch is already attached to a linked worktree, point the

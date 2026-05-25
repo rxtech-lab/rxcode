@@ -53,6 +53,7 @@ struct RootView: View {
                 .navigationTitle("Pair New Mac")
                 .navigationBarTitleDisplayMode(.inline)
             }
+            .mobileSheetPresentation()
         }
         .mobileDismissesKeyboardOnScroll()
     }
@@ -239,6 +240,7 @@ struct RootView: View {
         .sheet(isPresented: $showSettings) {
             MobileSettingsView()
                 .environmentObject(state)
+                .mobileSheetPresentation()
         }
         .onChange(of: selectedProject) { _, newValue in
             if newValue != nil {

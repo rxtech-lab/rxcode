@@ -297,11 +297,11 @@
 				4381E755142272EB2DAA9C96 /* AppStateProjectSwitchTests.swift */,
 				DFA0CCC02FB4CC01005991E1 /* PlanDecisionTests.swift */,
 				DFA0CCC12FB4CC01005991E1 /* PlanCardViewTests.swift */,
-					DFA0CCD52FB4CC02005991E1 /* HistoryListArchiveFilterTests.swift */,
-					5C2222222FCB200000000001 /* BriefingThreadRowTests.swift */,
-					5C3333332FCB400000000001 /* ThreadStoreThreadSummaryTests.swift */,
-					E62000002FCB000100000001 /* MemoryIntentTests.swift */,
-				);
+				DFA0CCD52FB4CC02005991E1 /* HistoryListArchiveFilterTests.swift */,
+				5C2222222FCB200000000001 /* BriefingThreadRowTests.swift */,
+				5C3333332FCB400000000001 /* ThreadStoreThreadSummaryTests.swift */,
+				E62000002FCB000100000001 /* MemoryIntentTests.swift */,
+			);
 			path = RxCodeTests;
 			sourceTree = "<group>";
 		};
@@ -711,12 +711,12 @@
 				101010112FCB100000000002 /* BranchBriefingPromptContextTests.swift in Sources */,
 				33993F0F87CF4DB09F2813A8 /* AppStateProjectSwitchTests.swift in Sources */,
 				DFA0CCD12FB4CC01005991E1 /* PlanDecisionTests.swift in Sources */,
-					DFA0CCD22FB4CC01005991E1 /* PlanCardViewTests.swift in Sources */,
-					DFA0CCE12FB4CC02005991E1 /* HistoryListArchiveFilterTests.swift in Sources */,
-					5C2222222FCB200000000002 /* BriefingThreadRowTests.swift in Sources */,
-					5C3333332FCB400000000002 /* ThreadStoreThreadSummaryTests.swift in Sources */,
-					E62000012FCB000100000001 /* MemoryIntentTests.swift in Sources */,
-				);
+				DFA0CCD22FB4CC01005991E1 /* PlanCardViewTests.swift in Sources */,
+				DFA0CCE12FB4CC02005991E1 /* HistoryListArchiveFilterTests.swift in Sources */,
+				5C2222222FCB200000000002 /* BriefingThreadRowTests.swift in Sources */,
+				5C3333332FCB400000000002 /* ThreadStoreThreadSummaryTests.swift in Sources */,
+				E62000012FCB000100000001 /* MemoryIntentTests.swift in Sources */,
+			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		DF22D8222FBE025C00E3ABFD /* Sources */ = {

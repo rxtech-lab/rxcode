@@ -8,54 +8,78 @@ import SwiftUI
 import UIKit
 import os.log
 extension MobileAppState {
+    func resolveSessionID(_ sessionID: String) -> String {
+        var current = sessionID
+        var seen: Set<String> = []
+        while let next = sessionIDRedirects[current], !seen.contains(next) {
+            seen.insert(current)
+            current = next
+        }
+        return current
+    }
+
+    func messages(sessionID: String) -> [ChatMessage] {
+        messagesBySession[resolveSessionID(sessionID)] ?? []
+    }
+
+    func sessionSummary(sessionID: String) -> SessionSummary? {
+        let resolved = resolveSessionID(sessionID)
+        return sessions.first { $0.id == resolved }
+    }
+
+    func threadSummary(sessionID: String) -> MobileThreadSummary? {
+        let resolved = resolveSessionID(sessionID)
+        return threadSummaries.first { $0.sessionId == resolved }
+    }
+
     func sendUserMessage(_ text: String, sessionID: String) async {
         guard isPaired else { return }
-        let payload = UserMessagePayload(sessionID: sessionID, text: text)
+        let payload = UserMessagePayload(sessionID: resolveSessionID(sessionID), text: text)
         try? await client.send(.userMessage(payload), toHex: pairedDesktopPubkey)
     }
 
     func cancelStream(sessionID: String) async {
         guard isPaired else { return }
-        let payload = CancelStreamPayload(sessionID: sessionID)
+        let payload = CancelStreamPayload(sessionID: resolveSessionID(sessionID))
         try? await client.send(.cancelStream(payload), toHex: pairedDesktopPubkey)
     }
 
     func removeQueuedMessage(sessionID: String, queuedID: UUID) async {
         guard isPaired else { return }
-        let payload = RemoveQueuedMessagePayload(sessionID: sessionID, queuedMessageID: queuedID)
+        let payload = RemoveQueuedMessagePayload(sessionID: resolveSessionID(sessionID), queuedMessageID: queuedID)
         try? await client.send(.removeQueuedMessage(payload), toHex: pairedDesktopPubkey)
     }
 
     /// True iff the desktop reports the given session as actively streaming.
     func isSessionStreaming(_ sessionID: String) -> Bool {
-        sessions.first(where: { $0.id == sessionID })?.isStreaming ?? false
+        sessions.first(where: { $0.id == resolveSessionID(sessionID) })?.isStreaming ?? false
     }
 
     /// True iff the desktop reports the given session as currently producing
     /// reasoning/thinking tokens.
     func isSessionThinking(_ sessionID: String) -> Bool {
-        thinkingSessions.contains(sessionID)
+        thinkingSessions.contains(resolveSessionID(sessionID))
     }
 
     /// Whether the given session has messages older than the loaded window.
     func hasMoreMessages(sessionID: String) -> Bool {
-        sessionsWithMoreMessages.contains(sessionID)
+        sessionsWithMoreMessages.contains(resolveSessionID(sessionID))
     }
 
     /// Whether an older page is currently being fetched for the given session.
     func isLoadingMoreMessages(sessionID: String) -> Bool {
-        loadingMoreSessions.contains(sessionID)
+        loadingMoreSessions.contains(resolveSessionID(sessionID))
     }
 
     /// Whether the initial message window for a newly opened thread is still
     /// being refreshed from the desktop.
     func isLoadingThreadMessages(sessionID: String) -> Bool {
-        loadingThreadMessageSessions.contains(sessionID)
+        loadingThreadMessageSessions.contains(resolveSessionID(sessionID))
     }
 
     /// Mirror of the desktop's per-session queue, surfaced via `SessionSummary`.
     func queuedMessages(sessionID: String) -> [QueuedUserMessage] {
-        sessions.first(where: { $0.id == sessionID })?.queuedMessages ?? []
+        sessions.first(where: { $0.id == resolveSessionID(sessionID) })?.queuedMessages ?? []
     }
 
     /// Ask the desktop to create a new thread. The per-thread agent config
@@ -125,7 +149,7 @@ extension MobileAppState {
     /// uses. Superseded plans (re-emitted within the same turn) are dropped so
     /// only actionable cards surface.
     func pendingPlans(sessionID: String) -> [PendingPlan] {
-        let messages = messagesBySession[sessionID] ?? []
+        let messages = messagesBySession[resolveSessionID(sessionID)] ?? []
         var plans: [PendingPlan] = []
         for message in messages {
             for block in message.blocks {
@@ -160,7 +184,7 @@ extension MobileAppState {
         guard isPaired else { return }
         let payload = PlanDecisionPayload(
             toolUseID: toolUseID,
-            sessionID: sessionID,
+            sessionID: resolveSessionID(sessionID),
             decision: action
         )
         try? await client.send(.planDecision(payload), toHex: pairedDesktopPubkey)
@@ -171,6 +195,7 @@ extension MobileAppState {
     /// Rename a thread. The local title is updated optimistically; the desktop
     /// confirms via the next snapshot / session update.
     func renameThread(sessionID: String, title: String) async {
+        let sessionID = resolveSessionID(sessionID)
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         replaceSession(sessionID: sessionID) { current in
@@ -193,6 +218,7 @@ extension MobileAppState {
     /// Archive a thread. Optimistically flips `isArchived` so the row drops out
     /// of the active list right away.
     func archiveThread(sessionID: String) async {
+        let sessionID = resolveSessionID(sessionID)
         loadingThreadMessageSessions.remove(sessionID)
         replaceSession(sessionID: sessionID) { current in
             SessionSummary(
@@ -213,6 +239,7 @@ extension MobileAppState {
 
     /// Delete a thread. Optimistically drops it from local state.
     func deleteThread(sessionID: String) async {
+        let sessionID = resolveSessionID(sessionID)
         sessions.removeAll { $0.id == sessionID }
         messagesBySession.removeValue(forKey: sessionID)
         sessionsWithMoreMessages.remove(sessionID)
@@ -223,6 +250,7 @@ extension MobileAppState {
     }
 
     func replaceSession(sessionID: String, _ transform: (SessionSummary) -> SessionSummary) {
+        let sessionID = resolveSessionID(sessionID)
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         sessions[index] = transform(sessions[index])
     }
@@ -232,6 +260,7 @@ extension MobileAppState {
         action: ThreadActionRequestPayload.Action,
         newTitle: String? = nil
     ) async {
+        let sessionID = resolveSessionID(sessionID)
         guard isPaired else {
             logger.error("[ThreadAction] not paired — dropping action=\(action.rawValue, privacy: .public)")
             return
@@ -295,6 +324,7 @@ extension MobileAppState {
     }
 
     func subscribe(to sessionID: String?) async {
+        let sessionID = sessionID.map(resolveSessionID)
         activeSessionID = sessionID
         guard isPaired else { return }
         if let sessionID {

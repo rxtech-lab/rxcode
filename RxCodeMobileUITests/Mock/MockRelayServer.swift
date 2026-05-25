@@ -187,8 +187,16 @@ nonisolated final class MockRelayServer: @unchecked Sendable {
                 hasMore: false
             )), on: connection)
         case .newSessionRequest(let request):
-            let sessionID = registerNewSession(for: request)
-            send(.snapshot(currentSnapshot(activeSessionID: sessionID)), on: connection)
+            let created = registerNewSession(for: request)
+            send(.snapshot(currentSnapshot(activeSessionID: created.pendingID)), on: connection)
+            queue.asyncAfter(deadline: .now() + 1.0) { [weak self, weak connection] in
+                guard let self, let connection else { return }
+                self.completeNewSessionRedirect(
+                    from: created.pendingID,
+                    to: created.sessionID,
+                    on: connection
+                )
+            }
         default:
             // pairRequest, apnsToken, userMessage, ping, … — decrypt and ignore.
             break
@@ -223,13 +231,15 @@ nonisolated final class MockRelayServer: @unchecked Sendable {
         )
     }
 
-    /// Materializes a fresh session + thread summary + canned transcript for a
-    /// `newSessionRequest`, mirroring what the desktop would persist before
-    /// pushing a snapshot back. Returns the new session ID so the snapshot
-    /// reply can mark it as active.
-    private func registerNewSession(for request: NewSessionRequestPayload) -> String {
+    /// Materializes a fresh pending session + thread summary + canned transcript
+    /// for a `newSessionRequest`. The real desktop first exposes a temporary
+    /// pending-mobile id, then later redirects it to the agent's real session id
+    /// after the stream result arrives; the mock mirrors that so navigation
+    /// regressions around stale ids are covered.
+    private func registerNewSession(for request: NewSessionRequestPayload) -> (pendingID: String, sessionID: String) {
         newSessionCounter += 1
         let sessionID = "sess-new-\(newSessionCounter)"
+        let pendingID = "pending-mobile-ui-\(newSessionCounter)"
         let now = Date(timeIntervalSince1970: 1_716_000_000)
         let title = request.initialText?
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -243,7 +253,7 @@ nonisolated final class MockRelayServer: @unchecked Sendable {
             .first(where: { $0.projectId == request.projectID })?.branch ?? "main"
 
         let session = SessionSummary(
-            id: sessionID,
+            id: pendingID,
             projectId: request.projectID,
             title: title,
             updatedAt: now,
@@ -251,7 +261,7 @@ nonisolated final class MockRelayServer: @unchecked Sendable {
             isArchived: false
         )
         let summary = MobileThreadSummary(
-            sessionId: sessionID,
+            sessionId: pendingID,
             projectId: request.projectID,
             branch: branch,
             title: title,
@@ -271,8 +281,54 @@ nonisolated final class MockRelayServer: @unchecked Sendable {
 
         dynamicSessions.append(session)
         dynamicThreadSummaries.append(summary)
-        dynamicMessagesBySession[sessionID] = transcript
-        return sessionID
+        dynamicMessagesBySession[pendingID] = transcript
+        return (pendingID, sessionID)
+    }
+
+    /// Completes the pending-mobile -> real-session transition that desktop
+    /// sends after the agent returns its authoritative id.
+    private func completeNewSessionRedirect(from pendingID: String, to sessionID: String, on connection: NWConnection) {
+        guard let pendingSession = dynamicSessions.first(where: { $0.id == pendingID }) else { return }
+        let finalSession = SessionSummary(
+            id: sessionID,
+            projectId: pendingSession.projectId,
+            title: pendingSession.title,
+            updatedAt: pendingSession.updatedAt,
+            isPinned: pendingSession.isPinned,
+            isArchived: pendingSession.isArchived,
+            isStreaming: false,
+            attention: pendingSession.attention,
+            progress: pendingSession.progress,
+            todos: pendingSession.todos,
+            queuedMessages: pendingSession.queuedMessages,
+            hasUncheckedCompletion: pendingSession.hasUncheckedCompletion
+        )
+
+        let pendingSummary = dynamicThreadSummaries.first { $0.sessionId == pendingID }
+        let finalThreadSummary = MobileThreadSummary(
+            sessionId: sessionID,
+            projectId: pendingSummary?.projectId ?? pendingSession.projectId,
+            branch: pendingSummary?.branch ?? "main",
+            title: pendingSummary?.title ?? pendingSession.title,
+            summary: pendingSummary?.summary ?? "",
+            updatedAt: pendingSummary?.updatedAt ?? pendingSession.updatedAt
+        )
+
+        dynamicSessions.removeAll { $0.id == pendingID || $0.id == sessionID }
+        dynamicSessions.append(finalSession)
+        dynamicThreadSummaries.removeAll { $0.sessionId == pendingID || $0.sessionId == sessionID }
+        dynamicThreadSummaries.append(finalThreadSummary)
+        dynamicMessagesBySession[sessionID] = dynamicMessagesBySession.removeValue(forKey: pendingID)
+
+        send(.sessionUpdate(SessionUpdatePayload(
+            sessionID: sessionID,
+            kind: .statusChanged,
+            message: nil,
+            isStreaming: false,
+            summary: finalSession,
+            previousSessionID: pendingID
+        )), on: connection)
+        send(.snapshot(currentSnapshot(activeSessionID: sessionID)), on: connection)
     }
 
     /// Seal `payload` for the mobile peer and send it as a binary WS message.

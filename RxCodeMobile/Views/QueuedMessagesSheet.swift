@@ -50,7 +50,6 @@ struct QueuedMessagesSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
+        .mobileSheetPresentation([.medium, .large])
     }
 }

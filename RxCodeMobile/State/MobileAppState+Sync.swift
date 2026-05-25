@@ -18,6 +18,7 @@ extension MobileAppState {
     /// settles.
     @discardableResult
     func loadMoreMessages(sessionID: String) async -> Bool {
+        let sessionID = resolveSessionID(sessionID)
         guard isPaired,
               sessionsWithMoreMessages.contains(sessionID),
               !loadingMoreSessions.contains(sessionID),
@@ -71,6 +72,7 @@ extension MobileAppState {
     /// `threadChanges` via the `threadChangesResult` payload.
     func requestThreadChanges(sessionID: String) async {
         guard isPaired else { return }
+        let sessionID = resolveSessionID(sessionID)
         let requestID = UUID()
         pendingThreadChangesID = requestID
         isLoadingThreadChanges = true
@@ -81,6 +83,42 @@ extension MobileAppState {
             if pendingThreadChangesID == requestID {
                 pendingThreadChangesID = nil
                 isLoadingThreadChanges = false
+            }
+        }
+    }
+
+    func requestRemoteFile(path: String, line: Int?) async {
+        guard isPaired else {
+            remoteFileResult = RemoteFileResultPayload(
+                clientRequestID: UUID(),
+                path: path,
+                name: URL(fileURLWithPath: path).lastPathComponent,
+                line: line,
+                ok: false,
+                errorMessage: String(localized: "Not connected to your Mac.")
+            )
+            return
+        }
+
+        let requestID = UUID()
+        pendingRemoteFileID = requestID
+        remoteFileResult = nil
+        isLoadingRemoteFile = true
+        let payload = RemoteFileRequestPayload(clientRequestID: requestID, path: path, line: line)
+        do {
+            try await client.send(.remoteFileRequest(payload), toHex: pairedDesktopPubkey)
+        } catch {
+            if pendingRemoteFileID == requestID {
+                pendingRemoteFileID = nil
+                isLoadingRemoteFile = false
+                remoteFileResult = RemoteFileResultPayload(
+                    clientRequestID: requestID,
+                    path: path,
+                    name: URL(fileURLWithPath: path).lastPathComponent,
+                    line: line,
+                    ok: false,
+                    errorMessage: String(localized: "Failed to request file: \(error.localizedDescription)")
+                )
             }
         }
     }
@@ -101,7 +139,8 @@ extension MobileAppState {
     /// Pending `AskUserQuestion` calls for one session, in the order the desktop
     /// queued them.
     func pendingQuestions(sessionID: String) -> [PendingQuestionPayload] {
-        pendingQuestions.filter { $0.sessionID == sessionID }
+        let sessionID = resolveSessionID(sessionID)
+        return pendingQuestions.filter { $0.sessionID == sessionID }
     }
 
     /// Submit the user's answers for one `AskUserQuestion` call to the desktop.

@@ -48,10 +48,12 @@ struct MobileMCPServersView: View {
         .sheet(isPresented: $showingAdd) {
             MobileMCPServerFormView(existing: nil)
                 .environmentObject(state)
+                .mobileSheetPresentation()
         }
         .sheet(item: $editing) { server in
             MobileMCPServerFormView(existing: server)
                 .environmentObject(state)
+                .mobileSheetPresentation()
         }
         .alert(
             "Remove MCP server?",

@@ -144,6 +144,12 @@ extension MobileAppState {
             pendingThreadChangesID = nil
             isLoadingThreadChanges = false
             threadChanges = result
+        case .remoteFileResult(let result):
+            guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "remote_file_result") else { return }
+            guard let pending = pendingRemoteFileID, result.clientRequestID == pending else { return }
+            pendingRemoteFileID = nil
+            isLoadingRemoteFile = false
+            remoteFileResult = result
         case .branchOpResult(let result):
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "branch_op_result") else { return }
             inFlightBranchOps.remove(result.clientRequestID)
@@ -345,6 +351,10 @@ extension MobileAppState {
 
     func applySessionUpdate(_ update: SessionUpdatePayload) {
         if let previous = update.previousSessionID, previous != update.sessionID {
+            sessionIDRedirects[previous] = update.sessionID
+            for (stale, target) in sessionIDRedirects where target == previous {
+                sessionIDRedirects[stale] = update.sessionID
+            }
             if let carried = messagesBySession.removeValue(forKey: previous) {
                 if let existing = messagesBySession[update.sessionID], !existing.isEmpty {
                     // The new session id already accumulated live messages

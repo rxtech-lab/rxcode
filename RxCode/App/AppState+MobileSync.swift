@@ -148,6 +148,20 @@ extension AppState {
         }
         mobileSyncObservers.append(threadChangesObserver)
 
+        let remoteFileObserver = center.addObserver(
+            forName: .mobileSyncRemoteFileRequested,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let fromHex = notification.userInfo?["from"] as? String,
+                  let request = notification.userInfo?["payload"] as? RemoteFileRequestPayload
+            else { return }
+            Task { @MainActor [weak self] in
+                await self?.handleMobileRemoteFileRequest(request, fromHex: fromHex)
+            }
+        }
+        mobileSyncObservers.append(remoteFileObserver)
+
         let branchOpObserver = center.addObserver(
             forName: .mobileSyncBranchOpRequested,
             object: nil,

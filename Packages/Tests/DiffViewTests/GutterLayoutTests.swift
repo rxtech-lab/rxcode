@@ -68,4 +68,18 @@ struct GutterLayoutTests {
 
         #expect(layout.columnCount == 0)
     }
+
+    @Test("horizontal scroll body expands for long right-side content")
+    func horizontalScrollBodyWidthExpandsForLongContent() {
+        let lines = [
+            DiffLine(
+                text: "+let value = \"this is a long line that should require horizontal scrolling on mobile\"",
+                kind: .added,
+                newLineNumber: 1
+            ),
+        ]
+        let layout = GutterLayout(lines: lines)
+
+        #expect(DiffView.horizontalScrollBodyWidth(for: lines, layout: layout) > 320)
+    }
 }

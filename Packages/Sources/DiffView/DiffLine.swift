@@ -6,8 +6,8 @@ import SwiftUI
 /// two-column gutter. Either gutter column may be `nil` — added rows have no
 /// pre-edit number, removed rows have no post-edit number, hunk/meta rows have
 /// neither.
-public struct DiffLine: Hashable, Sendable {
-    public enum Kind: Hashable, Sendable {
+public nonisolated struct DiffLine: Hashable, Sendable {
+    public nonisolated enum Kind: Hashable, Sendable {
         case added
         case removed
         case context

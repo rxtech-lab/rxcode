@@ -1247,6 +1247,9 @@
         }
       }
     },
+    "Couldn't Load File" : {
+
+    },
     "Couldn't load the selected image." : {
       "localizations" : {
         "en" : {
@@ -2008,6 +2011,9 @@
         }
       }
     },
+    "Failed to request file: %@" : {
+
+    },
     "Failed to request MCP servers: %@" : {
       "localizations" : {
         "en" : {
@@ -2154,6 +2160,9 @@
           }
         }
       }
+    },
+    "File preview truncated." : {
+
     },
     "Filter Skills" : {
       "localizations" : {
@@ -2854,6 +2863,9 @@
         }
       }
     },
+    "Next change" : {
+
+    },
     "No agents found." : {
       "localizations" : {
         "en" : {
@@ -3186,6 +3198,9 @@
         }
       }
     },
+    "Not connected to your Mac." : {
+
+    },
     "Nothing to Show" : {
       "localizations" : {
         "en" : {
@@ -3444,6 +3459,9 @@
           }
         }
       }
+    },
+    "Previous change" : {
+
     },
     "Privacy Report" : {
 

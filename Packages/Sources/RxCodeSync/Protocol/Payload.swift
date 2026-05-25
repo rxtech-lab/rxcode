@@ -26,6 +26,8 @@ public enum Payload: Sendable {
     case moreMessages(MoreMessagesPayload)
     case threadChangesRequest(ThreadChangesRequestPayload)
     case threadChangesResult(ThreadChangesResultPayload)
+    case remoteFileRequest(RemoteFileRequestPayload)
+    case remoteFileResult(RemoteFileResultPayload)
     case searchRequest(SearchRequestPayload)
     case searchResults(SearchResultsPayload)
     case notification(NotificationPayload)
@@ -88,6 +90,8 @@ public extension Payload {
         case .moreMessages: return "more_messages"
         case .threadChangesRequest: return "thread_changes_request"
         case .threadChangesResult: return "thread_changes_result"
+        case .remoteFileRequest: return "remote_file_request"
+        case .remoteFileResult: return "remote_file_result"
         case .searchRequest: return "search_request"
         case .searchResults: return "search_results"
         case .notification: return "notification"
@@ -675,6 +679,8 @@ extension Payload: Codable {
         case moreMessages = "more_messages"
         case threadChangesRequest = "thread_changes_request"
         case threadChangesResult = "thread_changes_result"
+        case remoteFileRequest = "remote_file_request"
+        case remoteFileResult = "remote_file_result"
         case searchRequest = "search_request"
         case searchResults = "search_results"
         case notification
@@ -741,6 +747,8 @@ extension Payload: Codable {
         case .moreMessages: self = .moreMessages(try container.decode(MoreMessagesPayload.self, forKey: .data))
         case .threadChangesRequest: self = .threadChangesRequest(try container.decode(ThreadChangesRequestPayload.self, forKey: .data))
         case .threadChangesResult: self = .threadChangesResult(try container.decode(ThreadChangesResultPayload.self, forKey: .data))
+        case .remoteFileRequest: self = .remoteFileRequest(try container.decode(RemoteFileRequestPayload.self, forKey: .data))
+        case .remoteFileResult: self = .remoteFileResult(try container.decode(RemoteFileResultPayload.self, forKey: .data))
         case .searchRequest: self = .searchRequest(try container.decode(SearchRequestPayload.self, forKey: .data))
         case .searchResults: self = .searchResults(try container.decode(SearchResultsPayload.self, forKey: .data))
         case .notification: self = .notification(try container.decode(NotificationPayload.self, forKey: .data))
@@ -803,6 +811,8 @@ extension Payload: Codable {
         case .moreMessages(let p): try container.encode(TypeKey.moreMessages.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .threadChangesRequest(let p): try container.encode(TypeKey.threadChangesRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .threadChangesResult(let p): try container.encode(TypeKey.threadChangesResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .remoteFileRequest(let p): try container.encode(TypeKey.remoteFileRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .remoteFileResult(let p): try container.encode(TypeKey.remoteFileResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .searchRequest(let p): try container.encode(TypeKey.searchRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .searchResults(let p): try container.encode(TypeKey.searchResults.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .notification(let p): try container.encode(TypeKey.notification.rawValue, forKey: .type); try container.encode(p, forKey: .data)

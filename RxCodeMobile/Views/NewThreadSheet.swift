@@ -73,7 +73,7 @@ struct NewThreadSheet: View {
                 }
             }
         }
-        .interactiveDismissDisabled(true)
+        .mobileSheetPresentation()
         .onAppear {
             seedConfigIfNeeded()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
@@ -600,7 +600,7 @@ struct CreateBranchSheet: View {
                 DispatchQueue.main.async { isFocused = true }
             }
         }
-        .presentationDetents([.medium])
+        .mobileSheetPresentation([.medium])
     }
 
     private func submit() {

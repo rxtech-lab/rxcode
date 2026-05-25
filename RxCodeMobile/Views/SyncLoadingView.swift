@@ -72,6 +72,11 @@ struct SyncLoadingView: View {
                     .padding(.top, 8)
                     .opacity(appeared ? 1 : 0)
 
+                pairNewDesktopButton
+                    .opacity(appeared ? 1 : 0)
+                    .offset(y: appeared ? 0 : 16)
+                    .padding(.top, 4)
+
                 Spacer()
                 Spacer()
             }
@@ -157,20 +162,25 @@ struct SyncLoadingView: View {
             }
             .buttonStyle(.plain)
 
-            if let onPairNewDesktop {
-                Button {
-                    onPairNewDesktop()
-                } label: {
-                    Label("Pair New Mac", systemImage: "plus.circle")
-                        .font(.body.weight(.semibold))
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 10)
-                }
-                .buttonStyle(.glass)
-                .foregroundStyle(.primary)
-            }
+            pairNewDesktopButton
         }
         .padding(.top, 8)
+    }
+
+    @ViewBuilder
+    private var pairNewDesktopButton: some View {
+        if let onPairNewDesktop {
+            Button {
+                onPairNewDesktop()
+            } label: {
+                Label("Pair New Mac", systemImage: "plus.circle")
+                    .font(.body.weight(.semibold))
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 10)
+            }
+            .buttonStyle(.glass)
+            .foregroundStyle(.primary)
+        }
     }
 
     @ViewBuilder

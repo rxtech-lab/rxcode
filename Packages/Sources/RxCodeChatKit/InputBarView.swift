@@ -86,9 +86,18 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
             .padding(.horizontal, 8)
             .padding(.top, 0)
             .padding(.bottom, 12)
-            .sheet(item: $slashDetailCommand) { cmd in CommandDetailSheet(command: cmd) }
-            .sheet(item: $textPreviewAttachment) { attachment in TextPreviewSheet(attachment: attachment) }
-            .sheet(item: $imagePreviewAttachment) { attachment in ImagePreviewSheet(attachment: attachment) }
+            .sheet(item: $slashDetailCommand) { cmd in
+                CommandDetailSheet(command: cmd)
+                    .mobileSheetPresentation()
+            }
+            .sheet(item: $textPreviewAttachment) { attachment in
+                TextPreviewSheet(attachment: attachment)
+                    .mobileSheetPresentation()
+            }
+            .sheet(item: $imagePreviewAttachment) { attachment in
+                ImagePreviewSheet(attachment: attachment)
+                    .mobileSheetPresentation()
+            }
             .onDrop(of: [.fileURL, .image], isTargeted: $isDragOver) { providers in
                 processItemProviders(providers)
                 return true

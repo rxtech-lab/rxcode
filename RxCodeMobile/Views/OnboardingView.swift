@@ -110,6 +110,7 @@ struct OnboardingView: View {
                 }
             }
             .preferredColorScheme(.dark)
+            .mobileSheetPresentation()
         }
         .photosPicker(
             isPresented: $photoPickerShown,

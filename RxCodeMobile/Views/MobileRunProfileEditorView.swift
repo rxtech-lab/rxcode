@@ -85,6 +85,7 @@ struct MobileRunProfileEditorView: View {
         }
         .sheet(item: $activePicker) { pick in
             folderPickerSheet(for: pick)
+                .mobileSheetPresentation()
         }
     }
 

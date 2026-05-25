@@ -545,6 +545,7 @@ struct BriefingView: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
+        .accessibilityIdentifier("briefing-group-actions-button")
         .help("Actions for \(project.name)")
     }
 

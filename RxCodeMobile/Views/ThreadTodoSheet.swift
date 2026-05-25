@@ -88,8 +88,7 @@ struct ThreadTodoSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
+        .mobileSheetPresentation([.medium, .large])
     }
 
     // MARK: Title header

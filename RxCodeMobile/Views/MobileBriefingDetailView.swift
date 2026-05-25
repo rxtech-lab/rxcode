@@ -47,6 +47,7 @@ struct MobileBriefingDetailView: View {
                 onOpenSession(newSessionID)
             }
             .environmentObject(state)
+            .mobileSheetPresentation()
         }
         .refreshable {
             await state.refreshSnapshot()

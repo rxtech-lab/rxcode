@@ -266,6 +266,7 @@ struct ToolResultView: View {
         }
         .sheet(isPresented: $showBashSheet) {
             BashTerminalSheet(toolCall: toolCall)
+                .mobileSheetPresentation()
         }
         .sheet(isPresented: $showDetailSheet) {
             ToolCallDetailSheet(toolCall: toolCall)
@@ -778,7 +779,8 @@ private extension View {
 #if os(iOS)
         self
             .presentationDetents([.large])
-            .presentationDragIndicator(.visible)
+            .presentationDragIndicator(.hidden)
+            .interactiveDismissDisabled(true)
 #else
         self
 #endif

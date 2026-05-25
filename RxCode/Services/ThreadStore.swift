@@ -266,6 +266,19 @@ final class ThreadStore {
         return row.toSummary()
     }
 
+    /// Return the ids of archived, non-pinned threads whose `archivedAt` is older
+    /// than `cutoff`. Caller is responsible for routing each id through the full
+    /// delete path (persistence + search service + SwiftData) — see `AppState`.
+    func staleArchivedIds(olderThan cutoff: Date) -> [String] {
+        let descriptor = FetchDescriptor<ChatThread>(
+            predicate: #Predicate { row in
+                row.isArchived == true && row.isPinned == false && row.archivedAt != nil && row.archivedAt! < cutoff
+            }
+        )
+        let rows = (try? context.fetch(descriptor)) ?? []
+        return rows.map(\.id)
+    }
+
     /// Archive all non-pinned, non-archived threads whose `updatedAt` is older than
     /// `cutoff`. Returns the ids that were archived.
     func archiveStale(olderThan cutoff: Date, now: Date = .now) -> [String] {
@@ -496,12 +509,18 @@ final class ThreadStore {
     /// to this path within this session. It's stored only on row creation —
     /// subsequent calls preserve the original snapshot rather than overwriting
     /// it, so the diff view always compares against the true thread-start state.
+    ///
+    /// `modifiedContent` is the file's contents re-read from disk immediately
+    /// after the tool_result. Unlike `originalContent` it is **always
+    /// overwritten** on subsequent edits so the "after" side reflects this
+    /// thread's most recent committed state.
     func appendFileEdit(
         sessionId: String,
         path: String,
         hunks: [PreviewFile.EditHunk],
         containsWrite: Bool,
-        originalContent: String? = nil
+        originalContent: String? = nil,
+        modifiedContent: String? = nil
     ) {
         guard !hunks.isEmpty else { return }
         let name = (path as NSString).lastPathComponent
@@ -511,6 +530,7 @@ final class ThreadStore {
             if existing.originalContent == nil, let originalContent {
                 existing.originalContent = originalContent
             }
+            existing.modifiedContent = modifiedContent
         } else {
             context.insert(ThreadFileEdit(
                 sessionId: sessionId,
@@ -518,7 +538,8 @@ final class ThreadStore {
                 name: name,
                 hunks: hunks,
                 containsWrite: containsWrite,
-                originalContent: originalContent
+                originalContent: originalContent,
+                modifiedContent: modifiedContent
             ))
         }
         save()

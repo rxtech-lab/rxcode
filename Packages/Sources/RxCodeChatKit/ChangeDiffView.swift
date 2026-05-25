@@ -1,119 +1,52 @@
 import SwiftUI
 import RxCodeCore
+import DiffView
 
 /// Full, non-collapsing diff renderer for a single file. Used by the mobile
 /// "View Changes" detail page, which owns a whole screen and therefore renders
 /// every diff line. Accepts either a raw unified diff string (git changes) or a
 /// set of old/new edit-hunk pairs (thread file edits).
 ///
-/// The +/- coloring intentionally mirrors `ToolResultView`'s inline chat diffs.
+/// Rendering is delegated to the shared `DiffView` package so mobile and
+/// desktop share the same GitHub-style two-column gutter layout.
 public struct ChangeDiffView: View {
-    private enum Source {
-        case unified(String)
-        case hunks([PreviewFile.EditHunk])
-    }
-
-    private let source: Source
+    private let lines: [DiffLine]
 
     /// Renders a raw unified diff, e.g. `git diff` output.
     public init(unifiedDiff: String) {
-        source = .unified(unifiedDiff)
+        self.lines = DiffComputation.parseUnifiedDiff(unifiedDiff)
     }
 
     /// Renders old/new replacement pairs as a removed-then-added diff.
     public init(hunks: [PreviewFile.EditHunk]) {
-        source = .hunks(hunks)
+        self.lines = DiffComputation.buildEditDiffLines(from: hunks)
+    }
+
+    /// Renders the diff between a pre-edit snapshot and a post-edit snapshot.
+    /// Preferred when both snapshots are available — gives an exact, thread-
+    /// isolated diff with no dependence on hunk anchoring or disk state.
+    public init(original: String, modified: String) {
+        self.lines = DiffComputation.buildSnapshotDiffLines(original: original, current: modified)
+    }
+
+    /// `+/-` counts derived from the same snapshot diff that
+    /// `init(original:modified:)` renders, so a sidebar row's badges always
+    /// match what the detail page shows.
+    public nonisolated static func snapshotStat(original: String, modified: String) -> (added: Int, removed: Int) {
+        let lines = DiffComputation.buildSnapshotDiffLines(original: original, current: modified)
+        var added = 0
+        var removed = 0
+        for line in lines {
+            switch line.kind {
+            case .added: added += 1
+            case .removed: removed += 1
+            default: break
+            }
+        }
+        return (added, removed)
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            switch source {
-            case .unified(let diff):
-                unifiedRows(diff)
-            case .hunks(let hunks):
-                hunkRows(hunks)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .textSelection(.enabled)
-    }
-
-    // MARK: - Unified diff
-
-    @ViewBuilder
-    private func unifiedRows(_ diff: String) -> some View {
-        let lines = diff.components(separatedBy: .newlines)
-        ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
-            diffRow(
-                lineNumber: unifiedLineNumber(line: line, offset: index),
-                text: line.isEmpty ? " " : line,
-                color: unifiedColor(line),
-                background: unifiedBackground(line)
-            )
-        }
-    }
-
-    // MARK: - Edit hunks
-
-    @ViewBuilder
-    private func hunkRows(_ hunks: [PreviewFile.EditHunk]) -> some View {
-        ForEach(Array(hunks.enumerated()), id: \.offset) { index, hunk in
-            if index > 0 {
-                Divider().padding(.vertical, 4)
-            }
-            let removed = hunk.oldString
-                .components(separatedBy: .newlines)
-                .map { ("- " + $0, ClaudeTheme.statusError, ClaudeTheme.statusError.opacity(0.06)) }
-            let added = hunk.newString
-                .components(separatedBy: .newlines)
-                .map { ("+ " + $0, ClaudeTheme.statusSuccess, ClaudeTheme.statusSuccess.opacity(0.06)) }
-            ForEach(Array((removed + added).enumerated()), id: \.offset) { offset, item in
-                diffRow(lineNumber: offset + 1, text: item.0, color: item.1, background: item.2)
-            }
-        }
-    }
-
-    // MARK: - Shared row
-
-    private func diffRow(lineNumber: Int? = nil, text: String, color: Color, background: Color) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(lineNumber.map(String.init) ?? "")
-                .font(.system(size: ClaudeTheme.messageSize(11), design: .monospaced))
-                .foregroundStyle(ClaudeTheme.textTertiary)
-                .frame(width: 34, alignment: .trailing)
-                .accessibilityIdentifier("diff-line-number")
-
-            ChatTextContentView(
-                text,
-                size: ClaudeTheme.messageSize(12),
-                design: .monospaced,
-                color: color
-            )
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 1)
-        .background(background)
-    }
-
-    private func unifiedLineNumber(line: String, offset: Int) -> Int? {
-        if line.hasPrefix("diff ") || line.hasPrefix("index ") || line.hasPrefix("---") || line.hasPrefix("+++") || line.hasPrefix("@@") {
-            return nil
-        }
-        return offset + 1
-    }
-
-    private func unifiedColor(_ line: String) -> Color {
-        if line.hasPrefix("+"), !line.hasPrefix("+++") { return ClaudeTheme.statusSuccess }
-        if line.hasPrefix("-"), !line.hasPrefix("---") { return ClaudeTheme.statusError }
-        if line.hasPrefix("@@") { return ClaudeTheme.accent }
-        return ClaudeTheme.textPrimary
-    }
-
-    private func unifiedBackground(_ line: String) -> Color {
-        if line.hasPrefix("+"), !line.hasPrefix("+++") { return ClaudeTheme.statusSuccess.opacity(0.06) }
-        if line.hasPrefix("-"), !line.hasPrefix("---") { return ClaudeTheme.statusError.opacity(0.06) }
-        if line.hasPrefix("@@") { return ClaudeTheme.accent.opacity(0.08) }
-        return Color.clear
+        DiffView(lines: lines, showsBackground: false)
     }
 }

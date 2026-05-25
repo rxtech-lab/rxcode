@@ -392,19 +392,46 @@ public struct SyncFileEdit: Codable, Sendable, Identifiable {
     /// Optional full-file before/after diff for mobile detail views. Older
     /// desktop builds omit this and mobile falls back to `hunks`.
     public let fullFileDiff: String?
+    /// Pre-edit snapshot ("before" side of the snapshot-pair diff). Optional —
+    /// older desktop builds omit it.
+    public let originalContent: String?
+    /// Post-edit snapshot captured after this thread's most recent edit ("after"
+    /// side of the snapshot-pair diff). When both `originalContent` and
+    /// `modifiedContent` are present, mobile renders the diff directly from
+    /// them and ignores `fullFileDiff` / `hunks`.
+    public let modifiedContent: String?
 
     public init(
         path: String,
         name: String,
         containsWrite: Bool,
         hunks: [SyncEditHunk],
-        fullFileDiff: String? = nil
+        fullFileDiff: String? = nil,
+        originalContent: String? = nil,
+        modifiedContent: String? = nil
     ) {
         self.path = path
         self.name = name
         self.containsWrite = containsWrite
         self.hunks = hunks
         self.fullFileDiff = fullFileDiff
+        self.originalContent = originalContent
+        self.modifiedContent = modifiedContent
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case path, name, containsWrite, hunks, fullFileDiff, originalContent, modifiedContent
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.path = try c.decode(String.self, forKey: .path)
+        self.name = try c.decode(String.self, forKey: .name)
+        self.containsWrite = try c.decode(Bool.self, forKey: .containsWrite)
+        self.hunks = try c.decode([SyncEditHunk].self, forKey: .hunks)
+        self.fullFileDiff = try c.decodeIfPresent(String.self, forKey: .fullFileDiff)
+        self.originalContent = try c.decodeIfPresent(String.self, forKey: .originalContent)
+        self.modifiedContent = try c.decodeIfPresent(String.self, forKey: .modifiedContent)
     }
 }
 

@@ -92,6 +92,48 @@ extension AppState {
         logger.info("Auto-archived \(archivedIds.count) chats older than \(self.archiveRetentionDays) days")
     }
 
+    /// Apply the auto-delete policy: permanently delete archived, non-pinned
+    /// chats whose `archivedAt` is older than `deleteRetentionDays`. Threads
+    /// must be archived first — this never deletes active chats. Runs after
+    /// `autoArchiveExpiredSessionsIfNeeded` at app launch.
+    func autoDeleteExpiredSessionsIfNeeded() async {
+        guard autoDeleteEnabled else { return }
+        let cutoff = Calendar.current.date(
+            byAdding: .day,
+            value: -deleteRetentionDays,
+            to: Date()
+        ) ?? Date()
+        let staleIds = Set(threadStore.staleArchivedIds(olderThan: cutoff))
+        guard !staleIds.isEmpty else { return }
+
+        let toDelete = allSessionSummaries.filter { staleIds.contains($0.id) }
+        for summary in toDelete {
+            let cwd = summary.worktreePath
+                ?? projects.first(where: { $0.id == summary.projectId })?.path
+            do {
+                try await persistence.deleteSession(
+                    projectId: summary.projectId,
+                    sessionId: summary.id,
+                    origin: summary.origin,
+                    cwd: cwd
+                )
+            } catch {
+                logger.error("Auto-delete: failed to remove session \(summary.id): \(error.localizedDescription)")
+            }
+        }
+
+        allSessionSummaries.removeAll { staleIds.contains($0.id) }
+        for id in staleIds {
+            threadStore.delete(id: id)
+            sessionStates.removeValue(forKey: id)
+        }
+        let snapshotIds = staleIds
+        Task.detached(priority: .utility) { [searchService] in
+            for id in snapshotIds { await searchService.removeThread(id: id) }
+        }
+        logger.info("Auto-deleted \(staleIds.count) archived chats older than \(self.deleteRetentionDays) days")
+    }
+
     /// Persist a metadata-only edit (title, pin, etc.) routing by session
     /// origin. cliBacked sessions go to the sidecar; legacy sessions need the
     /// full message log to be re-saved alongside the change.

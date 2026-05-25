@@ -730,7 +730,9 @@ extension AppState {
                         hunks: summary.hunks.map {
                             SyncEditHunk(oldString: $0.oldString, newString: $0.newString)
                         },
-                        fullFileDiff: fullFileDiff
+                        fullFileDiff: fullFileDiff,
+                        originalContent: summary.originalContent,
+                        modifiedContent: summary.modifiedContent
                     ))
                 }
             }

@@ -10,6 +10,7 @@ let package = Package(
         .library(name: "RxCodeCore", targets: ["RxCodeCore"]),
         .library(name: "RxCodeChatKit", targets: ["RxCodeChatKit"]),
         .library(name: "RxCodeSync", targets: ["RxCodeSync"]),
+        .library(name: "DiffView", targets: ["DiffView"]),
     ],
     dependencies: [
         .package(url: "https://github.com/nalexn/ViewInspector", from: "0.10.0"),
@@ -31,6 +32,7 @@ let package = Package(
         .target(
             name: "RxCodeChatKit",
             dependencies: [
+                "DiffView",
                 "MessageList",
                 "RxCodeCore",
                 .product(name: "Textual", package: "textual"),
@@ -48,6 +50,19 @@ let package = Package(
             name: "RxCodeSync",
             dependencies: ["RxCodeCore"],
             path: "Sources/RxCodeSync"
+        ),
+        .target(
+            name: "DiffView",
+            dependencies: ["RxCodeCore"],
+            path: "Sources/DiffView",
+            swiftSettings: [
+                .defaultIsolation(MainActor.self),
+            ]
+        ),
+        .testTarget(
+            name: "DiffViewTests",
+            dependencies: ["DiffView", "RxCodeCore"],
+            path: "Tests/DiffViewTests"
         ),
         .testTarget(
             name: "MessageListTests",

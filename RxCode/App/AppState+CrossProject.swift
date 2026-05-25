@@ -933,11 +933,17 @@ extension AppState {
 
     // MARK: - Editing File Snapshot Capture
 
-    /// Detects Edit/MultiEdit/Write tool_use events and kicks off a detached
-    /// read of every target file's current on-disk contents. The read result
-    /// is cached on `state.editingFileSnapshotTasks` keyed by absolute path,
-    /// and only the FIRST tool_use per (session, path) starts a read — later
-    /// edits in the same thread keep diffing against the original snapshot.
+    /// Detects Edit/MultiEdit/Write tool_use events and reads the target
+    /// file's current contents **synchronously** so the pre-edit snapshot is
+    /// captured before the CLI starts executing the tool. The result is cached
+    /// on `state.editingFileSnapshots` keyed by absolute path; only the FIRST
+    /// tool_use per (session, path) reads — later edits in the same thread
+    /// keep diffing against the original snapshot. A previous implementation
+    /// did this read on a detached task, which lost the race for large files
+    /// and produced an `originalContent` identical to `modifiedContent`,
+    /// collapsing the diff. Reading synchronously here is safe because we run
+    /// at content_block_stop / assistant tool_use arrival — the CLI has only
+    /// just finished emitting the tool_use and has not yet executed it.
     ///
     /// Handles both the Claude/Anthropic shape (`file_path` in input) and the
     /// Codex `changes: [{ path, diff }]` shape. Tools that don't touch files
@@ -964,11 +970,8 @@ extension AppState {
             }
         }
 
-        for path in paths where state.editingFileSnapshotTasks[path] == nil {
-            let capturedPath = path
-            state.editingFileSnapshotTasks[path] = Task.detached(priority: .userInitiated) {
-                try? String(contentsOfFile: capturedPath, encoding: .utf8)
-            }
+        for path in paths where state.editingFileSnapshots[path] == nil {
+            state.editingFileSnapshots[path] = try? String(contentsOfFile: path, encoding: .utf8)
         }
     }
 

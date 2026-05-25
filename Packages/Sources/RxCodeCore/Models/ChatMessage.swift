@@ -358,22 +358,28 @@ public struct FileEditSummary: Identifiable, Sendable {
     /// not surgically edited.
     public let containsWrite: Bool
     /// File contents captured at the moment this thread first touched the path.
-    /// When present, the diff view uses it as the "before" side and the
-    /// current file on disk as the "after" side, instead of reconstructing
-    /// from hunks.
+    /// Fixed once set — never overwritten by subsequent edits in the same thread.
+    /// Acts as the "before" side of the snapshot-pair diff.
     public let originalContent: String?
+    /// File contents re-read from disk after each successful edit tool_result
+    /// in this thread. Overwritten on every subsequent edit so the "after"
+    /// side always reflects this thread's most recent committed state,
+    /// independent of any concurrent edits from other threads/agents.
+    public let modifiedContent: String?
 
     public init(
         path: String,
         name: String,
         hunks: [PreviewFile.EditHunk],
         containsWrite: Bool,
-        originalContent: String? = nil
+        originalContent: String? = nil,
+        modifiedContent: String? = nil
     ) {
         self.path = path
         self.name = name
         self.hunks = hunks
         self.containsWrite = containsWrite
         self.originalContent = originalContent
+        self.modifiedContent = modifiedContent
     }
 }

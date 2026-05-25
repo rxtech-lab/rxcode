@@ -7,6 +7,9 @@ struct MobileBriefingDetailView: View {
     @EnvironmentObject private var state: MobileAppState
     @Namespace private var glassNamespace
     let groupKey: BriefingGroupKey
+    var onOpenSession: (String) -> Void = { _ in }
+
+    @State private var showingNewThread = false
 
     var body: some View {
         ScrollView {
@@ -23,6 +26,24 @@ struct MobileBriefingDetailView: View {
         .accessibilityIdentifier("briefing-detail-screen")
         .navigationTitle(projectName)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showingNewThread = true
+                } label: {
+                    Image(systemName: "square.and.pencil")
+                        .font(.system(size: 16, weight: .medium))
+                }
+                .accessibilityLabel("New Thread")
+                .accessibilityIdentifier("briefing-detail-new-thread")
+            }
+        }
+        .sheet(isPresented: $showingNewThread) {
+            NewThreadSheet(projectID: groupKey.projectId) { newSessionID in
+                onOpenSession(newSessionID)
+            }
+            .environmentObject(state)
+        }
         .refreshable {
             await state.refreshSnapshot()
         }

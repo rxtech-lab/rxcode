@@ -321,6 +321,16 @@
         }
       }
     },
+    "%lld day%@ after archiving" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld day%2$@ after archiving"
+          }
+        }
+      }
+    },
     "%lld day%@ of inactivity" : {
       "localizations" : {
         "en" : {
@@ -1950,6 +1960,12 @@
           }
         }
       }
+    },
+    "Auto-delete" : {
+
+    },
+    "Auto-delete archived chats" : {
+
     },
     "Auto-detected" : {
       "localizations" : {
@@ -4108,6 +4124,9 @@
           }
         }
       }
+    },
+    "Delete after" : {
+
     },
     "Delete All" : {
       "localizations" : {
@@ -8667,6 +8686,9 @@
         }
       }
     },
+    "Offline" : {
+
+    },
     "OK" : {
       "localizations" : {
         "en" : {
@@ -8688,6 +8710,9 @@
           }
         }
       }
+    },
+    "Online" : {
+
     },
     "Only enable Skip Permissions on projects you fully trust." : {
       "extractionState" : "stale",
@@ -9160,6 +9185,9 @@
           }
         }
       }
+    },
+    "Permanently delete archived chats after the retention window. Pinned chats are never auto-deleted. This cannot be undone." : {
+
     },
     "Permission Mode" : {
       "localizations" : {

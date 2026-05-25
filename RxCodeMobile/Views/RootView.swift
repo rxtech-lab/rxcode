@@ -186,7 +186,10 @@ struct RootView: View {
     private var phoneTabs: some View {
         TabView(selection: $selectedTab) {
             NavigationStack(path: $briefingDetailPath) {
-                MobileBriefingView(onCloseChat: { closeBriefingChat() })
+                MobileBriefingView(
+                    onCloseChat: { closeBriefingChat() },
+                    onOpenSession: { briefingDetailPath.append($0) }
+                )
             }
             .tabItem {
                 Label("Briefing", systemImage: "doc.text")
@@ -258,7 +261,10 @@ struct RootView: View {
             NavigationStack(path: $briefingDetailPath) {
                 Group {
                     if let groupKey = selectedBriefingGroup {
-                        MobileBriefingDetailView(groupKey: groupKey)
+                        MobileBriefingDetailView(
+                            groupKey: groupKey,
+                            onOpenSession: { briefingDetailPath.append($0) }
+                        )
                     } else {
                         ContentUnavailableView {
                             Label("No Selection", systemImage: "doc.text")

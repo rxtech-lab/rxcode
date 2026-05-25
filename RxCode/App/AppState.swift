@@ -94,15 +94,16 @@ struct SessionStreamState {
     /// from kicking off duplicate generations on the same session.
     var titleGenerationTriggered: Bool = false
 
-    /// File-content snapshots captured the first time this session's stream sees
-    /// an Edit/MultiEdit/Write tool_use for a given path. Used by the "This
-    /// thread" diff inspector so the rendered diff compares (file-before-this-
-    /// thread-touched-it) vs (file-on-disk-now), instead of trying to reverse-
-    /// apply hunks against the current file — which breaks when concurrent
-    /// agents modify the same file. The task is kicked off at tool_use time so
-    /// the read can race ahead of the actual file write. The persistence layer
-    /// awaits the task when the matching tool_result lands.
-    var editingFileSnapshotTasks: [String: Task<String?, Never>] = [:]
+    /// File-content snapshots captured the first time this session's stream
+    /// sees an Edit/MultiEdit/Write tool_use for a given path. Read
+    /// synchronously at capture time (content_block_stop / assistant tool_use
+    /// arrival) so we read the pre-edit state before the CLI executes the
+    /// tool — large files used to lose the race when the read was async and
+    /// `originalContent` would end up matching `modifiedContent`. Absence of a
+    /// key means the path hasn't been touched yet in this session; the value
+    /// can still be `nil` when the read failed (e.g. file does not exist for
+    /// a new-file Write).
+    var editingFileSnapshots: [String: String?] = [:]
 }
 
 enum SummarizationProvider: String, CaseIterable, Identifiable {
@@ -379,6 +380,25 @@ final class AppState {
                 return
             }
             UserDefaults.standard.set(archiveRetentionDays, forKey: "archiveRetentionDays")
+        }
+    }
+
+    /// Auto-delete archived chats whose `archivedAt` is older than this many days.
+    /// Pinned chats are never auto-deleted. Disabled by default — destructive.
+    static let defaultDeleteRetentionDays = 30
+
+    var autoDeleteEnabled: Bool = (UserDefaults.standard.object(forKey: "autoDeleteEnabled") as? Bool) ?? false {
+        didSet { UserDefaults.standard.set(autoDeleteEnabled, forKey: "autoDeleteEnabled") }
+    }
+
+    var deleteRetentionDays: Int = (UserDefaults.standard.object(forKey: "deleteRetentionDays") as? Int) ?? AppState.defaultDeleteRetentionDays {
+        didSet {
+            let clamped = max(1, min(365, deleteRetentionDays))
+            if clamped != deleteRetentionDays {
+                deleteRetentionDays = clamped
+                return
+            }
+            UserDefaults.standard.set(deleteRetentionDays, forKey: "deleteRetentionDays")
         }
     }
 

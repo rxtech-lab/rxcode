@@ -7,7 +7,7 @@ struct ToolResultView: View {
     @State private var isExpanded: Bool
     @State private var isDiffExpanded = false
     @State private var showBashSheet = false
-    @State private var showMCPDetailSheet = false
+    @State private var showDetailSheet = false
     @Environment(WindowState.self) private var windowState
 
     /// Lowercased tool name (avoids repeated lowercased() calls)
@@ -197,14 +197,18 @@ struct ToolResultView: View {
     private var minimalBody: some View {
         VStack(alignment: .leading, spacing: 4) {
             Button {
-                if isMCPTool {
-                    showMCPDetailSheet = true
-                } else if isBashTool, toolCall.result != nil {
+                if isBashTool, toolCall.result != nil {
                     showBashSheet = true
+                } else if isMCPTool {
+                    showDetailSheet = true
                 } else {
+#if os(iOS)
+                    showDetailSheet = true
+#else
                     withAnimation(.easeInOut(duration: 0.2)) {
                         isExpanded.toggle()
                     }
+#endif
                 }
             } label: {
                 HStack(spacing: 6) {
@@ -235,6 +239,7 @@ struct ToolResultView: View {
             }
             .buttonStyle(.plain)
 
+#if os(macOS)
             if isExpanded, !isBashTool, !isMCPTool, let result = toolCall.result, !result.isEmpty {
                 ScrollView {
                     ChatTextContentView(
@@ -248,13 +253,14 @@ struct ToolResultView: View {
                 .frame(maxHeight: 200)
                 .padding(.leading, 20)
             }
+#endif
         }
         .sheet(isPresented: $showBashSheet) {
             BashTerminalSheet(toolCall: toolCall)
         }
-        .sheet(isPresented: $showMCPDetailSheet) {
-            MCPToolDetailSheet(toolCall: toolCall)
-                .mcpToolDetailSheetPresentation()
+        .sheet(isPresented: $showDetailSheet) {
+            ToolCallDetailSheet(toolCall: toolCall)
+                .toolCallDetailSheetPresentation()
         }
     }
 
@@ -616,14 +622,14 @@ struct ToolResultView: View {
     }
 }
 
-struct MCPToolDetailSheet: View {
+struct ToolCallDetailSheet: View {
     let toolCall: ToolCall
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
-                Image(systemName: "puzzlepiece.extension")
+                Image(systemName: iconName)
                     .font(.system(size: ClaudeTheme.messageSize(16), weight: .medium))
                     .foregroundStyle(ClaudeTheme.accent)
 
@@ -660,17 +666,40 @@ struct MCPToolDetailSheet: View {
                 .padding(16)
             }
         }
-        .mcpToolDetailFrame()
+        .toolCallDetailFrame()
         .background(ClaudeTheme.surfacePrimary)
     }
 
+    private var toolNameLower: String { toolCall.name.lowercased() }
+    private var isMCP: Bool { ToolCategory(toolName: toolCall.name) == .mcp }
+
+    private var iconName: String {
+        if isMCP { return "puzzlepiece.extension" }
+        switch toolNameLower {
+        case "agent":        return "cpu"
+        case "read":         return "doc.text"
+        case "grep", "glob": return "magnifyingglass"
+        case "write":        return "square.and.pencil"
+        case "edit",
+             "multiedit",
+             "multi_edit":   return "pencil"
+        case "bash":         return "terminal"
+        case "notebookedit": return "book.and.wrench"
+        case "skill":        return "sparkles"
+        default:             return ToolCategory(toolName: toolNameLower).sfSymbol
+        }
+    }
+
     private var displayName: String {
-        if toolCall.name.lowercased() == "mcptoolcall" {
-            return "MCP tool call"
+        if isMCP {
+            if toolNameLower == "mcptoolcall" {
+                return "MCP tool call"
+            }
+            return toolCall.name
+                .replacingOccurrences(of: "mcp__", with: "")
+                .replacingOccurrences(of: "__", with: " / ")
         }
         return toolCall.name
-            .replacingOccurrences(of: "mcp__", with: "")
-            .replacingOccurrences(of: "__", with: " / ")
     }
 
     private var statusText: String {
@@ -714,7 +743,7 @@ struct MCPToolDetailSheet: View {
 
 private extension View {
     @ViewBuilder
-    func mcpToolDetailSheetPresentation() -> some View {
+    func toolCallDetailSheetPresentation() -> some View {
 #if os(iOS)
         self
             .presentationDetents([.large])
@@ -725,7 +754,7 @@ private extension View {
     }
 
     @ViewBuilder
-    func mcpToolDetailFrame() -> some View {
+    func toolCallDetailFrame() -> some View {
 #if os(macOS)
         self.frame(minWidth: 640, minHeight: 460)
 #else

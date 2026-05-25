@@ -138,7 +138,7 @@ struct ThreadChangesSheet: View {
                         path: edit.path,
                         badge: edit.containsWrite ? "W" : "M",
                         badgeColor: edit.containsWrite ? .blue : .orange,
-                        stat: hunkStat(edit.hunks)
+                        stat: turnStat(edit)
                     )
                 }
             }
@@ -148,12 +148,40 @@ struct ThreadChangesSheet: View {
     }
 
     private func turnDiff(_ edit: SyncFileEdit) -> ThreadChangeDetailView.Diff {
+        // Prefer the snapshot pair, but only when it actually yields a diff —
+        // if `original == modified` (e.g. the original snapshot lost its
+        // capture race on a large file) fall through so the user still sees
+        // the change as full-file diff or hunks.
+        if let modified = edit.modifiedContent,
+           let original = edit.originalContent,
+           original != modified {
+            return .snapshot(original: original, modified: modified)
+        }
+        if let modified = edit.modifiedContent,
+           edit.originalContent == nil,
+           !modified.isEmpty {
+            return .snapshot(original: "", modified: modified)
+        }
         if let fullFileDiff = edit.fullFileDiff, !fullFileDiff.isEmpty {
             return .unified(fullFileDiff)
         }
         return .hunks(edit.hunks.map {
             PreviewFile.EditHunk(oldString: $0.oldString, newString: $0.newString)
         })
+    }
+
+    /// Sidebar `+/-` count. Prefers a fresh snapshot-pair diff when both
+    /// snapshots are present so the row's numbers match what the detail page
+    /// renders; falls back to hunk-newline counting for legacy edits or when
+    /// the snapshot pair collapsed to zero (race-loss on the original capture).
+    private func turnStat(_ edit: SyncFileEdit) -> (added: Int, removed: Int) {
+        if let modified = edit.modifiedContent {
+            let stat = ChangeDiffView.snapshotStat(original: edit.originalContent ?? "", modified: modified)
+            if stat.added > 0 || stat.removed > 0 {
+                return stat
+            }
+        }
+        return hunkStat(edit.hunks)
     }
 
     // MARK: - Uncommitted
@@ -291,6 +319,7 @@ struct ThreadChangeDetailView: View {
     enum Diff {
         case unified(String)
         case hunks([PreviewFile.EditHunk])
+        case snapshot(original: String, modified: String)
     }
 
     let title: String
@@ -340,6 +369,12 @@ struct ThreadChangeDetailView: View {
                 emptyDiff
             } else {
                 ChangeDiffView(hunks: hunks)
+            }
+        case .snapshot(let original, let modified):
+            if original == modified {
+                emptyDiff
+            } else {
+                ChangeDiffView(original: original, modified: modified)
             }
         }
     }

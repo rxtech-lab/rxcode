@@ -35,17 +35,16 @@ jobs:
         with:
           xcode-version: latest-stable
 
-      - name: Install xcpretty
-        run: gem install xcpretty
-
       - name: Swift version
         run: swift --version
 
       - name: Run package tests
         working-directory: Packages
-        run: |
-          set -o pipefail
-          swift test 2>&1 | xcpretty
+        # No xcpretty: it doesn't understand swift-testing's output and
+        # the non-ASCII record marker (􁁛) crashes xcpretty 0.4.1 on Ruby 4
+        # with "invalid byte sequence in US-ASCII", which pipefail turns
+        # into an exit-1 even when every test passed.
+        run: swift test
 
   test-xcode:
     name: xcodebuild test (RxCode)
@@ -226,22 +225,14 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Set up JDK 17
-        uses: useblacksmith/setup-java@v5
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
 
       - name: Setup Gradle
-        uses: useblacksmith/setup-gradle@v6
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Assemble debug APK
         working-directory: RxCodeAndroid
         run: ./gradlew assembleDebug --stacktrace
-
-      - name: Upload debug APK
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: RxCodeAndroid-debug-apk
-          path: RxCodeAndroid/app/build/outputs/apk/debug/*.apk
-          retention-days: 7

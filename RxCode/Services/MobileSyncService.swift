@@ -523,10 +523,22 @@ final class MobileSyncService: ObservableObject {
     /// the very first send after launch isn't suppressed. Peers in `.offline`
     /// are skipped on the relay socket; APNs fan-out runs separately and is
     /// not gated here.
+    ///
+    /// Fan-out is parallel: each peer's socket write is awaited concurrently
+    /// so a slow remote-relay RTT for one peer does not stall delivery to the
+    /// others. The previous serial loop made a 5-peer broadcast cost roughly
+    /// 5× the slowest relay RTT.
     private func broadcastToAllClients(_ payload: RxCodeSync.Payload) async {
-        for device in pairedDevices where device.onlineState != .offline {
-            let target = clientForPeer(device.pubkeyHex)
-            try? await target.send(payload, toHex: device.pubkeyHex)
+        let targets: [(pubkeyHex: String, client: SyncClient)] = pairedDevices
+            .filter { $0.onlineState != .offline }
+            .map { ($0.pubkeyHex, clientForPeer($0.pubkeyHex)) }
+        guard !targets.isEmpty else { return }
+        await withTaskGroup(of: Void.self) { group in
+            for target in targets {
+                group.addTask {
+                    try? await target.client.send(payload, toHex: target.pubkeyHex)
+                }
+            }
         }
     }
 
@@ -541,247 +553,6 @@ final class MobileSyncService: ObservableObject {
         Task {
             await broadcastToAllClients(.notification(payload))
             await fanoutPush(payload)
-        }
-    }
-
-    func fanoutPush(_ payload: NotificationPayload) async {
-        let devices = pairedDevices.filter { Self.pushToken(for: $0)?.isEmpty == false }
-        guard !devices.isEmpty else { return }
-
-        for device in devices {
-            guard let relayURLString = device.relayURL,
-                  let relayURL = URL(string: relayURLString),
-                  let pushURL = Self.pushEndpointURL(from: relayURL) else {
-                logger.error("[Push] cannot derive push endpoint for device=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
-                continue
-            }
-
-            do {
-                switch Self.pushProvider(for: device) {
-                case "fcm":
-                    try await sendFCMPush(payload, to: device, pushURL: pushURL)
-                default:
-                    try await sendAPNsPush(payload, to: device, pushURL: pushURL)
-                }
-            } catch {
-                logger.error("[Push] fan-out failed provider=\(Self.pushProvider(for: device), privacy: .public) deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public): \(error.localizedDescription, privacy: .public)")
-            }
-        }
-    }
-
-    /// Best-effort APNs fan-out: submit one encrypted alert per paired device
-    /// that has registered a push token. Per-device failures are logged and
-    /// swallowed — the live channel above remains the primary path.
-    func fanoutAPNs(_ payload: NotificationPayload) async {
-        let devices = pairedDevices.filter { ($0.apnsToken?.isEmpty == false) }
-        guard !devices.isEmpty else { return }
-
-        for device in devices {
-            // Find the relay URL for this device
-            guard let relayURLString = device.relayURL,
-                  let relayURL = URL(string: relayURLString),
-                  let pushURL = Self.pushEndpointURL(from: relayURL) else {
-                logger.error("[APNs] cannot derive push endpoint for device=\(String(device.pubkeyHex.prefix(12)), privacy: .public)")
-                continue
-            }
-            do {
-                try await sendAPNsPush(payload, to: device, pushURL: pushURL)
-            } catch {
-                logger.error("[APNs] fan-out failed deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public): \(error.localizedDescription, privacy: .public)")
-            }
-        }
-    }
-
-    /// Encrypt `payload` for one device and POST it to the relay `/push`
-    /// endpoint. Throws on a missing token, unknown peer, or relay/APNs
-    /// rejection so callers can log the specific failure.
-    func sendAPNsPush(_ payload: NotificationPayload, to device: PairedDevice, pushURL: URL) async throws {
-        guard let token = Self.apnsToken(for: device), !token.isEmpty else {
-            throw MobilePushError.missingDeviceToken
-        }
-        // Find the client for this device's relay
-        let deviceClient = clientForDevice(device)
-        guard let peer = await deviceClient?.peer(forHex: device.pubkeyHex) else {
-            throw MobilePushError.unknownPeer
-        }
-
-        let plaintext = AlertPlaintext(
-            title: payload.title,
-            body: payload.body,
-            sessionID: payload.sessionID,
-            projectID: payload.projectID,
-            kind: payload.kind.rawValue
-        )
-        let encrypted = try APNsCrypto.seal(
-            plaintext: plaintext,
-            sender: identity.privateKey,
-            recipient: peer
-        )
-        let encryptedAlertData = try JSONEncoder().encode(encrypted)
-        let body = APNsPushRequest(
-            provider: nil,
-            deviceToken: token,
-            encryptedAlert: encryptedAlertData.base64EncodedString(),
-            category: payload.kind.rawValue,
-            collapseID: Self.notificationCollapseID(for: payload, device: device),
-            apnsEnvironment: Self.apnsEnvironmentForPush(device)
-        )
-
-        var request = URLRequest(url: pushURL)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(body)
-
-        logger.info("[APNs] sending push kind=\(payload.kind.rawValue, privacy: .public) deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public) tokenPrefix=\(String(token.prefix(12)), privacy: .public)")
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw MobilePushError.relayRejected(status: -1, body: "No HTTP response")
-        }
-        guard (200..<300).contains(http.statusCode) else {
-            throw MobilePushError.relayRejected(
-                status: http.statusCode,
-                body: Self.responseBodyString(data)
-            )
-        }
-        let pushResponse = try JSONDecoder().decode(APNsPushResponse.self, from: data)
-        guard (200..<300).contains(pushResponse.statusCode) else {
-            throw MobilePushError.apnsRejected(
-                status: pushResponse.statusCode,
-                reason: pushResponse.reason ?? "Unknown error"
-            )
-        }
-    }
-
-    func sendFCMPush(_ payload: NotificationPayload, to device: PairedDevice, pushURL: URL) async throws {
-        guard let token = Self.pushToken(for: device), !token.isEmpty else {
-            throw MobilePushError.missingDeviceToken
-        }
-        let deviceClient = clientForDevice(device)
-        guard let peer = await deviceClient?.peer(forHex: device.pubkeyHex) else {
-            throw MobilePushError.unknownPeer
-        }
-
-        let plaintext = AlertPlaintext(
-            title: payload.title,
-            body: payload.body,
-            sessionID: payload.sessionID,
-            projectID: payload.projectID,
-            kind: payload.kind.rawValue
-        )
-        let encrypted = try APNsCrypto.seal(
-            plaintext: plaintext,
-            sender: identity.privateKey,
-            recipient: peer
-        )
-        let encryptedAlertData = try JSONEncoder().encode(encrypted)
-        let body = PushRequest(
-            provider: "fcm",
-            deviceToken: token,
-            encryptedAlert: encryptedAlertData.base64EncodedString(),
-            category: payload.kind.rawValue,
-            collapseID: Self.notificationCollapseID(for: payload, device: device),
-            apnsEnvironment: nil
-        )
-
-        var request = URLRequest(url: pushURL)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(body)
-
-        logger.info("[FCM] sending push kind=\(payload.kind.rawValue, privacy: .public) deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public) tokenPrefix=\(String(token.prefix(12)), privacy: .public)")
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw MobilePushError.relayRejected(status: -1, body: "No HTTP response")
-        }
-        guard (200..<300).contains(http.statusCode) else {
-            throw MobilePushError.relayRejected(
-                status: http.statusCode,
-                body: Self.responseBodyString(data)
-            )
-        }
-        let pushResponse = try JSONDecoder().decode(PushResponse.self, from: data)
-        guard (200..<300).contains(pushResponse.statusCode) else {
-            throw MobilePushError.fcmRejected(
-                status: pushResponse.statusCode,
-                reason: pushResponse.reason ?? "Unknown error"
-            )
-        }
-    }
-
-    /// Send one APNs-backed test notification to a paired device.
-    func sendTestNotification(to device: PairedDevice) async throws {
-        if Self.pushProvider(for: device) == "fcm" {
-            guard let deviceRelayURL = pushEndpointURL(for: device) else {
-                throw MobilePushError.invalidRelayURL
-            }
-            let payload = NotificationPayload(
-                kind: .generic,
-                title: "RxCode test notification",
-                body: "Notifications are working for \(device.displayName)."
-            )
-            try await sendFCMPush(payload, to: device, pushURL: deviceRelayURL)
-            return
-        }
-
-        guard let token = Self.apnsToken(for: device), !token.isEmpty else {
-            throw MobilePushError.missingDeviceToken
-        }
-        // Find the client for this device's relay
-        let deviceClient = clientForDevice(device)
-        guard let peer = await deviceClient?.peer(forHex: device.pubkeyHex) else {
-            throw MobilePushError.unknownPeer
-        }
-        guard let relayURLString = device.relayURL,
-              let deviceRelayURL = URL(string: relayURLString),
-              let pushURL = Self.pushEndpointURL(from: deviceRelayURL) else {
-            throw MobilePushError.invalidRelayURL
-        }
-
-        logger.info("[APNs] sending test push deviceKey=\(String(device.pubkeyHex.prefix(12)), privacy: .public) tokenPrefix=\(String(token.prefix(12)), privacy: .public) environment=\(device.apnsEnvironment ?? "<nil>", privacy: .public) sender=\(String(self.identity.publicKeyHex.prefix(12)), privacy: .public)")
-        let plaintext = AlertPlaintext(
-            title: "RxCode test notification",
-            body: "Notifications are working for \(device.displayName).",
-            kind: NotificationPayload.Kind.generic.rawValue
-        )
-        let encrypted = try APNsCrypto.seal(
-            plaintext: plaintext,
-            sender: identity.privateKey,
-            recipient: peer
-        )
-        let encryptedAlertData = try JSONEncoder().encode(encrypted)
-        let body = APNsPushRequest(
-            provider: nil,
-            deviceToken: token,
-            encryptedAlert: encryptedAlertData.base64EncodedString(),
-            category: "test_notification",
-            collapseID: Self.testNotificationCollapseID(for: device),
-            apnsEnvironment: Self.apnsEnvironmentForPush(device)
-        )
-
-        var request = URLRequest(url: pushURL)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(body)
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw MobilePushError.relayRejected(status: -1, body: "No HTTP response")
-        }
-        guard (200..<300).contains(http.statusCode) else {
-            throw MobilePushError.relayRejected(
-                status: http.statusCode,
-                body: Self.responseBodyString(data)
-            )
-        }
-
-        let pushResponse = try JSONDecoder().decode(APNsPushResponse.self, from: data)
-        guard (200..<300).contains(pushResponse.statusCode) else {
-            throw MobilePushError.apnsRejected(
-                status: pushResponse.statusCode,
-                reason: pushResponse.reason ?? "Unknown error"
-            )
         }
     }
 

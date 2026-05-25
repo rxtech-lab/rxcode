@@ -475,12 +475,7 @@ struct MainWindowRoot: View {
                     .environment(windowState)
                     .environment(chatBridge)
                     .environment(\.openURL, OpenURLAction { url in
-                        var finalURL = url
-                        if url.scheme == nil || url.scheme!.isEmpty {
-                            finalURL = URL(string: "https://\(url.absoluteString)") ?? url
-                        }
-                        NSWorkspace.shared.open(finalURL)
-                        return .handled
+                        openMarkdownLink(url, in: windowState)
                     })
                     .transition(.opacity)
             } else {
@@ -500,6 +495,25 @@ struct MainWindowRoot: View {
             MobileSyncService.shared.start()
         }
     }
+}
+
+@MainActor
+private func openMarkdownLink(_ url: URL, in windowState: WindowState) -> OpenURLAction.Result {
+    if let fileLink = LocalFileLink.parse(url) {
+        let fileName = URL(fileURLWithPath: fileLink.path).lastPathComponent
+        windowState.inspectorFile = PreviewFile(
+            path: fileLink.path,
+            name: fileName.isEmpty ? fileLink.path : fileName
+        )
+        return .handled
+    }
+
+    var finalURL = url
+    if url.scheme == nil || url.scheme!.isEmpty {
+        finalURL = URL(string: "https://\(url.absoluteString)") ?? url
+    }
+    NSWorkspace.shared.open(finalURL)
+    return .handled
 }
 
 // MARK: - Settings Window Root
@@ -531,12 +545,7 @@ struct ProjectWindowRoot: View {
                     .environment(windowState)
                     .environment(chatBridge)
                     .environment(\.openURL, OpenURLAction { url in
-                        var finalURL = url
-                        if url.scheme == nil || url.scheme!.isEmpty {
-                            finalURL = URL(string: "https://\(url.absoluteString)") ?? url
-                        }
-                        NSWorkspace.shared.open(finalURL)
-                        return .handled
+                        openMarkdownLink(url, in: windowState)
                     })
                     .transition(.opacity)
             } else {

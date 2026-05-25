@@ -972,6 +972,7 @@ extension Notification.Name {
     static let mobileSyncLoadMoreMessagesRequested = Notification.Name("mobileSync.loadMoreMessagesRequested")
     static let mobileSyncSearchRequested = Notification.Name("mobileSync.searchRequested")
     static let mobileSyncThreadChangesRequested = Notification.Name("mobileSync.threadChangesRequested")
+    static let mobileSyncRemoteFileRequested = Notification.Name("mobileSync.remoteFileRequested")
     static let mobileSyncSettingsUpdateReceived = Notification.Name("mobileSync.settingsUpdateReceived")
     static let mobileSyncPermissionResponse = Notification.Name("mobileSync.permissionResponse")
     static let mobileSyncQuestionAnswerReceived = Notification.Name("mobileSync.questionAnswerReceived")

@@ -36,6 +36,9 @@ struct MobileChatView: View {
     @State private var presentedQuestion: PendingQuestionPayload?
     /// The plan whose review sheet is currently presented, if any.
     @State private var presentedPlan: PendingPlan?
+    /// Local file link tapped in rendered markdown. Mobile fetches the content
+    /// from the paired desktop before presenting it.
+    @State private var presentedFileLink: LocalFileLink?
     /// The message that sat at the top before an older page was requested. The
     /// viewport is restored to it after the page is prepended so the content
     /// the user was reading doesn't jump.
@@ -177,6 +180,11 @@ struct MobileChatView: View {
             }
             .sheet(isPresented: $showingChanges) {
                 ThreadChangesSheet(sessionID: sessionID)
+                    .environmentObject(state)
+                    .mobileSheetPresentation([.large])
+            }
+            .sheet(item: $presentedFileLink) { link in
+                MobileRemoteFilePreviewSheet(link: link)
                     .environmentObject(state)
                     .mobileSheetPresentation([.large])
             }
@@ -514,6 +522,13 @@ struct MobileChatView: View {
             }
         }
         .accessibilityIdentifier("chat-screen")
+        .environment(\.openURL, OpenURLAction { url in
+            if let link = LocalFileLink.parse(url) {
+                presentedFileLink = link
+                return .handled
+            }
+            return .systemAction
+        })
     }
 
     private var mobileTranscriptItems: [ChatTranscriptListItem] {

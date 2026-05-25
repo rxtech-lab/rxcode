@@ -144,6 +144,12 @@ extension MobileAppState {
             pendingThreadChangesID = nil
             isLoadingThreadChanges = false
             threadChanges = result
+        case .remoteFileResult(let result):
+            guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "remote_file_result") else { return }
+            guard let pending = pendingRemoteFileID, result.clientRequestID == pending else { return }
+            pendingRemoteFileID = nil
+            isLoadingRemoteFile = false
+            remoteFileResult = result
         case .branchOpResult(let result):
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "branch_op_result") else { return }
             inFlightBranchOps.remove(result.clientRequestID)

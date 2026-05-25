@@ -797,6 +797,72 @@ extension AppState {
         await reply(ok: true, error: nil, uncommitted: uncommitted)
     }
 
+    func handleMobileRemoteFileRequest(
+        _ request: RemoteFileRequestPayload,
+        fromHex hex: String
+    ) async {
+        let path = URL(fileURLWithPath: request.path).standardizedFileURL.path
+        let name = URL(fileURLWithPath: path).lastPathComponent
+
+        func reply(ok: Bool, error: String?, content: String? = nil, truncated: Bool = false) async {
+            await MobileSyncService.shared.send(
+                .remoteFileResult(RemoteFileResultPayload(
+                    clientRequestID: request.clientRequestID,
+                    path: path,
+                    name: name.isEmpty ? path : name,
+                    line: request.line,
+                    ok: ok,
+                    errorMessage: error,
+                    content: content,
+                    truncated: truncated
+                )),
+                toHex: hex
+            )
+        }
+
+        guard Self.isPath(path, underAnyProject: projects.map(\.path)) else {
+            await reply(ok: false, error: "This file is outside your RxCode projects.")
+            return
+        }
+
+        do {
+            let result = try await Task.detached {
+                try Self.readMobilePreviewFile(path: path)
+            }.value
+            await reply(ok: true, error: nil, content: result.content, truncated: result.truncated)
+        } catch let error as MobileRemoteFileReadError {
+            await reply(ok: false, error: error.localizedDescription)
+        } catch {
+            await reply(ok: false, error: "Read failed: \(error.localizedDescription)")
+        }
+    }
+
+    nonisolated private static func isPath(_ path: String, underAnyProject projectPaths: [String]) -> Bool {
+        let standardizedPath = URL(fileURLWithPath: path).standardizedFileURL.path
+        return projectPaths.contains { projectPath in
+            let root = URL(fileURLWithPath: projectPath).standardizedFileURL.path
+            return standardizedPath == root || standardizedPath.hasPrefix(root + "/")
+        }
+    }
+
+    nonisolated private static func readMobilePreviewFile(path: String) throws -> (content: String, truncated: Bool) {
+        let attributes = try FileManager.default.attributesOfItem(atPath: path)
+        let size = (attributes[.size] as? Int) ?? 0
+        let byteLimit = 1_500_000
+        let truncated = size > byteLimit
+
+        guard let handle = try? FileHandle(forReadingFrom: URL(fileURLWithPath: path)) else {
+            throw MobileRemoteFileReadError.unreadable
+        }
+        defer { try? handle.close() }
+
+        let data = try handle.read(upToCount: min(size, byteLimit)) ?? Data()
+        guard let content = String(data: data, encoding: .utf8) else {
+            throw MobileRemoteFileReadError.binary
+        }
+        return (content, truncated)
+    }
+
     /// Strips per-file `originalContent` / `modifiedContent` once the running
     /// total of attached snapshots would push the encoded reply past the
     /// relay's 10 MiB envelope cap. Order is preserved so earlier files in the
@@ -972,4 +1038,18 @@ extension AppState {
         reindexProgress = nil
     }
 
+}
+
+private enum MobileRemoteFileReadError: LocalizedError {
+    case unreadable
+    case binary
+
+    var errorDescription: String? {
+        switch self {
+        case .unreadable:
+            return "File could not be opened."
+        case .binary:
+            return "Binary file — preview not available."
+        }
+    }
 }

@@ -87,6 +87,42 @@ extension MobileAppState {
         }
     }
 
+    func requestRemoteFile(path: String, line: Int?) async {
+        guard isPaired else {
+            remoteFileResult = RemoteFileResultPayload(
+                clientRequestID: UUID(),
+                path: path,
+                name: URL(fileURLWithPath: path).lastPathComponent,
+                line: line,
+                ok: false,
+                errorMessage: String(localized: "Not connected to your Mac.")
+            )
+            return
+        }
+
+        let requestID = UUID()
+        pendingRemoteFileID = requestID
+        remoteFileResult = nil
+        isLoadingRemoteFile = true
+        let payload = RemoteFileRequestPayload(clientRequestID: requestID, path: path, line: line)
+        do {
+            try await client.send(.remoteFileRequest(payload), toHex: pairedDesktopPubkey)
+        } catch {
+            if pendingRemoteFileID == requestID {
+                pendingRemoteFileID = nil
+                isLoadingRemoteFile = false
+                remoteFileResult = RemoteFileResultPayload(
+                    clientRequestID: requestID,
+                    path: path,
+                    name: URL(fileURLWithPath: path).lastPathComponent,
+                    line: line,
+                    ok: false,
+                    errorMessage: String(localized: "Failed to request file: \(error.localizedDescription)")
+                )
+            }
+        }
+    }
+
     func respondToPermission(allow: Bool, denyReason: String? = nil) async {
         guard let pending = pendingPermission else { return }
         let payload = PermissionResponsePayload(

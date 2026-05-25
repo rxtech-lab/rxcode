@@ -124,6 +124,33 @@ struct FileInspectorView: View {
                 .help(isCopied ? "Copied" : "Copy")
             }
 
+            Menu {
+                let editors = ExternalEditorService.shared.detectedEditors()
+                if editors.isEmpty {
+                    Text("No editors detected")
+                } else {
+                    ForEach(editors) { editor in
+                        Button {
+                            ExternalEditorService.shared.open(editor, path: filePath)
+                        } label: {
+                            Label(editor.displayName, systemImage: editor.systemSymbol)
+                        }
+                    }
+                }
+                Divider()
+                Button {
+                    ExternalEditorService.shared.revealInFinder(filePath)
+                } label: {
+                    Label("Reveal in Finder", systemImage: "folder")
+                }
+            } label: {
+                Image(systemName: "arrow.up.forward.app")
+                    .font(.system(size: ClaudeTheme.size(12)))
+                    .foregroundStyle(ClaudeTheme.textSecondary)
+            }
+            .menuStyle(.borderlessButton)
+            .help("Open in Editor")
+
             Button { windowState.inspectorFile = nil } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: ClaudeTheme.size(11), weight: .medium))

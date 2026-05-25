@@ -247,6 +247,13 @@ extension MobileSyncService {
                 object: nil,
                 userInfo: ["from": inbound.fromHex, "payload": req]
             )
+        case .remoteFileRequest(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "remote_file_request") else { return }
+            NotificationCenter.default.post(
+                name: .mobileSyncRemoteFileRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": req]
+            )
         case .subscribeSession(let sub):
             guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "subscribe_session") else { return }
             subscribedSessions[inbound.fromHex] = sub.sessionID ?? ""

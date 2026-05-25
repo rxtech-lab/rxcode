@@ -4710,6 +4710,9 @@
         }
       }
     },
+    "Open in Editor" : {
+
+    },
     "Open in External Editor" : {
       "localizations" : {
         "zh-Hans" : {

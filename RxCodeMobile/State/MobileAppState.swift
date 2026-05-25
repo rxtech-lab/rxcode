@@ -190,6 +190,9 @@ final class MobileAppState: ObservableObject {
     @Published var threadChanges: ThreadChangesResultPayload?
     @Published var isLoadingThreadChanges: Bool = false
     var pendingThreadChangesID: UUID?
+    @Published var remoteFileResult: RemoteFileResultPayload?
+    @Published var isLoadingRemoteFile: Bool = false
+    var pendingRemoteFileID: UUID?
 
     @Published var remoteFolderRoot: RemoteFolderNode?
     @Published var remoteFolderIsLoading = false

@@ -54,6 +54,7 @@ public struct DiffView: View {
 
     private let lines: [DiffLine]
     private let showsBackground: Bool
+    private let showsDiffMarkers: Bool
     private let display: LineDisplay
     private let language: String?
     private let navigationRequest: ChangeNavigationRequest?
@@ -65,6 +66,7 @@ public struct DiffView: View {
     public init(
         lines: [DiffLine],
         showsBackground: Bool = true,
+        showsDiffMarkers: Bool = true,
         display: LineDisplay = .wrap,
         language: String? = nil,
         navigationRequest: ChangeNavigationRequest? = nil,
@@ -72,6 +74,7 @@ public struct DiffView: View {
     ) {
         self.lines = lines
         self.showsBackground = showsBackground
+        self.showsDiffMarkers = showsDiffMarkers
         self.display = display
         self.language = language
         self.navigationRequest = navigationRequest
@@ -127,7 +130,13 @@ public struct DiffView: View {
             ScrollView(.vertical) {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(Array(lines.enumerated()), id: \.offset) { offset, line in
-                        DiffRow(line: line, layout: layout, wraps: true, language: language)
+                    DiffRow(
+                        line: line,
+                        layout: layout,
+                        showsDiffMarkers: showsDiffMarkers,
+                        wraps: true,
+                        language: language
+                    )
                             .id(rowID(for: offset))
                     }
                 }
@@ -140,7 +149,11 @@ public struct DiffView: View {
                 let viewportWidth = max(0, proxy.size.width - layout.width)
                 let bodyWidth = max(
                     viewportWidth,
-                    Self.horizontalScrollBodyWidth(for: lines, layout: layout)
+                    Self.horizontalScrollBodyWidth(
+                        for: lines,
+                        layout: layout,
+                        showsDiffMarkers: showsDiffMarkers
+                    )
                 )
                 ScrollView(.vertical) {
                     HStack(alignment: .top, spacing: 0) {
@@ -163,6 +176,7 @@ public struct DiffView: View {
                                     DiffRowBody(
                                         line: line,
                                         layout: layout,
+                                        showsDiffMarkers: showsDiffMarkers,
                                         wraps: false,
                                         language: language
                                     )
@@ -219,27 +233,41 @@ public struct DiffView: View {
         "diff-line-\(offset)"
     }
 
-    static func horizontalScrollBodyWidth(for lines: [DiffLine], layout: GutterLayout) -> CGFloat {
-        let maxColumns = lines.map { horizontalColumnCount(for: $0, layout: layout) }.max() ?? 0
+    static func horizontalScrollBodyWidth(
+        for lines: [DiffLine],
+        layout: GutterLayout,
+        showsDiffMarkers: Bool = true
+    ) -> CGFloat {
+        let maxColumns = lines.map {
+            horizontalColumnCount(
+                for: $0,
+                layout: layout,
+                showsDiffMarkers: showsDiffMarkers
+            )
+        }.max() ?? 0
         let estimatedMonospaceWidth = ClaudeTheme.messageSize(12) * 0.72
         return ceil(CGFloat(maxColumns) * estimatedMonospaceWidth) + 12
     }
 
-    private static func horizontalColumnCount(for line: DiffLine, layout: GutterLayout) -> Int {
+    private static func horizontalColumnCount(
+        for line: DiffLine,
+        layout: GutterLayout,
+        showsDiffMarkers: Bool
+    ) -> Int {
         let prefixColumns: Int
         let body: String
         switch line.kind {
         case .added:
-            prefixColumns = 2
+            prefixColumns = showsDiffMarkers ? 2 : 0
             body = line.text.hasPrefix("+") ? String(line.text.dropFirst()) : line.text
         case .removed:
-            prefixColumns = 2
+            prefixColumns = showsDiffMarkers ? 2 : 0
             body = line.text.hasPrefix("-") ? String(line.text.dropFirst()) : line.text
         case .context:
-            prefixColumns = 2
+            prefixColumns = showsDiffMarkers ? 2 : 0
             body = line.text.hasPrefix(" ") ? String(line.text.dropFirst()) : line.text
         case .hunk, .meta:
-            prefixColumns = layout.columnCount > 0 ? 2 : 0
+            prefixColumns = showsDiffMarkers && layout.columnCount > 0 ? 2 : 0
             body = line.text
         }
         return prefixColumns + visualColumnCount(body)
@@ -299,13 +327,20 @@ struct GutterLayout {
 private struct DiffRow: View {
     let line: DiffLine
     let layout: GutterLayout
+    let showsDiffMarkers: Bool
     let wraps: Bool
     let language: String?
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 0) {
             DiffRowGutter(line: line, layout: layout)
-            DiffRowBody(line: line, layout: layout, wraps: wraps, language: language)
+            DiffRowBody(
+                line: line,
+                layout: layout,
+                showsDiffMarkers: showsDiffMarkers,
+                wraps: wraps,
+                language: language
+            )
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -357,6 +392,7 @@ enum DiffMetrics {
 private struct DiffRowBody: View {
     let line: DiffLine
     let layout: GutterLayout
+    let showsDiffMarkers: Bool
     let wraps: Bool
     /// File-extension hint (e.g. "swift", "ts") used to syntax-highlight the
     /// body text. `nil` skips highlighting and falls back to a flat color.
@@ -398,6 +434,10 @@ private struct DiffRowBody: View {
     /// flush with the `+` / `-` itself, instead of sitting in a phantom column
     /// past the marker like they do when marker and body are separate views.
     private var combinedText: Text {
+        guard showsDiffMarkers else {
+            return bodyTextView
+        }
+
         let prefix: Text
         switch line.kind {
         case .added:
@@ -455,6 +495,8 @@ private struct DiffRowBody: View {
     }
 
     private var rowBackground: Color {
+        guard showsDiffMarkers else { return .clear }
+
         switch line.kind {
         case .added:   return ClaudeTheme.statusSuccess.opacity(0.12)
         case .removed: return ClaudeTheme.statusError.opacity(0.12)

@@ -667,6 +667,51 @@ public struct PlanDecisionPayload: Codable, Sendable {
     }
 }
 
+public struct RemoteFileRequestPayload: Codable, Sendable {
+    public let clientRequestID: UUID
+    public let path: String
+    public let line: Int?
+
+    public init(clientRequestID: UUID, path: String, line: Int? = nil) {
+        self.clientRequestID = clientRequestID
+        self.path = path
+        self.line = line
+    }
+}
+
+public struct RemoteFileResultPayload: Codable, Sendable, Identifiable {
+    public var id: UUID { clientRequestID }
+
+    public let clientRequestID: UUID
+    public let path: String
+    public let name: String
+    public let line: Int?
+    public let ok: Bool
+    public let errorMessage: String?
+    public let content: String?
+    public let truncated: Bool
+
+    public init(
+        clientRequestID: UUID,
+        path: String,
+        name: String,
+        line: Int? = nil,
+        ok: Bool,
+        errorMessage: String? = nil,
+        content: String? = nil,
+        truncated: Bool = false
+    ) {
+        self.clientRequestID = clientRequestID
+        self.path = path
+        self.name = name
+        self.line = line
+        self.ok = ok
+        self.errorMessage = errorMessage
+        self.content = content
+        self.truncated = truncated
+    }
+}
+
 public struct PingPayload: Codable, Sendable {
     public let t: Date
     public init(t: Date = .now) { self.t = t }

@@ -18,8 +18,8 @@ Everything lives in the `rxcode-relay` namespace.
 | File | Purpose |
 |------|---------|
 | `namespace.yaml` | `rxcode-relay` namespace |
-| `configmap.yaml` | Non-secret config — `RELAY_ADDR`, `APNS_TOPIC`, `APNS_PRODUCTION`, `REDIS_URL` |
-| `secrets.yaml` | APNs auth credentials (placeholder values — **not** in kustomization) |
+| `configmap.yaml` | Non-secret config — `RELAY_ADDR`, `APNS_TOPIC`, `APNS_PRODUCTION`, `REDIS_URL`, `FCM_PROJECT_ID` |
+| `secrets.yaml` | APNs + FCM credentials (placeholder values — **not** in kustomization) |
 | `deployment.yaml` | Relay Deployment, 2 replicas, `/healthz` probes |
 | `service.yaml` | ClusterIP on port 8787 |
 | `ingress.yaml` | NGINX ingress for `relay.rxlab.app` with WebSocket timeouts |
@@ -39,15 +39,24 @@ Everything lives in the `rxcode-relay` namespace.
 
 ### 1. Populate secrets
 
-Edit `secrets.yaml` with real APNs values, then apply it manually (it is
+Edit `secrets.yaml` with real APNs + FCM values, then apply it manually (it is
 deliberately excluded from `kustomization.yaml`):
 
 ```bash
-# encode the .p8 auth key
+# APNs: encode the .p8 auth key
 base64 < AuthKey_XXXXXXXXXX.p8 | tr -d '\n'
+
+# FCM: encode the Firebase service-account JSON
+# (Firebase Console → Project settings → Service accounts → Generate new
+# private key. This is the server-side service-account file, NOT the
+# google-services.json that ships in the Android app.)
+base64 < firebase-service-account.json | tr -d '\n'
 
 kubectl apply -f secrets.yaml
 ```
+
+The relay only sends FCM pushes when `FCM_SERVICE_ACCOUNT_B64` is non-empty;
+leave it blank to disable Android push delivery while keeping APNs working.
 
 ### 2. Deploy
 

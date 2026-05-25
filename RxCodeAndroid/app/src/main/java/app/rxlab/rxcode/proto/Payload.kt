@@ -43,6 +43,9 @@ sealed class Payload {
     data class Unpair(val data: UnpairPayload) : Payload() {
         override val type = "unpair"
     }
+    data class PushToken(val data: PushTokenPayload) : Payload() {
+        override val type = "push_token"
+    }
     data class RequestSnapshot(val data: RequestSnapshotPayload) : Payload() {
         override val type = "request_snapshot"
     }
@@ -144,6 +147,13 @@ data class PairAckPayload(
 
 @Serializable
 data class UnpairPayload(val reason: String? = null)
+
+@Serializable
+data class PushTokenPayload(
+    val provider: String,
+    val token: String,
+    val environment: String? = null,
+)
 
 @Serializable
 data class RequestSnapshotPayload(val activeSessionID: String? = null)
@@ -462,6 +472,7 @@ object PayloadSerializer : KSerializer<Payload> {
             "pair_request" -> Payload.PairRequest(json.decodeFromJsonElement(PairRequestPayload.serializer(), data))
             "pair_ack" -> Payload.PairAck(json.decodeFromJsonElement(PairAckPayload.serializer(), data))
             "unpair" -> Payload.Unpair(json.decodeFromJsonElement(UnpairPayload.serializer(), data))
+            "push_token" -> Payload.PushToken(json.decodeFromJsonElement(PushTokenPayload.serializer(), data))
             "request_snapshot" -> Payload.RequestSnapshot(json.decodeFromJsonElement(RequestSnapshotPayload.serializer(), data))
             "snapshot" -> Payload.Snapshot(json.decodeFromJsonElement(SnapshotPayload.serializer(), data))
             "session_update" -> Payload.SessionUpdate(json.decodeFromJsonElement(SessionUpdatePayload.serializer(), data))
@@ -500,6 +511,7 @@ object PayloadSerializer : KSerializer<Payload> {
             is Payload.PairRequest -> value.type to json.encodeToJsonElement(PairRequestPayload.serializer(), value.data)
             is Payload.PairAck -> value.type to json.encodeToJsonElement(PairAckPayload.serializer(), value.data)
             is Payload.Unpair -> value.type to json.encodeToJsonElement(UnpairPayload.serializer(), value.data)
+            is Payload.PushToken -> value.type to json.encodeToJsonElement(PushTokenPayload.serializer(), value.data)
             is Payload.RequestSnapshot -> value.type to json.encodeToJsonElement(RequestSnapshotPayload.serializer(), value.data)
             is Payload.Snapshot -> value.type to json.encodeToJsonElement(SnapshotPayload.serializer(), value.data)
             is Payload.SessionUpdate -> value.type to json.encodeToJsonElement(SessionUpdatePayload.serializer(), value.data)

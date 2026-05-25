@@ -82,9 +82,9 @@ fun SessionsScreen(
     state: MobileState,
     projectId: UUID,
     onSessionClick: (SessionSummary) -> Unit,
-    onNewThread: (planMode: Boolean) -> Unit,
+    onNewThread: (sessionId: String) -> Unit,
     onBack: () -> Unit,
-    viewModel: MobileAppState? = null,
+    viewModel: MobileAppState,
     selectedSessionId: String? = null,
 ) {
     val haptics = rememberHaptics()
@@ -127,7 +127,7 @@ fun SessionsScreen(
             onRefresh = {
                 haptics.play(HapticEvent.LightTap)
                 refreshing = true
-                viewModel?.requestSnapshot("pull_to_refresh")
+                viewModel.requestSnapshot("pull_to_refresh")
                 scope.launch {
                     delay(800)
                     refreshing = false
@@ -158,7 +158,7 @@ fun SessionsScreen(
                             onRename = { renameTarget = session },
                             onArchive = {
                                 haptics.play(HapticEvent.HeavyImpact)
-                                viewModel?.archiveThread(session.id)
+                                viewModel.archiveThread(session.id)
                             },
                             onDelete = { deleteTarget = session },
                         )
@@ -170,12 +170,14 @@ fun SessionsScreen(
 
     if (newThreadOpen) {
         NewThreadSheet(
+            viewModel = viewModel,
             projectId = projectId,
+            projectName = project?.name,
             branchInfo = branchInfo,
             onDismiss = { newThreadOpen = false },
-            onSubmit = { planMode, _, _ ->
+            onSessionCreated = { sessionId ->
                 newThreadOpen = false
-                onNewThread(planMode)
+                onNewThread(sessionId)
             },
         )
     }
@@ -185,7 +187,7 @@ fun SessionsScreen(
             currentTitle = target.title,
             onDismiss = { renameTarget = null },
             onSubmit = { newTitle ->
-                viewModel?.renameThread(target.id, newTitle)
+                viewModel.renameThread(target.id, newTitle)
                 renameTarget = null
             },
         )
@@ -204,7 +206,7 @@ fun SessionsScreen(
             confirmButton = {
                 androidx.compose.material3.TextButton(onClick = {
                     haptics.play(HapticEvent.HeavyImpact)
-                    viewModel?.deleteThread(target.id)
+                    viewModel.deleteThread(target.id)
                     deleteTarget = null
                 }) {
                     Text("Delete", color = MaterialTheme.colorScheme.error)

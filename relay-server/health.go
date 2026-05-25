@@ -11,7 +11,7 @@ var startedAt = time.Now()
 // healthHandler returns a JSON liveness probe with current connection count
 // and APNs availability. Used by orchestrators and by the desktop "Mobile"
 // settings tab to verify the configured relay is reachable.
-func healthHandler(hub *Hub, sender *PushSender) http.HandlerFunc {
+func healthHandler(hub *Hub, apnsSender *PushSender, fcmSender *FCMSender) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		mode := "single-node"
 		if hub.backplane != nil {
@@ -21,7 +21,8 @@ func healthHandler(hub *Hub, sender *PushSender) http.HandlerFunc {
 			"ok":         true,
 			"uptime_sec": int(time.Since(startedAt).Seconds()),
 			"peers":      hub.ConnectedCount(),
-			"apns":       sender != nil,
+			"apns":       apnsSender != nil,
+			"fcm":        fcmSender != nil,
 			"mode":       mode,
 			"version":    "0.2.0",
 		}

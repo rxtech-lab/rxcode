@@ -22,6 +22,10 @@ echo "Repo root: $REPO_ROOT"
 defaults write com.apple.dt.Xcode IDESkipPackagePluginFingerprintValidatation -bool YES || true
 defaults write com.apple.dt.Xcode IDESkipMacroFingerprintValidation -bool YES || true
 
+# Materialize Firebase config files from Xcode Cloud env secrets.
+# FIREBASE_MACOS_B64 / FIREBASE_IOS_B64 must be defined as workflow secrets.
+"$REPO_ROOT/scripts/ci/write-firebase-config.sh"
+
 if [[ -n "${CI_TAG:-}" ]]; then
   VERSION="${CI_TAG#v}"
   if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][A-Za-z0-9.]+)?$ ]]; then

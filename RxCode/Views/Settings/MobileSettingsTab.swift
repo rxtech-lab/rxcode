@@ -346,7 +346,7 @@ struct MobileSettingsTab: View {
                     .labelStyle(.iconOnly)
             }
             .buttonStyle(.borderless)
-            .disabled(device.apnsToken?.isEmpty ?? true || sync.connectionState != .connected)
+            .disabled(MobileSyncService.pushToken(for: device)?.isEmpty ?? true || sync.connectionState != .connected)
             .help(testNotificationHelp(for: device))
         }
     }
@@ -371,8 +371,9 @@ struct MobileSettingsTab: View {
     }
 
     private func testNotificationHelp(for device: PairedDevice) -> String {
-        if device.apnsToken?.isEmpty ?? true {
-            return "Open RxCode Mobile on this device once so it can register for push notifications."
+        if MobileSyncService.pushToken(for: device)?.isEmpty ?? true {
+            let app = MobileSyncService.pushProvider(for: device) == "fcm" ? "RxCode on Android" : "RxCode Mobile"
+            return "Open \(app) on this device once so it can register for push notifications."
         }
         if sync.connectionState != .connected {
             return "Connect to the relay before sending a test notification."

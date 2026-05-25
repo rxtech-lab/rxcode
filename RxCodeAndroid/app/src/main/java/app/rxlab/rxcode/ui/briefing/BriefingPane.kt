@@ -187,9 +187,8 @@ private fun CompactBriefingPane(
                 groupKey = key,
                 onBack = onClearGroup,
                 onOpenSession = onSelectSession,
-                onNewThread = {
-                    viewModel.startNewSession(key.projectId, planMode = false)
-                    state.activeSessionID?.let { onSelectSession(it) }
+                onNewThread = { newSessionId ->
+                    onSelectSession(newSessionId)
                 },
                 selectedSessionId = selectedSessionId,
             )
@@ -240,9 +239,8 @@ private fun WideBriefingPane(
                         groupKey = key,
                         onBack = onClearGroup,
                         onOpenSession = onSelectSession,
-                        onNewThread = {
-                            viewModel.startNewSession(key.projectId, planMode = false)
-                            state.activeSessionID?.let { onSelectSession(it) }
+                        onNewThread = { newSessionId ->
+                            onSelectSession(newSessionId)
                         },
                         selectedSessionId = selectedSessionId,
                     )

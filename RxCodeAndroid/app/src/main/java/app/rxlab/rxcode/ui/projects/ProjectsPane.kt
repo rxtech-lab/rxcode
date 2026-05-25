@@ -36,6 +36,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import app.rxlab.rxcode.state.isDraftSessionId
 import app.rxlab.rxcode.state.resolveSessionId
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -122,11 +123,14 @@ private fun CollapsingProjectsPane(
     // React to a cross-tab navigation (Briefing → thread). When activeSessionID
     // changes from outside this scaffold, locate its owning project, drill the
     // list pane into that project's sessions, and push the chat detail pane.
+    // Skip draft ids: `startNewSession` flips activeSessionID to a draft id
+    // before the desktop has assigned a real session, and the new-thread sheet
+    // already owns navigation for that flow once the real session lands.
     LaunchedEffect(state.activeSessionID, state.sessions) {
         val sid = state.activeSessionID ?: return@LaunchedEffect
+        if (isDraftSessionId(sid)) return@LaunchedEffect
         val resolved = state.resolveSessionId(sid)
         val pid = state.sessions.firstOrNull { it.id == resolved || it.id == sid }?.projectId
-            ?: projectIdFromDraftSession(sid)
         if (pid != null && selectedProjectId != pid) {
             onSelectProject(pid)
         }
@@ -159,13 +163,10 @@ private fun CollapsingProjectsPane(
                                 navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, session.id)
                             }
                         },
-                        onNewThread = { planMode ->
-                            viewModel.startNewSession(pid, planMode = planMode)
-                            val draftId = state.activeSessionID
-                            if (draftId != null) {
-                                scope.launch {
-                                    navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, draftId)
-                                }
+                        onNewThread = { sessionId ->
+                            viewModel.selectSession(sessionId)
+                            scope.launch {
+                                navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, sessionId)
                             }
                         },
                         onBack = onBackToProjects,
@@ -210,9 +211,9 @@ private fun WideProjectsPane(
 
     LaunchedEffect(state.activeSessionID, state.sessions) {
         val sid = state.activeSessionID ?: return@LaunchedEffect
+        if (isDraftSessionId(sid)) return@LaunchedEffect
         val resolved = state.resolveSessionId(sid)
         val pid = state.sessions.firstOrNull { it.id == resolved || it.id == sid }?.projectId
-            ?: projectIdFromDraftSession(sid)
         if (pid != null && selectedProjectId != pid) {
             onSelectProject(pid)
         }
@@ -259,9 +260,9 @@ private fun WideProjectsPane(
                             viewModel.selectSession(session.id)
                             selectedSessionId = session.id
                         },
-                        onNewThread = { planMode ->
-                            viewModel.startNewSession(pid, planMode = planMode)
-                            state.activeSessionID?.let { selectedSessionId = it }
+                        onNewThread = { sessionId ->
+                            viewModel.selectSession(sessionId)
+                            selectedSessionId = sessionId
                         },
                         onBack = onBackToProjects,
                         viewModel = viewModel,
@@ -384,15 +385,3 @@ private val uuidSaver: Saver<UUID?, String> = Saver(
     restore = { if (it.isEmpty()) null else UUID.fromString(it) },
 )
 
-/**
- * `startNewSession` synthesizes a draft id of the form `draft-new:<uuid>:<uuid>`
- * before the desktop assigns a real one. Pull the project id out of it so we
- * can drill into the right project's sessions list while waiting for the real
- * session id to land.
- */
-private fun projectIdFromDraftSession(id: String): UUID? {
-    if (!id.startsWith("draft-new:")) return null
-    val parts = id.removePrefix("draft-new:").split(":")
-    val raw = parts.firstOrNull() ?: return null
-    return runCatching { UUID.fromString(raw) }.getOrNull()
-}

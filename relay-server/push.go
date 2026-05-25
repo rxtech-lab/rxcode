@@ -73,6 +73,9 @@ func NewPushSender(keyPath string, keyPEM []byte, keyID, teamID, topic string, p
 
 // Push delivery modes accepted by POST /push.
 const (
+	pushProviderAPNs = "apns"
+	pushProviderFCM  = "fcm"
+
 	// pushModeAlert is the legacy encrypted-banner path: the desktop ships an
 	// opaque E2E-encrypted blob and the iOS Notification Service Extension
 	// decrypts it before the banner is shown. This is the default when
@@ -96,6 +99,7 @@ const (
 // `liveactivity` and `background` paths, `apns_payload` is the complete APNs
 // JSON payload (`{"aps": {…}, …}`) built by the desktop and forwarded verbatim.
 type PushRequest struct {
+	Provider          string `json:"provider,omitempty"`
 	DeviceToken       string `json:"device_token"`
 	EncryptedAlertB64 string `json:"encrypted_alert,omitempty"`
 	Category          string `json:"category,omitempty"`
@@ -121,14 +125,10 @@ type PushRequest struct {
 // device. Only Live Activity content-state is unencrypted (ActivityKit
 // consumes it directly); a future hardening pass should require a signed
 // sender token.
-func pushHandler(sender *PushSender) http.HandlerFunc {
+func pushHandler(apnsSender *PushSender, fcmSender *FCMSender) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		if sender == nil {
-			http.Error(w, "apns disabled on this relay", http.StatusServiceUnavailable)
 			return
 		}
 		body, err := io.ReadAll(io.LimitReader(r.Body, 64*1024))
@@ -146,11 +146,32 @@ func pushHandler(sender *PushSender) http.HandlerFunc {
 			return
 		}
 
+		provider := strings.ToLower(strings.TrimSpace(req.Provider))
+		if provider == "" {
+			provider = pushProviderAPNs
+		}
+		if provider == pushProviderFCM {
+			if fcmSender == nil {
+				http.Error(w, "fcm disabled on this relay", http.StatusServiceUnavailable)
+				return
+			}
+			sendFCMResponse(w, fcmSender, &req)
+			return
+		}
+		if provider != pushProviderAPNs {
+			http.Error(w, "unknown push provider", http.StatusBadRequest)
+			return
+		}
+		if apnsSender == nil {
+			http.Error(w, "apns disabled on this relay", http.StatusServiceUnavailable)
+			return
+		}
+
 		mode := req.PushType
 		if mode == "" {
 			mode = pushModeAlert
 		}
-		environment, err := sender.environmentForRequest(&req)
+		environment, err := apnsSender.environmentForRequest(&req)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -159,11 +180,11 @@ func pushHandler(sender *PushSender) http.HandlerFunc {
 		var notif *apns2.Notification
 		switch mode {
 		case pushModeAlert:
-			notif, err = buildAlertNotification(sender, &req)
+			notif, err = buildAlertNotification(apnsSender, &req)
 		case pushModeLiveActivity:
-			notif, err = buildRawNotification(sender, &req, apns2.PushTypeLiveActivity, apns2.PriorityHigh, true)
+			notif, err = buildRawNotification(apnsSender, &req, apns2.PushTypeLiveActivity, apns2.PriorityHigh, true)
 		case pushModeBackground:
-			notif, err = buildRawNotification(sender, &req, apns2.PushTypeBackground, apns2.PriorityLow, false)
+			notif, err = buildRawNotification(apnsSender, &req, apns2.PushTypeBackground, apns2.PriorityLow, false)
 		default:
 			http.Error(w, "unknown push_type", http.StatusBadRequest)
 			return
@@ -179,7 +200,7 @@ func pushHandler(sender *PushSender) http.HandlerFunc {
 			mode, environment, short(req.DeviceToken), req.Category, req.CollapseID, len(payloadBytes),
 		)
 
-		res, err := sender.clientForEnvironment(environment).Push(notif)
+		res, err := apnsSender.clientForEnvironment(environment).Push(notif)
 		if err != nil {
 			log.Printf(
 				"apns push transport error: %v mode=%s environment=%s device=%s category=%q",
@@ -200,6 +221,7 @@ func pushHandler(sender *PushSender) http.HandlerFunc {
 			)
 		}
 		resp := map[string]any{
+			"provider":         pushProviderAPNs,
 			"status_code":      res.StatusCode,
 			"reason":           res.Reason,
 			"apns_id":          res.ApnsID,

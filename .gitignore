@@ -40,3 +40,8 @@ relay-server/.env.*
 relay-server/*.p8
 relay-server/k8s/secrets.yaml
 .playwright-mcp
+
+# Firebase config files (decoded from CI secrets, never committed)
+RxCode/GoogleService-Info.plist
+RxCodeMobile/GoogleService-Info.plist
+RxCodeAndroid/app/google-services.json

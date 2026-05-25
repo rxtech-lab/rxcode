@@ -11,6 +11,7 @@ struct RxCodeMobileApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
+        FirebaseBootstrap.configure()
         try? Tips.configure([
             .displayFrequency(.immediate),
             .datastoreLocation(.applicationDefault),

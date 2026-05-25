@@ -46,6 +46,11 @@ jobs:
           p12-file-base64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
           p12-password: ${{ secrets.P12_PASSWORD }}
 
+      - name: Write Firebase config
+        env:
+          FIREBASE_MACOS_B64: ${{ secrets.FIREBASE_MACOS_B64 }}
+        run: ./scripts/ci/write-firebase-config.sh
+
       - name: Bump version (release only)
         if: github.event_name == 'release'
         run: |

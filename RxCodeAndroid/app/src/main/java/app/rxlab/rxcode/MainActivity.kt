@@ -1,11 +1,16 @@
 package app.rxlab.rxcode
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.DisposableEffect
@@ -34,6 +39,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         Log.w(TAG, "MainActivity.onCreate data=${intent?.dataString?.let { "present" } ?: "none"}")
         enableEdgeToEdge()
+        requestNotificationPermissionIfNeeded()
         pendingDeeplink = intent?.dataString
         setContent {
             RxCodeTheme {
@@ -73,6 +79,16 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         Log.w(TAG, "MainActivity.onNewIntent data=${intent.dataString?.let { "present" } ?: "none"}")
         intent.dataString?.let { pendingDeeplink = it }
+    }
+
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1001)
     }
 
     private companion object {

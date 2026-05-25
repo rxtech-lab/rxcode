@@ -18,6 +18,7 @@ extension MobileAppState {
     /// settles.
     @discardableResult
     func loadMoreMessages(sessionID: String) async -> Bool {
+        let sessionID = resolveSessionID(sessionID)
         guard isPaired,
               sessionsWithMoreMessages.contains(sessionID),
               !loadingMoreSessions.contains(sessionID),
@@ -71,6 +72,7 @@ extension MobileAppState {
     /// `threadChanges` via the `threadChangesResult` payload.
     func requestThreadChanges(sessionID: String) async {
         guard isPaired else { return }
+        let sessionID = resolveSessionID(sessionID)
         let requestID = UUID()
         pendingThreadChangesID = requestID
         isLoadingThreadChanges = true
@@ -101,7 +103,8 @@ extension MobileAppState {
     /// Pending `AskUserQuestion` calls for one session, in the order the desktop
     /// queued them.
     func pendingQuestions(sessionID: String) -> [PendingQuestionPayload] {
-        pendingQuestions.filter { $0.sessionID == sessionID }
+        let sessionID = resolveSessionID(sessionID)
+        return pendingQuestions.filter { $0.sessionID == sessionID }
     }
 
     /// Submit the user's answers for one `AskUserQuestion` call to the desktop.

@@ -68,6 +68,7 @@ struct MobileSettingsView: View {
                     .navigationTitle("Pair New Mac")
                     .navigationBarTitleDisplayMode(.inline)
                 }
+                .mobileSheetPresentation()
             }
             .alert(
                 "Remove pairing?",

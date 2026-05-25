@@ -32,6 +32,7 @@ struct ProjectsSidebar: View {
             .sheet(isPresented: $showingRemoteFolderPicker) {
                 RemoteFolderPickerView()
                     .environmentObject(state)
+                    .mobileSheetPresentation()
             }
             .refreshable {
                 await state.refreshSnapshot()

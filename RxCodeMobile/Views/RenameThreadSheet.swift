@@ -57,8 +57,7 @@ struct RenameThreadSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium])
-        .presentationDragIndicator(.visible)
+        .mobileSheetPresentation([.medium])
     }
 
     private func commit() {

@@ -60,6 +60,7 @@ final class LocalAIProviderAcceptanceTests: XCTestCase {
         XCTAssertTrue(app.buttons["run-profile-run-button"].waitForExistence(timeout: 10))
 
         runProfileSmoke()
+        sendBriefingNewThreadTurn(provider: provider)
         sendPlanModeTurn(provider: provider)
         sendIntegratedAITurn(provider: provider)
     }
@@ -76,6 +77,7 @@ final class LocalAIProviderAcceptanceTests: XCTestCase {
         app.launchEnvironment = [
             "RXCODE_APP_SUPPORT_DIR": fixture.appSupportURL.path,
             "RXCODE_UI_TESTING": "1",
+            "RXCODE_UI_TEST_SEED_BRIEFING": "1",
             "RXCODE_LOCAL_MCP_SERVER": fixture.mcpServerPath,
         ]
         app.launch()
@@ -87,6 +89,33 @@ final class LocalAIProviderAcceptanceTests: XCTestCase {
         let inspector = app.buttons["toggle-inspector-button"]
         XCTAssertTrue(inspector.waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "RXCODE_UI_TEST_RUN_PROFILE")).element.waitForExistence(timeout: 15))
+    }
+
+    private func sendBriefingNewThreadTurn(provider: Provider) {
+        XCTAssertTrue(app.staticTexts["Briefings"].waitForExistence(timeout: 10))
+
+        let actionsButton = app.buttons["briefing-group-actions-button"]
+        XCTAssertTrue(actionsButton.waitForExistence(timeout: 10))
+        actionsButton.click()
+
+        let startNewChatMenuItem = app.menuItems["Start New Chat"]
+        if startNewChatMenuItem.waitForExistence(timeout: 2) {
+            startNewChatMenuItem.click()
+        } else {
+            let startNewChatButton = app.buttons["Start New Chat"]
+            XCTAssertTrue(startNewChatButton.waitForExistence(timeout: 5))
+            startNewChatButton.click()
+        }
+
+        let marker = "RXCODE_UI_TEST_BRIEFING_DONE"
+        let input = focusInput()
+        input.typeText("Start a new thread from the briefing view. Reply with \(marker) and no extra text.")
+        app.buttons["chat-send-button"].click()
+
+        XCTAssertTrue(
+            app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", marker)).element.waitForExistence(timeout: 120),
+            "Expected the assistant response to remain visible in thread detail for \(provider.rawValue)"
+        )
     }
 
     private func sendPlanModeTurn(provider: Provider) {

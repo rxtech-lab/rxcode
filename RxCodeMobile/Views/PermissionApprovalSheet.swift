@@ -68,6 +68,6 @@ struct PermissionApprovalSheet: View {
             }
         }
         .padding(20)
-        .presentationDetents([.medium, .large])
+        .mobileSheetPresentation([.medium, .large])
     }
 }

@@ -22,6 +22,9 @@ public struct FileDiffView: View {
     @State private var isLoading = true
     @State private var isCopied = false
     @State private var diffDisplay: DiffView.LineDisplay = .wrap
+    @State private var navigationToken = 0
+    @State private var navigationDirection: DiffView.ChangeNavigationDirection?
+    @State private var navigationState = DiffView.ChangeNavigationState.empty
 
     public init(
         filePath: String,
@@ -46,6 +49,10 @@ public struct FileDiffView: View {
             header
             ClaudeThemeDivider()
             contentArea
+            if !isLoading, !diffLines.isEmpty {
+                ClaudeThemeDivider()
+                changeNavigationBar
+            }
         }
         .background(ClaudeTheme.background)
         .background {
@@ -151,16 +158,89 @@ public struct FileDiffView: View {
             DiffView(
                 lines: diffLines,
                 display: diffDisplay,
-                language: SyntaxHighlighter.language(forFilename: fileName)
+                language: SyntaxHighlighter.language(forFilename: fileName),
+                navigationRequest: navigationRequest,
+                onNavigationStateChange: { navigationState = $0 }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    // MARK: - Change Navigation
+
+    private var changeNavigationBar: some View {
+        HStack(spacing: 8) {
+            Button {
+                requestChangeNavigation(.previous)
+            } label: {
+                Image(systemName: "arrow.up")
+                    .font(.system(size: ClaudeTheme.messageSize(12), weight: .medium))
+                    .foregroundStyle(ClaudeTheme.textSecondary)
+                    .frame(width: 26, height: 24)
+            }
+            .buttonStyle(.borderless)
+            .focusable(false)
+            .disabled(navigationState.changeCount == 0)
+            .help("Previous change")
+            .accessibilityLabel("Previous change")
+
+            Button {
+                requestChangeNavigation(.next)
+            } label: {
+                Image(systemName: "arrow.down")
+                    .font(.system(size: ClaudeTheme.messageSize(12), weight: .medium))
+                    .foregroundStyle(ClaudeTheme.textSecondary)
+                    .frame(width: 26, height: 24)
+            }
+            .buttonStyle(.borderless)
+            .focusable(false)
+            .disabled(navigationState.changeCount == 0)
+            .help("Next change")
+            .accessibilityLabel("Next change")
+
+            changePositionPill
+
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(ClaudeTheme.surfacePrimary)
+    }
+
+    private var navigationRequest: DiffView.ChangeNavigationRequest? {
+        guard let navigationDirection else { return nil }
+        return DiffView.ChangeNavigationRequest(direction: navigationDirection, token: navigationToken)
+    }
+
+    private var changePositionText: String {
+        guard navigationState.changeCount > 0 else { return "No changes" }
+        guard let currentIndex = navigationState.currentIndex else {
+            return "\(navigationState.changeCount) changes"
+        }
+        return "\(currentIndex + 1) of \(navigationState.changeCount)"
+    }
+
+    private var changePositionPill: some View {
+        Text(changePositionText)
+            .font(.system(size: ClaudeTheme.messageSize(11), weight: .medium))
+            .foregroundStyle(ClaudeTheme.textTertiary)
+            .monospacedDigit()
+            .lineLimit(1)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(ClaudeTheme.surfaceSecondary, in: Capsule())
+    }
+
+    private func requestChangeNavigation(_ direction: DiffView.ChangeNavigationDirection) {
+        navigationDirection = direction
+        navigationToken += 1
     }
 
     // MARK: - Diff Sources
 
     private func loadDiff() async {
         isLoading = true
+        navigationState = .empty
         defer { isLoading = false }
 
         // Snapshot-pair path: both originalContent and modifiedContent were

@@ -345,6 +345,10 @@ extension MobileAppState {
 
     func applySessionUpdate(_ update: SessionUpdatePayload) {
         if let previous = update.previousSessionID, previous != update.sessionID {
+            sessionIDRedirects[previous] = update.sessionID
+            for (stale, target) in sessionIDRedirects where target == previous {
+                sessionIDRedirects[stale] = update.sessionID
+            }
             if let carried = messagesBySession.removeValue(forKey: previous) {
                 if let existing = messagesBySession[update.sessionID], !existing.isEmpty {
                     // The new session id already accumulated live messages

@@ -25,28 +25,99 @@ public struct DiffView: View {
         case scroll
     }
 
+    public enum ChangeNavigationDirection: Equatable, Sendable {
+        case previous
+        case next
+    }
+
+    public struct ChangeNavigationRequest: Equatable, Sendable {
+        public let direction: ChangeNavigationDirection
+        public let token: Int
+
+        public init(direction: ChangeNavigationDirection, token: Int) {
+            self.direction = direction
+            self.token = token
+        }
+    }
+
+    public struct ChangeNavigationState: Equatable, Sendable {
+        public let changeCount: Int
+        public let currentIndex: Int?
+
+        public init(changeCount: Int, currentIndex: Int?) {
+            self.changeCount = changeCount
+            self.currentIndex = currentIndex
+        }
+
+        public static let empty = ChangeNavigationState(changeCount: 0, currentIndex: nil)
+    }
+
     private let lines: [DiffLine]
     private let showsBackground: Bool
     private let display: LineDisplay
     private let language: String?
+    private let navigationRequest: ChangeNavigationRequest?
+    private let onNavigationStateChange: ((ChangeNavigationState) -> Void)?
+
+    @State private var selectedChangeBlockIndex: Int?
+    @State private var verticalScrollPosition: String?
 
     public init(
         lines: [DiffLine],
         showsBackground: Bool = true,
         display: LineDisplay = .wrap,
-        language: String? = nil
+        language: String? = nil,
+        navigationRequest: ChangeNavigationRequest? = nil,
+        onNavigationStateChange: ((ChangeNavigationState) -> Void)? = nil
     ) {
         self.lines = lines
         self.showsBackground = showsBackground
         self.display = display
         self.language = language
+        self.navigationRequest = navigationRequest
+        self.onNavigationStateChange = onNavigationStateChange
     }
 
     public var body: some View {
         let layout = GutterLayout(lines: lines)
-        content(layout: layout)
-            .background(showsBackground ? ClaudeTheme.codeBackground : Color.clear)
-            .textSelection(.enabled)
+        let changeBlocks = Self.changeBlockOffsets(in: lines)
+        ScrollViewReader { proxy in
+            content(layout: layout)
+                .background(showsBackground ? ClaudeTheme.codeBackground : Color.clear)
+                .textSelection(.enabled)
+                .onAppear {
+                    publishNavigationState(changeBlocks: changeBlocks)
+                }
+                .onChange(of: lines) { _, newLines in
+                    selectedChangeBlockIndex = nil
+                    verticalScrollPosition = nil
+                    publishNavigationState(changeBlocks: Self.changeBlockOffsets(in: newLines))
+                }
+                .onChange(of: navigationRequest) { _, request in
+                    guard let request else { return }
+                    navigateChanges(
+                        direction: request.direction,
+                        changeBlocks: changeBlocks,
+                        proxy: proxy
+                    )
+                }
+        }
+    }
+
+    public nonisolated static func changeBlockOffsets(in lines: [DiffLine]) -> [Int] {
+        var offsets: [Int] = []
+        var previousWasChange = false
+        for (offset, line) in lines.enumerated() {
+            let isChange = switch line.kind {
+            case .added, .removed: true
+            case .context, .hunk, .meta: false
+            }
+            if isChange, !previousWasChange {
+                offsets.append(offset)
+            }
+            previousWasChange = isChange
+        }
+        return offsets
     }
 
     @ViewBuilder
@@ -55,24 +126,33 @@ public struct DiffView: View {
         case .wrap:
             ScrollView(.vertical) {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                    ForEach(Array(lines.enumerated()), id: \.offset) { offset, line in
                         DiffRow(line: line, layout: layout, wraps: true, language: language)
+                            .id(rowID(for: offset))
                     }
                 }
+                .scrollTargetLayout()
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .scrollPosition(id: $verticalScrollPosition, anchor: .top)
         case .scroll:
             GeometryReader { proxy in
                 let viewportWidth = max(0, proxy.size.width - layout.width)
+                let bodyWidth = max(
+                    viewportWidth,
+                    Self.horizontalScrollBodyWidth(for: lines, layout: layout)
+                )
                 ScrollView(.vertical) {
                     HStack(alignment: .top, spacing: 0) {
                         // Sticky gutter column — sits outside the horizontal
                         // scroll so line numbers stay anchored on the left.
                         LazyVStack(alignment: .leading, spacing: 0) {
-                            ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                            ForEach(Array(lines.enumerated()), id: \.offset) { offset, line in
                                 DiffRowGutter(line: line, layout: layout)
+                                    .id(rowID(for: offset))
                             }
                         }
+                        .scrollTargetLayout()
                         // Horizontally scrollable body. Constrain the viewport
                         // to the visible remainder; otherwise the vertical
                         // scroll layout can offer an effectively unbounded
@@ -86,15 +166,88 @@ public struct DiffView: View {
                                         wraps: false,
                                         language: language
                                     )
+                                    .frame(width: bodyWidth, alignment: .leading)
                                 }
                             }
-                            .frame(minWidth: viewportWidth, alignment: .leading)
+                            .frame(width: bodyWidth, alignment: .leading)
                         }
                         .frame(width: viewportWidth, alignment: .leading)
                     }
                     .frame(width: proxy.size.width, alignment: .leading)
                 }
+                .scrollPosition(id: $verticalScrollPosition, anchor: .top)
             }
+        }
+    }
+
+    private func navigateChanges(
+        direction: ChangeNavigationDirection,
+        changeBlocks: [Int],
+        proxy: ScrollViewProxy
+    ) {
+        guard !changeBlocks.isEmpty else {
+            selectedChangeBlockIndex = nil
+            publishNavigationState(changeBlocks: changeBlocks)
+            return
+        }
+
+        let nextIndex: Int
+        switch direction {
+        case .previous:
+            nextIndex = ((selectedChangeBlockIndex ?? changeBlocks.count) - 1 + changeBlocks.count) % changeBlocks.count
+        case .next:
+            nextIndex = ((selectedChangeBlockIndex ?? -1) + 1) % changeBlocks.count
+        }
+
+        selectedChangeBlockIndex = nextIndex
+        let targetID = rowID(for: changeBlocks[nextIndex])
+        verticalScrollPosition = targetID
+        withAnimation(.easeInOut(duration: 0.18)) {
+            proxy.scrollTo(targetID, anchor: .top)
+        }
+        publishNavigationState(changeBlocks: changeBlocks)
+    }
+
+    private func publishNavigationState(changeBlocks: [Int]) {
+        let current = selectedChangeBlockIndex.flatMap { index in
+            changeBlocks.indices.contains(index) ? index : nil
+        }
+        onNavigationStateChange?(.init(changeCount: changeBlocks.count, currentIndex: current))
+    }
+
+    private func rowID(for offset: Int) -> String {
+        "diff-line-\(offset)"
+    }
+
+    static func horizontalScrollBodyWidth(for lines: [DiffLine], layout: GutterLayout) -> CGFloat {
+        let maxColumns = lines.map { horizontalColumnCount(for: $0, layout: layout) }.max() ?? 0
+        let estimatedMonospaceWidth = ClaudeTheme.messageSize(12) * 0.72
+        return ceil(CGFloat(maxColumns) * estimatedMonospaceWidth) + 12
+    }
+
+    private static func horizontalColumnCount(for line: DiffLine, layout: GutterLayout) -> Int {
+        let prefixColumns: Int
+        let body: String
+        switch line.kind {
+        case .added:
+            prefixColumns = 2
+            body = line.text.hasPrefix("+") ? String(line.text.dropFirst()) : line.text
+        case .removed:
+            prefixColumns = 2
+            body = line.text.hasPrefix("-") ? String(line.text.dropFirst()) : line.text
+        case .context:
+            prefixColumns = 2
+            body = line.text.hasPrefix(" ") ? String(line.text.dropFirst()) : line.text
+        case .hunk, .meta:
+            prefixColumns = layout.columnCount > 0 ? 2 : 0
+            body = line.text
+        }
+        return prefixColumns + visualColumnCount(body)
+    }
+
+    private static func visualColumnCount(_ text: String) -> Int {
+        text.reduce(0) { count, character in
+            count + (character == "\t" ? 4 : 1)
         }
     }
 }

@@ -44,6 +44,7 @@ struct SessionsList: View {
                     selected = newSessionID
                 }
                 .environmentObject(state)
+                .mobileSheetPresentation()
             }
             .searchable(
                 text: $searchText,
@@ -314,6 +315,7 @@ struct MobileRunProfilesView: View {
                 MobileRunProfileEditorView(profile: profile, projectID: projectID)
                     .environmentObject(state)
             }
+            .mobileSheetPresentation()
         }
         .alert("Run Profile Error", isPresented: Binding(
             get: { state.lastRunProfileError != nil },

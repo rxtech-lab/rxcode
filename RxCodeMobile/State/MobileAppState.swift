@@ -144,6 +144,9 @@ final class MobileAppState: ObservableObject {
     /// Last branch op error message, surfaced once and cleared by the UI.
     @Published var lastBranchOpError: String?
     @Published var messagesBySession: [String: [ChatMessage]] = [:]
+    /// Maps stale mobile-visible session ids, such as a temporary
+    /// pending-mobile id, to the authoritative desktop session id.
+    @Published var sessionIDRedirects: [String: String] = [:]
     /// Sessions the desktop currently reports as producing reasoning/thinking
     /// tokens. Drives the "Thinking…" label in the streaming indicator.
     @Published var thinkingSessions: Set<String> = []

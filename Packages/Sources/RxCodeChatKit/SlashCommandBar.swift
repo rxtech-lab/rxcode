@@ -531,6 +531,7 @@ struct SlashCommandPopup: View {
             .shadow(color: ClaudeTheme.shadowColor, radius: 12, y: -4)
             .sheet(item: $detailCommand) { cmd in
                 CommandDetailSheet(command: cmd)
+                    .mobileSheetPresentation()
             }
         }
     }
@@ -697,6 +698,7 @@ struct CommandMenuButton: View {
         .popover(isPresented: $showUsagePopover, arrowEdge: .top) { UsagePopoverView() }
         .sheet(isPresented: $showCommandManager) {
             SlashCommandManagerView()
+                .mobileSheetPresentation()
         }
     }
 

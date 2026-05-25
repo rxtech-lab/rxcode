@@ -15,28 +15,55 @@ public struct ChangeDiffView: View {
     private let lines: [DiffLine]
     private let display: DiffView.LineDisplay
     private let language: String?
+    private let navigationRequest: DiffView.ChangeNavigationRequest?
+    private let onNavigationStateChange: ((DiffView.ChangeNavigationState) -> Void)?
 
     /// Renders a raw unified diff, e.g. `git diff` output.
-    public init(unifiedDiff: String, display: DiffView.LineDisplay = .wrap, language: String? = nil) {
+    public init(
+        unifiedDiff: String,
+        display: DiffView.LineDisplay = .wrap,
+        language: String? = nil,
+        navigationRequest: DiffView.ChangeNavigationRequest? = nil,
+        onNavigationStateChange: ((DiffView.ChangeNavigationState) -> Void)? = nil
+    ) {
         self.lines = DiffComputation.parseUnifiedDiff(unifiedDiff)
         self.display = display
         self.language = language
+        self.navigationRequest = navigationRequest
+        self.onNavigationStateChange = onNavigationStateChange
     }
 
     /// Renders old/new replacement pairs as a removed-then-added diff.
-    public init(hunks: [PreviewFile.EditHunk], display: DiffView.LineDisplay = .wrap, language: String? = nil) {
+    public init(
+        hunks: [PreviewFile.EditHunk],
+        display: DiffView.LineDisplay = .wrap,
+        language: String? = nil,
+        navigationRequest: DiffView.ChangeNavigationRequest? = nil,
+        onNavigationStateChange: ((DiffView.ChangeNavigationState) -> Void)? = nil
+    ) {
         self.lines = DiffComputation.buildEditDiffLines(from: hunks)
         self.display = display
         self.language = language
+        self.navigationRequest = navigationRequest
+        self.onNavigationStateChange = onNavigationStateChange
     }
 
     /// Renders the diff between a pre-edit snapshot and a post-edit snapshot.
     /// Preferred when both snapshots are available — gives an exact, thread-
     /// isolated diff with no dependence on hunk anchoring or disk state.
-    public init(original: String, modified: String, display: DiffView.LineDisplay = .wrap, language: String? = nil) {
+    public init(
+        original: String,
+        modified: String,
+        display: DiffView.LineDisplay = .wrap,
+        language: String? = nil,
+        navigationRequest: DiffView.ChangeNavigationRequest? = nil,
+        onNavigationStateChange: ((DiffView.ChangeNavigationState) -> Void)? = nil
+    ) {
         self.lines = DiffComputation.buildSnapshotDiffLines(original: original, current: modified)
         self.display = display
         self.language = language
+        self.navigationRequest = navigationRequest
+        self.onNavigationStateChange = onNavigationStateChange
     }
 
     /// `+/-` counts derived from the same snapshot diff that
@@ -57,6 +84,13 @@ public struct ChangeDiffView: View {
     }
 
     public var body: some View {
-        DiffView(lines: lines, showsBackground: false, display: display, language: language)
+        DiffView(
+            lines: lines,
+            showsBackground: false,
+            display: display,
+            language: language,
+            navigationRequest: navigationRequest,
+            onNavigationStateChange: onNavigationStateChange
+        )
     }
 }

@@ -138,6 +138,7 @@ struct MessageBubble: View {
             set: { previewImagePath = $0?.path }
         )) { item in
             MessageImagePreviewSheet(path: item.path) { previewImagePath = nil }
+                .mobileSheetPresentation()
         }
     }
 

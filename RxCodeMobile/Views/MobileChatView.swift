@@ -137,6 +137,11 @@ struct MobileChatView: View {
             .task(id: sessionID) {
                 await runThreadLoadingGate()
             }
+            .task(id: resolvedSessionID) {
+                if !MobileDraftSessionID.isDraft(resolvedSessionID) {
+                    await state.subscribe(to: resolvedSessionID)
+                }
+            }
             .onChange(of: isThreadLoadingMessages) { _, isLoading in
                 handleThreadLoadingChange(isLoading)
             }
@@ -167,13 +172,13 @@ struct MobileChatView: View {
                                 await state.refreshFromDesktop(reason: "open_run_profiles")
                             }
                     }
+                    .mobileSheetPresentation()
                 }
             }
             .sheet(isPresented: $showingChanges) {
                 ThreadChangesSheet(sessionID: sessionID)
                     .environmentObject(state)
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
+                    .mobileSheetPresentation([.large])
             }
             .fullScreenCover(isPresented: $showingBrowser) {
                 NavigationStack {
@@ -220,8 +225,7 @@ struct MobileChatView: View {
                     },
                     onClose: { presentedPlan = nil }
                 )
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
+                .mobileSheetPresentation([.large])
             }
             .onChange(of: sessionPlans) { _, plans in
                 // The plan resolved (decided here or on another device) or
@@ -553,11 +557,11 @@ struct MobileChatView: View {
     }
 
     private var messages: [ChatMessage] {
-        state.messagesBySession[sessionID] ?? []
+        state.messages(sessionID: sessionID)
     }
 
     private var currentProjectID: UUID? {
-        state.sessions.first(where: { $0.id == sessionID })?.projectId
+        state.sessionSummary(sessionID: sessionID)?.projectId
     }
 
     private var browserLaunchURL: URL? {
@@ -571,7 +575,7 @@ struct MobileChatView: View {
     }
 
     private var title: String {
-        state.sessions.first(where: { $0.id == sessionID })?.title ?? "Thread"
+        state.sessionSummary(sessionID: sessionID)?.title ?? "Thread"
     }
 
     /// Live todos from synced messages when available, otherwise from the
@@ -579,14 +583,18 @@ struct MobileChatView: View {
     /// snapshots rather than `TodoWrite` message tool calls.
     private var todos: [TodoItem]? {
         TodoExtractor.latest(in: messages)
-            ?? state.sessions.first(where: { $0.id == sessionID })?.todos
+            ?? state.sessionSummary(sessionID: sessionID)?.todos
     }
 
     /// The desktop-generated summary for this thread, if one exists. Summaries
     /// are produced once a thread finishes a turn, so live threads may not have
     /// one yet.
     private var threadSummary: MobileThreadSummary? {
-        state.threadSummaries.first { $0.sessionId == sessionID }
+        state.threadSummary(sessionID: sessionID)
+    }
+
+    private var resolvedSessionID: String {
+        state.resolveSessionID(sessionID)
     }
 
     private var isStreaming: Bool {
@@ -607,6 +615,7 @@ struct MobileChatView: View {
 
     private var shouldShowThreadLoading: Bool {
         !MobileDraftSessionID.isDraft(sessionID)
+            && messages.isEmpty
             && isThreadLoadingOverlayVisible
     }
 

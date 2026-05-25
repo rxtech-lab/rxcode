@@ -45,6 +45,7 @@ final class iPhoneNavigationUITests: XCTestCase {
         // Sustain the assertion a bit so a delayed snapshot can't pop us off.
         Thread.sleep(forTimeInterval: 2.0)
         r.assertExists(r.chatScreen, "chat screen remains after snapshot settles")
+        r.assertMessagesShown()
     }
 
     /// Case 3: Projects tab → project → thread list → thread → messages → back →

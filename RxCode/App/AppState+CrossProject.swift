@@ -697,10 +697,52 @@ extension AppState {
                     await finalizeAgentStream(agentProvider: agentProvider, streamId: streamId)
 
                     if sessionKey != resultEvent.sessionId {
-                        if let state = sessionStates.removeValue(forKey: sessionKey) {
+                        let previousSessionKey = sessionKey
+                        let wasForeground = (window.currentSessionId ?? window.newSessionKey) == previousSessionKey
+                        if let state = sessionStates.removeValue(forKey: previousSessionKey) {
                             sessionStates[resultEvent.sessionId] = state
                         }
+                        renameDraftState(from: previousSessionKey, to: resultEvent.sessionId, in: window)
+                        sessionIdRedirect[previousSessionKey] = resultEvent.sessionId
                         sessionKey = resultEvent.sessionId
+                        if wasForeground {
+                            window.currentSessionId = resultEvent.sessionId
+                        }
+
+                        let expectedPlaceholder = "pending-\(streamId.uuidString)"
+                        if window.pendingPlaceholderIds.contains(expectedPlaceholder) {
+                            if let idx = allSessionSummaries.firstIndex(where: { $0.id == expectedPlaceholder }) {
+                                let old = allSessionSummaries[idx]
+                                let replacement = ChatSession(
+                                    id: resultEvent.sessionId,
+                                    projectId: old.projectId,
+                                    title: old.title,
+                                    messages: [],
+                                    createdAt: old.createdAt,
+                                    updatedAt: old.createdAt,
+                                    isPinned: old.isPinned,
+                                    agentProvider: old.agentProvider,
+                                    model: old.model,
+                                    effort: old.effort,
+                                    permissionMode: old.permissionMode,
+                                    origin: old.origin,
+                                    worktreePath: old.worktreePath,
+                                    worktreeBranch: old.worktreeBranch,
+                                    isArchived: old.isArchived,
+                                    archivedAt: old.archivedAt
+                                )
+                                allSessionSummaries.removeAll { $0.id == expectedPlaceholder || $0.id == resultEvent.sessionId }
+                                allSessionSummaries.insert(replacement.summary, at: 0)
+                                threadStore.renameId(from: expectedPlaceholder, to: resultEvent.sessionId)
+                                threadStore.upsert(replacement.summary, cliSessionId: resultEvent.sessionId)
+                            } else {
+                                allSessionSummaries.removeAll { $0.id == expectedPlaceholder }
+                                threadStore.delete(id: expectedPlaceholder)
+                            }
+                            window.removePendingPlaceholder(expectedPlaceholder)
+                        }
+
+                        broadcastMobileSessionRedirect(from: previousSessionKey, to: resultEvent.sessionId)
                     }
 
                     // A background completion is "finished, unread". Setting the

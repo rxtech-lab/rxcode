@@ -78,8 +78,7 @@ struct MobileQuestionSheet: View {
             bottomActionBar
         }
         .background(ClaudeTheme.background)
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
+        .mobileSheetPresentation([.large])
     }
 }
 

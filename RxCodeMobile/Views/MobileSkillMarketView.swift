@@ -67,6 +67,7 @@ struct MobileSkillMarketView: View {
         .sheet(isPresented: $showingGitSourceSheet) {
             MobileSkillGitSourceSheet()
                 .environmentObject(state)
+                .mobileSheetPresentation()
         }
     }
 

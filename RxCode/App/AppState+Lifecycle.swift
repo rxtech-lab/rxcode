@@ -164,6 +164,8 @@ extension AppState {
         customRepos = await persistence.loadCustomRepos()
         marketplaceCustomSources = await marketplace.customSources()
 
+        seedUITestBriefingIfRequested()
+
         // Sidebar threads are now sourced from the local SwiftData store.
         // CLI session files are no longer surfaced in the sidebar list — the
         // CLI is still the transcript backend (replay on thread open), but
@@ -370,6 +372,29 @@ extension AppState {
         window.showingBriefing = true
 
         window.isInitialized = true
+    }
+
+    func seedUITestBriefingIfRequested() {
+        guard ProcessInfo.processInfo.environment["RXCODE_UI_TEST_SEED_BRIEFING"] == "1",
+              let project = projects.first else {
+            return
+        }
+
+        let branch = "main"
+        threadStore.upsertThreadSummary(
+            sessionId: "rxcode-ui-test-seeded-briefing-thread",
+            projectId: project.id,
+            branch: branch,
+            title: "UI Test Seed Thread",
+            summary: "Seeded thread summary for the briefing new-thread acceptance path."
+        )
+        threadStore.upsertBranchBriefing(
+            projectId: project.id,
+            branch: branch,
+            briefing: "Seeded briefing for the local UI acceptance test."
+        )
+        threadSummaryRevision &+= 1
+        branchBriefingRevision &+= 1
     }
 
     // MARK: - ChatBridge Setup

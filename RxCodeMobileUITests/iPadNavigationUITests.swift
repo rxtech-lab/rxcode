@@ -48,6 +48,7 @@ final class iPadNavigationUITests: XCTestCase {
         // navigate us into the projects split.
         Thread.sleep(forTimeInterval: 2.0)
         r.assertExists(r.chatScreen, "chat screen remains after snapshot settles")
+        r.assertMessagesShown()
         r.assertExists(r.briefingListScreen, "briefing list column still visible after settle")
     }
 

@@ -153,21 +153,24 @@ struct ThreadChangesSheet: View {
         // capture race on a large file) fall through so the user still sees
         // the change as full-file diff or hunks.
         if let modified = edit.modifiedContent,
-           let original = edit.originalContent,
-           original != modified {
+            let original = edit.originalContent,
+            original != modified
+        {
             return .snapshot(original: original, modified: modified)
         }
         if let modified = edit.modifiedContent,
-           edit.originalContent == nil,
-           !modified.isEmpty {
+            edit.originalContent == nil,
+            !modified.isEmpty
+        {
             return .snapshot(original: "", modified: modified)
         }
         if let fullFileDiff = edit.fullFileDiff, !fullFileDiff.isEmpty {
             return .unified(fullFileDiff)
         }
-        return .hunks(edit.hunks.map {
-            PreviewFile.EditHunk(oldString: $0.oldString, newString: $0.newString)
-        })
+        return .hunks(
+            edit.hunks.map {
+                PreviewFile.EditHunk(oldString: $0.oldString, newString: $0.newString)
+            })
     }
 
     /// Sidebar `+/-` count. Prefers a fresh snapshot-pair diff when both
@@ -176,7 +179,8 @@ struct ThreadChangesSheet: View {
     /// the snapshot pair collapsed to zero (race-loss on the original capture).
     private func turnStat(_ edit: SyncFileEdit) -> (added: Int, removed: Int) {
         if let modified = edit.modifiedContent {
-            let stat = ChangeDiffView.snapshotStat(original: edit.originalContent ?? "", modified: modified)
+            let stat = ChangeDiffView.snapshotStat(
+                original: edit.originalContent ?? "", modified: modified)
             if stat.added > 0 || stat.removed > 0 {
                 return stat
             }
@@ -328,6 +332,9 @@ struct ThreadChangeDetailView: View {
     let truncated: Bool
 
     @State private var diffDisplay: DiffView.LineDisplay = .wrap
+    @State private var navigationToken = 0
+    @State private var navigationDirection: DiffView.ChangeNavigationDirection?
+    @State private var navigationState = DiffView.ChangeNavigationState.empty
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -359,13 +366,36 @@ struct ThreadChangeDetailView: View {
                 Button {
                     diffDisplay = (diffDisplay == .wrap) ? .scroll : .wrap
                 } label: {
-                    Image(systemName: diffDisplay == .wrap
-                          ? "arrow.left.and.right"
-                          : "text.alignleft")
+                    Image(
+                        systemName: diffDisplay == .wrap
+                            ? "arrow.left.and.right"
+                            : "text.alignleft")
                 }
-                .accessibilityLabel(diffDisplay == .wrap
-                                    ? "Switch to horizontal scroll"
-                                    : "Switch to wrap")
+                .accessibilityLabel(
+                    diffDisplay == .wrap
+                        ? "Switch to horizontal scroll"
+                        : "Switch to wrap")
+            }
+            ToolbarItemGroup(placement: .bottomBar) {
+                Button {
+                    requestChangeNavigation(.previous)
+                } label: {
+                    Image(systemName: "arrow.up")
+                }
+                .disabled(navigationState.changeCount == 0)
+                .accessibilityLabel("Previous change")
+
+                Button {
+                    requestChangeNavigation(.next)
+                } label: {
+                    Image(systemName: "arrow.down")
+                }
+                .disabled(navigationState.changeCount == 0)
+                .accessibilityLabel("Next change")
+
+                Spacer()
+
+                changePositionPill
             }
         }
     }
@@ -378,21 +408,67 @@ struct ThreadChangeDetailView: View {
             if text.isEmpty {
                 emptyDiff
             } else {
-                ChangeDiffView(unifiedDiff: text, display: diffDisplay, language: language)
+                ChangeDiffView(
+                    unifiedDiff: text,
+                    display: diffDisplay,
+                    language: language,
+                    navigationRequest: navigationRequest,
+                    onNavigationStateChange: { navigationState = $0 }
+                )
             }
         case .hunks(let hunks):
             if hunks.isEmpty {
                 emptyDiff
             } else {
-                ChangeDiffView(hunks: hunks, display: diffDisplay, language: language)
+                ChangeDiffView(
+                    hunks: hunks,
+                    display: diffDisplay,
+                    language: language,
+                    navigationRequest: navigationRequest,
+                    onNavigationStateChange: { navigationState = $0 }
+                )
             }
         case .snapshot(let original, let modified):
             if original == modified {
                 emptyDiff
             } else {
-                ChangeDiffView(original: original, modified: modified, display: diffDisplay, language: language)
+                ChangeDiffView(
+                    original: original,
+                    modified: modified,
+                    display: diffDisplay,
+                    language: language,
+                    navigationRequest: navigationRequest,
+                    onNavigationStateChange: { navigationState = $0 }
+                )
             }
         }
+    }
+
+    private var navigationRequest: DiffView.ChangeNavigationRequest? {
+        guard let navigationDirection else { return nil }
+        return DiffView.ChangeNavigationRequest(
+            direction: navigationDirection, token: navigationToken)
+    }
+
+    private var changePositionText: String {
+        guard navigationState.changeCount > 0 else { return "No changes" }
+        guard let currentIndex = navigationState.currentIndex else {
+            return "\(navigationState.changeCount)"
+        }
+        return "\(currentIndex + 1) of \(navigationState.changeCount)"
+    }
+
+    private var changePositionPill: some View {
+        Text(changePositionText)
+            .font(.caption.weight(.medium))
+            .monospacedDigit()
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: true)
+    }
+
+    private func requestChangeNavigation(_ direction: DiffView.ChangeNavigationDirection) {
+        navigationDirection = direction
+        navigationToken += 1
     }
 
     private var emptyDiff: some View {

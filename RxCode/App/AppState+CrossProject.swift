@@ -395,11 +395,15 @@ extension AppState {
 
         var eventCount = 0
         var lastEventTime = Date()
+        logger.info("[Stream:UI] entering for-await session=\(sessionKey, privacy: .public) stream=\(streamId) cwd=\(cwd, privacy: .public)")
 
         do {
             for await event in stream {
                 eventCount += 1
                 let gap = Date().timeIntervalSince(lastEventTime)
+                if eventCount == 1 {
+                    logger.info("[Stream:UI] first event arrived session=\(sessionKey, privacy: .public) stream=\(streamId) after=\(String(format: "%.2f", gap))s")
+                }
                 lastEventTime = Date()
                 updateState(sessionKey) { $0.lastStreamEventDate = lastEventTime }
 

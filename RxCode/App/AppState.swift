@@ -186,6 +186,12 @@ final class AppState {
     /// have not yet picked up the result. Keyed by `streamId`.
     var pendingStreamCompletions: [UUID: StreamCompletion] = [:]
 
+    /// Active callers waiting for a stream's completion. Resumed directly by
+    /// `recordStreamCompletion` so the cross-project MCP handler doesn't sit
+    /// in a polling loop on MainActor (which starves the target project's
+    /// `processStream` and freezes its thread until the sender is cancelled).
+    var streamCompletionWaiters: [UUID: StreamCompletionWaiter] = [:]
+
     // MARK: - Session Summaries (shared — lightweight metadata for all projects)
 
     var allSessionSummaries: [ChatSession.Summary] = []

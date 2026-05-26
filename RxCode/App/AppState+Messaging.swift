@@ -536,6 +536,69 @@ extension AppState {
         }
     }
 
+    // MARK: - Session-id rename handoff (cross-project MCP)
+
+    /// Record that `pendingKey` was renamed to `realSessionId` (the CLI's own
+    /// `session_id`). Mirror writes to `sessionIdRedirect` already; this also
+    /// resumes any `awaitSessionRename` caller so the cross-project send can
+    /// return the real thread id instead of `pending-…`.
+    func applySessionIdRedirect(from pendingKey: String, to realSessionId: String) {
+        sessionIdRedirect[pendingKey] = realSessionId
+        if let waiter = sessionIdRenameWaiters.removeValue(forKey: pendingKey) {
+            waiter.resume(with: realSessionId)
+        }
+    }
+
+    /// Wait up to `timeout` seconds for `pendingKey` to be renamed to the
+    /// CLI's real `session_id`. Fast-paths the answer if the rename already
+    /// landed. Returns `nil` on timeout.
+    func awaitSessionRename(pendingKey: String, timeout: TimeInterval) async -> String? {
+        if let real = sessionIdRedirect[pendingKey] {
+            return real
+        }
+
+        let timeoutTask = Task { [weak self] in
+            let nanos = UInt64(max(0, timeout) * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: nanos)
+            guard let self else { return }
+            await MainActor.run {
+                if let waiter = self.sessionIdRenameWaiters.removeValue(forKey: pendingKey) {
+                    waiter.resume(with: nil)
+                }
+            }
+        }
+
+        let result: String? = await withCheckedContinuation { cont in
+            let waiter = SessionRenameWaiter(continuation: cont)
+            if let real = sessionIdRedirect[pendingKey] {
+                waiter.resume(with: real)
+            } else {
+                sessionIdRenameWaiters[pendingKey] = waiter
+            }
+        }
+
+        timeoutTask.cancel()
+        return result
+    }
+
+}
+
+/// Resumes a single waiting `awaitSessionRename` caller. Same single-shot
+/// pattern as `StreamCompletionWaiter` — guards against double-resume in the
+/// race between the rename notification and the timeout task.
+@MainActor
+final class SessionRenameWaiter {
+    private var continuation: CheckedContinuation<String?, Never>?
+
+    init(continuation: CheckedContinuation<String?, Never>) {
+        self.continuation = continuation
+    }
+
+    func resume(with value: String?) {
+        guard let cont = continuation else { return }
+        continuation = nil
+        cont.resume(returning: value)
+    }
 }
 
 /// Resumes a single waiting `awaitStreamCompletion` caller. The class wrapper

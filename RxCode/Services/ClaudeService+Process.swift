@@ -99,7 +99,12 @@ extension ClaudeCodeServer {
                     return
                 }
 
-                // Read stdout line-by-line — ends naturally at EOF
+                // Read stdout line-by-line via `readabilityHandler` rather than
+                // `FileHandle.AsyncBytes.lines`: the AsyncBytes iterator wedges
+                // when a second concurrent pipe reader is active (cross-project
+                // send spawns a second stream while the first is mid-tool-call),
+                // so the second CLI's events sit in the pipe and never wake the
+                // for-await. Dispatch's readable source delivers reliably.
                 var parsedCount = 0
                 var failedCount = 0
                 let decoder = JSONDecoder()
@@ -107,44 +112,40 @@ extension ClaudeCodeServer {
 
                 var rawLineCount = 0
                 var capturedSessionId: String?
-                do {
-                    for try await line in stdout.fileHandleForReading.bytes.lines {
-                        guard !line.isEmpty else { continue }
-                        guard let data = line.data(using: .utf8) else { continue }
+                for await line in Self.asyncLines(from: stdout.fileHandleForReading, log: log) {
+                    guard !line.isEmpty else { continue }
+                    guard let data = line.data(using: .utf8) else { continue }
 
-                        rawLineCount += 1
-                        // Diagnostic logging of raw NDJSON — full content for first 30 lines, then type field only
-                        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                            let type = (json["type"] as? String) ?? "?"
-                            if rawLineCount <= 30 {
-                                log.info("[Stream:RAW] #\(rawLineCount) type=\(type) line=\(line.prefix(600))")
-                            } else if type == "stream_event" || rawLineCount % 50 == 0 {
-                                log.info("[Stream:RAW] #\(rawLineCount) type=\(type)")
-                            }
-                            if capturedSessionId == nil,
-                               let sid = (json["session_id"] as? String) ?? (json["sessionId"] as? String) {
-                                capturedSessionId = sid
-                                Task { await self.recordSessionId(streamId: streamId, sessionId: sid) }
-                            }
-                        } else if rawLineCount <= 30 {
-                            log.info("[Stream:RAW] #\(rawLineCount) non-JSON line=\(line.prefix(600))")
+                    rawLineCount += 1
+                    // Diagnostic logging of raw NDJSON — full content for first 30 lines, then type field only
+                    if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        let type = (json["type"] as? String) ?? "?"
+                        if rawLineCount <= 30 {
+                            log.info("[Stream:RAW] #\(rawLineCount) type=\(type) line=\(line.prefix(600))")
+                        } else if type == "stream_event" || rawLineCount % 50 == 0 {
+                            log.info("[Stream:RAW] #\(rawLineCount) type=\(type)")
                         }
+                        if capturedSessionId == nil,
+                           let sid = (json["session_id"] as? String) ?? (json["sessionId"] as? String) {
+                            capturedSessionId = sid
+                            Task { await self.recordSessionId(streamId: streamId, sessionId: sid) }
+                        }
+                    } else if rawLineCount <= 30 {
+                        log.info("[Stream:RAW] #\(rawLineCount) non-JSON line=\(line.prefix(600))")
+                    }
 
-                        do {
-                            let event = try decoder.decode(StreamEvent.self, from: data)
-                            parsedCount += 1
-                            continuation.yield(event)
-                        } catch {
-                            failedCount += 1
-                            // Yield raw string so partial events still reach the UI
-                            continuation.yield(.unknown(line))
-                            if failedCount <= 5 {
-                                log.warning("[Stream] parse failed #\(failedCount): \(line.prefix(200))")
-                            }
+                    do {
+                        let event = try decoder.decode(StreamEvent.self, from: data)
+                        parsedCount += 1
+                        continuation.yield(event)
+                    } catch {
+                        failedCount += 1
+                        // Yield raw string so partial events still reach the UI
+                        continuation.yield(.unknown(line))
+                        if failedCount <= 5 {
+                            log.warning("[Stream] parse failed #\(failedCount): \(line.prefix(200))")
                         }
                     }
-                } catch {
-                    log.warning("[Stream] stdout read error: \(error.localizedDescription)")
                 }
 
                 log.info("[Stream] stdout ended (parsed=\(parsedCount), failed=\(failedCount))")
@@ -154,9 +155,49 @@ extension ClaudeCodeServer {
             continuation.onTermination = { reason in
                 log.info("[Stream] terminated (reason=\(String(describing: reason)))")
                 task.cancel()
-                // Close the pipe after the stream ends to unblock the bytes.lines read.
-                // onTermination is called after finish(), so there is no data loss.
+                // Detach the readability handler first so closing the pipe doesn't
+                // race a pending callback dispatch, then close to release the FD.
+                stdout.fileHandleForReading.readabilityHandler = nil
                 stdout.fileHandleForReading.closeFile()
+            }
+        }
+    }
+
+    /// Stream lines from `handle` using a Dispatch-backed `readabilityHandler`.
+    /// We use this instead of `FileHandle.AsyncBytes.lines` because the async
+    /// iterator can wedge when multiple concurrent pipe readers exist (the
+    /// cross-project send case: one CLI is mid-tool-call while another is
+    /// just starting). Dispatch's readable source delivers each chunk via a
+    /// per-handle background callback that doesn't share global async state,
+    /// so a second simultaneous reader is unaffected by the first's progress.
+    private static func asyncLines(from handle: FileHandle, log: Logger) -> AsyncStream<String> {
+        AsyncStream { continuation in
+            // `buffer` is touched only from the readabilityHandler, which Dispatch
+            // serializes onto a single internal queue per FileHandle — no lock needed.
+            nonisolated(unsafe) var buffer = Data()
+            handle.readabilityHandler = { fh in
+                let chunk = fh.availableData
+                if chunk.isEmpty {
+                    // EOF — flush any trailing non-terminated line, then finish.
+                    if !buffer.isEmpty, let trailing = String(data: buffer, encoding: .utf8) {
+                        continuation.yield(trailing)
+                        buffer.removeAll(keepingCapacity: false)
+                    }
+                    fh.readabilityHandler = nil
+                    continuation.finish()
+                    return
+                }
+                buffer.append(chunk)
+                while let newlineIdx = buffer.firstIndex(of: 0x0A) {
+                    let lineData = buffer[buffer.startIndex..<newlineIdx]
+                    buffer.removeSubrange(buffer.startIndex...newlineIdx)
+                    if let line = String(data: lineData, encoding: .utf8) {
+                        continuation.yield(line)
+                    }
+                }
+            }
+            continuation.onTermination = { _ in
+                handle.readabilityHandler = nil
             }
         }
     }

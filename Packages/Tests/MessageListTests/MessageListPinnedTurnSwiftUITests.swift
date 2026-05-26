@@ -35,7 +35,7 @@ struct MessageListPinnedTurnSwiftUITests {
             model.observedBottomRelease
         }
 
-        #expect(model.isAtBottom)
+        #expect(model.observedBottomRelease)
     }
 }
 

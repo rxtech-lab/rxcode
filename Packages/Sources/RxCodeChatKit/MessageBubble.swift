@@ -517,6 +517,14 @@ struct MessageBubble: View {
 
         func appendText(_ block: MessageBlock) {
             guard let text = block.text, !text.isEmpty else { return }
+            // The model emits "No response requested." when a turn arrives with
+            // no real prompt (SessionStart/ScheduleWakeup hooks, context-only
+            // ide__send_to_thread payloads). Keep the block in the data model
+            // (deleting it broke cross-project sends — see commit 9d4a837) but
+            // suppress it visually so it doesn't show up as noise.
+            if CLIMetaEnvelope.isNoResponseRequested(text.trimmingCharacters(in: .whitespacesAndNewlines)) {
+                return
+            }
             if let lastIndex = result.indices.last,
                case .text(let previousBlock) = result[lastIndex] {
                 let previous = previousBlock.text ?? ""

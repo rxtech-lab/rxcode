@@ -371,8 +371,11 @@ extension AppState {
 
     /// Looks up the `AgentBackend` for the given provider. Used by
     /// `processStream`/`cancel`/`finalize` to dispatch via the unified
-    /// protocol instead of switching on the enum directly.
+    /// protocol instead of switching on the enum directly. Tests can
+    /// populate `agentBackendOverrides` to substitute a mock for any
+    /// provider; production code never sets this.
     func backend(for provider: AgentProvider) -> any AgentBackend {
+        if let override = agentBackendOverrides[provider] { return override }
         switch provider {
         case .claudeCode: return claude
         case .codex: return codex

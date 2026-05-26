@@ -810,6 +810,12 @@ final class AppState {
     let claude: ClaudeService
     let codex: CodexAppServer
     let acp: ACPService
+
+    /// Test-only seam — populated by XCTests to substitute a mock backend for
+    /// the production `claude` / `codex` / `acp` services. `backend(for:)`
+    /// returns the override if one is registered, otherwise falls through to
+    /// the real service. Production code never writes to this dictionary.
+    var agentBackendOverrides: [AgentProvider: any AgentBackend] = [:]
     let acpRegistryService = ACPRegistryService()
     let openAISummarization = OpenAISummarizationService()
     let foundationModelSummarization = FoundationModelSummarizationService()

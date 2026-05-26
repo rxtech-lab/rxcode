@@ -69,6 +69,37 @@ public enum DiffComputation {
         return computeUnifiedDiffLines(old: originalLines, new: currentLines)
     }
 
+    // MARK: - Thread edit: snapshot pair with hunk fallback
+
+    /// Picks the best in-memory diff for a thread-edited file using only the
+    /// snapshots and hunks the thread already recorded. Prefers the exact
+    /// snapshot-pair diff (`buildSnapshotDiffLines`). When that pair collapses
+    /// — e.g. the pre-edit snapshot was captured *after* the edit applied so
+    /// `originalContent == modifiedContent` — falls back to rendering the
+    /// recorded hunks via `buildEditDiffLines`, so real edits never silently
+    /// vanish into a "No changes" body when the sidebar is reporting non-zero
+    /// `+N/-N` from the same hunks.
+    public nonisolated static func buildThreadEditDiff(
+        originalContent: String?,
+        modifiedContent: String?,
+        hunks: [PreviewFile.EditHunk]
+    ) -> [DiffLine] {
+        if let modifiedContent {
+            let snapshotLines = buildSnapshotDiffLines(
+                original: originalContent ?? "",
+                current: modifiedContent
+            )
+            // A collapsed snapshot pair (original == modified) still produces
+            // a full list of context lines — that's "no real change", so
+            // require at least one +/- line before trusting the snapshot diff.
+            let hasRealChange = snapshotLines.contains { $0.kind == .added || $0.kind == .removed }
+            if hasRealChange {
+                return snapshotLines
+            }
+        }
+        return buildEditDiffLines(from: hunks)
+    }
+
     // MARK: - Hunks reverse-applied to current → DiffLine
 
     /// Renders the full current file with the supplied hunks highlighted as

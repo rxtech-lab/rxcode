@@ -247,29 +247,41 @@ public struct FileDiffView: View {
         // captured from disk at the right moments (pre-first-edit and
         // post-each-edit). Diff them directly — no view-time disk read, no
         // contamination from external concurrent edits on the same file.
-        if showFullFileDiff, let modified = modifiedContent {
-            let original = originalContent ?? ""
+        // When the pair collapses (original == modified, e.g. a capture-time
+        // race) the helper falls back to the recorded hunks so real edits
+        // never render as "No changes".
+        if showFullFileDiff, modifiedContent != nil {
+            let original = originalContent
+            let modified = modifiedContent
+            let hunks = editHunks
             let lines = await Task.detached(priority: .userInitiated) {
-                DiffComputation.buildSnapshotDiffLines(original: original, current: modified)
+                DiffComputation.buildThreadEditDiff(
+                    originalContent: original,
+                    modifiedContent: modified,
+                    hunks: hunks
+                )
             }.value
             if !lines.isEmpty {
                 diffLines = lines
                 return
             }
-            // Snapshot pair collapsed (e.g. original lost its capture race).
-            // Fall through to the legacy / hunk paths so a real edit still
-            // shows something instead of an empty "no changes" state.
         }
 
         // Legacy fallback for rows persisted before modifiedContent existed:
-        // diff the original snapshot against the current on-disk content.
+        // diff the original snapshot against the current on-disk content. If
+        // disk happens to match the captured original (snapshot-capture race),
+        // fall through to the hunk path so the recorded edits still render.
         if showFullFileDiff, let original = originalContent {
             let path = filePath
-            diffLines = await Task.detached(priority: .userInitiated) {
+            let lines = await Task.detached(priority: .userInitiated) {
                 let current = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
                 return DiffComputation.buildSnapshotDiffLines(original: original, current: current)
             }.value
-            return
+            let hasRealChange = lines.contains { $0.kind == .added || $0.kind == .removed }
+            if hasRealChange {
+                diffLines = lines
+                return
+            }
         }
 
         if !editHunks.isEmpty {

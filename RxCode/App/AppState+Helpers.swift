@@ -144,8 +144,9 @@ extension AppState {
         Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
 
-            let url = await self.cliStore.directory(forCwd: cwd)
-                .appendingPathComponent("\(sessionId).jsonl")
+            let resolvedURL = await self.cliStore.resolveExistingJsonlURL(sid: sessionId, cwd: cwd)
+            let fallbackURL = await self.cliStore.directory(forCwd: cwd).appendingPathComponent("\(sessionId).jsonl")
+            let url = resolvedURL ?? fallbackURL
             let currentSize: UInt64? = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int)
                 .flatMap(UInt64.init(exactly:))
             if let lastSize, let currentSize, currentSize <= lastSize { return }

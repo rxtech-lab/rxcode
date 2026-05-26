@@ -20,6 +20,11 @@ public actor CLISessionStore {
     private var cwdIndex: [String: URL] = [:]
     private var cwdIndexBuiltAt: Date?
 
+    /// Per-sid resolved URL cache. Populated lazily when `jsonlURL` falls back
+    /// to a cross-directory scan (worktree sessions, moved projects, etc.) so
+    /// the scan only happens once per session per process.
+    private var sidURLCache: [String: URL] = [:]
+
     /// Per-sid cache of jsonl sniff results, keyed by sid and invalidated by
     /// file mtime. Avoids re-reading the first ~400 lines of every jsonl every
     /// time the FS watcher fires (which happens on every assistant turn since
@@ -459,6 +464,15 @@ public actor CLISessionStore {
         }
     }
 
+    /// Resolve a session's on-disk jsonl URL, including the worktree fallback.
+    /// Returns nil only when no matching `{sid}.jsonl` exists anywhere under
+    /// `~/.claude/projects/`. Public so callers outside this actor (e.g.
+    /// disk-reconcile size checks) can route to the same physical file.
+    public func resolveExistingJsonlURL(sid: String, cwd: String) async -> URL? {
+        let url = await jsonlURL(sid: sid, cwd: cwd)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
     private func jsonlURL(sid: String, cwd: String) async -> URL {
         // Fast path: most cwds round-trip cleanly through forward encoding, so
         // the jsonl is sitting at the predictable path. Probe that first and
@@ -471,7 +485,51 @@ public actor CLISessionStore {
         if FileManager.default.fileExists(atPath: forwardURL.path) {
             return forwardURL
         }
-        return await directory(forCwd: cwd).appendingPathComponent("\(sid).jsonl")
+        let indexedURL = await directory(forCwd: cwd).appendingPathComponent("\(sid).jsonl")
+        if FileManager.default.fileExists(atPath: indexedURL.path) {
+            return indexedURL
+        }
+        // Worktree fallback: the session may live under a sibling project
+        // directory (e.g. the CLI ran inside a git worktree whose cwd doesn't
+        // match the RxCode project's `path`). Sids are UUIDs, so scanning every
+        // CLI project subdirectory for `{sid}.jsonl` is unambiguous. Result is
+        // memoized per-sid so repeat clicks are O(1).
+        if let resolved = await resolveByScan(sid: sid) {
+            return resolved
+        }
+        // Nothing found — return the forward path so the existing "not found"
+        // diagnostic logging continues to show the expected location.
+        return forwardURL
+    }
+
+    /// Locate a session's jsonl by sid, regardless of which project directory
+    /// the CLI wrote it under. Used as a worktree-aware fallback when the
+    /// caller's cwd doesn't match the session's recorded cwd.
+    private func resolveByScan(sid: String) async -> URL? {
+        if let cached = sidURLCache[sid],
+           FileManager.default.fileExists(atPath: cached.path) {
+            return cached
+        }
+        let projectsRoot = CLIProjectsDirectory.url
+        guard let dirs = try? FileManager.default.contentsOfDirectory(
+            at: projectsRoot,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: .skipsHiddenFiles
+        ) else {
+            return nil
+        }
+        let filename = "\(sid).jsonl"
+        for dir in dirs {
+            let isDir = (try? dir.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+            guard isDir else { continue }
+            let candidate = dir.appendingPathComponent(filename)
+            if FileManager.default.fileExists(atPath: candidate.path) {
+                sidURLCache[sid] = candidate
+                logger.info("[JsonlURL] resolved-by-scan sid=\(sid, privacy: .public) dir=\(dir.lastPathComponent, privacy: .public)")
+                return candidate
+            }
+        }
+        return nil
     }
 
     // MARK: - External activity detection (S2)

@@ -94,6 +94,7 @@ public struct MessageList<Message: MessageListItem, RowContent: View>: View {
                 }
                 .coordinateSpace(.named(MessageListConstants.coordinateSpaceName))
             }
+            .scrollIndicators(.hidden)
             .onGeometryChange(for: CGFloat.self) { geometry in
                 geometry.size.height
             } action: { height in

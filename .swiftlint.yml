@@ -24,6 +24,6 @@ check_for_updates: false
 reporter: xcode
 
 file_length:
-  warning: 800
-  error: 1200
+  warning: 600
+  error: 800
   ignore_comment_only_lines: true

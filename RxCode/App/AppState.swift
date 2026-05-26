@@ -172,6 +172,12 @@ final class AppState {
     /// id after the swap that happens mid-stream in `processStream`.
     var sessionIdRedirect: [String: String] = [:]
 
+    /// Callers waiting for `pending-<streamId>` to be replaced by the CLI's
+    /// real `session_id` on the first `.system` event. The cross-project MCP
+    /// send (`ide__send_to_thread`) holds the JSON-RPC reply until the real
+    /// id is known so the sender's agent never sees a `pending-…` thread id.
+    var sessionIdRenameWaiters: [String: SessionRenameWaiter] = [:]
+
     // MARK: - Stream Completion Tracking (cross-project MCP)
 
     /// Result of a finished stream. Used by `ide__send_to_thread` to surface
@@ -185,6 +191,12 @@ final class AppState {
     /// Completed streams whose owners (callers of `awaitStreamCompletion`)
     /// have not yet picked up the result. Keyed by `streamId`.
     var pendingStreamCompletions: [UUID: StreamCompletion] = [:]
+
+    /// Active callers waiting for a stream's completion. Resumed directly by
+    /// `recordStreamCompletion` so the cross-project MCP handler doesn't sit
+    /// in a polling loop on MainActor (which starves the target project's
+    /// `processStream` and freezes its thread until the sender is cancelled).
+    var streamCompletionWaiters: [UUID: StreamCompletionWaiter] = [:]
 
     // MARK: - Session Summaries (shared — lightweight metadata for all projects)
 

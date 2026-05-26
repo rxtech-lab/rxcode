@@ -456,7 +456,6 @@ extension AppState {
                 if let start = state.streamingStartDate {
                     state.messages[idx].duration = Date().timeIntervalSince(start)
                 }
-                Self.stripNoOpText(at: idx, in: &state.messages)
             }
             state.streamingStartDate = nil
         }
@@ -468,42 +467,154 @@ extension AppState {
 
     // MARK: - Stream Completion (cross-project MCP)
 
-    /// Record that the stream `streamId` finished. Stored in
-    /// `pendingStreamCompletions` for any `awaitStreamCompletion(...)` caller
-    /// (currently `ide__send_to_thread`) to pick up. Latest call wins, except
-    /// we don't overwrite a success with an error from the fallback path.
+    /// Record that the stream `streamId` finished. If a caller is already
+    /// waiting via `awaitStreamCompletion(...)`, the result is handed to it
+    /// directly so it can return immediately; otherwise it's parked in
+    /// `pendingStreamCompletions` until someone picks it up.
     func recordStreamCompletion(
         streamId: UUID,
         sessionId: String,
         assistantText: String,
         error: String?
     ) {
-        pendingStreamCompletions[streamId] = StreamCompletion(
+        let completion = StreamCompletion(
             sessionId: sessionId,
             assistantText: assistantText,
             error: error
         )
+        if let waiter = streamCompletionWaiters.removeValue(forKey: streamId) {
+            waiter.resume(with: completion)
+            return
+        }
+        pendingStreamCompletions[streamId] = completion
     }
 
     /// Wait up to `timeout` seconds for the stream identified by `streamId`
-    /// to record a completion. Polls every 100ms — MainActor serialization
-    /// means the recorder fires between sleeps. Returns the completion if
-    /// one arrived in time, otherwise `nil`.
+    /// to record a completion. Event-driven: `recordStreamCompletion` resumes
+    /// the continuation as soon as the result lands, with a parallel
+    /// `Task.sleep(timeout)` to surface `nil` if the deadline passes first.
+    /// Returns the completion if one arrived in time, otherwise `nil`.
     func awaitStreamCompletion(streamId: UUID, timeout: TimeInterval) async -> StreamCompletion? {
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            if let completion = pendingStreamCompletions.removeValue(forKey: streamId) {
-                return completion
-            }
-            try? await Task.sleep(nanoseconds: 100_000_000)
+        // Fast path — completion already landed before we registered.
+        if let completion = pendingStreamCompletions.removeValue(forKey: streamId) {
+            return completion
         }
-        return pendingStreamCompletions.removeValue(forKey: streamId)
+
+        let timeoutTask = Task { [weak self] in
+            let nanos = UInt64(max(0, timeout) * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: nanos)
+            guard let self else { return }
+            await MainActor.run {
+                if let waiter = self.streamCompletionWaiters.removeValue(forKey: streamId) {
+                    waiter.resume(with: nil)
+                }
+            }
+        }
+
+        let result: StreamCompletion? = await withCheckedContinuation { cont in
+            let waiter = StreamCompletionWaiter(continuation: cont)
+            // Re-check between the fast-path read and continuation install — the
+            // recorder may have fired in between if any MainActor work yielded.
+            if let completion = pendingStreamCompletions.removeValue(forKey: streamId) {
+                waiter.resume(with: completion)
+            } else {
+                streamCompletionWaiters[streamId] = waiter
+            }
+        }
+
+        timeoutTask.cancel()
+        return result
     }
 
     /// Discard a recorded completion. Called by long-running `wait_for_response=false`
     /// MCP sends so the dictionary doesn't grow unbounded with abandoned results.
     func discardStreamCompletion(streamId: UUID) {
         pendingStreamCompletions.removeValue(forKey: streamId)
+        if let waiter = streamCompletionWaiters.removeValue(forKey: streamId) {
+            waiter.resume(with: nil)
+        }
     }
 
+    // MARK: - Session-id rename handoff (cross-project MCP)
+
+    /// Record that `pendingKey` was renamed to `realSessionId` (the CLI's own
+    /// `session_id`). Mirror writes to `sessionIdRedirect` already; this also
+    /// resumes any `awaitSessionRename` caller so the cross-project send can
+    /// return the real thread id instead of `pending-…`.
+    func applySessionIdRedirect(from pendingKey: String, to realSessionId: String) {
+        sessionIdRedirect[pendingKey] = realSessionId
+        if let waiter = sessionIdRenameWaiters.removeValue(forKey: pendingKey) {
+            waiter.resume(with: realSessionId)
+        }
+    }
+
+    /// Wait up to `timeout` seconds for `pendingKey` to be renamed to the
+    /// CLI's real `session_id`. Fast-paths the answer if the rename already
+    /// landed. Returns `nil` on timeout.
+    func awaitSessionRename(pendingKey: String, timeout: TimeInterval) async -> String? {
+        if let real = sessionIdRedirect[pendingKey] {
+            return real
+        }
+
+        let timeoutTask = Task { [weak self] in
+            let nanos = UInt64(max(0, timeout) * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: nanos)
+            guard let self else { return }
+            await MainActor.run {
+                if let waiter = self.sessionIdRenameWaiters.removeValue(forKey: pendingKey) {
+                    waiter.resume(with: nil)
+                }
+            }
+        }
+
+        let result: String? = await withCheckedContinuation { cont in
+            let waiter = SessionRenameWaiter(continuation: cont)
+            if let real = sessionIdRedirect[pendingKey] {
+                waiter.resume(with: real)
+            } else {
+                sessionIdRenameWaiters[pendingKey] = waiter
+            }
+        }
+
+        timeoutTask.cancel()
+        return result
+    }
+
+}
+
+/// Resumes a single waiting `awaitSessionRename` caller. Same single-shot
+/// pattern as `StreamCompletionWaiter` — guards against double-resume in the
+/// race between the rename notification and the timeout task.
+@MainActor
+final class SessionRenameWaiter {
+    private var continuation: CheckedContinuation<String?, Never>?
+
+    init(continuation: CheckedContinuation<String?, Never>) {
+        self.continuation = continuation
+    }
+
+    func resume(with value: String?) {
+        guard let cont = continuation else { return }
+        continuation = nil
+        cont.resume(returning: value)
+    }
+}
+
+/// Resumes a single waiting `awaitStreamCompletion` caller. The class wrapper
+/// guards against double-resume in the race between `recordStreamCompletion`
+/// and the timeout task: whichever fires first wins, and the other becomes a
+/// no-op when it finds the continuation already consumed.
+@MainActor
+final class StreamCompletionWaiter {
+    private var continuation: CheckedContinuation<AppState.StreamCompletion?, Never>?
+
+    init(continuation: CheckedContinuation<AppState.StreamCompletion?, Never>) {
+        self.continuation = continuation
+    }
+
+    func resume(with value: AppState.StreamCompletion?) {
+        guard let cont = continuation else { return }
+        continuation = nil
+        cont.resume(returning: value)
+    }
 }

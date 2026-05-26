@@ -138,6 +138,9 @@ actor IDEMCPServer {
         }
         let id = UUID()
         allocations[sessionKey]?.connections.insert(id)
+        connection.stateUpdateHandler = { state in
+            Self.logger.info("[IDE.conn] conn=\(id.uuidString.prefix(8), privacy: .public) session=\(sessionKey, privacy: .public) state=\(String(describing: state), privacy: .public)")
+        }
         connection.start(queue: .global(qos: .userInitiated))
         Self.logger.info("[IDE] accepted connection id=\(id.uuidString, privacy: .public) on port \(port) session=\(sessionKey, privacy: .public)")
 
@@ -162,6 +165,7 @@ actor IDEMCPServer {
         capabilities: CapabilitySet
     ) async {
         var pendingBuffer = Data()
+        var chunkCount = 0
         while true {
             // Drain any complete lines already buffered.
             while let newline = pendingBuffer.firstIndex(of: 0x0A) {
@@ -172,20 +176,25 @@ actor IDEMCPServer {
                     data: lineData,
                     connection: connection,
                     sessionKey: sessionKey,
-                    capabilities: capabilities
+                    capabilities: capabilities,
+                    connectionId: connectionId
                 )
             }
             // Read more bytes; bail when the peer half-closes.
             do {
                 let chunk = try await readChunk(connection: connection)
-                if chunk.isEmpty { return }
+                if chunk.isEmpty {
+                    Self.logger.info("[IDE.runMCP] eof conn=\(connectionId.uuidString.prefix(8), privacy: .public) session=\(sessionKey, privacy: .public) chunks=\(chunkCount)")
+                    return
+                }
+                chunkCount += 1
                 pendingBuffer.append(chunk)
                 if pendingBuffer.count > Self.messageMaxLength {
                     Self.logger.error("[IDE] message exceeded limit, closing connection id=\(connectionId.uuidString, privacy: .public)")
                     return
                 }
             } catch {
-                Self.logger.info("[IDE] connection read ended: \(error.localizedDescription, privacy: .public)")
+                Self.logger.info("[IDE.runMCP] err conn=\(connectionId.uuidString.prefix(8), privacy: .public) session=\(sessionKey, privacy: .public) chunks=\(chunkCount): \(error.localizedDescription, privacy: .public)")
                 return
             }
         }
@@ -213,7 +222,8 @@ actor IDEMCPServer {
         data: Data.SubSequence,
         connection: NWConnection,
         sessionKey: String,
-        capabilities: CapabilitySet
+        capabilities: CapabilitySet,
+        connectionId: UUID
     ) async {
         let bytes = Data(data)
         guard
@@ -229,8 +239,13 @@ actor IDEMCPServer {
 
         // Notifications (no id) — we only care about `notifications/initialized`
         if id == nil {
+            Self.logger.info("[IDE.recv] conn=\(connectionId.uuidString.prefix(8), privacy: .public) session=\(sessionKey, privacy: .public) notif=\(method ?? "<nil>", privacy: .public)")
             return
         }
+
+        let connTag = connectionId.uuidString.prefix(8)
+        let toolName = (params["name"] as? String) ?? ""
+        Self.logger.info("[IDE.recv] conn=\(connTag, privacy: .public) session=\(sessionKey, privacy: .public) method=\(method ?? "<nil>", privacy: .public) tool=\(toolName, privacy: .public)")
 
         switch method {
         case "initialize":
@@ -248,6 +263,7 @@ actor IDEMCPServer {
                 ],
                 on: connection
             )
+            Self.logger.info("[IDE.sent] conn=\(connTag, privacy: .public) session=\(sessionKey, privacy: .public) reply=initialize")
 
         case "tools/list":
             let tools = await currentTools(sessionKey: sessionKey, capabilities: capabilities)
@@ -256,26 +272,36 @@ actor IDEMCPServer {
                 result: ["tools": tools.map(Self.toolDescriptor)],
                 on: connection
             )
+            Self.logger.info("[IDE.sent] conn=\(connTag, privacy: .public) session=\(sessionKey, privacy: .public) reply=tools/list count=\(tools.count)")
 
         case "tools/call":
             let name = params["name"] as? String ?? ""
             let arguments = params["arguments"] as? [String: Any] ?? [:]
             let argsValue = JSONValue.fromAny(arguments)
+            let callStart = Date()
             do {
                 let handler = self.handler
                 guard let handler else {
                     throw IDEToolError.handlerFailed("IDE handler not attached")
                 }
+                Self.logger.info("[IDE.call→] conn=\(connTag, privacy: .public) session=\(sessionKey, privacy: .public) tool=\(name, privacy: .public)")
                 let result = try await handler.ideHandleToolCall(
                     name: name,
                     arguments: argsValue,
                     sessionKey: sessionKey
                 )
+                let elapsed = Date().timeIntervalSince(callStart)
+                Self.logger.info("[IDE.call←] conn=\(connTag, privacy: .public) session=\(sessionKey, privacy: .public) tool=\(name, privacy: .public) elapsed=\(String(format: "%.1f", elapsed))s")
                 let payload = Self.wrapToolResult(result)
                 await reply(id: id!, result: payload, on: connection)
+                Self.logger.info("[IDE.sent] conn=\(connTag, privacy: .public) session=\(sessionKey, privacy: .public) reply=tools/call tool=\(name, privacy: .public)")
             } catch let error as IDEToolError {
+                let elapsed = Date().timeIntervalSince(callStart)
+                Self.logger.warning("[IDE.call✗] conn=\(connTag, privacy: .public) session=\(sessionKey, privacy: .public) tool=\(name, privacy: .public) elapsed=\(String(format: "%.1f", elapsed))s err=\(Self.errorMessage(for: error), privacy: .public)")
                 await replyError(id: id!, code: Self.errorCode(for: error), message: Self.errorMessage(for: error), on: connection)
             } catch {
+                let elapsed = Date().timeIntervalSince(callStart)
+                Self.logger.warning("[IDE.call✗] conn=\(connTag, privacy: .public) session=\(sessionKey, privacy: .public) tool=\(name, privacy: .public) elapsed=\(String(format: "%.1f", elapsed))s err=\(error.localizedDescription, privacy: .public)")
                 await replyError(id: id!, code: -32603, message: error.localizedDescription, on: connection)
             }
 

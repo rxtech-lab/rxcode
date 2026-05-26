@@ -105,9 +105,23 @@ extension AppState {
         }
 
         // After sendPrompt returns, window.currentSessionId is the (possibly
-        // pending-) key the stream is bound to. The CLI may rename it to its
-        // own sid mid-stream; we surface whichever id the completion lands on.
-        let postSendThreadId = window.currentSessionId ?? resolvedThreadId ?? ""
+        // pending-) key the stream is bound to. Resolve the real CLI session
+        // id before returning so the caller's agent never sees `pending-…`
+        // (which it can't use to follow up via `get_thread_messages` etc.).
+        let postSendKey = window.currentSessionId ?? resolvedThreadId ?? ""
+        let resolvedThreadIdForReturn: String
+        if postSendKey.hasPrefix("pending-") {
+            // Cap the rename wait at the request's timeout so we still honor
+            // the caller's deadline; 60s upper bound matches typical first-token
+            // latency under healthy conditions.
+            let renameTimeout = min(max(timeoutSeconds, 1), 60)
+            resolvedThreadIdForReturn = await awaitSessionRename(
+                pendingKey: postSendKey,
+                timeout: renameTimeout
+            ) ?? postSendKey
+        } else {
+            resolvedThreadIdForReturn = postSendKey
+        }
 
         if !waitForResponse {
             // Don't leak the result in the dictionary — the caller is
@@ -116,7 +130,7 @@ extension AppState {
                 _ = await self?.awaitStreamCompletion(streamId: streamId, timeout: timeoutSeconds)
             }
             return CrossProjectSendResult(
-                threadId: postSendThreadId,
+                threadId: resolvedThreadIdForReturn,
                 projectId: resolvedProject.id,
                 done: false,
                 assistantText: "",
@@ -138,34 +152,12 @@ extension AppState {
             // the caller can decide whether to poll back via get_thread_messages.
             let partial = lastAssistantResponseText(in: stateForSession(window.currentSessionId ?? "").messages)
             return CrossProjectSendResult(
-                threadId: window.currentSessionId ?? postSendThreadId,
+                threadId: resolvedThreadIdForReturn,
                 projectId: resolvedProject.id,
                 done: false,
                 assistantText: partial,
                 error: nil
             )
-        }
-    }
-
-    /// Drop "No response requested." text blocks from the assistant message
-    /// at `idx`. If the message has no blocks left after the strip, remove
-    /// it entirely. Called at turn-finalization sites — the marker is the
-    /// model's response when a turn arrives without a user prompt
-    /// (ScheduleWakeup, hook re-entry) and reads as noise in the chat UI.
-    /// Strip CLI no-op meta text ("no response requested") from a message.
-    ///
-    /// `removeIfEmpty` controls whether a message left with no blocks is also
-    /// deleted. The normal stream path passes `true` to discard pure no-op
-    /// envelopes; the cancel path passes `false` so pausing a turn never makes
-    /// the partial assistant bubble disappear.
-    static func stripNoOpText(at idx: Int, in messages: inout [ChatMessage], removeIfEmpty: Bool = true) {
-        guard messages.indices.contains(idx) else { return }
-        messages[idx].blocks.removeAll { block in
-            guard let text = block.text else { return false }
-            return CLIMetaEnvelope.isNoResponseRequested(text.trimmingCharacters(in: .whitespacesAndNewlines))
-        }
-        if removeIfEmpty, messages[idx].blocks.isEmpty {
-            messages.remove(at: idx)
         }
     }
 
@@ -395,11 +387,15 @@ extension AppState {
 
         var eventCount = 0
         var lastEventTime = Date()
+        logger.info("[Stream:UI] entering for-await session=\(sessionKey, privacy: .public) stream=\(streamId) cwd=\(cwd, privacy: .public)")
 
         do {
             for await event in stream {
                 eventCount += 1
                 let gap = Date().timeIntervalSince(lastEventTime)
+                if eventCount == 1 {
+                    logger.info("[Stream:UI] first event arrived session=\(sessionKey, privacy: .public) stream=\(streamId) after=\(String(format: "%.2f", gap))s")
+                }
                 lastEventTime = Date()
                 updateState(sessionKey) { $0.lastStreamEventDate = lastEventTime }
 
@@ -418,7 +414,7 @@ extension AppState {
                             if let state = sessionStates.removeValue(forKey: sessionKey) {
                                 sessionStates[resultEvent.sessionId] = state
                             }
-                            sessionIdRedirect[sessionKey] = resultEvent.sessionId
+                            applySessionIdRedirect(from: sessionKey, to: resultEvent.sessionId)
                             sessionKey = resultEvent.sessionId
                         }
                         let msgs = stateForSession(sessionKey).messages
@@ -452,7 +448,7 @@ extension AppState {
                                 sessionStates[sid] = state
                             }
                             renameDraftState(from: previousSessionKey, to: sid, in: window)
-                            sessionIdRedirect[previousSessionKey] = sid
+                            applySessionIdRedirect(from: previousSessionKey, to: sid)
                             sessionKey = sid
                             startFlushTimer(for: sid)
 
@@ -674,7 +670,6 @@ extension AppState {
                                         }) {
                                             state.messages[idx].isStreaming = false
                                             state.messages[idx].finalizeToolCalls()
-                                            Self.stripNoOpText(at: idx, in: &state.messages)
                                         }
                                         state.messages.append(ChatMessage(role: .assistant, isStreaming: true))
                                         state.needsNewMessage = false
@@ -716,7 +711,7 @@ extension AppState {
                             sessionStates[resultEvent.sessionId] = state
                         }
                         renameDraftState(from: previousSessionKey, to: resultEvent.sessionId, in: window)
-                        sessionIdRedirect[previousSessionKey] = resultEvent.sessionId
+                        applySessionIdRedirect(from: previousSessionKey, to: resultEvent.sessionId)
                         sessionKey = resultEvent.sessionId
                         if wasForeground {
                             window.currentSessionId = resultEvent.sessionId

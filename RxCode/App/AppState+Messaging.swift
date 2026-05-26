@@ -456,7 +456,6 @@ extension AppState {
                 if let start = state.streamingStartDate {
                     state.messages[idx].duration = Date().timeIntervalSince(start)
                 }
-                Self.stripNoOpText(at: idx, in: &state.messages)
             }
             state.streamingStartDate = nil
         }

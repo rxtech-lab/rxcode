@@ -20,12 +20,6 @@ protocol AppStatePersistenceService: Actor {
     func saveACPClients(_ clients: [ACPClientSpec]) throws
     func loadACPClients() -> [ACPClientSpec]
     nonisolated func acpRegistrySnapshotURL() -> URL
-
-    func saveCustomRepos(_ repos: [CustomRepo]) throws
-    func loadCustomRepos() -> [CustomRepo]
-
-    func saveGitHubUser(_ user: GitHubUser) throws
-    func loadGitHubUser() -> GitHubUser?
 }
 
 extension AppStatePersistenceService {
@@ -269,30 +263,6 @@ actor PersistenceService: AppStatePersistenceService {
     /// `ACPRegistryService` reads/writes this file directly.
     nonisolated func acpRegistrySnapshotURL() -> URL {
         AppSupport.bundleScopedURL.appendingPathComponent("acp_registry.json")
-    }
-
-    // MARK: - Custom Git Repositories
-
-    func saveCustomRepos(_ repos: [CustomRepo]) throws {
-        let url = baseURL.appendingPathComponent("custom_repos.json")
-        try encode(repos, to: url)
-    }
-
-    func loadCustomRepos() -> [CustomRepo] {
-        let url = baseURL.appendingPathComponent("custom_repos.json")
-        return decode([CustomRepo].self, from: url) ?? []
-    }
-
-    // MARK: - GitHub User Cache
-
-    func saveGitHubUser(_ user: GitHubUser) throws {
-        let url = baseURL.appendingPathComponent("github_user.json")
-        try encode(user, to: url)
-    }
-
-    func loadGitHubUser() -> GitHubUser? {
-        let url = baseURL.appendingPathComponent("github_user.json")
-        return decode(GitHubUser.self, from: url)
     }
 
     // MARK: - Private Helpers

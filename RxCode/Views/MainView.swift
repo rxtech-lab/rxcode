@@ -183,13 +183,9 @@ struct MainView: View {
                 Button {
                     showGitHubSheet = true
                 } label: {
-                    Image("GitHubMark")
-                        .renderingMode(.template)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 16, height: 16)
+                    Image(systemName: "square.and.arrow.down")
                 }
-                .help(appState.isLoggedIn ? "Manage GitHub Repos" : "Connect GitHub")
+                .help(appState.isSignedIn ? "Import Repository" : "Sign in to rxlab")
             }
 
             ToolbarItem(placement: .navigation) {
@@ -233,7 +229,7 @@ struct MainView: View {
         .background(ClaudeTheme.sidebarBackground.ignoresSafeArea())
         .navigationSplitViewColumnWidth(min: 250, ideal: 250, max: 500)
         .sheet(isPresented: $showGitHubSheet) {
-            GitHubSheet()
+            AutopilotRepoSheet()
         }
     }
 

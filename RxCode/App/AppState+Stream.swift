@@ -220,6 +220,7 @@ extension AppState {
                     // New Claude turn after receiving tool result — start a new ChatMessage
                     state.messages[idx].isStreaming = false
                     state.messages[idx].finalizeToolCalls()
+                    Self.stripNoOpText(at: idx, in: &state.messages)
                     state.needsNewMessage = false
                     state.messages.append(ChatMessage(role: .assistant, content: buffered, isStreaming: true))
                 } else {
@@ -304,6 +305,7 @@ extension AppState {
                         if let idx = state.messages.indices.reversed().first(where: { state.messages[$0].role == .assistant && state.messages[$0].isStreaming }) {
                             state.messages[idx].isStreaming = false
                             state.messages[idx].finalizeToolCalls()
+                            Self.stripNoOpText(at: idx, in: &state.messages)
                         }
                         state.messages.append(ChatMessage(role: .assistant, isStreaming: true))
                         state.needsNewMessage = false
@@ -442,11 +444,13 @@ extension AppState {
                 // The user paused this turn — keep the partial assistant bubble
                 // visible. markStreamInterrupted() clears the message's streaming
                 // flag and retains in-progress tool calls (flagged as interrupted)
-                // instead of dropping them.
+                // instead of dropping them; the no-op strip below is told not to
+                // delete an emptied message.
                 state.messages[idx].markStreamInterrupted()
                 if let start = state.streamingStartDate {
                     state.messages[idx].duration = Date().timeIntervalSince(start)
                 }
+                Self.stripNoOpText(at: idx, in: &state.messages, removeIfEmpty: false)
             }
             state.streamingStartDate = nil
             state.inFlightUserAttachments = []

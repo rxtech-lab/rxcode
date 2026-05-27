@@ -3,23 +3,28 @@ import Security
 
 enum KeychainHelper {
 
-    // MARK: - Read (security CLI — reads items created by other apps without a popup)
+    // MARK: - Read (SecItem API — same process that wrote the item)
 
     nonisolated static func read(service: String, account: String? = nil) -> Data? {
-        var args = ["find-generic-password", "-s", service, "-w"]
+        var query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
         if let account {
-            args.insert(contentsOf: ["-a", account], at: 1)
+            query[kSecAttrAccount as String] = account
         }
-        guard let output = runSecurity(args) else { return nil }
-        return output.data(using: .utf8)
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        guard status == errSecSuccess else { return nil }
+        return result as? Data
     }
 
     nonisolated static func readString(service: String, account: String? = nil) -> String? {
-        var args = ["find-generic-password", "-s", service, "-w"]
-        if let account {
-            args.insert(contentsOf: ["-a", account], at: 1)
-        }
-        return runSecurity(args)
+        guard let data = read(service: service, account: account) else { return nil }
+        return String(data: data, encoding: .utf8)
     }
 
     // MARK: - Write / Delete (SecItem API — own app items)
@@ -54,27 +59,6 @@ enum KeychainHelper {
         let status = SecItemDelete(query as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw KeychainError.operationFailed(status)
-        }
-    }
-
-    // MARK: - Private
-
-    private nonisolated static func runSecurity(_ args: [String]) -> String? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-        process.arguments = args
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
-
-        do {
-            try process.run()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            guard process.terminationStatus == 0 else { return nil }
-            return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        } catch {
-            return nil
         }
     }
 

@@ -29,6 +29,21 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.rxtech.rxcode.oauth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>rxcode</string>
+			</array>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+		</dict>
+	</array>
+	<key>AutopilotBaseURL</key>
+	<string>https://autopilot.rxlab.app</string>
 	<key>NSHumanReadableCopyright</key>
 	<string></string>
 	<key>SUFeedURL</key>

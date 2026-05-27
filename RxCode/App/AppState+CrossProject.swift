@@ -161,6 +161,26 @@ extension AppState {
         }
     }
 
+    /// Drop "No response requested." text blocks from the assistant message
+    /// at `idx`. The marker is the model's response when a turn arrives
+    /// without a user prompt (ScheduleWakeup, hook re-entry) and reads as
+    /// noise in the chat UI.
+    ///
+    /// `removeIfEmpty` controls whether a message left with no blocks is also
+    /// deleted. The normal stream path passes `true` to discard pure no-op
+    /// envelopes; the cancel path passes `false` so pausing a turn never makes
+    /// the partial assistant bubble disappear.
+    static func stripNoOpText(at idx: Int, in messages: inout [ChatMessage], removeIfEmpty: Bool = true) {
+        guard messages.indices.contains(idx) else { return }
+        messages[idx].blocks.removeAll { block in
+            guard let text = block.text else { return false }
+            return CLIMetaEnvelope.isNoResponseRequested(text.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        if removeIfEmpty, messages[idx].blocks.isEmpty {
+            messages.remove(at: idx)
+        }
+    }
+
     /// Wrap a branch briefing into a system-prompt section the agent can use as
     /// background context. The briefing is auto-generated from earlier threads,
     /// so it is framed as advisory rather than authoritative.
@@ -670,6 +690,7 @@ extension AppState {
                                         }) {
                                             state.messages[idx].isStreaming = false
                                             state.messages[idx].finalizeToolCalls()
+                                            Self.stripNoOpText(at: idx, in: &state.messages)
                                         }
                                         state.messages.append(ChatMessage(role: .assistant, isStreaming: true))
                                         state.needsNewMessage = false

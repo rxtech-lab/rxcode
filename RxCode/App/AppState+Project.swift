@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import os
 import RxCodeChatKit
@@ -230,46 +231,150 @@ extension AppState {
         await didSwitchToSession(session)
     }
 
-    // MARK: - GitHub
+    // MARK: - rxauth + autopilot
 
-    func loginToGitHub() async throws -> DeviceCodeResponse {
-        try await github.startDeviceFlow()
-    }
-
-    func completeGitHubLogin(deviceCode: String, interval: Int) async throws {
-        _ = try await github.pollForToken(deviceCode: deviceCode, interval: interval)
-
-        let user = try await github.fetchUser()
-        gitHubUser = user
-        isLoggedIn = true
+    /// Called from `RxAuthSignInView.onAuthSuccess` once `OAuthManager` has
+    /// switched to `.authenticated`. `isSignedIn`/`rxUser` track the manager
+    /// directly; this hook only handles the side effects (mark onboarding
+    /// complete, kick off a background repo fetch).
+    func onRxAuthSignedIn() {
         onboardingCompleted = true
         UserDefaults.standard.set(true, forKey: "onboardingCompleted")
+        Task { await loadRepos() }
+    }
 
-        do { try await persistence.saveGitHubUser(user) }
-        catch { logger.error("Failed to cache GitHub user: \(error.localizedDescription)") }
+    func signOutRxAuth() async {
+        await rxAuth.signOut()
+        repos = []
+        installations = []
+        hasGitHubAppInstalled = nil
+        repoNextCursor = nil
+        repoHasMoreRepos = false
+        repoCurrentSearch = ""
+    }
 
+    /// Default page size for the server-side paginated repo list.
+    static let defaultRepoPageSize = 50
+
+    /// Load the first page for the given search term, plus the parallel
+    /// installation list used to render owner avatars in the import-repo
+    /// sheet. Replaces any previously loaded repos. Pass `refresh: true` to
+    /// bust the server's 60s cache on the repos endpoint (installations
+    /// always refetch).
+    func loadRepos(search: String = "", refresh: Bool = false) async {
+        guard isSignedIn else { return }
+        let trimmed = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        repoCurrentSearch = trimmed
+        let requestedSearch = trimmed
+        isLoadingRepos = true
+        defer { isLoadingRepos = false }
+        async let reposTask = autopilot.listRepositories(
+            search: trimmed.isEmpty ? nil : trimmed,
+            cursor: nil,
+            perPage: AppState.defaultRepoPageSize,
+            refresh: refresh
+        )
+        async let installationsTask = autopilot.listInstallations()
         do {
-            let publicKey = try await github.setupSSH()
-            try await github.registerSSHKey(publicKey)
+            let response = try await reposTask
+            // A newer search may have replaced `repoCurrentSearch` while this
+            // request was in flight — drop the stale result so the UI doesn't
+            // briefly show repos for the previous query.
+            guard requestedSearch == repoCurrentSearch else { return }
+            repos = response.items
+            repoNextCursor = response.pagination?.nextCursor
+            repoHasMoreRepos = response.pagination?.hasMore ?? false
         } catch {
-            logger.warning("SSH setup failed: \(error.localizedDescription)")
+            logger.error("Failed to fetch repos from autopilot: \(error.localizedDescription)")
+        }
+        do {
+            installations = try await installationsTask
+        } catch {
+            // Avatars degrade gracefully — log and continue with the existing
+            // list rather than failing the whole load.
+            logger.error("Failed to fetch installations from autopilot: \(error.localizedDescription)")
         }
     }
 
-    func skipGitHubLogin() {
-        onboardingCompleted = true
-        UserDefaults.standard.set(true, forKey: "onboardingCompleted")
+    /// Fetch the next page for the currently displayed search term. No-op when
+    /// the server reported no more pages, a load is already in flight, or the
+    /// user is signed out.
+    func loadMoreRepos() async {
+        guard isSignedIn, !isLoadingRepos, !isLoadingMoreRepos else { return }
+        guard repoHasMoreRepos, let cursor = repoNextCursor else { return }
+        let requestedSearch = repoCurrentSearch
+        isLoadingMoreRepos = true
+        defer { isLoadingMoreRepos = false }
+        do {
+            let response = try await autopilot.listRepositories(
+                search: requestedSearch.isEmpty ? nil : requestedSearch,
+                cursor: cursor,
+                perPage: AppState.defaultRepoPageSize
+            )
+            // Drop the page if the search changed while we were loading.
+            guard requestedSearch == repoCurrentSearch else { return }
+            // Defensive: server returns deduped pages, but if the user kicked
+            // a refresh between pages we could see overlap — dedupe by id.
+            let existingIds = Set(repos.map(\.id))
+            repos.append(contentsOf: response.items.filter { !existingIds.contains($0.id) })
+            repoNextCursor = response.pagination?.nextCursor
+            repoHasMoreRepos = response.pagination?.hasMore ?? false
+        } catch {
+            logger.error("Failed to fetch next repo page from autopilot: \(error.localizedDescription)")
+        }
     }
 
-
-    func fetchRepos() async {
-        isFetchingRepos = true
-        defer { isFetchingRepos = false }
-        do { repos = try await github.fetchRepos() }
-        catch { logger.error("Failed to fetch repos: \(error.localizedDescription)") }
+    /// Tiny "do you have any installations?" probe. Stored on AppState so
+    /// the sheet can branch on it without holding its own state machine.
+    func checkInstallation() async {
+        guard isSignedIn else {
+            hasGitHubAppInstalled = nil
+            return
+        }
+        isCheckingInstall = true
+        defer { isCheckingInstall = false }
+        do {
+            let result = try await autopilot.precheckInstallations()
+            hasGitHubAppInstalled = result.hasInstallation
+        } catch {
+            logger.error("Failed to precheck installations: \(error.localizedDescription)")
+        }
     }
 
-    func cloneAndAddProject(_ repo: GitHubRepo, in window: WindowState) async throws {
+    /// Fetch a fresh GitHub App install URL (with signed state) and open it
+    /// in the user's default browser. The sheet's Refresh button is then
+    /// responsible for picking up the resulting installation.
+    func openInstallGitHubApp() async {
+        guard isSignedIn else { return }
+        isOpeningInstallUrl = true
+        defer { isOpeningInstallUrl = false }
+        do {
+            let response = try await autopilot.installUrl()
+            guard let url = URL(string: response.url) else {
+                logger.error("autopilot returned an invalid install URL: \(response.url)")
+                return
+            }
+            NSWorkspace.shared.open(url)
+        } catch {
+            logger.error("Failed to fetch install URL: \(error.localizedDescription)")
+        }
+    }
+
+    /// User-triggered "did the install land?" refresh. Re-runs the precheck
+    /// and, if installed, follows up with a forced repo refresh so the new
+    /// installation's repos show up immediately.
+    func refreshInstallationAndRepos() async {
+        await checkInstallation()
+        if hasGitHubAppInstalled == true {
+            await loadRepos(search: repoCurrentSearch, refresh: true)
+        } else {
+            repos = []
+            repoNextCursor = nil
+            repoHasMoreRepos = false
+        }
+    }
+
+    func cloneAndAddProject(_ repo: AutopilotRepo, in window: WindowState) async throws {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let clonePath = "\(home)/RxCode/\(repo.name)"
         let parentDir = "\(home)/RxCode"
@@ -277,52 +382,29 @@ extension AppState {
         if !fm.fileExists(atPath: parentDir) {
             try fm.createDirectory(atPath: parentDir, withIntermediateDirectories: true)
         }
-        try await github.cloneRepo(repo, to: clonePath)
+        let cloneURL = repo.isPrivate ? repo.sshUrl : repo.cloneUrl
+        try await gitClone(from: cloneURL, to: clonePath)
         await addAndSelectProject(name: repo.name, path: clonePath, gitHubRepo: repo.fullName, in: window)
     }
 
-    func loadCustomRepos() async {
-        customRepos = await persistence.loadCustomRepos()
-    }
+    private func gitClone(from url: String, to path: String) async throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        process.arguments = ["clone", url, path]
+        process.environment = ProcessInfo.processInfo.environment
 
-    func addCustomRepo(url: String, name: String, in window: WindowState) async throws {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let clonePath = "\(home)/RxCode/\(name)"
-        let fm = FileManager.default
-        if !fm.fileExists(atPath: "\(home)/RxCode") {
-            try fm.createDirectory(atPath: "\(home)/RxCode", withIntermediateDirectories: true)
-        }
-        if fm.fileExists(atPath: clonePath) {
-            throw NSError(domain: "RxCode", code: 1, userInfo: [NSLocalizedDescriptionKey: "A folder named '\(name)' already exists in ~/RxCode"])
-        }
-        try await github.cloneRepo(from: url, to: clonePath)
-        let repo = CustomRepo(name: name, cloneURL: url)
-        customRepos.append(repo)
-        try await persistence.saveCustomRepos(customRepos)
-        await addAndSelectProject(name: name, path: clonePath, gitHubRepo: nil, in: window)
-    }
+        let stderrPipe = Pipe()
+        process.standardError = stderrPipe
+        try process.run()
 
-    func cloneCustomRepo(_ repo: CustomRepo, in window: WindowState) async throws {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let clonePath = "\(home)/RxCode/\(repo.name)"
-        let fm = FileManager.default
-        if !fm.fileExists(atPath: "\(home)/RxCode") {
-            try fm.createDirectory(atPath: "\(home)/RxCode", withIntermediateDirectories: true)
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            process.terminationHandler = { _ in continuation.resume() }
         }
-        if fm.fileExists(atPath: clonePath) {
-            throw NSError(domain: "RxCode", code: 1, userInfo: [NSLocalizedDescriptionKey: "A folder named '\(repo.name)' already exists in ~/RxCode"])
-        }
-        try await github.cloneRepo(from: repo.cloneURL, to: clonePath)
-        await addAndSelectProject(name: repo.name, path: clonePath, gitHubRepo: nil, in: window)
-    }
 
-    func removeCustomRepo(_ repo: CustomRepo) async {
-        customRepos.removeAll { $0.id == repo.id }
-        do {
-            try await persistence.saveCustomRepos(customRepos)
-        } catch {
-            logger.error("Failed to save custom repos: \(error.localizedDescription)")
+        guard process.terminationStatus == 0 else {
+            let data = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+            let stderr = String(data: data, encoding: .utf8) ?? "unknown error"
+            throw NSError(domain: "RxCode.GitClone", code: Int(process.terminationStatus), userInfo: [NSLocalizedDescriptionKey: stderr])
         }
     }
-
 }

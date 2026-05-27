@@ -75,6 +75,7 @@
       }
     },
     "@%@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -518,6 +519,7 @@
       }
     },
     "Add a Git repository by URL" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -682,6 +684,7 @@
       }
     },
     "Add Repository" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -1121,6 +1124,7 @@
       }
     },
     "Authenticate on GitHub" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1143,6 +1147,7 @@
       }
     },
     "Authentication Code" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1301,6 +1306,9 @@
           }
         }
       }
+    },
+    "Autopilot" : {
+
     },
     "Awaiting check" : {
       "localizations" : {
@@ -1645,6 +1653,7 @@
       }
     },
     "Clone" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -1655,6 +1664,7 @@
       }
     },
     "Clone & Add" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -1799,6 +1809,7 @@
       }
     },
     "Configure org access →" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1821,6 +1832,7 @@
       }
     },
     "Connect GitHub" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1843,6 +1855,7 @@
       }
     },
     "Connect GitHub to\nimport repos instantly" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1865,6 +1878,7 @@
       }
     },
     "Connect GitHub to fetch your repo list and add projects with a single click." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1915,6 +1929,9 @@
           }
         }
       }
+    },
+    "Connect your rxlab account to enable autopilot." : {
+
     },
     "Connected" : {
       "localizations" : {
@@ -2024,6 +2041,7 @@
       }
     },
     "Copy Code" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2106,6 +2124,7 @@
       }
     },
     "Custom" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -2512,6 +2531,7 @@
       }
     },
     "Don't see your org repos?" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2534,6 +2554,7 @@
       }
     },
     "Don't see your org repos? →" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -3023,6 +3044,9 @@
         }
       }
     },
+    "Finished installing? Tap Refresh." : {
+
+    },
     "Focus Mode" : {
       "localizations" : {
         "en" : {
@@ -3206,6 +3230,7 @@
       }
     },
     "Git Repositories" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -3216,6 +3241,7 @@
       }
     },
     "Git URL" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -3370,6 +3396,7 @@
       }
     },
     "https://github.com/owner/repo.git or git@github.com:owner/repo.git" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -3400,6 +3427,9 @@
           }
         }
       }
+    },
+    "Import Repository" : {
+
     },
     "In progress" : {
       "localizations" : {
@@ -3478,6 +3508,15 @@
           }
         }
       }
+    },
+    "Install GitHub App" : {
+
+    },
+    "Install GitHub App on another account" : {
+
+    },
+    "Install the GitHub App" : {
+
     },
     "Installed" : {
       "localizations" : {
@@ -3636,6 +3675,9 @@
           }
         }
       }
+    },
+    "Loading more..." : {
+
     },
     "Loading registry…" : {
       "localizations" : {
@@ -3816,6 +3858,7 @@
       }
     },
     "Manage GitHub Repos" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -4103,6 +4146,7 @@
       }
     },
     "my-project" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -4309,6 +4353,7 @@
       }
     },
     "No custom repositories" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -4494,6 +4539,9 @@
         }
       }
     },
+    "No repos match “%@”" : {
+
+    },
     "No results for '%@'" : {
       "localizations" : {
         "en" : {
@@ -4619,6 +4667,9 @@
           }
         }
       }
+    },
+    "Not signed in" : {
+
     },
     "Notifications" : {
       "localizations" : {
@@ -5108,6 +5159,9 @@
         }
       }
     },
+    "Private" : {
+
+    },
     "Project" : {
       "localizations" : {
         "zh-Hans" : {
@@ -5151,6 +5205,7 @@
       }
     },
     "Project Name" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -5221,6 +5276,9 @@
           }
         }
       }
+    },
+    "Public" : {
+
     },
     "Push" : {
       "localizations" : {
@@ -5783,6 +5841,9 @@
           }
         }
       }
+    },
+    "RxCode needs the GitHub App to see your repositories. Install it for the account or organizations you want to import from." : {
+
     },
     "RxCode.xcodeproj" : {
       "localizations" : {
@@ -6482,7 +6543,20 @@
         }
       }
     },
+    "Sign In" : {
+
+    },
+    "Sign in to rxlab" : {
+
+    },
+    "Sign in to rxlab to\nimport GitHub repos" : {
+
+    },
+    "Sign in to rxlab to\nimport your GitHub repos" : {
+
+    },
     "Sign in with GitHub" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -6503,6 +6577,18 @@
           }
         }
       }
+    },
+    "Sign in with rxlab" : {
+
+    },
+    "Sign in with rxlab to import GitHub repositories and use autopilot features." : {
+
+    },
+    "Sign in with rxlab to import GitHub repositories." : {
+
+    },
+    "Sign Out" : {
+
     },
     "sk-..." : {
       "localizations" : {
@@ -6569,6 +6655,7 @@
       }
     },
     "Source" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -7227,6 +7314,7 @@
       }
     },
     "Waiting for authentication..." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -7247,6 +7335,9 @@
           }
         }
       }
+    },
+    "Welcome to RxCode" : {
+
     },
     "Wipe cached embeddings and re-embed every thread for semantic search. Use this if global search results look stale or empty." : {
       "localizations" : {

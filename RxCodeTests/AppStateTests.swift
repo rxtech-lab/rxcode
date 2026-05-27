@@ -533,8 +533,6 @@ private actor MockAppStatePersistence: AppStatePersistenceService {
     private var deletedSessions: [(projectId: UUID, sessionId: String, origin: SessionOrigin, cwd: String?)] = []
     private var runProfiles: [UUID: [RunProfile]] = [:]
     private var acpClients: [ACPClientSpec] = []
-    private var customRepos: [CustomRepo] = []
-    private var githubUser: GitHubUser?
     private var fullSessions: [String: ChatSession] = [:]
     private var legacySessions: [String: ChatSession] = [:]
 
@@ -617,19 +615,5 @@ private actor MockAppStatePersistence: AppStatePersistenceService {
         URL(fileURLWithPath: "/tmp/acp_registry.json")
     }
 
-    func saveCustomRepos(_ repos: [CustomRepo]) throws {
-        customRepos = repos
-    }
 
-    func loadCustomRepos() -> [CustomRepo] {
-        customRepos
-    }
-
-    func saveGitHubUser(_ user: GitHubUser) throws {
-        githubUser = user
-    }
-
-    func loadGitHubUser() -> GitHubUser? {
-        githubUser
-    }
 }

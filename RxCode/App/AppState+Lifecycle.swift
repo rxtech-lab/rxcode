@@ -147,6 +147,18 @@ extension AppState {
 
         await refreshAgentInstallations()
 
+        // Prewarm each backend's shell PATH cache in parallel so the first
+        // user message in a thread doesn't pay the `/bin/zsh -ilc` round trip
+        // on its critical path. The result is cached inside each actor, so
+        // every subsequent spawn reuses it.
+        Task { [claude, codex, acp] in
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask { await claude.prewarm() }
+                group.addTask { await codex.prewarm() }
+                group.addTask { await acp.prewarm() }
+            }
+        }
+
         projects = await persistence.loadProjects()
         var seenPaths = Set<String>()
         let deduplicated = projects.filter { seenPaths.insert($0.path).inserted }

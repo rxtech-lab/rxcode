@@ -394,6 +394,7 @@ extension AppState {
                             "[TodoWrite] session=\(sessionKey, privacy: .public) total=\(todos.count) done=\(done) active=\(active, privacy: .public)"
                         )
                         threadStore.upsertTodoSnapshot(sessionId: sessionKey, items: todos)
+                        todoSnapshotsRevision &+= 1
                     }
                 }
             }

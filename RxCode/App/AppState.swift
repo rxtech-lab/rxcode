@@ -208,6 +208,13 @@ final class AppState {
     /// `threadFileEdits(in:)` fetch after a new Edit/Write tool call lands.
     var threadFileEditsRevision: Int = 0
 
+    /// Bumped each time a todo snapshot row is upserted in SwiftData (MCP
+    /// `ide__set_todos`, Codex `.todoSnapshot` events, in-message TodoWrite
+    /// persistence). The toolbar's `TodoProgressToolbarItem` reads this so
+    /// SwiftUI re-runs the `fetchTodoSnapshot` method when the snapshot
+    /// changes without an accompanying observable property mutation.
+    var todoSnapshotsRevision: Int = 0
+
     /// Pending permission/question prompts keyed by hook id. This mirrors the
     /// per-window queues so mobile thread rows can show the same attention state.
     var mobilePendingRequests: [String: PermissionRequest] = [:]

@@ -155,13 +155,32 @@ extension AppState {
             try? await persistence.saveProjects(projects)
         }
 
-        if let cachedUser = await persistence.loadGitHubUser() {
-            gitHubUser = cachedUser
-            isLoggedIn = true
-            _ = await github.loadToken()
+        // Restore an existing rxauth session (token refresh runs silently).
+        // One-time migration: purge the legacy GitHub device-flow access token
+        // from the old `com.claudework.github` keychain entry so it never
+        // gets re-used. `try?` — failure (no entry present) is the happy path.
+        try? KeychainHelper.delete(service: "com.claudework.github", account: "access_token")
+        // Restore an existing rxauth session. `OAuthManager.checkExistingAuth`
+        // refreshes the access token if it has expired and starts its own
+        // 5-minute refresh timer, so no extra scheduling is needed here.
+        await rxAuth.restore()
+        if isSignedIn {
+            Task { [weak self] in await self?.loadRepos() }
         }
 
-        customRepos = await persistence.loadCustomRepos()
+        // React to RxAuthSwift session expiry by clearing autopilot repos.
+        // `isSignedIn`/`rxUser` are computed from the manager, so they update
+        // automatically when `OAuthManager` flips to `.unauthenticated`.
+        NotificationCenter.default.addObserver(
+            forName: .rxAuthSessionExpired,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.repos = []
+            }
+        }
+
         marketplaceCustomSources = await marketplace.customSources()
 
         seedUITestBriefingIfRequested()

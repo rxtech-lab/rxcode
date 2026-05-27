@@ -10,11 +10,11 @@
 		101010102FCB100000000002 /* AppStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 101010102FCB100000000001 /* AppStateTests.swift */; };
 		101010112FCB100000000002 /* BranchBriefingPromptContextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 101010112FCB100000000001 /* BranchBriefingPromptContextTests.swift */; };
 		33993F0F87CF4DB09F2813A8 /* AppStateProjectSwitchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4381E755142272EB2DAA9C96 /* AppStateProjectSwitchTests.swift */; };
-		7A5C0001000000000000A002 /* MockAgentBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A5C0001000000000000A001 /* MockAgentBackend.swift */; };
-		7A5C0002000000000000A002 /* CrossProjectSendConcurrencyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A5C0002000000000000A001 /* CrossProjectSendConcurrencyTests.swift */; };
 		5C2222222FCB200000000002 /* BriefingThreadRowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C2222222FCB200000000001 /* BriefingThreadRowTests.swift */; };
 		5C3333332FCB400000000002 /* ThreadStoreThreadSummaryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3333332FCB400000000001 /* ThreadStoreThreadSummaryTests.swift */; };
 		6E17B0012FC8000100A10001 /* LocalAIProviderAcceptanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E17B0002FC8000100A10001 /* LocalAIProviderAcceptanceTests.swift */; };
+		7A5C0001000000000000A002 /* MockAgentBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A5C0001000000000000A001 /* MockAgentBackend.swift */; };
+		7A5C0002000000000000A002 /* CrossProjectSendConcurrencyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A5C0002000000000000A001 /* CrossProjectSendConcurrencyTests.swift */; };
 		92E180F9B311F3C72D5DE6B7 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A9993BB72A5307039A88B729 /* Cocoa.framework */; };
 		DCA8CF4A05C959C4A6EB391F /* RxCodeCore in Frameworks */ = {isa = PBXBuildFile; productRef = CCDF9594876099576D4FD46E /* RxCodeCore */; };
 		DF06CCD12FB4CAB5005991E1 /* ViewInspector in Frameworks */ = {isa = PBXBuildFile; productRef = DF06CCD02FB4CAB5005991E1 /* ViewInspector */; };
@@ -34,6 +34,12 @@
 		DF23F7362FB8C3EC008929A6 /* icon.icon in Resources */ = {isa = PBXBuildFile; fileRef = DF23F7352FB8C3EC008929A6 /* icon.icon */; };
 		DF23FF1D2FBB42F7008929A6 /* WaterfallGrid in Frameworks */ = {isa = PBXBuildFile; productRef = DF23FF1C2FBB42F7008929A6 /* WaterfallGrid */; };
 		DF31D3DC2FBC8143005D518E /* icon.icon in Resources */ = {isa = PBXBuildFile; fileRef = DF23F7352FB8C3EC008929A6 /* icon.icon */; };
+		DF4628922FC611E6002D9562 /* RxAuthSwift in Frameworks */ = {isa = PBXBuildFile; productRef = DF4628912FC611E6002D9562 /* RxAuthSwift */; };
+		DF4628942FC611E6002D9562 /* RxAuthSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = DF4628932FC611E6002D9562 /* RxAuthSwiftUI */; };
+		DF462A602FC6EDCE002D9562 /* RxAuthSwift in Frameworks */ = {isa = PBXBuildFile; productRef = DF462A5F2FC6EDCE002D9562 /* RxAuthSwift */; };
+		DF462A622FC6EDCE002D9562 /* RxAuthSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = DF462A612FC6EDCE002D9562 /* RxAuthSwiftUI */; };
+		DF462DC92FC73FA8002D9562 /* RxAuthSwift in Frameworks */ = {isa = PBXBuildFile; productRef = DF462DC82FC73FA8002D9562 /* RxAuthSwift */; };
+		DF462DCB2FC73FA8002D9562 /* RxAuthSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = DF462DCA2FC73FA8002D9562 /* RxAuthSwiftUI */; };
 		DFA0CCD12FB4CC01005991E1 /* PlanDecisionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA0CCC02FB4CC01005991E1 /* PlanDecisionTests.swift */; };
 		DFA0CCD22FB4CC01005991E1 /* PlanCardViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA0CCC12FB4CC01005991E1 /* PlanCardViewTests.swift */; };
 		DFA0CCD42FB4CC01005991E1 /* RxCodeChatKit in Frameworks */ = {isa = PBXBuildFile; productRef = DFA0CCC32FB4CC01005991E1 /* RxCodeChatKit */; };
@@ -114,14 +120,14 @@
 		101010102FCB100000000001 /* AppStateTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppStateTests.swift; sourceTree = "<group>"; };
 		101010112FCB100000000001 /* BranchBriefingPromptContextTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BranchBriefingPromptContextTests.swift; sourceTree = "<group>"; };
 		4381E755142272EB2DAA9C96 /* AppStateProjectSwitchTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppStateProjectSwitchTests.swift; sourceTree = "<group>"; };
-		7A5C0001000000000000A001 /* MockAgentBackend.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MockAgentBackend.swift; sourceTree = "<group>"; };
-		7A5C0002000000000000A001 /* CrossProjectSendConcurrencyTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CrossProjectSendConcurrencyTests.swift; sourceTree = "<group>"; };
 		5C2222222FCB200000000001 /* BriefingThreadRowTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BriefingThreadRowTests.swift; sourceTree = "<group>"; };
 		5C3333332FCB400000000001 /* ThreadStoreThreadSummaryTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ThreadStoreThreadSummaryTests.swift; sourceTree = "<group>"; };
 		6E17B0002FC8000100A10001 /* LocalAIProviderAcceptanceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LocalAIProviderAcceptanceTests.swift; sourceTree = "<group>"; };
 		6E17B0032FC8000100A10001 /* RxCodeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RxCodeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		6E17B00D2FC8000100A10001 /* UITestplan.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = UITestplan.xctestplan; sourceTree = "<group>"; };
 		7321B5E8B81AAB1A2DC0593B /* RxCodeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RxCodeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		7A5C0001000000000000A001 /* MockAgentBackend.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MockAgentBackend.swift; sourceTree = "<group>"; };
+		7A5C0002000000000000A001 /* CrossProjectSendConcurrencyTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CrossProjectSendConcurrencyTests.swift; sourceTree = "<group>"; };
 		A9993BB72A5307039A88B729 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
 		DF06DCC62FB8552B005991E1 /* UnitTestPlan.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = UnitTestPlan.xctestplan; sourceTree = "<group>"; };
 		DF22D8262FBE025C00E3ABFD /* RxCodeWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RxCodeWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -288,12 +294,18 @@
 			buildActionMask = 2147483647;
 			files = (
 				E6821AC12F7CEE7200829FC9 /* SwiftTerm in Frameworks */,
+				DF4628922FC611E6002D9562 /* RxAuthSwift in Frameworks */,
 				E6C001022F9B000100000001 /* Sparkle in Frameworks */,
 				E6D001032FA0000100000001 /* RxCodeCore in Frameworks */,
+				DF462A622FC6EDCE002D9562 /* RxAuthSwiftUI in Frameworks */,
 				E6D001042FA0000100000001 /* RxCodeChatKit in Frameworks */,
+				DF462DCB2FC73FA8002D9562 /* RxAuthSwiftUI in Frameworks */,
 				E6D001072FA0000100000001 /* RxCodeSync in Frameworks */,
+				DF462A602FC6EDCE002D9562 /* RxAuthSwift in Frameworks */,
 				DF23FF1D2FBB42F7008929A6 /* WaterfallGrid in Frameworks */,
 				FB0000030000000000000001 /* FirebaseAnalytics in Frameworks */,
+				DF462DC92FC73FA8002D9562 /* RxAuthSwift in Frameworks */,
+				DF4628942FC611E6002D9562 /* RxAuthSwiftUI in Frameworks */,
 				FB0000040000000000000001 /* FirebaseCrashlytics in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -578,6 +590,12 @@
 				DF23FF1C2FBB42F7008929A6 /* WaterfallGrid */,
 				FB0000010000000000000001 /* FirebaseAnalytics */,
 				FB0000020000000000000001 /* FirebaseCrashlytics */,
+				DF4628912FC611E6002D9562 /* RxAuthSwift */,
+				DF4628932FC611E6002D9562 /* RxAuthSwiftUI */,
+				DF462A5F2FC6EDCE002D9562 /* RxAuthSwift */,
+				DF462A612FC6EDCE002D9562 /* RxAuthSwiftUI */,
+				DF462DC82FC73FA8002D9562 /* RxAuthSwift */,
+				DF462DCA2FC73FA8002D9562 /* RxAuthSwiftUI */,
 			);
 			productName = RxCode;
 			productReference = E67335382F7356F600FD26C7 /* RxCode.app */;
@@ -612,6 +630,11 @@
 					};
 					E67335372F7356F600FD26C7 = {
 						CreatedOnToolsVersion = 26.3;
+						SystemCapabilities = {
+							com.apple.AssociatedDomains = {
+								enabled = 1;
+							};
+						};
 					};
 				};
 			};
@@ -633,6 +656,7 @@
 				DF06CCCF2FB4CAB5005991E1 /* XCRemoteSwiftPackageReference "ViewInspector" */,
 				DF23FF1B2FBB42F7008929A6 /* XCRemoteSwiftPackageReference "WaterfallGrid" */,
 				FB0000000000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				DF462DC72FC73FA8002D9562 /* XCRemoteSwiftPackageReference "RxAuthSwift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = E67335392F7356F600FD26C7 /* Products */;
@@ -1298,6 +1322,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = icon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = RxCode/RxCode.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 24;
@@ -1332,6 +1357,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = icon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = RxCode/RxCode.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 24;
@@ -1471,6 +1497,14 @@
 				minimumVersion = 1.1.0;
 			};
 		};
+		DF462DC72FC73FA8002D9562 /* XCRemoteSwiftPackageReference "RxAuthSwift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/rxtech-lab/RxAuthSwift";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
 		E6A001002F8A000100000001 /* XCRemoteSwiftPackageReference "SwiftTerm" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/migueldeicaza/SwiftTerm.git";
@@ -1546,6 +1580,32 @@
 			isa = XCSwiftPackageProductDependency;
 			package = DF23FF1B2FBB42F7008929A6 /* XCRemoteSwiftPackageReference "WaterfallGrid" */;
 			productName = WaterfallGrid;
+		};
+		DF4628912FC611E6002D9562 /* RxAuthSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = RxAuthSwift;
+		};
+		DF4628932FC611E6002D9562 /* RxAuthSwiftUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = RxAuthSwiftUI;
+		};
+		DF462A5F2FC6EDCE002D9562 /* RxAuthSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = RxAuthSwift;
+		};
+		DF462A612FC6EDCE002D9562 /* RxAuthSwiftUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = RxAuthSwiftUI;
+		};
+		DF462DC82FC73FA8002D9562 /* RxAuthSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DF462DC72FC73FA8002D9562 /* XCRemoteSwiftPackageReference "RxAuthSwift" */;
+			productName = RxAuthSwift;
+		};
+		DF462DCA2FC73FA8002D9562 /* RxAuthSwiftUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DF462DC72FC73FA8002D9562 /* XCRemoteSwiftPackageReference "RxAuthSwift" */;
+			productName = RxAuthSwiftUI;
 		};
 		DFA0CCC32FB4CC01005991E1 /* RxCodeChatKit */ = {
 			isa = XCSwiftPackageProductDependency;

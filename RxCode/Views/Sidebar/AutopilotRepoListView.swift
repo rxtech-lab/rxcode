@@ -1,10 +1,11 @@
-import SwiftUI
+import RxAuthSwift
 import RxCodeCore
+import SwiftUI
 
-struct GitHubRepoListView: View {
+struct AutopilotRepoListView: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
-    @State private var showLoginSheet = false
+    @State private var showSignInSheet = false
     @State private var searchText = ""
     @State private var cloningRepo: String?
 
@@ -14,15 +15,13 @@ struct GitHubRepoListView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
 
-            if appState.isLoggedIn {
+            if appState.isSignedIn {
                 repoList
             } else {
-                connectPrompt
+                signInPrompt
             }
         }
     }
-
-    // MARK: - Header
 
     private var headerRow: some View {
         HStack {
@@ -31,15 +30,16 @@ struct GitHubRepoListView: View {
 
             Spacer()
 
-            if appState.isLoggedIn {
-                if let user = appState.gitHubUser {
-                    Text("@\(user.login)")
+            if appState.isSignedIn {
+                if let user = appState.rxUser {
+                    Text(user.name ?? user.email ?? user.id)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
 
                 Button {
-                    Task { await appState.fetchRepos() }
+                    Task { await appState.loadRepos(refresh: true) }
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
@@ -49,9 +49,7 @@ struct GitHubRepoListView: View {
         }
     }
 
-    // MARK: - Connect Prompt
-
-    private var connectPrompt: some View {
+    private var signInPrompt: some View {
         VStack(spacing: 12) {
             Spacer()
 
@@ -59,15 +57,15 @@ struct GitHubRepoListView: View {
                 .font(.title2)
                 .foregroundStyle(.secondary)
 
-            Text("Connect GitHub to\nimport repos instantly")
+            Text("Sign in to rxlab to\nimport GitHub repos")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
             Button {
-                showLoginSheet = true
+                showSignInSheet = true
             } label: {
-                Label("Connect GitHub", systemImage: "person.crop.circle.badge.plus")
+                Label("Sign in with rxlab", systemImage: "person.crop.circle.badge.plus")
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.regular)
@@ -75,33 +73,32 @@ struct GitHubRepoListView: View {
             Spacer()
         }
         .frame(maxWidth: .infinity)
-        .sheet(isPresented: $showLoginSheet) {
-            GitHubLoginView()
+        .sheet(isPresented: $showSignInSheet) {
+            RxAuthSignInView()
         }
     }
 
-    // MARK: - Repo List
-
     private var repoList: some View {
         VStack(spacing: 0) {
-            // Search
             TextField("Search repos...", text: $searchText)
                 .textFieldStyle(.roundedBorder)
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
 
-            if appState.repos.isEmpty {
+            if appState.isLoadingRepos {
+                VStack(spacing: 8) {
+                    Spacer()
+                    ProgressView()
+                        .controlSize(.small)
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity)
+            } else if appState.repos.isEmpty {
                 VStack(spacing: 8) {
                     Spacer()
                     Text("No repos found")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                    Text("Don't see your org repos?")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Link("Configure org access →",
-                         destination: URL(string: "https://github.com/settings/connections/applications/\(GitHubService.oauthClientId)")!)
-                        .font(.caption)
                     Spacer()
                 }
                 .frame(maxWidth: .infinity)
@@ -110,20 +107,11 @@ struct GitHubRepoListView: View {
                     repoRow(repo)
                 }
                 .listStyle(.sidebar)
-
-                if !appState.repos.isEmpty {
-                    Link("Don't see your org repos? →",
-                         destination: URL(string: "https://github.com/settings/connections/applications/\(GitHubService.oauthClientId)")!)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                }
             }
         }
     }
 
-    private func repoRow(_ repo: GitHubRepo) -> some View {
+    private func repoRow(_ repo: AutopilotRepo) -> some View {
         HStack(spacing: 8) {
             Image(systemName: repo.isPrivate ? "lock.fill" : "globe")
                 .font(.caption)
@@ -163,9 +151,7 @@ struct GitHubRepoListView: View {
         .padding(.vertical, 2)
     }
 
-    // MARK: - Helpers
-
-    private var filteredRepos: [GitHubRepo] {
+    private var filteredRepos: [AutopilotRepo] {
         if searchText.isEmpty {
             return appState.repos
         }
@@ -175,11 +161,11 @@ struct GitHubRepoListView: View {
         }
     }
 
-    private func isAlreadyAdded(_ repo: GitHubRepo) -> Bool {
+    private func isAlreadyAdded(_ repo: AutopilotRepo) -> Bool {
         appState.projects.contains { $0.gitHubRepo == repo.fullName }
     }
 
-    private func cloneRepo(_ repo: GitHubRepo) async {
+    private func cloneRepo(_ repo: AutopilotRepo) async {
         cloningRepo = repo.fullName
         do {
             try await appState.cloneAndAddProject(repo, in: windowState)
@@ -192,7 +178,7 @@ struct GitHubRepoListView: View {
 }
 
 #Preview {
-    GitHubRepoListView()
+    AutopilotRepoListView()
         .environment(AppState())
         .frame(width: 260, height: 400)
 }

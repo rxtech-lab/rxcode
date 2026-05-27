@@ -184,14 +184,151 @@ actor FoundationModelSummarizationService {
 
     private func respond(instructions: String, prompt: String) async -> String? {
         guard Self.isAvailable else { return nil }
+        return await respond(instructions: instructions, prompt: prompt, allowRollingWindow: true)
+    }
+
+    private func respond(
+        instructions: String,
+        prompt: String,
+        allowRollingWindow: Bool
+    ) async -> String? {
         do {
             let session = LanguageModelSession(instructions: instructions)
             let response = try await session.respond(to: prompt)
             return response.content
         } catch {
+            if allowRollingWindow, Self.isContextWindowError(error) {
+                logger.notice("Foundation Models context window exceeded; retrying with rolling-window compression (\(prompt.count) chars)")
+                return await respondWithRollingWindow(instructions: instructions, prompt: prompt)
+            }
             logger.warning("Foundation Models summarization failed: \(error.localizedDescription)")
             return nil
         }
+    }
+
+    /// Re-runs the original (instructions, prompt) pair after compressing the
+    /// prompt with a rolling-window pass that builds up an accumulated summary
+    /// chunk-by-chunk. Each pass halves the chunk size so we converge even when
+    /// the model's window is very small.
+    private func respondWithRollingWindow(
+        instructions: String,
+        prompt: String
+    ) async -> String? {
+        let attempts = [2_500, 1_200, 600]
+        var workingPrompt = prompt
+        for chunkChars in attempts {
+            guard let compressed = await rollingWindowCompress(
+                text: workingPrompt,
+                chunkChars: chunkChars
+            ), !compressed.isEmpty else {
+                return nil
+            }
+            workingPrompt = compressed
+            do {
+                let session = LanguageModelSession(instructions: instructions)
+                let response = try await session.respond(to: workingPrompt)
+                return response.content
+            } catch {
+                if Self.isContextWindowError(error) {
+                    continue
+                }
+                logger.warning("Foundation Models rolling-window retry failed: \(error.localizedDescription)")
+                return nil
+            }
+        }
+        logger.warning("Foundation Models rolling-window gave up after \(attempts.count) attempts")
+        return nil
+    }
+
+    /// Splits `text` into chunks and folds them into a single accumulated
+    /// summary: `summary = compress(summary + nextChunk)`. Returns the final
+    /// accumulated summary (already shorter than the original).
+    private func rollingWindowCompress(
+        text: String,
+        chunkChars: Int
+    ) async -> String? {
+        let chunks = Self.splitIntoChunks(text: text, chunkChars: chunkChars)
+        guard !chunks.isEmpty else { return nil }
+        var accumulated = ""
+        for chunk in chunks {
+            let merged: String
+            if accumulated.isEmpty {
+                merged = chunk
+            } else {
+                merged = """
+                Summary so far:
+                \(accumulated)
+
+                Additional content to incorporate (preserve key facts, decisions, file paths, identifiers, and intent):
+                \(chunk)
+                """
+            }
+            do {
+                let session = LanguageModelSession(
+                    instructions: "You compress long text into a concise running summary while preserving key facts, decisions, file paths, identifiers, and intent. Output only the compressed text, no preamble."
+                )
+                let response = try await session.respond(to: merged)
+                accumulated = response.content
+            } catch {
+                if Self.isContextWindowError(error), chunkChars > 400 {
+                    guard let inner = await rollingWindowCompress(
+                        text: chunk,
+                        chunkChars: max(400, chunkChars / 2)
+                    ) else {
+                        return nil
+                    }
+                    accumulated = accumulated.isEmpty ? inner : "\(accumulated)\n\n\(inner)"
+                } else {
+                    logger.warning("Foundation Models rolling-window compression failed: \(error.localizedDescription)")
+                    return nil
+                }
+            }
+        }
+        return accumulated
+    }
+
+    private static func isContextWindowError(_ error: Error) -> Bool {
+        if let generationError = error as? LanguageModelSession.GenerationError {
+            if case .exceededContextWindowSize = generationError {
+                return true
+            }
+        }
+        let message = error.localizedDescription.lowercased()
+        return message.contains("context window")
+    }
+
+    private static func splitIntoChunks(text: String, chunkChars: Int) -> [String] {
+        guard text.count > chunkChars else { return text.isEmpty ? [] : [text] }
+        var chunks: [String] = []
+        var current = ""
+        let paragraphs = text.components(separatedBy: "\n\n")
+        for paragraph in paragraphs {
+            if paragraph.count > chunkChars {
+                if !current.isEmpty {
+                    chunks.append(current)
+                    current = ""
+                }
+                var idx = paragraph.startIndex
+                while idx < paragraph.endIndex {
+                    let end = paragraph.index(idx, offsetBy: chunkChars, limitedBy: paragraph.endIndex) ?? paragraph.endIndex
+                    chunks.append(String(paragraph[idx..<end]))
+                    idx = end
+                }
+                continue
+            }
+            if current.count + paragraph.count + 2 > chunkChars {
+                if !current.isEmpty {
+                    chunks.append(current)
+                }
+                current = paragraph
+            } else {
+                current = current.isEmpty ? paragraph : "\(current)\n\n\(paragraph)"
+            }
+        }
+        if !current.isEmpty {
+            chunks.append(current)
+        }
+        return chunks
     }
 
     private func cleanTitle(_ raw: String?) -> String? {

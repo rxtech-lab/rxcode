@@ -1,5 +1,6 @@
 import Foundation
 import os
+import RxAuthSwift
 import RxCodeChatKit
 import RxCodeCore
 import RxCodeSync
@@ -764,13 +765,42 @@ final class AppState {
         didSet { UserDefaults.standard.set(permissionMode.rawValue, forKey: "selectedPermissionMode") }
     }
 
-    // MARK: - GitHub
+    // MARK: - rxauth + autopilot
 
-    var isLoggedIn = false
-    var gitHubUser: GitHubUser?
-    var repos: [GitHubRepo] = []
-    var customRepos: [CustomRepo] = []
-    var isCloningCustomRepo: String?
+    /// Single source of truth for sign-in status. Reads through to the
+    /// shared `OAuthManager`, so every UI surface (toolbar sheet, settings
+    /// tab, sidebar) stays in sync regardless of which one triggered the
+    /// state change. `OAuthManager` is `@Observable`, so SwiftUI tracks
+    /// these reads transitively.
+    var isSignedIn: Bool { rxAuth.manager.authState == .authenticated }
+    var rxUser: User? { rxAuth.manager.currentUser }
+    var repos: [AutopilotRepo] = []
+    var isLoadingRepos = false
+    /// True while a `loadMoreRepos()` call is in flight. Separate from
+    /// `isLoadingRepos` so the list keeps rendering existing rows while a
+    /// follow-on page is fetched and only the footer shows a spinner.
+    var isLoadingMoreRepos = false
+    /// Cursor returned by the server for the next page, or `nil` when the
+    /// last page has been consumed.
+    var repoNextCursor: String?
+    /// `true` while the server reports more pages are available for the
+    /// current `(search, refresh)` request.
+    var repoHasMoreRepos = false
+    /// Search term used for the currently loaded page set. Tracked so
+    /// out-of-order responses from a stale query can be ignored.
+    var repoCurrentSearch: String = ""
+
+    /// `nil` = unknown (not yet probed), `true`/`false` = result of the last
+    /// `autopilot.precheckInstallations()` call. Drives the
+    /// "Install GitHub App" empty state in `AutopilotRepoSheet`.
+    var hasGitHubAppInstalled: Bool?
+    var isCheckingInstall = false
+    var isOpeningInstallUrl = false
+
+    /// GitHub App installations owned by the signed-in user. Used to look up
+    /// owner avatars in the import-repo sheet so each row gets a recognizable
+    /// glyph instead of a generic icon.
+    var installations: [AutopilotInstallation] = []
 
     // MARK: - CLI Version
 
@@ -803,7 +833,8 @@ final class AppState {
 
     // MARK: - Services
 
-    let github = GitHubService()
+    let rxAuth = RxAuthService.shared
+    let autopilot: AutopilotService
     let permission = PermissionServer()
     let metaStore = SessionMetaStore()
     let cliStore: CLISessionStore
@@ -929,6 +960,7 @@ final class AppState {
         self.persistence = injectedPersistence ?? PersistenceService(metaStore: metaStore, cliStore: cliStore)
         self.mcp = MCPService(claudeService: claude)
         self.threadStore = ThreadStore.make()
+        self.autopilot = AutopilotService(rxAuth: RxAuthService.shared)
         self.runService.onTasksChanged = { [weak self] in
             Task { @MainActor [weak self] in
                 self?.broadcastMobileRunTasks()
@@ -978,7 +1010,6 @@ final class AppState {
     /// threads in memory. Live (streaming) sessions bypass this entirely.
     var mobileFullMessageCache: (sessionID: String, messages: [ChatMessage])?
 
-    var isFetchingRepos = false
 
     /// Last seen jsonl byte size per session — used as a cheap drift signal
     /// in `reconcileFromDisk` so the no-drift path skips the full mmap+parse.

@@ -132,7 +132,8 @@ struct OnboardingView: View {
         HStack {
             Spacer()
             Button("Get Started") {
-                appState.skipGitHubLogin()
+                appState.onboardingCompleted = true
+                UserDefaults.standard.set(true, forKey: "onboardingCompleted")
                 onCompletion?()
             }
             .buttonStyle(ClaudeAccentButtonStyle())

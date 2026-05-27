@@ -58,6 +58,12 @@ struct SettingsView: View {
                     Label("Mobile", systemImage: "iphone.gen3")
                 }
                 .tag(6)
+
+            AutopilotSettingsTab()
+                .tabItem {
+                    Label("Autopilot", systemImage: "paperplane.circle")
+                }
+                .tag(7)
         }
         .frame(width: 680, height: 620)
         .focusable(false)

@@ -128,7 +128,16 @@ extension MobileAppState {
                     messagesBySession[active] = []
                 }
                 loadingThreadMessageSessions.remove(active)
-                activeSessionID = active
+                // The snapshot's activeSessionID is metadata that labels the
+                // carried activeSessionMessages — it must not be treated as a
+                // navigation command. Only adopt it when our local selection
+                // is the optimistic draft id produced by startNewSession and
+                // we're waiting for the desktop to assign a real id; otherwise
+                // a reconnect-driven snapshot would yank the user out of the
+                // thread they're currently reading.
+                if let current = activeSessionID, MobileDraftSessionID.isDraft(current) {
+                    activeSessionID = active
+                }
             }
             hasReceivedInitialSnapshot = true
             refreshWidgetData()

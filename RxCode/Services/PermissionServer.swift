@@ -14,7 +14,6 @@ actor PermissionServer {
 
     private static let basePort: UInt16 = 19836
     private static let maxPort: UInt16 = 19846
-    private static let timeoutSeconds: UInt64 = 300 // 5 minutes
     /// Upper bound on simultaneously-valid hook tokens. Each CLI launch mints one;
     /// the oldest is evicted past this cap — generous enough that no realistic
     /// number of concurrent agents ever loses a still-live token.
@@ -55,7 +54,6 @@ actor PermissionServer {
         var reasonOverride: String?
     }
     private var pending: [String: Pending] = [:]
-    private var timeoutTasks: [String: Task<Void, Never>] = [:]
 
     /// In-memory only; cleared on `stop()`.
     private var sessionToolAllows: Set<String> = []
@@ -163,8 +161,6 @@ actor PermissionServer {
             }
         }
         pending.removeAll()
-        timeoutTasks.values.forEach { $0.cancel() }
-        timeoutTasks.removeAll()
         for continuation in subscribers.values {
             continuation.finish()
         }
@@ -186,8 +182,6 @@ actor PermissionServer {
 
     /// Called by the UI when the user makes a decision.
     func respond(toolUseId: String, decision: PermissionDecision) async {
-        timeoutTasks.removeValue(forKey: toolUseId)?.cancel()
-
         guard var entry = pending.removeValue(forKey: toolUseId) else {
             logger.warning("No pending continuation for toolUseId \(toolUseId)")
             return
@@ -438,8 +432,11 @@ actor PermissionServer {
         }
     }
 
-    /// Wait for a UI decision with a 5-minute timeout.
-    /// The first requester emits to the UI stream and sets the timeout. CLI retries join the same entry.
+    /// Wait for a UI decision. The pending entry persists indefinitely until the
+    /// user responds via `respond(...)` (or the listener is torn down in `stop()`).
+    /// The first requester emits to the UI stream; CLI retries — issued every time the
+    /// CLI's own HTTP hook timeout expires — join the same entry by appending another
+    /// continuation, so the eventual answer reaches whichever HTTP connection is live.
     private func waitForDecision(
         toolUseId: String,
         sessionId: String?,
@@ -467,28 +464,14 @@ actor PermissionServer {
                     updatedInput: nil,
                     reasonOverride: nil
                 )
-                timeoutTasks[toolUseId] = Task { [weak self] in
-                    try? await Task.sleep(nanoseconds: UInt64(Self.timeoutSeconds) * 1_000_000_000)
-                    guard !Task.isCancelled else { return }
-                    await self?.cancelPendingIfNeeded(toolUseId: toolUseId)
-                }
             }
         }
-        timeoutTasks.removeValue(forKey: toolUseId)?.cancel()
         return outcome
     }
 
     private static func isExitPlanModeTool(_ toolName: String) -> Bool {
         let normalized = toolName.lowercased()
         return normalized == "exitplanmode" || normalized == "exit_plan_mode"
-    }
-
-    /// Remove and resume all pending continuations with .deny (timeout case).
-    private func cancelPendingIfNeeded(toolUseId: String) {
-        guard let entry = pending.removeValue(forKey: toolUseId) else { return }
-        for continuation in entry.continuations {
-            continuation.resume(returning: DecisionOutcome(decision: .deny, updatedInput: nil, reasonOverride: nil))
-        }
     }
 
     private func sendHookResponse(

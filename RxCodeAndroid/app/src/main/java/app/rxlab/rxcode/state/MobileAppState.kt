@@ -249,7 +249,24 @@ class MobileAppState @Inject constructor(
             current.copy(
                 projects = snap.data.projects,
                 sessions = snap.data.sessions.sortedWith(SessionSort),
-                activeSessionID = active ?: current.activeSessionID,
+                // The snapshot's activeSessionID is metadata that labels the
+                // carried activeSessionMessages — it must not be treated as a
+                // navigation command. Only adopt it when our local selection
+                // is the optimistic draft id produced by startNewSession and
+                // the redirect map (set up above) confirms this snapshot is
+                // the desktop's reply assigning the real id. Any other case
+                // (reconnect, periodic refresh, desktop-focus change) leaves
+                // the user's current selection alone.
+                activeSessionID = if (
+                    active != null &&
+                    currentActive != null &&
+                    isDraftSessionId(currentActive) &&
+                    nextRedirects[currentActive] == active
+                ) {
+                    active
+                } else {
+                    current.activeSessionID
+                },
                 sessionIDRedirects = nextRedirects,
                 messagesBySession = nextMessages,
                 sessionsWithMoreMessages = moreSet,

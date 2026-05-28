@@ -92,6 +92,13 @@ extension ClaudeCodeServer {
         return env
     }
 
+    /// Prime the shell PATH cache so the first user message doesn't pay the
+    /// `/bin/zsh -ilc` round trip in its critical path. Safe to call multiple
+    /// times — `resolvedShellPath()` is idempotent.
+    func prewarm() async {
+        _ = await resolvedShellPath()
+    }
+
     // MARK: - Binary Discovery
 
     /// Well-known paths searched in order before falling back to the shell.

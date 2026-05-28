@@ -125,6 +125,12 @@ extension CodexAppServer {
         return env
     }
 
+    /// Prime the shell PATH cache so the first user message doesn't pay the
+    /// `/bin/zsh -ilc` round trip in its critical path.
+    func prewarm() async {
+        _ = await resolvedEnvironment()
+    }
+
     func runShellCommand(_ executable: String, arguments: [String], injectPath: Bool = true) async throws -> String {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)

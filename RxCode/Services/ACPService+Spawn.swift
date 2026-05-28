@@ -63,6 +63,12 @@ extension ACPService {
         return env
     }
 
+    /// Prime the shell PATH cache so the first user message doesn't pay the
+    /// `/bin/zsh -ilc` round trip in its critical path.
+    func prewarm() async {
+        _ = await resolvedEnvironment()
+    }
+
     func readUserShellPath() async -> String? {
         await Task.detached(priority: .userInitiated) {
             let process = Process()

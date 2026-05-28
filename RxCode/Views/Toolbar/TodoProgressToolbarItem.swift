@@ -22,6 +22,9 @@ struct TodoProgressToolbarItem: View {
            let live = TodoExtractor.latest(in: messages) {
             return live
         }
+        // Touch the revision so SwiftUI re-runs this fetch when a new snapshot
+        // is upserted via MCP `ide__set_todos` or a Codex `.todoSnapshot` event.
+        _ = appState.todoSnapshotsRevision
         return appState.threadStore.fetchTodoSnapshot(sessionId: sessionKey)?.items
     }
 

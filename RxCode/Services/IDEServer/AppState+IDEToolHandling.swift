@@ -79,6 +79,7 @@ extension AppState: IDEToolHandling {
             return TodoItem(id: idx, content: content, activeForm: activeForm, status: status)
         }
         threadStore.upsertTodoSnapshot(sessionId: sessionKey, items: parsed)
+        todoSnapshotsRevision &+= 1
         return textResult("Recorded \(parsed.count) todo(s).")
     }
 

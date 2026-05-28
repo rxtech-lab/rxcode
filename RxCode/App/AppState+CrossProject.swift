@@ -259,17 +259,52 @@ extension AppState {
             }
         }
 
+        // Kick off the expensive, independent pre-spawn work concurrently.
+        // Memory lookup, git branch + briefing, IDE-MCP port allocation, and
+        // skill-context resolution all hop off MainActor and previously ran
+        // stacked serially — pushing the first stream event well after the
+        // user pressed send. Each `async let` starts immediately and is only
+        // joined when its value is read below.
+        //
+        // Snapshot the MainActor flags into locals first: `async let` evaluates
+        // the right-hand side in a nonisolated autoclosure, so it can't read
+        // `memoryEnabled` / `memoryInjectEnabled` / `memoryMaxContextItems`
+        // directly. The local `let` capture solves both isolation and the
+        // "captured var" warning for `sessionKey`.
+        let memoryActive = memoryEnabled && memoryInjectEnabled
+        let memoryLimit = memoryMaxContextItems
+        let capturedSessionKey = sessionKey
+        let memoryService = self.memoryService
+        let marketplace = self.marketplace
+        let ideMCPServer = self.ideMCPServer
+
+        async let memoryItemsAsync: [MemoryItem] = memoryActive
+            ? await systemPromptMemoryItems(projectId: projectId, provider: agentProvider, model: model)
+            : []
+        async let memoryHitsAsync = memoryActive
+            ? await memoryService.search(prompt, projectId: projectId, limit: memoryLimit)
+            : []
+        async let currentBranchAsync = GitHelper.currentBranch(at: cwd)
+        async let idePortAsync = ideMCPServer.allocate(
+            sessionKey: capturedSessionKey,
+            capabilities: agentProvider.staticCapabilities
+        )
+        async let skillContextAsync: String? = marketplace.promptContext(for: agentProvider)
+        async let codexSkillOverridesAsync: [String] = agentProvider == .codex
+            ? await marketplace.codexConfigOverrides()
+            : []
+
         let resolvedMemoryContext: String
-        if memoryEnabled, memoryInjectEnabled {
-            let systemItems = await systemPromptMemoryItems(projectId: projectId, provider: agentProvider, model: model)
-            let hits = await memoryService.search(prompt, projectId: projectId, limit: memoryMaxContextItems)
+        if memoryActive {
+            let systemItems = await memoryItemsAsync
+            let hits = await memoryHitsAsync
             resolvedMemoryContext = memoryContextSystemPrompt(systemItems: systemItems, relatedHits: hits)
         } else {
             resolvedMemoryContext = ""
         }
 
         let branchBriefingContext: String
-        if let branch = await GitHelper.currentBranch(at: cwd),
+        if let branch = await currentBranchAsync,
            let briefing = threadStore.branchBriefingItem(projectId: projectId, branch: branch) {
             branchBriefingContext = Self.branchBriefingSystemPrompt(
                 branch: branch,
@@ -279,55 +314,35 @@ extension AppState {
             branchBriefingContext = ""
         }
 
+        // The IDE-MCP port is provider-agnostic at allocation time — the
+        // bridge command is built from the port. Per-backend MCP config
+        // writes still happen serially after this since they consume the
+        // bridge, but they no longer block memory/git/skill resolution.
+        let idePort = await idePortAsync
+        let bridge = idePort.map { IDEMCPServer.bridgeCommand(forPort: $0) }
+
         switch agentProvider {
         case .claudeCode:
-            // Allocate a per-session IDE-MCP port so the Claude agent can call
-            // IDE-only tools — cross-project chat (`ide__send_to_thread`),
-            // thread history, running jobs, usage. The bridge is a perl
-            // one-liner Claude runs as the `rxcode-ide` MCP server child.
-            let idePort = await ideMCPServer.allocate(
-                sessionKey: sessionKey,
-                capabilities: AgentProvider.claudeCode.staticCapabilities
-            )
-            let bridge = idePort.map { IDEMCPServer.bridgeCommand(forPort: $0) }
             mcpClaudeConfigPath = await mcp.writeClaudeConfig(projectPath: cwd, bridgeCommand: bridge)
             // Surface the accumulated briefing for the project's current branch
             // to the agent as background context via `--append-system-prompt`.
             appendExtraSystemPrompt(branchBriefingContext)
             appendExtraSystemPrompt(resolvedMemoryContext)
-            if let skillContext = await marketplace.promptContext(for: .claudeCode) {
+            if let skillContext = await skillContextAsync {
                 appendExtraSystemPrompt(skillContext)
             }
         case .codex:
-            // Allocate a per-session IDE-MCP port so the Codex agent can call
-            // IDE-only tools — cross-project chat, thread history, running
-            // jobs, usage, durable memory. The bridge is a perl one-liner
-            // Codex runs as the `rxcode-ide` stdio MCP server child.
-            let idePort = await ideMCPServer.allocate(
-                sessionKey: sessionKey,
-                capabilities: AgentProvider.codex.staticCapabilities
-            )
-            let bridge = idePort.map { IDEMCPServer.bridgeCommand(forPort: $0) }
             mcpCodexOverrides = await mcp.codexConfigOverrides(projectPath: cwd, bridgeCommand: bridge)
-            mcpCodexOverrides += await marketplace.codexConfigOverrides()
+            mcpCodexOverrides += await codexSkillOverridesAsync
             resolvedPrompt = Self.promptWithBackgroundContext(
                 [branchBriefingContext, resolvedMemoryContext],
                 prompt: resolvedPrompt
             )
-            if let skillContext = await marketplace.promptContext(for: .codex) {
+            if let skillContext = await skillContextAsync {
                 resolvedPrompt = "\(skillContext)\n\nUser request:\n\(resolvedPrompt)"
             }
             resolvedSendMode = registerMode
         case .acp:
-            // Allocate a per-session IDE-MCP port so the ACP agent can call
-            // polyfill / introspection tools. The agent's MCP child is a
-            // perl one-liner that bridges its stdio to our TCP listener;
-            // the listener stays bound to this session for its lifetime.
-            let idePort = await ideMCPServer.allocate(
-                sessionKey: sessionKey,
-                capabilities: AgentProvider.acp.staticCapabilities
-            )
-            let bridge = idePort.map { IDEMCPServer.bridgeCommand(forPort: $0) }
             acpMCPServers = await mcp.acpMCPServers(
                 projectPath: cwd,
                 bridgeCommand: bridge
@@ -336,7 +351,7 @@ extension AppState {
                 [branchBriefingContext, resolvedMemoryContext],
                 prompt: resolvedPrompt
             )
-            if let skillContext = await marketplace.promptContext(for: .acp) {
+            if let skillContext = await skillContextAsync {
                 resolvedPrompt = "\(skillContext)\n\nUser request:\n\(resolvedPrompt)"
             }
             // `model` may be a composite `<clientId>::<model>` key (from the picker)
@@ -884,6 +899,7 @@ extension AppState {
                         "[TodoSnapshot] session=\(targetSession, privacy: .public) total=\(snapshot.items.count) done=\(done) active=\(active, privacy: .public)"
                     )
                     threadStore.upsertTodoSnapshot(sessionId: targetSession, items: snapshot.items)
+                    todoSnapshotsRevision &+= 1
                     broadcastMobileSessionStatus(sessionID: targetSession)
 
                 case .acpModelsDiscovered(let event):

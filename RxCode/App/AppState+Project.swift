@@ -118,7 +118,7 @@ extension AppState {
             state.effort = session.effort
             state.permissionMode = session.permissionMode
             if let msgs = loadedMessages {
-                state.messages = cleanLoadedMessages(msgs)
+                state.messages = messagesWithPersistedHookCard(cleanLoadedMessages(msgs), sessionId: session.id)
                 state.planDecisionSummaries = threadStore.loadPlanDecisions(sessionId: session.id)
                 sessionStates[session.id] = state
                 logger.info("[SwitchToSession] applied preloaded messages sid=\(session.id, privacy: .public) cleaned=\(state.messages.count)")

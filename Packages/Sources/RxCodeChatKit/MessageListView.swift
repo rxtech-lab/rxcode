@@ -155,6 +155,15 @@ struct MessageListView: View {
             .onChange(of: chatBridge.messages.last?.id) { _, _ in
                 handleLastMessageChange()
             }
+            // Synthetic hook/auto-continue cards mutate the last message in
+            // place (result: nil → result) without changing its id, content, or
+            // the session-level isStreaming flag, so none of the other rebuild
+            // triggers fire. They flip isResponseComplete when the result lands;
+            // observe it so the running card refreshes to its result live
+            // instead of only after a reload.
+            .onChange(of: chatBridge.messages.last?.isResponseComplete) { _, _ in
+                handleLastMessageChange()
+            }
             .onChange(of: chatBridge.messages.last?.content) { _, _ in
                 guard isSessionReady else { return }
                 requestScrollToBottom()

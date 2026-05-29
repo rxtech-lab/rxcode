@@ -273,6 +273,61 @@ struct RunTaskExecutorTests {
         #expect(!script.contains("# --- main ---"))
     }
 
+    // MARK: - Package profile
+
+    @Test("Each package manager emits its run prefix")
+    func packageManagerPrefixes() {
+        let cases: [(PackageManager, String)] = [
+            (.npm, "npm run 'dev'"),
+            (.yarn, "yarn 'dev'"),
+            (.pnpm, "pnpm run 'dev'"),
+            (.bun, "bun run 'dev'"),
+            (.deno, "deno task 'dev'"),
+        ]
+        for (manager, expected) in cases {
+            let profile = RunProfile(
+                projectId: UUID(),
+                name: "dev",
+                type: .packageScript,
+                package: PackageRunConfig(packageManager: manager, script: "dev")
+            )
+            let script = RunTaskExecutor.buildWrapperScript(profile: profile, projectPath: "/p")
+            #expect(script.contains(expected), "expected \(expected) for \(manager.rawValue)")
+        }
+    }
+
+    @Test("Arguments are appended verbatim after the script")
+    func packageArgumentsAppended() {
+        let profile = RunProfile(
+            projectId: UUID(),
+            name: "dev",
+            type: .packageScript,
+            package: PackageRunConfig(packageManager: .bun, script: "dev", arguments: "-- --port 3000")
+        )
+        let script = RunTaskExecutor.buildWrapperScript(profile: profile, projectPath: "/p")
+        #expect(script.contains("bun run 'dev' -- --port 3000"))
+    }
+
+    @Test("Package profile with empty script emits no main command")
+    func packageEmptyScript() {
+        let profile = RunProfile(
+            projectId: UUID(),
+            name: "empty",
+            type: .packageScript,
+            package: PackageRunConfig(packageManager: .npm, script: "")
+        )
+        let script = RunTaskExecutor.buildWrapperScript(profile: profile, projectPath: "/p")
+        #expect(!script.contains("# --- main ---"))
+    }
+
+    @Test("Script name with a single quote is shell-escaped")
+    func packageScriptEscaped() {
+        let lines = RunTaskExecutor.packageScriptLines(
+            PackageRunConfig(packageManager: .npm, script: "it's")
+        )
+        #expect(lines == ["npm run 'it'\\''s'"])
+    }
+
     // MARK: - Xcode profile
 
     @Test("Xcode .build emits a single xcodebuild build invocation")

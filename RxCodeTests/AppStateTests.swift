@@ -532,6 +532,7 @@ private actor MockAppStatePersistence: AppStatePersistenceService {
     private var sessionSaves: [(session: ChatSession, persistTitle: Bool)] = []
     private var deletedSessions: [(projectId: UUID, sessionId: String, origin: SessionOrigin, cwd: String?)] = []
     private var runProfiles: [UUID: [RunProfile]] = [:]
+    private var hookProfiles: [UUID: [HookProfile]] = [:]
     private var acpClients: [ACPClientSpec] = []
     private var fullSessions: [String: ChatSession] = [:]
     private var legacySessions: [String: ChatSession] = [:]
@@ -601,6 +602,14 @@ private actor MockAppStatePersistence: AppStatePersistenceService {
 
     func loadRunProfiles(projectId: UUID) -> [RunProfile] {
         runProfiles[projectId] ?? []
+    }
+
+    func saveHookProfiles(_ profiles: [HookProfile], projectId: UUID) throws {
+        hookProfiles[projectId] = profiles
+    }
+
+    func loadHookProfiles(projectId: UUID) -> [HookProfile] {
+        hookProfiles[projectId] ?? []
     }
 
     func saveACPClients(_ clients: [ACPClientSpec]) throws {

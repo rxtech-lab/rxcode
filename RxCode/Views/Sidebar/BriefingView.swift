@@ -20,6 +20,12 @@ struct BriefingView: View {
     /// Group id whose copy button most recently fired; used for transient checkmark feedback.
     @State private var recentlyCopiedGroupId: String?
 
+    /// Group ids whose thread list is expanded to show all threads. Collapsed by default.
+    @State private var expandedThreadGroupIds: Set<String> = []
+
+    /// Number of threads shown per group before the "Show more" toggle appears.
+    private static let defaultVisibleThreadCount = 5
+
     /// Container width tracked from the scroll content; drives the waterfall column count.
     @State private var availableWidth: CGFloat = 800
 
@@ -412,7 +418,7 @@ struct BriefingView: View {
 
             if !group.threadSummaries.isEmpty {
                 Divider().opacity(0.4)
-                threadList(group.threadSummaries)
+                threadList(group.threadSummaries, groupId: group.id)
             }
         }
         .padding(16)
@@ -589,8 +595,12 @@ struct BriefingView: View {
 
     // MARK: - Thread list (compact rows)
 
-    private func threadList(_ items: [ThreadSummaryItem]) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+    private func threadList(_ items: [ThreadSummaryItem], groupId: String) -> some View {
+        let isExpanded = expandedThreadGroupIds.contains(groupId)
+        let visibleItems = isExpanded ? items : Array(items.prefix(Self.defaultVisibleThreadCount))
+        let hiddenCount = max(0, items.count - visibleItems.count)
+
+        return VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 Text("Threads")
                     .font(.system(size: 10.5, weight: .semibold))
@@ -607,10 +617,46 @@ struct BriefingView: View {
             }
             .padding(.bottom, 2)
 
-            ForEach(items) { item in
+            ForEach(visibleItems) { item in
                 threadRow(item)
             }
+
+            if hiddenCount > 0 || isExpanded {
+                threadLimitToggle(groupId: groupId, isExpanded: isExpanded, hiddenCount: hiddenCount)
+            }
         }
+    }
+
+    private func threadLimitToggle(groupId: String, isExpanded: Bool, hiddenCount: Int) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.16)) {
+                if isExpanded {
+                    expandedThreadGroupIds.remove(groupId)
+                } else {
+                    expandedThreadGroupIds.insert(groupId)
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                Text(isExpanded ? "Show less" : "Show more")
+                    .font(.system(size: 11, weight: .medium))
+                if !isExpanded {
+                    Text("\(hiddenCount)")
+                        .font(.system(size: 10.5, weight: .semibold).monospacedDigit())
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(Capsule().fill(ClaudeTheme.surfaceSecondary))
+                }
+                Spacer()
+            }
+            .foregroundStyle(ClaudeTheme.textSecondary)
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.top, 2)
     }
 
     private func threadRow(_ item: ThreadSummaryItem) -> some View {
@@ -759,158 +805,4 @@ private struct BriefingThreadProgressBadge: View {
     }
 }
 
-// MARK: - Lightweight Markdown Renderer
-
-/// Renders simple markdown content (bullets, ordered lists, paragraphs, headings, inline
-/// bold/italic/code). Designed for compact briefings/summaries — not a full markdown engine.
-private struct BriefingMarkdownView: View {
-    let text: String
-    var fontSize: CGFloat = 13.5
-
-    private var blocks: [Block] {
-        Self.parse(text)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
-                switch block {
-                case .heading(let level, let content):
-                    Text(Self.inline(content))
-                        .font(.system(size: headingSize(level), weight: .semibold))
-                        .foregroundStyle(ClaudeTheme.textPrimary)
-                        .padding(.top, 4)
-                        .padding(.bottom, 2)
-                case .paragraph(let content):
-                    Text(Self.inline(content))
-                        .font(.system(size: fontSize))
-                        .foregroundStyle(ClaudeTheme.textSecondary)
-                        .lineSpacing(4)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .textSelection(.enabled)
-                case .bullet(let content):
-                    bulletRow(marker: "•", content: content)
-                case .ordered(let number, let content):
-                    bulletRow(marker: "\(number).", content: content, monospaced: true)
-                }
-            }
-        }
-    }
-
-    private func bulletRow(marker: String, content: String, monospaced: Bool = false) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(marker)
-                .font(monospaced
-                      ? .system(size: fontSize, weight: .semibold).monospacedDigit()
-                      : .system(size: fontSize, weight: .semibold))
-                .foregroundStyle(ClaudeTheme.accent)
-                .frame(minWidth: 14, alignment: .leading)
-            Text(Self.inline(content))
-                .font(.system(size: fontSize))
-                .foregroundStyle(ClaudeTheme.textSecondary)
-                .lineSpacing(4)
-                .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    private func headingSize(_ level: Int) -> CGFloat {
-        switch level {
-        case 1: return fontSize + 5
-        case 2: return fontSize + 3
-        case 3: return fontSize + 2
-        default: return fontSize + 1
-        }
-    }
-
-    // MARK: Parsing
-
-    enum Block {
-        case heading(level: Int, content: String)
-        case paragraph(String)
-        case bullet(String)
-        case ordered(number: Int, content: String)
-    }
-
-    private static func parse(_ text: String) -> [Block] {
-        var blocks: [Block] = []
-        var paragraphBuffer: [String] = []
-
-        func flushParagraph() {
-            guard !paragraphBuffer.isEmpty else { return }
-            let joined = paragraphBuffer.joined(separator: " ")
-                .trimmingCharacters(in: .whitespaces)
-            if !joined.isEmpty {
-                blocks.append(.paragraph(joined))
-            }
-            paragraphBuffer.removeAll()
-        }
-
-        for rawLine in text.components(separatedBy: "\n") {
-            let line = rawLine.trimmingCharacters(in: .whitespaces)
-
-            if line.isEmpty {
-                flushParagraph()
-                continue
-            }
-
-            // Heading: # to ######
-            if line.hasPrefix("#") {
-                var level = 0
-                for ch in line {
-                    if ch == "#" { level += 1 } else { break }
-                }
-                if level >= 1, level <= 6, line.count > level,
-                   line[line.index(line.startIndex, offsetBy: level)] == " " {
-                    flushParagraph()
-                    let content = String(line.dropFirst(level + 1)).trimmingCharacters(in: .whitespaces)
-                    blocks.append(.heading(level: level, content: content))
-                    continue
-                }
-            }
-
-            // Unordered bullet
-            if line.hasPrefix("- ") || line.hasPrefix("* ") || line.hasPrefix("+ ") {
-                flushParagraph()
-                blocks.append(.bullet(String(line.dropFirst(2))))
-                continue
-            }
-
-            // Ordered list "1. content"
-            if let dotIdx = line.firstIndex(of: "."),
-               let number = Int(line[line.startIndex..<dotIdx]),
-               line.index(after: dotIdx) < line.endIndex,
-               line[line.index(after: dotIdx)] == " " {
-                flushParagraph()
-                let content = String(line[line.index(dotIdx, offsetBy: 2)...])
-                blocks.append(.ordered(number: number, content: content))
-                continue
-            }
-
-            paragraphBuffer.append(line)
-        }
-
-        flushParagraph()
-        return blocks
-    }
-
-    private static func inline(_ content: String) -> AttributedString {
-        if var attr = try? AttributedString(
-            markdown: content,
-            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        ) {
-            // Style inline code spans
-            for run in attr.runs {
-                guard let intent = run.inlinePresentationIntent else { continue }
-                if intent.contains(.code) {
-                    attr[run.range].font = .system(size: 12.5, design: .monospaced)
-                    attr[run.range].foregroundColor = ClaudeTheme.textPrimary
-                    attr[run.range].backgroundColor = ClaudeTheme.surfaceTertiary
-                }
-            }
-            return attr
-        }
-        return AttributedString(content)
-    }
-}
+// `BriefingMarkdownView` lives in `BriefingMarkdownView.swift`.

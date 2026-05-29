@@ -188,6 +188,20 @@ extension AppState {
         let bridge = idePort.map { IDEMCPServer.bridgeCommand(forPort: $0) }
         logPreflight("ideMCP", detail: "port=\(idePort.map(String.init) ?? "<nil>")")
 
+        // Before-session-start hooks fire once, only for a brand-new thread (no
+        // resumed CLI session). Their stdout is injected into this turn's agent
+        // context the same way the branch briefing / memory context is, and the
+        // status cards inserted by `runHooks` persist via the `.result` save.
+        var hookStartContext = ""
+        if cliSessionId == nil, let project = projects.first(where: { $0.id == projectId }) {
+            hookStartContext = await runHooks(
+                trigger: .beforeSessionStart,
+                project: project,
+                sessionKey: sessionKey
+            ).combinedOutput
+            logPreflight("hooksStart", detail: "contextChars=\(hookStartContext.count)")
+        }
+
         switch agentProvider {
         case .claudeCode:
             mcpClaudeConfigPath = await mcp.writeClaudeConfig(projectPath: cwd, bridgeCommand: bridge)
@@ -196,6 +210,7 @@ extension AppState {
             // to the agent as background context via `--append-system-prompt`.
             appendExtraSystemPrompt(branchBriefingContext)
             appendExtraSystemPrompt(resolvedMemoryContext)
+            appendExtraSystemPrompt(hookStartContext)
             if let skillContext = await skillContextAsync {
                 logPreflight("skillContext", detail: "chars=\(skillContext.count)")
                 appendExtraSystemPrompt(skillContext)
@@ -209,7 +224,7 @@ extension AppState {
             logPreflight("codexSkillOverrides", detail: "args=\(codexSkillOverrides.count)")
             mcpCodexOverrides += codexSkillOverrides
             resolvedPrompt = Self.promptWithBackgroundContext(
-                [branchBriefingContext, resolvedMemoryContext],
+                [branchBriefingContext, resolvedMemoryContext, hookStartContext],
                 prompt: resolvedPrompt
             )
             if let skillContext = await skillContextAsync {
@@ -226,7 +241,7 @@ extension AppState {
             )
             logPreflight("acpMCP", detail: "servers=\(acpMCPServers.count)")
             resolvedPrompt = Self.promptWithBackgroundContext(
-                [branchBriefingContext, resolvedMemoryContext],
+                [branchBriefingContext, resolvedMemoryContext, hookStartContext],
                 prompt: resolvedPrompt
             )
             if let skillContext = await skillContextAsync {
@@ -681,6 +696,8 @@ extension AppState {
                     let isFg = (window.currentSessionId ?? window.newSessionKey) == sessionKey
                     let markUnread = !isFg && !resultEvent.isError
 
+                    let stopProject = projects.first(where: { $0.id == projectId })
+
                     finalizeStreamSession(for: sessionKey) { state in
                         if let cost = resultEvent.totalCostUsd { state.costUsd = cost }
                         if let duration = resultEvent.durationMs { state.durationMs += duration }
@@ -692,6 +709,23 @@ extension AppState {
                             state.cacheReadTokens += usage.cacheReadInputTokens
                         }
                         if markUnread { state.hasUncheckedCompletion = true }
+                    }
+
+                    // Session-stop hooks fire when streaming stops. Before-stop
+                    // runs *after* `finalizeStreamSession` so its status card lands
+                    // after the finalized assistant message (not before it), and
+                    // before `saveSession` below so the card persists ("passed to
+                    // the session"). After-stop runs post-save (shown, not saved).
+                    var stopHookFailureOutput: String?
+                    if let stopProject, !stopHooksHandledStreamIds.contains(streamId) {
+                        stopHooksHandledStreamIds.insert(streamId)
+                        let stopResult = await runHooks(trigger: .beforeSessionStop, project: stopProject, sessionKey: sessionKey)
+                        if stopResult.hasError {
+                            stopHookFailureOutput = stopResult.combinedOutput
+                        } else {
+                            // Hook passed — clear any prior auto-continue tally.
+                            stopHookRepromptCounts[sessionKey] = nil
+                        }
                     }
 
                     recordStreamCompletion(
@@ -718,6 +752,18 @@ extension AppState {
 
                     if agentProvider == .claudeCode {
                         reconcileFromDisk(sessionId: resultEvent.sessionId, projectId: projectId, cwd: cwd)
+                    }
+
+                    // After-session-stop hooks: shown only, not re-saved.
+                    if let stopProject {
+                        await runHooks(trigger: .afterSessionStop, project: stopProject, sessionKey: sessionKey)
+                    }
+
+                    // A failing before-stop hook auto-continues the agent so it
+                    // can fix the reported problem (e.g. lint). Skipped when the
+                    // turn itself errored — re-prompting won't help there.
+                    if let stopProject, let failureOutput = stopHookFailureOutput, !resultEvent.isError {
+                        repromptAfterStopHookFailure(output: failureOutput, project: stopProject, sessionKey: sessionKey)
                     }
 
                     if !resultEvent.isError {

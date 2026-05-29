@@ -104,7 +104,10 @@ struct ToolResultView: View {
                         Spacer()
 
                         Group {
-                            if displayIsError {
+                            if isAutoContinueTool {
+                                // System action, not a pass/fail result — no status badge.
+                                EmptyView()
+                            } else if displayIsError {
                                 Image(systemName: "exclamationmark.circle.fill")
                                     .foregroundStyle(ClaudeTheme.statusError)
                                     .font(.caption)
@@ -114,7 +117,7 @@ struct ToolResultView: View {
                                     .foregroundStyle(ClaudeTheme.statusSuccess)
                                     .font(.caption)
                                     .accessibilityLabel("Completed")
-                            } else if isMessageStreaming {
+                            } else if isMessageStreaming || isRunningHookCard {
                                 ProgressView()
                                     .controlSize(.mini)
                                     .accessibilityLabel("Running")
@@ -235,7 +238,7 @@ struct ToolResultView: View {
 
                     inputSummaryView(maximumNumberOfLines: 1)
 
-                    if toolCall.result == nil && isMessageStreaming {
+                    if toolCall.result == nil && (isMessageStreaming || isRunningHookCard) {
                         ProgressView()
                             .controlSize(.mini)
                             .accessibilityLabel("Running")
@@ -289,7 +292,28 @@ struct ToolResultView: View {
     }
 
     private var isCardTool: Bool {
-        isEditTool
+        isEditTool || isHookTool || isAutoContinueTool
+    }
+
+    /// Lifecycle hooks are emitted as tool calls named "Hook: <name>" so they
+    /// render through the same status/result card as real tools.
+    private var isHookTool: Bool {
+        toolNameLower.hasPrefix("hook:")
+    }
+
+    /// The synthetic card inserted when a failing before-session-stop hook
+    /// re-prompts the agent. Rendered as its own card (not a user bubble) so it
+    /// reads as a system action rather than something the user typed.
+    private var isAutoContinueTool: Bool {
+        toolNameLower == ToolCall.autoContinueToolName.lowercased()
+    }
+
+    /// A hook card whose command is still running. Hook cards are synthetic and
+    /// never carry the message-level `isStreaming` flag (a stop hook runs after
+    /// the turn is finalized), so the "running" spinner keys off the absent
+    /// result instead of `isMessageStreaming`.
+    private var isRunningHookCard: Bool {
+        isHookTool && toolCall.result == nil
     }
 
     // MARK: - Edit Diff
@@ -481,6 +505,8 @@ struct ToolResultView: View {
     // MARK: - Helpers
 
     private var sfSymbol: String {
+        if isAutoContinueTool { return "arrow.triangle.2.circlepath" }
+        if isHookTool { return "bolt.horizontal.circle" }
         switch toolNameLower {
         case "agent":      return "cpu"
         case "read":       return "doc.text"
@@ -497,6 +523,8 @@ struct ToolResultView: View {
     }
 
     private var iconColor: Color {
+        if isAutoContinueTool { return ClaudeTheme.accent }
+        if isHookTool { return ClaudeTheme.accent }
         switch toolNameLower {
         case "agent", "bash",
              InteractiveTerminalState.toolName: return ClaudeTheme.accent
@@ -583,6 +611,11 @@ struct ToolResultView: View {
     }
 
     private var inputSummary: String {
+        if isAutoContinueTool {
+            return toolCall.input["summary"]?.stringValue
+                ?? "Stop hook failed — sent back to the agent to continue."
+        }
+
         if toolNameLower == "agent" {
             if let desc = toolCall.input["description"]?.stringValue {
                 return desc

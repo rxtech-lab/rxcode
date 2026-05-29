@@ -10,8 +10,11 @@ struct RunProfileDetailForm: View {
     let project: Project
 
     @State var detectedMakeTargets: [String] = []
+    @State var detectedPackageScripts: [String] = []
+    @State var installedPackageManagers: [PackageManager] = []
     @State var newPresetName: String = ""
     static let customTargetSentinel = "__rxcode_custom_target__"
+    static let customScriptSentinel = "__rxcode_custom_script__"
 
     var body: some View {
         Form {
@@ -26,6 +29,9 @@ struct RunProfileDetailForm: View {
                         }
                         if newValue == .make, profile.make == nil {
                             profile.make = MakeRunConfig()
+                        }
+                        if newValue == .packageScript, profile.package == nil {
+                            profile.package = PackageRunConfig()
                         }
                     }
                 )) {
@@ -44,6 +50,8 @@ struct RunProfileDetailForm: View {
                 xcodeCommandSection
             case .make:
                 makeCommandSection
+            case .packageScript:
+                packageCommandSection
             }
 
             environmentsSection
@@ -298,6 +306,130 @@ struct RunProfileDetailForm: View {
 
             if isCustom {
                 TextField("Custom target", text: make.target, prompt: Text("build"))
+                    .font(.system(.body, design: .monospaced))
+            }
+        }
+    }
+
+    // MARK: - Package
+
+    @ViewBuilder
+    var packageCommandSection: some View {
+        Section {
+            let pkg = Binding(
+                get: { profile.package ?? PackageRunConfig() },
+                set: { profile.package = $0 }
+            )
+            Picker("Package Manager", selection: pkg.packageManager) {
+                ForEach(PackageManager.allCases, id: \.self) { manager in
+                    let installed = installedPackageManagers.isEmpty
+                        || installedPackageManagers.contains(manager)
+                    Text(installed ? manager.displayName : "\(manager.displayName) (not installed)")
+                        .tag(manager)
+                }
+            }
+            scriptField(pkg: pkg)
+            TextField(
+                "Arguments (optional)",
+                text: pkg.arguments,
+                prompt: Text("-- --port 3000")
+            )
+            .font(.system(.body, design: .monospaced))
+            HStack {
+                TextField("Working Directory", text: $profile.bash.workingDirectory, prompt: Text(project.path))
+                Button("Browse…") {
+                    pickDirectory { picked in
+                        profile.bash.workingDirectory = picked
+                    }
+                }
+                Button {
+                    profile.bash.workingDirectory = ""
+                } label: {
+                    Image(systemName: "arrow.uturn.backward")
+                }
+                .help("Reset to project root")
+            }
+        } header: {
+            Text("Package")
+        } footer: {
+            Text("Runs `\(packageCommandPreview)`. Arguments are appended after the script — use `-- <flags>` to forward flags through npm/pnpm.")
+        }
+        .task(id: packageDetectionKey) {
+            detectedPackageScripts = await refreshPackageScripts()
+            installedPackageManagers = await RunProfileDetector.detectInstalledPackageManagers()
+        }
+    }
+
+    /// `<manager> run <script> [args]` shown in the footer for clarity.
+    var packageCommandPreview: String {
+        let pkg = profile.package ?? PackageRunConfig()
+        let script = pkg.script.isEmpty ? "<script>" : pkg.script
+        var preview = "\(pkg.packageManager.runPrefix) \(script)"
+        let args = pkg.arguments.trimmingCharacters(in: .whitespaces)
+        if !args.isEmpty { preview += " \(args)" }
+        return preview
+    }
+
+    /// Cache key for re-reading package.json scripts when the working directory
+    /// changes.
+    var packageDetectionKey: String {
+        "\(profile.id.uuidString)|\(profile.bash.workingDirectory)"
+    }
+
+    func refreshPackageScripts() async -> [String] {
+        let projectRoot = project.path
+        let workingDirRaw = profile.bash.workingDirectory
+        return await Task.detached { () -> [String] in
+            func resolve(_ p: String, against base: String) -> String {
+                if p.isEmpty { return base }
+                if p.hasPrefix("/") { return p }
+                return (base as NSString).appendingPathComponent(p)
+            }
+            let dir = workingDirRaw.isEmpty
+                ? projectRoot
+                : resolve(workingDirRaw, against: projectRoot)
+            return RunProfileDetector.packageScriptNames(inDirectory: dir)
+        }.value
+    }
+
+    @ViewBuilder
+    func scriptField(pkg: Binding<PackageRunConfig>) -> some View {
+        let current = pkg.wrappedValue.script
+        let scripts = detectedPackageScripts
+        let isCustom = !scripts.isEmpty && !current.isEmpty && !scripts.contains(current)
+
+        if scripts.isEmpty {
+            TextField("Script", text: pkg.script, prompt: Text("dev"))
+                .font(.system(.body, design: .monospaced))
+        } else {
+            Picker("Script", selection: Binding(
+                get: {
+                    if current.isEmpty { return "" }
+                    return isCustom ? Self.customScriptSentinel : current
+                },
+                set: { newValue in
+                    var c = pkg.wrappedValue
+                    if newValue == Self.customScriptSentinel {
+                        if scripts.contains(c.script) { c.script = "" }
+                    } else {
+                        c.script = newValue
+                    }
+                    pkg.wrappedValue = c
+                }
+            )) {
+                if current.isEmpty {
+                    Text("Select a script…").tag("")
+                }
+                ForEach(scripts, id: \.self) { s in
+                    Text(s).tag(s)
+                }
+                Divider()
+                Text("Custom…").tag(Self.customScriptSentinel)
+            }
+            .font(.system(.body, design: .monospaced))
+
+            if isCustom {
+                TextField("Custom script", text: pkg.script, prompt: Text("dev"))
                     .font(.system(.body, design: .monospaced))
             }
         }

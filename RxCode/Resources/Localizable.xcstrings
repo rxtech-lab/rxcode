@@ -11,6 +11,20 @@
         }
       }
     },
+    " (copy)" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "（副本）"
+          }
+        }
+      }
+    },
+    "-- --port 3000" : {
+
+    },
     "—" : {
       "localizations" : {
         "zh-Hans" : {
@@ -356,6 +370,16 @@
         }
       }
     },
+    "^[%lld hook](inflect: true)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个 Hook"
+          }
+        }
+      }
+    },
     "↑↓ Select  ↵ Confirm  esc Cancel" : {
       "localizations" : {
         "en" : {
@@ -541,6 +565,16 @@
         }
       }
     },
+    "Add a project to configure hooks." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加一个项目以配置 Hook。"
+          }
+        }
+      }
+    },
     "Add a relay server" : {
       "localizations" : {
         "zh-Hans" : {
@@ -608,6 +642,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "添加 Git 来源"
+          }
+        }
+      }
+    },
+    "Add Hook" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加 Hook"
           }
         }
       }
@@ -817,6 +861,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已添加"
+          }
+        }
+      }
+    },
+    "After Session Stop" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会话停止后"
           }
         }
       }
@@ -1176,6 +1231,17 @@
         }
       }
     },
+    "Assistant reply" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "助手回复"
+          }
+        }
+      }
+    },
     "Authenticate on GitHub" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1401,6 +1467,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Bash"
+          }
+        }
+      }
+    },
+    "Before Session Start" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会话开始前"
+          }
+        }
+      }
+    },
+    "Before Session Stop" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会话停止前"
           }
         }
       }
@@ -2248,6 +2336,9 @@
         }
       }
     },
+    "Custom script" : {
+
+    },
     "Custom Sources" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2480,6 +2571,16 @@
         }
       }
     },
+    "Delete Hook" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除 Hook"
+          }
+        }
+      }
+    },
     "Delete memory" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2583,6 +2684,9 @@
           }
         }
       }
+    },
+    "dev" : {
+
     },
     "dev / prod / beta" : {
       "localizations" : {
@@ -2742,6 +2846,16 @@
         }
       }
     },
+    "Duplicate Hook" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制 Hook"
+          }
+        }
+      }
+    },
     "Duplicate Profile" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2876,6 +2990,9 @@
         }
       }
     },
+    "Empty Package Configuration" : {
+
+    },
     "Empty Xcode Configuration" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2924,6 +3041,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "启用记忆"
+          }
+        }
+      }
+    },
+    "Enabled" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已启用"
           }
         }
       }
@@ -3036,6 +3163,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "exit 0"
+          }
+        }
+      }
+    },
+    "Exit 0 → done" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "退出码 0 → 完成"
           }
         }
       }
@@ -3579,6 +3717,27 @@
         }
       }
     },
+    "Hook runs" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hook 运行"
+          }
+        }
+      }
+    },
+    "Hooks" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hook"
+          }
+        }
+      }
+    },
     "https://example.com/mcp" : {
       "localizations" : {
         "zh-Hans" : {
@@ -3888,6 +4047,16 @@
         }
       }
     },
+    "Lifecycle" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "生命周期"
+          }
+        }
+      }
+    },
     "Live channel only" : {
       "localizations" : {
         "zh-Hans" : {
@@ -4140,6 +4309,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "管理 GitHub 仓库"
+          }
+        }
+      }
+    },
+    "Manage Hooks…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "管理 Hook…"
           }
         }
       }
@@ -4482,6 +4661,17 @@
         }
       }
     },
+    "New Hook" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建 Hook"
+          }
+        }
+      }
+    },
     "New Terminal" : {
       "localizations" : {
         "zh-Hans" : {
@@ -4498,6 +4688,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "新建终端（⌘T）"
+          }
+        }
+      }
+    },
+    "New thread starts" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新对话开始"
           }
         }
       }
@@ -4663,6 +4864,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "未定义环境变量"
+          }
+        }
+      }
+    },
+    "No hooks yet" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂无 Hook"
           }
         }
       }
@@ -4910,6 +5121,17 @@
         }
       }
     },
+    "Non-zero → agent continues" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "非零 → agent 继续"
+          }
+        }
+      }
+    },
     "None" : {
       "localizations" : {
         "zh-Hans" : {
@@ -5047,6 +5269,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "确定"
+          }
+        }
+      }
+    },
+    "On failure the hook output is sent back to the agent, which keeps fixing until the hook passes (max 3 retries)." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "失败时，hook 的输出会回传给 agent，agent 会持续修复直到 hook 通过（最多重试 3 次）。"
           }
         }
       }
@@ -5216,6 +5448,17 @@
         }
       }
     },
+    "output added to context" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输出加入上下文"
+          }
+        }
+      }
+    },
     "Override" : {
       "localizations" : {
         "zh-Hans" : {
@@ -5225,6 +5468,12 @@
           }
         }
       }
+    },
+    "Package" : {
+
+    },
+    "Package Manager" : {
+
     },
     "Pair a new device" : {
       "localizations" : {
@@ -5525,6 +5774,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "项目 / 工作区"
+          }
+        }
+      }
+    },
+    "Project Hooks" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目 Hook"
           }
         }
       }
@@ -6199,6 +6458,16 @@
         }
       }
     },
+    "Run commands automatically at session lifecycle points. Hooks are configured per project." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在会话生命周期的各个时点自动运行命令。Hook 按项目分别配置。"
+          }
+        }
+      }
+    },
     "Run git init in this project" : {
 
     },
@@ -6222,12 +6491,26 @@
         }
       }
     },
+    "Runs `%@`. Arguments are appended after the script — use `-- <flags>` to forward flags through npm/pnpm." : {
+
+    },
     "Runs `make [-f <Makefile>] <target> [arguments]`. Leave Makefile empty to use the default lookup (Makefile / makefile / GNUmakefile)." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "运行 `make [-f <Makefile>] <target> [arguments]`。留空 Makefile 会使用默认查找（Makefile / makefile / GNUmakefile）。"
+          }
+        }
+      }
+    },
+    "Runs after streaming stops. Its output is shown only — nothing is passed back to the session." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在流式输出停止后运行。其输出仅作显示——不会回传给会话。"
           }
         }
       }
@@ -6248,6 +6531,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "通过 Apple Intelligence 在设备端运行。私密、免费且离线。"
+          }
+        }
+      }
+    },
+    "Runs once when a new thread starts. Its output is added to the agent's context for that turn." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在新对话开始时运行一次。其输出会加入该轮对话的 agent 上下文。"
+          }
+        }
+      }
+    },
+    "Runs when streaming stops. Its output is shown and saved with the thread. If the command exits non-zero, its output is sent back to the agent to continue (up to 3 times)." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在流式输出停止时运行。其输出会显示并随对话一起保存。若命令以非零状态退出，其输出会回传给 agent 以继续处理（最多 3 次）。"
+          }
+        }
+      }
+    },
+    "Runs with `/bin/zsh -lc`. Absolute or project-relative working directory; leave empty to use the project root." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用 `/bin/zsh -lc` 运行。工作目录可以是绝对路径或相对于项目的路径；留空则使用项目根目录。"
           }
         }
       }
@@ -6384,6 +6699,9 @@
           }
         }
       }
+    },
+    "Script" : {
+
     },
     "Search agents" : {
       "localizations" : {
@@ -6577,6 +6895,9 @@
         }
       }
     },
+    "Select a script…" : {
+
+    },
     "Select a target…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -6647,6 +6968,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "选择模型"
+          }
+        }
+      }
+    },
+    "Select or add a hook to edit" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择或添加一个 Hook 进行编辑"
           }
         }
       }
@@ -6923,6 +7254,9 @@
         }
       }
     },
+    "Show less" : {
+
+    },
     "Show menu bar icon" : {
       "localizations" : {
         "zh-Hans" : {
@@ -6989,6 +7323,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "显示全局 MCP 默认值"
+          }
+        }
+      }
+    },
+    "Shown only — nothing is passed back to the session." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅作显示——不会回传给会话。"
           }
         }
       }
@@ -7182,6 +7526,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "停止正在运行的任务"
+          }
+        }
+      }
+    },
+    "streaming stops" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "流式输出停止"
           }
         }
       }
@@ -7426,6 +7781,17 @@
         }
       }
     },
+    "Thread saved" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "对话已保存"
+          }
+        }
+      }
+    },
     "Threads" : {
       "localizations" : {
         "zh-Hans" : {
@@ -7468,6 +7834,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "传输"
+          }
+        }
+      }
+    },
+    "Trigger" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "触发时机"
           }
         }
       }
@@ -7520,6 +7896,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "取消固定"
+          }
+        }
+      }
+    },
+    "Untitled" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未命名"
           }
         }
       }

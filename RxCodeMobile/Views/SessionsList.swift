@@ -437,6 +437,7 @@ struct MobileRunProfilesView: View {
         case .bash: return "terminal"
         case .xcode: return "hammer.fill"
         case .make: return "wrench.and.screwdriver.fill"
+        case .packageScript: return "shippingbox.fill"
         }
     }
 
@@ -450,6 +451,9 @@ struct MobileRunProfilesView: View {
         case .make:
             let make = profile.make ?? MakeRunConfig()
             return ["make", make.target, make.arguments].filter { !$0.isEmpty }.joined(separator: " ")
+        case .packageScript:
+            let pkg = profile.package ?? PackageRunConfig()
+            return [pkg.packageManager.runPrefix, pkg.script, pkg.arguments].filter { !$0.isEmpty }.joined(separator: " ")
         }
     }
 
@@ -472,6 +476,11 @@ struct MobileRunProfilesView: View {
                     editingProfile = Self.newProfile(projectID: projectID, type: .make)
                 } label: {
                     Label("Make Configuration", systemImage: "wrench.and.screwdriver.fill")
+                }
+                Button {
+                    editingProfile = Self.newProfile(projectID: projectID, type: .packageScript)
+                } label: {
+                    Label("Package Configuration", systemImage: "shippingbox.fill")
                 }
             }
 
@@ -543,6 +552,15 @@ struct MobileRunProfilesView: View {
                 createdAt: now,
                 updatedAt: now
             )
+        case .packageScript:
+            return RunProfile(
+                projectId: projectID,
+                name: "New Package Configuration",
+                type: .packageScript,
+                package: PackageRunConfig(),
+                createdAt: now,
+                updatedAt: now
+            )
         }
     }
 
@@ -566,6 +584,16 @@ struct MobileRunProfilesView: View {
                 name: runnable.displayName,
                 type: .make,
                 make: make,
+                createdAt: now,
+                updatedAt: now
+            )
+        }
+        if let package = runnable.package {
+            return RunProfile(
+                projectId: projectID,
+                name: runnable.displayName,
+                type: .packageScript,
+                package: package,
                 createdAt: now,
                 updatedAt: now
             )

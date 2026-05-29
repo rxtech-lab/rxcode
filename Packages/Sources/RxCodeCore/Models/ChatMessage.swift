@@ -235,6 +235,10 @@ public struct ToolCall: Identifiable, Codable, Sendable, Equatable {
         result.map { !$0.isEmpty } ?? false
     }
 
+    /// Tool name for the synthetic card shown when a failing before-session-stop
+    /// hook auto-continues the agent. Rendered specially by `ToolResultView`.
+    public static let autoContinueToolName = "Auto-continue"
+
     /// Tool names that must stay in the message block even without a result —
     /// either because the result would be empty by design, or because the UI
     /// needs to render them before the user/CLI produces a result.

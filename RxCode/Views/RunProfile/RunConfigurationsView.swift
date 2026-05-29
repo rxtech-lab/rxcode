@@ -97,6 +97,7 @@ struct RunConfigurationsView: View {
                 List(selection: $selectedId) {
                     let xcodeProfiles = draft.filter { $0.type == .xcode }
                     let makeProfiles = draft.filter { $0.type == .make }
+                    let packageProfiles = draft.filter { $0.type == .packageScript }
                     let bashProfiles = draft.filter { $0.type == .bash }
 
                     if !xcodeProfiles.isEmpty {
@@ -109,6 +110,13 @@ struct RunConfigurationsView: View {
                     if !makeProfiles.isEmpty {
                         Section("Make") {
                             ForEach(makeProfiles) { profile in
+                                profileRow(profile)
+                            }
+                        }
+                    }
+                    if !packageProfiles.isEmpty {
+                        Section("Package") {
+                            ForEach(packageProfiles) { profile in
                                 profileRow(profile)
                             }
                         }
@@ -175,6 +183,7 @@ struct RunConfigurationsView: View {
         case .xcode: return "hammer.fill"
         case .make: return "wrench.and.screwdriver.fill"
         case .bash: return "terminal"
+        case .packageScript: return "shippingbox.fill"
         }
     }
 
@@ -212,11 +221,11 @@ struct RunConfigurationsView: View {
                 }
             }
 
-            Section("Bash") {
+            Section("Package") {
                 Button {
-                    addProfile()
+                    addPackageProfile()
                 } label: {
-                    Label("Empty Bash Configuration", systemImage: "terminal")
+                    Label("Empty Package Configuration", systemImage: "shippingbox.fill")
                 }
                 ForEach(detected.npm) { runnable in
                     Button {
@@ -224,6 +233,14 @@ struct RunConfigurationsView: View {
                     } label: {
                         Label(runnable.displayName, systemImage: "shippingbox.fill")
                     }
+                }
+            }
+
+            Section("Bash") {
+                Button {
+                    addProfile()
+                } label: {
+                    Label("Empty Bash Configuration", systemImage: "terminal")
                 }
             }
         } label: {
@@ -265,6 +282,19 @@ struct RunConfigurationsView: View {
             selectedId = new.id
             return
         }
+        if let package = runnable?.package {
+            let new = RunProfile(
+                projectId: project.id,
+                name: runnable?.displayName ?? "New Package Configuration",
+                type: .packageScript,
+                package: package,
+                createdAt: now,
+                updatedAt: now
+            )
+            draft.append(new)
+            selectedId = new.id
+            return
+        }
         let new = RunProfile(
             projectId: project.id,
             name: runnable?.displayName ?? "New Bash Configuration",
@@ -299,6 +329,21 @@ struct RunConfigurationsView: View {
             name: "New Make Configuration",
             type: .make,
             make: firstDetected ?? MakeRunConfig(),
+            createdAt: now,
+            updatedAt: now
+        )
+        draft.append(new)
+        selectedId = new.id
+    }
+
+    func addPackageProfile() {
+        let now = Date()
+        let firstDetected = detected.npm.first?.package
+        let new = RunProfile(
+            projectId: project.id,
+            name: "New Package Configuration",
+            type: .packageScript,
+            package: firstDetected ?? PackageRunConfig(),
             createdAt: now,
             updatedAt: now
         )

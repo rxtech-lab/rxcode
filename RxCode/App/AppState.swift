@@ -935,6 +935,18 @@ final class AppState {
     /// Loaded lazily per project. Keyed by `Project.id`.
     var runProfilesByProject: [UUID: [RunProfile]] = [:]
 
+    /// Lifecycle hooks loaded lazily per project. Keyed by `Project.id`.
+    var hookProfilesByProject: [UUID: [HookProfile]] = [:]
+
+    /// Streams whose session-stop hooks have already fired, so the `.result`
+    /// path and the cancel path don't double-run them for the same stream.
+    var stopHooksHandledStreamIds: Set<UUID> = []
+
+    /// Per-session count of consecutive auto-continues triggered by a failing
+    /// `beforeSessionStop` hook. Bounds the fix→fail→fix loop; reset when the
+    /// hook passes or the user sends a real message. Keyed by session id.
+    var stopHookRepromptCounts: [String: Int] = [:]
+
     func runProfiles(for projectId: UUID) -> [RunProfile] {
         runProfilesByProject[projectId] ?? []
     }

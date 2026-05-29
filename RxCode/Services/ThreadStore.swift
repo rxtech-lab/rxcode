@@ -26,7 +26,8 @@ final class ThreadStore {
             ThreadSummaryRecord.self,
             BranchBriefingRecord.self,
             ThreadEmbeddingChunk.self,
-            MemoryRecord.self
+            MemoryRecord.self,
+            HookStatusRecord.self
         ])
         let url = Self.storeURL()
         let config = ModelConfiguration(schema: schema, url: url)
@@ -270,6 +271,7 @@ final class ThreadStore {
         renameFileEdits(from: oldId, to: newId)
         renameQueueKey(from: oldId, to: newId)
         renamePlanDecisions(from: oldId, to: newId)
+        renameHookStatus(from: oldId, to: newId)
         renameThreadSummary(from: oldId, to: newId)
         save()
     }
@@ -323,6 +325,7 @@ final class ThreadStore {
         deleteFileEditRows(sessionId: id)
         deleteQueueRows(sessionKey: id)
         deletePlanDecisionRows(sessionId: id)
+        deleteHookStatusRow(sessionId: id)
         deleteThreadSummaryRow(sessionId: id)
         deleteEmbeddingChunkRows(threadId: id)
         save()
@@ -344,6 +347,7 @@ final class ThreadStore {
                 deleteFileEditRows(sessionId: id)
                 deleteQueueRows(sessionKey: id)
                 deletePlanDecisionRows(sessionId: id)
+                deleteHookStatusRow(sessionId: id)
                 deleteThreadSummaryRow(sessionId: id)
                 deleteEmbeddingChunkRows(threadId: id)
             }
@@ -356,6 +360,8 @@ final class ThreadStore {
                 for row in allQueues { context.delete(row) }
                 let allPlans = (try? context.fetch(FetchDescriptor<PlanDecisionRecord>())) ?? []
                 for row in allPlans { context.delete(row) }
+                let allHookStatuses = (try? context.fetch(FetchDescriptor<HookStatusRecord>())) ?? []
+                for row in allHookStatuses { context.delete(row) }
                 let allSummaries = (try? context.fetch(FetchDescriptor<ThreadSummaryRecord>())) ?? []
                 for row in allSummaries { context.delete(row) }
                 let allBriefings = (try? context.fetch(FetchDescriptor<BranchBriefingRecord>())) ?? []
@@ -500,6 +506,64 @@ final class ThreadStore {
 
     private func deletePlanDecisionRows(sessionId: String) {
         for row in planDecisions(sessionId: sessionId) { context.delete(row) }
+    }
+
+    // MARK: - Hook Status
+
+    func loadHookStatus(sessionId: String) -> HookStatusRecord? {
+        fetchHookStatus(sessionId: sessionId)
+    }
+
+    private func fetchHookStatus(sessionId: String) -> HookStatusRecord? {
+        var descriptor = FetchDescriptor<HookStatusRecord>(
+            predicate: #Predicate { $0.sessionId == sessionId }
+        )
+        descriptor.fetchLimit = 1
+        return (try? context.fetch(descriptor))?.first
+    }
+
+    /// Upsert the last hook card for a session (one row per session).
+    func setHookStatus(
+        sessionId: String,
+        toolId: String,
+        name: String,
+        trigger: String,
+        output: String,
+        isError: Bool
+    ) {
+        if let existing = fetchHookStatus(sessionId: sessionId) {
+            existing.toolId = toolId
+            existing.name = name
+            existing.trigger = trigger
+            existing.output = output
+            existing.isError = isError
+            existing.updatedAt = .now
+        } else {
+            context.insert(HookStatusRecord(
+                sessionId: sessionId,
+                toolId: toolId,
+                name: name,
+                trigger: trigger,
+                output: output,
+                isError: isError
+            ))
+        }
+        save()
+    }
+
+    private func renameHookStatus(from oldId: String, to newId: String) {
+        guard oldId != newId else { return }
+        guard let row = fetchHookStatus(sessionId: oldId) else { return }
+        if fetchHookStatus(sessionId: newId) != nil {
+            context.delete(row)
+        } else {
+            row.sessionId = newId
+        }
+    }
+
+    private func deleteHookStatusRow(sessionId: String) {
+        guard let row = fetchHookStatus(sessionId: sessionId) else { return }
+        context.delete(row)
     }
 
     // MARK: - Thread File Edits

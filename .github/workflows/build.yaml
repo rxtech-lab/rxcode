@@ -6,8 +6,6 @@ concurrency:
 
 on:
   push:
-    branches:
-      - main
   release:
     types:
       - created
@@ -90,7 +88,15 @@ jobs:
           # CURRENT_PROJECT_VERSION is overridden per-build so every CI build
           # has a unique build number (github.run_number), without committing
           # churn to project.pbxproj.
-          set -o pipefail && xcodebuild -destination platform=macOS \
+          # The provisioning profile is scoped to the RxCode target's Release
+          # build settings in project.pbxproj (PROVISIONING_PROFILE_SPECIFIER),
+          # NOT passed on the command line. A command-line PROVISIONING_PROFILE*
+          # applies to every target in the graph — including SPM package targets
+          # that don't support provisioning profiles — which fails the archive.
+          # CODE_SIGN_STYLE/IDENTITY stay global: Manual signing needs no team
+          # and library targets sign with the identity but need no profile.
+          set -o pipefail
+          xcodebuild -destination platform=macOS \
             -project RxCode.xcodeproj \
             -scheme RxCode \
             -configuration Release \
@@ -98,11 +104,15 @@ jobs:
             -allowProvisioningUpdates \
             CODE_SIGN_IDENTITY="${{ secrets.SIGNING_CERTIFICATE_NAME }}" \
             CODE_SIGN_STYLE=Manual \
-            PROVISIONING_PROFILE="$MACOS_PROFILE_UUID" \
-            PROVISIONING_PROFILE_SPECIFIER="$MACOS_PROFILE_SPECIFIER" \
             OTHER_CODE_SIGN_FLAGS="--options=runtime --timestamp" \
             CURRENT_PROJECT_VERSION=${{ github.run_number }} \
-            archive | xcpretty
+            archive 2>&1 | tee xcodebuild-archive.log | xcpretty || {
+              status=${PIPESTATUS[0]}
+              echo "::group::Full xcodebuild output (archive failed)"
+              cat xcodebuild-archive.log
+              echo "::endgroup::"
+              exit "$status"
+            }
 
       - name: Sign Sparkle
         run: ./scripts/ci/sign-sparkle.sh

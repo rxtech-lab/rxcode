@@ -51,12 +51,21 @@ final class RxAuthService {
     /// Returns a current bearer token, refreshing first if it's expired.
     /// Returns `nil` when the user is signed out or refresh failed.
     func accessToken() async -> String? {
+        let clock = ContinuousClock()
+        let start = clock.now
         do {
+            // RxAuthSwift reads/writes its own keychain item internally here; a
+            // long elapsed time below points the keychain prompt at the SDK
+            // rather than our `KeychainHelper.read` further down.
             try await manager.refreshTokenIfNeeded()
         } catch {
             logger.warning("RxAuth refresh failed: \(error.localizedDescription, privacy: .public)")
             return nil
         }
+        let refreshElapsed = clock.now - start
+        let ms = Double(refreshElapsed.components.attoseconds) / 1e15
+            + Double(refreshElapsed.components.seconds) * 1e3
+        logger.debug("accessToken: refreshTokenIfNeeded returned in \(ms, privacy: .public)ms")
         return KeychainBackedTokenReader.readAccessToken(
             service: "com.rxtech.rxcode.rxauth"
         )

@@ -180,6 +180,11 @@ extension AppState {
             Task { [weak self] in await self?.loadRepos() }
         }
 
+        // Periodically pull GitHub Actions CI status for open projects (no-ops
+        // until signed in). Notifies on failure and, when enabled, auto-starts a
+        // fix thread.
+        startCIStatusPoller()
+
         // React to RxAuthSwift session expiry by clearing autopilot repos.
         // `isSignedIn`/`rxUser` are computed from the manager, so they update
         // automatically when `OAuthManager` flips to `.unauthenticated`.

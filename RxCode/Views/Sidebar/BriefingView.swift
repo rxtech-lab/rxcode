@@ -454,6 +454,7 @@ struct BriefingView: View {
                         .truncationMode(.middle)
 
                     chip(icon: "arrow.triangle.branch", text: group.branch, accented: true)
+                    ciChip(for: group)
                 }
                 Text("Updated \(Self.compactDate(group.updatedAt))")
                     .font(.system(size: 10.5, weight: .medium))
@@ -569,6 +570,50 @@ struct BriefingView: View {
         .fixedSize()
         .accessibilityIdentifier("briefing-group-actions-button")
         .help("Actions for \(project.name)")
+    }
+
+    /// CI status chip, shown only on the card matching the project's current
+    /// branch (CI status is tracked per project for its current branch). Failing
+    /// states link to the failing run on GitHub.
+    @ViewBuilder
+    private func ciChip(for group: BriefingGroup) -> some View {
+        let _ = appState.ciStatusRevision
+        if currentBranchByProject[group.projectId] == group.branch,
+           let status = appState.ciStatusByProject[group.projectId] {
+            let state = status.overallState
+            if state == .failure,
+               let urlString = status.failing.first?.htmlUrl,
+               let url = URL(string: urlString) {
+                Link(destination: url) {
+                    ciChipLabel(state: state)
+                }
+                .buttonStyle(.plain)
+                .help("CI failing — open the failing run on GitHub")
+            } else {
+                ciChipLabel(state: state)
+            }
+        }
+    }
+
+    private func ciChipLabel(state: CIOverallState) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: state.sfSymbolName)
+                .font(.system(size: 9, weight: .semibold))
+            Text(state.label)
+                .font(.system(size: 10.5, weight: .medium))
+                .lineLimit(1)
+        }
+        .foregroundStyle(state.displayColor)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 2)
+        .background(
+            Capsule(style: .continuous)
+                .fill(state.displayColor.opacity(0.12))
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .strokeBorder(state.displayColor.opacity(0.25), lineWidth: 0.5)
+        )
     }
 
     private func chip(icon: String, text: String, accented: Bool = false) -> some View {

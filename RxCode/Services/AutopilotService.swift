@@ -102,6 +102,16 @@ final class AutopilotService {
         return try await get(url: url)
     }
 
+    /// `POST /api/v1/ci-status/batch` — given a set of repo+branch lookups,
+    /// returns the current aggregated GitHub Actions status for each (overall
+    /// state, the latest run per workflow, and the failing ones). CI data is
+    /// synced into autopilot via GitHub webhooks, so this never touches
+    /// api.github.com.
+    func batchCIStatus(_ repos: [CIStatusQuery]) async throws -> CIStatusBatchResponse {
+        let url = baseURL.appendingPathComponent("/api/v1/ci-status/batch")
+        return try await post(url: url, body: CIStatusBatchRequest(repos: repos))
+    }
+
     // MARK: - Internal
 
     private func get<T: Decodable>(url: URL) async throws -> T {
@@ -110,6 +120,24 @@ final class AutopilotService {
             request.httpMethod = "GET"
             request.setValue("application/json", forHTTPHeaderField: "Accept")
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            return request
+        }
+    }
+
+    private func post<Body: Encodable, T: Decodable>(url: URL, body: Body) async throws -> T {
+        let payload: Data
+        do {
+            payload = try JSONEncoder().encode(body)
+        } catch {
+            throw ServiceError.decodingError(error.localizedDescription)
+        }
+        return try await performWithRetry { token in
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            request.httpBody = payload
             return request
         }
     }

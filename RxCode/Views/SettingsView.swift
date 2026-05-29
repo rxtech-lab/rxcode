@@ -104,6 +104,8 @@ struct GeneralSettingsTab: View {
                 Divider()
                 notificationsSection(appState: $appState.notificationsEnabled)
                 Divider()
+                githubActionsSection(isOn: $appState.enableAutoCIFix)
+                Divider()
                 menuBarSection
                 Divider()
                 searchIndexSection
@@ -271,6 +273,17 @@ struct GeneralSettingsTab: View {
             label: "Notify when response completes",
             detail: "Sends a system notification while RxCode is in the background.",
             isOn: appState
+        )
+    }
+
+    // MARK: - GitHub Actions Section
+
+    private func githubActionsSection(isOn: Binding<Bool>) -> some View {
+        toggleSection(
+            title: "GitHub Actions",
+            label: "Auto-fix CI failures",
+            detail: "When CI fails on a project's current branch, automatically start a thread so an agent can fix it. CI failures are always notified; this only controls the automatic fix.",
+            isOn: isOn
         )
     }
 

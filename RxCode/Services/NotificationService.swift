@@ -183,6 +183,63 @@ final class NotificationService: NSObject {
         }
     }
 
+    /// Post a "CI failed" notification when a project's current branch goes red
+    /// on GitHub Actions. Fans out to mobile and (when authorized) shows a local
+    /// banner. Uses a per-project identifier so a newer failure replaces the
+    /// previous banner instead of stacking.
+    func postCIFailed(projectName: String?, projectId: UUID?, failingWorkflowNames: [String]) async {
+        let body = Self.ciFailureBody(failingWorkflowNames)
+        let projectSuffix: String = projectName.map { " — \($0)" } ?? ""
+        await fanoutToMobile(.init(
+            kind: .generic,
+            title: "CI failed\(projectSuffix)",
+            body: body,
+            sessionID: nil,
+            projectID: projectId
+        ))
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        switch settings.authorizationStatus {
+        case .authorized, .provisional:
+            break
+        default:
+            return
+        }
+
+        let content = UNMutableNotificationContent()
+        let titleFormat = NSLocalizedString(
+            "CI failed%@",
+            comment: "Notification title when GitHub Actions CI fails on a project's current branch. %@ is replaced with \" — <project name>\" or empty string."
+        )
+        content.title = String(format: titleFormat, projectSuffix)
+        content.body = body
+        content.sound = .default
+        if let projectId { content.userInfo = ["projectId": projectId.uuidString] }
+
+        // Stable per-project id: a fresh failure replaces the prior banner.
+        let identifier = projectId.map { "ci-failed-\($0.uuidString)" } ?? "ci-failed-\(UUID().uuidString)"
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
+
+        do {
+            try await UNUserNotificationCenter.current().add(request)
+        } catch {
+            logger.error("Failed to post CI failure notification: \(error.localizedDescription)")
+        }
+    }
+
+    private static func ciFailureBody(_ names: [String]) -> String {
+        let cleaned = names.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        switch cleaned.count {
+        case 0:
+            return NSLocalizedString("A workflow failed", comment: "CI failure notification body when the workflow name is unknown.")
+        case 1:
+            let format = NSLocalizedString("Workflow “%@” failed", comment: "CI failure notification body for a single failing workflow. %@ is the workflow name.")
+            return String(format: format, cleaned[0])
+        default:
+            let format = NSLocalizedString("%d workflows failed: %@", comment: "CI failure notification body for multiple failing workflows. %1$d is the count, %2$@ is a comma-separated list of names.")
+            return String(format: format, cleaned.count, cleaned.joined(separator: ", "))
+        }
+    }
+
     /// Post a local banner after a paired mobile device remotely changed the
     /// desktop's skill / ACP / MCP configuration. Silently no-ops if the user
     /// has not authorized notifications.

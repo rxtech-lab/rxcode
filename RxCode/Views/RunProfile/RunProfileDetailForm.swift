@@ -326,6 +326,7 @@ struct RunProfileDetailForm: View {
                         || installedPackageManagers.contains(manager)
                     Text(installed ? manager.displayName : "\(manager.displayName) (not installed)")
                         .tag(manager)
+                        .disabled(!installed)
                 }
             }
             scriptField(pkg: pkg)

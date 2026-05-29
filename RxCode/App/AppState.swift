@@ -416,6 +416,33 @@ final class AppState {
         didSet { UserDefaults.standard.set(notificationsEnabled, forKey: "notificationsEnabled") }
     }
 
+    // MARK: - GitHub Actions CI
+
+    /// When enabled, a failing CI run on a project's current branch silently
+    /// spawns a fix thread (via `sendCrossProject`) so an agent starts repairing
+    /// it on the user's behalf. The failure notification fires regardless of this
+    /// toggle — only the auto-fix behavior is gated. Off by default (spends tokens
+    /// unprompted).
+    var enableAutoCIFix: Bool = (UserDefaults.standard.object(forKey: "enableAutoCIFix") as? Bool) ?? false {
+        didSet { UserDefaults.standard.set(enableAutoCIFix, forKey: "enableAutoCIFix") }
+    }
+
+    /// Latest CI status per project (current branch), refreshed by the poller in
+    /// `AppState+CIStatus.swift`. Held in memory only.
+    var ciStatusByProject: [UUID: ProjectCIStatus] = [:]
+
+    /// Bumped after every CI refresh so views observing CI status recompute,
+    /// mirroring the `branchBriefingRevision` pattern.
+    var ciStatusRevision: Int = 0
+
+    /// The CI poller loop. Cancelled on teardown / restarted on sign-in.
+    @ObservationIgnored var ciStatusPollerTask: Task<Void, Never>?
+
+    /// Per-project signature of the last CI failure we already notified / auto-fixed,
+    /// so a steady-state red branch doesn't re-fire every 30s. Keyed by project id;
+    /// persisted to UserDefaults so a fix isn't re-triggered across relaunches.
+    @ObservationIgnored var lastHandledCIFailureSignature: [UUID: String] = [:]
+
     // MARK: - Focus Mode
 
     var focusMode: Bool = (UserDefaults.standard.object(forKey: "focusMode") as? Bool) ?? false {

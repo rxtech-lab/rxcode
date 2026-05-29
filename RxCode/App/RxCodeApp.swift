@@ -117,8 +117,10 @@ private struct MenuBarLabel: View {
         let provider = appState.selectedAgentProvider
         let usage = provider == .codex ? appState.latestCodexRateLimitUsage : appState.latestRateLimitUsage
         let fiveHour = usage?.fiveHourPercent
+        let _ = appState.ciStatusRevision
+        let ciFailing = appState.anyCIFailing
 
-        if let image = Self.renderLabelImage(agentText: Self.agentText(for: provider), fiveHour: fiveHour, inProgress: inProgress) {
+        if let image = Self.renderLabelImage(agentText: Self.agentText(for: provider), fiveHour: fiveHour, inProgress: inProgress, ciFailing: ciFailing) {
             Image(nsImage: image)
         } else {
             Image(systemName: "message")
@@ -126,11 +128,12 @@ private struct MenuBarLabel: View {
     }
 
     @MainActor
-    private static func renderLabelImage(agentText: String, fiveHour: Double?, inProgress: Int) -> NSImage? {
+    private static func renderLabelImage(agentText: String, fiveHour: Double?, inProgress: Int, ciFailing: Bool) -> NSImage? {
         let content = MenuBarLabelContent(
             agentText: agentText,
             fiveHourText: fiveHour.map { "\(formatPercent($0))%" } ?? "—%",
-            statusText: inProgress > 0 ? "\(inProgress)job\(inProgress == 1 ? "" : "s")" : "IDLE"
+            statusText: inProgress > 0 ? "\(inProgress)job\(inProgress == 1 ? "" : "s")" : "IDLE",
+            ciFailing: ciFailing
         )
         let renderer = ImageRenderer(content: content)
         renderer.scale = NSScreen.main?.backingScaleFactor ?? 2
@@ -164,6 +167,7 @@ private struct MenuBarLabelContent: View {
     let agentText: String
     let fiveHourText: String
     let statusText: String
+    let ciFailing: Bool
 
     var body: some View {
         HStack(alignment: .center, spacing: 8) {
@@ -183,6 +187,14 @@ private struct MenuBarLabelContent: View {
                     .fixedSize(horizontal: true, vertical: false)
             }
             .fixedSize(horizontal: true, vertical: false)
+
+            // Template-rendered, so this shows as a monochrome glyph rather than
+            // a red dot — the icon shape signals the CI failure.
+            if ciFailing {
+                Image(systemName: "xmark.octagon.fill")
+                    .font(.system(size: Self.textSize + 1, weight: .bold))
+                    .frame(height: 18, alignment: .center)
+            }
         }
         .padding(.vertical, 1)
         .fixedSize(horizontal: true, vertical: true)
@@ -268,6 +280,11 @@ private struct MenuBarContentView: View {
 
             chatActivitySection
 
+            if !ciStatusRows.isEmpty {
+                Divider()
+                ciStatusSection
+            }
+
             Divider()
 
             footer
@@ -308,30 +325,6 @@ private struct MenuBarContentView: View {
         }
     }
 
-    private var agentPicker: some View {
-        Picker("Client", selection: Binding(
-            get: { appState.selectedAgentProvider },
-            set: { provider in
-                appState.setDefaultAgentProvider(provider)
-                Task { await appState.refreshSelectedAgentRateLimitUsage() }
-            }
-        )) {
-            ForEach(AgentProvider.allCases, id: \.self) { provider in
-                Text(provider.displayName)
-                    .tag(provider)
-            }
-        }
-        .pickerStyle(.segmented)
-    }
-
-    private var emptyUsageText: String {
-        switch appState.selectedAgentProvider {
-        case .claudeCode: return "Sign in to Claude Code to see usage"
-        case .codex: return "Sign in to Codex to see usage"
-        case .acp: return "Usage tracking not supported by ACP"
-        }
-    }
-
     private var chatActivitySection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
@@ -362,6 +355,72 @@ private struct MenuBarContentView: View {
         }
     }
 
+    private var agentPicker: some View {
+        Picker("Client", selection: Binding(
+            get: { appState.selectedAgentProvider },
+            set: { provider in
+                appState.setDefaultAgentProvider(provider)
+                Task { await appState.refreshSelectedAgentRateLimitUsage() }
+            }
+        )) {
+            ForEach(AgentProvider.allCases, id: \.self) { provider in
+                Text(provider.displayName)
+                    .tag(provider)
+            }
+        }
+        .pickerStyle(.segmented)
+    }
+
+    private var emptyUsageText: String {
+        switch appState.selectedAgentProvider {
+        case .claudeCode: return "Sign in to Claude Code to see usage"
+        case .codex: return "Sign in to Codex to see usage"
+        case .acp: return "Usage tracking not supported by ACP"
+        }
+    }
+
+    private var ciStatusRows: [(project: Project, status: ProjectCIStatus)] {
+        _ = appState.ciStatusRevision
+        return appState.ciStatusList()
+    }
+
+    private var ciStatusSection: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("CI Status")
+                .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+                .padding(.bottom, 4)
+
+            ForEach(ciStatusRows, id: \.project.id) { row in
+                CIStatusRow(
+                    row: row,
+                    destinationURL: ciDestinationURL(for: row.status),
+                    help: ciRowHelp(for: row.status)
+                )
+            }
+        }
+    }
+
+    /// Where a CI row should navigate when clicked: the pull request if one is
+    /// associated with the branch, otherwise the failing workflow run on GitHub.
+    private func ciDestinationURL(for status: ProjectCIStatus) -> URL? {
+        if let prNumber = status.prNumber {
+            return URL(string: "https://github.com/\(status.owner)/\(status.repo)/pull/\(prNumber)")
+        }
+        if let urlString = status.failing.first?.htmlUrl {
+            return URL(string: urlString)
+        }
+        return nil
+    }
+
+    private func ciRowHelp(for status: ProjectCIStatus) -> String {
+        if let prNumber = status.prNumber {
+            return "Open PR #\(prNumber) on GitHub"
+        }
+        return "Open failing run on GitHub"
+    }
+
     private var footer: some View {
         HStack {
             Button("Open RxCode") {
@@ -379,6 +438,75 @@ private struct MenuBarContentView: View {
             .keyboardShortcut("q")
             .font(.system(size: ClaudeTheme.size(12)))
             .foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// A single CI-status row in the menubar popover. Clickable rows (those with a
+/// `destinationURL`) draw a menu-style highlight on hover — the `.window`
+/// MenuBarExtra style gives no automatic hover effect, so we track it manually.
+private struct CIStatusRow: View {
+    let row: (project: Project, status: ProjectCIStatus)
+    let destinationURL: URL?
+    let help: String
+
+    @State private var isHovering = false
+
+    private var isLink: Bool { destinationURL != nil }
+
+    var body: some View {
+        content
+            .contentShape(Rectangle())
+            .padding(.vertical, 4)
+            .padding(.horizontal, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(isHovering && isLink ? Color.primary.opacity(0.1) : .clear)
+            )
+            // Extend the highlight past the row's text inset, like a native menu item.
+            .padding(.horizontal, -6)
+            .onHover { hovering in
+                isHovering = hovering
+                guard isLink else { return }
+                if hovering {
+                    NSCursor.pointingHand.push()
+                } else {
+                    NSCursor.pop()
+                }
+            }
+            .onTapGesture {
+                if let url = destinationURL { NSWorkspace.shared.open(url) }
+            }
+            .help(isLink ? help : "")
+    }
+
+    private var content: some View {
+        HStack(spacing: 8) {
+            Image(systemName: row.status.overallState.sfSymbolName)
+                .font(.system(size: ClaudeTheme.size(11)))
+                .foregroundStyle(row.status.overallState.displayColor)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(row.project.name)
+                    .font(.system(size: ClaudeTheme.size(12)))
+                    .foregroundStyle(ClaudeTheme.textPrimary)
+                    .lineLimit(1)
+                if let branch = row.status.branch, !branch.isEmpty {
+                    Text(branch)
+                        .font(.system(size: ClaudeTheme.size(10)))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 4)
+            if isLink {
+                Image(systemName: "arrow.up.right.square")
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(.secondary)
+            } else {
+                Text(row.status.overallState.label)
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 }

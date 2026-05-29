@@ -138,3 +138,129 @@ public struct AutopilotInstallUrlResponse: Codable, Sendable {
     }
 }
 
+// MARK: - CI Status DTOs
+
+/// One repo+branch lookup sent in the `POST /api/v1/ci-status/batch` body.
+/// `branch` is optional; when nil autopilot reports the latest run on any
+/// branch and echoes back which branch it matched.
+public struct CIStatusQuery: Codable, Sendable, Hashable {
+    public let owner: String
+    public let repo: String
+    public let branch: String?
+
+    public init(owner: String, repo: String, branch: String?) {
+        self.owner = owner
+        self.repo = repo
+        self.branch = branch
+    }
+}
+
+public struct CIStatusBatchRequest: Codable, Sendable {
+    public let repos: [CIStatusQuery]
+
+    public init(repos: [CIStatusQuery]) {
+        self.repos = repos
+    }
+}
+
+/// Aggregated CI state for a repo+branch. Decodes leniently — unknown raw
+/// values fall back to `.unknown` so a server-side addition never breaks
+/// the client.
+public enum CIOverallState: String, Codable, Sendable, Hashable {
+    case success
+    case failure
+    case pending
+    case unknown
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = CIOverallState(rawValue: raw) ?? .unknown
+    }
+}
+
+/// Latest run for a single workflow definition on the queried branch.
+public struct CIWorkflowStatus: Codable, Sendable, Hashable {
+    public let workflowName: String?
+    public let workflowId: Int?
+    public let status: String?
+    public let conclusion: String?
+    public let htmlUrl: String?
+    public let runNumber: Int?
+    public let updatedAt: String?
+
+    public init(
+        workflowName: String?,
+        workflowId: Int?,
+        status: String?,
+        conclusion: String?,
+        htmlUrl: String?,
+        runNumber: Int?,
+        updatedAt: String?
+    ) {
+        self.workflowName = workflowName
+        self.workflowId = workflowId
+        self.status = status
+        self.conclusion = conclusion
+        self.htmlUrl = htmlUrl
+        self.runNumber = runNumber
+        self.updatedAt = updatedAt
+    }
+}
+
+/// A failing workflow surfaced for quick linking in the UI / fix prompt.
+public struct CIFailingWorkflow: Codable, Sendable, Hashable {
+    public let workflowName: String?
+    public let htmlUrl: String?
+
+    public init(workflowName: String?, htmlUrl: String?) {
+        self.workflowName = workflowName
+        self.htmlUrl = htmlUrl
+    }
+}
+
+/// Per-repo result from `POST /api/v1/ci-status/batch`.
+public struct ProjectCIStatus: Codable, Sendable, Hashable {
+    public let owner: String
+    public let repo: String
+    public let branch: String?
+    public let found: Bool
+    public let overallState: CIOverallState
+    public let lastUpdated: String?
+    public let headSha: String?
+    public let prNumber: Int?
+    public let workflows: [CIWorkflowStatus]
+    public let failing: [CIFailingWorkflow]
+
+    public init(
+        owner: String,
+        repo: String,
+        branch: String?,
+        found: Bool,
+        overallState: CIOverallState,
+        lastUpdated: String?,
+        headSha: String?,
+        prNumber: Int?,
+        workflows: [CIWorkflowStatus],
+        failing: [CIFailingWorkflow]
+    ) {
+        self.owner = owner
+        self.repo = repo
+        self.branch = branch
+        self.found = found
+        self.overallState = overallState
+        self.lastUpdated = lastUpdated
+        self.headSha = headSha
+        self.prNumber = prNumber
+        self.workflows = workflows
+        self.failing = failing
+    }
+}
+
+public struct CIStatusBatchResponse: Codable, Sendable {
+    public let results: [ProjectCIStatus]
+
+    public init(results: [ProjectCIStatus]) {
+        self.results = results
+    }
+}
+

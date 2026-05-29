@@ -210,6 +210,17 @@
         }
       }
     },
+    "%d workflows failed: %@" : {
+      "comment" : "CI failure notification body for multiple failing workflows. %1$d is the count, %2$@ is a comma-separated list of names.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$d workflows failed: %2$@"
+          }
+        }
+      }
+    },
     "%lld" : {
       "localizations" : {
         "zh-Hans" : {
@@ -451,6 +462,9 @@
           }
         }
       }
+    },
+    "A workflow failed" : {
+      "comment" : "CI failure notification body when the workflow name is unknown."
     },
     "Absolute or project-relative path. Leave empty to use the project root." : {
       "localizations" : {
@@ -1382,6 +1396,9 @@
         }
       }
     },
+    "Auto-fix CI failures" : {
+
+    },
     "Auto-preview Attachments" : {
       "localizations" : {
         "en" : {
@@ -1720,6 +1737,15 @@
           }
         }
       }
+    },
+    "CI failed%@" : {
+      "comment" : "Notification title when GitHub Actions CI fails on a project's current branch. %@ is replaced with \" — <project name>\" or empty string."
+    },
+    "CI failing — open the failing run on GitHub" : {
+
+    },
+    "CI Status" : {
+
     },
     "Claude CLI Installation Check" : {
       "extractionState" : "stale",
@@ -3614,6 +3640,9 @@
           }
         }
       }
+    },
+    "GitHub Actions" : {
+
     },
     "GitHub Repository" : {
       "localizations" : {
@@ -8227,6 +8256,9 @@
     "Welcome to RxCode" : {
 
     },
+    "When CI fails on a project's current branch, automatically start a thread so an agent can fix it. CI failures are always notified; this only controls the automatic fix." : {
+
+    },
     "Wipe cached embeddings and re-embed every thread for semantic search. Use this if global search results look stale or empty." : {
       "localizations" : {
         "zh-Hans" : {
@@ -8246,6 +8278,9 @@
           }
         }
       }
+    },
+    "Workflow “%@” failed" : {
+      "comment" : "CI failure notification body for a single failing workflow. %@ is the workflow name."
     },
     "Working Directory" : {
       "localizations" : {

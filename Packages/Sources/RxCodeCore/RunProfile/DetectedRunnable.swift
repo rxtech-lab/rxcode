@@ -27,6 +27,10 @@ public struct DetectedRunnable: Identifiable, Codable, Hashable, Sendable {
     /// Present when `source == .make`. The dialog materializes these as
     /// `.make`-typed profiles instead of bash configurations.
     public let make: MakeRunConfig?
+    /// Present when `source == .npm`. The dialog materializes these as
+    /// `.packageScript`-typed profiles, carrying the detected package manager
+    /// and script name.
+    public let package: PackageRunConfig?
 
     public init(
         id: String,
@@ -34,7 +38,8 @@ public struct DetectedRunnable: Identifiable, Codable, Hashable, Sendable {
         displayName: String,
         command: String,
         xcode: XcodeRunConfig? = nil,
-        make: MakeRunConfig? = nil
+        make: MakeRunConfig? = nil,
+        package: PackageRunConfig? = nil
     ) {
         self.id = id
         self.source = source
@@ -42,6 +47,7 @@ public struct DetectedRunnable: Identifiable, Codable, Hashable, Sendable {
         self.command = command
         self.xcode = xcode
         self.make = make
+        self.package = package
     }
 }
 

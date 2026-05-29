@@ -469,9 +469,21 @@ extension AppState {
         // The placeholder session (if any) is left in place so partial messages remain visible;
         // it will be promoted to the real CLI session id on the next user turn.
         if let project = window.selectedProject {
+            // Cancelling is also "streaming stops" — fire the stop hooks, guarded
+            // by the same per-stream set so a trailing `.result` won't re-run them.
+            // Before-stop runs ahead of the save so its cards persist; after-stop
+            // runs post-save and is shown only.
+            let alreadyHandled = streamToCancel.map { stopHooksHandledStreamIds.contains($0) } ?? true
+            if let streamToCancel, !alreadyHandled {
+                stopHooksHandledStreamIds.insert(streamToCancel)
+                await runHooks(trigger: .beforeSessionStop, project: project, sessionKey: key)
+            }
             let messages = stateForSession(key).messages
             if !messages.isEmpty {
                 await saveSession(sessionId: key, projectId: project.id, messages: messages)
+            }
+            if streamToCancel != nil, !alreadyHandled {
+                await runHooks(trigger: .afterSessionStop, project: project, sessionKey: key)
             }
         }
     }

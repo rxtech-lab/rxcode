@@ -48,11 +48,13 @@ struct MobileRunProfileEditorView: View {
                         draft.type = type
                         if type == .xcode, draft.xcode == nil { draft.xcode = XcodeRunConfig() }
                         if type == .make, draft.make == nil { draft.make = MakeRunConfig() }
+                        if type == .packageScript, draft.package == nil { draft.package = PackageRunConfig() }
                     }
                 )) {
                     Text("Bash").tag(RunProfileType.bash)
                     Text("Xcode").tag(RunProfileType.xcode)
                     Text("Make").tag(RunProfileType.make)
+                    Text("Package").tag(RunProfileType.packageScript)
                 }
             }
 
@@ -63,6 +65,8 @@ struct MobileRunProfileEditorView: View {
                 xcodeSection
             case .make:
                 makeSection
+            case .packageScript:
+                packageSection
             }
         }
         .navigationTitle(draft.name.isEmpty ? "Run Profile" : draft.name)
@@ -216,6 +220,47 @@ struct MobileRunProfileEditorView: View {
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled(true)
             workingDirectoryField
+        }
+    }
+
+    private var packageSection: some View {
+        Section("Package") {
+            let pkg = Binding(
+                get: { draft.package ?? PackageRunConfig() },
+                set: { draft.package = $0 }
+            )
+            Picker("Package Manager", selection: pkg.packageManager) {
+                ForEach(PackageManager.allCases, id: \.self) { manager in
+                    Text(manager.displayName).tag(manager)
+                }
+            }
+            scriptField(pkg)
+            TextField("Arguments", text: pkg.arguments, prompt: Text("-- --port 3000"))
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled(true)
+            workingDirectoryField
+        }
+    }
+
+    /// Script field: a picker over desktop-detected package scripts, falling
+    /// back to a free-text field when nothing was detected or "Custom…" chosen.
+    @ViewBuilder
+    private func scriptField(_ pkg: Binding<PackageRunConfig>) -> some View {
+        let scripts = detected.npm.compactMap { $0.package?.script }
+        if scripts.isEmpty {
+            TextField("Script", text: pkg.script)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled(true)
+        } else {
+            Picker("Script", selection: detectionSelection(pkg.script, options: scripts)) {
+                ForEach(scripts, id: \.self) { Text($0).tag($0) }
+                Text("Custom…").tag(Self.customTag)
+            }
+            if !scripts.contains(pkg.wrappedValue.script) {
+                TextField("Custom Script", text: pkg.script)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled(true)
+            }
         }
     }
 

@@ -17,6 +17,9 @@ protocol AppStatePersistenceService: Actor {
     func saveRunProfiles(_ profiles: [RunProfile], projectId: UUID) throws
     func loadRunProfiles(projectId: UUID) -> [RunProfile]
 
+    func saveHookProfiles(_ profiles: [HookProfile], projectId: UUID) throws
+    func loadHookProfiles(projectId: UUID) -> [HookProfile]
+
     func saveACPClients(_ clients: [ACPClientSpec]) throws
     func loadACPClients() -> [ACPClientSpec]
     nonisolated func acpRegistrySnapshotURL() -> URL
@@ -244,6 +247,24 @@ actor PersistenceService: AppStatePersistenceService {
     private func runProfilesURL(projectId: UUID) -> URL {
         baseURL
             .appendingPathComponent("run_profiles")
+            .appendingPathComponent("\(projectId.uuidString).json")
+    }
+
+    // MARK: - Hook Profiles
+
+    func saveHookProfiles(_ profiles: [HookProfile], projectId: UUID) throws {
+        let url = hookProfilesURL(projectId: projectId)
+        try encode(profiles, to: url)
+    }
+
+    func loadHookProfiles(projectId: UUID) -> [HookProfile] {
+        let url = hookProfilesURL(projectId: projectId)
+        return decode([HookProfile].self, from: url) ?? []
+    }
+
+    private func hookProfilesURL(projectId: UUID) -> URL {
+        baseURL
+            .appendingPathComponent("hooks")
             .appendingPathComponent("\(projectId.uuidString).json")
     }
 

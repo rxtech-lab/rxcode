@@ -11,7 +11,7 @@ import RxCodeCore
 final class RunProfileDetector {
     func detect(in projectPath: String) async -> DetectedRunnables {
         async let xcode = detectXcode(at: projectPath)
-        async let npm = detectNpm(at: projectPath)
+        async let npm = detectPackageScripts(at: projectPath)
         async let make = detectMake(at: projectPath)
         return await DetectedRunnables(xcode: xcode, npm: npm, make: make)
     }
@@ -76,34 +76,82 @@ final class RunProfileDetector {
         }
     }
 
-    // MARK: - npm / pnpm / yarn
+    // MARK: - Package scripts (npm / yarn / pnpm / bun / deno)
 
-    private func detectNpm(at root: String) async -> [DetectedRunnable] {
-        let pkgPath = (root as NSString).appendingPathComponent("package.json")
-        guard let data = try? Data(contentsOf: URL(fileURLWithPath: pkgPath)) else { return [] }
+    /// Scan `package.json` `scripts` (and, for Deno projects, `deno.json` /
+    /// `deno.jsonc` `tasks`) and surface each as a `.packageScript` runnable
+    /// carrying the package manager inferred from lock files.
+    private func detectPackageScripts(at root: String) async -> [DetectedRunnable] {
+        let names = Self.packageScriptNames(inDirectory: root)
+        guard !names.isEmpty else { return [] }
 
-        struct PackageJSON: Decodable { let scripts: [String: String]? }
-        guard let parsed = try? JSONDecoder().decode(PackageJSON.self, from: data),
-              let scripts = parsed.scripts, !scripts.isEmpty
-        else { return [] }
-
-        let runner = npmRunner(at: root)
-        return scripts.keys.sorted().map { name in
-            DetectedRunnable(
+        let manager = detectPackageManager(at: root)
+        return names.map { name in
+            let cfg = PackageRunConfig(packageManager: manager, script: name)
+            return DetectedRunnable(
                 id: "npm:\(name)",
                 source: .npm,
                 displayName: name,
-                command: "\(runner) \(name)"
+                command: "\(manager.runPrefix) \(name)",
+                package: cfg
             )
         }
     }
 
-    private func npmRunner(at root: String) -> String {
+    /// Decode the keys of a top-level object field (`scripts` or `tasks`) from a
+    /// JSON file. Returns an empty array if the file is missing or unparseable.
+    static func scriptNames(atPath path: String, key: String) -> [String] {
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let entries = json[key] as? [String: Any]
+        else { return [] }
+        return Array(entries.keys)
+    }
+
+    /// Sorted script/task names found in `package.json` (falling back to
+    /// `deno.json` / `deno.jsonc` tasks) inside `directory`. Used by the editor
+    /// to back the script dropdown.
+    static func packageScriptNames(inDirectory directory: String) -> [String] {
+        let path = directory as NSString
+        var names = scriptNames(atPath: path.appendingPathComponent("package.json"), key: "scripts")
+        if names.isEmpty {
+            for file in ["deno.json", "deno.jsonc"] {
+                let denoNames = scriptNames(atPath: path.appendingPathComponent(file), key: "tasks")
+                if !denoNames.isEmpty {
+                    names = denoNames
+                    break
+                }
+            }
+        }
+        return names.sorted()
+    }
+
+    /// Infer the package manager from lock files / manifests present at `root`.
+    private func detectPackageManager(at root: String) -> PackageManager {
         let fm = FileManager.default
         let path = root as NSString
-        if fm.fileExists(atPath: path.appendingPathComponent("pnpm-lock.yaml")) { return "pnpm run" }
-        if fm.fileExists(atPath: path.appendingPathComponent("yarn.lock")) { return "yarn" }
-        return "npm run"
+        func exists(_ name: String) -> Bool { fm.fileExists(atPath: path.appendingPathComponent(name)) }
+        if exists("pnpm-lock.yaml") { return .pnpm }
+        if exists("yarn.lock") { return .yarn }
+        if exists("bun.lockb") || exists("bun.lock") { return .bun }
+        if exists("deno.lock") || exists("deno.json") || exists("deno.jsonc") { return .deno }
+        return .npm
+    }
+
+    /// Detect which package managers are installed on this machine. Runs a
+    /// single interactive zsh so nvm/asdf/Homebrew PATH entries are visible
+    /// (matching the PATH-resolution trick used by `RunTaskExecutor`).
+    static func detectInstalledPackageManagers() async -> [PackageManager] {
+        let names = PackageManager.allCases.map(\.executable).joined(separator: " ")
+        let script = "for c in \(names); do command -v $c >/dev/null 2>&1 && echo $c; done"
+        let (stdout, _) = await RunProfileDetector().runProcess(
+            executable: "/bin/zsh",
+            arguments: ["-ic", script],
+            cwd: NSHomeDirectory(),
+            timeoutSeconds: 8
+        )
+        let found = Set(stdout.split(whereSeparator: { $0 == "\n" || $0 == " " }).map(String.init))
+        return PackageManager.allCases.filter { found.contains($0.executable) }
     }
 
     // MARK: - Makefile

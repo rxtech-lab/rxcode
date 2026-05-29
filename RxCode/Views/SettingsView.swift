@@ -110,6 +110,8 @@ struct GeneralSettingsTab: View {
                 Divider()
                 MemorySettingsSection()
                 Divider()
+                HooksSettingsSection()
+                Divider()
                 VStack(alignment: .leading, spacing: 8) {
                     onboardingSection
                     helpSection

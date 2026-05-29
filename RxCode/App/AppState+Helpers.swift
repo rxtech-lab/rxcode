@@ -160,7 +160,7 @@ extension AppState {
                 let diskBlocks = cleaned.reduce(0) { $0 + $1.blocks.count }
                 guard diskBlocks > memBlocks else { return }
                 self.logger.info("[Reconcile] sid=\(sessionId, privacy: .public) memBlocks=\(memBlocks) diskBlocks=\(diskBlocks) — applied")
-                state.messages = cleaned
+                state.messages = self.messagesWithPersistedHookCard(cleaned, sessionId: sessionId)
                 self.sessionStates[sessionId] = state
             }
         }
@@ -203,7 +203,7 @@ extension AppState {
                     self.logger.info("[LoadMessages] skipped apply sid=\(sessionId, privacy: .public) isStreaming=\(state.isStreaming) existingMessages=\(state.messages.count)")
                     return
                 }
-                state.messages = cleaned
+                state.messages = self.messagesWithPersistedHookCard(cleaned, sessionId: sessionId)
                 state.planDecisionSummaries = self.threadStore.loadPlanDecisions(sessionId: sessionId)
                 if state.model == nil { state.model = full.model }
                 if state.effort == nil { state.effort = full.effort }

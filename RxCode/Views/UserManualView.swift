@@ -124,6 +124,7 @@ private enum UserManualMenu: String, CaseIterable, Identifiable {
     case settings
     case integrations
     case worktrees
+    case hooks
 
     var id: String { rawValue }
 
@@ -141,6 +142,7 @@ private enum UserManualMenu: String, CaseIterable, Identifiable {
         case .settings: "Integrations and Settings"
         case .integrations: "MCP and ACP Clients"
         case .worktrees: "Git Worktrees"
+        case .hooks: "Project Hooks"
         }
     }
 
@@ -154,6 +156,7 @@ private enum UserManualMenu: String, CaseIterable, Identifiable {
         case .settings: "gearshape"
         case .integrations: "puzzlepiece.extension"
         case .worktrees: "arrow.triangle.branch"
+        case .hooks: "bolt.horizontal.circle"
         }
     }
 }

@@ -4,6 +4,10 @@ public enum RunProfileType: String, Codable, Sendable, CaseIterable, Hashable {
     case bash
     case xcode
     case make
+    /// Runs a `package.json` / `deno.json` script through a selected package
+    /// manager. Named `packageScript` to avoid the `package` access-control
+    /// keyword; the rawValue stays `"package"` so it renders as "Package".
+    case packageScript = "package"
 }
 
 public struct RunProfile: Identifiable, Codable, Sendable, Hashable {
@@ -18,6 +22,9 @@ public struct RunProfile: Identifiable, Codable, Sendable, Hashable {
     /// Populated when `type == .make`. Optional so existing on-disk profiles
     /// (written before the Make type existed) decode cleanly.
     public var make: MakeRunConfig?
+    /// Populated when `type == .packageScript`. Optional so existing on-disk
+    /// profiles (written before the Package type existed) decode cleanly.
+    public var package: PackageRunConfig?
     public var beforeSteps: [RunStep]
     public var afterSteps: [RunStep]
     public var createdAt: Date
@@ -31,6 +38,7 @@ public struct RunProfile: Identifiable, Codable, Sendable, Hashable {
         bash: BashRunConfig = BashRunConfig(),
         xcode: XcodeRunConfig? = nil,
         make: MakeRunConfig? = nil,
+        package: PackageRunConfig? = nil,
         beforeSteps: [RunStep] = [],
         afterSteps: [RunStep] = [],
         createdAt: Date = Date(),
@@ -43,6 +51,7 @@ public struct RunProfile: Identifiable, Codable, Sendable, Hashable {
         self.bash = bash
         self.xcode = xcode
         self.make = make
+        self.package = package
         self.beforeSteps = beforeSteps
         self.afterSteps = afterSteps
         self.createdAt = createdAt

@@ -150,7 +150,24 @@ public enum RunTaskExecutor {
         case .make:
             guard let make = profile.make else { return [] }
             return makeScriptLines(make, projectPath: projectPath)
+        case .packageScript:
+            guard let pkg = profile.package else { return [] }
+            return packageScriptLines(pkg)
         }
+    }
+
+    /// Synthesize `<manager> run <script> [arguments]`. Arguments are appended
+    /// verbatim (like `makeScriptLines`) so the user can pass an npm-style
+    /// `-- --flag` separator. An untouched profile (no script) is a no-op.
+    static func packageScriptLines(_ cfg: PackageRunConfig) -> [String] {
+        let script = cfg.script.trimmingCharacters(in: .whitespaces)
+        if script.isEmpty { return [] }
+        var parts: [String] = [cfg.packageManager.runPrefix, shellEscape(script)]
+        let args = cfg.arguments.trimmingCharacters(in: .whitespaces)
+        if !args.isEmpty {
+            parts.append(args)
+        }
+        return [parts.joined(separator: " ")]
     }
 
     private static func xcodeScriptLines(_ cfg: XcodeRunConfig) -> [String] {

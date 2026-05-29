@@ -212,6 +212,7 @@ extension AppState {
         skipAppendingUserMessage: Bool = false,
         initialMessages: [ChatMessage]? = nil,
         tempFilePaths: [String] = [],
+        isStopHookReprompt: Bool = false,
         in window: WindowState
     ) async -> UUID? {
         guard let project = window.selectedProject else {
@@ -254,6 +255,13 @@ extension AppState {
         }
 
         let sessionKey = window.currentSessionId!
+
+        // A real user turn clears the stop-hook auto-continue tally so a fresh
+        // round of fix→fail→fix gets the full retry budget again. A reprompt
+        // turn (this method calling itself) must not reset it.
+        if !isStopHookReprompt {
+            stopHookRepromptCounts[sessionKey] = nil
+        }
 
         // Apply initialMessages if provided. Refuse to clobber an already-
         // populated in-memory list with an empty array — `editAndResend` is

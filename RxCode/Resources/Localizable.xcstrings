@@ -119,6 +119,7 @@
       }
     },
     "%@ installed%@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -145,6 +146,7 @@
       }
     },
     "%@ not found" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -549,12 +551,43 @@
         }
       }
     },
+    "Add a relay server in Settings → Mobile before pairing." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配对前请先在 设置 → 移动端 中添加一个中继服务器。"
+          }
+        }
+      }
+    },
+    "Add a relay server to pair your phone." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请添加一个中继服务器以配对你的手机。"
+          }
+        }
+      }
+    },
     "Add a skill catalog from a GitHub repository" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "从 GitHub 仓库添加技能目录"
+          }
+        }
+      }
+    },
+    "Add an Agent Client Protocol client" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加一个 Agent Client Protocol 客户端"
           }
         }
       }
@@ -799,7 +832,14 @@
       }
     },
     "Agent CLI Setup" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "代理 CLI 设置"
+          }
+        }
+      }
     },
     "Agent Runtimes" : {
       "localizations" : {
@@ -1017,6 +1057,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "应用"
+          }
+        }
+      }
+    },
+    "Approve risky actions with context" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在了解上下文后审批高风险操作"
           }
         }
       }
@@ -1351,6 +1401,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Bash"
+          }
+        }
+      }
+    },
+    "Binary found: %@, but version check failed" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "找到二进制 %@，但版本检查失败"
           }
         }
       }
@@ -1835,6 +1895,26 @@
         }
       }
     },
+    "Connect any MCP server to give every agent extra tools. You can also skip this and add servers later in Settings → MCP." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "接入任意 MCP 服务器，让每个代理获得额外工具。也可跳过此步骤，稍后在 设置 → MCP 中添加。"
+          }
+        }
+      }
+    },
+    "Connect at least one agent CLI" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "至少连接一个代理 CLI"
+          }
+        }
+      }
+    },
     "Connect GitHub" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1991,7 +2071,14 @@
       }
     },
     "Continue" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "继续"
+          }
+        }
+      }
     },
     "Copied" : {
       "localizations" : {
@@ -2071,7 +2158,14 @@
       }
     },
     "Copy install command" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制安装命令"
+          }
+        }
+      }
     },
     "Could not load registry. Check your network connection." : {
       "localizations" : {
@@ -2079,6 +2173,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法加载注册表。请检查网络连接。"
+          }
+        }
+      }
+    },
+    "Could not start pairing. Pick a different relay server or add a new one." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法开始配对，请选择其他中继服务器或新增一个。"
           }
         }
       }
@@ -2608,6 +2712,36 @@
         }
       }
     },
+    "Download APK" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载 APK"
+          }
+        }
+      }
+    },
+    "Download for iOS" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载 iOS 版"
+          }
+        }
+      }
+    },
+    "Download links unavailable. Visit rxlab.app to install the mobile app." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂无下载链接，请访问 rxlab.app 安装移动端。"
+          }
+        }
+      }
+    },
     "Duplicate Profile" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2794,6 +2928,16 @@
         }
       }
     },
+    "Endpoint" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "接入点"
+          }
+        }
+      }
+    },
     "Enter a new name for this device." : {
       "localizations" : {
         "zh-Hans" : {
@@ -2906,12 +3050,32 @@
         }
       }
     },
+    "Expired" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已过期"
+          }
+        }
+      }
+    },
     "Expired — generating a new QR code" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "已过期 — 正在生成新的二维码"
+          }
+        }
+      }
+    },
+    "Expires in %d:%02d" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Expires in %1$d:%2$02d"
           }
         }
       }
@@ -3057,6 +3221,16 @@
     "Finished installing? Tap Refresh." : {
 
     },
+    "First MCP Server" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "第一个 MCP 服务器"
+          }
+        }
+      }
+    },
     "Focus Mode" : {
       "localizations" : {
         "en" : {
@@ -3097,6 +3271,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "隐藏流式输出气泡，只在历史记录中显示已完成的回复。"
+          }
+        }
+      }
+    },
+    "Follow active threads, approve permissions, and pick up work from your iPhone, iPad, or Android device." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 iPhone、iPad 或 Android 设备上跟进会话、批准权限并继续工作。"
           }
         }
       }
@@ -3213,6 +3397,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "根据已暂存差异生成提交消息"
+          }
+        }
+      }
+    },
+    "Get it on Google Play" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 Google Play 获取"
           }
         }
       }
@@ -3416,6 +3610,16 @@
         }
       }
     },
+    "I found the existing onboarding view and will keep the CLI check as setup." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我找到了现有的引导视图，会保留 CLI 检查作为初始化步骤。"
+          }
+        }
+      }
+    },
     "Images" : {
       "localizations" : {
         "en" : {
@@ -3519,6 +3723,26 @@
         }
       }
     },
+    "Install additional ACP-compatible agents — RxCode downloads the right binary for macOS and probes the model list." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "安装更多兼容 ACP 的代理 —— RxCode 会下载适配 macOS 的二进制并探测模型列表。"
+          }
+        }
+      }
+    },
+    "Install additional coding agents from the ACP registry. You can skip this and add clients later." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从 ACP 注册表安装更多编程代理，可稍后再添加。"
+          }
+        }
+      }
+    },
     "Install GitHub App" : {
 
     },
@@ -3526,10 +3750,37 @@
 
     },
     "Install one CLI, then check again." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "先安装一个 CLI，然后再次检查。"
+          }
+        }
+      }
+    },
+    "Install the app" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "安装应用"
+          }
+        }
+      }
     },
     "Install the GitHub App" : {
 
+    },
+    "installed" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已安装"
+          }
+        }
+      }
     },
     "Installed" : {
       "localizations" : {
@@ -4090,6 +4341,16 @@
         }
       }
     },
+    "Model Context Protocol servers expose tools and resources to every agent. Optional — you can skip this step." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Model Context Protocol 服务器为所有代理提供工具和资源。可选 —— 可跳过此步骤。"
+          }
+        }
+      }
+    },
     "Model Picker" : {
       "localizations" : {
         "en" : {
@@ -4498,6 +4759,16 @@
         }
       }
     },
+    "No relay server configured" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚未配置中继服务器"
+          }
+        }
+      }
+    },
     "No relay servers" : {
       "localizations" : {
         "zh-Hans" : {
@@ -4671,6 +4942,16 @@
         }
       }
     },
+    "not found" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未找到"
+          }
+        }
+      }
+    },
     "Not found" : {
       "localizations" : {
         "zh-Hans" : {
@@ -4833,12 +5114,32 @@
         }
       }
     },
+    "Open projects, switch threads, and keep agent conversations close to the files they change." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开项目、切换会话，让代理对话紧贴它修改的文件。"
+          }
+        }
+      }
+    },
     "Open RxCode" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "打开 RxCode"
+          }
+        }
+      }
+    },
+    "Open RxCode on your phone, then tap Pair Device and scan the QR code." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在手机上打开 RxCode，点击\"配对设备\"并扫描二维码。"
           }
         }
       }
@@ -4965,6 +5266,26 @@
         }
       }
     },
+    "Pair via QR" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通过二维码配对"
+          }
+        }
+      }
+    },
+    "Pair your phone" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配对你的手机"
+          }
+        }
+      }
+    },
     "Paired devices" : {
       "localizations" : {
         "zh-Hans" : {
@@ -5068,6 +5389,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在工具栏中选择配置并按“运行”。"
+          }
+        }
+      }
+    },
+    "Pick a summarization model" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择摘要模型"
           }
         }
       }
@@ -5327,7 +5658,14 @@
       }
     },
     "Ready to start." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "准备就绪。"
+          }
+        }
+      }
     },
     "Recent Briefings" : {
       "localizations" : {
@@ -5345,6 +5683,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld 秒后重新连接"
+          }
+        }
+      }
+    },
+    "Refactor onboarding into slides" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将引导流程重构为幻灯片"
           }
         }
       }
@@ -5457,6 +5805,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "拒绝"
+          }
+        }
+      }
+    },
+    "Relay" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "中继"
           }
         }
       }
@@ -5802,7 +6160,24 @@
       }
     },
     "Review Command" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "审查命令"
+          }
+        }
+      }
+    },
+    "Review commands, diffs, and permission requests before an agent changes your workspace." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在代理修改工作区前，审查命令、差异和权限请求。"
+          }
+        }
+      }
     },
     "Review the CLI setup check" : {
       "localizations" : {
@@ -5837,12 +6212,32 @@
         }
       }
     },
+    "Running swift build" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在运行 swift build"
+          }
+        }
+      }
+    },
     "Runs `make [-f <Makefile>] <target> [arguments]`. Leave Makefile empty to use the default lookup (Makefile / makefile / GNUmakefile)." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "运行 `make [-f <Makefile>] <target> [arguments]`。留空 Makefile 会使用默认查找（Makefile / makefile / GNUmakefile）。"
+          }
+        }
+      }
+    },
+    "Runs on-device using Apple Intelligence. Free, private, and offline." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通过 Apple Intelligence 在设备上运行，免费、私密、可离线。"
           }
         }
       }
@@ -5870,6 +6265,16 @@
     "RxCode needs the GitHub App to see your repositories. Install it for the account or organizations you want to import from." : {
 
     },
+    "RxCode runs Claude Code or Codex locally. Install one of them to start your first project." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RxCode 在本地运行 Claude Code 或 Codex，安装其一即可开始第一个项目。"
+          }
+        }
+      }
+    },
     "RxCode.xcodeproj" : {
       "localizations" : {
         "zh-Hans" : {
@@ -5896,6 +6301,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "保存"
+          }
+        }
+      }
+    },
+    "Save Server" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存服务器"
+          }
+        }
+      }
+    },
+    "Saved" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已保存"
           }
         }
       }
@@ -6340,6 +6765,16 @@
         }
       }
     },
+    "Set up your first MCP server" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置第一个 MCP 服务器"
+          }
+        }
+      }
+    },
     "Settings" : {
       "localizations" : {
         "zh-Hans" : {
@@ -6647,6 +7082,17 @@
         }
       }
     },
+    "Skip" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跳过"
+          }
+        }
+      }
+    },
     "Skip All Questions" : {
       "localizations" : {
         "zh-Hans" : {
@@ -6844,7 +7290,14 @@
       }
     },
     "The agent wants to run a command in this project." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "代理想要在此项目中运行命令。"
+          }
+        }
+      }
     },
     "The CLI sent an AskUserQuestion call this app could not parse." : {
       "localizations" : {
@@ -7229,6 +7682,16 @@
         }
       }
     },
+    "Used for thread titles, branch briefings, and search. Defaults to your chat model." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用于会话标题、分支简介和搜索，默认使用你的对话模型。"
+          }
+        }
+      }
+    },
     "Used to generate short session titles. The default follows each thread's model." : {
       "localizations" : {
         "zh-Hans" : {
@@ -7257,6 +7720,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "用户指南"
+          }
+        }
+      }
+    },
+    "Uses the model picked by the current thread. No extra configuration needed." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用当前会话所选模型，无需额外配置。"
           }
         }
       }
@@ -7377,6 +7850,16 @@
         }
       }
     },
+    "Work with coding agents in one native app" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在一个原生应用中协作编程代理"
+          }
+        }
+      }
+    },
     "Working Directory" : {
       "localizations" : {
         "zh-Hans" : {
@@ -7406,9 +7889,6 @@
           }
         }
       }
-    },
-    "xcodebuild -project RxCode.xcodeproj -scheme RxCode build" : {
-
     },
     "You" : {
       "localizations" : {

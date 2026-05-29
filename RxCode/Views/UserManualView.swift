@@ -122,6 +122,8 @@ private enum UserManualMenu: String, CaseIterable, Identifiable {
     case commands
     case permissions
     case settings
+    case integrations
+    case worktrees
 
     var id: String { rawValue }
 
@@ -137,6 +139,8 @@ private enum UserManualMenu: String, CaseIterable, Identifiable {
         case .commands: "Commands and Shortcuts"
         case .permissions: "Permissions and Inspector"
         case .settings: "Integrations and Settings"
+        case .integrations: "MCP and ACP Clients"
+        case .worktrees: "Git Worktrees"
         }
     }
 
@@ -148,6 +152,8 @@ private enum UserManualMenu: String, CaseIterable, Identifiable {
         case .commands: "terminal.fill"
         case .permissions: "checkmark.shield"
         case .settings: "gearshape"
+        case .integrations: "puzzlepiece.extension"
+        case .worktrees: "arrow.triangle.branch"
         }
     }
 }

@@ -282,7 +282,7 @@ actor OpenAISummarizationService {
         Store only the user's reusable preference, recurring workflow instruction, naming convention, or explicitly requested remember-this note.
         For recurring instructions, preserve the recurrence marker in the memory text, such as "Always...", "Never...", "From now on...", "By default...", or "Next time...".
         Do not save routine requests, one-off tasks, bug reports, temporary debugging details, implementation steps, command requests, build/test results, files changed, tool availability, secrets, API keys, credentials, or vague observations.
-        Do not save greetings or assistant-style conversation text such as "Hi", "Hi! How can I help you today?", "Updated it.", "Implemented debug timing logs", "Build succeeded", "Final assistant response:", or "What changed:".
+        Do not save greetings or assistant-style conversation text such as "Hi", "Hi! How can I help you today?", "Updated it.", "Implemented debug timing logs", "Build succeeded", or "What changed:".
         Do not add memory simply because the user sent messages. Most chats should produce [].
         Add at most 1-2 memories, and only when each memory is clearly reusable beyond the current conversation.
         If an existing memory should be refined, return an update operation with its id. If a memory is no longer valid because the user corrected it, return delete.

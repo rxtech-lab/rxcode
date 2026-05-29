@@ -423,7 +423,7 @@ private struct TestNotificationAlert: Identifiable {
 
 // MARK: - Relay Server Editor Sheet
 
-private struct RelayServerEditorSheet: View {
+struct RelayServerEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var sync: MobileSyncService
     @State var catalog: RelayPresetCatalog

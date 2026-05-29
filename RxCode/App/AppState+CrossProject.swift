@@ -6,161 +6,6 @@ import RxCodeSync
 import SwiftUI
 
 extension AppState {
-    // MARK: - Cross-Project Send (used by ide__send_to_thread)
-
-    struct CrossProjectSendResult: Sendable {
-        let threadId: String
-        let projectId: UUID
-        let done: Bool
-        let assistantText: String
-        let error: String?
-    }
-
-    enum CrossProjectSendError: Error, LocalizedError {
-        case unknownProject(UUID)
-        case unknownThread(String)
-
-        var errorDescription: String? {
-            switch self {
-            case .unknownProject(let id): return "No project with id \(id.uuidString)"
-            case .unknownThread(let id):  return "No thread with id \(id)"
-            }
-        }
-    }
-
-    /// Send a prompt to a thread in any project. The send runs through the
-    /// normal `sendPrompt` pipeline via a synthetic `WindowState`, so all the
-    /// usual side-effects (title generation, briefing updates, persistence)
-    /// still fire and any UI windows currently bound to the same session see
-    /// the assistant tokens live via the shared `sessionStates` dictionary.
-    func sendCrossProject(
-        projectId: UUID?,
-        threadId: String?,
-        prompt: String,
-        agentProvider: AgentProvider? = nil,
-        model: String? = nil,
-        effort: String? = nil,
-        permissionMode: PermissionMode? = nil,
-        waitForResponse: Bool = true,
-        timeoutSeconds: TimeInterval = 120
-    ) async throws -> CrossProjectSendResult {
-        // Resolve target project + thread.
-        let resolvedProject: Project
-        let resolvedThreadId: String?
-
-        if let threadId {
-            guard let summary = allSessionSummaries.first(where: { $0.id == threadId })
-                ?? threadStore.fetch(id: threadId).map({ $0.toSummary() })
-            else {
-                throw CrossProjectSendError.unknownThread(threadId)
-            }
-            guard let proj = projects.first(where: { $0.id == summary.projectId }) else {
-                throw CrossProjectSendError.unknownProject(summary.projectId)
-            }
-            resolvedProject = proj
-            resolvedThreadId = threadId
-        } else if let projectId {
-            guard let proj = projects.first(where: { $0.id == projectId }) else {
-                throw CrossProjectSendError.unknownProject(projectId)
-            }
-            resolvedProject = proj
-            resolvedThreadId = nil
-        } else {
-            throw CrossProjectSendError.unknownProject(UUID())
-        }
-
-        // Build a synthetic WindowState. AppState.sessionStates is shared across
-        // windows, so the message + stream are visible to any real window that
-        // happens to also be viewing this session.
-        let window = WindowState()
-        window.selectedProject = resolvedProject
-        window.currentSessionId = resolvedThreadId
-
-        // Carry over per-session overrides for a new thread; for an existing
-        // thread we leave the session's own stored values alone (the resume
-        // path in sendPrompt reads from `sessionStates[sessionKey]`).
-        if resolvedThreadId == nil {
-            if let agentProvider {
-                window.sessionAgentProvider = agentProvider
-            }
-            if let model {
-                window.sessionModel = model
-            }
-            if let effort {
-                window.sessionEffort = effort
-            }
-            if let permissionMode {
-                window.sessionPermissionMode = permissionMode
-            }
-        }
-
-        guard let streamId = await sendPrompt(prompt, displayText: prompt, in: window) else {
-            return CrossProjectSendResult(
-                threadId: resolvedThreadId ?? "",
-                projectId: resolvedProject.id,
-                done: false,
-                assistantText: "",
-                error: "Send failed: no session could be allocated."
-            )
-        }
-
-        // After sendPrompt returns, window.currentSessionId is the (possibly
-        // pending-) key the stream is bound to. Resolve the real CLI session
-        // id before returning so the caller's agent never sees `pending-…`
-        // (which it can't use to follow up via `get_thread_messages` etc.).
-        let postSendKey = window.currentSessionId ?? resolvedThreadId ?? ""
-        let resolvedThreadIdForReturn: String
-        if postSendKey.hasPrefix("pending-") {
-            // Cap the rename wait at the request's timeout so we still honor
-            // the caller's deadline; 60s upper bound matches typical first-token
-            // latency under healthy conditions.
-            let renameTimeout = min(max(timeoutSeconds, 1), 60)
-            resolvedThreadIdForReturn = await awaitSessionRename(
-                pendingKey: postSendKey,
-                timeout: renameTimeout
-            ) ?? postSendKey
-        } else {
-            resolvedThreadIdForReturn = postSendKey
-        }
-
-        if !waitForResponse {
-            // Don't leak the result in the dictionary — the caller is
-            // fire-and-forget. Drop it once it lands.
-            Task { [weak self] in
-                _ = await self?.awaitStreamCompletion(streamId: streamId, timeout: timeoutSeconds)
-            }
-            return CrossProjectSendResult(
-                threadId: resolvedThreadIdForReturn,
-                projectId: resolvedProject.id,
-                done: false,
-                assistantText: "",
-                error: nil
-            )
-        }
-
-        let completion = await awaitStreamCompletion(streamId: streamId, timeout: timeoutSeconds)
-        if let completion {
-            return CrossProjectSendResult(
-                threadId: completion.sessionId,
-                projectId: resolvedProject.id,
-                done: completion.error == nil,
-                assistantText: completion.assistantText,
-                error: completion.error
-            )
-        } else {
-            // Timed out. Surface the partial assistant text we have so far so
-            // the caller can decide whether to poll back via get_thread_messages.
-            let partial = lastAssistantResponseText(in: stateForSession(window.currentSessionId ?? "").messages)
-            return CrossProjectSendResult(
-                threadId: resolvedThreadIdForReturn,
-                projectId: resolvedProject.id,
-                done: false,
-                assistantText: partial,
-                error: nil
-            )
-        }
-    }
-
     /// Drop "No response requested." text blocks from the assistant message
     /// at `idx`. The marker is the model's response when a turn arrives
     /// without a user prompt (ScheduleWakeup, hook re-entry) and reads as
@@ -233,7 +78,7 @@ extension AppState {
         // user's dropdown choice (e.g. `.auto`) should still drive the hook policy.
         let registerMode = hookSessionMode ?? permissionMode
         let streamStart = Date()
-        logger.info("[Stream:UI] starting processStream (cli=\(cliSessionId ?? "new"), key=\(internalSessionKey))")
+        logger.info("[Stream:UI] starting processStream provider=\(agentProvider.rawValue, privacy: .public) stream=\(streamId) cli=\(cliSessionId ?? "new", privacy: .public) key=\(internalSessionKey, privacy: .public)")
 
         var sessionKey = internalSessionKey
 
@@ -273,16 +118,29 @@ extension AppState {
         // "captured var" warning for `sessionKey`.
         let memoryActive = memoryEnabled && memoryInjectEnabled
         let memoryLimit = memoryMaxContextItems
+        let memoryMode = memoryRetrievalMode
+        let memoryMinScore = memoryInjectionScoreThreshold
         let capturedSessionKey = sessionKey
         let memoryService = self.memoryService
         let marketplace = self.marketplace
         let ideMCPServer = self.ideMCPServer
 
-        async let memoryItemsAsync: [MemoryItem] = memoryActive
-            ? await systemPromptMemoryItems(projectId: projectId, provider: agentProvider, model: model)
-            : []
+        func logPreflight(_ label: String, detail: String = "") {
+            let elapsed = Date().timeIntervalSince(streamStart)
+            if detail.isEmpty {
+                logger.info("[Stream:UI] preflight \(label, privacy: .public) stream=\(streamId) after=\(String(format: "%.2f", elapsed), privacy: .public)s")
+            } else {
+                logger.info("[Stream:UI] preflight \(label, privacy: .public) stream=\(streamId) after=\(String(format: "%.2f", elapsed), privacy: .public)s \(detail, privacy: .public)")
+            }
+        }
+
         async let memoryHitsAsync = memoryActive
-            ? await memoryService.search(prompt, projectId: projectId, limit: memoryLimit)
+            ? await memoryService.search(
+                prompt,
+                projectId: projectId,
+                limit: memoryLimit,
+                minScore: memoryMinScore
+            )
             : []
         async let currentBranchAsync = GitHelper.currentBranch(at: cwd)
         async let idePortAsync = ideMCPServer.allocate(
@@ -295,13 +153,19 @@ extension AppState {
             : []
 
         let resolvedMemoryContext: String
+        let memoryHitCount: Int
         if memoryActive {
-            let systemItems = await memoryItemsAsync
             let hits = await memoryHitsAsync
-            resolvedMemoryContext = memoryContextSystemPrompt(systemItems: systemItems, relatedHits: hits)
+            memoryHitCount = hits.count
+            resolvedMemoryContext = memoryContextSystemPrompt(relatedHits: hits)
         } else {
+            memoryHitCount = 0
             resolvedMemoryContext = ""
         }
+        logPreflight(
+            "memory",
+            detail: "enabled=\(memoryActive) mode=\(memoryMode.title) minScore=\(String(format: "%.2f", memoryMinScore)) hits=\(memoryHitCount) contextChars=\(resolvedMemoryContext.count)"
+        )
 
         let branchBriefingContext: String
         if let branch = await currentBranchAsync,
@@ -310,8 +174,10 @@ extension AppState {
                 branch: branch,
                 briefing: briefing.briefing
             )
+            logPreflight("branchBriefing", detail: "branch=\(branch) contextChars=\(branchBriefingContext.count)")
         } else {
             branchBriefingContext = ""
+            logPreflight("branchBriefing", detail: "contextChars=0")
         }
 
         // The IDE-MCP port is provider-agnostic at allocation time — the
@@ -320,26 +186,37 @@ extension AppState {
         // bridge, but they no longer block memory/git/skill resolution.
         let idePort = await idePortAsync
         let bridge = idePort.map { IDEMCPServer.bridgeCommand(forPort: $0) }
+        logPreflight("ideMCP", detail: "port=\(idePort.map(String.init) ?? "<nil>")")
 
         switch agentProvider {
         case .claudeCode:
             mcpClaudeConfigPath = await mcp.writeClaudeConfig(projectPath: cwd, bridgeCommand: bridge)
+            logPreflight("claudeMCP", detail: "hasConfig=\(mcpClaudeConfigPath != nil)")
             // Surface the accumulated briefing for the project's current branch
             // to the agent as background context via `--append-system-prompt`.
             appendExtraSystemPrompt(branchBriefingContext)
             appendExtraSystemPrompt(resolvedMemoryContext)
             if let skillContext = await skillContextAsync {
+                logPreflight("skillContext", detail: "chars=\(skillContext.count)")
                 appendExtraSystemPrompt(skillContext)
+            } else {
+                logPreflight("skillContext", detail: "chars=0")
             }
         case .codex:
             mcpCodexOverrides = await mcp.codexConfigOverrides(projectPath: cwd, bridgeCommand: bridge)
-            mcpCodexOverrides += await codexSkillOverridesAsync
+            logPreflight("codexMCP", detail: "args=\(mcpCodexOverrides.count)")
+            let codexSkillOverrides = await codexSkillOverridesAsync
+            logPreflight("codexSkillOverrides", detail: "args=\(codexSkillOverrides.count)")
+            mcpCodexOverrides += codexSkillOverrides
             resolvedPrompt = Self.promptWithBackgroundContext(
                 [branchBriefingContext, resolvedMemoryContext],
                 prompt: resolvedPrompt
             )
             if let skillContext = await skillContextAsync {
+                logPreflight("skillContext", detail: "chars=\(skillContext.count)")
                 resolvedPrompt = "\(skillContext)\n\nUser request:\n\(resolvedPrompt)"
+            } else {
+                logPreflight("skillContext", detail: "chars=0")
             }
             resolvedSendMode = registerMode
         case .acp:
@@ -347,12 +224,16 @@ extension AppState {
                 projectPath: cwd,
                 bridgeCommand: bridge
             )
+            logPreflight("acpMCP", detail: "servers=\(acpMCPServers.count)")
             resolvedPrompt = Self.promptWithBackgroundContext(
                 [branchBriefingContext, resolvedMemoryContext],
                 prompt: resolvedPrompt
             )
             if let skillContext = await skillContextAsync {
+                logPreflight("skillContext", detail: "chars=\(skillContext.count)")
                 resolvedPrompt = "\(skillContext)\n\nUser request:\n\(resolvedPrompt)"
+            } else {
+                logPreflight("skillContext", detail: "chars=0")
             }
             // `model` may be a composite `<clientId>::<model>` key (from the picker)
             // or a bare model id (from a per-session override).
@@ -386,6 +267,8 @@ extension AppState {
         if let earlyStream {
             stream = earlyStream
         } else {
+            let preflightElapsed = Date().timeIntervalSince(streamStart)
+            logger.info("[Stream:UI] backend send starting provider=\(agentProvider.rawValue, privacy: .public) stream=\(streamId) after=\(String(format: "%.2f", preflightElapsed), privacy: .public)s cwd=\(cwd, privacy: .public)")
             let request = BackendSendRequest(
                 streamId: streamId,
                 prompt: resolvedPrompt,
@@ -404,6 +287,8 @@ extension AppState {
                 clientSessionKey: sessionKey
             )
             stream = await backend(for: agentProvider).send(request)
+            let backendReturnedElapsed = Date().timeIntervalSince(streamStart)
+            logger.info("[Stream:UI] backend send returned provider=\(agentProvider.rawValue, privacy: .public) stream=\(streamId) after=\(String(format: "%.2f", backendReturnedElapsed), privacy: .public)s")
         }
 
         startFlushTimer(for: sessionKey)
@@ -429,7 +314,8 @@ extension AppState {
                 eventCount += 1
                 let gap = Date().timeIntervalSince(lastEventTime)
                 if eventCount == 1 {
-                    logger.info("[Stream:UI] first event arrived session=\(sessionKey, privacy: .public) stream=\(streamId) after=\(String(format: "%.2f", gap))s")
+                    let totalElapsed = Date().timeIntervalSince(streamStart)
+                    logger.info("[Stream:UI] first event arrived provider=\(agentProvider.rawValue, privacy: .public) session=\(sessionKey, privacy: .public) stream=\(streamId) total=\(String(format: "%.2f", totalElapsed), privacy: .public)s awaitGap=\(String(format: "%.2f", gap), privacy: .public)s event=\(Self.streamEventLogName(event), privacy: .public)")
                 }
                 lastEventTime = Date()
                 updateState(sessionKey) { $0.lastStreamEventDate = lastEventTime }
@@ -989,6 +875,27 @@ extension AppState {
                     error: errorMsg
                 )
             }
+        }
+    }
+
+    nonisolated static func streamEventLogName(_ event: StreamEvent) -> String {
+        switch event {
+        case .system(let systemEvent):
+            return "system.\(systemEvent.subtype)"
+        case .assistant:
+            return "assistant"
+        case .user:
+            return "user"
+        case .result:
+            return "result"
+        case .rateLimitEvent:
+            return "rateLimitEvent"
+        case .todoSnapshot:
+            return "todoSnapshot"
+        case .acpModelsDiscovered:
+            return "acpModelsDiscovered"
+        case .unknown:
+            return "unknown"
         }
     }
 

@@ -66,6 +66,21 @@ struct MemorySettingsSection: View {
             .fixedSize()
             .disabled(!appState.memoryEnabled)
 
+            Picker("Retrieval", selection: $appState.memoryRetrievalMode) {
+                ForEach(MemoryRetrievalMode.allCases) { mode in
+                    Text(mode.title).tag(mode)
+                }
+            }
+            .pickerStyle(.menu)
+            .frame(width: 220, alignment: .leading)
+            .disabled(!appState.memoryEnabled || !appState.memoryInjectEnabled)
+
+            Text("Precise returns fewer, stronger matches. Balanced is the default. Aggressive includes more related memories.")
+                .font(.system(size: ClaudeTheme.size(11)))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .disabled(!appState.memoryEnabled || !appState.memoryInjectEnabled)
+
             Stepper(value: $appState.memoryMaxContextItems, in: 1...12) {
                 Text("Context memories: \(appState.memoryMaxContextItems)")
                     .font(.system(size: ClaudeTheme.size(12)))

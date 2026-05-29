@@ -60,6 +60,8 @@ extension CodexAppServer {
     }
 
     func spawnAppServer(binary: String, streamId: UUID, cwd: String?, configOverrides: [String] = []) async throws -> (process: Process, stdin: FileHandle, stdout: Pipe) {
+        let launchStartedAt = Date()
+        logger.info("[CodexAppServer] launch start stream=\(streamId) cwd=\(cwd ?? "<nil>", privacy: .public) overrides=\(configOverrides.count)")
         let process = Process()
         process.executableURL = URL(fileURLWithPath: binary)
         process.arguments = ["app-server", "--listen", "stdio://"] + configOverrides
@@ -78,6 +80,8 @@ extension CodexAppServer {
         } catch {
             throw CodexError.spawnFailed(error.localizedDescription)
         }
+        let elapsed = Date().timeIntervalSince(launchStartedAt)
+        logger.info("[CodexAppServer] process launched pid=\(process.processIdentifier) stream=\(streamId) after=\(String(format: "%.2f", elapsed), privacy: .public)s binary=\(binary, privacy: .public)")
 
         let stdinHandle = stdin.fileHandleForWriting
         running[streamId] = RunningProcess(process: process, stdin: stdinHandle)

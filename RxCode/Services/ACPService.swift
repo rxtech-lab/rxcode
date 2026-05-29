@@ -39,6 +39,7 @@ actor ACPService {
         var pending: [Int: CheckedContinuation<JSONValue, Error>] = [:]
         var stderr: String = ""
         var stdoutReaderTask: Task<Void, Never>?
+        var stdoutLineCount: Int = 0
 
         // Per-turn (reset before `session/prompt`)
         var currentStreamId: UUID?

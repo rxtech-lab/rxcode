@@ -166,32 +166,15 @@ extension CodexAppServer {
 
     func generateMemoryOperations(
         existingMemories: [(id: String, content: String)],
-        userMessage: String,
-        finalResponse: String,
+        userMessages: [String],
         model: String?
     ) async -> String? {
         let prompt = OpenAISummarizationService.memoryExtractionPrompt(
             existingMemories: existingMemories,
-            userMessage: userMessage,
-            finalResponse: finalResponse
+            userMessages: userMessages
         )
         guard let raw = await generateCodexPlainSummary(prompt: prompt, model: model) else { return nil }
         return cleanSummary(raw, limit: 3000)
-    }
-
-    func determineMemoryInjectionIntent(
-        content: String,
-        kind: String,
-        scope: String,
-        model: String?
-    ) async -> String? {
-        let prompt = OpenAISummarizationService.memoryInjectionIntentPrompt(
-            content: content,
-            kind: kind,
-            scope: scope
-        )
-        guard let raw = await generateCodexPlainSummary(prompt: prompt, model: model) else { return nil }
-        return cleanSummary(raw, limit: 16)
     }
 
     func generateBranchBriefing(

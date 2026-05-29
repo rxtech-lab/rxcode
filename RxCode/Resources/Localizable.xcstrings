@@ -798,6 +798,9 @@
         }
       }
     },
+    "Agent CLI Setup" : {
+
+    },
     "Agent Runtimes" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1571,6 +1574,7 @@
       }
     },
     "Claude CLI Installation Check" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1986,6 +1990,9 @@
         }
       }
     },
+    "Continue" : {
+
+    },
     "Copied" : {
       "localizations" : {
         "en" : {
@@ -2062,6 +2069,9 @@
           }
         }
       }
+    },
+    "Copy install command" : {
+
     },
     "Could not load registry. Check your network connection." : {
       "localizations" : {
@@ -3513,6 +3523,9 @@
 
     },
     "Install GitHub App on another account" : {
+
+    },
+    "Install one CLI, then check again." : {
 
     },
     "Install the GitHub App" : {
@@ -5097,6 +5110,9 @@
         }
       }
     },
+    "Precise returns fewer, stronger matches. Balanced is the default. Aggressive includes more related memories." : {
+
+    },
     "Preference" : {
       "localizations" : {
         "zh-Hans" : {
@@ -5309,6 +5325,9 @@
           }
         }
       }
+    },
+    "Ready to start." : {
+
     },
     "Recent Briefings" : {
       "localizations" : {
@@ -5747,6 +5766,9 @@
         }
       }
     },
+    "Retrieval" : {
+
+    },
     "Retry" : {
       "localizations" : {
         "en" : {
@@ -5778,6 +5800,9 @@
           }
         }
       }
+    },
+    "Review Command" : {
+
     },
     "Review the CLI setup check" : {
       "localizations" : {
@@ -6818,6 +6843,9 @@
         }
       }
     },
+    "The agent wants to run a command in this project." : {
+
+    },
     "The CLI sent an AskUserQuestion call this app could not parse." : {
       "localizations" : {
         "zh-Hans" : {
@@ -7378,6 +7406,9 @@
           }
         }
       }
+    },
+    "xcodebuild -project RxCode.xcodeproj -scheme RxCode build" : {
+
     },
     "You" : {
       "localizations" : {

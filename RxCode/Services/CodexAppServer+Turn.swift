@@ -15,6 +15,7 @@ extension CodexAppServer {
         permissionServer: PermissionServer,
         continuation: AsyncStream<StreamEvent>.Continuation
     ) async {
+        let turnReceivedAt = Date()
         do {
             guard let binary = await findCodexBinary() else { throw CodexError.binaryNotFound }
             let handles = try await spawnAppServer(binary: binary, streamId: streamId, cwd: cwd, configOverrides: mcpConfigOverrides)
@@ -34,9 +35,15 @@ extension CodexAppServer {
             // message (concise summary). See PlanCardView for the rendering contract.
             var planItems: [TodoItem] = []
             var assistantTextBuffer = ""
+            var rawLineCount = 0
 
             for try await line in handles.stdout.fileHandleForReading.bytes.lines {
                 guard !Task.isCancelled else { break }
+                rawLineCount += 1
+                if rawLineCount == 1 {
+                    let elapsed = Date().timeIntervalSince(turnReceivedAt)
+                    logger.info("[CodexAppServer] first stdout line stream=\(streamId) after=\(String(format: "%.2f", elapsed), privacy: .public)s")
+                }
                 guard let object = Self.decodeObject(line) else { continue }
 
                 if let id = Self.idString(object["id"]), object["method"] == nil {

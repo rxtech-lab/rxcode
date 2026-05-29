@@ -197,6 +197,15 @@ extension AppState {
 
         seedUITestBriefingIfRequested()
 
+        let prunedBriefingMetadata = threadStore.deleteBriefingMetadata(
+            excludingProjectIds: Set(projects.map(\.id))
+        )
+        if prunedBriefingMetadata.threadSummaries > 0 || prunedBriefingMetadata.branchBriefings > 0 {
+            threadSummaryRevision &+= 1
+            branchBriefingRevision &+= 1
+            logger.info("Pruned orphan briefing metadata summaries=\(prunedBriefingMetadata.threadSummaries) briefings=\(prunedBriefingMetadata.branchBriefings)")
+        }
+
         // Sidebar threads are now sourced from the local SwiftData store.
         // CLI session files are no longer surfaced in the sidebar list — the
         // CLI is still the transcript backend (replay on thread open), but
@@ -207,11 +216,6 @@ extension AppState {
         purgeStaleBranchBriefingsIfNeeded()
 
         persistedQueues = threadStore.loadAllQueues()
-
-        if claudeInstalled || codexInstalled, !onboardingCompleted {
-            onboardingCompleted = true
-            UserDefaults.standard.set(true, forKey: "onboardingCompleted")
-        }
 
         // Hydrate ACP state (clients + cached registry) early so the model picker
         // and Settings tab don't flash empty on first open.

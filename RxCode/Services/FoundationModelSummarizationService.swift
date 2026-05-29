@@ -94,32 +94,17 @@ actor FoundationModelSummarizationService {
 
     func generateMemoryOperations(
         existingMemories: [(id: String, content: String)],
-        userMessage: String,
-        finalResponse: String
+        userMessages: [String]
     ) async -> String? {
         let prompt = OpenAISummarizationService.memoryExtractionPrompt(
             existingMemories: existingMemories,
-            userMessage: userMessage,
-            finalResponse: finalResponse
+            userMessages: userMessages
         )
         let raw = await respond(
             instructions: "You extract concise durable memory as JSON operations. Output only JSON.",
             prompt: prompt
         )
         return cleanSummary(raw, limit: 3000)
-    }
-
-    func determineMemoryInjectionIntent(content: String, kind: String, scope: String) async -> String? {
-        let prompt = OpenAISummarizationService.memoryInjectionIntentPrompt(
-            content: content,
-            kind: kind,
-            scope: scope
-        )
-        let raw = await respond(
-            instructions: "You classify durable IDE memories. Output only true or false.",
-            prompt: prompt
-        )
-        return cleanSummary(raw, limit: 16)
     }
 
     func generateBranchBriefing(

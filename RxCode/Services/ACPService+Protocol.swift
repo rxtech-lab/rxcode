@@ -139,6 +139,15 @@ extension ACPService {
         // Resolve the latest canonical key in case the entry has been
         // re-keyed (bootstrap key → agent sessionId).
         let resolved = aliasToCanonical[key] ?? key
+        var lineCount = 0
+        mutateSession(resolved) { entry in
+            entry.stdoutLineCount += 1
+            lineCount = entry.stdoutLineCount
+        }
+        if lineCount == 1 {
+            let pid = sessions[resolved]?.process.processIdentifier ?? 0
+            logger.info("[ACP] first stdout line key=\(resolved, privacy: .public) pid=\(pid) line=\(line.prefix(240), privacy: .public)")
+        }
         logger.info("[ACP][stdout] \(line.prefix(400), privacy: .public)")
         await handleIncoming(key: resolved, data: data)
     }

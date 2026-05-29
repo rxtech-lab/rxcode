@@ -45,9 +45,14 @@ actor MemoryService {
             .sorted { $0.updatedAt > $1.updatedAt }
     }
 
-    func search(_ query: String, projectId: UUID?, limit: Int = 20) async -> [Hit] {
+    func search(_ query: String, projectId: UUID?, limit: Int = 20, minScore: Float? = nil) async -> [Hit] {
+        let startedAt = Date()
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let qvec = embed(trimmed) else { return [] }
+        guard !trimmed.isEmpty, let qvec = embed(trimmed) else {
+            let elapsed = Date().timeIntervalSince(startedAt)
+            logger.info("[Memory] search skipped queryChars=\(trimmed.count) elapsed=\(String(format: "%.2f", elapsed), privacy: .public)s")
+            return []
+        }
 
         let ranked = entries.values.compactMap { entry -> Hit? in
             if let memoryProject = entry.item.projectId,
@@ -56,6 +61,9 @@ actor MemoryService {
                 return nil
             }
             let score = dot(qvec, entry.vector)
+            if let minScore, score <= minScore {
+                return nil
+            }
             return Hit(item: entry.item, score: score)
         }
         .sorted { $0.score > $1.score }
@@ -66,6 +74,8 @@ actor MemoryService {
             let ids = hits.map(\.item.id)
             await MainActor.run { store.touchMemories(ids: ids) }
         }
+        let elapsed = Date().timeIntervalSince(startedAt)
+        logger.info("[Memory] search queryChars=\(trimmed.count) entries=\(self.entries.count) hits=\(hits.count) minScore=\(minScore.map { String(format: "%.2f", $0) } ?? "<none>", privacy: .public) elapsed=\(String(format: "%.2f", elapsed), privacy: .public)s")
         return hits
     }
 

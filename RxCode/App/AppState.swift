@@ -150,6 +150,30 @@ enum SummarizationProvider: String, CaseIterable, Identifiable {
     }
 }
 
+enum MemoryRetrievalMode: String, CaseIterable, Identifiable {
+    case precise
+    case balanced
+    case aggressive
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .precise: return "Precise"
+        case .balanced: return "Balanced"
+        case .aggressive: return "Aggressive"
+        }
+    }
+
+    var scoreThreshold: Float {
+        switch self {
+        case .precise: return 0.65
+        case .balanced: return 0.50
+        case .aggressive: return 0.35
+        }
+    }
+}
+
 @Observable
 @MainActor
 final class AppState {
@@ -363,6 +387,16 @@ final class AppState {
         didSet { UserDefaults.standard.set(memoryInjectEnabled, forKey: "memoryInjectEnabled") }
     }
 
+    var memoryRetrievalMode: MemoryRetrievalMode = {
+        MemoryRetrievalMode(rawValue: UserDefaults.standard.string(forKey: "memoryRetrievalMode") ?? "") ?? .balanced
+    }() {
+        didSet { UserDefaults.standard.set(memoryRetrievalMode.rawValue, forKey: "memoryRetrievalMode") }
+    }
+
+    var memoryInjectionScoreThreshold: Float {
+        memoryRetrievalMode.scoreThreshold
+    }
+
     var memoryMaxContextItems: Int = (UserDefaults.standard.object(forKey: "memoryMaxContextItems") as? Int) ?? 5 {
         didSet {
             let clamped = max(1, min(12, memoryMaxContextItems))
@@ -375,7 +409,6 @@ final class AppState {
     }
 
     var memoryRevision = 0
-    @ObservationIgnored var memoryInjectionIntentCache: [String: Bool] = [:]
 
     // MARK: - Notifications
 

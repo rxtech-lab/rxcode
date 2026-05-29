@@ -1,676 +1,237 @@
-import SwiftUI
+import RxCodeChatKit
 import RxCodeCore
+import SwiftUI
 
 struct UserManualView: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var selectedTopic: ManualTopic = .overview
+    @State private var selectedMenu: UserManualMenu? = .overview
+
+    private let documents: [UserManualMenu: BundledMarkdownDocument]
+
+    init() {
+        self.documents = Dictionary(uniqueKeysWithValues: UserManualMenu.allCases.map { menu in
+            (
+                menu,
+                BundledMarkdownDocument.load(
+                    baseName: menu.resourceBaseName,
+                    fallbackTitle: menu.fallbackTitle
+                )
+            )
+        })
+    }
 
     var body: some View {
         NavigationSplitView {
-            topicList
-                .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 280)
+            sidebar
+                .navigationSplitViewColumnWidth(min: 190, ideal: 230, max: 280)
         } detail: {
-            ScrollView {
-                topicDetail(selectedTopic)
-                    .padding(24)
-                    .frame(maxWidth: 640, alignment: .leading)
+            detailView
+        }
+        .overlay(alignment: .topTrailing) {
+            Button { dismiss() } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 24, height: 24)
+                    .background(Color(NSColor.controlBackgroundColor))
+                    .clipShape(Circle())
             }
-            .overlay(alignment: .topTrailing) {
-                Button { dismiss() } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 24, height: 24)
-                        .background(Color(NSColor.controlBackgroundColor))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .focusable(false)
-                .padding(12)
-            }
+            .buttonStyle(.plain)
+            .focusable(false)
+            .padding(12)
         }
         .frame(width: 900, height: 680)
     }
 
-    // MARK: - Topic List
-
-    private var topicList: some View {
-        List(ManualTopic.allCases, selection: $selectedTopic) { topic in
-            Label(LocalizedStringKey(topic.title), systemImage: topic.icon)
-                .tag(topic)
+    private var sidebar: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(UserManualMenu.allCases) { menu in
+                    Button {
+                        selectedMenu = menu
+                    } label: {
+                        UserManualSidebarRow(
+                            title: documents[menu]?.titleText ?? menu.fallbackTitle,
+                            icon: menu.icon,
+                            isSelected: selectedMenu == menu
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .focusable(false)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 16)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .listStyle(.sidebar)
+        .background(ClaudeTheme.sidebarBackground)
         .navigationTitle("User Guide")
     }
 
-    // MARK: - Topic Detail
+    private var detailView: some View {
+        let document = documents[selectedMenu ?? .overview] ?? .missing(title: UserManualMenu.overview.fallbackTitle)
 
-    @ViewBuilder
-    private func topicDetail(_ topic: ManualTopic) -> some View {
-        VStack(alignment: .leading, spacing: 20) {
-            HStack(spacing: 12) {
-                Image(systemName: topic.icon)
-                    .font(.title)
-                    .foregroundStyle(Color.accentColor)
-                Text(LocalizedStringKey(topic.title))
-                    .font(.title2)
-                    .fontWeight(.bold)
-            }
-
-            Divider()
-
-            ForEach(Array(topic.sections.enumerated()), id: \.offset) { _, section in
-                sectionView(section)
-            }
+        return ScrollView {
+            MarkdownContentView(text: document.content)
+                .padding(.horizontal, 32)
+                .padding(.vertical, 28)
+                .frame(maxWidth: 760, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .center)
         }
-    }
-
-    private func sectionView(_ section: ManualSection) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if let title = section.title {
-                Text(LocalizedStringKey(title))
-                    .font(.headline)
-            }
-
-            Text(LocalizedStringKey(section.body))
-                .font(.body)
-                .foregroundStyle(.secondary)
-
-            if !section.items.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(section.items, id: \.key) { item in
-                        ManualKeyValueRow(key: item.key, value: item.value, symbolName: item.symbolName, symbolColor: item.symbolColor)
-                    }
-                }
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(NSColor.controlBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-            }
-
-            if let note = section.note {
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: "info.circle.fill")
-                        .foregroundStyle(Color.accentColor)
-                        .font(.callout)
-                    Text(LocalizedStringKey(note))
-                        .font(.callout)
-                }
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.accentColor.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .strokeBorder(Color.accentColor.opacity(0.25), lineWidth: 0.5)
-                )
-            }
-        }
+        .background(ClaudeTheme.background)
+        .navigationTitle(document.titleText)
     }
 }
 
-// MARK: - Key-Value Row
-
-private struct ManualKeyValueRow: View {
-    let key: String
-    let value: String
-    var symbolName: String? = nil
-    var symbolColor: Color? = nil
+private struct UserManualSidebarRow: View {
+    let title: String
+    let icon: String
+    let isSelected: Bool
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            if let symbolName {
-                Image(systemName: symbolName)
-                    .font(.system(size: ClaudeTheme.size(14), weight: .medium))
-                    .foregroundStyle(symbolColor ?? .primary)
-                    .frame(width: 28, height: 20)
-            } else {
-                Text(key)
-                    .font(.system(size: ClaudeTheme.size(12), weight: .medium, design: .monospaced))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Color(NSColor.controlBackgroundColor))
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
-                    .fixedSize()
-            }
-            Text(LocalizedStringKey(value))
-                .font(.system(size: ClaudeTheme.size(13)))
-                .foregroundStyle(.secondary)
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: ClaudeTheme.size(14), weight: .medium))
+                .frame(width: 22)
+
+            Text(title)
+                .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+
+            Spacer(minLength: 0)
         }
+        .foregroundStyle(isSelected ? ClaudeTheme.textPrimary : ClaudeTheme.textSecondary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            if isSelected {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(ClaudeTheme.surfaceSecondary)
+            }
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 
-// MARK: - Data Models
-
-struct ManualSection {
-    let title: String?
-    let body: String
-    let items: [KeyValueItem]
-    let note: String?
-
-    init(title: String? = nil, body: String = "", items: [KeyValueItem] = [], note: String? = nil) {
-        self.title = title
-        self.body = body
-        self.items = items
-        self.note = note
-    }
-}
-
-struct KeyValueItem {
-    let key: String
-    let value: String
-    var symbolName: String? = nil
-    var symbolColor: Color? = nil
-}
-
-// MARK: - Topics
-
-enum ManualTopic: String, CaseIterable, Identifiable {
+private enum UserManualMenu: String, CaseIterable, Identifiable {
     case overview
     case projects
     case chat
-    case shortcuts
-    case slashCommands
-    case attachments
-    case customShortcuts
-    case inspectorPanel
-    case github
-    case marketplace
+    case commands
     case permissions
-    case statusLine
     case settings
+    case integrations
+    case worktrees
 
     var id: String { rawValue }
 
-    var title: String {
+    var resourceBaseName: String {
+        "user_manual_\(rawValue)"
+    }
+
+    var fallbackTitle: String {
         switch self {
-        case .overview:        "About RxCode"
-        case .projects:        "Project Management"
-        case .chat:            "Chat Basics"
-        case .shortcuts:       "Keyboard Shortcuts"
-        case .slashCommands:   "Slash Commands"
-        case .attachments:     "File & Image Attachments"
-        case .customShortcuts: "Shortcuts"
-        case .inspectorPanel:  "Inspector Panel"
-        case .github:          "GitHub Integration"
-        case .marketplace:     "Skill Marketplace"
-        case .permissions:     "Permission Requests"
-        case .statusLine:      "Status Line"
-        case .settings:        "Settings & Themes"
+        case .overview: "Overview"
+        case .projects: "Projects and Sidebar"
+        case .chat: "Chat and Attachments"
+        case .commands: "Commands and Shortcuts"
+        case .permissions: "Permissions and Inspector"
+        case .settings: "Integrations and Settings"
+        case .integrations: "MCP and ACP Clients"
+        case .worktrees: "Git Worktrees"
         }
     }
 
     var icon: String {
         switch self {
-        case .overview:        "sparkle"
-        case .projects:        "folder.fill"
-        case .chat:            "bubble.left.and.bubble.right"
-        case .shortcuts:       "keyboard"
-        case .slashCommands:   "terminal.fill"
-        case .attachments:     "paperclip"
-        case .customShortcuts: "bolt.fill"
-        case .inspectorPanel:  "sidebar.trailing"
-        case .github:          "building.columns"
-        case .marketplace:     "brain.head.profile"
-        case .permissions:     "checkmark.shield"
-        case .statusLine:      "chart.bar.fill"
-        case .settings:        "gear"
+        case .overview: "sparkle"
+        case .projects: "sidebar.left"
+        case .chat: "bubble.left.and.bubble.right"
+        case .commands: "terminal.fill"
+        case .permissions: "checkmark.shield"
+        case .settings: "gearshape"
+        case .integrations: "puzzlepiece.extension"
+        case .worktrees: "arrow.triangle.branch"
         }
     }
+}
 
-    var sections: [ManualSection] {
-        switch self {
-        case .overview:
-            [
-                ManualSection(
-                    title: "What is RxCode?",
-                    body: "A native macOS desktop client for the Claude Code CLI. Use all Claude Code features via a polished GUI without needing a terminal."
-                ),
-                ManualSection(
-                    title: "Main Layout",
-                    body: "The left sidebar has History and Files tabs. Project tabs appear at the top of the chat area — click to switch projects. The right inspector panel contains the Terminal and Memo tabs.",
-                    note: "Chat is disabled when no project is selected."
-                ),
-                ManualSection(
-                    title: "Top Toolbar",
-                    body: "The toolbar contains: New Chat, Manage Commands, Skip Permissions toggle, Model picker, Inspector panel toggle, Settings, and the GitHub integration button."
-                ),
-            ]
+private struct BundledMarkdownDocument {
+    let titleText: String
+    let content: String
 
-        case .projects:
-            [
-                ManualSection(
-                    title: "Adding a Project",
-                    body: "Click the + button at the top of the sidebar or drag a folder from Finder. Claude Code uses that folder as its working directory."
-                ),
-                ManualSection(
-                    title: "Project Tabs",
-                    body: "Project tabs appear at the top of the chat area. Click a tab to switch projects. You can switch even while Claude is streaming — the active stream continues in the background."
-                ),
-                ManualSection(
-                    title: "Dedicated Project Window",
-                    body: "Double-click a project tab to open it in its own independent window. Each window manages its own sessions independently, allowing you to work on multiple projects at once.",
-                    note: "In a dedicated project window, only the project name is shown — there are no project tabs."
-                ),
-                ManualSection(
-                    title: "Sidebar Tabs",
-                    body: "History tab: shows previous conversations\nFiles tab: browse the project file tree",
-                    items: [
-                        KeyValueItem(key: "⌘1", value: "Go to History tab"),
-                        KeyValueItem(key: "⌘2", value: "Go to Files tab"),
-                        KeyValueItem(key: "⌘F", value: "Files tab + activate search"),
-                    ]
-                ),
-                ManualSection(
-                    title: "History Management",
-                    body: "Right-click a session in the History tab for context menu options.",
-                    items: [
-                        KeyValueItem(key: "pin", value: "Pin / Unpin — pinned sessions stay at the top of the list", symbolName: "pin.fill", symbolColor: .orange),
-                        KeyValueItem(key: "rename", value: "Rename — change the session title", symbolName: "pencil", symbolColor: .secondary),
-                        KeyValueItem(key: "delete", value: "Delete — remove the session", symbolName: "trash", symbolColor: .red),
-                    ],
-                    note: "Use the trash icon in the History header to delete all sessions at once."
-                ),
-                ManualSection(
-                    title: "File Inspector",
-                    body: "Click any file in the Files tab to preview it with syntax highlighting. Press the pencil button to enter edit mode and modify the file directly.",
-                    items: [
-                        KeyValueItem(key: "⌘S", value: "Save file changes"),
-                        KeyValueItem(key: "Escape", value: "Exit edit mode"),
-                    ],
-                    note: "Files larger than 1 MB cannot be previewed."
-                ),
-                ManualSection(
-                    title: "Hidden Files",
-                    body: "Toggle the eye icon in the Files tab header to show or hide dotfiles (files starting with a period, such as .env or .gitignore)."
-                ),
-                ManualSection(
-                    title: "Git Status",
-                    body: "The Git status panel at the bottom of the sidebar shows changed-file counts and the current branch. Click the branch name to switch between local or remote branches."
-                ),
-            ]
+    static func load(baseName: String, fallbackTitle: String, bundle: Bundle = .main) -> Self {
+        let candidates = localizedResourceNames(for: baseName)
 
-        case .chat:
-            [
-                ManualSection(
-                    title: "Sending Messages",
-                    body: "Type a message in the input field and press Return or the send button.",
-                    items: [
-                        KeyValueItem(key: "Return", value: "Send message"),
-                        KeyValueItem(key: "⌘Return", value: "Send message (alternative)"),
-                        KeyValueItem(key: "⇧Return", value: "Insert line break"),
-                        KeyValueItem(key: "Escape", value: "Stop streaming (cancel response generation)"),
-                    ]
-                ),
-                ManualSection(
-                    title: "Message Queue",
-                    body: "You can send messages even while Claude is responding. New messages are queued automatically and sent once the current response finishes. Queued messages appear as a badge above the input field — click the × on each item to remove it from the queue."
-                ),
-                ManualSection(
-                    title: "Recalling Previous Messages",
-                    body: "When the input field is empty, use ↑/↓ to navigate your message history.",
-                    items: [
-                        KeyValueItem(key: "↑", value: "Recall previous message"),
-                        KeyValueItem(key: "↓", value: "Next message / clear input"),
-                    ]
-                ),
-                ManualSection(
-                    title: "Changing the Model",
-                    body: "Use the model dropdown at the top of the chat area to switch Claude models."
-                ),
-                ManualSection(
-                    title: "Effort Level",
-                    body: "Use the effort dropdown next to the model picker to control how much reasoning Claude applies. The selection is per-session.",
-                    items: [
-                        KeyValueItem(key: "Auto Effort", value: "effort.desc.auto"),
-                        KeyValueItem(key: "Low", value: "effort.desc.low"),
-                        KeyValueItem(key: "Medium", value: "effort.desc.medium"),
-                        KeyValueItem(key: "High", value: "effort.desc.high"),
-                        KeyValueItem(key: "XHigh", value: "effort.desc.xhigh"),
-                        KeyValueItem(key: "Max", value: "effort.desc.max"),
-                    ]
-                ),
-                ManualSection(
-                    title: "Permission Mode",
-                    body: "Use the permission mode dropdown at the top of the chat to control how Claude requests approval before running actions.",
-                    items: [
-                        KeyValueItem(key: "Ask", value: "Default — prompts for approval before file edits and commands"),
-                        KeyValueItem(key: "Accept Edits", value: "Auto-accepts file edits in the working directory (commands still require approval)"),
-                        KeyValueItem(key: "Plan", value: "Read-only — analyzes and plans without making edits"),
-                        KeyValueItem(key: "Auto", value: "AI auto-approves safe operations, prompts only for risky ones (requires Max/Team/Enterprise/API plan + Sonnet/Opus 4.6+)"),
-                        KeyValueItem(key: "Bypass", value: "Skips all permission checks — use only in isolated environments"),
-                    ],
-                    note: "Only enable Skip Permissions on projects you fully trust."
-                ),
-            ]
-
-        case .shortcuts:
-            [
-                ManualSection(
-                    title: "Global Shortcuts",
-                    body: "",
-                    items: [
-                        KeyValueItem(key: "⌘N", value: "Start new chat"),
-                        KeyValueItem(key: "⌘W", value: "Close current window"),
-                        KeyValueItem(key: "⌘1", value: "Sidebar — History tab (expands sidebar if hidden)"),
-                        KeyValueItem(key: "⌘2", value: "Sidebar — Files tab (expands sidebar if hidden)"),
-                        KeyValueItem(key: "⌘3", value: "Toggle left sidebar"),
-                        KeyValueItem(key: "⌘4", value: "Toggle right inspector panel"),
-                        KeyValueItem(key: "⌘F", value: "Sidebar — Files tab + search"),
-                        KeyValueItem(key: "Double-click", value: "Project tab — open in dedicated window"),
-                    ]
-                ),
-                ManualSection(
-                    title: "Input Field Shortcuts",
-                    body: "",
-                    items: [
-                        KeyValueItem(key: "Return", value: "Send message"),
-                        KeyValueItem(key: "⌘Return", value: "Send message (alternative)"),
-                        KeyValueItem(key: "⇧Return", value: "Line break"),
-                        KeyValueItem(key: "Escape", value: "Close popup / stop streaming"),
-                        KeyValueItem(key: "↑ / ↓", value: "Select popup item or navigate message history"),
-                        KeyValueItem(key: "Tab", value: "Autocomplete slash command / @ file"),
-                    ]
-                ),
-                ManualSection(
-                    title: "Slash Command Popup",
-                    body: "",
-                    items: [
-                        KeyValueItem(key: "↑ / ↓", value: "Select item"),
-                        KeyValueItem(key: "Return", value: "Execute command"),
-                        KeyValueItem(key: "⌘Return", value: "View command details"),
-                        KeyValueItem(key: "Tab", value: "Autocomplete command"),
-                        KeyValueItem(key: "Escape", value: "Close popup"),
-                    ]
-                ),
-                ManualSection(
-                    title: "@ Mention Popup",
-                    body: "",
-                    items: [
-                        KeyValueItem(key: "↑ / ↓", value: "Select shortcut or file"),
-                        KeyValueItem(key: "Return / Tab", value: "Run shortcut or insert file path"),
-                        KeyValueItem(key: "Escape", value: "Close popup"),
-                    ]
-                ),
-            ]
-
-        case .slashCommands:
-            [
-                ManualSection(
-                    title: "What are Slash Commands?",
-                    body: "Type / in the input field to open a popup list of available commands. Slash commands let you quickly trigger Claude Code CLI operations without typing them manually."
-                ),
-                ManualSection(
-                    title: "How to Use",
-                    body: "Type / to open the popup, then continue typing to filter results. Use ↑/↓ to navigate.",
-                    items: [
-                        KeyValueItem(key: "Return", value: "Execute selected command"),
-                        KeyValueItem(key: "⌘Return", value: "View command details"),
-                        KeyValueItem(key: "Tab", value: "Autocomplete command"),
-                        KeyValueItem(key: "Escape", value: "Close popup"),
-                    ]
-                ),
-                ManualSection(
-                    title: "Interactive Commands",
-                    body: "Some commands (such as /config, /permissions, /model) open in a full interactive terminal popup sheet, where you can use the interactive CLI interface. The popup closes automatically when the command finishes."
-                ),
-                ManualSection(
-                    title: "Agent-Specific Commands",
-                    body: "Each command targets an agent: built-in commands are Claude Code only, while custom commands can target Claude Code, Codex, ACP, or all agents. The popup only lists commands available to the current session's agent.",
-                    note: "Set a command's agent in its editor under Settings → Commands."
-                ),
-                ManualSection(
-                    title: "Managing Commands",
-                    body: "Click the / button in the toolbar, or open Settings → Commands to add, edit, delete, or disable custom commands. Built-in commands can be edited and enabled or disabled in the app.",
-                    note: "JSON import/export backs up or shares custom commands only. Built-in commands in imported files are ignored."
-                ),
-            ]
-
-        case .attachments:
-            [
-                ManualSection(
-                    title: "Attaching Files",
-                    body: "Click the clip icon to the left of the input field, or drag and drop files onto the input field. When dragging, the input field border highlights in the accent color to show the drop zone."
-                ),
-                ManualSection(
-                    title: "Clipboard Detection",
-                    body: "Pasting (⌘V) is smart — RxCode detects what's in the clipboard and handles it automatically.",
-                    items: [
-                        KeyValueItem(key: "image", value: "Image data (PNG/TIFF) → attached as an image", symbolName: "photo", symbolColor: .blue),
-                        KeyValueItem(key: "file", value: "File path → attached as a file", symbolName: "doc", symbolColor: .secondary),
-                        KeyValueItem(key: "url", value: "URL → attached as a URL reference", symbolName: "link", symbolColor: .accentColor),
-                        KeyValueItem(key: "text", value: "Long text (>2 KB) → converted to a text attachment", symbolName: "text.alignleft", symbolColor: .secondary),
-                    ],
-                    note: "Screenshots can be pasted directly — they are automatically attached as images."
-                ),
-                ManualSection(
-                    title: "@ Mentions",
-                    body: "Type @ in the input field to open the mention popup. It lists your shortcuts on top and project files below, both filtered in real time as you type.",
-                    items: [
-                        KeyValueItem(key: "↑ / ↓", value: "Select shortcut or file"),
-                        KeyValueItem(key: "Return / Tab", value: "Run shortcut or insert file path"),
-                        KeyValueItem(key: "Escape", value: "Close popup"),
-                    ]
-                ),
-                ManualSection(
-                    title: "Auto-Preview Settings",
-                    body: "By default, pasting certain content automatically creates a preview chip. You can toggle each category independently in Settings → Message.",
-                    items: [
-                        KeyValueItem(key: "URL links", value: "Show a preview chip when a URL is detected", symbolName: "link", symbolColor: .accentColor),
-                        KeyValueItem(key: "File paths", value: "Show a preview chip when a file path is detected", symbolName: "doc", symbolColor: .secondary),
-                        KeyValueItem(key: "Images", value: "Show a preview chip when image data is detected", symbolName: "photo", symbolColor: .blue),
-                        KeyValueItem(key: "Long text", value: "Convert long text (200+ characters) into an attachment chip", symbolName: "text.alignleft", symbolColor: .secondary),
-                    ]
-                ),
-            ]
-
-        case .customShortcuts:
-            [
-                ManualSection(
-                    title: "What are Shortcuts?",
-                    body: "Saved snippets for frequently used messages or shell commands. Type @ in the input field to open the mention popup and pick a shortcut from the list."
-                ),
-                ManualSection(
-                    title: "Using a Shortcut",
-                    body: "Type @ to open the popup, continue typing to filter, then press Return or Tab. A message shortcut is inserted into the input field for you to review and send; a terminal-command shortcut runs immediately."
-                ),
-                ManualSection(
-                    title: "Terminal Command Mode",
-                    body: "Enable the \"Run as terminal command\" option to execute the shortcut as a shell command in the inspector terminal instead of inserting it as a chat message. The project directory is used as the working directory."
-                ),
-                ManualSection(
-                    title: "Managing Shortcuts",
-                    body: "Open Settings → Commands and switch to the Shortcuts segment to add, edit, or delete shortcuts.",
-                    note: "JSON import/export is supported for backing up or sharing your shortcut set."
-                ),
-            ]
-
-        case .inspectorPanel:
-            [
-                ManualSection(
-                    title: "Opening the Inspector Panel",
-                    body: "Click the sidebar.trailing (⊟) button at the top right of the toolbar to toggle the inspector panel. The panel docks to the right side of the window and contains two tabs: Terminal and Memo."
-                ),
-                ManualSection(
-                    title: "Terminal Tab",
-                    body: "An embedded zsh terminal that opens at the current project's directory. Use it to run shell commands, inspect files, or manage git — all without leaving the app."
-                ),
-                ManualSection(
-                    title: "Memo Tab",
-                    body: "A per-project rich text memo editor. Notes are auto-saved after a short pause and persist across sessions. Use the toolbar at the bottom for formatting, or the keyboard shortcuts below.",
-                    items: [
-                        KeyValueItem(key: "⌘B", value: "Bold"),
-                        KeyValueItem(key: "⌘I", value: "Italic"),
-                        KeyValueItem(key: "⌘U", value: "Underline"),
-                        KeyValueItem(key: "H1 / H2 / H3", value: "Heading levels (# / ## / ###)"),
-                        KeyValueItem(key: "- ", value: "Unordered list (auto-continues on Return)"),
-                        KeyValueItem(key: "⌘⇧L", value: "Toggle checkbox"),
-                        KeyValueItem(key: "⌘K", value: "Insert link"),
-                    ]
-                ),
-                ManualSection(
-                    title: "Reset Buttons",
-                    body: "Each inspector tab has a reset button (the circular arrow at the top right of the panel).",
-                    items: [
-                        KeyValueItem(key: "Reset Terminal", value: "Terminate the current shell and start a fresh zsh session"),
-                        KeyValueItem(key: "Clear Memo", value: "Erase the memo for the current project (cannot be undone)"),
-                    ]
-                ),
-                ManualSection(
-                    title: "Interactive Terminal Popup",
-                    body: "Some slash commands (such as /config, /permissions, /model) open in a separate interactive terminal sheet. The popup runs the command automatically and closes when it exits.",
-                    note: "The exit code is shown at the bottom — \"exit 0\" means the command completed successfully."
-                ),
-            ]
-
-        case .github:
-            [
-                ManualSection(
-                    title: "GitHub Integration",
-                    body: "Click the GitHub Mark button at the top of the sidebar to open the GitHub panel. After connecting your GitHub account, your repositories are listed and can be added to RxCode with one click."
-                ),
-                ManualSection(
-                    title: "Adding a Repository",
-                    body: "Search for a repository by name, then click Add. RxCode clones it automatically and opens it as a new project.",
-                    items: [
-                        KeyValueItem(key: "lock", value: "Private repository", symbolName: "lock", symbolColor: .secondary),
-                        KeyValueItem(key: "globe", value: "Public repository", symbolName: "globe", symbolColor: .secondary),
-                        KeyValueItem(key: "checkmark", value: "Already added to RxCode", symbolName: "checkmark.circle.fill", symbolColor: .green),
-                    ]
-                ),
-            ]
-
-        case .marketplace:
-            [
-                ManualSection(
-                    title: "Skill Marketplace",
-                    body: "Open Settings and select Skill Marketplace to browse OpenAI Agent Skills and compatible skill catalogs. Skills can be filtered by category or searched by name, description, or author."
-                ),
-                ManualSection(
-                    title: "Installing Skills",
-                    body: "Click a skill to view its details, then press Install. RxCode stores installed skills in its own settings and enables them for supported coding agents.",
-                    items: [
-                        KeyValueItem(key: "clock", value: "Not installed", symbolName: "clock", symbolColor: .secondary),
-                        KeyValueItem(key: "arrow.down", value: "Installing…", symbolName: "arrow.down.circle", symbolColor: .accentColor),
-                        KeyValueItem(key: "checkmark", value: "Installed", symbolName: "checkmark.circle.fill", symbolColor: .green),
-                    ],
-                    note: "The catalog refreshes automatically every 5 minutes."
-                ),
-            ]
-
-        case .statusLine:
-            [
-                ManualSection(
-                    title: "What is the Status Line?",
-                    body: "A fixed information bar at the bottom of the chat area. It shows the current project path, model, rate limit usage, context window usage, and total response time at a glance."
-                ),
-                ManualSection(
-                    title: "Displayed Items",
-                    body: "Items are shown left to right in the status line.",
-                    items: [
-                        KeyValueItem(key: "folder", value: "Project path — folder path of the currently selected project (home directory abbreviated as ~)", symbolName: "folder.fill", symbolColor: .orange),
-                        KeyValueItem(key: "cpu", value: "Model — name of the Claude model in use for this session", symbolName: "cpu", symbolColor: .green),
-                        KeyValueItem(key: "clock", value: "5h limit — API usage over the last 5 hours (bar + % + time until reset)", symbolName: "clock", symbolColor: .secondary),
-                        KeyValueItem(key: "calendar", value: "7d limit — API usage over the last 7 days (bar + % + time until reset)", symbolName: "calendar", symbolColor: .secondary),
-                        KeyValueItem(key: "memorychip", value: "context — context window usage for the current session (bar + %)", symbolName: "memorychip", symbolColor: .secondary),
-                        KeyValueItem(key: "stopwatch", value: "Total response time — cumulative time Claude spent generating responses in this session", symbolName: "stopwatch", symbolColor: .secondary),
-                    ]
-                ),
-                ManualSection(
-                    title: "Usage Colors",
-                    body: "The bar graph and percentage change color based on usage level.",
-                    items: [
-                        KeyValueItem(key: "green", value: "Below 70% — normal", symbolName: "circle.fill", symbolColor: .green),
-                        KeyValueItem(key: "yellow", value: "70–89% — caution", symbolName: "circle.fill", symbolColor: .orange),
-                        KeyValueItem(key: "red", value: "90% or above — critical", symbolName: "circle.fill", symbolColor: .red),
-                    ],
-                    note: "Usage data refreshes automatically after each response. If the initial fetch fails on launch, it retries once after 5 seconds."
-                ),
-            ]
-
-        case .permissions:
-            [
-                ManualSection(
-                    title: "What are Permission Requests?",
-                    body: "Before Claude edits files or runs commands, it pauses and asks for your approval. A modal appears showing the tool name and its arguments."
-                ),
-                ManualSection(
-                    title: "Approval Options",
-                    body: "Each permission request offers three choices.",
-                    items: [
-                        KeyValueItem(key: "Allow", value: "Approve this single action"),
-                        KeyValueItem(key: "Allow Session", value: "Approve all future requests of this type for the current session"),
-                        KeyValueItem(key: "Deny", value: "Reject the action"),
-                    ],
-                    note: "If no action is taken, the request is automatically denied after 5 minutes. Press Return to Allow, or Escape to Deny."
-                ),
-                ManualSection(
-                    title: "Permission Mode",
-                    body: "Use the permission mode dropdown at the top of the chat to switch how Claude handles permissions.",
-                    items: [
-                        KeyValueItem(key: "Ask", value: "Default — prompts for approval before file edits and commands"),
-                        KeyValueItem(key: "Accept Edits", value: "Auto-accepts file edits in the working directory (commands still require approval)"),
-                        KeyValueItem(key: "Plan", value: "Read-only — analyzes and plans without making edits"),
-                        KeyValueItem(key: "Auto", value: "AI auto-approves safe operations, prompts only for risky ones (requires Max/Team/Enterprise/API plan + Sonnet/Opus 4.6+)"),
-                        KeyValueItem(key: "Bypass", value: "Skips all permission checks — writes to .git/.vscode/.claude directories still require approval"),
-                    ],
-                    note: "Only enable Skip Permissions on projects you fully trust. Mode changes take effect from the next message."
-                ),
-            ]
-
-        case .settings:
-            [
-                ManualSection(
-                    title: "Opening Settings",
-                    body: "Choose RxCode → Settings from the menu bar or press ⌘, to open the Settings window. Settings are organized into tabs including General, Message, and Commands."
-                ),
-                ManualSection(
-                    title: "General Tab",
-                    body: "The General tab configures session defaults. Changes apply to newly created sessions — existing sessions keep their current values.",
-                    items: [
-                        KeyValueItem(key: "Theme", value: "Accent color palette (Terracotta, Ocean, Forest, Lavender, Midnight, Amber)"),
-                        KeyValueItem(key: "Interface Font Size", value: "Adjust the font size for the app UI (sidebar, toolbars, labels)"),
-                        KeyValueItem(key: "Messages Font Size", value: "Adjust the font size in the chat message area"),
-                        KeyValueItem(key: "Default Model", value: "Claude model used when starting a new session"),
-                        KeyValueItem(key: "Default Permission Mode", value: "Permission mode applied to new sessions"),
-                        KeyValueItem(key: "Default Effort Level", value: "Reasoning effort applied to new sessions"),
-                        KeyValueItem(key: "Notifications", value: "Show a system notification when a response completes while RxCode is in the background"),
-                    ],
-                    note: "Model, permission mode, and effort can also be overridden per session from the toolbar — the chosen value sticks to that session."
-                ),
-                ManualSection(
-                    title: "Message Tab",
-                    body: "The Message tab controls chat display and attachment behavior.",
-                    items: [
-                        KeyValueItem(key: "Focus Mode", value: "Enable a focused chat layout that hides the project tab bar and sidebar controls — useful when you want to concentrate on a single conversation"),
-                        KeyValueItem(key: "Auto-Preview URLs", value: "Automatically show a preview chip when a URL is pasted"),
-                        KeyValueItem(key: "Auto-Preview File Paths", value: "Automatically show a preview chip when a file path is pasted"),
-                        KeyValueItem(key: "Auto-Preview Images", value: "Automatically show a preview chip when image data is pasted"),
-                        KeyValueItem(key: "Auto-Preview Long Text", value: "Automatically convert long text (200+ characters) into an attachment chip when pasted"),
-                    ]
-                ),
-                ManualSection(
-                    title: "Themes",
-                    body: "RxCode ships with six accent color themes. Preview each one directly from the theme picker — the whole app recolors live as you choose.",
-                    items: [
-                        KeyValueItem(key: "Terracotta", value: "Claude default — warm orange-red"),
-                        KeyValueItem(key: "Ocean", value: "Cool blue"),
-                        KeyValueItem(key: "Forest", value: "Deep green"),
-                        KeyValueItem(key: "Lavender", value: "Soft purple"),
-                        KeyValueItem(key: "Midnight", value: "Dark indigo"),
-                        KeyValueItem(key: "Amber", value: "Warm yellow"),
-                    ]
-                ),
-                ManualSection(
-                    title: "Commands Tab",
-                    body: "The Commands tab has two segments. Slash Commands manages built-in and custom commands — edit, enable/disable, add, delete, or set an agent scope; JSON import/export covers custom commands only. Shortcuts manages your @-triggered shortcuts with JSON import/export support."
-                ),
-                ManualSection(
-                    title: "Checking for Updates",
-                    body: "Open RxCode → Check for Updates… to run Sparkle's update check manually. Updates are also checked automatically on launch."
-                ),
-            ]
+        for name in candidates {
+            if let content = readMarkdown(named: name, bundle: bundle) {
+                return Self(titleText: title(in: content) ?? fallbackTitle, content: content)
+            }
         }
+
+        return missing(title: fallbackTitle)
+    }
+
+    static func missing(title: String) -> Self {
+        Self(
+            titleText: title,
+            content: "# \(title)\n\nThe bundled user guide section could not be loaded."
+        )
+    }
+
+    private static func title(in content: String) -> String? {
+        content
+            .split(whereSeparator: \.isNewline)
+            .lazy
+            .compactMap { line -> String? in
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                guard trimmed.hasPrefix("# ") else { return nil }
+                let title = trimmed.dropFirst(2).trimmingCharacters(in: .whitespaces)
+                return title.isEmpty ? nil : title
+            }
+            .first
+    }
+
+    private static func localizedResourceNames(for baseName: String) -> [String] {
+        var names: [String] = []
+
+        for identifier in Locale.preferredLanguages {
+            let normalized = identifier.replacingOccurrences(of: "-", with: "_")
+            let locale = Locale(identifier: identifier)
+            let languageCode = locale.language.languageCode?.identifier
+            let scriptCode = locale.language.script?.identifier
+            let regionCode = locale.region?.identifier
+
+            appendUnique("\(baseName)_\(normalized)", to: &names)
+
+            if languageCode == "zh" {
+                if regionCode == "HK" || regionCode == "MO" || regionCode == "TW" || scriptCode == "Hant" {
+                    appendUnique("\(baseName)_zh_HK", to: &names)
+                } else {
+                    appendUnique("\(baseName)_zh_CN", to: &names)
+                }
+            } else if let languageCode {
+                appendUnique("\(baseName)_\(languageCode)", to: &names)
+            }
+        }
+
+        appendUnique(baseName, to: &names)
+        return names
+    }
+
+    private static func readMarkdown(named name: String, bundle: Bundle) -> String? {
+        guard let url = bundle.url(forResource: name, withExtension: "md"),
+              let content = try? String(contentsOf: url, encoding: .utf8) else {
+            return nil
+        }
+        return content
+    }
+
+    private static func appendUnique(_ name: String, to names: inout [String]) {
+        guard !names.contains(name) else { return }
+        names.append(name)
     }
 }
 

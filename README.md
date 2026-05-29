@@ -7,6 +7,7 @@ RxCode brings Claude Code, Codex, and Agent Client Protocol (ACP) clients into o
 ![Platform](https://img.shields.io/badge/platform-macOS%2026.0%2B-blue)
 ![Swift](https://img.shields.io/badge/Swift-6.x-orange)
 ![License](https://img.shields.io/badge/license-Apache%202.0-green)
+[![Discord](https://img.shields.io/badge/Discord-Join%20Chat-5865F2?logo=discord&logoColor=white)](https://discord.gg/ytt8SjRRNN)
 
 <p align="center">
   <img src="website/public/screenshot/screenshot1.png" alt="RxCode showing an active coding session with a diff and streaming response" width="900">
@@ -163,6 +164,10 @@ xcodebuild -project RxCode.xcodeproj -scheme RxCode -configuration Release build
 | `Packages/Tests/` | Swift package tests. |
 | `website/` | Public website and screenshot assets used by this README. |
 | `scripts/` | Build, notarization, Sparkle signing, and release automation. |
+
+## Community
+
+Join the RxCode Discord to ask questions, share feedback, and follow development: [discord.gg/ytt8SjRRNN](https://discord.gg/ytt8SjRRNN).
 
 ## License
 

@@ -357,9 +357,17 @@
 			path = RxCodeUITests;
 			sourceTree = "<group>";
 		};
+		DF46311C2FC97C0D002D9562 /* UserMenus */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = UserMenus;
+			sourceTree = "<group>";
+		};
 		E673352F2F7356F600FD26C7 = {
 			isa = PBXGroup;
 			children = (
+				DF46311C2FC97C0D002D9562 /* UserMenus */,
 				DF23F7352FB8C3EC008929A6 /* icon.icon */,
 				DF5B0DDC2FC023C8000CE36F /* MobileUITestPlan-iPad.xctestplan */,
 				DF5B0DDA2FC023BE000CE36F /* MobileUITestPlan-iPhone.xctestplan */,

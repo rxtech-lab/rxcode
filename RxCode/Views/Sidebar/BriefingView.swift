@@ -36,12 +36,19 @@ struct BriefingView: View {
         Dictionary(uniqueKeysWithValues: appState.projects.map { ($0.id, $0) })
     }
 
+    private var knownProjectIds: Set<UUID> {
+        Set(appState.projects.map(\.id))
+    }
+
     private var groups: [BriefingGroup] {
         _ = appState.branchBriefingRevision
         _ = appState.threadSummaryRevision
 
+        let knownIds = knownProjectIds
         let briefings = appState.threadStore.allBranchBriefingItems()
+            .filter { knownIds.contains($0.projectId) }
         let summaries = appState.threadStore.allThreadSummaryItems()
+            .filter { knownIds.contains($0.projectId) }
 
         struct Bucket {
             var projectId: UUID
@@ -103,9 +110,14 @@ struct BriefingView: View {
     private var projectsWithData: [Project] {
         _ = appState.branchBriefingRevision
         _ = appState.threadSummaryRevision
+        let knownIds = knownProjectIds
         let ids = Set(
-            appState.threadStore.allBranchBriefingItems().map(\.projectId)
-            + appState.threadStore.allThreadSummaryItems().map(\.projectId)
+            appState.threadStore.allBranchBriefingItems()
+                .filter { knownIds.contains($0.projectId) }
+                .map(\.projectId)
+            + appState.threadStore.allThreadSummaryItems()
+                .filter { knownIds.contains($0.projectId) }
+                .map(\.projectId)
         )
         return appState.projects.filter { ids.contains($0.id) }
     }
@@ -137,8 +149,9 @@ struct BriefingView: View {
     private var hasAnyData: Bool {
         _ = appState.branchBriefingRevision
         _ = appState.threadSummaryRevision
-        return !appState.threadStore.allBranchBriefingItems().isEmpty
-            || !appState.threadStore.allThreadSummaryItems().isEmpty
+        let knownIds = knownProjectIds
+        return appState.threadStore.allBranchBriefingItems().contains { knownIds.contains($0.projectId) }
+            || appState.threadStore.allThreadSummaryItems().contains { knownIds.contains($0.projectId) }
     }
 
     private var projectPathsKey: String {

@@ -3,6 +3,11 @@ import Foundation
 import MarkdownUI
 import RxCodeCore
 import Textual
+#if canImport(AppKit)
+import AppKit
+#elseif canImport(UIKit)
+import UIKit
+#endif
 
 // MARK: - Markdown Content View
 
@@ -11,11 +16,18 @@ public struct MarkdownContentView: View {
     let text: String
     let showsTrailingCursor: Bool
     let isCursorVisible: Bool
+    let baseURL: URL?
 
-    public init(text: String, showsTrailingCursor: Bool = false, isCursorVisible: Bool = true) {
+    public init(
+        text: String,
+        showsTrailingCursor: Bool = false,
+        isCursorVisible: Bool = true,
+        baseURL: URL? = nil
+    ) {
         self.text = text
         self.showsTrailingCursor = showsTrailingCursor
         self.isCursorVisible = isCursorVisible
+        self.baseURL = baseURL
     }
 
     public var body: some View {
@@ -30,7 +42,8 @@ public struct MarkdownContentView: View {
             MarkdownUIMarkdownContentView(
                 text: text,
                 showsTrailingCursor: showsTrailingCursor,
-                isCursorVisible: isCursorVisible
+                isCursorVisible: isCursorVisible,
+                baseURL: baseURL
             )
         }
     }
@@ -78,11 +91,13 @@ private struct MarkdownUIMarkdownContentView: View {
     let text: String
     let showsTrailingCursor: Bool
     let isCursorVisible: Bool
+    let baseURL: URL?
 
     var body: some View {
-        Markdown(renderedMarkdown)
+        Markdown(renderedMarkdown, baseURL: baseURL, imageBaseURL: baseURL)
             .id(renderedMarkdown)
             .markdownTheme(.rxCodeChat)
+            .markdownImageProvider(LocalFileImageProvider())
             .markdownTextStyle(\.code) {
                 FontFamilyVariant(.monospaced)
                 FontSize(.em(0.93))
@@ -243,10 +258,44 @@ private func preprocessMarkdown(_ text: String) -> String {
         } else if inFence {
             lines.append(line)
         } else {
-            lines.append(autoLinkURLs(sanitizeMarkdownLinkURLs(line)))
+            lines.append(autoLinkURLs(sanitizeMarkdownLinkURLs(convertHTMLImages(line))))
         }
     }
     return lines.joined(separator: "\n")
+}
+
+/// Rewrites HTML `<img src="..." alt="...">` tags into markdown image syntax so
+/// MarkdownUI renders them instead of treating them as raw HTML.
+func convertHTMLImages(_ text: String) -> String {
+    let pattern = #"<img\b([^>]*?)/?>"#
+    guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+        return text
+    }
+    let range = NSRange(text.startIndex..., in: text)
+    var result = text
+    for match in regex.matches(in: text, range: range).reversed() {
+        guard let fullRange = Range(match.range, in: result),
+              let attrsRange = Range(match.range(at: 1), in: result) else { continue }
+        let attrs = String(result[attrsRange])
+        guard let src = htmlAttribute("src", in: attrs) else { continue }
+        let alt = htmlAttribute("alt", in: attrs) ?? ""
+        result.replaceSubrange(fullRange, with: "![\(alt)](\(src))")
+    }
+    return result
+}
+
+private func htmlAttribute(_ name: String, in attrs: String) -> String? {
+    let pattern = "\(name)\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s>]+))"
+    guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+          let match = regex.firstMatch(in: attrs, range: NSRange(attrs.startIndex..., in: attrs)) else {
+        return nil
+    }
+    for index in 1..<match.numberOfRanges {
+        if let range = Range(match.range(at: index), in: attrs) {
+            return String(attrs[range])
+        }
+    }
+    return nil
 }
 
 // MARK: - Textual Styles
@@ -330,6 +379,57 @@ private struct RxCodeBlockBody: View {
             .foregroundStyle(isCopied ? ClaudeTheme.statusSuccess : ClaudeTheme.textTertiary)
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Local File Image Provider
+
+/// Renders images from `file://` URLs by loading them via NSImage, and falls
+/// back to MarkdownUI's default network image provider for remote URLs.
+private struct LocalFileImageProvider: ImageProvider {
+    func makeImage(url: URL?) -> some View {
+        Group {
+            if let url, url.isFileURL {
+                LocalFileImage(url: url)
+            } else {
+                DefaultImageProvider.default.makeImage(url: url)
+            }
+        }
+    }
+}
+
+private struct LocalFileImage: View {
+    let url: URL
+
+    var body: some View {
+        if let loaded = LocalFileImage.load(url: url) {
+            loaded.image
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(maxWidth: loaded.size.width)
+        } else {
+            Text("⚠︎ \(url.lastPathComponent)")
+                .font(.caption)
+                .foregroundStyle(ClaudeTheme.textTertiary)
+        }
+    }
+
+    private struct Loaded {
+        let image: Image
+        let size: CGSize
+    }
+
+    private static func load(url: URL) -> Loaded? {
+        #if canImport(AppKit)
+        guard let nsImage = NSImage(contentsOf: url) else { return nil }
+        return Loaded(image: Image(nsImage: nsImage), size: nsImage.size)
+        #elseif canImport(UIKit)
+        guard let data = try? Data(contentsOf: url),
+              let uiImage = UIImage(data: data) else { return nil }
+        return Loaded(image: Image(uiImage: uiImage), size: uiImage.size)
+        #else
+        return nil
+        #endif
     }
 }
 

@@ -9,9 +9,10 @@ extension ACPService {
     func spawn(spec: ACPClientSpec, model: String?, cwd: String) async
         throws -> (Process, FileHandle, FileHandle, FileHandle)
     {
+        let launchStartedAt = Date()
         let (executable, args, baseEnv) = try resolveLaunch(spec.launch)
         let allArgs = args + spec.extraArgs
-        logger.info("[ACP] spawn exec=\(executable, privacy: .public) args=[\(allArgs.joined(separator: " "), privacy: .public)] cwd=\(cwd, privacy: .public)")
+        logger.info("[ACP] launch start client=\(spec.displayName, privacy: .public) exec=\(executable, privacy: .public) args=[\(allArgs.joined(separator: " "), privacy: .public)] cwd=\(cwd, privacy: .public)")
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
@@ -37,7 +38,8 @@ extension ACPService {
 
         do {
             try process.run()
-            logger.info("[ACP] spawn ok pid=\(process.processIdentifier) for \(spec.displayName, privacy: .public)")
+            let elapsed = Date().timeIntervalSince(launchStartedAt)
+            logger.info("[ACP] process launched pid=\(process.processIdentifier) client=\(spec.displayName, privacy: .public) after=\(String(format: "%.2f", elapsed), privacy: .public)s")
         } catch {
             logger.error("[ACP] spawn FAILED exec=\(executable, privacy: .public): \(error.localizedDescription, privacy: .public)")
             throw error

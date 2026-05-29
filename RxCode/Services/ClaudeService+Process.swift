@@ -33,6 +33,7 @@ extension ClaudeCodeServer {
 
         let log = self.logger
         let currentStreamId = streamId
+        let sendStartedAt = Date()
 
         readStderr(stderr, streamId: currentStreamId)
 
@@ -117,6 +118,10 @@ extension ClaudeCodeServer {
                     guard let data = line.data(using: .utf8) else { continue }
 
                     rawLineCount += 1
+                    if rawLineCount == 1 {
+                        let elapsed = Date().timeIntervalSince(sendStartedAt)
+                        log.info("[Claude] first stdout line stream=\(streamId) after=\(String(format: "%.2f", elapsed), privacy: .public)s")
+                    }
                     // Diagnostic logging of raw NDJSON — full content for first 30 lines, then type field only
                     if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                         let type = (json["type"] as? String) ?? "?"
@@ -533,6 +538,9 @@ extension ClaudeCodeServer {
         stderrPipe: Pipe,
         onProcessExit: (@Sendable () -> Void)? = nil
     ) async throws {
+        let launchStartedAt = Date()
+        logger.info("[Claude] launch start stream=\(streamId) cwd=\(cwd, privacy: .public) session=\(sessionId ?? "<new>", privacy: .public) model=\(model ?? "<default>", privacy: .public) mode=\(String(describing: permissionMode), privacy: .public)")
+
         guard let binary = await findClaudeBinary() else {
             throw ClaudeError.binaryNotFound
         }
@@ -567,6 +575,8 @@ extension ClaudeCodeServer {
             logger.error("Failed to spawn claude: \(error, privacy: .public)")
             throw ClaudeError.spawnFailed(error.localizedDescription)
         }
+        let spawnElapsed = Date().timeIntervalSince(launchStartedAt)
+        logger.info("[Claude] process launched pid=\(pid) stream=\(streamId) after=\(String(format: "%.2f", spawnElapsed), privacy: .public)s binary=\(binary, privacy: .public)")
 
         // Parent must release the child-owned pipe ends so EOF propagates correctly.
         try? stdinPipe.fileHandleForReading.close()
@@ -591,6 +601,8 @@ extension ClaudeCodeServer {
             ]
         ]
         try Self.writeJSONLine(userMessage, to: stdinHandle)
+        let promptElapsed = Date().timeIntervalSince(launchStartedAt)
+        logger.info("[Claude] initial prompt written stream=\(streamId) after=\(String(format: "%.2f", promptElapsed), privacy: .public)s promptLen=\(prompt.count)")
 
         logger.info(
             "Spawned claude process pid=\(pid) pgid=\(pid) cwd=\(cwd, privacy: .public) stream=\(streamId)"

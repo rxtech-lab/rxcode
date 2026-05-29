@@ -155,30 +155,16 @@ actor OpenAISummarizationService {
 
     func generateMemoryOperations(
         existingMemories: [(id: String, content: String)],
-        userMessage: String,
-        finalResponse: String,
+        userMessages: [String],
         endpoint: String,
         apiKey: String,
         model: String
     ) async -> String? {
         let prompt = Self.memoryExtractionPrompt(
             existingMemories: existingMemories,
-            userMessage: userMessage,
-            finalResponse: finalResponse
+            userMessages: userMessages
         )
         return await generateSummary(prompt: prompt, endpoint: endpoint, apiKey: apiKey, model: model, maxTokens: 512)
-    }
-
-    func determineMemoryInjectionIntent(
-        content: String,
-        kind: String,
-        scope: String,
-        endpoint: String,
-        apiKey: String,
-        model: String
-    ) async -> String? {
-        let prompt = Self.memoryInjectionIntentPrompt(content: content, kind: kind, scope: scope)
-        return await generateSummary(prompt: prompt, endpoint: endpoint, apiKey: apiKey, model: model, maxTokens: 8)
     }
 
     func generateBranchBriefing(
@@ -279,22 +265,25 @@ actor OpenAISummarizationService {
 
     static func memoryExtractionPrompt(
         existingMemories: [(id: String, content: String)],
-        userMessage: String,
-        finalResponse: String
+        userMessages: [String]
     ) -> String {
         let existing = existingMemories.isEmpty
             ? "None"
             : existingMemories.map { "- id: \($0.id)\n  content: \($0.content)" }.joined(separator: "\n")
+        let messages = userMessages.enumerated().map { idx, message in
+            "### User message \(idx + 1)\n\(message)"
+        }.joined(separator: "\n\n")
 
         return """
-        Decide whether the latest chat turn contains explicit durable user memory for a local coding IDE.
+        Decide whether the user-authored messages at the end of this chat contain durable user memory for a local coding IDE.
 
+        The user messages below are the only source for new memory. Do not infer memory from assistant responses, summaries, tool output, files changed, build/test results, or completed implementation notes.
         Return [] unless the user explicitly asks to remember something, states a stable preference, or gives a recurring instruction for future/next-time agent runs.
         Store only the user's reusable preference, recurring workflow instruction, naming convention, or explicitly requested remember-this note.
         For recurring instructions, preserve the recurrence marker in the memory text, such as "Always...", "Never...", "From now on...", "By default...", or "Next time...".
-        Use the assistant response only to confirm the exact wording of an explicit user-requested memory.
         Do not save routine requests, one-off tasks, bug reports, temporary debugging details, implementation steps, command requests, build/test results, files changed, tool availability, secrets, API keys, credentials, or vague observations.
-        Do not add memory simply because the user sent a message. Most user messages should produce [].
+        Do not save greetings or assistant-style conversation text such as "Hi", "Hi! How can I help you today?", "Updated it.", "Implemented debug timing logs", "Build succeeded", or "What changed:".
+        Do not add memory simply because the user sent messages. Most chats should produce [].
         Add at most 1-2 memories, and only when each memory is clearly reusable beyond the current conversation.
         If an existing memory should be refined, return an update operation with its id. If a memory is no longer valid because the user corrected it, return delete.
 
@@ -306,28 +295,8 @@ actor OpenAISummarizationService {
         Existing related memories:
         \(existing)
 
-        Latest user message:
-        \(String(userMessage.prefix(3000)))
-
-        Final assistant response:
-        \(String(finalResponse.prefix(3000)))
-        """
-    }
-
-    static func memoryInjectionIntentPrompt(content: String, kind: String, scope: String) -> String {
-        """
-        Decide whether this saved memory should be injected into every future agent system prompt.
-
-        Reply with ONLY true or false.
-
-        Return true only when the memory captures the user's durable intent: a reusable preference, recurring workflow instruction, naming/style convention, default behavior, "always/never" rule, or explicitly requested remember-this note.
-
-        Return false for ordinary facts, completed work, build/test results, files changed, temporary task state, one-off decisions, tool availability, debugging details, or any memory that is useful only when retrieved by related search.
-
-        Memory kind: \(kind)
-        Memory scope: \(scope)
-        Memory content:
-        \(String(content.prefix(1200)))
+        User-authored messages:
+        \(messages)
         """
     }
 

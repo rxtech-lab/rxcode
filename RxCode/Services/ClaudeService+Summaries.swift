@@ -108,30 +108,14 @@ extension ClaudeCodeServer {
 
     func generateMemoryOperations(
         existingMemories: [(id: String, content: String)],
-        userMessage: String,
-        finalResponse: String,
+        userMessages: [String],
         model: String = "claude-haiku-4-5-20251001"
     ) async -> String? {
         let prompt = OpenAISummarizationService.memoryExtractionPrompt(
             existingMemories: existingMemories,
-            userMessage: userMessage,
-            finalResponse: finalResponse
+            userMessages: userMessages
         )
         return await generatePlainSummary(prompt: prompt, model: model, limit: 3000)
-    }
-
-    func determineMemoryInjectionIntent(
-        content: String,
-        kind: String,
-        scope: String,
-        model: String = "claude-haiku-4-5-20251001"
-    ) async -> String? {
-        let prompt = OpenAISummarizationService.memoryInjectionIntentPrompt(
-            content: content,
-            kind: kind,
-            scope: scope
-        )
-        return await generatePlainSummary(prompt: prompt, model: model, limit: 16)
     }
 
     func generateBranchBriefing(

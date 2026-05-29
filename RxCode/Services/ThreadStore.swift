@@ -113,6 +113,25 @@ final class ThreadStore {
         return ((try? context.fetch(descriptor)) ?? []).map { $0.toItem() }
     }
 
+    @discardableResult
+    func deleteBriefingMetadata(excludingProjectIds knownProjectIds: Set<UUID>) -> (threadSummaries: Int, branchBriefings: Int) {
+        let summaryRows = (try? context.fetch(FetchDescriptor<ThreadSummaryRecord>())) ?? []
+        let orphanedSummaries = summaryRows.filter { !knownProjectIds.contains($0.projectId) }
+
+        let briefingRows = (try? context.fetch(FetchDescriptor<BranchBriefingRecord>())) ?? []
+        let orphanedBriefings = briefingRows.filter { !knownProjectIds.contains($0.projectId) }
+
+        guard !orphanedSummaries.isEmpty || !orphanedBriefings.isEmpty else {
+            return (0, 0)
+        }
+
+        for row in orphanedSummaries { context.delete(row) }
+        for row in orphanedBriefings { context.delete(row) }
+        save()
+
+        return (orphanedSummaries.count, orphanedBriefings.count)
+    }
+
     // MARK: - Writes
 
     /// Insert or update a thread row from a summary.

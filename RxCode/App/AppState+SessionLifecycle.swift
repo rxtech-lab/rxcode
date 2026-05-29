@@ -299,8 +299,7 @@ extension AppState {
 
     func generateMemoryOperations(
         existingMemories: [(id: String, content: String)],
-        userMessage: String,
-        finalResponse: String,
+        userMessages: [String],
         summary: ChatSession.Summary
     ) async -> String? {
         switch summarizationProvider {
@@ -309,8 +308,7 @@ extension AppState {
             let model = summary.model ?? selectedSummarizationModel(for: provider)
             return await generateMemoryOperations(
                 existingMemories: existingMemories,
-                userMessage: userMessage,
-                finalResponse: finalResponse,
+                userMessages: userMessages,
                 provider: provider,
                 model: model
             )
@@ -318,8 +316,7 @@ extension AppState {
             guard !openAISummarizationModel.isEmpty else { return nil }
             return await openAISummarization.generateMemoryOperations(
                 existingMemories: existingMemories,
-                userMessage: userMessage,
-                finalResponse: finalResponse,
+                userMessages: userMessages,
                 endpoint: openAISummarizationEndpoint,
                 apiKey: openAISummarizationAPIKey,
                 model: openAISummarizationModel
@@ -327,8 +324,7 @@ extension AppState {
         case .appleFoundationModel:
             return await foundationModelSummarization.generateMemoryOperations(
                 existingMemories: existingMemories,
-                userMessage: userMessage,
-                finalResponse: finalResponse
+                userMessages: userMessages
             )
         }
     }
@@ -564,8 +560,7 @@ extension AppState {
 
     func generateMemoryOperations(
         existingMemories: [(id: String, content: String)],
-        userMessage: String,
-        finalResponse: String,
+        userMessages: [String],
         provider: AgentProvider,
         model: String?
     ) async -> String? {
@@ -573,15 +568,13 @@ extension AppState {
         case .claudeCode:
             return await claude.generateMemoryOperations(
                 existingMemories: existingMemories,
-                userMessage: userMessage,
-                finalResponse: finalResponse,
+                userMessages: userMessages,
                 model: model ?? "haiku"
             )
         case .codex:
             return await codex.generateMemoryOperations(
                 existingMemories: existingMemories,
-                userMessage: userMessage,
-                finalResponse: finalResponse,
+                userMessages: userMessages,
                 model: model
             )
         case .acp:
@@ -614,6 +607,13 @@ extension AppState {
         }
         return ChatSession.stripAttachmentMarkers(from: message.content)
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func userMessageTexts(in messages: [ChatMessage]) -> [String] {
+        messages
+            .filter { $0.role == .user && !$0.isError }
+            .map { ChatSession.stripAttachmentMarkers(from: $0.content).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
     }
 
     func responseNotificationFallback(from responseText: String) -> String {

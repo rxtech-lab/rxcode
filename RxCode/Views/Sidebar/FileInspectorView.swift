@@ -36,8 +36,11 @@ struct FileInspectorView: View {
                 editingView
             } else if let content {
                 if fileExtension == "md" || fileExtension == "markdown" {
-                    MarkdownPreviewView(content: content)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    MarkdownPreviewView(
+                        content: content,
+                        baseURL: URL(fileURLWithPath: filePath).deletingLastPathComponent()
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     codeContentView(content)
                 }

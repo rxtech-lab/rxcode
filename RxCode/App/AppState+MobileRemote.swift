@@ -97,10 +97,10 @@ extension AppState {
 
         if ok {
             let verb = request.operation == .install ? "installed" : "removed"
-            await NotificationService.shared.postRemoteConfigChanged(
+            await hookManager.dispatchRemoteConfigChanged(RemoteConfigChangedPayload(
                 title: "Skill \(verb) remotely",
                 body: plugin.name
-            )
+            ))
         }
 
         let result = SkillMutationResultPayload(
@@ -157,7 +157,7 @@ extension AppState {
         marketplaceInstalledNames = await marketplace.installedPluginNames()
 
         if ok, let bannerTitle, let bannerBody {
-            await NotificationService.shared.postRemoteConfigChanged(title: bannerTitle, body: bannerBody)
+            await hookManager.dispatchRemoteConfigChanged(RemoteConfigChangedPayload(title: bannerTitle, body: bannerBody))
         }
 
         let result = SkillSourceMutationResultPayload(
@@ -266,7 +266,7 @@ extension AppState {
         }
 
         if ok, let bannerTitle, let bannerBody {
-            await NotificationService.shared.postRemoteConfigChanged(title: bannerTitle, body: bannerBody)
+            await hookManager.dispatchRemoteConfigChanged(RemoteConfigChangedPayload(title: bannerTitle, body: bannerBody))
         }
 
         let result = ACPMutationResultPayload(
@@ -375,7 +375,7 @@ extension AppState {
         }
 
         if ok, let bannerTitle {
-            await NotificationService.shared.postRemoteConfigChanged(title: bannerTitle, body: request.serverName)
+            await hookManager.dispatchRemoteConfigChanged(RemoteConfigChangedPayload(title: bannerTitle, body: request.serverName))
         }
 
         var servers: [MobileMCPServer] = []

@@ -45,16 +45,16 @@ struct SecretsEnvironmentDetailView: View {
                 }
             }
             if files.isEmpty, !isLoading {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("No secrets yet. Add a .env file or enter values manually.")
-                        .foregroundStyle(.secondary)
-                    Button { showAdd = true } label: {
-                        Label("Add Secret", systemImage: "plus")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(environmentKey == nil)
-                }
+                Text("No secrets yet. Add a .env file or enter values manually.")
+                    .foregroundStyle(.secondary)
             }
+            // Always-visible add affordance: the toolbar button is unreliable
+            // inside this sheet's navigation chrome, so keep one in the list.
+            Button { showAdd = true } label: {
+                Label("Add Secret", systemImage: "plus")
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(environmentKey == nil)
         }
         .overlay { if isLoading, files.isEmpty { ProgressView() } }
         .overlay {

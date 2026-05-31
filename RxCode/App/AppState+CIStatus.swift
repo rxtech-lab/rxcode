@@ -135,11 +135,11 @@ extension AppState {
         let failingNames = status.failing.compactMap(\.workflowName)
 
         if notificationsEnabled {
-            await NotificationService.shared.postCIFailed(
-                projectName: project.name,
+            await hookManager.dispatchCIFailed(CIFailedPayload(
                 projectId: project.id,
+                projectName: project.name,
                 failingWorkflowNames: failingNames
-            )
+            ))
         }
 
         if enableAutoCIFix {

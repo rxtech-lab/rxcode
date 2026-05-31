@@ -145,6 +145,17 @@ extension AppState {
     ) async throws -> [String] {
         let bundle = try await secrets.bundle(repo: repo, env: env)
         let files = try await decryptSecretBundle(bundle)
+        return try writeDecryptedSecrets(files, to: directory, overwrite: overwrite)
+    }
+
+    /// Writes already-decrypted `(filename, content)` pairs into `directory`,
+    /// skipping existing files unless `overwrite`. Returns filenames written.
+    @discardableResult
+    func writeDecryptedSecrets(
+        _ files: [(filename: String, content: String)],
+        to directory: URL,
+        overwrite: Bool
+    ) throws -> [String] {
         var written: [String] = []
         for file in files {
             let dest = directory.appendingPathComponent(file.filename)

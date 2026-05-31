@@ -903,6 +903,16 @@ final class AppState {
     /// half-loaded projects/sessions.
     var isInitialized = false
 
+    // MARK: - Hook-driven UI
+
+    /// Non-nil while a hook is showing the loading dialog; the value is the
+    /// status line the hook is currently displaying.
+    var hookProgressStatus: LocalizedStringKey?
+    /// Non-nil while a hook is awaiting the user's pick from a choice sheet.
+    var hookChoiceRequest: HookChoiceRequest?
+    /// Non-nil while a hook is awaiting a confirm/cancel decision.
+    var hookConfirmRequest: HookConfirmRequest?
+
     // MARK: - Services
 
     let rxAuth = RxAuthService.shared
@@ -939,6 +949,12 @@ final class AppState {
     let localWebProxy = LocalWebProxyServer()
     let ideMCPServer = IDEMCPServer()
     var mobileSyncObservers: [NSObjectProtocol] = []
+
+    /// The seam hooks act through (thread/IDE capabilities). Implicitly-unwrapped
+    /// because it captures `self`; assigned at the end of `init`.
+    var hookController: AppStateHookController!
+    /// Registry + dispatcher for lifecycle hooks. See `registerBuiltInHooks()`.
+    var hookManager: HookManager!
 
     /// Weak refs to every `WindowState` that's been wired up via `setupChatBridge`.
     /// Used by AppState-driven queue maintenance (e.g. `flushNextQueuedMessageIfNeeded`)
@@ -1090,6 +1106,29 @@ final class AppState {
 
             setupMobileSyncBridge()
         }
+
+        // Build the hook controller/manager last — the controller captures
+        // `self` (weakly) and every other service it forwards to is now ready.
+        let hookController = AppStateHookController(app: self)
+        self.hookController = hookController
+        self.hookManager = HookManager(controller: hookController)
+        registerBuiltInHooks()
+    }
+
+    /// Register the built-in hooks in dispatch order. User bash hooks run first
+    /// (their start-hook stdout is injected into agent context), then the
+    /// notification hooks. New hooks (or future plugins) append here.
+    private func registerBuiltInHooks() {
+        hookManager.register(UserAddedHook())
+        hookManager.register(ResponseNotificationHook())
+        hookManager.register(QuestionNotificationHook())
+        hookManager.register(PermissionNotificationHook())
+        hookManager.register(MCPNotificationHook())
+        hookManager.register(CINotificationHook())
+        hookManager.register(RemoteConfigNotificationHook())
+        #if os(macOS)
+        hookManager.register(SecretsAutoDownloadHook())
+        #endif
     }
 
 

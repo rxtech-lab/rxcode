@@ -349,20 +349,23 @@ extension AppState {
                     {
                         window.presentedPermissionId = request.id
                     }
-                    Task { @MainActor in
+                    Task { @MainActor [weak self] in
+                        guard let self else { return }
                         if toolName == "AskUserQuestion" {
-                            await NotificationService.shared.postQuestionNeeded(
-                                projectName: projectName,
+                            await self.hookManager.dispatchQuestionAsk(QuestionAskPayload(
+                                toolUseId: request.id,
+                                sessionId: sessionId,
                                 projectId: projectId,
-                                sessionId: sessionId
-                            )
+                                projectName: projectName
+                            ))
                         } else {
-                            await NotificationService.shared.postPermissionNeeded(
+                            await self.hookManager.dispatchPermissionAsk(PermissionAskPayload(
+                                toolUseId: request.id,
                                 toolName: toolName,
-                                projectName: projectName,
+                                sessionId: sessionId,
                                 projectId: projectId,
-                                sessionId: sessionId
-                            )
+                                projectName: projectName
+                            ))
                         }
                     }
                 }

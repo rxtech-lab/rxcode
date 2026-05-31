@@ -476,14 +476,28 @@ extension AppState {
             let alreadyHandled = streamToCancel.map { stopHooksHandledStreamIds.contains($0) } ?? true
             if let streamToCancel, !alreadyHandled {
                 stopHooksHandledStreamIds.insert(streamToCancel)
-                await runHooks(trigger: .beforeSessionStop, project: project, sessionKey: key)
+                await hookManager.dispatchBeforeSessionEnd(SessionEndPayload(
+                    project: project,
+                    sessionKey: key,
+                    sessionId: key,
+                    reason: .cancelled,
+                    turnDidError: false,
+                    lastAssistantText: lastAssistantResponseText(in: stateForSession(key).messages)
+                ))
             }
             let messages = stateForSession(key).messages
             if !messages.isEmpty {
                 await saveSession(sessionId: key, projectId: project.id, messages: messages)
             }
             if streamToCancel != nil, !alreadyHandled {
-                await runHooks(trigger: .afterSessionStop, project: project, sessionKey: key)
+                await hookManager.dispatchAfterSessionEnd(SessionEndPayload(
+                    project: project,
+                    sessionKey: key,
+                    sessionId: key,
+                    reason: .cancelled,
+                    turnDidError: false,
+                    lastAssistantText: lastAssistantResponseText(in: stateForSession(key).messages)
+                ))
             }
         }
     }
@@ -507,6 +521,43 @@ extension AppState {
         mobilePendingRequests.removeValue(forKey: request.id)
         if let sessionId = request.sessionId {
             broadcastMobileSessionStatus(sessionID: sessionId)
+        }
+
+        // Fan the resolved decision out to hooks. Dispatching here (rather than at
+        // each UI button) means desktop and mobile responses both fire exactly once.
+        let payload = PermissionDecisionPayload(
+            toolUseId: request.id,
+            toolName: request.toolName,
+            sessionId: request.sessionId,
+            projectId: window.selectedProject?.id,
+            decision: Self.permissionDecisionLabel(decision)
+        )
+        if Self.permissionDecisionIsApproval(decision) {
+            await hookManager.dispatchPermissionApprove(payload)
+        } else {
+            await hookManager.dispatchPermissionDenied(payload)
+        }
+    }
+
+    /// Stable, serializable label for a permission decision (for hook payloads).
+    static func permissionDecisionLabel(_ decision: PermissionDecision) -> String {
+        switch decision {
+        case .allow: return "allow"
+        case .deny: return "deny"
+        case .allowSessionTool: return "allowSessionTool"
+        case .allowAlwaysCommand: return "allowAlwaysCommand"
+        case .allowAndSetMode: return "allowAndSetMode"
+        case .denyWithReason: return "denyWithReason"
+        }
+    }
+
+    /// Whether a decision grants the tool call (vs. denies it).
+    static func permissionDecisionIsApproval(_ decision: PermissionDecision) -> Bool {
+        switch decision {
+        case .allow, .allowSessionTool, .allowAlwaysCommand, .allowAndSetMode:
+            return true
+        case .deny, .denyWithReason:
+            return false
         }
     }
 
@@ -737,6 +788,21 @@ extension AppState {
 
         await permission.respond(toolUseId: toolUseId, decision: decision)
 
+        // Fan the plan decision out to hooks (one site → fires once for desktop + mobile).
+        switch action {
+        case .acceptAsk:
+            await hookManager.dispatchPlanAccept(PlanAcceptPayload(toolUseId: toolUseId, sessionKey: key, mode: "ask"))
+        case .acceptWithEdits:
+            await hookManager.dispatchPlanAccept(PlanAcceptPayload(toolUseId: toolUseId, sessionKey: key, mode: "acceptEdits"))
+        case .acceptAutoApprove:
+            await hookManager.dispatchPlanAccept(PlanAcceptPayload(toolUseId: toolUseId, sessionKey: key, mode: "auto"))
+        case .reject:
+            await hookManager.dispatchPlanReject(PlanRejectPayload(toolUseId: toolUseId, sessionKey: key, reason: nil))
+        case .rejectWithFeedback(let reason):
+            let trimmed = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+            await hookManager.dispatchPlanReject(PlanRejectPayload(toolUseId: toolUseId, sessionKey: key, reason: trimmed.isEmpty ? nil : trimmed))
+        }
+
         // When the CLI honors `allowAndSetMode` it continues the same turn — the model
         // executes (or revises) the plan inline and the turn ends naturally. In that
         // case sending a follow-up prompt would spawn a redundant second turn that
@@ -776,15 +842,16 @@ extension AppState {
             guard let planBlockIdx = messages[messageIdx].toolCallIndex(id: toolUseId) else {
                 continue
             }
-            // Same message: any tool-call block after the plan block counts as work.
+            // Same message: any *implementation* tool-call block after the plan block
+            // counts as work.
             let trailingBlocks = messages[messageIdx].blocks.dropFirst(planBlockIdx + 1)
-            if trailingBlocks.contains(where: { $0.toolCall != nil }) {
+            if trailingBlocks.contains(where: Self.isImplementationToolCall) {
                 return true
             }
-            // Subsequent assistant messages: any tool-call block at all.
+            // Subsequent assistant messages: any implementation tool-call block at all.
             if messageIdx + 1 < messages.count {
                 for later in messages[(messageIdx + 1)...] where later.role == .assistant {
-                    if later.blocks.contains(where: { $0.toolCall != nil }) {
+                    if later.blocks.contains(where: Self.isImplementationToolCall) {
                         return true
                     }
                 }
@@ -792,6 +859,19 @@ extension AppState {
             return false
         }
         return false
+    }
+
+    /// True when a block is a tool call that represents actual plan *execution*
+    /// rather than plan *scaffolding*. Re-writing the plan into a
+    /// `~/.claude/plans/*.md` file, or re-emitting `ExitPlanMode`, is the model
+    /// restating the plan — not implementing it — and must not be mistaken for
+    /// "the turn continued", otherwise the "Proceed with the plan." nudge is
+    /// suppressed and the user is left having to re-prompt manually.
+    private static func isImplementationToolCall(_ block: MessageBlock) -> Bool {
+        guard let call = block.toolCall else { return false }
+        if isExitPlanModeCall(call) { return false }
+        if PlanLogic.isPlanFileWrite(call) { return false }
+        return true
     }
 
     /// Prefixes of result strings written by `respondToPlanDecision`. Sourced from

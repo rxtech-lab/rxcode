@@ -3,17 +3,6 @@ import os
 import RxCodeChatKit
 import RxCodeCore
 
-/// Aggregate outcome of running every hook for one trigger. `combinedOutput`
-/// is the concatenated stdout (used to inject start-hook context or to feed a
-/// failing stop hook back to the agent); `hasError` is true if any hook exited
-/// non-zero.
-struct HookBatchResult: Sendable {
-    let combinedOutput: String
-    let hasError: Bool
-
-    static let empty = HookBatchResult(combinedOutput: "", hasError: false)
-}
-
 extension AppState {
     // MARK: - Per-project hook cache (mirrors run profiles)
 
@@ -52,90 +41,6 @@ extension AppState {
     /// rebuilding a persisted hook card on reload.
     static func hookToolName(for name: String) -> String {
         "Hook: \(name.isEmpty ? "Untitled" : name)"
-    }
-
-    /// Run every enabled hook for `trigger`, inserting a live status card into
-    /// the session's message list for each (running spinner → success/error +
-    /// expandable output). Returns the hooks' combined stdout so a caller can
-    /// inject it into the agent's context (used by `beforeSessionStart`).
-    ///
-    /// Inserting via `updateState` means the cards stream to paired mobile
-    /// devices automatically. Whether the cards persist is up to the caller:
-    /// start / before-stop hooks are followed by a `saveSession`; after-stop
-    /// hooks are not, so their cards are shown but not saved ("nothing passed").
-    @discardableResult
-    func runHooks(
-        trigger: HookTrigger,
-        project: Project,
-        sessionKey: String
-    ) async -> HookBatchResult {
-        await ensureHookProfilesLoaded(for: project.id)
-        let hooks = hookProfiles(for: project.id).filter { $0.enabled && $0.trigger == trigger }
-        guard !hooks.isEmpty else { return .empty }
-
-        var combined: [String] = []
-        var anyError = false
-        for hook in hooks {
-            let toolId = UUID().uuidString
-            let messageId = UUID()
-            let toolName = Self.hookToolName(for: hook)
-
-            updateState(sessionKey) { state in
-                let toolCall = ToolCall(
-                    id: toolId,
-                    name: toolName,
-                    input: [
-                        "name": .string(hook.name),
-                        "trigger": .string(hook.trigger.displayName),
-                    ],
-                    result: nil
-                )
-                // Synthetic hook cards are NOT part of the agent's streaming
-                // turn, so they must not carry `isStreaming`. A stop hook runs
-                // after `finalizeStreamSession` has cleared the session-level
-                // `isStreaming`; a trailing message flagged streaming while the
-                // session is not makes `settledOnlyMessages` drop the whole last
-                // assistant run (the real reply + this card) into a streaming
-                // slice that never renders — both vanish. The "running" spinner
-                // is driven by `result == nil` instead (see `ToolResultView`).
-                state.messages.append(ChatMessage(
-                    id: messageId,
-                    role: .assistant,
-                    blocks: [.toolCall(toolCall)],
-                    isStreaming: false
-                ))
-            }
-
-            let result = await HookService.run(hook, project: project)
-            let displayOutput = result.output.isEmpty ? "(no output)" : result.output
-
-            updateState(sessionKey) { state in
-                guard let idx = state.messages.firstIndex(where: { $0.id == messageId }) else { return }
-                state.messages[idx].setToolResult(id: toolId, result: displayOutput, isError: result.isError)
-                state.messages[idx].isStreaming = false
-                state.messages[idx].isResponseComplete = true
-            }
-
-            // Persist this hook as the session's "last hook" so its card can be
-            // rebuilt on reload — hook cards are synthetic and never reach the
-            // CLI transcript. Each hook overwrites the prior row, so the most
-            // recent hook (across triggers) is the one that survives.
-            threadStore.setHookStatus(
-                sessionId: sessionKey,
-                toolId: toolId,
-                name: hook.name,
-                trigger: hook.trigger.displayName,
-                output: displayOutput,
-                isError: result.isError
-            )
-
-            if result.isError { anyError = true }
-            if !result.output.isEmpty {
-                combined.append("### Hook: \(hook.name)\n\(result.output)")
-            }
-        }
-
-        return HookBatchResult(combinedOutput: combined.joined(separator: "\n\n"), hasError: anyError)
     }
 
     /// Rebuild the persisted "last hook" card and append it to a freshly-loaded

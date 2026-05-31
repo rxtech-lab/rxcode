@@ -303,6 +303,22 @@ struct MainView: View {
             )
             .environment(appState)
         }
+        .onChange(of: appState.docsSetupRequest?.id) { _, _ in
+            guard let request = appState.docsSetupRequest else { return }
+            // Start a fresh chat in this project; DocsHook.onSessionStart injects
+            // the docs-publishing skill into its system prompt on first send.
+            appState.pendingDocsSetupProjectId = windowState.selectedProject?.id
+            appState.startNewChat(in: windowState)
+            let repoText = request.repoFullName.map { " for \($0)" } ?? ""
+            let prompt = "Set up documentation publishing\(repoText) by following the docs-publishing skill: inspect the repo, author the docs under docs/, add the uploader script and CI workflow, and tell me exactly what DOCS_UPLOAD_TOKEN to set."
+            appState.docsSetupRequest = nil
+            // Send the prompt straight to the agent — mirror the IDE `send_to_thread`
+            // new-thread flow (AppState.sendCrossProject), which calls sendPrompt
+            // directly rather than routing through the composer's inputText. Going
+            // through inputText lets the composer auto-collapse the long text into
+            // an attachment thumbnail before it's sent.
+            Task { await appState.sendPrompt(prompt, in: windowState) }
+        }
         .sheet(item: Bindable(windowState).diffFile) { file in
             FileDiffView(
                 filePath: file.path,

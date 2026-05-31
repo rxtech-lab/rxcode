@@ -1,0 +1,26 @@
+name: Upload docs to autopilot
+on:
+    push:
+        branches: ["main"]
+        paths:
+            - "docs/**"
+            - "scripts/upload_docs.py"
+            - ".github/workflows/upload-docs.yaml"
+    workflow_dispatch:
+concurrency:
+    group: upload-docs
+    cancel-in-progress: false
+jobs:
+    upload:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v6
+            - uses: actions/setup-python@v6
+              with:
+                  python-version: "3.x"
+            - name: Upload docs
+              env:
+                  DOCS_ENDPOINT: https://autopilot.rxlab.app
+                  DOCS_REPOSITORY_ID: rxtech-lab/rxcode
+                  DOCS_UPLOAD_TOKEN: ${{ secrets.DOCS_UPLOAD_TOKEN }}
+              run: python scripts/upload_docs.py

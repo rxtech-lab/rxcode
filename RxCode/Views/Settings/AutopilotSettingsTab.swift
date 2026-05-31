@@ -13,6 +13,8 @@ struct AutopilotSettingsTab: View {
     @State private var isEnrollingSecrets = false
     @State private var secretsError: String?
 
+    @State private var showManageDocs = false
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -22,6 +24,8 @@ struct AutopilotSettingsTab: View {
                 if appState.isSignedIn {
                     Divider()
                     secretsSection
+                    Divider()
+                    docsSection
                 }
             }
             .padding(24)
@@ -37,7 +41,45 @@ struct AutopilotSettingsTab: View {
             SecretsManageSheet()
                 .environment(appState)
         }
+        .sheet(isPresented: $showManageDocs, onDismiss: {
+            Task { await appState.refreshDocsStatuses() }
+        }) {
+            DocsManageSheet()
+                .environment(appState)
+        }
         .task { await appState.refreshSecretsEnrollment() }
+    }
+
+    // MARK: - Docs Section
+
+    private var docsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Documentation")
+                    .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
+                Text("Index your repositories' docs (design docs, API docs, code docs) so agents and ⌘K can search them. Set up CI to upload docs automatically with an upload token.")
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            secretsCard {
+                HStack(spacing: 12) {
+                    Image(systemName: "books.vertical.fill")
+                        .font(.system(size: ClaudeTheme.size(18)))
+                        .foregroundStyle(ClaudeTheme.accent)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Documentation search")
+                            .font(.system(size: ClaudeTheme.size(13), weight: .medium))
+                        Text("Manage docs repositories, view indexed documents, and create CI upload tokens.")
+                            .font(.system(size: ClaudeTheme.size(11)))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                    Button("Manage Docs") { showManageDocs = true }
+                        .buttonStyle(.borderedProminent)
+                }
+            }
+        }
     }
 
     // MARK: - Secrets Section

@@ -114,6 +114,20 @@ public protocol HookController: AnyObject {
     /// Write decrypted files into a project folder, skipping existing files
     /// unless `overwrite`. Returns the filenames actually written.
     func writeSecrets(_ files: [HookSecretFile], toPath path: String, overwrite: Bool) throws -> [String]
+
+    // MARK: Docs
+
+    /// Whether the repo has documentation indexed in the docs service. Returns
+    /// `nil` when the check can't be completed (signed out, offline, request
+    /// failed) so callers can tell that apart from a genuine "no docs" and avoid
+    /// surfacing a misleading banner.
+    func docsIndexed(repoFullName: String) async -> Bool?
+
+    /// One-shot: if a docs-setup chat was kicked off for `projectId` (via the
+    /// docs banner), returns the docs-publishing skill text to inject as the
+    /// session's system prompt and clears the pending flag. Returns `nil`
+    /// otherwise.
+    func consumePendingDocsSetupSkill(projectId: UUID) -> String?
 }
 
 // MARK: - Banner surfaces

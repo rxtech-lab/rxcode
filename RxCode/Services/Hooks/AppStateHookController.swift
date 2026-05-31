@@ -249,4 +249,25 @@ final class AppStateHookController: HookController {
             overwrite: overwrite
         )
     }
+
+    // MARK: Docs
+
+    func docsIndexed(repoFullName: String) async -> Bool? {
+        guard let app else { return nil }
+        do {
+            let statuses = try await app.docs.statuses(forRepos: [repoFullName])
+            // nil (not false) only on a failed/cancelled check — a successful
+            // lookup that finds no row legitimately means "no docs".
+            return statuses.first(where: { $0.repository.lowercased() == repoFullName.lowercased() })?.hasDocs ?? false
+        } catch {
+            logger.error("docsIndexed failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    func consumePendingDocsSetupSkill(projectId: UUID) -> String? {
+        guard let app, app.pendingDocsSetupProjectId == projectId else { return nil }
+        app.pendingDocsSetupProjectId = nil
+        return DocsSkill.systemPrompt
+    }
 }

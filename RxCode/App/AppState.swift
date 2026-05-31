@@ -443,6 +443,11 @@ final class AppState {
     /// Secret" affordance so it only shows where secrets exist. Memory only.
     var secretsStatusByRepo: [String: SecretsRepoStatus] = [:]
 
+    /// Latest docs status keyed by lowercased `owner/repo`, refreshed in
+    /// `AppState+Docs.swift`. Lets the docs hook decide whether to surface the
+    /// "set up docs" banner without a per-chat round trip. Memory only.
+    var docsStatusByRepo: [String: DocsRepoStatus] = [:]
+
     /// Per-project signature of the last CI failure we already notified / auto-fixed,
     /// so a steady-state red branch doesn't re-fire every 30s. Keyed by project id;
     /// persisted to UserDefaults so a fix isn't re-triggered across relaunches.
@@ -918,12 +923,22 @@ final class AppState {
     /// Non-nil while the secret-setup form should be presented (e.g. opened from
     /// the autopilot `.env` banner's deep link).
     var secretsSetupRequest: SecretsSetupRequest?
+    /// Non-nil while a docs-setup new chat should be started (opened from the
+    /// docs banner's deep link). `MainView` consumes it to start a fresh chat
+    /// seeded with the docs-publishing skill.
+    var docsSetupRequest: DocsSetupRequest?
+    /// One-shot: when a docs-setup chat is kicked off, this holds the project so
+    /// `DocsHook.onSessionStart` injects the docs skill into exactly that chat's
+    /// system prompt, then clears it.
+    @ObservationIgnored var pendingDocsSetupProjectId: UUID?
 
     // MARK: - Services
 
     let rxAuth = RxAuthService.shared
     let autopilot: AutopilotService
     let secrets: SecretsService
+    /// Talks to github-pm's docs API (search, repos, documents, upload tokens).
+    let docs: DocsService
     /// Passkey-derived KEK cache for the secrets feature (macOS only).
     let secretsKeyVault = SecretsKeyVault()
     /// Cached enrollment status for the secrets feature: `nil` = unknown.
@@ -1073,6 +1088,7 @@ final class AppState {
         self.threadStore = ThreadStore.make()
         self.autopilot = AutopilotService(rxAuth: RxAuthService.shared)
         self.secrets = SecretsService(rxAuth: RxAuthService.shared)
+        self.docs = DocsService(rxAuth: RxAuthService.shared)
         self.runService.onTasksChanged = { [weak self] in
             Task { @MainActor [weak self] in
                 self?.broadcastMobileRunTasks()
@@ -1134,6 +1150,7 @@ final class AppState {
         hookManager.register(RemoteConfigNotificationHook())
         #if os(macOS)
         hookManager.register(AutopilotHook())
+        hookManager.register(DocsHook())
         #endif
     }
 

@@ -604,6 +604,10 @@ struct MainWindowRoot: View {
                     .environment(windowState)
                     .environment(chatBridge)
                     .environment(\.openURL, OpenURLAction { url in
+                        if let docs = DocsDeepLink.parse(url), docs.action == .setup {
+                            appState.docsSetupRequest = DocsSetupRequest(repoFullName: docs.repoFullName)
+                            return .handled
+                        }
                         if let request = SecretsDeepLink.parse(url) {
                             appState.secretsSetupRequest = request
                             return .handled
@@ -617,7 +621,9 @@ struct MainWindowRoot: View {
             }
         }
         .onOpenURL { url in
-            if let request = SecretsDeepLink.parse(url) {
+            if let docs = DocsDeepLink.parse(url), docs.action == .setup {
+                appState.docsSetupRequest = DocsSetupRequest(repoFullName: docs.repoFullName)
+            } else if let request = SecretsDeepLink.parse(url) {
                 appState.secretsSetupRequest = request
             }
         }
@@ -683,6 +689,10 @@ struct ProjectWindowRoot: View {
                     .environment(windowState)
                     .environment(chatBridge)
                     .environment(\.openURL, OpenURLAction { url in
+                        if let docs = DocsDeepLink.parse(url), docs.action == .setup {
+                            appState.docsSetupRequest = DocsSetupRequest(repoFullName: docs.repoFullName)
+                            return .handled
+                        }
                         if let request = SecretsDeepLink.parse(url) {
                             appState.secretsSetupRequest = request
                             return .handled

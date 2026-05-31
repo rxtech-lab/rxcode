@@ -11,6 +11,7 @@ struct ProjectTreeView: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.openURL) private var openURL
 
     @State private var expandedProjectIds: Set<UUID> = []
     @State private var renameProject: Project? = nil
@@ -263,7 +264,13 @@ private struct SummarySidebarSection: View {
                             appState.startNewChat(in: windowState)
                         },
                         onDownloadSecret: { downloadSecretProject = project },
-                        hasSecrets: appState.projectHasSecrets(project)
+                        hasSecrets: appState.projectHasSecrets(project),
+                        onSetupDocsSearch: {
+                            guard let repo = project.gitHubRepo,
+                                  let url = DocsDeepLink.setupURL(repo: repo) else { return }
+                            openURL(url)
+                        },
+                        canSetupDocsSearch: project.gitHubRepo != nil
                     )
 
                     if expandedProjectIds.contains(project.id) {
@@ -309,6 +316,8 @@ private struct ProjectTreeRow: View {
     let onNewChat: () -> Void
     let onDownloadSecret: () -> Void
     let hasSecrets: Bool
+    let onSetupDocsSearch: () -> Void
+    let canSetupDocsSearch: Bool
 
     @State private var isHovered = false
     @State private var showLocationPopover = false
@@ -372,25 +381,7 @@ private struct ProjectTreeRow: View {
             // Always reserve space; fade in on hover so layout doesn't shift.
             HStack(spacing: 2) {
                 Menu {
-                    Button { onNewChat() } label: {
-                        Label("New Chat", systemImage: "square.and.pencil")
-                    }
-                    Button { onOpenInNewWindow() } label: {
-                        Label("Open in New Window", systemImage: "macwindow.badge.plus")
-                    }
-                    Divider()
-                    if hasSecrets {
-                        Button { onDownloadSecret() } label: {
-                            Label("Download Secret", systemImage: "key.fill")
-                        }
-                        Divider()
-                    }
-                    Button { onRename() } label: {
-                        Label("Rename Project", systemImage: "pencil")
-                    }
-                    Button(role: .destructive) { onDelete() } label: {
-                        Label("Delete Project", systemImage: "trash")
-                    }
+                    projectMenuItems
                 } label: {
                     Image(systemName: "ellipsis")
                         .font(.system(size: ClaudeTheme.size(11), weight: .semibold))
@@ -434,35 +425,39 @@ private struct ProjectTreeRow: View {
             onOpenInNewWindow()
         }
         .contextMenu {
-            Button {
-                onNewChat()
-            } label: {
-                Label("New Chat", systemImage: "square.and.pencil")
+            projectMenuItems
+        }
+    }
+
+    /// Shared items for both the "More" (ellipsis) menu and the right-click
+    /// context menu so the two stay in sync.
+    @ViewBuilder
+    private var projectMenuItems: some View {
+        Button { onNewChat() } label: {
+            Label("New Chat", systemImage: "square.and.pencil")
+        }
+        Button { onOpenInNewWindow() } label: {
+            Label("Open in New Window", systemImage: "macwindow.badge.plus")
+        }
+        Divider()
+        if canSetupDocsSearch {
+            Button { onSetupDocsSearch() } label: {
+                Label("Set Up Docs Search", systemImage: "books.vertical.fill")
             }
-            Button {
-                onOpenInNewWindow()
-            } label: {
-                Label("Open in New Window", systemImage: "macwindow.badge.plus")
+        }
+        if hasSecrets {
+            Button { onDownloadSecret() } label: {
+                Label("Download Secret", systemImage: "key.fill")
             }
+        }
+        if canSetupDocsSearch || hasSecrets {
             Divider()
-            if hasSecrets {
-                Button {
-                    onDownloadSecret()
-                } label: {
-                    Label("Download Secret", systemImage: "key.fill")
-                }
-                Divider()
-            }
-            Button {
-                onRename()
-            } label: {
-                Label("Rename Project", systemImage: "pencil")
-            }
-            Button(role: .destructive) {
-                onDelete()
-            } label: {
-                Label("Delete Project", systemImage: "trash")
-            }
+        }
+        Button { onRename() } label: {
+            Label("Rename Project", systemImage: "pencil")
+        }
+        Button(role: .destructive) { onDelete() } label: {
+            Label("Delete Project", systemImage: "trash")
         }
     }
 }

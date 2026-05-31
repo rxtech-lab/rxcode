@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 /// The capabilities a hook may use to act on the thread / IDE. This is the
 /// single seam between hooks and the host app (`AppState`): hooks never touch
@@ -50,4 +51,34 @@ public protocol HookController: AnyObject {
     func postMCPDisconnected(name: String, error: String?) async
     func postCIFailed(projectName: String?, projectId: UUID?, failingWorkflowNames: [String]) async
     func postRemoteConfigChanged(title: String, body: String) async
+
+    // MARK: Interactive UI
+
+    /// Show the hook loading dialog with an initial status line (e.g. while an
+    /// async hook does its work). Idempotent — calling again just updates text.
+    func beginProgress(_ status: LocalizedStringKey)
+    /// Update the status line of the visible loading dialog.
+    func updateProgress(_ status: LocalizedStringKey)
+    /// Dismiss the loading dialog.
+    func endProgress()
+
+    /// Present a single-choice picker and suspend until the user picks (returns
+    /// the chosen `HookChoice.id`) or cancels (returns `nil`).
+    func requestChoice(title: LocalizedStringKey, choices: [HookChoice]) async -> String?
+
+    /// Present a confirm/cancel dialog; returns `true` if confirmed. `detail`
+    /// carries dynamic, non-localizable text (e.g. a list of filenames).
+    func requestConfirmation(title: LocalizedStringKey, detail: String?) async -> Bool
+
+    // MARK: Secrets
+
+    /// Environments configured for a repo in autopilot. Returns `[]` when there
+    /// are none, the user is signed out, or the request fails.
+    func secretEnvironments(repoFullName: String) async -> [HookChoice]
+    /// Download + decrypt an environment's files (may prompt for the passkey).
+    /// Does not write anything to disk.
+    func fetchSecrets(repoFullName: String, env: String) async throws -> [HookSecretFile]
+    /// Write decrypted files into a project folder, skipping existing files
+    /// unless `overwrite`. Returns the filenames actually written.
+    func writeSecrets(_ files: [HookSecretFile], toPath path: String, overwrite: Bool) throws -> [String]
 }

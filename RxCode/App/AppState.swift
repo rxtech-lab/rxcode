@@ -903,6 +903,16 @@ final class AppState {
     /// half-loaded projects/sessions.
     var isInitialized = false
 
+    // MARK: - Hook-driven UI
+
+    /// Non-nil while a hook is showing the loading dialog; the value is the
+    /// status line the hook is currently displaying.
+    var hookProgressStatus: LocalizedStringKey?
+    /// Non-nil while a hook is awaiting the user's pick from a choice sheet.
+    var hookChoiceRequest: HookChoiceRequest?
+    /// Non-nil while a hook is awaiting a confirm/cancel decision.
+    var hookConfirmRequest: HookConfirmRequest?
+
     // MARK: - Services
 
     let rxAuth = RxAuthService.shared
@@ -1116,6 +1126,9 @@ final class AppState {
         hookManager.register(MCPNotificationHook())
         hookManager.register(CINotificationHook())
         hookManager.register(RemoteConfigNotificationHook())
+        #if os(macOS)
+        hookManager.register(SecretsAutoDownloadHook())
+        #endif
     }
 
 

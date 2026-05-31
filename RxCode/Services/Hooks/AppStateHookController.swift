@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 import os
 import RxCodeCore
+import SwiftUI
 
 /// Concrete `HookController` backed by `AppState`. This is the *only* type
 /// allowed to reach into app internals on a hook's behalf; hooks themselves
@@ -113,5 +114,63 @@ final class AppStateHookController: HookController {
 
     func postRemoteConfigChanged(title: String, body: String) async {
         await NotificationService.shared.postRemoteConfigChanged(title: title, body: body)
+    }
+
+    // MARK: Interactive UI
+
+    func beginProgress(_ status: LocalizedStringKey) {
+        app?.hookProgressStatus = status
+    }
+
+    func updateProgress(_ status: LocalizedStringKey) {
+        app?.hookProgressStatus = status
+    }
+
+    func endProgress() {
+        app?.hookProgressStatus = nil
+    }
+
+    func requestChoice(title: LocalizedStringKey, choices: [HookChoice]) async -> String? {
+        guard let app else { return nil }
+        return await withCheckedContinuation { cont in
+            app.hookChoiceRequest = HookChoiceRequest(title: title, choices: choices, cont: cont)
+        }
+    }
+
+    func requestConfirmation(title: LocalizedStringKey, detail: String?) async -> Bool {
+        guard let app else { return false }
+        return await withCheckedContinuation { cont in
+            app.hookConfirmRequest = HookConfirmRequest(title: title, detail: detail, cont: cont)
+        }
+    }
+
+    // MARK: Secrets
+
+    func secretEnvironments(repoFullName: String) async -> [HookChoice] {
+        guard let app else { return [] }
+        do {
+            let envs = try await app.secrets.listEnvironments(repo: repoFullName).items
+            return envs.map { HookChoice(id: $0.id, label: $0.name) }
+        } catch {
+            logger.error("secretEnvironments failed: \(error.localizedDescription)")
+            return []
+        }
+    }
+
+    func fetchSecrets(repoFullName: String, env: String) async throws -> [HookSecretFile] {
+        guard let app else { return [] }
+        let bundle = try await app.secrets.bundle(repo: repoFullName, env: env)
+        let files = try await app.decryptSecretBundle(bundle)
+        return files.map { HookSecretFile(filename: $0.filename, content: $0.content) }
+    }
+
+    func writeSecrets(_ files: [HookSecretFile], toPath path: String, overwrite: Bool) throws -> [String] {
+        guard let app else { return [] }
+        let directory = URL(fileURLWithPath: path, isDirectory: true)
+        return try app.writeDecryptedSecrets(
+            files.map { (filename: $0.filename, content: $0.content) },
+            to: directory,
+            overwrite: overwrite
+        )
     }
 }

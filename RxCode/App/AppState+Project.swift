@@ -395,9 +395,12 @@ extension AppState {
         }
         let cloneURL = repo.isPrivate ? repo.sshUrl : repo.cloneUrl
         try await gitClone(from: cloneURL, to: clonePath)
-        // Suppress the generic "added" event — a clone is a more specific event.
+        // A clone fires BOTH `onRepositoryAdded` (so add-time hooks like secret
+        // auto-download run for clones too) and the more specific
+        // `onRepositoryCloned`. No built-in hook handles both, so there is no
+        // double-processing.
         let project = await addAndSelectProject(
-            name: repo.name, path: clonePath, gitHubRepo: repo.fullName, suppressAddedHook: true, in: window
+            name: repo.name, path: clonePath, gitHubRepo: repo.fullName, in: window
         )
         if let project {
             await hookManager.dispatchRepositoryCloned(RepositoryPayload(project: project, wasCloned: true))

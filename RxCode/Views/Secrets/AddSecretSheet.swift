@@ -1,3 +1,4 @@
+import AppKit
 import RxCodeCore
 import SwiftUI
 import UniformTypeIdentifiers
@@ -25,7 +26,6 @@ struct AddSecretSheet: View {
     @State private var source: Source = .manual
     @State private var detected: [DetectedEnv] = []
     @State private var selectedDetected: Set<String> = []
-    @State private var showFileImporter = false
     @State private var pickedFilename = ""
     @State private var pickedContent = ""
     @State private var manualFilename = ".env"
@@ -118,7 +118,7 @@ struct AddSecretSheet: View {
     @ViewBuilder private var fileView: some View {
         VStack(alignment: .leading, spacing: 8) {
             Button {
-                showFileImporter = true
+                pickFile()
             } label: {
                 Label(pickedFilename.isEmpty ? "Choose File…" : pickedFilename, systemImage: "folder")
             }
@@ -128,22 +128,33 @@ struct AddSecretSheet: View {
                     Text("Will overwrite the existing \(pickedFilename).")
                         .font(.caption).foregroundStyle(.orange)
                 }
+                TextEditor(text: $pickedContent)
+                    .font(.system(.body, design: .monospaced))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(Color.secondary.opacity(0.3))
+                    )
             }
         }
-        .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [.data, .text, .plainText]) { result in
-            switch result {
-            case .success(let url):
-                let didAccess = url.startAccessingSecurityScopedResource()
-                defer { if didAccess { url.stopAccessingSecurityScopedResource() } }
-                if let data = try? Data(contentsOf: url) {
-                    pickedFilename = url.lastPathComponent
-                    pickedContent = String(decoding: data, as: UTF8.self)
-                } else {
-                    errorMessage = "Couldn't read the selected file."
-                }
-            case .failure(let error):
-                errorMessage = error.localizedDescription
-            }
+    }
+
+    /// Opens an `NSOpenPanel` instead of SwiftUI's `.fileImporter` so hidden
+    /// dotfiles like `.env` are selectable (`.fileImporter` cannot show them).
+    private func pickFile() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.showsHiddenFiles = true
+        panel.treatsFilePackagesAsDirectories = false
+        panel.allowedContentTypes = [.data, .text, .plainText]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        if let data = try? Data(contentsOf: url) {
+            pickedFilename = url.lastPathComponent
+            pickedContent = String(decoding: data, as: UTF8.self)
+        } else {
+            errorMessage = "Couldn't read the selected file."
         }
     }
 

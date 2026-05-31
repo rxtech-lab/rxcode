@@ -842,15 +842,16 @@ extension AppState {
             guard let planBlockIdx = messages[messageIdx].toolCallIndex(id: toolUseId) else {
                 continue
             }
-            // Same message: any tool-call block after the plan block counts as work.
+            // Same message: any *implementation* tool-call block after the plan block
+            // counts as work.
             let trailingBlocks = messages[messageIdx].blocks.dropFirst(planBlockIdx + 1)
-            if trailingBlocks.contains(where: { $0.toolCall != nil }) {
+            if trailingBlocks.contains(where: Self.isImplementationToolCall) {
                 return true
             }
-            // Subsequent assistant messages: any tool-call block at all.
+            // Subsequent assistant messages: any implementation tool-call block at all.
             if messageIdx + 1 < messages.count {
                 for later in messages[(messageIdx + 1)...] where later.role == .assistant {
-                    if later.blocks.contains(where: { $0.toolCall != nil }) {
+                    if later.blocks.contains(where: Self.isImplementationToolCall) {
                         return true
                     }
                 }
@@ -858,6 +859,19 @@ extension AppState {
             return false
         }
         return false
+    }
+
+    /// True when a block is a tool call that represents actual plan *execution*
+    /// rather than plan *scaffolding*. Re-writing the plan into a
+    /// `~/.claude/plans/*.md` file, or re-emitting `ExitPlanMode`, is the model
+    /// restating the plan — not implementing it — and must not be mistaken for
+    /// "the turn continued", otherwise the "Proceed with the plan." nudge is
+    /// suppressed and the user is left having to re-prompt manually.
+    private static func isImplementationToolCall(_ block: MessageBlock) -> Bool {
+        guard let call = block.toolCall else { return false }
+        if isExitPlanModeCall(call) { return false }
+        if PlanLogic.isPlanFileWrite(call) { return false }
+        return true
     }
 
     /// Prefixes of result strings written by `respondToPlanDecision`. Sourced from

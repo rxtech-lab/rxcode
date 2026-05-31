@@ -466,7 +466,7 @@ struct BriefingView: View {
             copyButton(for: group)
 
             if let project {
-                cardMenu(for: project)
+                cardMenu(for: group, project: project)
             }
         }
     }
@@ -533,7 +533,28 @@ struct BriefingView: View {
         return lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func cardMenu(for project: Project) -> some View {
+    /// GitHub destination for a briefing card's "Open on GitHub" action. Prefers
+    /// the pull request associated with the branch (mirroring the menu bar
+    /// extra), and falls back to the repository page when no PR is known.
+    private func gitHubURL(for group: BriefingGroup, project: Project) -> URL? {
+        let _ = appState.ciStatusRevision
+        if currentBranchByProject[group.projectId] == group.branch,
+           let status = appState.ciStatusByProject[group.projectId],
+           let prNumber = status.prNumber {
+            return URL(string: "https://github.com/\(status.owner)/\(status.repo)/pull/\(prNumber)")
+        }
+        guard let ownerRepo = project.gitHubRepo else { return nil }
+        return gitHubWebURL(forOwnerRepo: ownerRepo)
+    }
+
+    /// True when the GitHub action for this card points at a pull request.
+    private func gitHubURLIsPullRequest(for group: BriefingGroup) -> Bool {
+        let _ = appState.ciStatusRevision
+        return currentBranchByProject[group.projectId] == group.branch
+            && appState.ciStatusByProject[group.projectId]?.prNumber != nil
+    }
+
+    private func cardMenu(for group: BriefingGroup, project: Project) -> some View {
         Menu {
             Button {
                 if windowState.selectedProject?.id != project.id {
@@ -550,6 +571,16 @@ struct BriefingView: View {
                 }
             } label: {
                 Label("Open Project", systemImage: "folder")
+            }
+
+            if let url = gitHubURL(for: group, project: project) {
+                Divider()
+                Link(destination: url) {
+                    Label(
+                        gitHubURLIsPullRequest(for: group) ? "Open Pull Request" : "Open on GitHub",
+                        systemImage: "arrow.up.forward.square"
+                    )
+                }
             }
         } label: {
             Image(systemName: "ellipsis")

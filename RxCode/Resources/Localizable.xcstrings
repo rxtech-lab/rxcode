@@ -241,6 +241,12 @@
         }
       }
     },
+    "%lld B" : {
+
+    },
+    "%lld bytes" : {
+
+    },
     "%lld changed" : {
       "localizations" : {
         "zh-Hans" : {
@@ -295,6 +301,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "不活跃 %1$lld 天%2$@"
+          }
+        }
+      }
+    },
+    "%lld env · %lld secrets" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld env · %2$lld secrets"
           }
         }
       }
@@ -785,6 +801,9 @@
         }
       }
     },
+    "Add Secret" : {
+
+    },
     "Add server" : {
       "localizations" : {
         "zh-Hans" : {
@@ -969,6 +988,9 @@
           }
         }
       }
+    },
+    "All secrets in this environment will be permanently deleted." : {
+
     },
     "All sessions in the current project will be deleted. This action cannot be undone." : {
       "localizations" : {
@@ -1676,6 +1698,9 @@
         }
       }
     },
+    "Checking enrollment…" : {
+
+    },
     "Checking..." : {
       "localizations" : {
         "en" : {
@@ -2301,6 +2326,9 @@
         }
       }
     },
+    "Create" : {
+
+    },
     "Create and checkout" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2331,6 +2359,9 @@
         }
       }
     },
+    "Create your encryption key. You'll authenticate with your passkey; the key is derived from it and used to protect your secrets." : {
+
+    },
     "Creating…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2340,6 +2371,9 @@
           }
         }
       }
+    },
+    "Current" : {
+
     },
     "Current branch" : {
       "localizations" : {
@@ -2414,6 +2448,12 @@
           }
         }
       }
+    },
+    "Decrypting…" : {
+
+    },
+    "Decrypts with your passkey and writes the .env file(s) into the project folder." : {
+
     },
     "Default" : {
       "localizations" : {
@@ -2597,6 +2637,9 @@
         }
       }
     },
+    "Delete Environment" : {
+
+    },
     "Delete Hook" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2669,6 +2712,9 @@
         }
       }
     },
+    "Delete Secret" : {
+
+    },
     "Delete Session" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2678,6 +2724,9 @@
           }
         }
       }
+    },
+    "Deleting \"%@\"…" : {
+
     },
     "Deny" : {
       "localizations" : {
@@ -2842,6 +2891,9 @@
         }
       }
     },
+    "Download" : {
+
+    },
     "Download APK" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2871,6 +2923,9 @@
           }
         }
       }
+    },
+    "Download Secret" : {
+
     },
     "Duplicate Hook" : {
       "localizations" : {
@@ -3081,6 +3136,12 @@
         }
       }
     },
+    "Encrypt & Upload" : {
+
+    },
+    "Encryption enabled" : {
+
+    },
     "Endpoint" : {
       "localizations" : {
         "zh-Hans" : {
@@ -3090,6 +3151,9 @@
           }
         }
       }
+    },
+    "Enroll with Passkey" : {
+
     },
     "Enter a new name for this device." : {
       "localizations" : {
@@ -3359,6 +3423,9 @@
           }
         }
       }
+    },
+    "Filename" : {
+
     },
     "Files" : {
       "localizations" : {
@@ -4076,6 +4143,9 @@
         }
       }
     },
+    "Letters, numbers, dot, dash and underscore. Max 32 characters." : {
+
+    },
     "Lifecycle" : {
       "localizations" : {
         "zh-Hans" : {
@@ -4105,6 +4175,9 @@
           }
         }
       }
+    },
+    "Load more" : {
+
     },
     "Loading catalog..." : {
       "localizations" : {
@@ -4361,6 +4434,12 @@
           }
         }
       }
+    },
+    "Manage Secrets" : {
+
+    },
+    "Manage your repositories, environments, and secrets." : {
+
     },
     "Manual key/value pairs" : {
       "localizations" : {
@@ -4658,6 +4737,9 @@
         }
       }
     },
+    "Name (e.g. prod)" : {
+
+    },
     "New Chat" : {
       "localizations" : {
         "en" : {
@@ -4689,6 +4771,9 @@
           }
         }
       }
+    },
+    "New Environment" : {
+
     },
     "New Hook" : {
       "extractionState" : "stale",
@@ -4741,6 +4826,9 @@
           }
         }
       }
+    },
+    "No .env files found in the project folder." : {
+
     },
     "No active runs" : {
       "localizations" : {
@@ -4896,6 +4984,12 @@
           }
         }
       }
+    },
+    "No environments found for this repository. Add secrets from Settings → Secrets first." : {
+
+    },
+    "No environments yet. Create one to store secrets." : {
+
     },
     "No hooks yet" : {
       "localizations" : {
@@ -5066,6 +5160,9 @@
     "No repos match “%@”" : {
 
     },
+    "No repositories found." : {
+
+    },
     "No results for '%@'" : {
       "localizations" : {
         "en" : {
@@ -5109,6 +5206,9 @@
           }
         }
       }
+    },
+    "No secrets yet. Add a .env file or enter values manually." : {
+
     },
     "No servers" : {
       "localizations" : {
@@ -5214,6 +5314,12 @@
       }
     },
     "Not signed in" : {
+
+    },
+    "Not yet managed" : {
+
+    },
+    "Nothing written (files already exist)." : {
 
     },
     "Notifications" : {
@@ -5355,6 +5461,9 @@
         }
       }
     },
+    "Open on GitHub" : {
+
+    },
     "Open Project" : {
       "localizations" : {
         "zh-Hans" : {
@@ -5384,6 +5493,9 @@
           }
         }
       }
+    },
+    "Open Pull Request" : {
+
     },
     "Open RxCode" : {
       "localizations" : {
@@ -5497,6 +5609,12 @@
           }
         }
       }
+    },
+    "Overwrite existing files" : {
+
+    },
+    "overwrites" : {
+
     },
     "Package" : {
 
@@ -6838,6 +6956,9 @@
         }
       }
     },
+    "Search repositories" : {
+
+    },
     "Search skills..." : {
       "localizations" : {
         "en" : {
@@ -6879,6 +7000,9 @@
           }
         }
       }
+    },
+    "Secrets" : {
+
     },
     "Select a Project" : {
       "localizations" : {
@@ -7124,6 +7248,9 @@
           }
         }
       }
+    },
+    "Set up encryption" : {
+
     },
     "Set up your first MCP server" : {
       "localizations" : {
@@ -7499,7 +7626,6 @@
       }
     },
     "Source" : {
-      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -7558,6 +7684,9 @@
           }
         }
       }
+    },
+    "Store .env files end-to-end encrypted with your passkey. Secrets are encrypted on this device and never leave it unencrypted." : {
+
     },
     "streaming stops" : {
       "extractionState" : "stale",
@@ -7767,6 +7896,9 @@
           }
         }
       }
+    },
+    "This project isn't linked to a GitHub repository, so it has no secrets to download." : {
+
     },
     "This session will be deleted. This action cannot be undone." : {
       "localizations" : {
@@ -8259,6 +8391,9 @@
     "When CI fails on a project's current branch, automatically start a thread so an agent can fix it. CI failures are always notified; this only controls the automatic fix." : {
 
     },
+    "Will overwrite the existing %@." : {
+
+    },
     "Wipe cached embeddings and re-embed every thread for semantic search. Use this if global search results look stale or empty." : {
       "localizations" : {
         "zh-Hans" : {
@@ -8291,6 +8426,9 @@
           }
         }
       }
+    },
+    "Wrote %@ to the project." : {
+
     },
     "wss://relay.example.com" : {
       "localizations" : {

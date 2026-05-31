@@ -401,6 +401,7 @@ extension AppState {
             _ = autoPreviewSettings
             _ = branchBriefingRevision
             _ = threadSummaryRevision
+            _ = ciStatusRevision
             _ = projects.count
             _ = allSessionSummaries.count
             _ = latestRateLimitUsage

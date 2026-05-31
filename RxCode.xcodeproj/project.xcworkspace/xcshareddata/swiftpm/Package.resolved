@@ -132,8 +132,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/rxtech-lab/RxAuthSwift",
       "state" : {
-        "branch" : "main",
-        "revision" : "31e20effc3215c7656ec1543a27a1dcc2a9b0ccf"
+        "revision" : "f1bc8a1004c58f7eae628eaf8ae705e4f8c21c51",
+        "version" : "1.1.1"
       }
     },
     {

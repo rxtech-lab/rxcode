@@ -39,6 +39,24 @@ struct MobileBriefingDetailView: View {
                 .accessibilityLabel("New Thread")
                 .accessibilityIdentifier("briefing-detail-new-thread")
             }
+
+            if let gitHubURL {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Link(destination: gitHubURL) {
+                            Label(
+                                gitHubURLIsPullRequest ? "Open Pull Request" : "Open on GitHub",
+                                systemImage: "arrow.up.forward.square"
+                            )
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 16, weight: .medium))
+                    }
+                    .accessibilityLabel("Project actions")
+                    .accessibilityIdentifier("briefing-detail-actions")
+                }
+            }
         }
         .sheet(isPresented: $showingNewThread) {
             NewThreadSheet(
@@ -76,8 +94,31 @@ struct MobileBriefingDetailView: View {
         state.projects.first(where: { $0.id == groupKey.projectId })?.name ?? "Unknown Project"
     }
 
+    /// GitHub destination for the "Open on GitHub" action. Prefers the pull
+    /// request associated with the branch (mirroring the menu bar extra), and
+    /// falls back to the repository page when no PR is known.
+    private var gitHubURL: URL? {
+        if let status = ciStatus, let prNumber = status.prNumber {
+            return URL(string: "https://github.com/\(status.owner)/\(status.repo)/pull/\(prNumber)")
+        }
+        guard let repo = state.projects.first(where: { $0.id == groupKey.projectId })?.gitHubRepo else {
+            return nil
+        }
+        return gitHubWebURL(forOwnerRepo: repo)
+    }
+
+    /// True when the GitHub action points at a pull request rather than the repo.
+    private var gitHubURLIsPullRequest: Bool {
+        ciStatus?.prNumber != nil
+    }
+
     private var isUnknownBranch: Bool {
         groupKey.branch.lowercased() == "unknown"
+    }
+
+    private var ciStatus: ProjectCIStatus? {
+        guard state.projectBranches[groupKey.projectId] == groupKey.branch else { return nil }
+        return state.ciStatusByProject[groupKey.projectId]
     }
 
     private func initializeGit() {
@@ -148,6 +189,10 @@ struct MobileBriefingDetailView: View {
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .background(.ultraThinMaterial, in: Capsule())
+                    }
+
+                    if let ciStatus {
+                        MobileCIStatusChip(status: ciStatus, linksFailingRun: true)
                     }
 
                     // Updated time

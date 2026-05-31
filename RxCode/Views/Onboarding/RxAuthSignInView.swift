@@ -28,6 +28,10 @@ struct RxAuthSignInView: View {
             },
             onAuthFailed: { error in
                 Self.logger.error("rxauth sign-in failed: \(String(describing: error), privacy: .public) — manager.errorMessage=\(manager.errorMessage ?? "<nil>", privacy: .public)")
+                AnalyticsService.shared.log(.passkeySignInError, parameters: [
+                    "message": manager.errorMessage ?? error.localizedDescription,
+                    "error": String(describing: error),
+                ])
             }
         )
         .onAppear {

@@ -107,8 +107,10 @@ extension AppState {
         }
 
         // Drop status for projects no longer queried (e.g. removed).
-        ciStatusByProject = next
-        ciStatusRevision &+= 1
+        if next != ciStatusByProject {
+            ciStatusByProject = next
+            ciStatusRevision &+= 1
+        }
     }
 
     // MARK: - Failure handling

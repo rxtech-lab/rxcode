@@ -277,6 +277,11 @@ final class NotificationService: NSObject {
         // Notification banners (the APNs alert and the macOS local banner) render
         // Markdown syntax literally, so strip it from the assistant-summary body.
         let cleanBody = stripMarkdown(body)
+        if cleanBody.isEmpty {
+            logger.warning("[Notification] response-complete body empty after strip (incomingLen=\(body.count, privacy: .public)) — substituting \"Response complete\" fallback session=\(sessionId, privacy: .public)")
+        } else {
+            logger.info("[Notification] response-complete cleanBodyLen=\(cleanBody.count, privacy: .public) session=\(sessionId, privacy: .public)")
+        }
         await fanoutToMobile(.init(
             kind: .responseComplete,
             title: title,

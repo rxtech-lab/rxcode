@@ -4,6 +4,9 @@
     "" : {
 
     },
+    "-- --port 3000" : {
+
+    },
     "%@ · %lld model%@" : {
       "localizations" : {
         "en" : {
@@ -1458,6 +1461,9 @@
         }
       }
     },
+    "Custom Script" : {
+
+    },
     "Custom Sources" : {
       "localizations" : {
         "en" : {
@@ -2122,6 +2128,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "发送停止请求失败：%@"
+          }
+        }
+      }
+    },
+    "Failing" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Failing"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "失败"
           }
         }
       }
@@ -3112,6 +3134,22 @@
         }
       }
     },
+    "No status" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "No status"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无状态"
+          }
+        }
+      }
+    },
     "No summary available yet" : {
       "localizations" : {
         "en" : {
@@ -3297,6 +3335,22 @@
         }
       }
     },
+    "Open failing CI run" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Open failing CI run"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开失败的 CI 运行"
+          }
+        }
+      }
+    },
     "Open in Browser" : {
       "localizations" : {
         "en" : {
@@ -3312,6 +3366,12 @@
           }
         }
       }
+    },
+    "Open on GitHub" : {
+
+    },
+    "Open Pull Request" : {
+
     },
     "Opens todos and thread summary" : {
       "localizations" : {
@@ -3330,6 +3390,15 @@
       }
     },
     "Optional xcodebuild destination" : {
+
+    },
+    "Package" : {
+
+    },
+    "Package Configuration" : {
+
+    },
+    "Package Manager" : {
 
     },
     "Pair New Mac" : {
@@ -3408,6 +3477,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在与 Mac 配对…"
+          }
+        }
+      }
+    },
+    "Passing" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Passing"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通过"
           }
         }
       }
@@ -3497,6 +3582,9 @@
           }
         }
       }
+    },
+    "Project actions" : {
+
     },
     "Project root" : {
 
@@ -3830,6 +3918,22 @@
         }
       }
     },
+    "Running" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Running"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运行中"
+          }
+        }
+      }
+    },
     "Runs" : {
       "localizations" : {
         "en" : {
@@ -3979,6 +4083,9 @@
           }
         }
       }
+    },
+    "Script" : {
+
     },
     "Scroll to bottom" : {
       "localizations" : {

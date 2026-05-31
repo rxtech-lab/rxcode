@@ -23,6 +23,7 @@ struct ProjectTreeView: View {
     @State private var archiveSession: ChatSession? = nil
 
     @State private var showAllChatsSheet = false
+    @State private var downloadSecretProject: Project? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -125,6 +126,10 @@ struct ProjectTreeView: View {
         .sheet(isPresented: $showAllChatsSheet) {
             AllChatsHistorySheet(isPresented: $showAllChatsSheet)
         }
+        .sheet(item: $downloadSecretProject) { project in
+            SecretsDownloadSheet(project: project)
+                .environment(appState)
+        }
         .onChange(of: windowState.selectedProject?.id) { _, newId in
             if let newId { expandedProjectIds.insert(newId) }
         }
@@ -132,6 +137,9 @@ struct ProjectTreeView: View {
             if let id = windowState.selectedProject?.id {
                 expandedProjectIds.insert(id)
             }
+        }
+        .task(id: appState.projects.map { $0.gitHubRepo ?? "" }.joined(separator: ",")) {
+            await appState.refreshSecretsStatuses()
         }
     }
 
@@ -253,7 +261,9 @@ private struct SummarySidebarSection: View {
                         onNewChat: {
                             appState.selectProject(project, in: windowState)
                             appState.startNewChat(in: windowState)
-                        }
+                        },
+                        onDownloadSecret: { downloadSecretProject = project },
+                        hasSecrets: appState.projectHasSecrets(project)
                     )
 
                     if expandedProjectIds.contains(project.id) {
@@ -297,6 +307,8 @@ private struct ProjectTreeRow: View {
     let onRename: () -> Void
     let onDelete: () -> Void
     let onNewChat: () -> Void
+    let onDownloadSecret: () -> Void
+    let hasSecrets: Bool
 
     @State private var isHovered = false
     @State private var showLocationPopover = false
@@ -367,6 +379,12 @@ private struct ProjectTreeRow: View {
                         Label("Open in New Window", systemImage: "macwindow.badge.plus")
                     }
                     Divider()
+                    if hasSecrets {
+                        Button { onDownloadSecret() } label: {
+                            Label("Download Secret", systemImage: "key.fill")
+                        }
+                        Divider()
+                    }
                     Button { onRename() } label: {
                         Label("Rename Project", systemImage: "pencil")
                     }
@@ -427,6 +445,14 @@ private struct ProjectTreeRow: View {
                 Label("Open in New Window", systemImage: "macwindow.badge.plus")
             }
             Divider()
+            if hasSecrets {
+                Button {
+                    onDownloadSecret()
+                } label: {
+                    Label("Download Secret", systemImage: "key.fill")
+                }
+                Divider()
+            }
             Button {
                 onRename()
             } label: {

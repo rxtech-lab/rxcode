@@ -912,6 +912,12 @@ final class AppState {
     var hookChoiceRequest: HookChoiceRequest?
     /// Non-nil while a hook is awaiting a confirm/cancel decision.
     var hookConfirmRequest: HookConfirmRequest?
+    /// Hook-supplied banners, keyed by surface. Each surface renders its items
+    /// at their requested position (see `HookBannerHost`).
+    var hookBanners: [HookBannerSurface: [HookBannerItem]] = [:]
+    /// Non-nil while the secret-setup form should be presented (e.g. opened from
+    /// the autopilot `.env` banner's deep link).
+    var secretsSetupRequest: SecretsSetupRequest?
 
     // MARK: - Services
 
@@ -1127,7 +1133,7 @@ final class AppState {
         hookManager.register(CINotificationHook())
         hookManager.register(RemoteConfigNotificationHook())
         #if os(macOS)
-        hookManager.register(SecretsAutoDownloadHook())
+        hookManager.register(AutopilotHook())
         #endif
     }
 

@@ -27,8 +27,16 @@ final class HookManager {
     // MARK: - Session lifecycle
 
     func dispatchProjectNewChatStart(_ payload: NewChatStartPayload) async {
+        logger.debug("[Hook] dispatchProjectNewChatStart: projectId=\(payload.projectId.uuidString, privacy: .public) enabledHooks=\(self.enabledHooks.map(\.hookID).joined(separator: ","), privacy: .public)")
         for hook in enabledHooks {
             _ = await hook.onProjectNewChatStart(payload, controller: controller)
+        }
+    }
+
+    func dispatchProjectDelete(_ payload: ProjectDeletePayload) async {
+        logger.debug("[Hook] dispatchProjectDelete: projectId=\(payload.project.id.uuidString, privacy: .public)")
+        for hook in enabledHooks {
+            _ = await hook.onProjectDelete(payload, controller: controller)
         }
     }
 

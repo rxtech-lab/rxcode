@@ -604,12 +604,21 @@ struct MainWindowRoot: View {
                     .environment(windowState)
                     .environment(chatBridge)
                     .environment(\.openURL, OpenURLAction { url in
-                        openMarkdownLink(url, in: windowState)
+                        if let request = SecretsDeepLink.parse(url) {
+                            appState.secretsSetupRequest = request
+                            return .handled
+                        }
+                        return openMarkdownLink(url, in: windowState)
                     })
                     .transition(.opacity)
             } else {
                 LoadingView()
                     .transition(.opacity)
+            }
+        }
+        .onOpenURL { url in
+            if let request = SecretsDeepLink.parse(url) {
+                appState.secretsSetupRequest = request
             }
         }
         .animation(.easeInOut(duration: 0.3), value: appState.isInitialized)
@@ -674,7 +683,11 @@ struct ProjectWindowRoot: View {
                     .environment(windowState)
                     .environment(chatBridge)
                     .environment(\.openURL, OpenURLAction { url in
-                        openMarkdownLink(url, in: windowState)
+                        if let request = SecretsDeepLink.parse(url) {
+                            appState.secretsSetupRequest = request
+                            return .handled
+                        }
+                        return openMarkdownLink(url, in: windowState)
                     })
                     .transition(.opacity)
             } else {

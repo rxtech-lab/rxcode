@@ -8,6 +8,10 @@ struct SecretsRepoDetailView: View {
 
     let repo: SecretsManagedRepo
     var projectPath: String?
+    /// Closes the enclosing Manage Secrets sheet. Set by `SecretsManageSheet` so
+    /// a "Done" button stays available even when the deep link drills straight
+    /// into this pushed view (where the root sheet's toolbar isn't shown).
+    var onClose: (() -> Void)?
 
     @State private var repoId: String?
     @State private var environments: [SecretsEnvironment] = []
@@ -60,6 +64,11 @@ struct SecretsRepoDetailView: View {
         .overlay { if isLoading, environments.isEmpty { ProgressView() } }
         .navigationTitle(repo.name)
         .toolbar {
+            if let onClose {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { onClose() }
+                }
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button { newName = ""; showCreate = true } label: {
                     Label("New Environment", systemImage: "plus")

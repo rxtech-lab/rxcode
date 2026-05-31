@@ -166,6 +166,33 @@ public struct SecretsFileList: Codable, Sendable {
     public let items: [SecretsFileMeta]
 }
 
+// MARK: - Cross-environment filename search
+
+/// One environment that contains a file matching the searched filename.
+public struct SecretsFileLocation: Codable, Sendable, Identifiable, Hashable {
+    public let environmentId: String
+    public let environmentName: String
+    public let fileId: String
+    public let size: Int?
+    public let updatedAt: Double?
+
+    public var id: String { environmentId }
+}
+
+/// Result of searching a repo's environments for a given filename, from
+/// `GET /repositories/{id}/files?filename=…`.
+public struct SecretsFileSearch: Codable, Sendable, Identifiable {
+    public let filename: String
+    public let environments: [SecretsFileLocation]
+    public let exists: Bool
+
+    public var id: String { filename }
+}
+
+public struct SecretsFileSearchList: Codable, Sendable {
+    public let items: [SecretsFileSearch]
+}
+
 public struct UpsertFileBody: Codable, Sendable {
     public let filename: String
     public let ciphertext: String

@@ -29,9 +29,13 @@ struct SecretsManageSheet: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var searchTask: Task<Void, Never>?
+    @State private var path = NavigationPath()
+    /// Whether we've already drilled into the pinned repo, so re-running
+    /// `reload()` (e.g. on search) doesn't fight the user's navigation.
+    @State private var didAutoNavigate = false
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             VStack(spacing: 0) {
                 content
             }
@@ -42,10 +46,10 @@ struct SecretsManageSheet: View {
                 }
             }
             .navigationDestination(for: SecretsManagedRepo.self) { repo in
-                SecretsRepoDetailView(repo: repo, projectPath: projectPath(for: repo))
+                SecretsRepoDetailView(repo: repo, projectPath: projectPath(for: repo), onClose: { dismiss() })
             }
             .navigationDestination(for: SecretsEnvRoute.self) { route in
-                SecretsEnvironmentDetailView(route: route, projectPath: pathIfCurrent(route.repoFullName))
+                SecretsEnvironmentDetailView(route: route, projectPath: pathIfCurrent(route.repoFullName), onClose: { dismiss() })
             }
         }
         .frame(width: 560, height: 560)
@@ -115,11 +119,23 @@ struct SecretsManageSheet: View {
             repos = page.items
             nextCursor = page.pagination.nextCursor
             hasMore = page.pagination.hasMore
+            autoNavigateToCurrentRepoIfNeeded()
         } catch {
             errorMessage = error.localizedDescription
             repos = []
             hasMore = false
         }
+    }
+
+    /// When opened from the banner's deep link with a pinned repo, skip the repo
+    /// picker entirely and push straight to that repo's environments page.
+    private func autoNavigateToCurrentRepoIfNeeded() {
+        guard !didAutoNavigate,
+              let currentRepoFullName,
+              let match = repos.first(where: { $0.fullName == currentRepoFullName })
+        else { return }
+        didAutoNavigate = true
+        path.append(match)
     }
 
     private func loadMore() async {

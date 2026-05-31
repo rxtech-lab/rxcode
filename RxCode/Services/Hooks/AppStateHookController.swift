@@ -144,16 +144,92 @@ final class AppStateHookController: HookController {
         }
     }
 
+    // MARK: Banners
+
+    func showBanner(_ content: AnyView, id: String, projectId: UUID?, in surface: HookBannerSurface, position: HookBannerPosition) {
+        guard let app else {
+            logger.debug("[Hook] showBanner(\(id, privacy: .public)): app is nil — dropped")
+            return
+        }
+        let item = HookBannerItem(id: id, position: position, projectId: projectId, content: content)
+        var items = app.hookBanners[surface] ?? []
+        let isNew = !items.contains { $0.id == id }
+        if let idx = items.firstIndex(where: { $0.id == id }) {
+            items[idx] = item
+        } else {
+            items.append(item)
+        }
+        // Animate only when a banner actually appears, so replacing an existing
+        // banner's content doesn't re-run the slide-in transition.
+        if isNew {
+            withAnimation(.snappy(duration: 0.28)) { app.hookBanners[surface] = items }
+        } else {
+            app.hookBanners[surface] = items
+        }
+        logger.debug("[Hook] showBanner: id=\(id, privacy: .public) surface=\(surface.rawValue, privacy: .public) position=\(position.rawValue, privacy: .public) new=\(isNew, privacy: .public) — now \(items.count, privacy: .public) banner(s) in surface")
+    }
+
+    func dismissBanner(id: String, in surface: HookBannerSurface) {
+        guard let app else { return }
+        guard var items = app.hookBanners[surface] else { return }
+        let before = items.count
+        items.removeAll { $0.id == id }
+        guard items.count != before else { return }
+        withAnimation(.snappy(duration: 0.28)) { app.hookBanners[surface] = items }
+        logger.debug("[Hook] dismissBanner: id=\(id, privacy: .public) surface=\(surface.rawValue, privacy: .public) — \(before, privacy: .public)→\(items.count, privacy: .public) banner(s)")
+    }
+
+    /// UserDefaults key holding the array of banner ids the user has dismissed.
+    private static let dismissedBannersKey = "hook.dismissedBanners"
+
+    private var dismissedBannerIDs: Set<String> {
+        get { Set(UserDefaults.standard.stringArray(forKey: Self.dismissedBannersKey) ?? []) }
+        set { UserDefaults.standard.set(Array(newValue), forKey: Self.dismissedBannersKey) }
+    }
+
+    func isBannerDismissed(id: String) -> Bool {
+        dismissedBannerIDs.contains(id)
+    }
+
+    func markBannerDismissed(id: String, in surface: HookBannerSurface) {
+        var ids = dismissedBannerIDs
+        ids.insert(id)
+        dismissedBannerIDs = ids
+        logger.debug("[Hook] markBannerDismissed: id=\(id, privacy: .public) — persisted (\(ids.count, privacy: .public) total dismissed)")
+        dismissBanner(id: id, in: surface)
+    }
+
+    func clearBannerDismissal(id: String) {
+        var ids = dismissedBannerIDs
+        guard ids.remove(id) != nil else { return }
+        dismissedBannerIDs = ids
+        logger.debug("[Hook] clearBannerDismissal: id=\(id, privacy: .public) — forgotten (\(ids.count, privacy: .public) remain)")
+    }
+
     // MARK: Secrets
 
-    func secretEnvironments(repoFullName: String) async -> [HookChoice] {
-        guard let app else { return [] }
+    func secretEnvironments(repoFullName: String) async -> [HookChoice]? {
+        guard let app else { return nil }
         do {
             let envs = try await app.secrets.listEnvironments(repo: repoFullName).items
             return envs.map { HookChoice(id: $0.id, label: $0.name) }
         } catch {
+            // nil (not []) so callers don't mistake a failed/cancelled check for
+            // a repo that genuinely has no environments and show a stale banner.
             logger.error("secretEnvironments failed: \(error.localizedDescription)")
-            return []
+            return nil
+        }
+    }
+
+    func secretFileExists(repoFullName: String, filename: String) async -> Bool {
+        guard let app else { return true }
+        do {
+            let result = try await app.secrets.searchFiles(repo: repoFullName, filenames: [filename])
+            return result.items.first(where: { $0.filename == filename })?.exists ?? false
+        } catch {
+            // Don't nag when the check itself fails (offline, signed-out, etc.).
+            logger.error("secretFileExists failed: \(error.localizedDescription)")
+            return true
         }
     }
 

@@ -125,6 +125,14 @@ final class SecretsService {
         )
     }
 
+    /// Searches every environment of `repo` for files matching `filenames`,
+    /// in a single request. Returns one result per requested filename, each
+    /// listing the environments that contain it (`exists` = found anywhere).
+    func searchFiles(repo: String, filenames: [String]) async throws -> SecretsFileSearchList {
+        let query = filenames.map { URLQueryItem(name: "filename", value: $0) }
+        return try await get(url: url("/api/v1/secrets/repositories/\(seg(repo))/files", query: query))
+    }
+
     func deleteFile(repo: String, envId: String, fileId: String) async throws {
         let _: Ignored = try await send(
             method: "DELETE",

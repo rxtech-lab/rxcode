@@ -8,6 +8,9 @@ struct SecretsEnvironmentDetailView: View {
 
     let route: SecretsEnvRoute
     var projectPath: String?
+    /// Closes the enclosing Manage Secrets sheet (threaded from
+    /// `SecretsManageSheet`), so "Done" stays reachable from this pushed view.
+    var onClose: (() -> Void)?
 
     @State private var environmentKey: SecretsEnvironmentKey?
     @State private var files: [SecretsBundleFile] = []
@@ -48,13 +51,6 @@ struct SecretsEnvironmentDetailView: View {
                 Text("No secrets yet. Add a .env file or enter values manually.")
                     .foregroundStyle(.secondary)
             }
-            // Always-visible add affordance: the toolbar button is unreliable
-            // inside this sheet's navigation chrome, so keep one in the list.
-            Button { showAdd = true } label: {
-                Label("Add Secret", systemImage: "plus")
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(environmentKey == nil)
         }
         .overlay { if isLoading, files.isEmpty { ProgressView() } }
         .overlay {
@@ -76,6 +72,11 @@ struct SecretsEnvironmentDetailView: View {
         .animation(.default, value: deletingFilename)
         .navigationTitle(route.env.name)
         .toolbar {
+            if let onClose {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { onClose() }
+                }
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button { showAdd = true } label: { Label("Add Secret", systemImage: "plus") }
                     .disabled(environmentKey == nil)

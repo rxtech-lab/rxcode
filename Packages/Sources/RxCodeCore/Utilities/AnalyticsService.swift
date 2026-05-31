@@ -47,4 +47,7 @@ public enum AnalyticsEvent: String, Sendable {
     // Misc
     case settingsOpened = "settings_opened"
     case newProjectStarted = "new_project_started"
+
+    // Errors
+    case passkeySignInError = "passkey_sign_in_error"
 }

@@ -438,6 +438,11 @@ final class AppState {
     /// The CI poller loop. Cancelled on teardown / restarted on sign-in.
     @ObservationIgnored var ciStatusPollerTask: Task<Void, Never>?
 
+    /// Latest secrets-management status keyed by lowercased `owner/repo`,
+    /// refreshed in `AppState+Secrets.swift`. Gates the per-project "Download
+    /// Secret" affordance so it only shows where secrets exist. Memory only.
+    var secretsStatusByRepo: [String: SecretsRepoStatus] = [:]
+
     /// Per-project signature of the last CI failure we already notified / auto-fixed,
     /// so a steady-state red branch doesn't re-fire every 30s. Keyed by project id;
     /// persisted to UserDefaults so a fix isn't re-triggered across relaunches.
@@ -902,6 +907,11 @@ final class AppState {
 
     let rxAuth = RxAuthService.shared
     let autopilot: AutopilotService
+    let secrets: SecretsService
+    /// Passkey-derived KEK cache for the secrets feature (macOS only).
+    let secretsKeyVault = SecretsKeyVault()
+    /// Cached enrollment status for the secrets feature: `nil` = unknown.
+    var secretsEnrolled: Bool?
     let permission = PermissionServer()
     let metaStore = SessionMetaStore()
     let cliStore: CLISessionStore
@@ -1040,6 +1050,7 @@ final class AppState {
         self.mcp = MCPService(claudeService: claude)
         self.threadStore = ThreadStore.make()
         self.autopilot = AutopilotService(rxAuth: RxAuthService.shared)
+        self.secrets = SecretsService(rxAuth: RxAuthService.shared)
         self.runService.onTasksChanged = { [weak self] in
             Task { @MainActor [weak self] in
                 self?.broadcastMobileRunTasks()

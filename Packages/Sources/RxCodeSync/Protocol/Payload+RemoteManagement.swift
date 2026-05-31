@@ -498,6 +498,18 @@ public struct MobileBranchBriefing: Codable, Sendable, Identifiable, Equatable {
     }
 }
 
+public struct MobileProjectCIStatus: Codable, Sendable, Identifiable, Equatable {
+    public var id: UUID { projectId }
+
+    public let projectId: UUID
+    public let status: ProjectCIStatus
+
+    public init(projectId: UUID, status: ProjectCIStatus) {
+        self.projectId = projectId
+        self.status = status
+    }
+}
+
 public struct MobileThreadSummary: Codable, Sendable, Identifiable, Equatable {
     public var id: String { sessionId }
 
@@ -698,4 +710,3 @@ public struct MobileSettingsUpdatePayload: Codable, Sendable {
         self.autoPreviewSettings = autoPreviewSettings
     }
 }
-

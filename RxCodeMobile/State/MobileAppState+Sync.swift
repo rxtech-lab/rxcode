@@ -441,6 +441,7 @@ extension MobileAppState {
         sessions = []
         branchBriefings = []
         threadSummaries = []
+        ciStatusByProject = [:]
         desktopSettings = nil
         desktopUsage = nil
         desktopHostMetrics = nil

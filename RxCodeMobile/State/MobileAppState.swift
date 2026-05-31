@@ -67,6 +67,7 @@ final class MobileAppState: ObservableObject {
     @Published var sessions: [SessionSummary] = []
     @Published var branchBriefings: [MobileBranchBriefing] = []
     @Published var threadSummaries: [MobileThreadSummary] = []
+    @Published var ciStatusByProject: [UUID: ProjectCIStatus] = [:]
     @Published var desktopSettings: MobileSettingsSnapshot?
     /// Agent rate-limit usage mirrored from the paired desktop. `nil` until the
     /// first snapshot arrives, or when paired with a desktop that predates

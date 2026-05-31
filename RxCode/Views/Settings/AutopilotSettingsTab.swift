@@ -9,12 +9,20 @@ struct AutopilotSettingsTab: View {
     @State private var showSignIn = false
     @State private var isSigningOut = false
 
+    @State private var showManageSecrets = false
+    @State private var isEnrollingSecrets = false
+    @State private var secretsError: String?
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 headerSection
                 Divider()
                 accountSection
+                if appState.isSignedIn {
+                    Divider()
+                    secretsSection
+                }
             }
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -22,6 +30,110 @@ struct AutopilotSettingsTab: View {
         .sheet(isPresented: $showSignIn) {
             RxAuthSignInView()
                 .environment(appState)
+        }
+        .sheet(isPresented: $showManageSecrets, onDismiss: {
+            Task { await appState.refreshSecretsStatuses() }
+        }) {
+            SecretsManageSheet()
+                .environment(appState)
+        }
+        .task { await appState.refreshSecretsEnrollment() }
+    }
+
+    // MARK: - Secrets Section
+
+    private var secretsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Secrets")
+                    .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
+                Text("Store .env files end-to-end encrypted with your passkey. Secrets are encrypted on this device and never leave it unencrypted.")
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            switch appState.secretsEnrolled {
+            case .none:
+                secretsCard {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text("Checking enrollment…").foregroundStyle(.secondary)
+                    }
+                }
+            case .some(false):
+                secretsEnrollCard
+            case .some(true):
+                secretsManageCard
+            }
+
+            if let secretsError {
+                Text(secretsError).foregroundStyle(.red).font(.system(size: ClaudeTheme.size(11)))
+            }
+        }
+    }
+
+    private var secretsEnrollCard: some View {
+        secretsCard {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Set up encryption")
+                    .font(.system(size: ClaudeTheme.size(13), weight: .medium))
+                Text("Create your encryption key. You'll authenticate with your passkey; the key is derived from it and used to protect your secrets.")
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button {
+                    Task { await enrollSecrets() }
+                } label: {
+                    if isEnrollingSecrets { ProgressView().controlSize(.small) } else { Text("Enroll with Passkey") }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(isEnrollingSecrets)
+            }
+        }
+    }
+
+    private var secretsManageCard: some View {
+        secretsCard {
+            HStack(spacing: 12) {
+                Image(systemName: "key.fill")
+                    .font(.system(size: ClaudeTheme.size(18)))
+                    .foregroundStyle(ClaudeTheme.accent)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Encryption enabled")
+                        .font(.system(size: ClaudeTheme.size(13), weight: .medium))
+                    Text("Manage your repositories, environments, and secrets.")
+                        .font(.system(size: ClaudeTheme.size(11)))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+                Button("Manage Secrets") { showManageSecrets = true }
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+    }
+
+    private func secretsCard<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        content()
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(NSColor.controlBackgroundColor))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1)
+            )
+    }
+
+    private func enrollSecrets() async {
+        isEnrollingSecrets = true
+        secretsError = nil
+        defer { isEnrollingSecrets = false }
+        do {
+            try await appState.enrollSecrets()
+        } catch {
+            secretsError = error.localizedDescription
         }
     }
 

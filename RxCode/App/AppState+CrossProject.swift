@@ -787,11 +787,18 @@ extension AppState {
                             let pid = projectId
                             let sid = resultEvent.sessionId
                             let postLocalBanner = !NSApp.isActive
+                            logger.info("[Notification] building response-complete session=\(sid, privacy: .public) hasSummary=\(summary != nil, privacy: .public) responseTextLen=\(responseText.count, privacy: .public) fallbackBodyLen=\(fallbackBody.count, privacy: .public)")
+                            if responseText.isEmpty {
+                                logger.warning("[Notification] last assistant response text is EMPTY — banner will fall back to \"Response complete\" unless the AI summary produces text. messageCount=\(self.stateForSession(sessionKey).messages.count, privacy: .public)")
+                            }
                             Task { [weak self] in
                                 var body = fallbackBody
                                 if let self, let summary {
-                                    body = await self.generateResponseNotificationSummary(responseText: responseText, summary: summary) ?? fallbackBody
+                                    let aiSummary = await self.generateResponseNotificationSummary(responseText: responseText, summary: summary)
+                                    self.logger.info("[Notification] ai summary session=\(sid, privacy: .public) returnedNonNil=\(aiSummary != nil, privacy: .public) len=\(aiSummary?.count ?? 0, privacy: .public)")
+                                    body = aiSummary ?? fallbackBody
                                 }
+                                self?.logger.info("[Notification] posting response-complete session=\(sid, privacy: .public) finalBodyLen=\(body.count, privacy: .public) usedFallback=\(body == fallbackBody, privacy: .public)")
                                 await NotificationService.shared.postResponseComplete(title: title, body: body, projectId: pid, sessionId: sid, postLocalBanner: postLocalBanner)
                             }
                         }

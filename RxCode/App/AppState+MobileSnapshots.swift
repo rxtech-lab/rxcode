@@ -149,6 +149,7 @@ extension AppState {
             sessions: mobileSessionSummaries(),
             branchBriefings: mobileBranchBriefings(),
             threadSummaries: mobileThreadSummaries(),
+            ciStatuses: mobileCIStatuses(),
             settings: mobileSettingsSnapshot(),
             activeSessionID: active.id,
             activeSessionMessages: active.messages,
@@ -440,6 +441,18 @@ extension AppState {
                     summary: $0.summary,
                     updatedAt: $0.updatedAt
                 )
+            }
+    }
+
+    func mobileCIStatuses() -> [MobileProjectCIStatus] {
+        let knownProjectIds = Set(projects.map(\.id))
+        return ciStatusByProject
+            .filter { knownProjectIds.contains($0.key) }
+            .map { MobileProjectCIStatus(projectId: $0.key, status: $0.value) }
+            .sorted { lhs, rhs in
+                let leftName = projects.first(where: { $0.id == lhs.projectId })?.name ?? ""
+                let rightName = projects.first(where: { $0.id == rhs.projectId })?.name ?? ""
+                return leftName.localizedCaseInsensitiveCompare(rightName) == .orderedAscending
             }
     }
 
@@ -871,4 +884,3 @@ extension AppState {
     }
 
 }
-

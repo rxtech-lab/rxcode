@@ -136,6 +136,28 @@ struct PayloadTests {
                         updatedAt: Date(timeIntervalSince1970: 11)
                     )
                 ],
+                ciStatuses: [
+                    MobileProjectCIStatus(
+                        projectId: projectId,
+                        status: ProjectCIStatus(
+                            owner: "rxlab",
+                            repo: "rxcode",
+                            branch: "main",
+                            found: true,
+                            overallState: .failure,
+                            lastUpdated: "2026-05-31T00:00:00Z",
+                            headSha: "abc123",
+                            prNumber: 42,
+                            workflows: [],
+                            failing: [
+                                CIFailingWorkflow(
+                                    workflowName: "Tests",
+                                    htmlUrl: "https://github.com/rxlab/rxcode/actions/runs/1"
+                                )
+                            ]
+                        )
+                    )
+                ],
                 settings: settings
             )
         )
@@ -149,6 +171,8 @@ struct PayloadTests {
 
         #expect(snapshot.branchBriefings?.first?.briefing == "Current work summary")
         #expect(snapshot.threadSummaries?.first?.title == "Fix sync")
+        #expect(snapshot.ciStatuses?.first?.status.overallState == .failure)
+        #expect(snapshot.ciStatuses?.first?.status.prNumber == 42)
         #expect(snapshot.settings?.selectedAgentProvider == .codex)
         #expect(snapshot.settings?.permissionMode == .acceptEdits)
     }

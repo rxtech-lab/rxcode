@@ -77,6 +77,7 @@ extension MobileAppState {
             sessions = snap.sessions
             branchBriefings = snap.branchBriefings ?? []
             threadSummaries = snap.threadSummaries ?? []
+            ciStatusByProject = Dictionary(uniqueKeysWithValues: (snap.ciStatuses ?? []).map { ($0.projectId, $0.status) })
             desktopSettings = snap.settings
             desktopUsage = snap.usage
             desktopHostMetrics = snap.hostMetrics

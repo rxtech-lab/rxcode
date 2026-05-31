@@ -332,6 +332,9 @@ public struct SnapshotPayload: Codable, Sendable {
     public let sessions: [SessionSummary]
     public let branchBriefings: [MobileBranchBriefing]?
     public let threadSummaries: [MobileThreadSummary]?
+    /// Current GitHub Actions CI status per desktop project. `nil` when the
+    /// desktop predates CI-status sync.
+    public let ciStatuses: [MobileProjectCIStatus]?
     public let settings: MobileSettingsSnapshot?
     public let activeSessionID: String?
     public let activeSessionMessages: [ChatMessage]?
@@ -372,6 +375,7 @@ public struct SnapshotPayload: Codable, Sendable {
         sessions: [SessionSummary],
         branchBriefings: [MobileBranchBriefing]? = nil,
         threadSummaries: [MobileThreadSummary]? = nil,
+        ciStatuses: [MobileProjectCIStatus]? = nil,
         settings: MobileSettingsSnapshot? = nil,
         activeSessionID: String? = nil,
         activeSessionMessages: [ChatMessage]? = nil,
@@ -388,6 +392,7 @@ public struct SnapshotPayload: Codable, Sendable {
         self.sessions = sessions
         self.branchBriefings = branchBriefings
         self.threadSummaries = threadSummaries
+        self.ciStatuses = ciStatuses
         self.settings = settings
         self.activeSessionID = activeSessionID
         self.activeSessionMessages = activeSessionMessages
@@ -402,7 +407,7 @@ public struct SnapshotPayload: Codable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case projects, sessions, branchBriefings, threadSummaries, settings
+        case projects, sessions, branchBriefings, threadSummaries, ciStatuses, settings
         case activeSessionID, activeSessionMessages, activeSessionHasMore, projectBranches
         case usage, hostMetrics, runProfiles, runTasks, webProxy, seq
     }
@@ -413,6 +418,7 @@ public struct SnapshotPayload: Codable, Sendable {
         sessions = try c.decode([SessionSummary].self, forKey: .sessions)
         branchBriefings = try c.decodeIfPresent([MobileBranchBriefing].self, forKey: .branchBriefings)
         threadSummaries = try c.decodeIfPresent([MobileThreadSummary].self, forKey: .threadSummaries)
+        ciStatuses = try c.decodeIfPresent([MobileProjectCIStatus].self, forKey: .ciStatuses)
         settings = try c.decodeIfPresent(MobileSettingsSnapshot.self, forKey: .settings)
         activeSessionID = try c.decodeIfPresent(String.self, forKey: .activeSessionID)
         activeSessionMessages = try c.decodeIfPresent([ChatMessage].self, forKey: .activeSessionMessages)

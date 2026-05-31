@@ -595,10 +595,16 @@ extension AppState {
     }
 
     func lastAssistantResponseText(in messages: [ChatMessage]) -> String {
-        guard let message = messages.last(where: { $0.role == .assistant && !$0.isError }) else {
-            return ""
+        // Walk back to the most recent assistant message that actually has text.
+        // A turn often ends on a tool-call-only (or thinking-only) assistant
+        // message whose `content` — the joined text blocks — is empty. Taking
+        // `messages.last` blindly would return "" and collapse the notification
+        // body to the "Response complete" fallback, hiding the real summary.
+        for message in messages.reversed() where message.role == .assistant && !message.isError {
+            let text = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !text.isEmpty { return text }
         }
-        return message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        return ""
     }
 
     func lastUserMessageText(in messages: [ChatMessage]) -> String {

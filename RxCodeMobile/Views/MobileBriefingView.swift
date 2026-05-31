@@ -55,6 +55,7 @@ struct MobileBriefingView: View {
                                             group: group,
                                             projectName: projectsById[group.projectId]?.name ?? "Unknown Project",
                                             activeJobCount: activeJobCountByProject[group.projectId] ?? 0,
+                                            ciStatus: ciStatus(for: group),
                                             namespace: glassNamespace
                                         )
                                     }
@@ -195,6 +196,11 @@ struct MobileBriefingView: View {
         }
     }
 
+    private func ciStatus(for group: GroupedBriefing) -> ProjectCIStatus? {
+        guard state.projectBranches[group.projectId] == group.branch else { return nil }
+        return state.ciStatusByProject[group.projectId]
+    }
+
     // MARK: - Filter menu
 
     @ViewBuilder
@@ -301,6 +307,7 @@ struct BriefingListView: View {
                                     group: group,
                                     projectName: projectsById[group.projectId]?.name ?? "Unknown Project",
                                     activeJobCount: activeJobCountByProject[group.projectId] ?? 0,
+                                    ciStatus: ciStatus(for: group),
                                     isSelected: selectedGroup == group.key,
                                     namespace: glassNamespace
                                 )
@@ -386,6 +393,11 @@ struct BriefingListView: View {
         } else {
             selectedProjectIds.insert(id)
         }
+    }
+
+    private func ciStatus(for group: GroupedBriefing) -> ProjectCIStatus? {
+        guard state.projectBranches[group.projectId] == group.branch else { return nil }
+        return state.ciStatusByProject[group.projectId]
     }
 
     // MARK: - Filter Menu
@@ -476,6 +488,7 @@ private struct BriefingListCard: View {
     let group: GroupedBriefing
     let projectName: String
     let activeJobCount: Int
+    let ciStatus: ProjectCIStatus?
     let isSelected: Bool
     let namespace: Namespace.ID
 
@@ -511,7 +524,7 @@ private struct BriefingListCard: View {
                 .foregroundStyle(.secondary)
 
                 // Metadata
-                FlowLayout(spacing: 8) {
+                BriefingFlowLayout(spacing: 8) {
                     if threadCount > 0 {
                         HStack(spacing: 4) {
                             Image(systemName: "bubble.left.and.bubble.right")
@@ -531,6 +544,10 @@ private struct BriefingListCard: View {
                                 .font(.system(size: 11, weight: .medium))
                         }
                         .foregroundStyle(.green)
+                    }
+
+                    if let ciStatus {
+                        MobileCIStatusChip(status: ciStatus, compact: true)
                     }
 
                     HStack(spacing: 4) {
@@ -606,59 +623,13 @@ private struct BriefingListCardButtonStyle: ButtonStyle {
     }
 }
 
-// MARK: - Flow Layout
-
-/// A layout that arranges views horizontally and wraps to the next line when needed.
-private struct FlowLayout: Layout {
-    var spacing: CGFloat = 8
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
-        return layout(sizes: sizes, containerWidth: proposal.width ?? .infinity).size
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
-        let offsets = layout(sizes: sizes, containerWidth: bounds.width).offsets
-
-        for (index, subview) in subviews.enumerated() {
-            subview.place(
-                at: CGPoint(x: bounds.minX + offsets[index].x, y: bounds.minY + offsets[index].y),
-                proposal: ProposedViewSize(sizes[index])
-            )
-        }
-    }
-
-    private func layout(sizes: [CGSize], containerWidth: CGFloat) -> (offsets: [CGPoint], size: CGSize) {
-        var offsets: [CGPoint] = []
-        var currentX: CGFloat = 0
-        var currentY: CGFloat = 0
-        var lineHeight: CGFloat = 0
-        var maxWidth: CGFloat = 0
-
-        for size in sizes {
-            if currentX + size.width > containerWidth && currentX > 0 {
-                currentX = 0
-                currentY += lineHeight + spacing
-                lineHeight = 0
-            }
-
-            offsets.append(CGPoint(x: currentX, y: currentY))
-            lineHeight = max(lineHeight, size.height)
-            currentX += size.width + spacing
-            maxWidth = max(maxWidth, currentX - spacing)
-        }
-
-        return (offsets, CGSize(width: maxWidth, height: currentY + lineHeight))
-    }
-}
-
 // MARK: - Briefing Card
 
 private struct BriefingCard: View {
     let group: GroupedBriefing
     let projectName: String
     let activeJobCount: Int
+    let ciStatus: ProjectCIStatus?
     let namespace: Namespace.ID
 
     private var threadCount: Int { group.threads.count }
@@ -687,7 +658,7 @@ private struct BriefingCard: View {
                 }
                 
                 Spacer(minLength: 0)
-                
+
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.tertiary)
@@ -721,6 +692,10 @@ private struct BriefingCard: View {
                 // Active jobs chip — pulses while jobs are running
                 if activeJobCount > 0 {
                     ActiveJobsChip(count: activeJobCount)
+                }
+
+                if let ciStatus {
+                    MobileCIStatusChip(status: ciStatus)
                 }
 
                 // Thread count chip

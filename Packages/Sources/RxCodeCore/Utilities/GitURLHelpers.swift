@@ -1,7 +1,5 @@
 import Foundation
 
-#if os(macOS)
-
 /// Extracts "owner/repo" from a GitHub remote URL.
 /// Supports HTTPS and SSH formats.
 /// Returns nil for non-GitHub URLs.
@@ -22,6 +20,8 @@ public func parseGitHubOwnerRepo(from urlString: String) -> String? {
 public func gitHubWebURL(forOwnerRepo ownerRepo: String) -> URL? {
     URL(string: "https://github.com/\(ownerRepo)")
 }
+
+#if os(macOS)
 
 public func detectGitHubOwnerRepo(at path: String) -> String? {
     let process = Process()

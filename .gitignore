@@ -45,3 +45,4 @@ relay-server/k8s/secrets.yaml
 RxCode/GoogleService-Info.plist
 RxCodeMobile/GoogleService-Info.plist
 RxCodeAndroid/app/google-services.json
+.env

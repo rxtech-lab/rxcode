@@ -186,7 +186,20 @@
       }
     },
     "%@ isn't backed up to Autopilot" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@이(가) Autopilot에 백업되지 않았습니다"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 尚未备份到 Autopilot"
+          }
+        }
+      }
     },
     "%@ not found" : {
       "extractionState" : "stale",
@@ -218,6 +231,9 @@
           }
         }
       }
+    },
+    "%@ will be removed from the docs index. This can't be undone." : {
+
     },
     "%@, in progress" : {
       "localizations" : {
@@ -368,6 +384,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "不活跃 %1$lld 天%2$@"
+          }
+        }
+      }
+    },
+    "%lld document(s)" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "문서 %lld개"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个文档"
           }
         }
       }
@@ -749,6 +781,12 @@
         }
       }
     },
+    "Add Document" : {
+
+    },
+    "Add Documentation Repository" : {
+
+    },
     "Add Git Skill Source" : {
       "localizations" : {
         "zh-Hans" : {
@@ -884,7 +922,6 @@
       }
     },
     "Add Repository" : {
-      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -1626,6 +1663,22 @@
         }
       }
     },
+    "Autopilot Account" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autopilot 계정"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autopilot 账户"
+          }
+        }
+      }
+    },
     "Awaiting check" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1659,7 +1712,20 @@
       }
     },
     "Back up this project's secrets to Autopilot" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 프로젝트의 시크릿을 Autopilot에 백업"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将此项目的密钥备份到 Autopilot"
+          }
+        }
+      }
     },
     "Bash" : {
       "localizations" : {
@@ -1998,6 +2064,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "CI 状态"
+          }
+        }
+      }
+    },
+    "CI upload token" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CI 업로드 토큰"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CI 上传令牌"
           }
         }
       }
@@ -2399,6 +2481,22 @@
         }
       }
     },
+    "Connect your rxlab account to import GitHub repositories, sync encrypted secrets, and use autopilot features. You can skip this and sign in later." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "rxlab 계정을 연결하여 GitHub 저장소를 가져오고, 암호화된 시크릿을 동기화하고, Autopilot 기능을 사용하세요. 이 단계를 건너뛰고 나중에 로그인할 수 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接你的 rxlab 账户以导入 GitHub 仓库、同步加密的密钥并使用 Autopilot 功能。你可以跳过此步骤，稍后再登录。"
+          }
+        }
+      }
+    },
     "Connected" : {
       "localizations" : {
         "en" : {
@@ -2666,6 +2764,9 @@
           }
         }
       }
+    },
+    "Current project" : {
+
     },
     "Custom" : {
       "extractionState" : "stale",
@@ -2958,6 +3059,9 @@
         }
       }
     },
+    "Delete Document" : {
+
+    },
     "Delete Environment" : {
       "localizations" : {
         "ko" : {
@@ -3071,6 +3175,9 @@
           }
         }
       }
+    },
+    "Delete this document?" : {
+
     },
     "Deleting \"%@\"…" : {
       "localizations" : {
@@ -3187,7 +3294,20 @@
       }
     },
     "Dismiss" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "무시"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "忽略"
+          }
+        }
+      }
     },
     "Display name" : {
       "localizations" : {
@@ -3195,6 +3315,74 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "显示名称"
+          }
+        }
+      }
+    },
+    "Document" : {
+
+    },
+    "Documentation" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "문서"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文档"
+          }
+        }
+      }
+    },
+    "Documentation search" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "문서 검색"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文档搜索"
+          }
+        }
+      }
+    },
+    "Documentation search · powered by the docs service" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "문서 검색 · 문서 서비스 제공"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文档搜索 · 由文档服务提供支持"
+          }
+        }
+      }
+    },
+    "Documents (%lld)" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "문서 (%lld)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文档 (%lld)"
           }
         }
       }
@@ -4529,6 +4717,22 @@
         }
       }
     },
+    "Index your repositories' docs (design docs, API docs, code docs) so agents and ⌘K can search them. Set up CI to upload docs automatically with an upload token." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장소의 문서(설계 문서, API 문서, 코드 문서)를 색인하여 에이전트와 ⌘K로 검색할 수 있습니다. CI를 설정하면 업로드 토큰으로 문서를 자동으로 업로드할 수 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为你的仓库文档（设计文档、API 文档、代码文档）建立索引，让智能体和 ⌘K 可以搜索它们。配置 CI 即可使用上传令牌自动上传文档。"
+          }
+        }
+      }
+    },
     "Inherit global default" : {
       "localizations" : {
         "zh-Hans" : {
@@ -4593,12 +4797,44 @@
         }
       }
     },
+    "Install a DOCS_UPLOAD_TOKEN secret so this repo's CI can upload docs. RxCode mints the token and stores it as the repository's GitHub Actions secret for you — no terminal needed." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 저장소의 CI가 문서를 업로드할 수 있도록 DOCS_UPLOAD_TOKEN 시크릿을 설치합니다. RxCode가 토큰을 생성하여 저장소의 GitHub Actions 시크릿으로 저장해 줍니다 — 터미널이 필요 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为该仓库安装 DOCS_UPLOAD_TOKEN 密钥，使其 CI 能够上传文档。RxCode 会为你创建令牌并将其保存为仓库的 GitHub Actions 密钥——无需使用终端。"
+          }
+        }
+      }
+    },
     "Install ACP agents" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "安装 ACP 智能体"
+          }
+        }
+      }
+    },
+    "Install DOCS_UPLOAD_TOKEN secret" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DOCS_UPLOAD_TOKEN 시크릿 설치"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "安装 DOCS_UPLOAD_TOKEN 密钥"
           }
         }
       }
@@ -4719,6 +4955,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已安装"
+          }
+        }
+      }
+    },
+    "Installed %@ on %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%2$@에 %1$@을(를) 설치했습니다"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已将 %1$@ 安装到 %2$@"
           }
         }
       }
@@ -4852,6 +5104,9 @@
           }
         }
       }
+    },
+    "Load from File…" : {
+
     },
     "Load more" : {
       "localizations" : {
@@ -4994,6 +5249,7 @@
       }
     },
     "Local on-device search · archived threads included" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -5095,6 +5351,38 @@
         }
       }
     },
+    "Manage Docs" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "문서 관리"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "管理文档"
+          }
+        }
+      }
+    },
+    "Manage docs repositories, view indexed documents, and create CI upload tokens." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "문서 저장소를 관리하고, 색인된 문서를 보고, CI 업로드 토큰을 생성합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "管理文档仓库、查看已索引的文档并创建 CI 上传令牌。"
+          }
+        }
+      }
+    },
     "Manage GitHub Repos" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -5179,6 +5467,9 @@
           }
         }
       }
+    },
+    "Markdown content" : {
+
     },
     "Matched on title" : {
       "localizations" : {
@@ -5733,6 +6024,42 @@
         }
       }
     },
+    "No documentation repositories yet. Set up docs publishing from a project's chat to index its docs." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "아직 문서 저장소가 없습니다. 프로젝트 채팅에서 문서 게시를 설정하여 문서를 색인하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚无文档仓库。在项目的聊天中设置文档发布即可为其文档建立索引。"
+          }
+        }
+      }
+    },
+    "No documents uploaded yet." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "아직 업로드된 문서가 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚未上传任何文档。"
+          }
+        }
+      }
+    },
+    "No documents uploaded yet. Use the + button above to add one, or set up CI to upload them automatically." : {
+
+    },
     "No editors detected" : {
       "localizations" : {
         "zh-Hans" : {
@@ -5966,6 +6293,9 @@
           }
         }
       }
+    },
+    "No repositories available to add." : {
+
     },
     "No repositories found." : {
       "localizations" : {
@@ -6300,6 +6630,22 @@
         }
       }
     },
+    "Open" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "열기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开"
+          }
+        }
+      }
+    },
     "Open in Editor" : {
       "localizations" : {
         "ko" : {
@@ -6489,6 +6835,9 @@
           }
         }
       }
+    },
+    "Original link (optional)" : {
+
     },
     "Other" : {
       "localizations" : {
@@ -7315,12 +7664,44 @@
         }
       }
     },
+    "Remove Documentation Repository" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "문서 저장소 제거"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除文档仓库"
+          }
+        }
+      }
+    },
     "Remove MCP server?" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "移除 MCP 服务器？"
+          }
+        }
+      }
+    },
+    "Remove this docs repository?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 문서 저장소를 제거하시겠습니까?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除此文档仓库？"
           }
         }
       }
@@ -7638,6 +8019,22 @@
         }
       }
     },
+    "Rotate token & reinstall" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "토큰 교체 후 재설치"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "轮换令牌并重新安装"
+          }
+        }
+      }
+    },
     "Run %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -7839,6 +8236,23 @@
         }
       }
     },
+    "rxlab account" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "rxlab 계정"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "rxlab 账户"
+          }
+        }
+      }
+    },
     "Save" : {
       "localizations" : {
         "zh-Hans" : {
@@ -7951,6 +8365,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "搜索智能体"
+          }
+        }
+      }
+    },
+    "Search documentation repositories" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "문서 저장소 검색"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索文档仓库"
           }
         }
       }
@@ -8099,7 +8529,11 @@
         }
       }
     },
+    "Search threads and docs…" : {
+
+    },
     "Search threads by topic, keyword, or feel…" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -8384,7 +8818,39 @@
       }
     },
     "Set up" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설정"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置"
+          }
+        }
+      }
+    },
+    "Set Up Docs Search" : {
 
+    },
+    "Set up documentation so it's searchable" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "검색할 수 있도록 문서 설정"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置文档以便进行搜索"
+          }
+        }
+      }
     },
     "Set up encryption" : {
       "localizations" : {
@@ -8730,6 +9196,22 @@
         }
       }
     },
+    "Sign in to your Autopilot account" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autopilot 계정에 로그인"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登录你的 Autopilot 账户"
+          }
+        }
+      }
+    },
     "Sign in with GitHub" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -8785,6 +9267,22 @@
         }
       }
     },
+    "Sign in with rxlab to import GitHub repositories, sync encrypted secrets, and use autopilot features. You can skip this and sign in later from Settings." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "rxlab으로 로그인하여 GitHub 저장소를 가져오고, 암호화된 시크릿을 동기화하고, Autopilot 기능을 사용하세요. 이 단계를 건너뛰고 나중에 설정에서 로그인할 수 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用 rxlab 登录以导入 GitHub 仓库、同步加密的密钥并使用 Autopilot 功能。你可以跳过此步骤，稍后在“设置”中登录。"
+          }
+        }
+      }
+    },
     "Sign in with rxlab to import GitHub repositories." : {
       "localizations" : {
         "ko" : {
@@ -8813,6 +9311,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "退出登录"
+          }
+        }
+      }
+    },
+    "Signed in" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "로그인됨"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已登录"
           }
         }
       }
@@ -8891,6 +9405,9 @@
           }
         }
       }
+    },
+    "Slug (e.g. architecture/overview)" : {
+
     },
     "Source" : {
       "localizations" : {
@@ -9216,6 +9733,22 @@
         }
       }
     },
+    "This unregisters %@ from the docs service and removes its indexed documents. The repo's files are not affected." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@을(를) 문서 서비스에서 등록 해제하고 색인된 문서를 제거합니다. 저장소의 파일은 영향을 받지 않습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这将从文档服务中注销 %@ 并移除其已索引的文档。仓库中的文件不受影响。"
+          }
+        }
+      }
+    },
     "This will remove the project from RxCode. The files on disk will not be deleted." : {
       "localizations" : {
         "en" : {
@@ -9268,6 +9801,12 @@
           }
         }
       }
+    },
+    "Threads on-device · docs unavailable: %@" : {
+
+    },
+    "Threads searched on-device · docs from the docs service" : {
+
     },
     "Todos (%lld/%lld)" : {
       "localizations" : {
@@ -9387,6 +9926,9 @@
           }
         }
       }
+    },
+    "Upload" : {
+
     },
     "URL" : {
       "localizations" : {
@@ -9637,6 +10179,9 @@
           }
         }
       }
+    },
+    "Version" : {
+
     },
     "Via:" : {
       "localizations" : {

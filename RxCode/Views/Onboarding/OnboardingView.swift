@@ -273,6 +273,8 @@ struct OnboardingView: View {
                 apiKeyDraft: $summarizationAPIKeyDraft,
                 hasLoadedModels: $hasLoadedSummarizationModels
             )
+        case .autopilotSignIn:
+            AutopilotSignInPreview(appState: appState)
         case .mobilePairing:
             MobilePairingPreview(
                 token: pairingToken,
@@ -491,6 +493,7 @@ struct OnboardingSlide: Identifiable {
         case cliSetup
         case acpSetup
         case summarizationModel
+        case autopilotSignIn
         case mobilePairing
         case mcpSetup
     }
@@ -535,6 +538,13 @@ struct OnboardingSlide: Identifiable {
             title: "Pick a summarization model",
             subtitle: "Used for thread titles, branch briefings, and search. Defaults to your chat model.",
             visual: .summarizationModel,
+            canSkip: true
+        ),
+        OnboardingSlide(
+            id: "autopilot",
+            title: "Sign in to your Autopilot account",
+            subtitle: "Connect your rxlab account to import GitHub repositories, sync encrypted secrets, and use autopilot features. You can skip this and sign in later.",
+            visual: .autopilotSignIn,
             canSkip: true
         ),
         OnboardingSlide(

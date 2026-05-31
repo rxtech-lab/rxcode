@@ -313,6 +313,43 @@ public enum IDEToolRegistry {
                 "properties": .object([:]),
             ])
         ),
+        IDETool(
+            name: "ide__search_docs",
+            description: "Semantic search over the project's published documentation (design docs, API docs, code docs) indexed by the docs service. Use this to look up how something works before reading source. Returns ranked snippets with their document ids.",
+            visibility: .polyfill(.docsSearch),
+            inputSchema: .object([
+                "type": .string("object"),
+                "properties": .object([
+                    "query": .object([
+                        "type": .string("string"),
+                        "description": .string("Natural-language search query."),
+                    ]),
+                    "repository": .object([
+                        "type": .string("string"),
+                        "description": .string("Optional `owner/repo` full name to restrict the search to one repository. Omit to search every docs repository you can read."),
+                    ]),
+                    "limit": .object([
+                        "type": .string("integer"),
+                        "description": .string("Maximum number of hits to return. Default 10, capped at 50."),
+                    ]),
+                ]),
+                "required": .array([.string("query")]),
+            ])
+        ),
+        IDETool(
+            name: "ide__setup_docs_secret",
+            description: "Mint a DOCS_UPLOAD_TOKEN and install it as the repository's GitHub Actions secret in one step, so the repo's docs-publishing CI can authenticate. Use this when setting up documentation publishing instead of asking the user to run `gh secret set` manually. If the repository isn't registered with the docs service yet, it's registered automatically (the RxLab GitHub App must be installed on it). If the call fails with a permission error, tell the user to re-authorize the RxLab GitHub App (Actions secrets: read & write) and retry.",
+            visibility: .alwaysIDEOnly,
+            inputSchema: .object([
+                "type": .string("object"),
+                "properties": .object([
+                    "repository": .object([
+                        "type": .string("string"),
+                        "description": .string("Optional `owner/repo` full name. Omit to use the current project's repository."),
+                    ]),
+                ]),
+            ])
+        ),
     ]
 
     /// Returns the tools that should be exposed to an agent whose declared

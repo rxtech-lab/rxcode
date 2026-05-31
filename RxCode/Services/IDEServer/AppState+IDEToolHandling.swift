@@ -54,6 +54,10 @@ extension AppState: IDEToolHandling {
             return try await handleSendToThread(arguments: arguments)
         case "ide__get_usage":
             return await handleGetUsage()
+        case "ide__search_docs":
+            return try await handleSearchDocs(arguments: arguments)
+        case "ide__setup_docs_secret":
+            return try await handleSetupDocsSecret(arguments: arguments, sessionKey: sessionKey)
         case "ide__ask_user":
             throw IDEToolError.notSupported("ide__ask_user polyfill not implemented yet — surface the question as plain assistant text instead.")
         default:
@@ -386,6 +390,107 @@ extension AppState: IDEToolHandling {
             obj["score"] = .number(Double(score))
         }
         return .object(obj)
+    }
+
+    @MainActor
+    private func handleSearchDocs(arguments: JSONValue) async throws -> JSONValue {
+        guard let query = arguments["query"]?.stringValue,
+              !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw IDEToolError.invalidArguments("missing 'query'")
+        }
+        let repo = arguments["repository"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let requestedLimit = Int(arguments["limit"]?.numberValue ?? 10)
+        let limit = max(1, min(requestedLimit, 50))
+        do {
+            let hits = try await docs.search(query: query, repo: (repo?.isEmpty == false) ? repo : nil, limit: limit)
+            let entries: [JSONValue] = hits.map { hit in
+                var obj: [String: JSONValue] = ["doc_id": .string(hit.docId)]
+                if let repository = hit.repository { obj["repository"] = .string(repository) }
+                if let snippet = hit.snippet { obj["snippet"] = .string(snippet) }
+                if let score = hit.score { obj["score"] = .number(score) }
+                if let link = hit.originalLink { obj["original_link"] = .string(link) }
+                return .object(obj)
+            }
+            return jsonTextResult(.array(entries))
+        } catch {
+            throw IDEToolError.handlerFailed(error.localizedDescription)
+        }
+    }
+
+    @MainActor
+    private func handleSetupDocsSecret(arguments: JSONValue, sessionKey: String) async throws -> JSONValue {
+        // Prefer an explicit `owner/repo`; otherwise fall back to the repo linked
+        // to the calling session's project.
+        let explicit = arguments["repository"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let repo: String
+        if let explicit, !explicit.isEmpty {
+            repo = explicit
+        } else if let thread = threadStore.fetch(id: sessionKey),
+                  let linked = projects.first(where: { $0.id == thread.projectId })?.gitHubRepo,
+                  !linked.isEmpty {
+            repo = linked
+        } else {
+            throw IDEToolError.invalidArguments(
+                "No 'repository' given and the current project has no linked GitHub repo. Pass repository as 'owner/repo'."
+            )
+        }
+        // The install endpoint 404s on unregistered repos, so register first if
+        // needed (these throw IDEToolError with their own messages — keep them
+        // outside the catch below so they aren't re-wrapped).
+        let registered = try await ensureDocsRepoRegistered(repo)
+        do {
+            let result = try await docs.installGithubSecret(repoId: repo)
+            return jsonTextResult(.object([
+                "installed": .bool(true),
+                "registered": .bool(registered),
+                "secret_name": .string(result.secretName),
+                "repository": .string(result.repositoryFullName),
+            ]))
+        } catch {
+            throw IDEToolError.handlerFailed(error.localizedDescription)
+        }
+    }
+
+    /// Ensures `repo` (an `owner/repo`) is registered with the docs service,
+    /// registering it if not. Returns true when it had to register it. Throws a
+    /// descriptive `IDEToolError` when the repo isn't accessible to the GitHub
+    /// App (so it can't be registered).
+    @MainActor
+    private func ensureDocsRepoRegistered(_ repo: String) async throws -> Bool {
+        if let status = try? await docs.statuses(forRepos: [repo]).first, status.hasDocs {
+            return false
+        }
+        guard let managed = try await findManagedRepo(fullName: repo) else {
+            throw IDEToolError.handlerFailed(
+                "\(repo) isn't set up for docs and isn't accessible to the RxLab GitHub App. Install the GitHub App on this repository, then retry."
+            )
+        }
+        _ = try await docs.addRepository(
+            AddDocsRepoBody(
+                installationId: managed.installationId,
+                repositoryId: managed.id,
+                repositoryFullName: managed.fullName
+            )
+        )
+        return true
+    }
+
+    /// Finds the accessible GitHub repo matching `fullName` (`owner/repo`) in the
+    /// secrets `repositories/all` listing — the source of the `installationId` +
+    /// `repositoryId` the docs add-repo API needs. Pages defensively in case the
+    /// search filter returns more than one page.
+    @MainActor
+    private func findManagedRepo(fullName: String) async throws -> SecretsManagedRepo? {
+        let target = fullName.lowercased()
+        var cursor: String?
+        repeat {
+            let page = try await secrets.listManagedRepositories(search: fullName, cursor: cursor, pageSize: 100)
+            if let match = page.items.first(where: { $0.fullName.lowercased() == target }) {
+                return match
+            }
+            cursor = page.pagination.hasMore ? page.pagination.nextCursor : nil
+        } while cursor != nil
+        return nil
     }
 
     private func handleGetUsage() async -> JSONValue {

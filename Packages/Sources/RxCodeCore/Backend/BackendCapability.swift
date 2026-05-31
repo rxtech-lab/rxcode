@@ -14,6 +14,11 @@ public enum BackendCapability: String, Sendable, Hashable, CaseIterable, Codable
     case hooks
     case mcpServers
     case skills
+    /// Native documentation search. No backend declares this yet, so the
+    /// `ide__search_docs` polyfill is exposed to every agent (it calls
+    /// github-pm's docs API). A backend that ships its own docs search can
+    /// declare this to suppress the polyfill.
+    case docsSearch
 }
 
 public typealias CapabilitySet = Set<BackendCapability>

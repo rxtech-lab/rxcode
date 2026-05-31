@@ -29,6 +29,21 @@ extension AppState {
         }
     }
 
+    // MARK: - New-chat banner hooks
+
+    /// Run the "new chat started" hooks for a project's empty-state / composer
+    /// screen — e.g. the Autopilot `.env` backup banner. This used to fire only
+    /// inside the stream preflight (on first message send), so the banner never
+    /// appeared just from opening the screen. Views call this from `.task(id:)`
+    /// when a project's chat screen appears. The hook itself decides whether to
+    /// show or dismiss its banner, so this is safe to call repeatedly.
+    func runProjectNewChatHooks(projectId: UUID, sessionKey: String) async {
+        logger.debug("[Hook] runProjectNewChatHooks: projectId=\(projectId.uuidString, privacy: .public) sessionKey=\(sessionKey, privacy: .public)")
+        await hookManager.dispatchProjectNewChatStart(
+            NewChatStartPayload(projectId: projectId, sessionKey: sessionKey)
+        )
+    }
+
     // MARK: - Hook execution
 
     /// Tool-call name carried by a hook's chat card. The `Hook: ` prefix lets

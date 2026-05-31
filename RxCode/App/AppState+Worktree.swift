@@ -393,6 +393,10 @@ extension AppState {
         } catch {
             logger.error("Failed to save projects after deletion: \(error.localizedDescription)")
         }
+
+        // Let hooks clean up persisted, project-scoped state (e.g. the autopilot
+        // banner's stored dismissal) so re-adding the project starts fresh.
+        await hookManager.dispatchProjectDelete(ProjectDeletePayload(project: project))
     }
 
     func deleteSession(_ session: ChatSession, in window: WindowState) async {

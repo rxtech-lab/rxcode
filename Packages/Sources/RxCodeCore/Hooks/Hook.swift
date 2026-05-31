@@ -17,6 +17,7 @@ public protocol Hook: AnyObject {
     var isEnabled: Bool { get }
 
     func onProjectNewChatStart(_ payload: NewChatStartPayload, controller: any HookController) async -> HookOutcome
+    func onProjectDelete(_ payload: ProjectDeletePayload, controller: any HookController) async -> HookOutcome
     func onSessionStart(_ payload: SessionStartPayload, controller: any HookController) async -> HookOutcome
     func beforeSessionEnd(_ payload: SessionEndPayload, controller: any HookController) async -> HookOutcome
     func afterSessionEnd(_ payload: SessionEndPayload, controller: any HookController) async -> HookOutcome
@@ -37,6 +38,7 @@ public extension Hook {
     var isEnabled: Bool { true }
 
     func onProjectNewChatStart(_ payload: NewChatStartPayload, controller: any HookController) async -> HookOutcome { .ignored }
+    func onProjectDelete(_ payload: ProjectDeletePayload, controller: any HookController) async -> HookOutcome { .ignored }
     func onSessionStart(_ payload: SessionStartPayload, controller: any HookController) async -> HookOutcome { .ignored }
     func beforeSessionEnd(_ payload: SessionEndPayload, controller: any HookController) async -> HookOutcome { .ignored }
     func afterSessionEnd(_ payload: SessionEndPayload, controller: any HookController) async -> HookOutcome { .ignored }

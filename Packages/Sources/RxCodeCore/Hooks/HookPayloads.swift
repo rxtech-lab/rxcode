@@ -6,6 +6,7 @@ import Foundation
 /// event to a future out-of-process plugin.
 public enum HookEventKind: String, Codable, Sendable, CaseIterable {
     case onProjectNewChatStart
+    case onProjectDelete
     case onSessionStart
     case beforeSessionEnd
     case afterSessionEnd
@@ -97,6 +98,16 @@ public struct RepositoryPayload: Codable, Sendable {
     public init(project: Project, wasCloned: Bool) {
         self.project = project
         self.wasCloned = wasCloned
+    }
+}
+
+/// Fired when a project is removed from the IDE. Carries the full project so a
+/// hook can clean up any persisted, project-scoped state (e.g. a dismissed
+/// banner keyed by the project's repo) — so re-adding it starts fresh.
+public struct ProjectDeletePayload: Codable, Sendable {
+    public let project: Project
+    public init(project: Project) {
+        self.project = project
     }
 }
 

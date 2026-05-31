@@ -41,6 +41,22 @@ struct MainView: View {
         }
     }
 
+    /// Re-runs the new-chat hooks (e.g. the Autopilot `.env` banner) whenever the
+    /// open project or the active session changes — so the banner appears on
+    /// opening the chat screen, not only after the first message is sent.
+    private var newChatHookKey: String {
+        "\(windowState.selectedProject?.id.uuidString ?? "none")|\(windowState.currentSessionId ?? "new")"
+    }
+
+    /// Re-evaluate the new-chat hooks (e.g. the Autopilot `.env` banner) after the
+    /// secrets sheet closes, so finishing a backup immediately dismisses the
+    /// "back up secrets" banner instead of waiting for the next chat switch.
+    private func rerunNewChatHooks() {
+        guard let project = windowState.selectedProject else { return }
+        let sessionKey = windowState.currentSessionId ?? windowState.newSessionKey
+        Task { await appState.runProjectNewChatHooks(projectId: project.id, sessionKey: sessionKey) }
+    }
+
     private var navigationTitleText: String {
         if windowState.showingBriefing {
             return "Briefing"
@@ -252,10 +268,20 @@ struct MainView: View {
                     }, bottomAccessory: {
                         RecentChatsSuggestionList()
                     }, aboveInputAccessory: {
-                        PermissionQueueBanner()
+                        VStack(spacing: 8) {
+                            PermissionQueueBanner()
+                            HookBannerHost(surface: .newProject, position: .aboveInputBox)
+                        }
                     })
                 }
                 .modifier(ChatDetailModifiers())
+                .task(id: newChatHookKey) {
+                    guard let project = windowState.selectedProject else { return }
+                    await appState.runProjectNewChatHooks(
+                        projectId: project.id,
+                        sessionKey: windowState.currentSessionId ?? windowState.newSessionKey
+                    )
+                }
             } else if !windowState.isInitialized {
                 ProgressView()
                     .controlSize(.small)
@@ -269,6 +295,13 @@ struct MainView: View {
             FileInspectorView(filePath: file.path, fileName: file.name)
                 .frame(minWidth: 1000, idealWidth: 1400, maxWidth: 1920,
                        minHeight: 600, idealHeight: 1000, maxHeight: 1200)
+        }
+        .sheet(item: Bindable(appState).secretsSetupRequest, onDismiss: rerunNewChatHooks) { request in
+            SecretsManageSheet(
+                currentRepoFullName: request.repoFullName,
+                currentProjectPath: request.projectPath
+            )
+            .environment(appState)
         }
         .sheet(item: Bindable(windowState).diffFile) { file in
             FileDiffView(

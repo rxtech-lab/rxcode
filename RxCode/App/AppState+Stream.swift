@@ -725,29 +725,43 @@ extension AppState {
         let summary: String
         let decision: PermissionDecision
         let nextMode: PermissionMode?
+        // Whether this decision moves the session out of plan mode. Only an
+        // *accept* does — the user has approved a plan and is ready to implement.
+        // A reject (with or without feedback) keeps the user in the planning
+        // phase: the model will revise and re-emit `ExitPlanMode`, and that next
+        // plan must launch with `--permission-mode plan` so the CLI actually
+        // pauses for the plan card instead of auto-resolving it with the
+        // "Exit plan mode?" placeholder (which leaves the user having to
+        // manually re-chat to make any decision stick).
+        let exitsPlanMode: Bool
 
         switch action {
         case .acceptAsk:
             summary = "Accepted with Ask"
             decision = .allowAndSetMode(newMode: .default)
             nextMode = .default
+            exitsPlanMode = true
         case .acceptWithEdits:
             summary = "Accepted with Edits"
             decision = .allowAndSetMode(newMode: .acceptEdits)
             nextMode = .acceptEdits
+            exitsPlanMode = true
         case .acceptAutoApprove:
             summary = "Accepted with Auto-approve"
             decision = .allowAndSetMode(newMode: .auto)
             nextMode = .auto
+            exitsPlanMode = true
         case .rejectWithFeedback(let reason):
             let trimmed = reason.trimmingCharacters(in: .whitespacesAndNewlines)
             summary = trimmed.isEmpty ? "Rejected" : "Rejected: \(trimmed)"
             decision = .denyWithReason(reason: trimmed.isEmpty ? "User rejected the plan." : trimmed)
             nextMode = nil
+            exitsPlanMode = false
         case .reject:
             summary = "Rejected"
             decision = .denyWithReason(reason: "User rejected the plan.")
             nextMode = nil
+            exitsPlanMode = false
         }
 
         // Record the outcome on the tool block so `PlanCardView` flips from buttons to
@@ -768,9 +782,11 @@ extension AppState {
         }
         threadStore.setPlanDecision(sessionId: key, toolCallId: toolUseId, summary: summary)
 
-        // Plan-mode is one-shot — clear the pill so the next user turn isn't in plan mode.
-        // This also triggers a permission re-register (no-op if there's no live CLI sid).
-        if window.sessionPlanMode {
+        // Clear the plan-mode pill only when the user accepted — that's the
+        // transition out of planning and into implementation. On a reject we stay
+        // in plan mode so the revised plan re-enters the real ExitPlanMode pause
+        // (see `exitsPlanMode` above). The mode re-register below runs regardless.
+        if exitsPlanMode, window.sessionPlanMode {
             window.sessionPlanMode = false
             updateState(key) { $0.planMode = false }
         }

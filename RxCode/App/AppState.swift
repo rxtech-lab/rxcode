@@ -940,6 +940,12 @@ final class AppState {
     let ideMCPServer = IDEMCPServer()
     var mobileSyncObservers: [NSObjectProtocol] = []
 
+    /// The seam hooks act through (thread/IDE capabilities). Implicitly-unwrapped
+    /// because it captures `self`; assigned at the end of `init`.
+    var hookController: AppStateHookController!
+    /// Registry + dispatcher for lifecycle hooks. See `registerBuiltInHooks()`.
+    var hookManager: HookManager!
+
     /// Weak refs to every `WindowState` that's been wired up via `setupChatBridge`.
     /// Used by AppState-driven queue maintenance (e.g. `flushNextQueuedMessageIfNeeded`)
     /// to scrub stale entries out of each window's in-memory queue mirror.
@@ -1090,6 +1096,26 @@ final class AppState {
 
             setupMobileSyncBridge()
         }
+
+        // Build the hook controller/manager last — the controller captures
+        // `self` (weakly) and every other service it forwards to is now ready.
+        let hookController = AppStateHookController(app: self)
+        self.hookController = hookController
+        self.hookManager = HookManager(controller: hookController)
+        registerBuiltInHooks()
+    }
+
+    /// Register the built-in hooks in dispatch order. User bash hooks run first
+    /// (their start-hook stdout is injected into agent context), then the
+    /// notification hooks. New hooks (or future plugins) append here.
+    private func registerBuiltInHooks() {
+        hookManager.register(UserAddedHook())
+        hookManager.register(ResponseNotificationHook())
+        hookManager.register(QuestionNotificationHook())
+        hookManager.register(PermissionNotificationHook())
+        hookManager.register(MCPNotificationHook())
+        hookManager.register(CINotificationHook())
+        hookManager.register(RemoteConfigNotificationHook())
     }
 
 

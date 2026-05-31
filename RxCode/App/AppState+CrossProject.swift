@@ -188,16 +188,17 @@ extension AppState {
         let bridge = idePort.map { IDEMCPServer.bridgeCommand(forPort: $0) }
         logPreflight("ideMCP", detail: "port=\(idePort.map(String.init) ?? "<nil>")")
 
-        // Before-session-start hooks fire once, only for a brand-new thread (no
-        // resumed CLI session). Their stdout is injected into this turn's agent
-        // context the same way the branch briefing / memory context is, and the
-        // status cards inserted by `runHooks` persist via the `.result` save.
+        // Session-start hooks fire once, only for a brand-new thread (no resumed
+        // CLI session). Their stdout is injected into this turn's agent context
+        // the same way the branch briefing / memory context is, and the status
+        // cards inserted by UserAddedHook persist via the `.result` save.
         var hookStartContext = ""
         if cliSessionId == nil, let project = projects.first(where: { $0.id == projectId }) {
-            hookStartContext = await runHooks(
-                trigger: .beforeSessionStart,
-                project: project,
-                sessionKey: sessionKey
+            await hookManager.dispatchProjectNewChatStart(
+                NewChatStartPayload(projectId: projectId, sessionKey: sessionKey)
+            )
+            hookStartContext = await hookManager.dispatchSessionStart(
+                SessionStartPayload(project: project, sessionKey: sessionKey)
             ).combinedOutput
             logPreflight("hooksStart", detail: "contextChars=\(hookStartContext.count)")
         }
@@ -719,7 +720,14 @@ extension AppState {
                     var stopHookFailureOutput: String?
                     if let stopProject, !stopHooksHandledStreamIds.contains(streamId) {
                         stopHooksHandledStreamIds.insert(streamId)
-                        let stopResult = await runHooks(trigger: .beforeSessionStop, project: stopProject, sessionKey: sessionKey)
+                        let stopResult = await hookManager.dispatchBeforeSessionEnd(SessionEndPayload(
+                            project: stopProject,
+                            sessionKey: sessionKey,
+                            sessionId: resultEvent.sessionId,
+                            reason: .completed,
+                            turnDidError: resultEvent.isError,
+                            lastAssistantText: lastAssistantResponseText(in: stateForSession(sessionKey).messages)
+                        ))
                         if stopResult.hasError {
                             stopHookFailureOutput = stopResult.combinedOutput
                         } else {
@@ -754,9 +762,19 @@ extension AppState {
                         reconcileFromDisk(sessionId: resultEvent.sessionId, projectId: projectId, cwd: cwd)
                     }
 
-                    // After-session-stop hooks: shown only, not re-saved.
+                    // After-session-stop hooks: shown only, not re-saved. This
+                    // dispatch also drives the response-complete notification
+                    // (ResponseNotificationHook), which self-suppresses unless
+                    // the turn genuinely completed without error.
                     if let stopProject {
-                        await runHooks(trigger: .afterSessionStop, project: stopProject, sessionKey: sessionKey)
+                        await hookManager.dispatchAfterSessionEnd(SessionEndPayload(
+                            project: stopProject,
+                            sessionKey: sessionKey,
+                            sessionId: resultEvent.sessionId,
+                            reason: .completed,
+                            turnDidError: resultEvent.isError,
+                            lastAssistantText: lastAssistantResponseText(in: stateForSession(sessionKey).messages)
+                        ))
                     }
 
                     // A failing before-stop hook auto-continues the agent so it
@@ -779,29 +797,9 @@ extension AppState {
                             }
                         }
 
-                        if notificationsEnabled {
-                            let summary = allSessionSummaries.first(where: { $0.id == resultEvent.sessionId })
-                            let title = summary?.title ?? "New Session"
-                            let responseText = lastAssistantResponseText(in: stateForSession(sessionKey).messages)
-                            let fallbackBody = responseNotificationFallback(from: responseText)
-                            let pid = projectId
-                            let sid = resultEvent.sessionId
-                            let postLocalBanner = !NSApp.isActive
-                            logger.info("[Notification] building response-complete session=\(sid, privacy: .public) hasSummary=\(summary != nil, privacy: .public) responseTextLen=\(responseText.count, privacy: .public) fallbackBodyLen=\(fallbackBody.count, privacy: .public)")
-                            if responseText.isEmpty {
-                                logger.warning("[Notification] last assistant response text is EMPTY — banner will fall back to \"Response complete\" unless the AI summary produces text. messageCount=\(self.stateForSession(sessionKey).messages.count, privacy: .public)")
-                            }
-                            Task { [weak self] in
-                                var body = fallbackBody
-                                if let self, let summary {
-                                    let aiSummary = await self.generateResponseNotificationSummary(responseText: responseText, summary: summary)
-                                    self.logger.info("[Notification] ai summary session=\(sid, privacy: .public) returnedNonNil=\(aiSummary != nil, privacy: .public) len=\(aiSummary?.count ?? 0, privacy: .public)")
-                                    body = aiSummary ?? fallbackBody
-                                }
-                                self?.logger.info("[Notification] posting response-complete session=\(sid, privacy: .public) finalBodyLen=\(body.count, privacy: .public) usedFallback=\(body == fallbackBody, privacy: .public)")
-                                await NotificationService.shared.postResponseComplete(title: title, body: body, projectId: pid, sessionId: sid, postLocalBanner: postLocalBanner)
-                            }
-                        }
+                        // The response-complete notification is posted by
+                        // ResponseNotificationHook via the after-session-end
+                        // dispatch above.
 
                         scheduleThreadSummaryUpdate(
                             sessionId: resultEvent.sessionId,

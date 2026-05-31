@@ -503,10 +503,9 @@ extension AppState {
         if case .connected = (previousStatus ?? .unknown),
            case .failed(let message) = newStatus
         {
-            let notifyService = NotificationService.shared
             let serverName = name
-            Task { @MainActor in
-                await notifyService.postMCPDisconnected(name: serverName, error: message)
+            Task { @MainActor [weak self] in
+                await self?.hookManager.dispatchMCPDisconnected(MCPDisconnectedPayload(name: serverName, error: message))
             }
         }
     }

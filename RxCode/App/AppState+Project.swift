@@ -9,8 +9,13 @@ import SwiftUI
 extension AppState {
     // MARK: - Project Management
 
-    func addProject(name: String, path: String, gitHubRepo: String?) async {
-        guard !projects.contains(where: { $0.path == path }) else { return }
+    /// Add a local project. Fires `onRepositoryAdded` unless `suppressHookEvent`
+    /// is set (the clone path fires `onRepositoryCloned` instead, to avoid a
+    /// double event). Returns the project (existing one if the path was already
+    /// added).
+    @discardableResult
+    func addProject(name: String, path: String, gitHubRepo: String?, suppressHookEvent: Bool = false) async -> Project? {
+        if let existing = projects.first(where: { $0.path == path }) { return existing }
         let project = Project(name: name, path: path, gitHubRepo: gitHubRepo)
         projects.append(project)
         do {
@@ -18,6 +23,10 @@ extension AppState {
         } catch {
             logger.error("Failed to save projects: \(error.localizedDescription)")
         }
+        if !suppressHookEvent {
+            await hookManager.dispatchRepositoryAdded(RepositoryPayload(project: project, wasCloned: false))
+        }
+        return project
     }
 
     func selectProject(_ project: Project, in window: WindowState) {
@@ -86,15 +95,17 @@ extension AppState {
         await addAndSelectProject(name: url.lastPathComponent, path: url.path, gitHubRepo: gitHubRepo, in: window)
     }
 
-    func addAndSelectProject(name: String, path: String, gitHubRepo: String? = nil, in window: WindowState) async {
+    @discardableResult
+    func addAndSelectProject(name: String, path: String, gitHubRepo: String? = nil, suppressAddedHook: Bool = false, in window: WindowState) async -> Project? {
         if let existing = projects.first(where: { $0.path == path }) {
             selectProject(existing, in: window)
-            return
+            return existing
         }
-        await addProject(name: name, path: path, gitHubRepo: gitHubRepo)
-        if let project = projects.last {
+        let project = await addProject(name: name, path: path, gitHubRepo: gitHubRepo, suppressHookEvent: suppressAddedHook)
+        if let project {
             selectProject(project, in: window)
         }
+        return project
     }
 
     // MARK: - Session Management
@@ -384,7 +395,13 @@ extension AppState {
         }
         let cloneURL = repo.isPrivate ? repo.sshUrl : repo.cloneUrl
         try await gitClone(from: cloneURL, to: clonePath)
-        await addAndSelectProject(name: repo.name, path: clonePath, gitHubRepo: repo.fullName, in: window)
+        // Suppress the generic "added" event — a clone is a more specific event.
+        let project = await addAndSelectProject(
+            name: repo.name, path: clonePath, gitHubRepo: repo.fullName, suppressAddedHook: true, in: window
+        )
+        if let project {
+            await hookManager.dispatchRepositoryCloned(RepositoryPayload(project: project, wasCloned: true))
+        }
     }
 
     private func gitClone(from url: String, to path: String) async throws {

@@ -9,7 +9,7 @@ import SwiftUI
 /// user accepts — injects the docs-publishing skill into that chat's system
 /// prompt so the agent wires up CI doc uploads. Mirrors `AutopilotHook`.
 @MainActor
-final class DocsHook: Hook {
+final class AutopilotDocsHook: Hook {
     let hookID = "builtin.docs"
     private let logger = Logger(subsystem: "com.claudework", category: "DocsHook")
 
@@ -19,6 +19,39 @@ final class DocsHook: Hook {
         guard let repo = project.gitHubRepo else { return nil }
         let repoSlug = repo.split(separator: "/").last.map(String.init) ?? repo
         return "\(repoSlug)-new-project-docs"
+    }
+
+    func onThreadContextMenu(_ payload: ThreadContextMenuPayload, controller: any HookController) -> [HookMenuItem] {
+        menuItems(for: payload.project, controller: controller)
+    }
+
+    func onProjectContextMenu(_ payload: ProjectContextMenuPayload, controller: any HookController) -> [HookMenuItem] {
+        menuItems(for: payload.project, controller: controller)
+    }
+
+    private func menuItems(for project: Project, controller: any HookController) -> [HookMenuItem] {
+        guard project.gitHubRepo != nil else { return [] }
+        if controller.projectHasDocs(project) {
+            return [
+                HookMenuItem(
+                    id: "\(hookID).search.\(project.id.uuidString)",
+                    title: "Search Docs",
+                    systemImage: "books.vertical.fill"
+                ) {
+                    controller.requestDocsSearch(project: project)
+                }
+            ]
+        }
+
+        return [
+            HookMenuItem(
+                id: "\(hookID).setup.\(project.id.uuidString)",
+                title: "Set Up Docs Search",
+                systemImage: "books.vertical.fill"
+            ) {
+                controller.requestDocsSetup(project: project)
+            }
+        ]
     }
 
     func onProjectDelete(_ payload: ProjectDeletePayload, controller: any HookController) async -> HookOutcome {

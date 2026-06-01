@@ -20,6 +20,11 @@ struct ProjectListView: View {
                 projectRow(project)
                     .tag(project.id)
                     .contextMenu {
+                        let hookItems = appState.projectContextMenuItems(for: project)
+                        if !hookItems.isEmpty {
+                            HookContextMenuItems(items: hookItems)
+                            Divider()
+                        }
                         Button {
                             renameText = project.name
                             projectToRename = project

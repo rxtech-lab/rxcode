@@ -340,6 +340,48 @@ final class AppStateHookController: HookController {
         return ReleaseSkill.systemPrompt
     }
 
+    // MARK: Context menu actions
+
+    func projectHasSecrets(_ project: Project) -> Bool {
+        app?.projectHasSecrets(project) ?? false
+    }
+
+    func projectHasDocs(_ project: Project) -> Bool {
+        app?.projectHasDocs(project) ?? false
+    }
+
+    func projectHasReleaseWorkflow(_ project: Project) -> Bool {
+        app?.projectHasReleaseWorkflow(project) ?? false
+    }
+
+    func requestSecretsSetup(project: Project) {
+        app?.secretsSetupRequest = SecretsSetupRequest(
+            repoFullName: project.gitHubRepo,
+            projectPath: project.path,
+            filename: nil
+        )
+    }
+
+    func requestSecretsDownload(project: Project) {
+        app?.secretsDownloadRequest = project
+    }
+
+    func requestDocsSetup(project: Project) {
+        app?.docsSetupRequest = DocsSetupRequest(projectId: project.id, repoFullName: project.gitHubRepo)
+    }
+
+    func requestDocsSearch(project: Project) {
+        app?.docsSearchRequest = UUID()
+    }
+
+    func requestReleaseSetup(project: Project) {
+        app?.releaseSetupRequest = ReleaseSetupRequest(projectId: project.id, repoFullName: project.gitHubRepo)
+    }
+
+    func requestReleaseCreate(project: Project) {
+        app?.releaseCreateRequest = project
+    }
+
     // MARK: Setup-session tracking
 
     func markSetupSession(kind: String, sessionKey: String) {

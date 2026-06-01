@@ -514,6 +514,37 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(appState.memoryMaxContextItems, 7)
     }
 
+    // MARK: - Pull request content
+
+    func testParsePullRequestContentNormalizesConventionalTitle() {
+        let raw = """
+        Fix: Enhance parallel API calls and improve startup warmup and Autopilot API handling.
+
+        Updates the branch behavior.
+        """
+
+        let result = AppState.parsePullRequestContent(raw, branch: "context-menu")
+
+        XCTAssertEqual(
+            result.title,
+            "fix: enhance parallel API calls and improve startup warmup and Autopilot API handling"
+        )
+        XCTAssertEqual(result.body, "Updates the branch behavior.")
+    }
+
+    func testParsePullRequestContentNormalizesScopedConventionalTitle() {
+        let raw = """
+        Title: Feat(Autopilot): Add docs search!
+
+        Adds the docs search flow.
+        """
+
+        let result = AppState.parsePullRequestContent(raw, branch: "context-menu")
+
+        XCTAssertEqual(result.title, "feat(autopilot): add docs search")
+        XCTAssertEqual(result.body, "Adds the docs search flow.")
+    }
+
     // MARK: - Helpers
 
     private func makeProject(_ name: String) -> Project {

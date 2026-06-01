@@ -9,7 +9,7 @@ import SwiftUI
 /// injects the release skill into that chat's system prompt so the agent wires
 /// up the `.releaserc` + CI workflow. Mirrors `DocsHook`.
 @MainActor
-final class ReleaseHook: Hook {
+final class AutopilotReleaseHook: Hook {
     let hookID = "builtin.release"
     private let logger = Logger(subsystem: "com.claudework", category: "ReleaseHook")
 
@@ -19,6 +19,39 @@ final class ReleaseHook: Hook {
         guard let repo = project.gitHubRepo else { return nil }
         let repoSlug = repo.split(separator: "/").last.map(String.init) ?? repo
         return "\(repoSlug)-new-project-release"
+    }
+
+    func onThreadContextMenu(_ payload: ThreadContextMenuPayload, controller: any HookController) -> [HookMenuItem] {
+        menuItems(for: payload.project, controller: controller)
+    }
+
+    func onProjectContextMenu(_ payload: ProjectContextMenuPayload, controller: any HookController) -> [HookMenuItem] {
+        menuItems(for: payload.project, controller: controller)
+    }
+
+    private func menuItems(for project: Project, controller: any HookController) -> [HookMenuItem] {
+        guard project.gitHubRepo != nil else { return [] }
+        if controller.projectHasReleaseWorkflow(project) {
+            return [
+                HookMenuItem(
+                    id: "\(hookID).create.\(project.id.uuidString)",
+                    title: "Create Release",
+                    systemImage: "tag.fill"
+                ) {
+                    controller.requestReleaseCreate(project: project)
+                }
+            ]
+        }
+
+        return [
+            HookMenuItem(
+                id: "\(hookID).setup.\(project.id.uuidString)",
+                title: "Set Up Release Workflow",
+                systemImage: "tag.fill"
+            ) {
+                controller.requestReleaseSetup(project: project)
+            }
+        ]
     }
 
     func onProjectDelete(_ payload: ProjectDeletePayload, controller: any HookController) async -> HookOutcome {

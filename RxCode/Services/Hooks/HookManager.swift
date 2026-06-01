@@ -33,6 +33,14 @@ final class HookManager {
         }
     }
 
+    func projectContextMenuItems(_ payload: ProjectContextMenuPayload) -> [HookMenuItem] {
+        enabledHooks.flatMap { $0.onProjectContextMenu(payload, controller: controller) }
+    }
+
+    func threadContextMenuItems(_ payload: ThreadContextMenuPayload) -> [HookMenuItem] {
+        enabledHooks.flatMap { $0.onThreadContextMenu(payload, controller: controller) }
+    }
+
     func dispatchProjectDelete(_ payload: ProjectDeletePayload) async {
         logger.debug("[Hook] dispatchProjectDelete: projectId=\(payload.project.id.uuidString, privacy: .public)")
         for hook in enabledHooks {

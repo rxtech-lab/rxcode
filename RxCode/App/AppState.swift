@@ -939,6 +939,8 @@ final class AppState {
     /// Non-nil while the secret-setup form should be presented (e.g. opened from
     /// the autopilot `.env` banner's deep link).
     var secretsSetupRequest: SecretsSetupRequest?
+    /// Non-nil while the per-project secret download sheet should be presented.
+    var secretsDownloadRequest: Project?
     /// Non-nil while the CI auto-update manage sheet should be presented, pinned
     /// to a repo (opened from the CI setup banner's deep link). `MainView`
     /// consumes it to present the sheet pre-targeted at that repo.
@@ -947,6 +949,9 @@ final class AppState {
     /// docs banner's deep link). `MainView` consumes it to start a fresh chat
     /// seeded with the docs-publishing skill.
     var docsSetupRequest: DocsSetupRequest?
+    /// Set when a hook/context-menu action wants to open the global docs-capable
+    /// search overlay in the current window.
+    var docsSearchRequest: UUID?
     /// One-shot: when a docs-setup chat is kicked off, this holds the project so
     /// `DocsHook.onSessionStart` injects the docs skill into exactly that chat's
     /// system prompt, then clears it.
@@ -955,6 +960,8 @@ final class AppState {
     /// release banner's deep link). `MainView` consumes it to start a fresh chat
     /// seeded with the release skill.
     var releaseSetupRequest: ReleaseSetupRequest?
+    /// Non-nil while the create-release sheet should be presented.
+    var releaseCreateRequest: Project?
     /// One-shot: when a release-setup chat is kicked off, this holds the project
     /// so `ReleaseHook.onSessionStart` injects the release skill into exactly
     /// that chat's system prompt, then clears it.
@@ -1188,9 +1195,9 @@ final class AppState {
         hookManager.register(CINotificationHook())
         hookManager.register(RemoteConfigNotificationHook())
         #if os(macOS)
-        hookManager.register(AutopilotHook())
-        hookManager.register(DocsHook())
-        hookManager.register(ReleaseHook())
+        hookManager.register(AutopilotSecretsHook())
+        hookManager.register(AutopilotDocsHook())
+        hookManager.register(AutopilotReleaseHook())
         hookManager.register(CIUpdateHook())
         #endif
     }

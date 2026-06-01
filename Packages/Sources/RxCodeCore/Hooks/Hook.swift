@@ -17,6 +17,8 @@ public protocol Hook: AnyObject {
     var isEnabled: Bool { get }
 
     func onProjectNewChatStart(_ payload: NewChatStartPayload, controller: any HookController) async -> HookOutcome
+    func onThreadContextMenu(_ payload: ThreadContextMenuPayload, controller: any HookController) -> [HookMenuItem]
+    func onProjectContextMenu(_ payload: ProjectContextMenuPayload, controller: any HookController) -> [HookMenuItem]
     func onProjectDelete(_ payload: ProjectDeletePayload, controller: any HookController) async -> HookOutcome
     func onSessionStart(_ payload: SessionStartPayload, controller: any HookController) async -> HookOutcome
     func beforeSessionEnd(_ payload: SessionEndPayload, controller: any HookController) async -> HookOutcome
@@ -38,6 +40,8 @@ public extension Hook {
     var isEnabled: Bool { true }
 
     func onProjectNewChatStart(_ payload: NewChatStartPayload, controller: any HookController) async -> HookOutcome { .ignored }
+    func onThreadContextMenu(_ payload: ThreadContextMenuPayload, controller: any HookController) -> [HookMenuItem] { [] }
+    func onProjectContextMenu(_ payload: ProjectContextMenuPayload, controller: any HookController) -> [HookMenuItem] { [] }
     func onProjectDelete(_ payload: ProjectDeletePayload, controller: any HookController) async -> HookOutcome { .ignored }
     func onSessionStart(_ payload: SessionStartPayload, controller: any HookController) async -> HookOutcome { .ignored }
     func beforeSessionEnd(_ payload: SessionEndPayload, controller: any HookController) async -> HookOutcome { .ignored }

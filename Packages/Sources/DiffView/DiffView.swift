@@ -161,7 +161,12 @@ public struct DiffView: View {
                         // scroll so line numbers stay anchored on the left.
                         LazyVStack(alignment: .leading, spacing: 0) {
                             ForEach(Array(lines.enumerated()), id: \.offset) { offset, line in
-                                DiffRowGutter(line: line, layout: layout)
+                                DiffRowGutter(
+                                    line: line,
+                                    layout: layout,
+                                    showsDiffMarkers: showsDiffMarkers,
+                                    fillsRowBackground: true
+                                )
                                     .id(rowID(for: offset))
                             }
                         }
@@ -177,6 +182,7 @@ public struct DiffView: View {
                                         line: line,
                                         layout: layout,
                                         showsDiffMarkers: showsDiffMarkers,
+                                        fillsRowBackground: true,
                                         wraps: false,
                                         language: language
                                     )
@@ -333,17 +339,24 @@ private struct DiffRow: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 0) {
-            DiffRowGutter(line: line, layout: layout)
+            DiffRowGutter(
+                line: line,
+                layout: layout,
+                showsDiffMarkers: showsDiffMarkers,
+                fillsRowBackground: false
+            )
             DiffRowBody(
                 line: line,
                 layout: layout,
                 showsDiffMarkers: showsDiffMarkers,
+                fillsRowBackground: false,
                 wraps: wraps,
                 language: language
             )
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(line.diffRowBackground(showsDiffMarkers: showsDiffMarkers))
     }
 }
 
@@ -352,6 +365,8 @@ private struct DiffRow: View {
 private struct DiffRowGutter: View {
     let line: DiffLine
     let layout: GutterLayout
+    let showsDiffMarkers: Bool
+    let fillsRowBackground: Bool
 
     var body: some View {
         let isHeader = line.kind == .hunk || line.kind == .meta
@@ -372,6 +387,11 @@ private struct DiffRowGutter: View {
             }
         }
         .frame(minHeight: DiffMetrics.rowMinHeight, alignment: .top)
+        .background(
+            fillsRowBackground
+                ? line.diffRowBackground(showsDiffMarkers: showsDiffMarkers)
+                : Color.clear
+        )
     }
 }
 
@@ -383,7 +403,7 @@ private struct DiffRowGutter: View {
 enum DiffMetrics {
     static var rowMinHeight: CGFloat {
         // ~lineHeight(12pt monospaced) + vertical padding(1 + 1).
-        ClaudeTheme.messageSize(12) * 1.35 + 2
+        (ClaudeTheme.messageSize(12) * 1.35 + 2).rounded(.up)
     }
 }
 
@@ -393,6 +413,7 @@ private struct DiffRowBody: View {
     let line: DiffLine
     let layout: GutterLayout
     let showsDiffMarkers: Bool
+    let fillsRowBackground: Bool
     let wraps: Bool
     /// File-extension hint (e.g. "swift", "ts") used to syntax-highlight the
     /// body text. `nil` skips highlighting and falls back to a flat color.
@@ -414,7 +435,11 @@ private struct DiffRowBody: View {
                 minHeight: DiffMetrics.rowMinHeight,
                 alignment: .leading
             )
-            .background(rowBackground)
+            .background(
+                fillsRowBackground
+                    ? line.diffRowBackground(showsDiffMarkers: showsDiffMarkers)
+                    : Color.clear
+            )
     }
 
     @ViewBuilder
@@ -493,11 +518,13 @@ private struct DiffRowBody: View {
         case .context: return ClaudeTheme.textPrimary
         }
     }
+}
 
-    private var rowBackground: Color {
+private extension DiffLine {
+    func diffRowBackground(showsDiffMarkers: Bool) -> Color {
         guard showsDiffMarkers else { return .clear }
 
-        switch line.kind {
+        switch kind {
         case .added:   return ClaudeTheme.statusSuccess.opacity(0.12)
         case .removed: return ClaudeTheme.statusError.opacity(0.12)
         case .hunk:    return ClaudeTheme.surfaceSecondary.opacity(0.6)

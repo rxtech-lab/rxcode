@@ -12358,6 +12358,22 @@
         }
       }
     },
+    "Search Docs" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "문서 검색"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索文档"
+          }
+        }
+      }
+    },
     "Search documentation repositories" : {
       "localizations" : {
         "ko" : {
@@ -12543,6 +12559,7 @@
       }
     },
     "Search Threads (⌘K)" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -12554,6 +12571,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "搜索对话（⌘K）"
+          }
+        }
+      }
+    },
+    "Search Threads and Docs (⌘K)" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스레드 및 문서 검색 (⌘K)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索对话和文档（⌘K）"
           }
         }
       }
@@ -13027,6 +13060,22 @@
         }
       }
     },
+    "Set Up Release Workflow" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "릴리스 워크플로 설정"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置发布工作流"
+          }
+        }
+      }
+    },
     "Set up releases for this repository" : {
       "localizations" : {
         "ko" : {
@@ -13039,6 +13088,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "为此仓库设置发布"
+          }
+        }
+      }
+    },
+    "Set Up Secrets" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "시크릿 설정"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置密钥"
           }
         }
       }

@@ -83,6 +83,7 @@ struct ProjectChatRow: View {
     let onTogglePin: () -> Void
     let onToggleArchive: () -> Void
     let onDelete: () -> Void
+    let hookMenuItems: [HookMenuItem]
 
     @State private var isHovered = false
 
@@ -167,6 +168,10 @@ struct ProjectChatRow: View {
                 } else {
                     Label("Archive", systemImage: "archivebox")
                 }
+            }
+            if !hookMenuItems.isEmpty {
+                Divider()
+                HookContextMenuItems(items: hookMenuItems)
             }
             Divider()
             Button(role: .destructive) { onDelete() } label: {

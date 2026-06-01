@@ -612,6 +612,10 @@ struct MainWindowRoot: View {
                             appState.secretsSetupRequest = request
                             return .handled
                         }
+                        if let request = CIUpdateDeepLink.parse(url) {
+                            appState.ciSetupRequest = request
+                            return .handled
+                        }
                         return openMarkdownLink(url, in: windowState)
                     })
                     .transition(.opacity)
@@ -625,6 +629,8 @@ struct MainWindowRoot: View {
                 appState.docsSetupRequest = DocsSetupRequest(repoFullName: docs.repoFullName)
             } else if let request = SecretsDeepLink.parse(url) {
                 appState.secretsSetupRequest = request
+            } else if let request = CIUpdateDeepLink.parse(url) {
+                appState.ciSetupRequest = request
             }
         }
         .animation(.easeInOut(duration: 0.3), value: appState.isInitialized)
@@ -695,6 +701,10 @@ struct ProjectWindowRoot: View {
                         }
                         if let request = SecretsDeepLink.parse(url) {
                             appState.secretsSetupRequest = request
+                            return .handled
+                        }
+                        if let request = CIUpdateDeepLink.parse(url) {
+                            appState.ciSetupRequest = request
                             return .handled
                         }
                         return openMarkdownLink(url, in: windowState)

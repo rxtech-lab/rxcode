@@ -115,6 +115,14 @@ public protocol HookController: AnyObject {
     /// unless `overwrite`. Returns the filenames actually written.
     func writeSecrets(_ files: [HookSecretFile], toPath path: String, overwrite: Bool) throws -> [String]
 
+    // MARK: CI auto-update
+
+    /// Whether the repo is configured for CI auto-updates (a "watched
+    /// repository"). Returns `nil` when the check can't be completed (signed out,
+    /// offline, request failed) so callers can tell that apart from a genuine
+    /// "not watched" and avoid surfacing a misleading banner.
+    func ciRepoIsWatched(repoFullName: String) async -> Bool?
+
     // MARK: Docs
 
     /// Whether the repo has documentation indexed in the docs service. Returns

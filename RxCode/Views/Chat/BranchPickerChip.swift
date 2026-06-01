@@ -199,6 +199,32 @@ struct BranchPickerChip: View {
 // MARK: - CreateBranchSheet
 
 struct CreateBranchSheet: View {
+    /// How a new branch gets materialized for the chat.
+    enum BranchMode: String, CaseIterable, Identifiable {
+        /// `git worktree add -b` — isolated checkout in a sibling directory.
+        case worktree
+        /// `git checkout -b` in the project root — mutates the main repo.
+        case checkout
+
+        var id: String { rawValue }
+
+        var label: String {
+            switch self {
+            case .worktree: "New worktree"
+            case .checkout: "Branch + checkout"
+            }
+        }
+
+        var hint: String {
+            switch self {
+            case .worktree:
+                "Creates an isolated worktree so this chat works without touching the main checkout."
+            case .checkout:
+                "Creates the branch and checks it out in the project root, changing the main checkout."
+            }
+        }
+    }
+
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
     @Environment(\.dismiss) private var dismiss
@@ -207,6 +233,7 @@ struct CreateBranchSheet: View {
     let onCreated: () -> Void
 
     @State private var branchText: String = "rxcode/"
+    @State private var mode: BranchMode = .worktree
     @State private var isCreating = false
     @State private var errorMessage: String?
     @FocusState private var isFocused: Bool
@@ -222,7 +249,7 @@ struct CreateBranchSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text("Create and checkout branch")
+                Text("Create branch")
                     .font(.system(size: ClaudeTheme.size(16), weight: .semibold))
                     .foregroundStyle(ClaudeTheme.textPrimary)
                 Spacer()
@@ -275,6 +302,22 @@ struct CreateBranchSheet: View {
                 }
             }
 
+            VStack(alignment: .leading, spacing: 6) {
+                Picker("", selection: $mode) {
+                    ForEach(BranchMode.allCases) { m in
+                        Text(m.label).tag(m)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .disabled(isCreating)
+
+                Text(mode.hint)
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(ClaudeTheme.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             HStack {
                 Spacer()
                 Button("Close") {
@@ -292,7 +335,7 @@ struct CreateBranchSheet: View {
                             Text("Creating…")
                         }
                     } else {
-                        Text("Create and checkout")
+                        Text(mode == .worktree ? "Create worktree" : "Create and checkout")
                     }
                 }
                 .keyboardShortcut(.defaultAction)
@@ -314,7 +357,12 @@ struct CreateBranchSheet: View {
         errorMessage = nil
         Task {
             do {
-                try await appState.attachWorktree(branch: trimmed, in: windowState)
+                switch mode {
+                case .worktree:
+                    try await appState.attachWorktree(branch: trimmed, in: windowState)
+                case .checkout:
+                    try await appState.createBranchInPlace(branch: trimmed, in: windowState)
+                }
                 isCreating = false
                 onCreated()
                 dismiss()

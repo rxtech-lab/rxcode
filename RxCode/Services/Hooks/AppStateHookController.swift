@@ -250,6 +250,21 @@ final class AppStateHookController: HookController {
         )
     }
 
+    // MARK: CI auto-update
+
+    func ciRepoIsWatched(repoFullName: String) async -> Bool? {
+        guard let app else { return nil }
+        do {
+            let statuses = try await app.ciUpdates.statuses(forRepos: [repoFullName])
+            // nil (not false) only on a failed/cancelled check — a successful
+            // lookup that finds no row legitimately means "not watched".
+            return statuses.first(where: { $0.repositoryFullName.lowercased() == repoFullName.lowercased() })?.isWatched ?? false
+        } catch {
+            logger.error("ciRepoIsWatched failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
     // MARK: Docs
 
     func docsIndexed(repoFullName: String) async -> Bool? {

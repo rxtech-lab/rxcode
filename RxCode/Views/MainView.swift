@@ -303,6 +303,13 @@ struct MainView: View {
             )
             .environment(appState)
         }
+        .sheet(item: Bindable(appState).ciSetupRequest, onDismiss: rerunNewChatHooks) { request in
+            CIUpdateManageSheet(
+                currentRepoFullName: request.repoFullName,
+                currentProjectPath: request.projectPath
+            )
+            .environment(appState)
+        }
         .onChange(of: appState.docsSetupRequest?.id) { _, _ in
             guard let request = appState.docsSetupRequest else { return }
             // Start a fresh chat in this project; DocsHook.onSessionStart injects

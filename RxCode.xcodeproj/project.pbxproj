@@ -40,6 +40,8 @@
 		DF462A622FC6EDCE002D9562 /* RxAuthSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = DF462A612FC6EDCE002D9562 /* RxAuthSwiftUI */; };
 		DF462DC92FC73FA8002D9562 /* RxAuthSwift in Frameworks */ = {isa = PBXBuildFile; productRef = DF462DC82FC73FA8002D9562 /* RxAuthSwift */; };
 		DF462DCB2FC73FA8002D9562 /* RxAuthSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = DF462DCA2FC73FA8002D9562 /* RxAuthSwiftUI */; };
+		DF4652682FCD34B3002D9562 /* JSONSchemaForm in Frameworks */ = {isa = PBXBuildFile; productRef = DF4652672FCD34B3002D9562 /* JSONSchemaForm */; };
+		DF46526A2FCD34B3002D9562 /* JSONSchemaValidator in Frameworks */ = {isa = PBXBuildFile; productRef = DF4652692FCD34B3002D9562 /* JSONSchemaValidator */; };
 		DFA0CCD12FB4CC01005991E1 /* PlanDecisionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA0CCC02FB4CC01005991E1 /* PlanDecisionTests.swift */; };
 		DFA0CCD22FB4CC01005991E1 /* PlanCardViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA0CCC12FB4CC01005991E1 /* PlanCardViewTests.swift */; };
 		DFA0CCD42FB4CC01005991E1 /* RxCodeChatKit in Frameworks */ = {isa = PBXBuildFile; productRef = DFA0CCC32FB4CC01005991E1 /* RxCodeChatKit */; };
@@ -297,7 +299,9 @@
 				DF4628922FC611E6002D9562 /* RxAuthSwift in Frameworks */,
 				E6C001022F9B000100000001 /* Sparkle in Frameworks */,
 				E6D001032FA0000100000001 /* RxCodeCore in Frameworks */,
+				DF46526A2FCD34B3002D9562 /* JSONSchemaValidator in Frameworks */,
 				DF462A622FC6EDCE002D9562 /* RxAuthSwiftUI in Frameworks */,
+				DF4652682FCD34B3002D9562 /* JSONSchemaForm in Frameworks */,
 				E6D001042FA0000100000001 /* RxCodeChatKit in Frameworks */,
 				DF462DCB2FC73FA8002D9562 /* RxAuthSwiftUI in Frameworks */,
 				E6D001072FA0000100000001 /* RxCodeSync in Frameworks */,
@@ -604,6 +608,8 @@
 				DF462A612FC6EDCE002D9562 /* RxAuthSwiftUI */,
 				DF462DC82FC73FA8002D9562 /* RxAuthSwift */,
 				DF462DCA2FC73FA8002D9562 /* RxAuthSwiftUI */,
+				DF4652672FCD34B3002D9562 /* JSONSchemaForm */,
+				DF4652692FCD34B3002D9562 /* JSONSchemaValidator */,
 			);
 			productName = RxCode;
 			productReference = E67335382F7356F600FD26C7 /* RxCode.app */;
@@ -665,6 +671,7 @@
 				DF23FF1B2FBB42F7008929A6 /* XCRemoteSwiftPackageReference "WaterfallGrid" */,
 				FB0000000000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				DF462DC72FC73FA8002D9562 /* XCRemoteSwiftPackageReference "RxAuthSwift" */,
+				DF4652662FCD34B3002D9562 /* XCRemoteSwiftPackageReference "swift-jsonschema-form" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = E67335392F7356F600FD26C7 /* Products */;
@@ -1514,6 +1521,14 @@
 				version = 1.1.1;
 			};
 		};
+		DF4652662FCD34B3002D9562 /* XCRemoteSwiftPackageReference "swift-jsonschema-form" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sirily11/swift-jsonschema-form";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
 		E6A001002F8A000100000001 /* XCRemoteSwiftPackageReference "SwiftTerm" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/migueldeicaza/SwiftTerm.git";
@@ -1615,6 +1630,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = DF462DC72FC73FA8002D9562 /* XCRemoteSwiftPackageReference "RxAuthSwift" */;
 			productName = RxAuthSwiftUI;
+		};
+		DF4652672FCD34B3002D9562 /* JSONSchemaForm */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DF4652662FCD34B3002D9562 /* XCRemoteSwiftPackageReference "swift-jsonschema-form" */;
+			productName = JSONSchemaForm;
+		};
+		DF4652692FCD34B3002D9562 /* JSONSchemaValidator */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DF4652662FCD34B3002D9562 /* XCRemoteSwiftPackageReference "swift-jsonschema-form" */;
+			productName = JSONSchemaValidator;
 		};
 		DFA0CCC32FB4CC01005991E1 /* RxCodeChatKit */ = {
 			isa = XCSwiftPackageProductDependency;

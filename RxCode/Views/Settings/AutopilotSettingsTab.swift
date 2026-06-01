@@ -15,6 +15,8 @@ struct AutopilotSettingsTab: View {
 
     @State private var showManageDocs = false
 
+    @State private var showManageCIUpdates = false
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -24,6 +26,8 @@ struct AutopilotSettingsTab: View {
                 if appState.isSignedIn {
                     Divider()
                     secretsSection
+                    Divider()
+                    ciUpdatesSection
                     Divider()
                     docsSection
                 }
@@ -39,6 +43,12 @@ struct AutopilotSettingsTab: View {
             Task { await appState.refreshSecretsStatuses() }
         }) {
             SecretsManageSheet()
+                .environment(appState)
+        }
+        .sheet(isPresented: $showManageCIUpdates, onDismiss: {
+            Task { await appState.refreshCIStatuses() }
+        }) {
+            CIUpdateManageSheet()
                 .environment(appState)
         }
         .sheet(isPresented: $showManageDocs, onDismiss: {
@@ -76,6 +86,38 @@ struct AutopilotSettingsTab: View {
                     }
                     Spacer(minLength: 0)
                     Button("Manage Docs") { showManageDocs = true }
+                        .buttonStyle(.borderedProminent)
+                }
+            }
+        }
+    }
+
+    // MARK: - CI Auto-Update Section
+
+    private var ciUpdatesSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("CI Auto-Update")
+                    .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
+                Text("Keep your repositories' GitHub Actions up to date automatically. Autopilot scans `.github/workflows` on a schedule and opens a PR when actions are outdated.")
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            secretsCard {
+                HStack(spacing: 12) {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(.system(size: ClaudeTheme.size(18)))
+                        .foregroundStyle(ClaudeTheme.accent)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("CI auto-update scan")
+                            .font(.system(size: ClaudeTheme.size(13), weight: .medium))
+                        Text("Watch repositories, set scan schedules, and review scan history and pull requests.")
+                            .font(.system(size: ClaudeTheme.size(11)))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                    Button("Manage") { showManageCIUpdates = true }
                         .buttonStyle(.borderedProminent)
                 }
             }

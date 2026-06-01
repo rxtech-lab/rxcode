@@ -102,6 +102,14 @@ public enum GitHelper {
         return trimmed.isEmpty ? "git checkout exited \(process.terminationStatus)" : trimmed
     }
 
+    /// Creates a new branch and checks it out (`git checkout -b <branch> [fromRef]`)
+    /// at `path`. Returns the combined git output on failure, or nil on success.
+    public static func createBranch(_ branch: String, at path: String, fromRef: String? = nil) async -> String? {
+        var args = ["checkout", "-b", branch]
+        if let fromRef, !fromRef.isEmpty { args.append(fromRef) }
+        return await runWithError(args, at: path)
+    }
+
     /// Stages the given paths (`git add --`). Returns nil on success or the
     /// combined output on failure.
     public static func stage(paths: [String], at repoPath: String) async -> String? {

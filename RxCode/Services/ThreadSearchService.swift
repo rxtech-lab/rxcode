@@ -207,6 +207,24 @@ actor ThreadSearchService {
         // time it removes the threads, so the disk side is handled there.
     }
 
+    /// Drop every in-memory chunk whose project is no longer known. The disk
+    /// rows are purged separately at launch (`ThreadStore.pruneOrphanThreads`);
+    /// this keeps the live index consistent regardless of whether `start()`
+    /// loaded before or after that prune ran.
+    func pruneOrphans(knownProjectIds: Set<UUID>) async {
+        let before = index.count
+        for (threadId, chunks) in index {
+            guard let projectId = chunks.first?.projectId else { continue }
+            if !knownProjectIds.contains(projectId) {
+                index.removeValue(forKey: threadId)
+            }
+        }
+        let removed = before - index.count
+        if removed > 0 {
+            logger.info("Pruned \(removed) orphan thread(s) from in-memory search index")
+        }
+    }
+
     // MARK: - Search
 
     /// Return up to `limit` thread hits, grouped by project, sorted by descending score.

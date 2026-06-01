@@ -393,15 +393,31 @@ private struct GlassProjectCard: View {
     @State private var autopilotInfo: AutopilotMenuInfo?
 
     var body: some View {
+        // Attach the autopilot context menu directly to the card (mirrors the
+        // working `GlassThreadCard` pattern in `SessionsList`). Routing it
+        // through a conditional `ViewModifier` previously meant the long-press
+        // menu never registered on the project list. The menu items themselves
+        // stay gated on a linked GitHub repo, matching the desktop.
         cardButton
-            .modifier(ProjectCardAutopilotMenuModifier(
+            .contextMenu {
+                if project.gitHubRepo != nil {
+                    ProjectAutopilotMenuItems(
+                        project: project,
+                        status: autopilotStatus,
+                        showDownloadSheet: $showingSecretsDownload,
+                        showReleaseCreate: $showingReleaseCreate,
+                        info: $autopilotInfo
+                    )
+                }
+            }
+            .projectAutopilotMenuHost(
                 project: project,
                 status: $autopilotStatus,
                 showDownloadSheet: $showingSecretsDownload,
                 showReleaseCreate: $showingReleaseCreate,
                 info: $autopilotInfo,
                 state: state
-            ))
+            )
     }
 
     @ViewBuilder
@@ -545,45 +561,6 @@ private struct GlassProjectCard: View {
         if weeks < 52 { return "\(weeks)w" }
 
         return "\(days / 365)y"
-    }
-}
-
-// MARK: - Project Card Autopilot Menu
-
-/// Attaches the autopilot context menu (long-press) + its sheet/alert to a
-/// project card, but only for repo-backed projects (matching the desktop, which
-/// shows no autopilot items without a linked GitHub repo).
-private struct ProjectCardAutopilotMenuModifier: ViewModifier {
-    let project: Project
-    @Binding var status: AutopilotProjectStatus?
-    @Binding var showDownloadSheet: Bool
-    @Binding var showReleaseCreate: Bool
-    @Binding var info: AutopilotMenuInfo?
-    let state: MobileAppState
-
-    func body(content: Content) -> some View {
-        if project.gitHubRepo != nil {
-            content
-                .contextMenu {
-                    ProjectAutopilotMenuItems(
-                        project: project,
-                        status: status,
-                        showDownloadSheet: $showDownloadSheet,
-                        showReleaseCreate: $showReleaseCreate,
-                        info: $info
-                    )
-                }
-                .projectAutopilotMenuHost(
-                    project: project,
-                    status: $status,
-                    showDownloadSheet: $showDownloadSheet,
-                    showReleaseCreate: $showReleaseCreate,
-                    info: $info,
-                    state: state
-                )
-        } else {
-            content
-        }
     }
 }
 

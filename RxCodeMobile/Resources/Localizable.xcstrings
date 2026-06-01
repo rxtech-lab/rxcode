@@ -1442,6 +1442,9 @@
         }
       }
     },
+    "Couldn’t Complete" : {
+
+    },
     "Couldn't connect to the relay from the QR code. Check the relay address and try again." : {
       "localizations" : {
         "en" : {
@@ -1473,6 +1476,9 @@
           }
         }
       }
+    },
+    "Couldn’t Load Environments" : {
+
     },
     "Couldn't Load File" : {
       "localizations" : {
@@ -2137,6 +2143,12 @@
         }
       }
     },
+    "Download" : {
+
+    },
+    "Download Secret" : {
+
+    },
     "Duplicate" : {
       "localizations" : {
         "en" : {
@@ -2304,6 +2316,9 @@
           }
         }
       }
+    },
+    "Environment" : {
+
     },
     "Error" : {
       "localizations" : {
@@ -2668,6 +2683,9 @@
           }
         }
       }
+    },
+    "Files are decrypted on your Mac and written into the project folder." : {
+
     },
     "Filter Skills" : {
       "localizations" : {
@@ -3100,6 +3118,9 @@
         }
       }
     },
+    "Loading Autopilot…" : {
+
+    },
     "Loading changes…" : {
       "localizations" : {
         "en" : {
@@ -3115,6 +3136,9 @@
           }
         }
       }
+    },
+    "Loading environments…" : {
+
     },
     "Loading folders" : {
       "localizations" : {
@@ -3924,6 +3948,9 @@
         }
       }
     },
+    "No Secrets" : {
+
+    },
     "No Selection" : {
       "localizations" : {
         "zh-Hans" : {
@@ -4299,6 +4326,9 @@
           }
         }
       }
+    },
+    "Overwrite existing files" : {
+
     },
     "Package" : {
 
@@ -5225,6 +5255,9 @@
         }
       }
     },
+    "Search Docs" : {
+
+    },
     "Search or enter website name" : {
       "localizations" : {
         "zh-Hans" : {
@@ -5387,6 +5420,9 @@
         }
       }
     },
+    "Sent to Your Mac" : {
+
+    },
     "Serious" : {
       "localizations" : {
         "en" : {
@@ -5418,6 +5454,15 @@
           }
         }
       }
+    },
+    "Set Up Docs Search" : {
+
+    },
+    "Set Up Release Workflow" : {
+
+    },
+    "Set Up Secrets" : {
+
     },
     "Settings" : {
       "localizations" : {
@@ -5855,6 +5900,9 @@
         }
       }
     },
+    "These files already exist and were skipped: %@. Turn on overwrite to replace them." : {
+
+    },
     "Thinking" : {
       "localizations" : {
         "zh-Hans" : {
@@ -5949,6 +5997,9 @@
         }
       }
     },
+    "This project is not linked to a GitHub repo." : {
+
+    },
     "This QR has expired. Generate a new one on your Mac." : {
       "localizations" : {
         "en" : {
@@ -6022,6 +6073,9 @@
           }
         }
       }
+    },
+    "This repository has no secret environments to download." : {
+
     },
     "This settings form couldn't be rendered. Edit the raw JSON instead." : {
       "localizations" : {

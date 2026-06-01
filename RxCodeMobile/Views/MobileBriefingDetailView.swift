@@ -15,6 +15,7 @@ struct MobileBriefingDetailView: View {
     // Autopilot context menu (1:1 with the desktop briefing/project menu).
     @State private var autopilotStatus: AutopilotProjectStatus?
     @State private var showingSecretsDownload = false
+    @State private var showingReleaseCreate = false
     @State private var autopilotInfo: AutopilotMenuInfo?
 
     var body: some View {
@@ -53,6 +54,7 @@ struct MobileBriefingDetailView: View {
                                 project: project,
                                 status: autopilotStatus,
                                 showDownloadSheet: $showingSecretsDownload,
+                                showReleaseCreate: $showingReleaseCreate,
                                 info: $autopilotInfo
                             )
                             if gitHubURL != nil { Divider() }
@@ -78,6 +80,7 @@ struct MobileBriefingDetailView: View {
             project: project,
             status: $autopilotStatus,
             showDownloadSheet: $showingSecretsDownload,
+            showReleaseCreate: $showingReleaseCreate,
             info: $autopilotInfo,
             state: state
         )

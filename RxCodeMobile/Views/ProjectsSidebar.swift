@@ -389,6 +389,7 @@ private struct GlassProjectCard: View {
     // Autopilot context menu (1:1 with the desktop project/sidebar menu).
     @State private var autopilotStatus: AutopilotProjectStatus?
     @State private var showingSecretsDownload = false
+    @State private var showingReleaseCreate = false
     @State private var autopilotInfo: AutopilotMenuInfo?
 
     var body: some View {
@@ -397,6 +398,7 @@ private struct GlassProjectCard: View {
                 project: project,
                 status: $autopilotStatus,
                 showDownloadSheet: $showingSecretsDownload,
+                showReleaseCreate: $showingReleaseCreate,
                 info: $autopilotInfo,
                 state: state
             ))
@@ -555,6 +557,7 @@ private struct ProjectCardAutopilotMenuModifier: ViewModifier {
     let project: Project
     @Binding var status: AutopilotProjectStatus?
     @Binding var showDownloadSheet: Bool
+    @Binding var showReleaseCreate: Bool
     @Binding var info: AutopilotMenuInfo?
     let state: MobileAppState
 
@@ -566,6 +569,7 @@ private struct ProjectCardAutopilotMenuModifier: ViewModifier {
                         project: project,
                         status: status,
                         showDownloadSheet: $showDownloadSheet,
+                        showReleaseCreate: $showReleaseCreate,
                         info: $info
                     )
                 }
@@ -573,6 +577,7 @@ private struct ProjectCardAutopilotMenuModifier: ViewModifier {
                     project: project,
                     status: $status,
                     showDownloadSheet: $showDownloadSheet,
+                    showReleaseCreate: $showReleaseCreate,
                     info: $info,
                     state: state
                 )

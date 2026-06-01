@@ -34,6 +34,7 @@ struct ProjectAutopilotMenuItems: View {
     /// Loaded per-project state; `nil` while the first fetch is in flight.
     let status: AutopilotProjectStatus?
     @Binding var showDownloadSheet: Bool
+    @Binding var showReleaseCreate: Bool
     @Binding var info: AutopilotMenuInfo?
 
     var body: some View {
@@ -73,22 +74,14 @@ struct ProjectAutopilotMenuItems: View {
 
     @ViewBuilder
     private func docsItem(_ status: AutopilotProjectStatus) -> some View {
-        if status.hasDocs {
-            Button {
-                fire("Opened docs search on your Mac.") {
-                    try await state.requestProjectDocsSearch(projectId: project.id)
-                }
-            } label: {
-                Label("Search Docs", systemImage: "books.vertical.fill")
+        // Docs search lives in the docs UI now — the context menu only offers
+        // setting up / creating docs for the repo.
+        Button {
+            fire("Docs setup started on your Mac.") {
+                try await state.requestProjectDocsSetup(projectId: project.id)
             }
-        } else {
-            Button {
-                fire("Docs setup started on your Mac.") {
-                    try await state.requestProjectDocsSetup(projectId: project.id)
-                }
-            } label: {
-                Label("Set Up Docs Search", systemImage: "books.vertical.fill")
-            }
+        } label: {
+            Label("Set Up Docs Search", systemImage: "books.vertical.fill")
         }
     }
 
@@ -96,9 +89,9 @@ struct ProjectAutopilotMenuItems: View {
     private func releaseItem(_ status: AutopilotProjectStatus) -> some View {
         if status.hasRelease {
             Button {
-                fire("Opened create-release on your Mac.") {
-                    try await state.requestProjectReleaseCreate(projectId: project.id)
-                }
+                // Show the create-release form on the phone (1:1 with the
+                // on-device release dispatch form) instead of opening it on Mac.
+                showReleaseCreate = true
             } label: {
                 Label("Create Release", systemImage: "tag.fill")
             }
@@ -136,6 +129,7 @@ extension View {
         project: Project?,
         status: Binding<AutopilotProjectStatus?>,
         showDownloadSheet: Binding<Bool>,
+        showReleaseCreate: Binding<Bool>,
         info: Binding<AutopilotMenuInfo?>,
         state: MobileAppState
     ) -> some View {
@@ -143,6 +137,7 @@ extension View {
             project: project,
             status: status,
             showDownloadSheet: showDownloadSheet,
+            showReleaseCreate: showReleaseCreate,
             info: info,
             state: state
         ))
@@ -153,6 +148,7 @@ private struct ProjectAutopilotMenuHostModifier: ViewModifier {
     let project: Project?
     @Binding var status: AutopilotProjectStatus?
     @Binding var showDownloadSheet: Bool
+    @Binding var showReleaseCreate: Bool
     @Binding var info: AutopilotMenuInfo?
     let state: MobileAppState
 
@@ -166,6 +162,13 @@ private struct ProjectAutopilotMenuHostModifier: ViewModifier {
             .sheet(isPresented: $showDownloadSheet) {
                 if let project {
                     ProjectSecretsDownloadSheet(project: project)
+                        .environmentObject(state)
+                        .mobileSheetPresentation()
+                }
+            }
+            .sheet(isPresented: $showReleaseCreate) {
+                if let project {
+                    ProjectReleaseCreateSheet(project: project)
                         .environmentObject(state)
                         .mobileSheetPresentation()
                 }
@@ -339,6 +342,194 @@ struct ProjectSecretsDownloadSheet: View {
             } catch {
                 actionError = error.localizedDescription
             }
+        }
+    }
+}
+
+// MARK: - Create-release form (on-device)
+
+/// On-device "Create Release" form, mirroring the desktop `ReleaseCreateSheet`:
+/// resolves the project's release workflows, lets the user pick a dispatchable
+/// one, fills its `workflow_dispatch` inputs, and triggers it — all on the phone
+/// (the desktop only relays the request). `repoId` is the `owner/repo` slug,
+/// which the desktop resolves server-side just like the macOS sheet does.
+struct ProjectReleaseCreateSheet: View {
+    @EnvironmentObject private var state: MobileAppState
+    @Environment(\.dismiss) private var dismiss
+    let project: Project
+
+    @State private var workflows: [MobileReleaseWorkflow] = []
+    @State private var selectedWorkflowId: String?
+    @State private var branch = "main"
+    @State private var inputValues: [String: String] = [:]
+    @State private var isLoading = true
+    @State private var isDispatching = false
+    @State private var loadError: String?
+    @State private var dispatchError: String?
+    @State private var dispatchedURLString: String?
+
+    private var repoFullName: String { project.gitHubRepo ?? "" }
+    private var dispatchableWorkflows: [MobileReleaseWorkflow] {
+        workflows.filter { $0.hasWorkflowDispatch }
+    }
+    private var selectedWorkflow: MobileReleaseWorkflow? {
+        workflows.first { $0.id == selectedWorkflowId }
+    }
+    private var resolvedBranch: String {
+        branch.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                if isLoading {
+                    HStack { Spacer(); ProgressView(); Spacer() }
+                } else if let loadError {
+                    Text(loadError).foregroundStyle(.red)
+                } else if dispatchableWorkflows.isEmpty {
+                    Text("No dispatchable release workflow found for \(repoFullName). Add a workflow_dispatch release workflow and rescan, then try again.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    detailsSection
+                    if let inputs = selectedWorkflow?.inputs, !inputs.isEmpty {
+                        Section("Workflow inputs") {
+                            ForEach(inputs) { inputField($0) }
+                        }
+                    }
+                    if let dispatchError {
+                        Section { Text(dispatchError).foregroundStyle(.red).font(.callout) }
+                    }
+                    if let dispatchedURLString, let url = URL(string: dispatchedURLString) {
+                        Section {
+                            Label("Release workflow triggered", systemImage: "checkmark.seal.fill")
+                                .foregroundStyle(.green)
+                            Link("View workflow run on GitHub", destination: url)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Create Release")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(dispatchedURLString == nil ? "Cancel" : "Close") { dismiss() }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        Task { await dispatch() }
+                    } label: {
+                        if isDispatching { ProgressView() } else { Text("Create Release") }
+                    }
+                    .disabled(isDispatching || selectedWorkflow == nil || resolvedBranch.isEmpty || dispatchedURLString != nil)
+                }
+            }
+            .mobileAutopilotLoadingOverlay(isLoading && workflows.isEmpty, title: "Loading workflows…")
+        }
+        .task { await load() }
+    }
+
+    private var detailsSection: some View {
+        Section("Release") {
+            LabeledContent("Repository", value: repoFullName)
+            if dispatchableWorkflows.count > 1 {
+                Picker("Workflow", selection: $selectedWorkflowId) {
+                    ForEach(dispatchableWorkflows) { Text($0.displayName).tag(Optional($0.id)) }
+                }
+            } else if let wf = dispatchableWorkflows.first {
+                LabeledContent("Workflow", value: wf.displayName)
+            }
+            TextField("Branch", text: $branch)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            Text("The next version is computed by semantic-release from the commit history.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private func inputField(_ input: MobileReleaseWorkflowInput) -> some View {
+        let label = input.name + (input.required ? " *" : "")
+        if input.type == "boolean" {
+            Toggle(label, isOn: Binding(
+                get: { (inputValues[input.name] ?? (input.defaultBool == true ? "true" : "false")) == "true" },
+                set: { inputValues[input.name] = $0 ? "true" : "false" }
+            ))
+        } else if input.type == "choice", let options = input.options {
+            Picker(label, selection: Binding(
+                get: { inputValues[input.name] ?? input.defaultString ?? options.first ?? "" },
+                set: { inputValues[input.name] = $0 }
+            )) {
+                ForEach(options, id: \.self) { Text($0).tag($0) }
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 2) {
+                TextField(label, text: Binding(
+                    get: { inputValues[input.name] ?? input.defaultString ?? "" },
+                    set: { inputValues[input.name] = $0 }
+                ))
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                if let desc = input.description, !desc.isEmpty {
+                    Text(desc).font(.caption2).foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private func load() async {
+        guard !repoFullName.isEmpty else {
+            loadError = String(localized: "This project is not linked to a GitHub repo.")
+            isLoading = false
+            return
+        }
+        isLoading = true
+        loadError = nil
+        defer { isLoading = false }
+        do {
+            workflows = try await state.listReleaseWorkflows(repoId: repoFullName)
+            let preferred = workflows.first { $0.isSelected && $0.hasWorkflowDispatch }
+                ?? dispatchableWorkflows.first
+            selectedWorkflowId = preferred?.id
+            seedDefaults(for: preferred)
+        } catch {
+            loadError = error.localizedDescription
+        }
+    }
+
+    private func seedDefaults(for workflow: MobileReleaseWorkflow?) {
+        guard let inputs = workflow?.inputs else { return }
+        for input in inputs where inputValues[input.name] == nil {
+            if input.type == "boolean" {
+                inputValues[input.name] = (input.defaultBool ?? false) ? "true" : "false"
+            } else {
+                inputValues[input.name] = input.defaultString ?? (input.options?.first ?? "")
+            }
+        }
+    }
+
+    private func dispatch() async {
+        guard let workflow = selectedWorkflow else { return }
+        isDispatching = true
+        dispatchError = nil
+        defer { isDispatching = false }
+        do {
+            let result = try await state.dispatchRelease(
+                repoId: repoFullName,
+                request: ReleaseDispatchRequest(
+                    workflowId: workflow.id,
+                    branch: resolvedBranch,
+                    inputs: inputValues
+                )
+            )
+            if let urlString = result.workflowRunUrl {
+                dispatchedURLString = urlString
+            } else if result.success == false {
+                dispatchError = result.error ?? String(localized: "Failed to trigger the release workflow.")
+            } else {
+                dispatchedURLString = "https://github.com/\(repoFullName)/actions"
+            }
+        } catch {
+            dispatchError = error.localizedDescription
         }
     }
 }

@@ -902,4 +902,5 @@ extension Notification.Name {
     static let mobileSyncACPMutationRequested = Notification.Name("mobileSync.acpMutationRequested")
     static let mobileSyncMCPConfigRequested = Notification.Name("mobileSync.mcpConfigRequested")
     static let mobileSyncMCPMutationRequested = Notification.Name("mobileSync.mcpMutationRequested")
+    static let mobileSyncAutopilotRequested = Notification.Name("mobileSync.autopilotRequested")
 }

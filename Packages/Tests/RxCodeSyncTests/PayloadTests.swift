@@ -415,4 +415,82 @@ struct PayloadTests {
         #expect(createResult.project?.id == projectID)
         #expect(createResult.project?.name == "RxCode")
     }
+
+    @Test("autopilot request payload round trips with an encoded body")
+    func autopilotRequestRoundTrips() throws {
+        let requestID = UUID(uuidString: "AAAAAAAA-1111-2222-3333-444444444444")!
+        let innerBody = try JSONEncoder().encode(AutopilotSecretsEnvRefBody(repo: "octocat/hello", envId: "env-123"))
+        let request = Payload.autopilotRequest(
+            AutopilotRequestPayload(
+                clientRequestID: requestID,
+                domain: .secrets,
+                operation: .secretsGetBundle,
+                body: innerBody
+            )
+        )
+
+        let data = try JSONEncoder().encode(request)
+        let decoded = try JSONDecoder().decode(Payload.self, from: data)
+        guard case .autopilotRequest(let req) = decoded else {
+            Issue.record("Expected autopilot request")
+            return
+        }
+        #expect(req.clientRequestID == requestID)
+        #expect(req.domain == AutopilotDomain.secrets.rawValue)
+        #expect(req.operation == AutopilotOp.secretsGetBundle.rawValue)
+        let innerDecoded = try JSONDecoder().decode(AutopilotSecretsEnvRefBody.self, from: #require(req.body))
+        #expect(innerDecoded.repo == "octocat/hello")
+        #expect(innerDecoded.envId == "env-123")
+    }
+
+    @Test("autopilot result payload round trips and preserves failure detail")
+    func autopilotResultRoundTrips() throws {
+        let requestID = UUID(uuidString: "BBBBBBBB-5555-6666-7777-888888888888")!
+        let workflows = MobileReleaseWorkflowList(items: [
+            MobileReleaseWorkflow(
+                id: "wf-1",
+                workflowPath: ".github/workflows/release.yml",
+                workflowName: "Release",
+                isSelected: true,
+                isReleaseWorkflow: true,
+                hasWorkflowDispatch: true,
+                inputs: nil
+            )
+        ])
+        let okResult = Payload.autopilotResult(
+            AutopilotResultPayload(
+                clientRequestID: requestID,
+                domain: AutopilotDomain.release.rawValue,
+                operation: AutopilotOp.releaseListWorkflows.rawValue,
+                ok: true,
+                body: try JSONEncoder().encode(workflows)
+            )
+        )
+        let okData = try JSONEncoder().encode(okResult)
+        guard case .autopilotResult(let decodedOK) = try JSONDecoder().decode(Payload.self, from: okData) else {
+            Issue.record("Expected autopilot result")
+            return
+        }
+        #expect(decodedOK.ok)
+        let decodedWorkflows = try JSONDecoder().decode(MobileReleaseWorkflowList.self, from: #require(decodedOK.body))
+        #expect(decodedWorkflows.items.first?.displayName == "Release")
+
+        let failure = Payload.autopilotResult(
+            AutopilotResultPayload(
+                clientRequestID: requestID,
+                domain: AutopilotDomain.docs.rawValue,
+                operation: AutopilotOp.docsList.rawValue,
+                ok: false,
+                errorMessage: "Not signed in."
+            )
+        )
+        let failureData = try JSONEncoder().encode(failure)
+        guard case .autopilotResult(let decodedFailure) = try JSONDecoder().decode(Payload.self, from: failureData) else {
+            Issue.record("Expected autopilot result")
+            return
+        }
+        #expect(!decodedFailure.ok)
+        #expect(decodedFailure.errorMessage == "Not signed in.")
+        #expect(decodedFailure.body == nil)
+    }
 }

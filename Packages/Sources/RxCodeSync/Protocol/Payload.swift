@@ -64,6 +64,8 @@ public enum Payload: Sendable {
     case mcpConfigResult(MCPConfigResultPayload)
     case mcpMutationRequest(MCPMutationRequestPayload)
     case mcpMutationResult(MCPMutationResultPayload)
+    case autopilotRequest(AutopilotRequestPayload)
+    case autopilotResult(AutopilotResultPayload)
     case ping(PingPayload)
     case pong(PongPayload)
     case unknown(type: String)
@@ -129,6 +131,8 @@ public extension Payload {
         case .mcpConfigResult: return "mcp_config_result"
         case .mcpMutationRequest: return "mcp_mutation_request"
         case .mcpMutationResult: return "mcp_mutation_result"
+        case .autopilotRequest: return "autopilot_request"
+        case .autopilotResult: return "autopilot_result"
         case .ping: return "ping"
         case .pong: return "pong"
         case .unknown(let type): return type
@@ -748,6 +752,8 @@ extension Payload: Codable {
         case mcpConfigResult = "mcp_config_result"
         case mcpMutationRequest = "mcp_mutation_request"
         case mcpMutationResult = "mcp_mutation_result"
+        case autopilotRequest = "autopilot_request"
+        case autopilotResult = "autopilot_result"
         case ping
         case pong
     }
@@ -817,6 +823,8 @@ extension Payload: Codable {
         case .mcpConfigResult: self = .mcpConfigResult(try container.decode(MCPConfigResultPayload.self, forKey: .data))
         case .mcpMutationRequest: self = .mcpMutationRequest(try container.decode(MCPMutationRequestPayload.self, forKey: .data))
         case .mcpMutationResult: self = .mcpMutationResult(try container.decode(MCPMutationResultPayload.self, forKey: .data))
+        case .autopilotRequest: self = .autopilotRequest(try container.decode(AutopilotRequestPayload.self, forKey: .data))
+        case .autopilotResult: self = .autopilotResult(try container.decode(AutopilotResultPayload.self, forKey: .data))
         case .ping: self = .ping(try container.decode(PingPayload.self, forKey: .data))
         case .pong: self = .pong(try container.decode(PongPayload.self, forKey: .data))
         }
@@ -882,6 +890,8 @@ extension Payload: Codable {
         case .mcpConfigResult(let p): try container.encode(TypeKey.mcpConfigResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .mcpMutationRequest(let p): try container.encode(TypeKey.mcpMutationRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .mcpMutationResult(let p): try container.encode(TypeKey.mcpMutationResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .autopilotRequest(let p): try container.encode(TypeKey.autopilotRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .autopilotResult(let p): try container.encode(TypeKey.autopilotResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .ping(let p): try container.encode(TypeKey.ping.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .pong(let p): try container.encode(TypeKey.pong.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .unknown(let type): try container.encode(type, forKey: .type)

@@ -384,6 +384,20 @@ extension AppState {
         }
         mobileSyncObservers.append(mcpMutationObserver)
 
+        let autopilotObserver = center.addObserver(
+            forName: .mobileSyncAutopilotRequested,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let fromHex = notification.userInfo?["from"] as? String,
+                  let request = notification.userInfo?["payload"] as? AutopilotRequestPayload
+            else { return }
+            Task { @MainActor [weak self] in
+                await self?.handleMobileAutopilotRequest(request, fromHex: fromHex)
+            }
+        }
+        mobileSyncObservers.append(autopilotObserver)
+
         observeMobileSnapshotInputs()
     }
 

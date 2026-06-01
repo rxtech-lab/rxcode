@@ -493,5 +493,11 @@ extension MobileAppState {
         inFlightMCPMutations = []
         lastMCPError = nil
         pendingMCPConfigRequestID = nil
+        autopilotAccount = nil
+        let pendingAutopilot = pendingAutopilotRequests
+        pendingAutopilotRequests = [:]
+        for continuation in pendingAutopilot.values {
+            continuation.resume(throwing: AutopilotRemoteError.desktopChanged)
+        }
     }
 }

@@ -412,7 +412,13 @@ extension AppState {
         stopFlushTimer(for: key)
     }
 
-    func cancelStreaming(in window: WindowState) async {
+    /// - Parameter fireStopHooks: When `true` (explicit Stop button), the
+    ///   session-stop hooks fire because streaming genuinely stopped. When
+    ///   `false` (the user sent a *new* message that interrupts the current
+    ///   stream), the session isn't stopping — a new turn starts immediately —
+    ///   so the stop hooks are skipped. The cancelled stream is still marked
+    ///   handled either way so a trailing `.result` can't re-fire them.
+    func cancelStreaming(in window: WindowState, fireStopHooks: Bool = true) async {
         let key = window.currentSessionId ?? window.newSessionKey
         let streamToCancel = sessionStates[key]?.activeStreamId
         sessionStates[key]?.streamTask?.cancel()
@@ -474,8 +480,12 @@ extension AppState {
             // Before-stop runs ahead of the save so its cards persist; after-stop
             // runs post-save and is shown only.
             let alreadyHandled = streamToCancel.map { stopHooksHandledStreamIds.contains($0) } ?? true
+            // Mark the stream handled regardless of `fireStopHooks` so a
+            // trailing `.result` event can't re-fire the stop hooks later.
             if let streamToCancel, !alreadyHandled {
                 stopHooksHandledStreamIds.insert(streamToCancel)
+            }
+            if fireStopHooks, streamToCancel != nil, !alreadyHandled {
                 await hookManager.dispatchBeforeSessionEnd(SessionEndPayload(
                     project: project,
                     sessionKey: key,
@@ -489,7 +499,7 @@ extension AppState {
             if !messages.isEmpty {
                 await saveSession(sessionId: key, projectId: project.id, messages: messages)
             }
-            if streamToCancel != nil, !alreadyHandled {
+            if fireStopHooks, streamToCancel != nil, !alreadyHandled {
                 await hookManager.dispatchAfterSessionEnd(SessionEndPayload(
                     project: project,
                     sessionKey: key,

@@ -7,6 +7,12 @@
     "-- --port 3000" : {
 
     },
+    ".env" : {
+
+    },
+    "#%lld" : {
+
+    },
     "%@ · %lld model%@" : {
       "localizations" : {
         "en" : {
@@ -34,22 +40,93 @@
       }
     },
     "%@. Tap to answer." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@。点按以回答。"
+          }
+        }
+      }
     },
     "%@. Tap to review." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@。点按以查看。"
+          }
+        }
+      }
     },
     "%lld" : {
 
     },
     "%lld active" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个活跃"
+          }
+        }
+      }
     },
     "%lld active jobs" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个活跃任务"
+          }
+        }
+      }
+    },
+    "%lld document(s)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个文档"
+          }
+        }
+      }
+    },
+    "%lld environment(s), %lld file(s)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld environment(s), %2$lld file(s)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个环境，%lld 个文件"
+          }
+        }
+      }
+    },
+    "%lld outdated action(s)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个过期 Action"
+          }
+        }
+      }
     },
     "%lld queued" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个排队"
+          }
+        }
+      }
     },
     "%lld queued messages. Tap to view all." : {
       "localizations" : {
@@ -146,6 +223,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "对话完成后会显示摘要"
+          }
+        }
+      }
+    },
+    "Account" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "账户"
           }
         }
       }
@@ -247,7 +334,14 @@
       }
     },
     "Add a QR code" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加二维码"
+          }
+        }
+      }
     },
     "Add Argument" : {
       "localizations" : {
@@ -261,6 +355,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "添加参数"
+          }
+        }
+      }
+    },
+    "Add Document" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加文档"
           }
         }
       }
@@ -604,6 +708,19 @@
         }
       }
     },
+    "Automation" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动化"
+          }
+        }
+      }
+    },
+    "Autopilot" : {
+
+    },
     "Available in Registry" : {
       "localizations" : {
         "en" : {
@@ -648,6 +765,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Bash 配置"
+          }
+        }
+      }
+    },
+    "Branch" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分支"
           }
         }
       }
@@ -748,6 +875,16 @@
         }
       }
     },
+    "Branch Ruleset (optional)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分支规则集（可选）"
+          }
+        }
+      }
+    },
     "Branches" : {
       "localizations" : {
         "en" : {
@@ -813,7 +950,14 @@
       }
     },
     "Browser Error" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "浏览器错误"
+          }
+        }
+      }
     },
     "Cancel" : {
       "localizations" : {
@@ -863,6 +1007,16 @@
         }
       }
     },
+    "Checking account…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在检查账户…"
+          }
+        }
+      }
+    },
     "Choose from Photos" : {
       "localizations" : {
         "en" : {
@@ -907,6 +1061,19 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "选择对话代理"
+          }
+        }
+      }
+    },
+    "CI" : {
+
+    },
+    "CI Auto-Update" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CI 自动更新"
           }
         }
       }
@@ -960,7 +1127,34 @@
       }
     },
     "Close Browser" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭浏览器"
+          }
+        }
+      }
+    },
+    "Close PR" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭 PR"
+          }
+        }
+      }
+    },
+    "Close pull request?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭拉取请求？"
+          }
+        }
+      }
     },
     "Codex Usage" : {
       "localizations" : {
@@ -1090,6 +1284,16 @@
         }
       }
     },
+    "Connect an online Mac to use Autopilot." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请连接一台在线的 Mac 以使用 Autopilot。"
+          }
+        }
+      }
+    },
     "Connect to" : {
       "localizations" : {
         "en" : {
@@ -1102,6 +1306,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "连接到"
+          }
+        }
+      }
+    },
+    "Connect to an online Mac to manage Autopilot." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请连接一台在线的 Mac 以管理 Autopilot。"
           }
         }
       }
@@ -1218,6 +1432,16 @@
         }
       }
     },
+    "Control what autopilot does automatically and the templates applied to new repositories." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "控制 Autopilot 自动执行的操作，以及应用于新仓库的模板。"
+          }
+        }
+      }
+    },
     "Couldn't connect to the relay from the QR code. Check the relay address and try again." : {
       "localizations" : {
         "en" : {
@@ -1251,7 +1475,14 @@
       }
     },
     "Couldn't Load File" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法加载文件"
+          }
+        }
+      }
     },
     "Couldn't load the selected image." : {
       "localizations" : {
@@ -1381,6 +1612,16 @@
         }
       }
     },
+    "Create Release" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建发布"
+          }
+        }
+      }
+    },
     "Created from %@" : {
       "localizations" : {
         "en" : {
@@ -1445,6 +1686,16 @@
         }
       }
     },
+    "Current project" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前项目"
+          }
+        }
+      }
+    },
     "Custom Scheme" : {
       "localizations" : {
         "en" : {
@@ -1462,7 +1713,14 @@
       }
     },
     "Custom Script" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自定义脚本"
+          }
+        }
+      }
     },
     "Custom Sources" : {
       "localizations" : {
@@ -1528,6 +1786,26 @@
         }
       }
     },
+    "Default" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "默认"
+          }
+        }
+      }
+    },
+    "Default for new repositories" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新仓库的默认设置"
+          }
+        }
+      }
+    },
     "Delete" : {
       "localizations" : {
         "en" : {
@@ -1540,6 +1818,46 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "删除"
+          }
+        }
+      }
+    },
+    "Delete document?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除文档？"
+          }
+        }
+      }
+    },
+    "Delete environment?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除环境？"
+          }
+        }
+      }
+    },
+    "Delete file?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除文件？"
+          }
+        }
+      }
+    },
+    "Delete template?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除模板？"
           }
         }
       }
@@ -1608,6 +1926,9 @@
         }
       }
     },
+    "design/overview" : {
+
+    },
     "Desktop Behavior" : {
       "localizations" : {
         "en" : {
@@ -1673,13 +1994,34 @@
       }
     },
     "Detected · Make" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已检测 · Make"
+          }
+        }
+      }
     },
     "Detected · Scripts" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已检测 · Scripts"
+          }
+        }
+      }
     },
     "Detected · Xcode" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已检测 · Xcode"
+          }
+        }
+      }
     },
     "Device name" : {
       "localizations" : {
@@ -1713,6 +2055,16 @@
         }
       }
     },
+    "Disabled" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已禁用"
+          }
+        }
+      }
+    },
     "Disconnected" : {
       "localizations" : {
         "en" : {
@@ -1725,6 +2077,46 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已断开"
+          }
+        }
+      }
+    },
+    "Dispatch" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "触发"
+          }
+        }
+      }
+    },
+    "Document ID (slug)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文档 ID（slug）"
+          }
+        }
+      }
+    },
+    "Documentation" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文档"
+          }
+        }
+      }
+    },
+    "Documents" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文档"
           }
         }
       }
@@ -1793,6 +2185,16 @@
         }
       }
     },
+    "Edit Template" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑模板"
+          }
+        }
+      }
+    },
     "Empty Folder" : {
       "localizations" : {
         "en" : {
@@ -1825,6 +2227,26 @@
         }
       }
     },
+    "Enabled" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已启用"
+          }
+        }
+      }
+    },
+    "Encryption not set up" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚未设置加密"
+          }
+        }
+      }
+    },
     "Endpoint" : {
       "localizations" : {
         "en" : {
@@ -1837,6 +2259,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "端点"
+          }
+        }
+      }
+    },
+    "Enroll with your passkey on your Mac to manage secrets." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在你的 Mac 上使用通行密钥注册以管理密钥。"
           }
         }
       }
@@ -1869,6 +2301,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "输入这台 Mac 的新名称。"
+          }
+        }
+      }
+    },
+    "Error" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "错误"
           }
         }
       }
@@ -2018,7 +2460,14 @@
       }
     },
     "Failed to request file: %@" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请求文件失败：%@"
+          }
+        }
+      }
     },
     "Failed to request MCP servers: %@" : {
       "localizations" : {
@@ -2165,7 +2614,14 @@
       }
     },
     "Favorites" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "收藏"
+          }
+        }
+      }
     },
     "File paths" : {
       "localizations" : {
@@ -2184,7 +2640,34 @@
       }
     },
     "File preview truncated." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件预览已截断。"
+          }
+        }
+      }
+    },
+    "Filename" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件名"
+          }
+        }
+      }
+    },
+    "Files" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件"
+          }
+        }
+      }
     },
     "Filter Skills" : {
       "localizations" : {
@@ -2250,6 +2733,29 @@
         }
       }
     },
+    "Form couldn't be rendered — edit raw JSON." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法渲染表单 — 请编辑原始 JSON。"
+          }
+        }
+      }
+    },
+    "Frequency" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "频率"
+          }
+        }
+      }
+    },
+    "ghp_… or github_pat_…" : {
+
+    },
     "Git Source" : {
       "localizations" : {
         "en" : {
@@ -2299,7 +2805,14 @@
       }
     },
     "Go" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "前往"
+          }
+        }
+      }
     },
     "Go to **Settings → Mobile** and tap *Pair new device*." : {
       "localizations" : {
@@ -2313,6 +2826,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "前往 **设置 → 移动端**，然后点按 *配对新设备*。"
+          }
+        }
+      }
+    },
+    "Hide values" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐藏值"
           }
         }
       }
@@ -2336,6 +2859,9 @@
     "HTTP" : {
 
     },
+    "https://…" : {
+
+    },
     "https://github.com/owner/repo" : {
 
     },
@@ -2356,10 +2882,24 @@
       }
     },
     "Initialize Git" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "初始化 Git"
+          }
+        }
+      }
     },
     "Initializing…" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在初始化…"
+          }
+        }
+      }
     },
     "Input" : {
       "localizations" : {
@@ -2369,6 +2909,16 @@
             "value" : "Input"
           }
         },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入"
+          }
+        }
+      }
+    },
+    "Inputs" : {
+      "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2393,7 +2943,28 @@
         }
       }
     },
+    "Install CI upload token" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "安装 CI 上传令牌"
+          }
+        }
+      }
+    },
+    "Install RELEASE_TOKEN" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "安装 RELEASE_TOKEN"
+          }
+        }
+      }
+    },
     "Install skills and agents, and configure MCP servers on the active Mac." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2405,6 +2976,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在当前 Mac 上安装技能和代理，并配置 MCP 服务器。"
+          }
+        }
+      }
+    },
+    "Install skills and agents, configure MCP servers, and manage Autopilot on the active Mac." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在当前 Mac 上安装技能和智能体、配置 MCP 服务器，并管理 Autopilot。"
           }
         }
       }
@@ -2421,6 +3002,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已安装"
+          }
+        }
+      }
+    },
+    "Installed as the repo's GitHub Actions secret so the release workflow can publish." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已作为仓库的 GitHub Actions 密钥安装，以便发布工作流可以发布。"
           }
         }
       }
@@ -2473,6 +3064,16 @@
         }
       }
     },
+    "Latest: %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最新：%@"
+          }
+        }
+      }
+    },
     "Live" : {
       "localizations" : {
         "en" : {
@@ -2485,6 +3086,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在线"
+          }
+        }
+      }
+    },
+    "Load more" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "加载更多"
           }
         }
       }
@@ -2522,7 +3133,14 @@
       }
     },
     "Loading messages" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在加载消息"
+          }
+        }
+      }
     },
     "Loading skills…" : {
       "localizations" : {
@@ -2541,7 +3159,14 @@
       }
     },
     "Loading thread" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在加载会话"
+          }
+        }
+      }
     },
     "Loading…" : {
       "localizations" : {
@@ -2619,6 +3244,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mac 名称"
+          }
+        }
+      }
+    },
+    "Mac offline" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac 离线"
           }
         }
       }
@@ -2705,6 +3340,19 @@
           }
         }
       }
+    },
+    "Manage end-to-end encrypted secrets, CI auto-update scans, indexed docs, and release workflows." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "管理端到端加密的密钥、CI 自动更新扫描、已索引的文档和发布工作流。"
+          }
+        }
+      }
+    },
+    "Markdown" : {
+
     },
     "Marketplaces" : {
       "localizations" : {
@@ -2802,6 +3450,16 @@
         }
       }
     },
+    "Merge Settings" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "合并设置"
+          }
+        }
+      }
+    },
     "Message…" : {
       "localizations" : {
         "en" : {
@@ -2819,7 +3477,24 @@
       }
     },
     "Messages you queue while a response is streaming appear here." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在响应流式传输期间排队的消息会显示在这里。"
+          }
+        }
+      }
+    },
+    "Mints a DOCS_UPLOAD_TOKEN and installs it as the repo's GitHub Actions secret so CI can publish docs automatically." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "生成 DOCS_UPLOAD_TOKEN 并将其作为仓库的 GitHub Actions 密钥安装，以便 CI 可以自动发布文档。"
+          }
+        }
+      }
     },
     "Model" : {
       "localizations" : {
@@ -2853,6 +3528,16 @@
         }
       }
     },
+    "Name (e.g. production)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "名称（例如 production）"
+          }
+        }
+      }
+    },
     "New" : {
       "localizations" : {
         "en" : {
@@ -2865,6 +3550,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "新建"
+          }
+        }
+      }
+    },
+    "New environment" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建环境"
+          }
+        }
+      }
+    },
+    "New Template" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建模板"
           }
         }
       }
@@ -2886,7 +3591,14 @@
       }
     },
     "Next change" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下一处更改"
+          }
+        }
+      }
     },
     "No agents found." : {
       "localizations" : {
@@ -3016,6 +3728,46 @@
         }
       }
     },
+    "No documentation repositories. Tap + to add one." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有文档仓库。点按 + 添加。"
+          }
+        }
+      }
+    },
+    "No documents indexed yet." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚未索引任何文档。"
+          }
+        }
+      }
+    },
+    "No environments yet. Tap + to add one." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还没有环境。点按 + 添加。"
+          }
+        }
+      }
+    },
+    "No files yet. Tap + to add one." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还没有文件。点按 + 添加。"
+          }
+        }
+      }
+    },
     "No Folders" : {
       "localizations" : {
         "en" : {
@@ -3064,6 +3816,16 @@
         }
       }
     },
+    "No open auto-update pull requests." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有打开的自动更新拉取请求。"
+          }
+        }
+      }
+    },
     "No Projects" : {
       "localizations" : {
         "en" : {
@@ -3097,7 +3859,44 @@
       }
     },
     "No Queued Messages" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有排队的消息"
+          }
+        }
+      }
+    },
+    "No release repositories. Tap + to add one." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有发布仓库。点按 + 添加。"
+          }
+        }
+      }
+    },
+    "No repositories available to add." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有可添加的仓库。"
+          }
+        }
+      }
+    },
+    "No repositories available." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有可用的仓库。"
+          }
+        }
+      }
     },
     "No Run Profiles" : {
       "localizations" : {
@@ -3115,8 +3914,25 @@
         }
       }
     },
+    "No scans yet." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚未进行扫描。"
+          }
+        }
+      }
+    },
     "No Selection" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未选择"
+          }
+        }
+      }
     },
     "No skills found." : {
       "localizations" : {
@@ -3183,7 +3999,24 @@
       }
     },
     "No summary yet. A summary is generated once the thread finishes a turn on your Mac." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂无摘要。当会话在你的 Mac 上完成一轮对话后会生成摘要。"
+          }
+        }
+      }
+    },
+    "No templates yet. Tap + to create one." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还没有模板。点按 + 创建。"
+          }
+        }
+      }
     },
     "No Threads" : {
       "localizations" : {
@@ -3218,7 +4051,34 @@
       }
     },
     "No todos for this thread." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此会话没有待办事项。"
+          }
+        }
+      }
+    },
+    "No watched repositories. Tap + to add one." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有监视的仓库。点按 + 添加。"
+          }
+        }
+      }
+    },
+    "No workflows scanned yet." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚未扫描到工作流。"
+          }
+        }
+      }
     },
     "Normal" : {
       "localizations" : {
@@ -3237,7 +4097,24 @@
       }
     },
     "Not connected to your Mac." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未连接到你的 Mac。"
+          }
+        }
+      }
+    },
+    "Not signed in" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未登录"
+          }
+        }
+      }
     },
     "Nothing to Show" : {
       "localizations" : {
@@ -3319,6 +4196,16 @@
         }
       }
     },
+    "Open" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开"
+          }
+        }
+      }
+    },
     "Open **RxCode** on your Mac." : {
       "localizations" : {
         "en" : {
@@ -3368,10 +4255,24 @@
       }
     },
     "Open on GitHub" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 GitHub 上打开"
+          }
+        }
+      }
     },
     "Open Pull Request" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开拉取请求"
+          }
+        }
+      }
     },
     "Opens todos and thread summary" : {
       "localizations" : {
@@ -3390,16 +4291,37 @@
       }
     },
     "Optional xcodebuild destination" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可选的 xcodebuild 目标"
+          }
+        }
+      }
     },
     "Package" : {
 
     },
     "Package Configuration" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "软件包配置"
+          }
+        }
+      }
     },
     "Package Manager" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "包管理器"
+          }
+        }
+      }
     },
     "Pair New Mac" : {
       "localizations" : {
@@ -3497,6 +4419,36 @@
         }
       }
     },
+    "Passkey authentication failed: %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通行密钥验证失败：%@"
+          }
+        }
+      }
+    },
+    "Passkey authentication was cancelled." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通行密钥验证已取消。"
+          }
+        }
+      }
+    },
+    "Paste a GitHub ruleset JSON with name, target, enforcement, and rules." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "粘贴包含 name、target、enforcement 和 rules 的 GitHub 规则集 JSON。"
+          }
+        }
+      }
+    },
     "Permission needed" : {
       "localizations" : {
         "en" : {
@@ -3546,10 +4498,24 @@
       }
     },
     "Previous change" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上一处更改"
+          }
+        }
+      }
     },
     "Privacy Report" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐私报告"
+          }
+        }
+      }
     },
     "Profiles" : {
       "localizations" : {
@@ -3584,10 +4550,24 @@
       }
     },
     "Project actions" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目操作"
+          }
+        }
+      }
     },
     "Project root" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目根目录"
+          }
+        }
+      }
     },
     "Projects" : {
       "localizations" : {
@@ -3621,6 +4601,16 @@
         }
       }
     },
+    "Pull Requests" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "拉取请求"
+          }
+        }
+      }
+    },
     "Queue a message..." : {
       "localizations" : {
         "en" : {
@@ -3638,7 +4628,14 @@
       }
     },
     "Queued Messages" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "排队的消息"
+          }
+        }
+      }
     },
     "Reconnecting in %llds" : {
       "localizations" : {
@@ -3672,8 +4669,38 @@
         }
       }
     },
-    "Reload" : {
+    "Release" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发布"
+          }
+        }
+      }
+    },
+    "RELEASE_TOKEN" : {
 
+    },
+    "Releases" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发布"
+          }
+        }
+      }
+    },
+    "Reload" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新加载"
+          }
+        }
+      }
     },
     "Remove" : {
       "localizations" : {
@@ -3708,10 +4735,24 @@
       }
     },
     "Remove agent?" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除智能体？"
+          }
+        }
+      }
     },
     "Remove MCP server?" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除 MCP 服务器？"
+          }
+        }
+      }
     },
     "Remove pairing?" : {
       "localizations" : {
@@ -3725,6 +4766,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "移除配对？"
+          }
+        }
+      }
+    },
+    "Remove repository?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除仓库？"
           }
         }
       }
@@ -3762,7 +4813,34 @@
       }
     },
     "Rename Thread" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重命名会话"
+          }
+        }
+      }
+    },
+    "Repo Setup" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仓库设置"
+          }
+        }
+      }
+    },
+    "Repositories" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仓库"
+          }
+        }
+      }
     },
     "Request timed out. Check your Mac and try again." : {
       "localizations" : {
@@ -3951,7 +5029,14 @@
       }
     },
     "RxCode keeps this browser session separate from your regular Safari data." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RxCode 会将此浏览器会话与你常用的 Safari 数据分开保存。"
+          }
+        }
+      }
     },
     "rxcode/feature-name" : {
 
@@ -3968,6 +5053,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "保存"
+          }
+        }
+      }
+    },
+    "Scan" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "扫描"
+          }
+        }
+      }
+    },
+    "Scan History" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "扫描历史"
           }
         }
       }
@@ -4068,6 +5173,16 @@
         }
       }
     },
+    "Scanning…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在扫描…"
+          }
+        }
+      }
+    },
     "Scheme" : {
       "localizations" : {
         "en" : {
@@ -4085,7 +5200,14 @@
       }
     },
     "Script" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "脚本"
+          }
+        }
+      }
     },
     "Scroll to bottom" : {
       "localizations" : {
@@ -4104,7 +5226,14 @@
       }
     },
     "Search or enter website name" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索或输入网站名称"
+          }
+        }
+      }
     },
     "Search projects and threads" : {
       "localizations" : {
@@ -4154,6 +5283,16 @@
         }
       }
     },
+    "Secrets" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "密钥"
+          }
+        }
+      }
+    },
     "Securely link this device to RxCode in seconds." : {
       "localizations" : {
         "en" : {
@@ -4171,13 +5310,34 @@
       }
     },
     "Select a briefing to view details" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择一个简报以查看详情"
+          }
+        }
+      }
     },
     "Select a project" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择一个项目"
+          }
+        }
+      }
     },
     "Select a thread" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择一个会话"
+          }
+        }
+      }
     },
     "Select all that apply" : {
       "localizations" : {
@@ -4291,6 +5451,16 @@
         }
       }
     },
+    "Sign in with rxlab on your Mac to enable Autopilot." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在你的 Mac 上使用 rxlab 登录以启用 Autopilot。"
+          }
+        }
+      }
+    },
     "Skill operation failed." : {
       "localizations" : {
         "en" : {
@@ -4351,6 +5521,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "跳过所有问题"
+          }
+        }
+      }
+    },
+    "Source link (optional)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "来源链接（可选）"
           }
         }
       }
@@ -4441,6 +5621,26 @@
         }
       }
     },
+    "Stop watching?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止监视？"
+          }
+        }
+      }
+    },
+    "Success" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "成功"
+          }
+        }
+      }
+    },
     "Summarization" : {
       "localizations" : {
         "en" : {
@@ -4506,10 +5706,24 @@
       }
     },
     "Switch to horizontal scroll" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换到水平滚动"
+          }
+        }
+      }
     },
     "Switch to wrap" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换到自动换行"
+          }
+        }
+      }
     },
     "Syncing settings…" : {
       "localizations" : {
@@ -4559,6 +5773,26 @@
         }
       }
     },
+    "Template" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模板"
+          }
+        }
+      }
+    },
+    "Templates of GitHub merge settings and branch rulesets. The default template is applied to newly created repositories." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GitHub 合并设置和分支规则集的模板。默认模板会应用于新创建的仓库。"
+          }
+        }
+      }
+    },
     "The desktop sent an AskUserQuestion call this app could not parse." : {
       "localizations" : {
         "en" : {
@@ -4571,6 +5805,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "桌面端发送了此 App 无法解析的 AskUserQuestion 调用。"
+          }
+        }
+      }
+    },
+    "The Mac could not complete the request." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac 无法完成该请求。"
+          }
+        }
+      }
+    },
+    "The Mac returned an empty response." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac 返回了空响应。"
+          }
+        }
+      }
+    },
+    "The paired Mac changed before the request finished." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请求完成前已配对的 Mac 发生了变化。"
           }
         }
       }
@@ -4592,7 +5856,14 @@
       }
     },
     "Thinking" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "思考中"
+          }
+        }
+      }
     },
     "This location has no visible folders." : {
       "localizations" : {
@@ -4622,6 +5893,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此位置没有可显示内容。"
+          }
+        }
+      }
+    },
+    "This passkey can't unlock secrets — it doesn't support the PRF extension. Use the passkey you enrolled with." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此通行密钥无法解锁密钥 — 它不支持 PRF 扩展。请使用你注册时使用的通行密钥。"
+          }
+        }
+      }
+    },
+    "This permanently deletes the environment and its secret files." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这将永久删除该环境及其密钥文件。"
           }
         }
       }
@@ -4722,6 +6013,26 @@
         }
       }
     },
+    "This removes the repository and its indexed documents from docs search." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这会从文档搜索中移除该仓库及其已索引的文档。"
+          }
+        }
+      }
+    },
+    "This settings form couldn't be rendered. Edit the raw JSON instead." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法渲染此设置表单。请改为编辑原始 JSON。"
+          }
+        }
+      }
+    },
     "This Turn" : {
       "localizations" : {
         "en" : {
@@ -4755,10 +6066,24 @@
       }
     },
     "Thread name" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会话名称"
+          }
+        }
+      }
     },
     "Thread Summary" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会话摘要"
+          }
+        }
+      }
     },
     "Threads" : {
       "localizations" : {
@@ -4777,10 +6102,24 @@
       }
     },
     "Todos" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "待办事项"
+          }
+        }
+      }
     },
     "Todos & Summary" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "待办事项与摘要"
+          }
+        }
+      }
     },
     "Tool" : {
       "localizations" : {
@@ -4810,6 +6149,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "传输"
+          }
+        }
+      }
+    },
+    "Trigger scan now" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "立即触发扫描"
           }
         }
       }
@@ -5006,6 +6355,16 @@
         }
       }
     },
+    "Upload" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上传"
+          }
+        }
+      }
+    },
     "URL" : {
 
     },
@@ -5074,7 +6433,14 @@
       }
     },
     "Use Workspace" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用 Workspace"
+          }
+        }
+      }
     },
     "Value" : {
       "localizations" : {
@@ -5108,6 +6474,26 @@
         }
       }
     },
+    "View pull request" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查看拉取请求"
+          }
+        }
+      }
+    },
+    "View values" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查看值"
+          }
+        }
+      }
+    },
     "What should we build in %@?" : {
       "localizations" : {
         "en" : {
@@ -5120,6 +6506,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "要在 %@ 中构建什么？"
+          }
+        }
+      }
+    },
+    "Workflows" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作流"
           }
         }
       }

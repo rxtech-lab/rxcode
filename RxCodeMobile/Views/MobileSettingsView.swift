@@ -217,10 +217,15 @@ struct MobileSettingsView: View {
             } label: {
                 Label("MCP Servers", systemImage: "server.rack")
             }
+            NavigationLink {
+                MobileAutopilotView()
+            } label: {
+                Label("Autopilot", systemImage: "airplane")
+            }
         } header: {
             Text("Desktop Configuration")
         } footer: {
-            Text("Install skills and agents, and configure MCP servers on the active Mac.")
+            Text("Install skills and agents, configure MCP servers, and manage Autopilot on the active Mac.")
         }
     }
 

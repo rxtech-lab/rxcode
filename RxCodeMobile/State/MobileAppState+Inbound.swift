@@ -244,6 +244,11 @@ extension MobileAppState {
         case .mcpMutationResult(let result):
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "mcp_mutation_result") else { return }
             applyMCPMutationResult(result)
+        case .autopilotResult(let result):
+            guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "autopilot_result") else { return }
+            if let continuation = pendingAutopilotRequests.removeValue(forKey: result.clientRequestID) {
+                continuation.resume(returning: result)
+            }
         case .ping:
             guard pairedDesktops.contains(where: { $0.pubkeyHex == inbound.fromHex }) else { return }
             Task { try? await self.client.send(.pong(PongPayload()), toHex: inbound.fromHex) }

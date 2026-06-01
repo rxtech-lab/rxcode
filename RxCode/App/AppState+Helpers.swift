@@ -402,7 +402,9 @@ extension AppState {
         threadStore.clearQueue(sessionKey: key)
 
         if isStreaming(in: window) {
-            await cancelStreaming(in: window)
+            // Sending a queued message interrupts the current stream and starts
+            // a new turn — not a session stop, so skip the stop hooks.
+            await cancelStreaming(in: window, fireStopHooks: false)
         }
 
         // Restore the remaining items into memory + disk.
@@ -443,7 +445,9 @@ extension AppState {
         threadStore.clearQueue(sessionKey: key)
 
         if isStreaming(in: window) {
-            await cancelStreaming(in: window)
+            // Sending the combined queue interrupts the current stream and
+            // starts a new turn — not a session stop, so skip the stop hooks.
+            await cancelStreaming(in: window, fireStopHooks: false)
         }
 
         let combinedText = snapshot

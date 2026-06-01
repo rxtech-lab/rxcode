@@ -177,7 +177,7 @@ extension AppState {
         // 5-minute refresh timer, so no extra scheduling is needed here.
         await rxAuth.restore()
         if isSignedIn {
-            Task { [weak self] in await self?.loadRepos() }
+            startAutopilotWarmup()
         }
 
         // Periodically pull GitHub Actions CI status for open projects (no-ops
@@ -431,6 +431,28 @@ extension AppState {
         window.showingBriefing = true
 
         window.isInitialized = true
+    }
+
+    /// Starts the Autopilot-backed reads that power repo import, hook banners,
+    /// and briefing-card chips. This intentionally runs during app
+    /// initialization so the desktop loading screen can hide most of the network
+    /// latency instead of waiting for sidebar views to appear.
+    func startAutopilotWarmup() {
+        Task { [weak self] in
+            await self?.refreshAutopilotLaunchData()
+        }
+    }
+
+    private func refreshAutopilotLaunchData() async {
+        guard isSignedIn else { return }
+
+        async let repos: Void = loadRepos()
+        async let secrets: Void = refreshSecretsStatuses()
+        async let docs: Void = refreshDocsStatuses()
+        async let ciUpdates: Void = refreshCIStatuses()
+        async let releases: Void = refreshReleaseStatuses()
+
+        _ = await (repos, secrets, docs, ciUpdates, releases)
     }
 
     func seedUITestBriefingIfRequested() {

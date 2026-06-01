@@ -31,5 +31,13 @@ extension AppState {
     func projectDocsState(_ repoFullName: String) -> Bool? {
         docsStatusByRepo[repoFullName.lowercased()]?.hasDocs
     }
+
+    /// Whether the project's linked repo is registered with the docs service.
+    /// This mirrors the setup banner gate: once a repo is registered, setup is
+    /// considered complete even before the first CI-published document lands.
+    func projectHasDocs(_ project: Project) -> Bool {
+        guard let repo = project.gitHubRepo else { return false }
+        return docsStatusByRepo[repo.lowercased()]?.docsRepositoryId != nil
+    }
 }
 #endif

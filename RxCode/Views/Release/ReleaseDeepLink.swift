@@ -4,7 +4,13 @@ import Foundation
 /// the release skill so the agent wires up the `.releaserc` + CI workflow.
 struct ReleaseSetupRequest: Identifiable, Hashable {
     let id = UUID()
+    var projectId: UUID?
     var repoFullName: String?
+
+    init(projectId: UUID? = nil, repoFullName: String? = nil) {
+        self.projectId = projectId
+        self.repoFullName = repoFullName
+    }
 }
 
 /// Parses `rxcode://release/setup?repo=<owner/repo>` and

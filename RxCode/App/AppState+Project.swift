@@ -251,7 +251,7 @@ extension AppState {
     func onRxAuthSignedIn() {
         onboardingCompleted = true
         UserDefaults.standard.set(true, forKey: "onboardingCompleted")
-        Task { await loadRepos() }
+        startAutopilotWarmup()
     }
 
     func signOutRxAuth() async {

@@ -151,6 +151,23 @@ public protocol HookController: AnyObject {
     /// system prompt and clears the pending flag. Returns `nil` otherwise.
     func consumePendingReleaseSetupSkill(projectId: UUID) -> String?
 
+    // MARK: Context menu actions
+
+    /// Cached context-menu status for a project's linked repository. These are
+    /// intentionally synchronous because SwiftUI builds context menus
+    /// synchronously when the user opens them.
+    func projectHasSecrets(_ project: Project) -> Bool
+    func projectHasDocs(_ project: Project) -> Bool
+    func projectHasReleaseWorkflow(_ project: Project) -> Bool
+
+    /// Centralized presentation actions used by hook-supplied context menus.
+    func requestSecretsSetup(project: Project)
+    func requestSecretsDownload(project: Project)
+    func requestDocsSetup(project: Project)
+    func requestDocsSearch(project: Project)
+    func requestReleaseSetup(project: Project)
+    func requestReleaseCreate(project: Project)
+
     // MARK: Setup-session tracking
 
     /// Record that `sessionKey` belongs to a setup chat of the given `kind` (e.g.

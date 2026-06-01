@@ -156,11 +156,70 @@ extension AppState {
         title = ChatSession.stripMarkdownEmphasis(from: title)
             .trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
             .trimmingCharacters(in: .whitespaces)
+        title = normalizePullRequestTitle(title, fallbackTitle: fallbackTitle)
         if title.isEmpty { title = fallbackTitle }
 
         let body = lines[(firstIdx + 1)...]
             .joined(separator: "\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return (title, body)
+    }
+
+    private static func normalizePullRequestTitle(_ raw: String, fallbackTitle: String) -> String {
+        var title = stripTrailingPullRequestTitlePunctuation(
+            raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+        guard !title.isEmpty else { return fallbackTitle }
+
+        let pattern = #"^([A-Za-z]+)(\([^):\n]+\))?\s*:\s*(.+)$"#
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(
+                in: title,
+                range: NSRange(title.startIndex..<title.endIndex, in: title)
+              ),
+              let typeRange = Range(match.range(at: 1), in: title),
+              let descriptionRange = Range(match.range(at: 3), in: title) else {
+            return title
+        }
+
+        let type = title[typeRange].lowercased()
+        let scope = Range(match.range(at: 2), in: title)
+            .map { title[$0].lowercased() } ?? ""
+        let description = lowercaseInitialPullRequestDescriptionWord(
+            String(title[descriptionRange]).trimmingCharacters(in: .whitespaces)
+        )
+
+        title = "\(type)\(scope): \(description)"
+        return stripTrailingPullRequestTitlePunctuation(title)
+    }
+
+    private static func stripTrailingPullRequestTitlePunctuation(_ raw: String) -> String {
+        var title = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trailing = CharacterSet(charactersIn: ".!?。！？")
+        while let scalar = title.unicodeScalars.last, trailing.contains(scalar) {
+            title.removeLast()
+            title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return title
+    }
+
+    private static func lowercaseInitialPullRequestDescriptionWord(_ raw: String) -> String {
+        guard !raw.isEmpty else { return raw }
+
+        var wordEnd = raw.startIndex
+        while wordEnd < raw.endIndex, raw[wordEnd].isLetter {
+            wordEnd = raw.index(after: wordEnd)
+        }
+
+        guard wordEnd > raw.startIndex else {
+            guard let first = raw.first else { return raw }
+            return first.lowercased() + String(raw.dropFirst())
+        }
+
+        let word = String(raw[..<wordEnd])
+        if word.count > 1, word == word.uppercased() {
+            return raw
+        }
+        return word.lowercased() + String(raw[wordEnd...])
     }
 }

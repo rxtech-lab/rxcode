@@ -227,7 +227,7 @@ struct MainView: View {
                 } label: {
                     Image(systemName: "magnifyingglass")
                 }
-                .help("Search Threads (⌘K)")
+                .help(String(localized: "Search Threads and Docs (⌘K)"))
                 .popoverTip(RxCodeTips.GlobalSearchTip(), arrowEdge: .top)
             }
 
@@ -303,6 +303,10 @@ struct MainView: View {
             )
             .environment(appState)
         }
+        .sheet(item: Bindable(appState).secretsDownloadRequest) { project in
+            SecretsDownloadSheet(project: project)
+                .environment(appState)
+        }
         .sheet(item: Bindable(appState).ciSetupRequest, onDismiss: rerunNewChatHooks) { request in
             CIUpdateManageSheet(
                 currentRepoFullName: request.repoFullName,
@@ -310,11 +314,21 @@ struct MainView: View {
             )
             .environment(appState)
         }
+        .onChange(of: appState.docsSearchRequest) { _, request in
+            guard request != nil else { return }
+            windowState.showGlobalSearch = true
+            appState.docsSearchRequest = nil
+        }
         .onChange(of: appState.docsSetupRequest?.id) { _, _ in
             guard let request = appState.docsSetupRequest else { return }
             // Start a fresh chat in this project; DocsHook.onSessionStart injects
             // the docs-publishing skill into its system prompt on first send.
-            appState.pendingDocsSetupProjectId = windowState.selectedProject?.id
+            if let projectId = request.projectId,
+               let project = appState.projects.first(where: { $0.id == projectId }),
+               windowState.selectedProject?.id != projectId {
+                appState.selectProject(project, in: windowState)
+            }
+            appState.pendingDocsSetupProjectId = request.projectId ?? windowState.selectedProject?.id
             appState.startNewChat(in: windowState)
             let repoText = request.repoFullName.map { " for \($0)" } ?? ""
             let prompt = "Set up documentation publishing\(repoText) by following the docs-publishing skill: inspect the repo, author the docs under docs/, add the uploader script and CI workflow, and tell me exactly what DOCS_UPLOAD_TOKEN to set."
@@ -330,12 +344,26 @@ struct MainView: View {
             guard let request = appState.releaseSetupRequest else { return }
             // Start a fresh chat in this project; ReleaseHook.onSessionStart
             // injects the release skill into its system prompt on first send.
-            appState.pendingReleaseSetupProjectId = windowState.selectedProject?.id
+            if let projectId = request.projectId,
+               let project = appState.projects.first(where: { $0.id == projectId }),
+               windowState.selectedProject?.id != projectId {
+                appState.selectProject(project, in: windowState)
+            }
+            appState.pendingReleaseSetupProjectId = request.projectId ?? windowState.selectedProject?.id
             appState.startNewChat(in: windowState)
             let repoText = request.repoFullName.map { " for \($0)" } ?? ""
             let prompt = "Set up release publishing\(repoText) by following the create-release skill: inspect the repo, create the `.releaserc` and the release CI workflow (ask me whether to trigger releases on branch push or manually), then register the repo and install the RELEASE_TOKEN via the `ide__setup_release` tool."
             appState.releaseSetupRequest = nil
             Task { await appState.sendPrompt(prompt, in: windowState) }
+        }
+        .sheet(item: Bindable(appState).releaseCreateRequest) { project in
+            ReleaseCreateSheet(
+                repoId: project.gitHubRepo ?? "",
+                repoFullName: project.gitHubRepo ?? project.name,
+                currentVersion: appState.projectLatestReleaseVersion(project),
+                projectPath: project.path
+            )
+            .environment(appState)
         }
         .sheet(item: Bindable(windowState).diffFile) { file in
             FileDiffView(
@@ -452,6 +480,11 @@ struct ProjectTabButton: View {
             openWindow(id: "project-window", value: ProjectWindowValue(projectId: project.id, instanceId: UUID()))
         }
         .contextMenu {
+            let hookItems = appState.projectContextMenuItems(for: project)
+            if !hookItems.isEmpty {
+                HookContextMenuItems(items: hookItems)
+                Divider()
+            }
             Button {
                 renameText = project.name
                 projectToRename = project

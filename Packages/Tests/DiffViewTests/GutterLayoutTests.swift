@@ -82,4 +82,9 @@ struct GutterLayoutTests {
 
         #expect(DiffView.horizontalScrollBodyWidth(for: lines, layout: layout) > 320)
     }
+
+    @Test("row height snaps to whole points")
+    func rowHeightUsesWholePoints() {
+        #expect(DiffMetrics.rowMinHeight == DiffMetrics.rowMinHeight.rounded(.down))
+    }
 }

@@ -6,6 +6,8 @@ import Foundation
 /// event to a future out-of-process plugin.
 public enum HookEventKind: String, Codable, Sendable, CaseIterable {
     case onProjectNewChatStart
+    case onThreadContextMenu
+    case onProjectContextMenu
     case onProjectDelete
     case onSessionStart
     case beforeSessionEnd
@@ -45,6 +47,24 @@ public struct NewChatStartPayload: Codable, Sendable {
     public init(projectId: UUID, sessionKey: String) {
         self.projectId = projectId
         self.sessionKey = sessionKey
+    }
+}
+
+public struct ThreadContextMenuPayload: Codable, Sendable {
+    public let project: Project
+    public let session: ChatSession.Summary
+
+    public init(project: Project, session: ChatSession.Summary) {
+        self.project = project
+        self.session = session
+    }
+}
+
+public struct ProjectContextMenuPayload: Codable, Sendable {
+    public let project: Project
+
+    public init(project: Project) {
+        self.project = project
     }
 }
 

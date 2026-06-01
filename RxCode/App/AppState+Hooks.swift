@@ -44,6 +44,15 @@ extension AppState {
         )
     }
 
+    func projectContextMenuItems(for project: Project) -> [HookMenuItem] {
+        hookManager.projectContextMenuItems(ProjectContextMenuPayload(project: project))
+    }
+
+    func threadContextMenuItems(for session: ChatSession.Summary) -> [HookMenuItem] {
+        guard let project = projects.first(where: { $0.id == session.projectId }) else { return [] }
+        return hookManager.threadContextMenuItems(ThreadContextMenuPayload(project: project, session: session))
+    }
+
     // MARK: - Hook execution
 
     /// Tool-call name carried by a hook's chat card. The `Hook: ` prefix lets

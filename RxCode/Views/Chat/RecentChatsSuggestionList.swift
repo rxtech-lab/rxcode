@@ -141,6 +141,12 @@ struct RecentChatsSuggestionList: View {
                 }
             }
 
+            let hookItems = appState.threadContextMenuItems(for: summary)
+            if !hookItems.isEmpty {
+                Divider()
+                HookContextMenuItems(items: hookItems)
+            }
+
             Divider()
 
             Button(role: .destructive) {

@@ -29,9 +29,6 @@ struct BriefingView: View {
     /// Container width tracked from the scroll content; drives the waterfall column count.
     @State private var availableWidth: CGFloat = 800
 
-    /// Non-nil while the "Create Release" sheet is presented for a project.
-    @State private var createReleaseProject: Project?
-
     /// Presents the account-level autopilot automation settings form.
     @State private var showAutomationSettings = false
 
@@ -156,15 +153,6 @@ struct BriefingView: View {
         }
         .onAppear {
             AnalyticsService.shared.log(.briefingListOpened)
-        }
-        .sheet(item: $createReleaseProject) { project in
-            ReleaseCreateSheet(
-                repoId: project.gitHubRepo ?? "",
-                repoFullName: project.gitHubRepo ?? project.name,
-                currentVersion: appState.projectLatestReleaseVersion(project),
-                projectPath: project.path
-            )
-            .environment(appState)
         }
         .sheet(isPresented: $showAutomationSettings) {
             AutomationSettingsSheet()
@@ -658,13 +646,10 @@ struct BriefingView: View {
                 Label("Open Project", systemImage: "folder")
             }
 
-            if appState.projectHasReleaseWorkflow(project) {
+            let hookItems = appState.projectContextMenuItems(for: project)
+            if !hookItems.isEmpty {
                 Divider()
-                Button {
-                    createReleaseProject = project
-                } label: {
-                    Label("Create Release", systemImage: "tag.fill")
-                }
+                HookContextMenuItems(items: hookItems)
             }
 
             if let url = gitHubURL(for: group, project: project) {

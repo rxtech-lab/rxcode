@@ -4,7 +4,13 @@ import Foundation
 /// the docs-publishing skill so the agent wires up CI doc uploads.
 struct DocsSetupRequest: Identifiable, Hashable {
     let id = UUID()
+    var projectId: UUID?
     var repoFullName: String?
+
+    init(projectId: UUID? = nil, repoFullName: String? = nil) {
+        self.projectId = projectId
+        self.repoFullName = repoFullName
+    }
 }
 
 /// Parses `rxcode://docs/setup?repo=<owner/repo>` and

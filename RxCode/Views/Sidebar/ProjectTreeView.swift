@@ -1,5 +1,5 @@
-import SwiftUI
 import RxCodeCore
+import SwiftUI
 import TipKit
 
 // MARK: - ProjectTreeView
@@ -11,7 +11,6 @@ struct ProjectTreeView: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
     @Environment(\.openWindow) private var openWindow
-    @Environment(\.openURL) private var openURL
 
     @State private var expandedProjectIds: Set<UUID> = []
     @State private var renameProject: Project? = nil
@@ -24,8 +23,6 @@ struct ProjectTreeView: View {
     @State private var archiveSession: ChatSession? = nil
 
     @State private var showAllChatsSheet = false
-    @State private var downloadSecretProject: Project? = nil
-    @State private var createReleaseProject: Project? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -128,19 +125,6 @@ struct ProjectTreeView: View {
         .sheet(isPresented: $showAllChatsSheet) {
             AllChatsHistorySheet(isPresented: $showAllChatsSheet)
         }
-        .sheet(item: $downloadSecretProject) { project in
-            SecretsDownloadSheet(project: project)
-                .environment(appState)
-        }
-        .sheet(item: $createReleaseProject) { project in
-            ReleaseCreateSheet(
-                repoId: project.gitHubRepo ?? "",
-                repoFullName: project.gitHubRepo ?? project.name,
-                currentVersion: appState.projectLatestReleaseVersion(project),
-                projectPath: project.path
-            )
-            .environment(appState)
-        }
         .onChange(of: windowState.selectedProject?.id) { _, newId in
             if let newId { expandedProjectIds.insert(newId) }
         }
@@ -151,6 +135,7 @@ struct ProjectTreeView: View {
         }
         .task(id: appState.projects.map { $0.gitHubRepo ?? "" }.joined(separator: ",")) {
             await appState.refreshSecretsStatuses()
+            await appState.refreshDocsStatuses()
             await appState.refreshReleaseStatuses()
         }
     }
@@ -175,55 +160,55 @@ struct ProjectTreeView: View {
             }
             .buttonStyle(.borderless)
             .help("Show all chats")
-    }
-}
-
-// MARK: - SummarySidebarSection
-
-private struct SummarySidebarSection: View {
-    @Environment(WindowState.self) private var windowState
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text("General")
-                .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
-                .foregroundStyle(ClaudeTheme.textTertiary)
-                .textCase(.uppercase)
-                .padding(.horizontal, 12)
-                .padding(.bottom, 2)
-
-            Button {
-                windowState.showingBriefing = true
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "text.page")
-                        .font(.system(size: ClaudeTheme.size(12), weight: .medium))
-                        .frame(width: 18, height: 18)
-
-                    Text("Briefing")
-                        .font(.system(size: ClaudeTheme.size(13), weight: .medium))
-                        .lineLimit(1)
-
-                    Spacer(minLength: 4)
-                }
-                .foregroundStyle(windowState.showingBriefing ? ClaudeTheme.accent : ClaudeTheme.textSecondary)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .background(
-                    RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
-                        .fill(windowState.showingBriefing ? ClaudeTheme.accent.opacity(0.10) : Color.clear)
-                )
-                .padding(.horizontal, 8)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help("Open project branch briefing")
-            .popoverTip(RxCodeTips.BriefingTip(), arrowEdge: .trailing)
         }
     }
-}
 
-// MARK: - Empty State
+    // MARK: - SummarySidebarSection
+
+    private struct SummarySidebarSection: View {
+        @Environment(WindowState.self) private var windowState
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("General")
+                    .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
+                    .foregroundStyle(ClaudeTheme.textTertiary)
+                    .textCase(.uppercase)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 2)
+
+                Button {
+                    windowState.showingBriefing = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "text.page")
+                            .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+                            .frame(width: 18, height: 18)
+
+                        Text("Briefing")
+                            .font(.system(size: ClaudeTheme.size(13), weight: .medium))
+                            .lineLimit(1)
+
+                        Spacer(minLength: 4)
+                    }
+                    .foregroundStyle(windowState.showingBriefing ? ClaudeTheme.accent : ClaudeTheme.textSecondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(
+                        RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
+                            .fill(windowState.showingBriefing ? ClaudeTheme.accent.opacity(0.10) : Color.clear)
+                    )
+                    .padding(.horizontal, 8)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Open project branch briefing")
+                .popoverTip(RxCodeTips.BriefingTip(), arrowEdge: .trailing)
+            }
+        }
+    }
+
+    // MARK: - Empty State
 
     private var emptyState: some View {
         VStack(spacing: 8) {
@@ -274,16 +259,7 @@ private struct SummarySidebarSection: View {
                             appState.selectProject(project, in: windowState)
                             appState.startNewChat(in: windowState)
                         },
-                        onDownloadSecret: { downloadSecretProject = project },
-                        hasSecrets: appState.projectHasSecrets(project),
-                        onSetupDocsSearch: {
-                            guard let repo = project.gitHubRepo,
-                                  let url = DocsDeepLink.setupURL(repo: repo) else { return }
-                            openURL(url)
-                        },
-                        canSetupDocsSearch: project.gitHubRepo != nil,
-                        hasReleaseWorkflow: appState.projectHasReleaseWorkflow(project),
-                        onCreateRelease: { createReleaseProject = project }
+                        hookMenuItems: appState.projectContextMenuItems(for: project)
                     )
 
                     if expandedProjectIds.contains(project.id) {
@@ -327,12 +303,7 @@ private struct ProjectTreeRow: View {
     let onRename: () -> Void
     let onDelete: () -> Void
     let onNewChat: () -> Void
-    let onDownloadSecret: () -> Void
-    let hasSecrets: Bool
-    let onSetupDocsSearch: () -> Void
-    let canSetupDocsSearch: Bool
-    let hasReleaseWorkflow: Bool
-    let onCreateRelease: () -> Void
+    let hookMenuItems: [HookMenuItem]
 
     @State private var isHovered = false
     @State private var showLocationPopover = false
@@ -454,25 +425,11 @@ private struct ProjectTreeRow: View {
         Button { onOpenInNewWindow() } label: {
             Label("Open in New Window", systemImage: "macwindow.badge.plus")
         }
-        Divider()
-        if canSetupDocsSearch {
-            Button { onSetupDocsSearch() } label: {
-                Label("Set Up Docs Search", systemImage: "books.vertical.fill")
-            }
-        }
-        if hasSecrets {
-            Button { onDownloadSecret() } label: {
-                Label("Download Secret", systemImage: "key.fill")
-            }
-        }
-        if hasReleaseWorkflow {
-            Button { onCreateRelease() } label: {
-                Label("Create Release", systemImage: "tag.fill")
-            }
-        }
-        if canSetupDocsSearch || hasSecrets || hasReleaseWorkflow {
+        if !hookMenuItems.isEmpty {
             Divider()
+            HookContextMenuItems(items: hookMenuItems)
         }
+        Divider()
         Button { onRename() } label: {
             Label("Rename Project", systemImage: "pencil")
         }
@@ -611,7 +568,8 @@ private struct ProjectChatsList: View {
             },
             onDelete: {
                 onDeleteSession(session)
-            }
+            },
+            hookMenuItems: appState.threadContextMenuItems(for: summary)
         )
     }
 }

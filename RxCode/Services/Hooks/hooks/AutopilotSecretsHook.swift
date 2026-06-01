@@ -13,12 +13,45 @@ import SwiftUI
 /// - On new chat, surface a banner when the project's local `.env*` files
 ///   aren't backed up to autopilot (see `onProjectNewChatStart`).
 @MainActor
-final class AutopilotHook: Hook {
+final class AutopilotSecretsHook: Hook {
     let hookID = "builtin.autopilot"
     private let logger = Logger(subsystem: "com.claudework", category: "AutopilotHook")
 
     func onRepositoryAdded(_ payload: RepositoryPayload, controller: any HookController) async -> HookOutcome {
         await run(project: payload.project, controller: controller)
+    }
+
+    func onThreadContextMenu(_ payload: ThreadContextMenuPayload, controller: any HookController) -> [HookMenuItem] {
+        menuItems(for: payload.project, controller: controller)
+    }
+
+    func onProjectContextMenu(_ payload: ProjectContextMenuPayload, controller: any HookController) -> [HookMenuItem] {
+        menuItems(for: payload.project, controller: controller)
+    }
+
+    private func menuItems(for project: Project, controller: any HookController) -> [HookMenuItem] {
+        guard project.gitHubRepo != nil else { return [] }
+        if controller.projectHasSecrets(project) {
+            return [
+                HookMenuItem(
+                    id: "\(hookID).download.\(project.id.uuidString)",
+                    title: "Download Secret",
+                    systemImage: "key.fill"
+                ) {
+                    controller.requestSecretsDownload(project: project)
+                }
+            ]
+        }
+
+        return [
+            HookMenuItem(
+                id: "\(hookID).setup.\(project.id.uuidString)",
+                title: "Set Up Secrets",
+                systemImage: "key.fill"
+            ) {
+                controller.requestSecretsSetup(project: project)
+            }
+        ]
     }
 
     /// Stable, readable banner id for a repo, used both as the banner key and the

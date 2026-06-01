@@ -364,4 +364,50 @@ extension MobileAppState {
     func installReleaseToken(repoId: String, value: String) async throws -> ReleaseGithubSecretResult {
         try await autopilotSend(.release, .releaseInstallToken, body: AutopilotReleaseTokenBody(repoId: repoId, value: value), as: ReleaseGithubSecretResult.self)
     }
+
+    // MARK: - Project context-menu actions (desktop-mediated, 1:1 with macOS)
+
+    /// Per-project autopilot state (has secrets / docs / release), mirroring the
+    /// desktop checks that decide which context-menu items to show.
+    func projectAutopilotStatus(projectId: UUID) async throws -> AutopilotProjectStatus {
+        try await autopilotSend(.project, .projectAutopilotStatus,
+                                body: AutopilotProjectBody(projectId: projectId),
+                                as: AutopilotProjectStatus.self)
+    }
+
+    /// Asks the Mac to surface the secrets-setup flow for the project (same as
+    /// the desktop "Set Up Secrets" menu item).
+    func requestProjectSecretsSetup(projectId: UUID) async throws {
+        try await autopilotSendVoid(.project, .projectSecretsSetup, body: AutopilotProjectBody(projectId: projectId))
+    }
+
+    /// Asks the Mac to start the docs-setup chat for the project ("Set Up Docs").
+    func requestProjectDocsSetup(projectId: UUID) async throws {
+        try await autopilotSendVoid(.project, .projectDocsSetup, body: AutopilotProjectBody(projectId: projectId))
+    }
+
+    /// Asks the Mac to open its docs search overlay ("Search Docs").
+    func requestProjectDocsSearch(projectId: UUID) async throws {
+        try await autopilotSendVoid(.project, .projectDocsSearch, body: AutopilotProjectBody(projectId: projectId))
+    }
+
+    /// Asks the Mac to start the release-setup chat for the project.
+    func requestProjectReleaseSetup(projectId: UUID) async throws {
+        try await autopilotSendVoid(.project, .projectReleaseSetup, body: AutopilotProjectBody(projectId: projectId))
+    }
+
+    /// Asks the Mac to present its create-release sheet for the project.
+    func requestProjectReleaseCreate(projectId: UUID) async throws {
+        try await autopilotSendVoid(.project, .projectReleaseCreate, body: AutopilotProjectBody(projectId: projectId))
+    }
+
+    /// Asks the Mac to download + decrypt the chosen environment and write its
+    /// files into the project folder (the Mac holds the KEK; plaintext stays on
+    /// the Mac). Returns the files written and any skipped conflicts.
+    @discardableResult
+    func downloadProjectSecrets(projectId: UUID, envId: String, overwrite: Bool) async throws -> AutopilotProjectSecretsDownloadResult {
+        try await autopilotSend(.project, .projectSecretsDownload,
+                                body: AutopilotProjectSecretsDownloadBody(projectId: projectId, envId: envId, overwrite: overwrite),
+                                as: AutopilotProjectSecretsDownloadResult.self)
+    }
 }

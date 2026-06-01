@@ -12,6 +12,11 @@ struct MobileBriefingDetailView: View {
     @State private var showingNewThread = false
     @State private var isInitializingGit = false
 
+    // Autopilot context menu (1:1 with the desktop briefing/project menu).
+    @State private var autopilotStatus: AutopilotProjectStatus?
+    @State private var showingSecretsDownload = false
+    @State private var autopilotInfo: AutopilotMenuInfo?
+
     var body: some View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: 24) {
@@ -40,14 +45,25 @@ struct MobileBriefingDetailView: View {
                 .accessibilityIdentifier("briefing-detail-new-thread")
             }
 
-            if let gitHubURL {
+            if showsActionsMenu {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        Link(destination: gitHubURL) {
-                            Label(
-                                gitHubURLIsPullRequest ? "Open Pull Request" : "Open on GitHub",
-                                systemImage: "arrow.up.forward.square"
+                        if let project, project.gitHubRepo != nil {
+                            ProjectAutopilotMenuItems(
+                                project: project,
+                                status: autopilotStatus,
+                                showDownloadSheet: $showingSecretsDownload,
+                                info: $autopilotInfo
                             )
+                            if gitHubURL != nil { Divider() }
+                        }
+                        if let gitHubURL {
+                            Link(destination: gitHubURL) {
+                                Label(
+                                    gitHubURLIsPullRequest ? "Open Pull Request" : "Open on GitHub",
+                                    systemImage: "arrow.up.forward.square"
+                                )
+                            }
                         }
                     } label: {
                         Image(systemName: "ellipsis")
@@ -58,6 +74,13 @@ struct MobileBriefingDetailView: View {
                 }
             }
         }
+        .projectAutopilotMenuHost(
+            project: project,
+            status: $autopilotStatus,
+            showDownloadSheet: $showingSecretsDownload,
+            info: $autopilotInfo,
+            state: state
+        )
         .sheet(isPresented: $showingNewThread) {
             NewThreadSheet(
                 projectID: groupKey.projectId,
@@ -91,7 +114,17 @@ struct MobileBriefingDetailView: View {
     }
 
     private var projectName: String {
-        state.projects.first(where: { $0.id == groupKey.projectId })?.name ?? "Unknown Project"
+        project?.name ?? "Unknown Project"
+    }
+
+    private var project: Project? {
+        state.projects.first(where: { $0.id == groupKey.projectId })
+    }
+
+    /// Show the ellipsis menu when there's an autopilot-capable repo or a GitHub
+    /// link to surface.
+    private var showsActionsMenu: Bool {
+        project?.gitHubRepo != nil || gitHubURL != nil
     }
 
     /// GitHub destination for the "Open on GitHub" action. Prefers the pull

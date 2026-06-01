@@ -253,6 +253,83 @@ extension AppState {
         case .releaseInstallToken:
             let body = try decodeAutopilotBody(request, as: AutopilotReleaseTokenBody.self)
             return try encoder.encode(try await release.installReleaseToken(repoId: body.repoId, value: body.value))
+
+        // MARK: Project context-menu actions (desktop-mediated 1:1 with the
+        // macOS project/briefing context menu — see AutopilotSecretsHook /
+        // AutopilotDocsHook / AutopilotReleaseHook).
+        case .projectAutopilotStatus:
+            let project = try autopilotProject(request)
+            let status = AutopilotProjectStatus(
+                gitHubRepo: project.gitHubRepo,
+                hasSecrets: projectHasSecrets(project),
+                hasDocs: projectHasDocs(project),
+                hasRelease: projectHasReleaseWorkflow(project)
+            )
+            return try encoder.encode(status)
+
+        case .projectSecretsSetup:
+            // Same request the desktop "Set Up Secrets" menu item sets; the Mac
+            // surfaces the secrets-setup form / chat for the project.
+            let project = try autopilotProject(request)
+            secretsSetupRequest = SecretsSetupRequest(
+                repoFullName: project.gitHubRepo,
+                projectPath: project.path,
+                filename: nil
+            )
+            return nil
+
+        case .projectDocsSetup:
+            let project = try autopilotProject(request)
+            docsSetupRequest = DocsSetupRequest(projectId: project.id, repoFullName: project.gitHubRepo)
+            return nil
+
+        case .projectDocsSearch:
+            // Same as the desktop "Search Docs" item — opens the docs-capable
+            // search overlay on the Mac.
+            _ = try autopilotProject(request)
+            docsSearchRequest = UUID()
+            return nil
+
+        case .projectReleaseSetup:
+            let project = try autopilotProject(request)
+            releaseSetupRequest = ReleaseSetupRequest(projectId: project.id, repoFullName: project.gitHubRepo)
+            return nil
+
+        case .projectReleaseCreate:
+            // Same as the desktop "Create Release" item — presents the
+            // create-release sheet on the Mac, pinned to this project.
+            let project = try autopilotProject(request)
+            releaseCreateRequest = project
+            return nil
+
+        case .projectSecretsDownload:
+            let body = try decodeAutopilotBody(request, as: AutopilotProjectSecretsDownloadBody.self)
+            guard let project = projects.first(where: { $0.id == body.projectId }) else {
+                throw MobileRemoteConfigError.invalidRequest("No project found for the requested id.")
+            }
+            guard let repo = project.gitHubRepo else {
+                throw MobileRemoteConfigError.invalidRequest("Project is not linked to a GitHub repo.")
+            }
+            let bundle = try await secrets.bundle(repo: repo, env: body.envId)
+            let files = try await decryptSecretBundle(bundle)
+            let directory = URL(fileURLWithPath: project.path, isDirectory: true)
+            // Files that would clobber something already in the folder. When
+            // overwrite is requested nothing is skipped, so there are no conflicts.
+            let conflicts = body.overwrite ? [] : files
+                .map(\.filename)
+                .filter { FileManager.default.fileExists(atPath: directory.appendingPathComponent($0).path) }
+            let written = try writeDecryptedSecrets(files, to: directory, overwrite: body.overwrite)
+            return try encoder.encode(AutopilotProjectSecretsDownloadResult(written: written, conflicts: conflicts))
         }
+    }
+
+    /// Resolves an `AutopilotProjectBody` request to a known project, throwing a
+    /// descriptive error when the id is missing or unknown.
+    private func autopilotProject(_ request: AutopilotRequestPayload) throws -> Project {
+        let body = try decodeAutopilotBody(request, as: AutopilotProjectBody.self)
+        guard let project = projects.first(where: { $0.id == body.projectId }) else {
+            throw MobileRemoteConfigError.invalidRequest("No project found for the requested id.")
+        }
+        return project
     }
 }

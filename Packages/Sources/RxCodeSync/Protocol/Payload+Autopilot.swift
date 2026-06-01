@@ -26,6 +26,7 @@ public enum AutopilotDomain: String, Codable, Sendable {
     case ciUpdates
     case docs
     case release
+    case project
 }
 
 /// Every autopilot operation, globally unique so the desktop can switch on it
@@ -92,6 +93,19 @@ public enum AutopilotOp: String, Codable, Sendable {
     case releaseListWorkflows
     case releaseDispatch
     case releaseInstallToken
+
+    // Project context-menu actions — desktop-mediated so the Mac performs the
+    // exact work its own project/briefing context menu does. `*Setup` ops set
+    // the same AppState request the desktop menu sets (the Mac surfaces the
+    // setup chat/sheet); `projectSecretsDownload` decrypts on the Mac and writes
+    // the files into the project folder (the phone never sees plaintext).
+    case projectAutopilotStatus
+    case projectSecretsSetup
+    case projectDocsSetup
+    case projectDocsSearch
+    case projectReleaseSetup
+    case projectReleaseCreate
+    case projectSecretsDownload
 }
 
 /// Mobile → desktop: a single autopilot operation. `body` is a JSON-encoded
@@ -434,4 +448,59 @@ public struct CIUpdateRunHistoryList: Codable, Sendable {
 public struct CIPullRequestList: Codable, Sendable {
     public let items: [CIPullRequest]
     public init(items: [CIPullRequest]) { self.items = items }
+}
+
+// MARK: - Project context-menu actions
+
+/// Addresses a project by its local id; the desktop resolves it to the linked
+/// GitHub repo and on-disk path.
+public struct AutopilotProjectBody: Codable, Sendable {
+    public let projectId: UUID
+    public init(projectId: UUID) { self.projectId = projectId }
+}
+
+/// Per-project autopilot state powering the mobile context menu. Mirrors the
+/// desktop's `projectHasSecrets` / `projectHasDocs` / `projectHasReleaseWorkflow`
+/// checks so the phone can pick the same menu items (Download vs Set Up, etc.).
+public struct AutopilotProjectStatus: Codable, Sendable {
+    public let gitHubRepo: String?
+    public let hasSecrets: Bool
+    public let hasDocs: Bool
+    public let hasRelease: Bool
+
+    public init(gitHubRepo: String?, hasSecrets: Bool, hasDocs: Bool, hasRelease: Bool) {
+        self.gitHubRepo = gitHubRepo
+        self.hasSecrets = hasSecrets
+        self.hasDocs = hasDocs
+        self.hasRelease = hasRelease
+    }
+}
+
+/// Ask the desktop to download + decrypt a secret environment and write its
+/// files into the project's folder on the Mac. The Mac holds the passkey-derived
+/// KEK and does the decryption, mirroring `AutopilotSecretsHook`'s desktop
+/// download. `overwrite` clobbers files that already exist in the folder.
+public struct AutopilotProjectSecretsDownloadBody: Codable, Sendable {
+    public let projectId: UUID
+    public let envId: String
+    public let overwrite: Bool
+
+    public init(projectId: UUID, envId: String, overwrite: Bool) {
+        self.projectId = projectId
+        self.envId = envId
+        self.overwrite = overwrite
+    }
+}
+
+/// Result of `projectSecretsDownload`: filenames actually written, plus the
+/// files skipped because they already existed (only when `overwrite` was false).
+/// The phone re-issues with `overwrite: true` to clobber the conflicts.
+public struct AutopilotProjectSecretsDownloadResult: Codable, Sendable {
+    public let written: [String]
+    public let conflicts: [String]
+
+    public init(written: [String], conflicts: [String]) {
+        self.written = written
+        self.conflicts = conflicts
+    }
 }

@@ -385,7 +385,25 @@ private struct GlassProjectCard: View {
     let namespace: Namespace.ID
     var onSelect: (() -> Void)?
 
+    @EnvironmentObject private var state: MobileAppState
+    // Autopilot context menu (1:1 with the desktop project/sidebar menu).
+    @State private var autopilotStatus: AutopilotProjectStatus?
+    @State private var showingSecretsDownload = false
+    @State private var autopilotInfo: AutopilotMenuInfo?
+
     var body: some View {
+        cardButton
+            .modifier(ProjectCardAutopilotMenuModifier(
+                project: project,
+                status: $autopilotStatus,
+                showDownloadSheet: $showingSecretsDownload,
+                info: $autopilotInfo,
+                state: state
+            ))
+    }
+
+    @ViewBuilder
+    private var cardButton: some View {
         // The UI-test identifier is applied directly on the button of each
         // branch — applying it to an enclosing container does not reach the
         // button element XCUITest queries.
@@ -525,6 +543,42 @@ private struct GlassProjectCard: View {
         if weeks < 52 { return "\(weeks)w" }
 
         return "\(days / 365)y"
+    }
+}
+
+// MARK: - Project Card Autopilot Menu
+
+/// Attaches the autopilot context menu (long-press) + its sheet/alert to a
+/// project card, but only for repo-backed projects (matching the desktop, which
+/// shows no autopilot items without a linked GitHub repo).
+private struct ProjectCardAutopilotMenuModifier: ViewModifier {
+    let project: Project
+    @Binding var status: AutopilotProjectStatus?
+    @Binding var showDownloadSheet: Bool
+    @Binding var info: AutopilotMenuInfo?
+    let state: MobileAppState
+
+    func body(content: Content) -> some View {
+        if project.gitHubRepo != nil {
+            content
+                .contextMenu {
+                    ProjectAutopilotMenuItems(
+                        project: project,
+                        status: status,
+                        showDownloadSheet: $showDownloadSheet,
+                        info: $info
+                    )
+                }
+                .projectAutopilotMenuHost(
+                    project: project,
+                    status: $status,
+                    showDownloadSheet: $showDownloadSheet,
+                    info: $info,
+                    state: state
+                )
+        } else {
+            content
+        }
     }
 }
 

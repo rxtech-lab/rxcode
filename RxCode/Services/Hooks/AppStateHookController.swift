@@ -171,10 +171,17 @@ final class AppStateHookController: HookController {
 
     func dismissBanner(id: String, in surface: HookBannerSurface) {
         guard let app else { return }
-        guard var items = app.hookBanners[surface] else { return }
+        guard var items = app.hookBanners[surface] else {
+            logger.debug("[Hook] dismissBanner: id=\(id, privacy: .public) surface=\(surface.rawValue, privacy: .public) — no banners in surface, no-op")
+            return
+        }
         let before = items.count
         items.removeAll { $0.id == id }
-        guard items.count != before else { return }
+        guard items.count != before else {
+            let present = items.map(\.id).joined(separator: ",")
+            logger.debug("[Hook] dismissBanner: id=\(id, privacy: .public) surface=\(surface.rawValue, privacy: .public) — id not found, no-op. present=[\(present, privacy: .public)]")
+            return
+        }
         withAnimation(.snappy(duration: 0.28)) { app.hookBanners[surface] = items }
         logger.debug("[Hook] dismissBanner: id=\(id, privacy: .public) surface=\(surface.rawValue, privacy: .public) — \(before, privacy: .public)→\(items.count, privacy: .public) banner(s)")
     }
@@ -250,15 +257,44 @@ final class AppStateHookController: HookController {
         )
     }
 
+    // MARK: CI auto-update
+
+    func ciRepoIsWatched(repoFullName: String) async -> Bool? {
+        guard let app else { return nil }
+        do {
+            let statuses = try await app.ciUpdates.statuses(forRepos: [repoFullName])
+            // nil (not false) only on a failed/cancelled check — a successful
+            // lookup that finds no row legitimately means "not watched".
+            return statuses.first(where: { $0.repositoryFullName.lowercased() == repoFullName.lowercased() })?.isWatched ?? false
+        } catch {
+            logger.error("ciRepoIsWatched failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
     // MARK: Docs
 
     func docsIndexed(repoFullName: String) async -> Bool? {
         guard let app else { return nil }
         do {
             let statuses = try await app.docs.statuses(forRepos: [repoFullName])
+            guard let s = statuses.first(where: { $0.repository.lowercased() == repoFullName.lowercased() }) else {
+                logger.debug("[Hook] docsIndexed(\(repoFullName, privacy: .public)): no matching status row in \(statuses.count, privacy: .public) result(s) → treating as not set up")
+                return false
+            }
             // nil (not false) only on a failed/cancelled check — a successful
             // lookup that finds no row legitimately means "no docs".
-            return statuses.first(where: { $0.repository.lowercased() == repoFullName.lowercased() })?.hasDocs ?? false
+            //
+            // Gate on registration (`docsRepositoryId != nil`), not `hasDocs`: once
+            // the repo is registered with the docs service we should stop prompting
+            // setup. `hasDocs` additionally requires documents to be uploaded AND
+            // embedded, which only lands after the docs-publishing CI runs (i.e.
+            // after the workflow PR merges to the default branch) — so it stays
+            // false for a freshly set-up repo and would keep the banner up even
+            // though setup is effectively done.
+            let registered = s.docsRepositoryId != nil
+            logger.debug("[Hook] docsIndexed(\(repoFullName, privacy: .public)): registered=\(registered, privacy: .public) hasDocs=\(s.hasDocs, privacy: .public) documentsCount=\(s.documentsCount ?? -1, privacy: .public) readyCount=\(s.readyCount ?? -1, privacy: .public) docsRepositoryId=\(s.docsRepositoryId ?? "nil", privacy: .public)")
+            return registered
         } catch {
             logger.error("docsIndexed failed: \(error.localizedDescription)")
             return nil
@@ -269,5 +305,68 @@ final class AppStateHookController: HookController {
         guard let app, app.pendingDocsSetupProjectId == projectId else { return nil }
         app.pendingDocsSetupProjectId = nil
         return DocsSkill.systemPrompt
+    }
+
+    // MARK: Release
+
+    func releaseConfigured(repoFullName: String) async -> Bool? {
+        guard let app else { return nil }
+        do {
+            let statuses = try await app.release.statuses(forRepos: [repoFullName])
+            if let s = statuses.first(where: { $0.fullName.lowercased() == repoFullName.lowercased() }) {
+                logger.debug("[Hook] releaseConfigured(\(repoFullName, privacy: .public)): isManaged=\(s.isManaged, privacy: .public) hasReleaseWorkflow=\(s.hasReleaseWorkflow, privacy: .public) latestVersion=\(s.latestVersion ?? "nil", privacy: .public)")
+            } else {
+                logger.debug("[Hook] releaseConfigured(\(repoFullName, privacy: .public)): no matching status row in \(statuses.count, privacy: .public) result(s) → treating as not managed")
+            }
+            // nil (not false) only on a failed/cancelled check — a successful
+            // lookup that finds no row legitimately means "not set up".
+            //
+            // Gate on `isManaged`, not `hasReleaseWorkflow`: once the repo is
+            // registered with the release service we should stop prompting setup.
+            // `hasReleaseWorkflow` additionally requires a *selected dispatchable*
+            // workflow, which only lands after the release workflow PR merges into
+            // the default branch — so it stays false for a freshly set-up repo and
+            // would keep the banner up even though setup is effectively done.
+            return statuses.first(where: { $0.fullName.lowercased() == repoFullName.lowercased() })?.isManaged ?? false
+        } catch {
+            logger.error("releaseConfigured failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    func consumePendingReleaseSetupSkill(projectId: UUID) -> String? {
+        guard let app, app.pendingReleaseSetupProjectId == projectId else { return nil }
+        app.pendingReleaseSetupProjectId = nil
+        return ReleaseSkill.systemPrompt
+    }
+
+    // MARK: Setup-session tracking
+
+    func markSetupSession(kind: String, sessionKey: String) {
+        app?.setupSessionKeys[kind, default: []].insert(sessionKey)
+        logger.debug("[Hook] markSetupSession: kind=\(kind, privacy: .public) sessionKey=\(sessionKey, privacy: .public)")
+    }
+
+    func isSetupSession(kind: String, sessionKey: String) -> Bool {
+        guard let app else { return false }
+        // Canonical, redirect-aware check lives on AppState (shared with the setup
+        // banners). The CLI rotates the session id mid-life (`pending-<uuid>` →
+        // real sid, and again on `compact_boundary`), so the marker stored when
+        // the skill was injected won't raw-match a later turn's key.
+        let matched = app.isSetupSession(kind: kind, sessionKey: sessionKey)
+        if !matched, let keys = app.setupSessionKeys[kind], !keys.isEmpty {
+            let target = app.resolveCurrentSessionId(sessionKey)
+            logger.debug("[Hook] isSetupSession(kind=\(kind, privacy: .public)): no match. query=\(sessionKey, privacy: .public)→\(target, privacy: .public) stored=[\(keys.map { "\($0)→\(app.resolveCurrentSessionId($0))" }.joined(separator: ","), privacy: .public)]")
+        }
+        return matched
+    }
+
+    func clearSetupSession(kind: String, sessionKey: String) {
+        guard let app, let keys = app.setupSessionKeys[kind] else { return }
+        // Remove every stored key that resolves to the same canonical sid as the
+        // one being cleared (mirrors the redirect-aware match in `isSetupSession`).
+        let target = app.resolveCurrentSessionId(sessionKey)
+        let stale = keys.filter { app.resolveCurrentSessionId($0) == target }
+        app.setupSessionKeys[kind]?.subtract(stale)
     }
 }

@@ -175,13 +175,25 @@ public struct ChatSession: Identifiable, Codable, Sendable {
         )
     }
 
+    /// Strip inline Markdown emphasis markers (`**bold**`, `__bold__`, `` `code` ``)
+    /// that LLM-generated titles sometimes include. Titles are rendered as plain
+    /// text, so leftover markers surface literally (e.g. "**feat: …**"). Only the
+    /// markers are removed; the wrapped text is preserved.
+    public static func stripMarkdownEmphasis(from content: String) -> String {
+        content
+            .replacingOccurrences(of: "**", with: "")
+            .replacingOccurrences(of: "__", with: "")
+            .replacingOccurrences(of: "`", with: "")
+    }
+
     /// Strip attachment markers from user message content so titles and prompts
     /// don't surface internal tokens. Removes:
     ///   - `[Attached image: ...]`, `[Attached file: ...]`, `[Pasted text: ...]`, `[Link: ...]`
     ///   - `[Image1]`, `[Image2]`, ... display tokens
+    ///   - `**bold**` / `__bold__` / `` `code` `` Markdown emphasis markers
     /// Collapses runs of whitespace and trims edges.
     public static func stripAttachmentMarkers(from content: String) -> String {
-        content
+        stripMarkdownEmphasis(from: content)
             .replacingOccurrences(
                 of: #"\[(Attached [A-Za-z]+|Pasted text|Link):[^\]]*\]"#,
                 with: "",

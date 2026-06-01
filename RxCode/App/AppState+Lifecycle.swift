@@ -211,6 +211,22 @@ extension AppState {
             logger.info("Pruned orphan briefing metadata summaries=\(prunedBriefingMetadata.threadSummaries) briefings=\(prunedBriefingMetadata.branchBriefings)")
         }
 
+        // Purge threads + search chunks left behind by projects that were
+        // deleted before the cascade in `deleteProject` existed (or by any
+        // leak). This clears them from history and the search source so they
+        // never resurface as "Unknown project" results. Runs before we load
+        // the sidebar summaries below so the loaded list already excludes them.
+        let knownProjectIds = Set(projects.map(\.id))
+        let prunedOrphanThreads = threadStore.pruneOrphanThreads(excludingProjectIds: knownProjectIds)
+        if prunedOrphanThreads > 0 {
+            logger.info("Pruned \(prunedOrphanThreads) orphan thread(s) from deleted projects")
+        }
+        // Keep the in-memory search index consistent too (disk is already clean
+        // above). Detached so a fresh boot isn't blocked on the embedding actor.
+        Task.detached(priority: .utility) { [searchService] in
+            await searchService.pruneOrphans(knownProjectIds: knownProjectIds)
+        }
+
         // Sidebar threads are now sourced from the local SwiftData store.
         // CLI session files are no longer surfaced in the sidebar list — the
         // CLI is still the transcript backend (replay on thread open), but

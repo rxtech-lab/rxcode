@@ -65,6 +65,19 @@ extension AppState {
         return current
     }
 
+    /// True when `sessionKey` is currently tracked as an in-flight setup chat of
+    /// `kind` (see `HookSetupKind`). Resolves CLI session-id renames so a thread
+    /// that has rotated `pending-… → real` still matches. This is the single
+    /// source of truth shared by the hook controller (re-check on session end)
+    /// and the setup banners (which disable their "Set up" action while you're
+    /// already inside that setup thread — clicking again would spawn a duplicate
+    /// setup chat).
+    func isSetupSession(kind: String, sessionKey: String) -> Bool {
+        guard let keys = setupSessionKeys[kind], !keys.isEmpty else { return false }
+        let target = resolveCurrentSessionId(sessionKey)
+        return keys.contains { resolveCurrentSessionId($0) == target }
+    }
+
     /// Spawn a one-shot summarization call to generate a 3–6 word title for the given
     /// session, then persist it via `renameSession` if the title is still the placeholder.
     /// No-op if the session was already renamed manually or the LLM call fails.

@@ -249,7 +249,7 @@ extension CodexAppServer {
     }
 
     func cleanTitle(_ raw: String) -> String? {
-        let cleaned = raw
+        let cleaned = ChatSession.stripMarkdownEmphasis(from: raw)
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
         guard !cleaned.isEmpty else { return nil }

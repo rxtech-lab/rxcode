@@ -58,6 +58,8 @@ extension AppState: IDEToolHandling {
             return try await handleSearchDocs(arguments: arguments)
         case "ide__setup_docs_secret":
             return try await handleSetupDocsSecret(arguments: arguments, sessionKey: sessionKey)
+        case "ide__setup_release":
+            return try await handleSetupRelease(arguments: arguments, sessionKey: sessionKey)
         case "ide__ask_user":
             throw IDEToolError.notSupported("ide__ask_user polyfill not implemented yet — surface the question as plain assistant text instead.")
         default:
@@ -467,6 +469,74 @@ extension AppState: IDEToolHandling {
         }
         _ = try await docs.addRepository(
             AddDocsRepoBody(
+                installationId: managed.installationId,
+                repositoryId: managed.id,
+                repositoryFullName: managed.fullName
+            )
+        )
+        return true
+    }
+
+    @MainActor
+    private func handleSetupRelease(arguments: JSONValue, sessionKey: String) async throws -> JSONValue {
+        // Prefer an explicit `owner/repo`; otherwise fall back to the repo linked
+        // to the calling session's project.
+        let explicit = arguments["repository"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let repo: String
+        if let explicit, !explicit.isEmpty {
+            repo = explicit
+        } else if let thread = threadStore.fetch(id: sessionKey),
+                  let linked = projects.first(where: { $0.id == thread.projectId })?.gitHubRepo,
+                  !linked.isEmpty {
+            repo = linked
+        } else {
+            throw IDEToolError.invalidArguments(
+                "No 'repository' given and the current project has no linked GitHub repo. Pass repository as 'owner/repo'."
+            )
+        }
+        // Register (and scan workflows) first if needed; throws a descriptive
+        // IDEToolError when the repo isn't accessible to the GitHub App.
+        let registered = try await ensureReleaseRepoRegistered(repo)
+
+        // The RELEASE_TOKEN is user-supplied — only install when provided.
+        let token = arguments["release_token"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let token, !token.isEmpty else {
+            return jsonTextResult(.object([
+                "registered": .bool(registered),
+                "secret_installed": .bool(false),
+                "repository": .string(repo),
+                "note": .string("Repository registered and workflows scanned. No release_token was provided, so RELEASE_TOKEN was not installed — ask the user for a GitHub token with contents:write and call again with release_token to finish setup."),
+            ]))
+        }
+        do {
+            let result = try await release.installReleaseToken(repoId: repo, value: token)
+            return jsonTextResult(.object([
+                "registered": .bool(registered),
+                "secret_installed": .bool(true),
+                "secret_name": .string(result.secretName),
+                "repository": .string(result.repositoryFullName),
+            ]))
+        } catch {
+            throw IDEToolError.handlerFailed(error.localizedDescription)
+        }
+    }
+
+    /// Ensures `repo` (an `owner/repo`) is registered with the release service,
+    /// registering it if not. Returns true when it had to register it. Throws a
+    /// descriptive `IDEToolError` when the repo isn't accessible to the GitHub
+    /// App (so it can't be registered).
+    @MainActor
+    private func ensureReleaseRepoRegistered(_ repo: String) async throws -> Bool {
+        if let status = try? await release.statuses(forRepos: [repo]).first, status.isManaged {
+            return false
+        }
+        guard let managed = try await findManagedRepo(fullName: repo) else {
+            throw IDEToolError.handlerFailed(
+                "\(repo) isn't set up for releases and isn't accessible to the RxLab GitHub App. Install the GitHub App on this repository, then retry."
+            )
+        }
+        _ = try await release.addRepository(
+            AddReleaseRepoBody(
                 installationId: managed.installationId,
                 repositoryId: managed.id,
                 repositoryFullName: managed.fullName

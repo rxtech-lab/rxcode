@@ -133,6 +133,42 @@ final class ThreadStore {
         return (orphanedSummaries.count, orphanedBriefings.count)
     }
 
+    /// Remove every thread — and its full per-thread footprint (todo snapshots,
+    /// file edits, queues, plan decisions, hook status, summaries, embedding
+    /// chunks) — whose project is no longer known. Mirrors
+    /// `deleteBriefingMetadata` but covers the data that drives history and
+    /// global search. Used at launch to purge orphans left behind by projects
+    /// that were deleted before the cascade in `deleteProject` existed (or any
+    /// leak), so they never resurface in the sidebar or as "Unknown project"
+    /// search results. Returns the number of thread rows removed.
+    func pruneOrphanThreads(excludingProjectIds knownProjectIds: Set<UUID>) -> Int {
+        let threadRows = (try? context.fetch(FetchDescriptor<ChatThread>())) ?? []
+        let orphans = threadRows.filter { !knownProjectIds.contains($0.projectId) }
+        let orphanIds = orphans.map(\.id)
+
+        // Also sweep embedding chunks whose owning thread row is already gone —
+        // these are what feed the search source directly.
+        let chunkRows = (try? context.fetch(FetchDescriptor<ThreadEmbeddingChunk>())) ?? []
+        let orphanChunks = chunkRows.filter { !knownProjectIds.contains($0.projectId) }
+
+        guard !orphans.isEmpty || !orphanChunks.isEmpty else { return 0 }
+
+        for row in orphans { context.delete(row) }
+        for id in orphanIds {
+            deleteTodoSnapshotRow(sessionId: id)
+            deleteFileEditRows(sessionId: id)
+            deleteQueueRows(sessionKey: id)
+            deletePlanDecisionRows(sessionId: id)
+            deleteHookStatusRow(sessionId: id)
+            deleteThreadSummaryRow(sessionId: id)
+            deleteEmbeddingChunkRows(threadId: id)
+        }
+        for row in orphanChunks { context.delete(row) }
+        save()
+
+        return orphans.count
+    }
+
     // MARK: - Writes
 
     /// Insert or update a thread row from a summary.

@@ -161,6 +161,15 @@ extension ClaudeCodeServer {
         return await generatePlainSummary(prompt: prompt, model: model, limit: 1000)
     }
 
+    func generatePullRequestContent(
+        briefing: String,
+        branch: String,
+        model: String = "claude-haiku-4-5-20251001"
+    ) async -> String? {
+        let prompt = OpenAISummarizationService.pullRequestPrompt(briefing: briefing, branch: branch)
+        return await generatePlainSummary(prompt: prompt, model: model, limit: 4000)
+    }
+
     func generatePlainSummary(prompt: String, model: String, limit: Int) async -> String? {
         guard let binary = await findClaudeBinary() else { return nil }
         let emptyMCPConfigPath = writeEmptyMCPConfig()

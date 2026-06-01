@@ -15,6 +15,13 @@ struct AutopilotSettingsTab: View {
 
     @State private var showManageDocs = false
 
+    @State private var showManageRelease = false
+
+    @State private var showManageCIUpdates = false
+
+    @State private var showManageAutomation = false
+    @State private var showManageRepoSetup = false
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -23,9 +30,17 @@ struct AutopilotSettingsTab: View {
                 accountSection
                 if appState.isSignedIn {
                     Divider()
+                    automationSection
+                    Divider()
+                    repoSetupSection
+                    Divider()
                     secretsSection
                     Divider()
+                    ciUpdatesSection
+                    Divider()
                     docsSection
+                    Divider()
+                    releaseSection
                 }
             }
             .padding(24)
@@ -41,13 +56,129 @@ struct AutopilotSettingsTab: View {
             SecretsManageSheet()
                 .environment(appState)
         }
+        .sheet(isPresented: $showManageCIUpdates, onDismiss: {
+            Task { await appState.refreshCIStatuses() }
+        }) {
+            CIUpdateManageSheet()
+                .environment(appState)
+        }
         .sheet(isPresented: $showManageDocs, onDismiss: {
             Task { await appState.refreshDocsStatuses() }
         }) {
             DocsManageSheet()
                 .environment(appState)
         }
+        .sheet(isPresented: $showManageRelease, onDismiss: {
+            Task { await appState.refreshReleaseStatuses() }
+        }) {
+            ReleaseManageSheet()
+                .environment(appState)
+        }
+        .sheet(isPresented: $showManageAutomation) {
+            AutomationSettingsSheet()
+                .environment(appState)
+        }
+        .sheet(isPresented: $showManageRepoSetup) {
+            RepoSetupManageSheet()
+                .environment(appState)
+        }
         .task { await appState.refreshSecretsEnrollment() }
+    }
+
+    // MARK: - Automation Section
+
+    private var automationSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Automation Settings")
+                    .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
+                Text("Control what autopilot does automatically — issue labeling, PR validation and linking, project field population, and more.")
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            secretsCard {
+                HStack(spacing: 12) {
+                    Image(systemName: "wand.and.stars")
+                        .font(.system(size: ClaudeTheme.size(18)))
+                        .foregroundStyle(ClaudeTheme.accent)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Automation")
+                            .font(.system(size: ClaudeTheme.size(13), weight: .medium))
+                        Text("Edit your autopilot automation preferences.")
+                            .font(.system(size: ClaudeTheme.size(11)))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                    Button("Manage Settings") { showManageAutomation = true }
+                        .buttonStyle(.borderedProminent)
+                }
+            }
+        }
+    }
+
+    // MARK: - Repo Setup Section
+
+    private var repoSetupSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Repo Setup")
+                    .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
+                Text("Create reusable templates of GitHub merge settings and branch rulesets. Your default template is applied to newly created repositories.")
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            secretsCard {
+                HStack(spacing: 12) {
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.system(size: ClaudeTheme.size(18)))
+                        .foregroundStyle(ClaudeTheme.accent)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Setup templates")
+                            .font(.system(size: ClaudeTheme.size(13), weight: .medium))
+                        Text("Manage merge settings and rulesets applied to new repositories.")
+                            .font(.system(size: ClaudeTheme.size(11)))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                    Button("Manage Templates") { showManageRepoSetup = true }
+                        .buttonStyle(.borderedProminent)
+                }
+            }
+        }
+    }
+
+    // MARK: - Release Section
+
+    private var releaseSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Releases")
+                    .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
+                Text("Register repositories for semantic-release publishing. Pick which workflow cuts releases, install the RELEASE_TOKEN secret, and trigger releases from RxCode.")
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            secretsCard {
+                HStack(spacing: 12) {
+                    Image(systemName: "tag.fill")
+                        .font(.system(size: ClaudeTheme.size(18)))
+                        .foregroundStyle(ClaudeTheme.accent)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Release publishing")
+                            .font(.system(size: ClaudeTheme.size(13), weight: .medium))
+                        Text("Manage release repositories, select release workflows, and create releases.")
+                            .font(.system(size: ClaudeTheme.size(11)))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                    Button("Manage Releases") { showManageRelease = true }
+                        .buttonStyle(.borderedProminent)
+                }
+            }
+        }
     }
 
     // MARK: - Docs Section
@@ -76,6 +207,38 @@ struct AutopilotSettingsTab: View {
                     }
                     Spacer(minLength: 0)
                     Button("Manage Docs") { showManageDocs = true }
+                        .buttonStyle(.borderedProminent)
+                }
+            }
+        }
+    }
+
+    // MARK: - CI Auto-Update Section
+
+    private var ciUpdatesSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("CI Auto-Update")
+                    .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
+                Text("Keep your repositories' GitHub Actions up to date automatically. Autopilot scans `.github/workflows` on a schedule and opens a PR when actions are outdated.")
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            secretsCard {
+                HStack(spacing: 12) {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(.system(size: ClaudeTheme.size(18)))
+                        .foregroundStyle(ClaudeTheme.accent)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("CI auto-update scan")
+                            .font(.system(size: ClaudeTheme.size(13), weight: .medium))
+                        Text("Watch repositories, set scan schedules, and review scan history and pull requests.")
+                            .font(.system(size: ClaudeTheme.size(11)))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                    Button("Manage") { showManageCIUpdates = true }
                         .buttonStyle(.borderedProminent)
                 }
             }

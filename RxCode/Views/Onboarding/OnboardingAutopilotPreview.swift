@@ -26,6 +26,8 @@ struct AutopilotSignInPreview: View {
                 .font(.system(size: 12))
                 .foregroundStyle(.white.opacity(0.62))
 
+            capabilitiesGrid
+
             if appState.isSignedIn {
                 signedInCard
             } else {
@@ -48,6 +50,74 @@ struct AutopilotSignInPreview: View {
             RxAuthSignInView()
                 .environment(appState)
         }
+    }
+
+    // MARK: - Capabilities
+
+    private struct Capability: Identifiable {
+        let id = UUID()
+        let icon: String
+        let title: String
+        let description: String
+    }
+
+    private let capabilities: [Capability] = [
+        Capability(
+            icon: "key.fill",
+            title: String(localized: "Manage Secrets"),
+            description: String(localized: "Per-project secrets, end-to-end encrypted and easily shared with your team.")
+        ),
+        Capability(
+            icon: "books.vertical.fill",
+            title: String(localized: "Manage Docs"),
+            description: String(localized: "Index your repositories into a personalized, searchable knowledge base.")
+        ),
+        Capability(
+            icon: "arrow.triangle.2.circlepath",
+            title: String(localized: "Detect CI Issues"),
+            description: String(localized: "Autopilot watches your CI, spots failures, and opens fix pull requests.")
+        ),
+        Capability(
+            icon: "tag.fill",
+            title: String(localized: "Create Releases"),
+            description: String(localized: "Cut and publish semantic releases — all from one app.")
+        ),
+    ]
+
+    private var capabilitiesGrid: some View {
+        let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
+        return LazyVGrid(columns: columns, spacing: 10) {
+            ForEach(capabilities) { capability in
+                capabilityCard(capability)
+            }
+        }
+    }
+
+    private func capabilityCard(_ capability: Capability) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: capability.icon)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(ClaudeTheme.accent)
+                .frame(width: 22, height: 22)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(capability.title)
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(.white)
+                Text(capability.description)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.white.opacity(0.6))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(.white.opacity(0.1), lineWidth: 1)
+        )
     }
 
     private var signedInCard: some View {

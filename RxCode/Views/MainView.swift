@@ -303,6 +303,13 @@ struct MainView: View {
             )
             .environment(appState)
         }
+        .sheet(item: Bindable(appState).ciSetupRequest, onDismiss: rerunNewChatHooks) { request in
+            CIUpdateManageSheet(
+                currentRepoFullName: request.repoFullName,
+                currentProjectPath: request.projectPath
+            )
+            .environment(appState)
+        }
         .onChange(of: appState.docsSetupRequest?.id) { _, _ in
             guard let request = appState.docsSetupRequest else { return }
             // Start a fresh chat in this project; DocsHook.onSessionStart injects
@@ -317,6 +324,17 @@ struct MainView: View {
             // directly rather than routing through the composer's inputText. Going
             // through inputText lets the composer auto-collapse the long text into
             // an attachment thumbnail before it's sent.
+            Task { await appState.sendPrompt(prompt, in: windowState) }
+        }
+        .onChange(of: appState.releaseSetupRequest?.id) { _, _ in
+            guard let request = appState.releaseSetupRequest else { return }
+            // Start a fresh chat in this project; ReleaseHook.onSessionStart
+            // injects the release skill into its system prompt on first send.
+            appState.pendingReleaseSetupProjectId = windowState.selectedProject?.id
+            appState.startNewChat(in: windowState)
+            let repoText = request.repoFullName.map { " for \($0)" } ?? ""
+            let prompt = "Set up release publishing\(repoText) by following the create-release skill: inspect the repo, create the `.releaserc` and the release CI workflow (ask me whether to trigger releases on branch push or manually), then register the repo and install the RELEASE_TOKEN via the `ide__setup_release` tool."
+            appState.releaseSetupRequest = nil
             Task { await appState.sendPrompt(prompt, in: windowState) }
         }
         .sheet(item: Bindable(windowState).diffFile) { file in

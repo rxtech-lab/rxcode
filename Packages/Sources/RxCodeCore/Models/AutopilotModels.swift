@@ -218,6 +218,14 @@ public struct CIFailingWorkflow: Codable, Sendable, Hashable {
     }
 }
 
+/// State of the pull request associated with a branch, as tracked by autopilot
+/// from GitHub webhooks. `merged` is distinct from `closed` (closed-without-merge).
+public enum PRState: String, Sendable, Hashable {
+    case open
+    case closed
+    case merged
+}
+
 /// Per-repo result from `POST /api/v1/ci-status/batch`.
 public struct ProjectCIStatus: Codable, Sendable, Hashable {
     public let owner: String
@@ -228,8 +236,18 @@ public struct ProjectCIStatus: Codable, Sendable, Hashable {
     public let lastUpdated: String?
     public let headSha: String?
     public let prNumber: Int?
+    /// Raw PR state string (`open`/`closed`/`merged`) or nil when no PR exists
+    /// for the branch. Stored raw so an unexpected server value never breaks
+    /// decoding; use ``pullRequestState`` for the typed value.
+    public let prState: String?
+    public let prUrl: String?
     public let workflows: [CIWorkflowStatus]
     public let failing: [CIFailingWorkflow]
+
+    /// Typed pull-request state, or nil when absent/unrecognized.
+    public var pullRequestState: PRState? {
+        prState.flatMap(PRState.init(rawValue:))
+    }
 
     public init(
         owner: String,
@@ -240,6 +258,8 @@ public struct ProjectCIStatus: Codable, Sendable, Hashable {
         lastUpdated: String?,
         headSha: String?,
         prNumber: Int?,
+        prState: String?,
+        prUrl: String?,
         workflows: [CIWorkflowStatus],
         failing: [CIFailingWorkflow]
     ) {
@@ -251,8 +271,52 @@ public struct ProjectCIStatus: Codable, Sendable, Hashable {
         self.lastUpdated = lastUpdated
         self.headSha = headSha
         self.prNumber = prNumber
+        self.prState = prState
+        self.prUrl = prUrl
         self.workflows = workflows
         self.failing = failing
+    }
+}
+
+// MARK: - Create Pull Request DTOs
+
+/// Body for `POST /api/v1/pull-requests`. `base` is optional — autopilot uses
+/// the repo's default branch when omitted. `head` is the branch to merge from.
+public struct CreatePullRequestRequest: Codable, Sendable {
+    public let owner: String
+    public let repo: String
+    public let head: String
+    public let base: String?
+    public let title: String
+    public let body: String?
+
+    public init(
+        owner: String,
+        repo: String,
+        head: String,
+        base: String?,
+        title: String,
+        body: String?
+    ) {
+        self.owner = owner
+        self.repo = repo
+        self.head = head
+        self.base = base
+        self.title = title
+        self.body = body
+    }
+}
+
+/// Reply from `POST /api/v1/pull-requests`.
+public struct CreatePullRequestResponse: Codable, Sendable {
+    public let prNumber: Int
+    public let prUrl: String
+    public let state: String
+
+    public init(prNumber: Int, prUrl: String, state: String) {
+        self.prNumber = prNumber
+        self.prUrl = prUrl
+        self.state = state
     }
 }
 

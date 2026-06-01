@@ -17,6 +17,26 @@ enum KeychainHelper {
         return "\(status) (\(message))"
     }
 
+    /// Emitted immediately *before* a `SecItem` call. A keychain permission
+    /// dialog blocks the call synchronously, so when one appears this is the
+    /// last `[Keychain]` line logged before the freeze — it identifies the
+    /// caller and item that triggered the prompt. Pair it with the `logTiming`
+    /// line that follows to see whether the call returned fast (no prompt) or
+    /// blocked (prompt shown).
+    private nonisolated static func logRequest(
+        op: String,
+        service: String,
+        account: String?,
+        caller: String,
+        file: String,
+        line: Int
+    ) {
+        let acct = account ?? "<any>"
+        logger.debug(
+            "[Keychain] → \(op, privacy: .public) requesting service=\(service, privacy: .public) account=\(acct, privacy: .public) caller=\(file, privacy: .public):\(line, privacy: .public) \(caller, privacy: .public)"
+        )
+    }
+
     private nonisolated static func logTiming(
         op: String,
         service: String,
@@ -33,11 +53,11 @@ enum KeychainHelper {
             + Double(elapsed.components.seconds) * 1e3
         if elapsed > promptSuspicionThreshold {
             logger.warning(
-                "\(op, privacy: .public) service=\(service, privacy: .public) account=\(acct, privacy: .public) status=\(describe(status), privacy: .public) elapsed=\(ms, privacy: .public)ms ⚠️ SLOW — likely a keychain permission prompt — caller=\(location, privacy: .public)"
+                "[Keychain] ⚠️ PROMPT-LIKELY \(op, privacy: .public) service=\(service, privacy: .public) account=\(acct, privacy: .public) status=\(describe(status), privacy: .public) elapsed=\(ms, privacy: .public)ms — a permission dialog almost certainly blocked this call (the running binary's code signature no longer matches the item's keychain ACL). caller=\(location, privacy: .public)"
             )
         } else {
             logger.debug(
-                "\(op, privacy: .public) service=\(service, privacy: .public) account=\(acct, privacy: .public) status=\(describe(status), privacy: .public) elapsed=\(ms, privacy: .public)ms caller=\(location, privacy: .public)"
+                "[Keychain] ✓ \(op, privacy: .public) service=\(service, privacy: .public) account=\(acct, privacy: .public) status=\(describe(status), privacy: .public) elapsed=\(ms, privacy: .public)ms caller=\(location, privacy: .public)"
             )
         }
     }
@@ -60,6 +80,8 @@ enum KeychainHelper {
         if let account {
             query[kSecAttrAccount as String] = account
         }
+
+        logRequest(op: "read", service: service, account: account, caller: caller, file: file, line: line)
 
         let clock = ContinuousClock()
         let start = clock.now
@@ -105,6 +127,8 @@ enum KeychainHelper {
             kSecAttrAccount as String: account,
         ]
 
+        logRequest(op: "save", service: service, account: account, caller: caller, file: file, line: line)
+
         let updateAttributes: [String: Any] = [kSecValueData as String: data]
         let clock = ContinuousClock()
         let start = clock.now
@@ -141,6 +165,9 @@ enum KeychainHelper {
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
         ]
+
+        logRequest(op: "delete", service: service, account: account, caller: caller, file: file, line: line)
+
         let clock = ContinuousClock()
         let start = clock.now
         let status = SecItemDelete(query as CFDictionary)

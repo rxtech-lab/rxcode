@@ -13,66 +13,33 @@ struct DocsSetupBanner: View {
     let onDismiss: () -> Void
 
     @Environment(\.openURL) private var openURL
-    @State private var isHovered = false
-    @State private var isCloseHovered = false
+    @Environment(AppState.self) private var appState
+    @Environment(WindowState.self) private var windowState
+
+    /// True while the current thread *is* the docs-setup chat this banner would
+    /// otherwise create — either it's already marked as a docs setup session, or
+    /// a docs setup is staged for this project (button just clicked, first turn
+    /// not yet marked). In both cases tapping "Set up" again would spawn a
+    /// duplicate setup chat, so the action is disabled.
+    private var isInDocsSetupThread: Bool {
+        if let pid = windowState.selectedProject?.id, appState.pendingDocsSetupProjectId == pid {
+            return true
+        }
+        if let sid = windowState.currentSessionId,
+           appState.isSetupSession(kind: HookSetupKind.docs, sessionKey: sid) {
+            return true
+        }
+        return false
+    }
 
     var body: some View {
-        HStack(spacing: 8) {
-            Button(action: open) {
-                HStack(spacing: 10) {
-                    Image(systemName: "books.vertical.fill")
-                        .font(.system(size: ClaudeTheme.size(16), weight: .semibold))
-                        .foregroundStyle(ClaudeTheme.accent)
-
-                    Text("Set up documentation so it's searchable")
-                        .font(.system(size: ClaudeTheme.size(13), weight: .medium))
-                        .foregroundStyle(ClaudeTheme.textPrimary)
-                        .lineLimit(2)
-
-                    Spacer(minLength: 8)
-
-                    Text("Set up")
-                        .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 5)
-                        .background(ClaudeTheme.accent, in: Capsule())
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .onHover { isHovered = $0 }
-            .pointerCursorOnHover()
-
-            Button(action: onDismiss) {
-                Image(systemName: "xmark")
-                    .font(.system(size: ClaudeTheme.size(11), weight: .bold))
-                    .foregroundStyle(ClaudeTheme.textSecondary.opacity(isCloseHovered ? 1 : 0.6))
-                    .frame(width: 20, height: 20)
-                    .background(
-                        Circle().fill(ClaudeTheme.textSecondary.opacity(isCloseHovered ? 0.12 : 0))
-                    )
-                    .contentShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .onHover { isCloseHovered = $0 }
-            .pointerCursorOnHover()
-            .help("Dismiss")
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .background(
-            RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusLarge)
-                .fill(ClaudeTheme.accentSubtle)
+        HookBannerRow(
+            icon: "books.vertical.fill",
+            message: String(localized: "Set up documentation so it's searchable"),
+            onTap: open,
+            onDismiss: onDismiss,
+            isActionDisabled: isInDocsSetupThread
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusLarge)
-                .strokeBorder(ClaudeTheme.accent.opacity(isHovered ? 0.55 : 0.35), lineWidth: 1)
-        )
-        .padding(.horizontal, 16)
-        .padding(.bottom, 6)
-        .animation(.easeInOut(duration: 0.12), value: isHovered)
-        .animation(.easeInOut(duration: 0.12), value: isCloseHovered)
     }
 
     private func open() {

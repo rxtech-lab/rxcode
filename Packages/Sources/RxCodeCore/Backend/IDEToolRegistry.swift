@@ -350,6 +350,24 @@ public enum IDEToolRegistry {
                 ]),
             ])
         ),
+        IDETool(
+            name: "ide__setup_release",
+            description: "Register the repository with the release service and (optionally) install its RELEASE_TOKEN GitHub Actions secret in one step, so the repo's semantic-release CI can create releases. Use this when setting up release publishing. If the repository isn't registered yet, it's registered automatically (the RxLab GitHub App must be installed on it) and its workflows are scanned. The RELEASE_TOKEN is user-supplied: ask the user for a GitHub token with `contents:write`, then pass it as `release_token` so it's installed as the repo's `RELEASE_TOKEN` secret. If the call fails with a permission error, tell the user to re-authorize the RxLab GitHub App (Actions secrets: read & write) and retry.",
+            visibility: .alwaysIDEOnly,
+            inputSchema: .object([
+                "type": .string("object"),
+                "properties": .object([
+                    "repository": .object([
+                        "type": .string("string"),
+                        "description": .string("Optional `owner/repo` full name. Omit to use the current project's repository."),
+                    ]),
+                    "release_token": .object([
+                        "type": .string("string"),
+                        "description": .string("Optional user-supplied GitHub token (e.g. a PAT with `contents:write`) to install as the repo's `RELEASE_TOKEN` Actions secret. Omit to only register the repository without installing a secret."),
+                    ]),
+                ]),
+            ])
+        ),
     ]
 
     /// Returns the tools that should be exposed to an agent whose declared

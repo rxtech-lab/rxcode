@@ -29,6 +29,15 @@ struct BriefingView: View {
     /// Container width tracked from the scroll content; drives the waterfall column count.
     @State private var availableWidth: CGFloat = 800
 
+    /// Non-nil while the "Create Release" sheet is presented for a project.
+    @State private var createReleaseProject: Project?
+
+    /// Presents the account-level autopilot automation settings form.
+    @State private var showAutomationSettings = false
+
+    /// Presents the account-level repo-setup template manager.
+    @State private var showRepoSetup = false
+
     private struct BriefingGroup: Identifiable {
         let projectId: UUID
         let branch: String
@@ -148,6 +157,23 @@ struct BriefingView: View {
         .onAppear {
             AnalyticsService.shared.log(.briefingListOpened)
         }
+        .sheet(item: $createReleaseProject) { project in
+            ReleaseCreateSheet(
+                repoId: project.gitHubRepo ?? "",
+                repoFullName: project.gitHubRepo ?? project.name,
+                currentVersion: appState.projectLatestReleaseVersion(project),
+                projectPath: project.path
+            )
+            .environment(appState)
+        }
+        .sheet(isPresented: $showAutomationSettings) {
+            AutomationSettingsSheet()
+                .environment(appState)
+        }
+        .sheet(isPresented: $showRepoSetup) {
+            RepoSetupManageSheet()
+                .environment(appState)
+        }
     }
 
     /// True when there is at least one briefing or thread summary persisted, regardless
@@ -255,8 +281,55 @@ struct BriefingView: View {
                 }
 
                 Spacer(minLength: 0)
+
+                if appState.isSignedIn {
+                    autopilotMenu
+                }
             }
         }
+    }
+
+    /// Account-level autopilot entry points. Automation settings and repo-setup
+    /// templates are user-scoped (not per-project), so they live in the briefing
+    /// hero rather than on individual cards — mirroring the Autopilot settings tab.
+    private var autopilotMenu: some View {
+        Menu {
+            Button {
+                showAutomationSettings = true
+            } label: {
+                Label("Automation Settings", systemImage: "wand.and.stars")
+            }
+            Button {
+                showRepoSetup = true
+            } label: {
+                Label("Repo Setup Templates", systemImage: "slider.horizontal.3")
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "wand.and.stars")
+                    .font(.system(size: 11, weight: .semibold))
+                Text("Autopilot")
+                    .font(.system(size: 11, weight: .semibold))
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+            }
+            .foregroundStyle(ClaudeTheme.textSecondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(ClaudeTheme.surfaceSecondary)
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .strokeBorder(ClaudeTheme.border.opacity(0.6), lineWidth: 0.5)
+            )
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Manage autopilot automation settings and repo-setup templates.")
     }
 
     private var heroSubtitle: String {
@@ -435,38 +508,50 @@ struct BriefingView: View {
     }
 
     private func groupCardHeader(_ group: BriefingGroup, project: Project?) -> some View {
-        HStack(alignment: .center, spacing: 10) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(ClaudeTheme.accent.opacity(0.12))
-                Image(systemName: "folder.fill")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(ClaudeTheme.accent)
-            }
-            .frame(width: 28, height: 28)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center, spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(ClaudeTheme.accent.opacity(0.12))
+                    Image(systemName: "folder.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(ClaudeTheme.accent)
+                }
+                .frame(width: 28, height: 28)
 
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(project?.name ?? "Unknown project")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(ClaudeTheme.textPrimary)
                         .lineLimit(1)
                         .truncationMode(.middle)
-
-                    chip(icon: "arrow.triangle.branch", text: group.branch, accented: true)
-                    ciChip(for: group)
+                    Text("Updated \(Self.compactDate(group.updatedAt))")
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundStyle(ClaudeTheme.textTertiary)
                 }
-                Text("Updated \(Self.compactDate(group.updatedAt))")
-                    .font(.system(size: 10.5, weight: .medium))
-                    .foregroundStyle(ClaudeTheme.textTertiary)
+
+                Spacer(minLength: 0)
+
+                copyButton(for: group)
+
+                if let project {
+                    cardMenu(for: group, project: project)
+                }
             }
 
-            Spacer(minLength: 0)
-
-            copyButton(for: group)
-
-            if let project {
-                cardMenu(for: group, project: project)
+            // Status chips wrap onto multiple lines so a narrow card never
+            // truncates the branch / CI / release / PR indicators.
+            FlowLayout(spacing: 6, lineSpacing: 6) {
+                chip(icon: "arrow.triangle.branch", text: group.branch, accented: true)
+                ciChip(for: group)
+                if let project, let version = appState.projectLatestReleaseVersion(project) {
+                    chip(icon: "tag.fill", text: version)
+                }
+                BriefingPRStatusView(
+                    projectId: group.projectId,
+                    branch: group.branch,
+                    project: project
+                )
             }
         }
     }
@@ -571,6 +656,15 @@ struct BriefingView: View {
                 }
             } label: {
                 Label("Open Project", systemImage: "folder")
+            }
+
+            if appState.projectHasReleaseWorkflow(project) {
+                Divider()
+                Button {
+                    createReleaseProject = project
+                } label: {
+                    Label("Create Release", systemImage: "tag.fill")
+                }
             }
 
             if let url = gitHubURL(for: group, project: project) {
@@ -776,109 +870,5 @@ struct BriefingView: View {
     }
 }
 
-// MARK: - Briefing Thread Row
-
-struct BriefingThreadRow: View {
-    let item: ThreadSummaryItem
-    let isInProgress: Bool
-    let todoProgress: ChatTodoProgress?
-    let onSelect: () -> Void
-
-    var body: some View {
-        Button(action: onSelect) {
-            HStack(alignment: .center, spacing: 8) {
-                Image(systemName: "bubble.left.and.text.bubble.right")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(ClaudeTheme.accent)
-                    .frame(width: 14)
-
-                Text(item.title)
-                    .font(.system(size: 12.5, weight: .medium))
-                    .foregroundStyle(ClaudeTheme.textPrimary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                if isInProgress {
-                    BriefingThreadProgressBadge(progress: todoProgress)
-                } else {
-                    Text(Self.compactDate(item.updatedAt))
-                        .font(.system(size: 10.5, weight: .medium))
-                        .foregroundStyle(ClaudeTheme.textTertiary)
-                        .lineLimit(1)
-                }
-            }
-            .padding(.horizontal, 6)
-            .padding(.vertical, 5)
-            .contentShape(Rectangle())
-            .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(ClaudeTheme.surfaceSecondary.opacity(0.4))
-            )
-        }
-        .buttonStyle(.plain)
-        .help(isInProgress ? progressHelpText : "Open thread")
-        .accessibilityLabel(accessibilityLabel)
-    }
-
-    private var progressHelpText: String {
-        guard let todoProgress, todoProgress.total > 0 else {
-            return String(localized: "Response in progress")
-        }
-        return String(localized: "Response in progress. Todos \(todoProgress.done)/\(todoProgress.total)")
-    }
-
-    private var accessibilityLabel: String {
-        if isInProgress {
-            return String(localized: "\(item.title), in progress")
-        }
-        return item.title
-    }
-
-    static func compactDate(_ date: Date, relativeTo now: Date = .now) -> String {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .short
-        return formatter.localizedString(for: date, relativeTo: now)
-    }
-}
-
-private struct BriefingThreadProgressBadge: View {
-    let progress: ChatTodoProgress?
-
-    private var fraction: Double? {
-        guard let progress, progress.total > 0 else { return nil }
-        return min(1, max(0, Double(progress.done) / Double(progress.total)))
-    }
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Group {
-                if let fraction {
-                    ProgressView(value: fraction, total: 1)
-                } else {
-                    ProgressView()
-                }
-            }
-            .progressViewStyle(.circular)
-            .controlSize(.mini)
-            .frame(width: 10, height: 10)
-
-            Text("In progress")
-                .font(.system(size: 10.5, weight: .semibold))
-                .lineLimit(1)
-        }
-        .foregroundStyle(ClaudeTheme.accent)
-        .padding(.horizontal, 6)
-        .padding(.vertical, 2)
-        .background(
-            Capsule(style: .continuous)
-                .fill(ClaudeTheme.accent.opacity(0.12))
-        )
-        .overlay(
-            Capsule(style: .continuous)
-                .strokeBorder(ClaudeTheme.accent.opacity(0.25), lineWidth: 0.5)
-        )
-    }
-}
-
+// `BriefingThreadRow` / `BriefingThreadProgressBadge` live in `BriefingThreadRow.swift`.
 // `BriefingMarkdownView` lives in `BriefingMarkdownView.swift`.

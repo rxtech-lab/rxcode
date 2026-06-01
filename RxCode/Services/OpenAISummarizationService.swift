@@ -245,6 +245,45 @@ actor OpenAISummarizationService {
         }
     }
 
+    func generatePullRequestContent(
+        briefing: String,
+        branch: String,
+        endpoint: String,
+        apiKey: String,
+        model: String
+    ) async -> String? {
+        let prompt = Self.pullRequestPrompt(briefing: briefing, branch: branch)
+        return await generateSummary(
+            prompt: prompt,
+            endpoint: endpoint,
+            apiKey: apiKey,
+            model: model,
+            maxTokens: 700
+        )
+    }
+
+    /// Prompt that asks for a PR title (Conventional Commits, first line) plus a
+    /// blank line and a markdown body, derived from a branch briefing. Shared by
+    /// all summarization providers so output is consistent regardless of backend.
+    static func pullRequestPrompt(briefing: String, branch: String) -> String {
+        let trimmed = String(briefing.prefix(6_000)).trimmingCharacters(in: .whitespacesAndNewlines)
+        return """
+        Write a GitHub pull request title and description that summarize the work on a branch, using the branch briefing below.
+
+        Format rules (MUST follow exactly):
+        - The FIRST line is the PR title in Conventional Commits format: `<type>(<optional-scope>): <description>` — under 72 characters, lowercase imperative mood, no trailing period.
+        - `<type>` MUST be one of: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert.
+        - Then exactly ONE blank line.
+        - Then the PR description in GitHub-flavored markdown: a short summary paragraph, then a `## Changes` section with concise bullet points covering the main work. Keep it focused.
+        - Do NOT wrap the output in code fences. Do NOT put the title in quotes. Do NOT prefix the title with anything (no "Title:").
+
+        Branch: `\(branch)`
+
+        Branch briefing:
+        \(trimmed.isEmpty ? "(no briefing available — summarize from the branch name)" : trimmed)
+        """
+    }
+
     static func branchBriefingPrompt(threadSummaries: [(title: String, summary: String)]) -> String {
         let joined = threadSummaries.map { item -> String in
             let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -383,7 +422,7 @@ actor OpenAISummarizationService {
 
     private func cleanTitle(_ raw: String?) -> String? {
         guard let raw else { return nil }
-        let cleaned = raw
+        let cleaned = ChatSession.stripMarkdownEmphasis(from: raw)
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
         guard !cleaned.isEmpty else { return nil }

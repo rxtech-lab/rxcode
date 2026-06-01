@@ -1,5 +1,6 @@
 import Foundation
 import FoundationModels
+import RxCodeCore
 import os
 
 /// On-device summarization powered by Apple's Foundation Models framework
@@ -167,6 +168,15 @@ actor FoundationModelSummarizationService {
         return cleanSummary(raw, limit: 1000)
     }
 
+    func generatePullRequestContent(briefing: String, branch: String) async -> String? {
+        let prompt = OpenAISummarizationService.pullRequestPrompt(briefing: briefing, branch: branch)
+        let raw = await respond(
+            instructions: "You write GitHub pull request titles (Conventional Commits) and concise markdown descriptions. Output only the title line, a blank line, then the description.",
+            prompt: prompt
+        )
+        return cleanSummary(raw, limit: 4000)
+    }
+
     private func respond(instructions: String, prompt: String) async -> String? {
         guard Self.isAvailable else { return nil }
         return await respond(instructions: instructions, prompt: prompt, allowRollingWindow: true)
@@ -318,7 +328,7 @@ actor FoundationModelSummarizationService {
 
     private func cleanTitle(_ raw: String?) -> String? {
         guard let raw else { return nil }
-        let cleaned = raw
+        let cleaned = ChatSession.stripMarkdownEmphasis(from: raw)
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
         guard !cleaned.isEmpty else { return nil }

@@ -112,7 +112,73 @@ final class AutopilotService {
         return try await post(url: url, body: CIStatusBatchRequest(repos: repos))
     }
 
+    /// `POST /api/v1/pull-requests` — open a pull request for `head` → `base`
+    /// (base defaults to the repo's default branch when nil) via the signed-in
+    /// user's GitHub App installation. The head branch must already be pushed.
+    func createPullRequest(_ request: CreatePullRequestRequest) async throws -> CreatePullRequestResponse {
+        let url = baseURL.appendingPathComponent("/api/v1/pull-requests")
+        return try await post(url: url, body: request)
+    }
+
+    // MARK: - Automation settings
+
+    /// `GET /api/v1/automation/schema` — the JSON Schema + ui schema describing
+    /// the autopilot automation settings form.
+    func getAutomationSchema() async throws -> SchemaEnvelope {
+        try await get(url: baseURL.appendingPathComponent("/api/v1/automation/schema"))
+    }
+
+    /// `GET /api/v1/preferences` — the user's saved automation settings values.
+    func getPreferences() async throws -> PreferencesValues {
+        try await get(url: baseURL.appendingPathComponent("/api/v1/preferences"))
+    }
+
+    /// `PUT /api/v1/preferences` — persist new automation settings values.
+    @discardableResult
+    func putPreferences(_ body: PreferencesValues) async throws -> PreferencesValues {
+        try await send(method: "PUT", url: baseURL.appendingPathComponent("/api/v1/preferences"), body: body)
+    }
+
+    // MARK: - Repo setup templates
+
+    /// `GET /api/v1/repo-setup/schema` — the JSON Schema + ui schema for a
+    /// repo-setup template's merge settings.
+    func getRepoSetupSchema() async throws -> SchemaEnvelope {
+        try await get(url: baseURL.appendingPathComponent("/api/v1/repo-setup/schema"))
+    }
+
+    func listSetupTemplates() async throws -> RepoSetupTemplateList {
+        try await get(url: baseURL.appendingPathComponent("/api/v1/repo-setup/templates"))
+    }
+
+    func getSetupTemplate(id: String) async throws -> RepoSetupTemplate {
+        try await get(url: templateURL(id))
+    }
+
+    func createSetupTemplate(_ body: RepoSetupTemplateInput) async throws -> RepoSetupTemplate {
+        try await send(method: "POST", url: baseURL.appendingPathComponent("/api/v1/repo-setup/templates"), body: body)
+    }
+
+    func updateSetupTemplate(id: String, _ body: RepoSetupTemplateInput) async throws -> RepoSetupTemplate {
+        try await send(method: "PUT", url: templateURL(id), body: body)
+    }
+
+    func deleteSetupTemplate(id: String) async throws {
+        let _: Ignored = try await send(method: "DELETE", url: templateURL(id))
+    }
+
+    /// Percent-encodes a template id into the `/repo-setup/templates/{id}` path.
+    private func templateURL(_ id: String) -> URL {
+        var allowed = CharacterSet.urlPathAllowed
+        allowed.remove("/")
+        let encoded = id.addingPercentEncoding(withAllowedCharacters: allowed) ?? id
+        return baseURL.appendingPathComponent("/api/v1/repo-setup/templates/\(encoded)")
+    }
+
     // MARK: - Internal
+
+    /// Sentinel for endpoints that return no decodable body (e.g. 204).
+    private struct Ignored: Decodable {}
 
     private func get<T: Decodable>(url: URL) async throws -> T {
         try await performWithRetry { token in
@@ -142,6 +208,36 @@ final class AutopilotService {
         }
     }
 
+    /// Like `post`, but with an arbitrary HTTP method (PUT/POST) and a body.
+    private func send<Body: Encodable, T: Decodable>(method: String, url: URL, body: Body) async throws -> T {
+        let payload: Data
+        do {
+            payload = try JSONEncoder().encode(body)
+        } catch {
+            throw ServiceError.decodingError(error.localizedDescription)
+        }
+        return try await performWithRetry { token in
+            var request = URLRequest(url: url)
+            request.httpMethod = method
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            request.httpBody = payload
+            return request
+        }
+    }
+
+    /// A bodyless request with an arbitrary HTTP method (DELETE).
+    private func send<T: Decodable>(method: String, url: URL) async throws -> T {
+        try await performWithRetry { token in
+            var request = URLRequest(url: url)
+            request.httpMethod = method
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            return request
+        }
+    }
+
     /// Sign the request with the current bearer, hit the network, and retry
     /// exactly once after a refresh if the server returned 401. A second 401
     /// posts `.rxAuthSessionExpired` so the UI can re-present sign-in.
@@ -157,9 +253,11 @@ final class AutopilotService {
         }
 
         if http.statusCode == 401 {
-            // One silent refresh + retry. If that fails too, surface the
-            // session-expired notification so the UI re-presents sign-in.
-            guard let refreshed = await rxAuth.accessToken() else {
+            // One silent refresh + retry. Force a refresh so the retry uses a
+            // brand-new token: the cached one was just rejected, and its
+            // keychain expiry may still look fresh. If that fails too, surface
+            // the session-expired notification so the UI re-presents sign-in.
+            guard let refreshed = await rxAuth.accessToken(forceRefresh: true) else {
                 NotificationCenter.default.post(name: .rxAuthSessionExpired, object: nil)
                 throw ServiceError.notAuthenticated
             }
@@ -182,6 +280,9 @@ final class AutopilotService {
         guard (200..<300).contains(response.statusCode) else {
             let body = String(data: data, encoding: .utf8) ?? "no body"
             throw ServiceError.apiError(response.statusCode, body)
+        }
+        if T.self == Ignored.self {
+            return Ignored() as! T
         }
         do {
             return try JSONDecoder().decode(T.self, from: data)

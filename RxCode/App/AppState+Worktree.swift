@@ -186,6 +186,40 @@ extension AppState {
         }
     }
 
+    /// Create a new branch in the project root and check it out (no worktree).
+    /// The chat keeps running in the project root, so the worktree pointer is
+    /// cleared — subsequent CLI invocations for this session use the main repo.
+    func createBranchInPlace(branch: String, in window: WindowState) async throws {
+        guard let project = window.selectedProject else {
+            throw AppError.noProjectSelected
+        }
+        if let err = await GitHelper.createBranch(branch, at: project.path) {
+            throw GitWorktreeService.WorktreeError.gitFailed(err)
+        }
+
+        // New-chat view: no session yet. Clear any parked worktree so the chat
+        // runs in the project root once sendPrompt allocates a session id.
+        guard let sessionId = window.currentSessionId else {
+            window.pendingWorktreePath = nil
+            window.pendingWorktreeBranch = nil
+            return
+        }
+
+        sessionStates[sessionId, default: SessionStreamState()].worktreePath = nil
+        sessionStates[sessionId, default: SessionStreamState()].worktreeBranch = nil
+        if let idx = allSessionSummaries.firstIndex(where: { $0.id == sessionId }) {
+            allSessionSummaries[idx].worktreePath = nil
+            allSessionSummaries[idx].worktreeBranch = nil
+            threadStore.upsert(allSessionSummaries[idx])
+        }
+        if let snap = allSessionSummaries.first(where: { $0.id == sessionId }) {
+            await updateSessionMetadata(snap.makeSession()) { s in
+                s.worktreePath = nil
+                s.worktreeBranch = nil
+            }
+        }
+    }
+
     /// Mobile new-thread flow: spawn the next thread on `branch` via a Git
     /// worktree, not by mutating the main project repo. Reuses an existing
     /// linked worktree for the branch when one is around; otherwise creates a

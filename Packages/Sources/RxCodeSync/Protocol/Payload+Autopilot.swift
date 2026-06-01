@@ -106,6 +106,7 @@ public enum AutopilotOp: String, Codable, Sendable {
     case projectReleaseSetup
     case projectReleaseCreate
     case projectSecretsDownload
+    case projectCreatePullRequest
 }
 
 /// Mobile → desktop: a single autopilot operation. `body` is a JSON-encoded
@@ -457,6 +458,24 @@ public struct CIPullRequestList: Codable, Sendable {
 public struct AutopilotProjectBody: Codable, Sendable {
     public let projectId: UUID
     public init(projectId: UUID) { self.projectId = projectId }
+}
+
+/// Addresses a project + branch. Used by `projectCreatePullRequest`, where the
+/// desktop pushes the branch, generates the PR title/body from the branch
+/// briefing, and opens the pull request (it holds the GitHub token + checkout).
+public struct AutopilotProjectBranchBody: Codable, Sendable {
+    public let projectId: UUID
+    public let branch: String
+    public init(projectId: UUID, branch: String) {
+        self.projectId = projectId
+        self.branch = branch
+    }
+}
+
+/// Result of `projectCreatePullRequest`: the URL of the opened pull request.
+public struct AutopilotPullRequestResult: Codable, Sendable {
+    public let url: String
+    public init(url: String) { self.url = url }
 }
 
 /// Per-project autopilot state powering the mobile context menu. Mirrors the

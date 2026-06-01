@@ -2596,6 +2596,9 @@
         }
       }
     },
+    "Failed to trigger the release workflow." : {
+
+    },
     "Failing" : {
       "localizations" : {
         "en" : {
@@ -3192,6 +3195,9 @@
         }
       }
     },
+    "Loading workflows…" : {
+
+    },
     "Loading…" : {
       "localizations" : {
         "en" : {
@@ -3751,6 +3757,9 @@
           }
         }
       }
+    },
+    "No dispatchable release workflow found for %@. Add a workflow_dispatch release workflow and rescan, then try again." : {
+
     },
     "No documentation repositories. Tap + to add one." : {
       "localizations" : {
@@ -4709,6 +4718,9 @@
         }
       }
     },
+    "Release workflow triggered" : {
+
+    },
     "RELEASE_TOKEN" : {
 
     },
@@ -4871,6 +4883,9 @@
           }
         }
       }
+    },
+    "Repository" : {
+
     },
     "Request timed out. Check your Mac and try again." : {
       "localizations" : {
@@ -5254,9 +5269,6 @@
           }
         }
       }
-    },
-    "Search Docs" : {
-
     },
     "Search or enter website name" : {
       "localizations" : {
@@ -5873,6 +5885,9 @@
           }
         }
       }
+    },
+    "The next version is computed by semantic-release from the commit history." : {
+
     },
     "The paired Mac changed before the request finished." : {
       "localizations" : {
@@ -6548,6 +6563,9 @@
         }
       }
     },
+    "View workflow run on GitHub" : {
+
+    },
     "What should we build in %@?" : {
       "localizations" : {
         "en" : {
@@ -6563,6 +6581,12 @@
           }
         }
       }
+    },
+    "Workflow" : {
+
+    },
+    "Workflow inputs" : {
+
     },
     "Workflows" : {
       "localizations" : {

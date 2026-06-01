@@ -302,6 +302,16 @@ extension AppState {
             releaseCreateRequest = project
             return nil
 
+        case .projectCreatePullRequest:
+            // Same as the desktop briefing "Create PR" button: push the branch,
+            // generate the title/body from the briefing, and open the PR.
+            let body = try decodeAutopilotBody(request, as: AutopilotProjectBranchBody.self)
+            guard let project = projects.first(where: { $0.id == body.projectId }) else {
+                throw MobileRemoteConfigError.invalidRequest("No project found for the requested id.")
+            }
+            let url = try await createPullRequestForBranch(project: project, branch: body.branch)
+            return try encoder.encode(AutopilotPullRequestResult(url: url.absoluteString))
+
         case .projectSecretsDownload:
             let body = try decodeAutopilotBody(request, as: AutopilotProjectSecretsDownloadBody.self)
             guard let project = projects.first(where: { $0.id == body.projectId }) else {

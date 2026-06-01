@@ -9,8 +9,10 @@ struct MobileBriefingDetailView: View {
     let groupKey: BriefingGroupKey
     var onOpenSession: (String) -> Void = { _ in }
 
+    @Environment(\.openURL) private var openURL
     @State private var showingNewThread = false
     @State private var isInitializingGit = false
+    @State private var isCreatingPR = false
 
     // Autopilot context menu (1:1 with the desktop briefing/project menu).
     @State private var autopilotStatus: AutopilotProjectStatus?
@@ -57,6 +59,17 @@ struct MobileBriefingDetailView: View {
                                 showReleaseCreate: $showingReleaseCreate,
                                 info: $autopilotInfo
                             )
+                            // Offer "Create PR" for a real branch with no open PR
+                            // yet (mirrors the desktop briefing PR button); once a
+                            // PR exists the "Open Pull Request" link below covers it.
+                            if !isUnknownBranch && !gitHubURLIsPullRequest {
+                                Button {
+                                    createPullRequest(project: project)
+                                } label: {
+                                    Label("Create Pull Request", systemImage: "arrow.triangle.pull.request")
+                                }
+                                .disabled(isCreatingPR)
+                            }
                             if gitHubURL != nil { Divider() }
                         }
                         if let gitHubURL {
@@ -164,6 +177,27 @@ struct MobileBriefingDetailView: View {
             await state.initProjectGit(projectID: groupKey.projectId)
             await state.refreshSnapshot()
             isInitializingGit = false
+        }
+    }
+
+    /// Ask the Mac to open a PR for this branch, then open it in the browser.
+    /// The Mac pushes the branch, drafts the title/body from the briefing, and
+    /// creates the PR; on failure we surface the reason in the info alert.
+    private func createPullRequest(project: Project) {
+        guard !isCreatingPR else { return }
+        isCreatingPR = true
+        Task {
+            defer { isCreatingPR = false }
+            do {
+                let url = try await state.requestProjectCreatePullRequest(
+                    projectId: project.id,
+                    branch: groupKey.branch
+                )
+                await state.refreshSnapshot()
+                openURL(url)
+            } catch {
+                autopilotInfo = AutopilotMenuInfo(text: error.localizedDescription, isError: true)
+            }
         }
     }
 

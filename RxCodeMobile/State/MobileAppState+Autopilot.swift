@@ -401,6 +401,20 @@ extension MobileAppState {
         try await autopilotSendVoid(.project, .projectReleaseCreate, body: AutopilotProjectBody(projectId: projectId))
     }
 
+    /// Asks the Mac to open a pull request for the project's branch: it pushes
+    /// the branch, generates the PR title/body from the branch briefing, and
+    /// opens the PR (the Mac holds the GitHub token + checkout). Returns the PR
+    /// URL so the phone can open it.
+    func requestProjectCreatePullRequest(projectId: UUID, branch: String) async throws -> URL {
+        let result = try await autopilotSend(.project, .projectCreatePullRequest,
+                                             body: AutopilotProjectBranchBody(projectId: projectId, branch: branch),
+                                             as: AutopilotPullRequestResult.self)
+        guard let url = URL(string: result.url) else {
+            throw AutopilotRemoteError.server(String(localized: "The Mac returned an invalid pull-request URL."))
+        }
+        return url
+    }
+
     /// Asks the Mac to download + decrypt the chosen environment and write its
     /// files into the project folder (the Mac holds the KEK; plaintext stays on
     /// the Mac). Returns the files written and any skipped conflicts.

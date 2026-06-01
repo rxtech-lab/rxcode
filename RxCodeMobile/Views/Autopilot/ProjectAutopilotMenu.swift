@@ -11,21 +11,28 @@ import RxCodeSync
 ///   • Create Release   / Set Up Release Workflow  (tag.fill)
 ///
 /// Every item is desktop-mediated — the Mac performs the same work it does when
-/// you click the menu there. The one exception that runs UI on the phone is
-/// "Download Secret", which opens the on-device environment picker before asking
-/// the Mac to decrypt + write the files into the project folder.
+/// you click the menu there. The one exception that runs on the phone is
+/// "Download Secret", which opens the on-device environment picker, decrypts the
+/// environment locally with the phone's passkey, and sends the plaintext over the
+/// E2E relay for the Mac to write into the project folder.
 ///
 /// Drop the buttons into any `Menu { }` or `.contextMenu { }`; the host owns the
 /// `@State` for the loaded status, the download sheet, and the info alert and
 /// passes them in. Use `projectAutopilotMenu(...)` on a host that already has a
 /// stable identity (toolbar button, project card) so the sheet/alert can attach.
 
-/// A transient message surfaced after a desktop-mediated action fires (e.g.
-/// "Secrets setup started on your Mac") or when one fails.
+/// A transient message surfaced when an autopilot action fails.
 struct AutopilotMenuInfo: Identifiable {
     let id = UUID()
     let text: String
     var isError = false
+}
+
+/// Request to open a new on-device setup chat, prefilled with `prompt`. Setting
+/// this on the host presents `NewThreadSheet`; nothing runs "on the Mac".
+struct AutopilotSetupChat: Identifiable {
+    let id = UUID()
+    let prompt: String
 }
 
 struct ProjectAutopilotMenuItems: View {
@@ -35,6 +42,7 @@ struct ProjectAutopilotMenuItems: View {
     let status: AutopilotProjectStatus?
     @Binding var showDownloadSheet: Bool
     @Binding var showReleaseCreate: Bool
+    @Binding var setupChat: AutopilotSetupChat?
     @Binding var info: AutopilotMenuInfo?
 
     var body: some View {
@@ -63,9 +71,10 @@ struct ProjectAutopilotMenuItems: View {
             }
         } else {
             Button {
-                fire("Secrets setup started on your Mac.") {
-                    try await state.requestProjectSecretsSetup(projectId: project.id)
-                }
+                // Set up secrets through an on-device chat — never on the Mac.
+                setupChat = AutopilotSetupChat(
+                    prompt: "Set up encrypted secrets for this repository so I can sync environment files securely."
+                )
             } label: {
                 Label("Set Up Secrets", systemImage: "key.fill")
             }
@@ -74,14 +83,16 @@ struct ProjectAutopilotMenuItems: View {
 
     @ViewBuilder
     private func docsItem(_ status: AutopilotProjectStatus) -> some View {
-        // Docs search lives in the docs UI now — the context menu only offers
-        // setting up / creating docs for the repo.
-        Button {
-            fire("Docs setup started on your Mac.") {
-                try await state.requestProjectDocsSetup(projectId: project.id)
+        // Already-indexed repos show nothing here (docs search lives in the docs
+        // UI). Otherwise offer to set docs up via an on-device chat.
+        if !status.hasDocs {
+            Button {
+                setupChat = AutopilotSetupChat(
+                    prompt: "Set up documentation publishing for this repository so its docs are indexed into RxCode docs search."
+                )
+            } label: {
+                Label("Set Up Docs", systemImage: "books.vertical.fill")
             }
-        } label: {
-            Label("Set Up Docs Search", systemImage: "books.vertical.fill")
         }
     }
 
@@ -97,23 +108,12 @@ struct ProjectAutopilotMenuItems: View {
             }
         } else {
             Button {
-                fire("Release setup started on your Mac.") {
-                    try await state.requestProjectReleaseSetup(projectId: project.id)
-                }
+                // Set up the release workflow through an on-device chat.
+                setupChat = AutopilotSetupChat(
+                    prompt: "Set up a release workflow for this repository (semantic-release + a GitHub Actions release workflow)."
+                )
             } label: {
                 Label("Set Up Release Workflow", systemImage: "tag.fill")
-            }
-        }
-    }
-
-    /// Runs a desktop-mediated action and reports success/failure via the alert.
-    private func fire(_ success: String, _ action: @escaping () async throws -> Void) {
-        Task {
-            do {
-                try await action()
-                info = AutopilotMenuInfo(text: success)
-            } catch {
-                info = AutopilotMenuInfo(text: error.localizedDescription, isError: true)
             }
         }
     }
@@ -130,6 +130,7 @@ extension View {
         status: Binding<AutopilotProjectStatus?>,
         showDownloadSheet: Binding<Bool>,
         showReleaseCreate: Binding<Bool>,
+        setupChat: Binding<AutopilotSetupChat?>,
         info: Binding<AutopilotMenuInfo?>,
         state: MobileAppState
     ) -> some View {
@@ -138,6 +139,7 @@ extension View {
             status: status,
             showDownloadSheet: showDownloadSheet,
             showReleaseCreate: showReleaseCreate,
+            setupChat: setupChat,
             info: info,
             state: state
         ))
@@ -149,6 +151,7 @@ private struct ProjectAutopilotMenuHostModifier: ViewModifier {
     @Binding var status: AutopilotProjectStatus?
     @Binding var showDownloadSheet: Bool
     @Binding var showReleaseCreate: Bool
+    @Binding var setupChat: AutopilotSetupChat?
     @Binding var info: AutopilotMenuInfo?
     let state: MobileAppState
 
@@ -173,9 +176,20 @@ private struct ProjectAutopilotMenuHostModifier: ViewModifier {
                         .mobileSheetPresentation()
                 }
             }
+            .sheet(item: $setupChat) { request in
+                if let project {
+                    // Set up via an on-device chat. NewThreadSheet creates the
+                    // thread; we route to it through the deep-link navigation so
+                    // the user lands in the chat (everything stays on iOS).
+                    NewThreadSheet(projectID: project.id, initialText: request.prompt) { newSessionID in
+                        state.pendingDeepLink = MobileDeepLink(sessionID: newSessionID, projectID: project.id)
+                    }
+                    .environmentObject(state)
+                }
+            }
             .alert(item: $info) { message in
                 Alert(
-                    title: Text(message.isError ? "Couldn’t Complete" : "Sent to Your Mac"),
+                    title: Text(message.isError ? "Couldn’t Complete" : "Done"),
                     message: Text(message.text),
                     dismissButton: .default(Text("OK"))
                 )
@@ -186,8 +200,10 @@ private struct ProjectAutopilotMenuHostModifier: ViewModifier {
 // MARK: - Secrets download form
 
 /// Mobile mirror of the desktop secrets auto-download (`AutopilotSecretsHook`):
-/// pick an environment, then ask the Mac to decrypt it and write the files into
-/// the project folder. The phone never sees plaintext — the Mac holds the KEK.
+/// pick an environment, decrypt it on-device with the phone's passkey-derived
+/// KEK, then send the plaintext over the E2E relay for the Mac to write into the
+/// project folder. The passkey ceremony runs on the phone, so nothing waits on a
+/// Mac-side prompt.
 struct ProjectSecretsDownloadSheet: View {
     @EnvironmentObject private var state: MobileAppState
     @Environment(\.dismiss) private var dismiss
@@ -269,7 +285,7 @@ struct ProjectSecretsDownloadSheet: View {
             } header: {
                 Text("Environment")
             } footer: {
-                Text("Files are decrypted on your Mac and written into the project folder.")
+                Text("Files are decrypted on this device with your passkey, then written into the project folder on your Mac.")
             }
 
             Section {
@@ -320,7 +336,7 @@ struct ProjectSecretsDownloadSheet: View {
     }
 
     private func download() {
-        guard let envId = selectedEnvId else { return }
+        guard let envId = selectedEnvId, let repo = project.gitHubRepo else { return }
         isDownloading = true
         actionError = nil
         conflicts = []
@@ -329,6 +345,7 @@ struct ProjectSecretsDownloadSheet: View {
             do {
                 let result = try await state.downloadProjectSecrets(
                     projectId: project.id,
+                    repo: repo,
                     envId: envId,
                     overwrite: overwrite
                 )
@@ -369,6 +386,9 @@ struct ProjectReleaseCreateSheet: View {
     @State private var dispatchedURLString: String?
 
     private var repoFullName: String { project.gitHubRepo ?? "" }
+    /// Branch names synced from the desktop for this project, offered as a
+    /// picker so the user doesn't have to type (mirrors the macOS sheet).
+    private var branchOptions: [String] { state.availableBranchesByProject[project.id] ?? [] }
     private var dispatchableWorkflows: [MobileReleaseWorkflow] {
         workflows.filter { $0.hasWorkflowDispatch }
     }
@@ -438,9 +458,15 @@ struct ProjectReleaseCreateSheet: View {
             } else if let wf = dispatchableWorkflows.first {
                 LabeledContent("Workflow", value: wf.displayName)
             }
-            TextField("Branch", text: $branch)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
+            if branchOptions.isEmpty {
+                TextField("Branch", text: $branch)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+            } else {
+                Picker("Branch", selection: $branch) {
+                    ForEach(branchOptions, id: \.self) { Text($0).tag($0) }
+                }
+            }
             Text("The next version is computed by semantic-release from the commit history.")
                 .font(.caption).foregroundStyle(.secondary)
         }
@@ -484,6 +510,13 @@ struct ProjectReleaseCreateSheet: View {
         }
         isLoading = true
         loadError = nil
+        // Seed the branch from the project's current branch so the picker opens
+        // on a valid selection; fall back to the first available branch.
+        if !branchOptions.isEmpty {
+            let current = state.projectBranches[project.id]
+            branch = current.flatMap { branchOptions.contains($0) ? $0 : nil }
+                ?? (branchOptions.contains(branch) ? branch : branchOptions.first ?? branch)
+        }
         defer { isLoading = false }
         do {
             workflows = try await state.listReleaseWorkflows(repoId: repoFullName)

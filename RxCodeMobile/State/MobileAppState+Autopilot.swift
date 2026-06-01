@@ -415,13 +415,20 @@ extension MobileAppState {
         return url
     }
 
-    /// Asks the Mac to download + decrypt the chosen environment and write its
-    /// files into the project folder (the Mac holds the KEK; plaintext stays on
-    /// the Mac). Returns the files written and any skipped conflicts.
+    /// Downloads the chosen environment into the project folder. The phone
+    /// decrypts on-device with its passkey-derived KEK (the same iCloud-synced
+    /// credential the Mac uses) — running the phone's own passkey ceremony — then
+    /// sends the plaintext over the E2E-encrypted relay; the Mac only writes the
+    /// files into the project folder, with no passkey prompt on the Mac. Returns
+    /// the files written and any skipped conflicts.
     @discardableResult
-    func downloadProjectSecrets(projectId: UUID, envId: String, overwrite: Bool) async throws -> AutopilotProjectSecretsDownloadResult {
-        try await autopilotSend(.project, .projectSecretsDownload,
-                                body: AutopilotProjectSecretsDownloadBody(projectId: projectId, envId: envId, overwrite: overwrite),
-                                as: AutopilotProjectSecretsDownloadResult.self)
+    func downloadProjectSecrets(projectId: UUID, repo: String, envId: String, overwrite: Bool) async throws -> AutopilotProjectSecretsDownloadResult {
+        let plaintext = try await secretEnvironmentPlaintext(repo: repo, envId: envId)
+        let files = plaintext.map {
+            AutopilotProjectSecretsWriteBody.Plaintext(filename: $0.filename, content: $0.content)
+        }
+        return try await autopilotSend(.project, .projectSecretsWrite,
+                                       body: AutopilotProjectSecretsWriteBody(projectId: projectId, files: files, overwrite: overwrite),
+                                       as: AutopilotProjectSecretsDownloadResult.self)
     }
 }

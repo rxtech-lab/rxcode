@@ -226,16 +226,31 @@ struct MobileReleaseDispatchView: View {
         self.repo = repo
         self.workflow = workflow
         self.onDispatched = onDispatched
-        _branch = State(initialValue: repo.repositoryFullName.isEmpty ? "main" : "main")
+        _branch = State(initialValue: "main")
+    }
+
+    /// Branches synced from the desktop for the local project that matches this
+    /// release repo (if any), offered as a picker instead of free text.
+    private var branchOptions: [String] {
+        guard let project = state.projects.first(where: {
+            $0.gitHubRepo?.lowercased() == repo.repositoryFullName.lowercased()
+        }) else { return [] }
+        return state.availableBranchesByProject[project.id] ?? []
     }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Branch") {
-                    TextField("main", text: $branch)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
+                    if branchOptions.isEmpty {
+                        TextField("main", text: $branch)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                    } else {
+                        Picker("Branch", selection: $branch) {
+                            ForEach(branchOptions, id: \.self) { Text($0).tag($0) }
+                        }
+                    }
                 }
                 if let inputs = workflow.inputs, !inputs.isEmpty {
                     Section("Inputs") {
@@ -290,6 +305,15 @@ struct MobileReleaseDispatchView: View {
     private func seedDefaults() {
         for input in workflow.inputs ?? [] where inputValues[input.name] == nil {
             if let value = input.defaultString { inputValues[input.name] = value }
+        }
+        // Open the branch picker on a valid selection.
+        if !branchOptions.isEmpty {
+            let project = state.projects.first {
+                $0.gitHubRepo?.lowercased() == repo.repositoryFullName.lowercased()
+            }
+            let current = project.flatMap { state.projectBranches[$0.id] }
+            branch = current.flatMap { branchOptions.contains($0) ? $0 : nil }
+                ?? (branchOptions.contains(branch) ? branch : branchOptions.first ?? branch)
         }
     }
 

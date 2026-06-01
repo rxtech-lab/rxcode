@@ -1618,6 +1618,9 @@
         }
       }
     },
+    "Create Pull Request" : {
+
+    },
     "Create Release" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1659,6 +1662,9 @@
           }
         }
       }
+    },
+    "Creating Pull Request…" : {
+
     },
     "Critical" : {
       "localizations" : {
@@ -1857,6 +1863,12 @@
           }
         }
       }
+    },
+    "Delete Project" : {
+
+    },
+    "Delete Project?" : {
+
     },
     "Delete template?" : {
       "localizations" : {
@@ -2362,6 +2374,9 @@
         }
       }
     },
+    "Failed to delete project." : {
+
+    },
     "Failed to detect runnables." : {
       "localizations" : {
         "en" : {
@@ -2687,7 +2702,7 @@
         }
       }
     },
-    "Files are decrypted on your Mac and written into the project folder." : {
+    "Files are decrypted on this device with your passkey, then written into the project folder on your Mac." : {
 
     },
     "Filter Skills" : {
@@ -5432,9 +5447,6 @@
         }
       }
     },
-    "Sent to Your Mac" : {
-
-    },
     "Serious" : {
       "localizations" : {
         "en" : {
@@ -5467,7 +5479,7 @@
         }
       }
     },
-    "Set Up Docs Search" : {
+    "Set Up Docs" : {
 
     },
     "Set Up Release Workflow" : {
@@ -5886,6 +5898,9 @@
         }
       }
     },
+    "The Mac returned an invalid pull-request URL." : {
+
+    },
     "The next version is computed by semantic-release from the commit history." : {
 
     },
@@ -6030,6 +6045,9 @@
           }
         }
       }
+    },
+    "This removes “%@” and all its threads from RxCode. Your files on the Mac are not deleted." : {
+
     },
     "This removes %@ and its downloaded binary from your Mac." : {
       "localizations" : {

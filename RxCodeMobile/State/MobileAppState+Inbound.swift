@@ -213,6 +213,21 @@ extension MobileAppState {
             } else {
                 remoteProjectCreateError = result.errorMessage ?? String(localized: "Failed to add project.")
             }
+        case .deleteProjectResult(let result):
+            guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "delete_project_result") else { return }
+            guard pendingDeleteProjectRequestID == result.clientRequestID else { return }
+            pendingDeleteProjectRequestID = nil
+            if result.ok {
+                // Already removed optimistically; ensure it's gone and reconcile.
+                projects.removeAll { $0.id == result.projectID }
+                sessions.removeAll { $0.projectId == result.projectID }
+                remoteProjectDeleteError = nil
+                Task { await self.requestSnapshot() }
+            } else {
+                remoteProjectDeleteError = result.errorMessage ?? String(localized: "Failed to delete project.")
+                // Restore the project the desktop refused to delete.
+                Task { await self.requestSnapshot() }
+            }
         case .runProfileResult(let result):
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "run_profile_result") else { return }
             logger.info("[RunProfiles] received result id=\(result.clientRequestID.uuidString, privacy: .public) ok=\(result.ok, privacy: .public) project=\(result.projectID.uuidString, privacy: .public) profiles=\(result.profiles?.count ?? 0, privacy: .public) task=\(result.task?.taskId.uuidString ?? "<nil>", privacy: .public) error=\(result.errorMessage ?? "<nil>", privacy: .public)")

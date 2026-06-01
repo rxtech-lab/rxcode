@@ -225,8 +225,10 @@ final class MobileAppState: ObservableObject {
     @Published var remoteProjectCreateInFlight = false
     @Published var remoteProjectCreateError: String?
     @Published var lastCreatedProjectID: UUID?
+    @Published var remoteProjectDeleteError: String?
     var pendingFolderTreeRequestID: UUID?
     var pendingCreateProjectRequestID: UUID?
+    var pendingDeleteProjectRequestID: UUID?
 
     var identity: DeviceIdentity
     var client: SyncClient

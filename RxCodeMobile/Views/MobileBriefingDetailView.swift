@@ -18,6 +18,7 @@ struct MobileBriefingDetailView: View {
     @State private var autopilotStatus: AutopilotProjectStatus?
     @State private var showingSecretsDownload = false
     @State private var showingReleaseCreate = false
+    @State private var autopilotSetupChat: AutopilotSetupChat?
     @State private var autopilotInfo: AutopilotMenuInfo?
 
     var body: some View {
@@ -57,6 +58,7 @@ struct MobileBriefingDetailView: View {
                                 status: autopilotStatus,
                                 showDownloadSheet: $showingSecretsDownload,
                                 showReleaseCreate: $showingReleaseCreate,
+                                setupChat: $autopilotSetupChat,
                                 info: $autopilotInfo
                             )
                             // Offer "Create PR" for a real branch with no open PR
@@ -94,6 +96,7 @@ struct MobileBriefingDetailView: View {
             status: $autopilotStatus,
             showDownloadSheet: $showingSecretsDownload,
             showReleaseCreate: $showingReleaseCreate,
+            setupChat: $autopilotSetupChat,
             info: $autopilotInfo,
             state: state
         )
@@ -116,6 +119,7 @@ struct MobileBriefingDetailView: View {
                 "branch": groupKey.branch,
             ])
         }
+        .mobileAutopilotLoadingOverlay(isCreatingPR, title: "Creating Pull Request…")
     }
 
     private var group: GroupedBriefing? {

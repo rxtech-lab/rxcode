@@ -97,8 +97,11 @@ public enum AutopilotOp: String, Codable, Sendable {
     // Project context-menu actions — desktop-mediated so the Mac performs the
     // exact work its own project/briefing context menu does. `*Setup` ops set
     // the same AppState request the desktop menu sets (the Mac surfaces the
-    // setup chat/sheet); `projectSecretsDownload` decrypts on the Mac and writes
-    // the files into the project folder (the phone never sees plaintext).
+    // setup chat/sheet). For secrets download the phone decrypts on-device with
+    // its own passkey-derived KEK and sends the plaintext over the E2E relay via
+    // `projectSecretsWrite`; the Mac only writes the files into the project
+    // folder (no passkey prompt on the Mac). `projectSecretsDownload` is the
+    // legacy Mac-side-decrypt path, kept for wire compatibility.
     case projectAutopilotStatus
     case projectSecretsSetup
     case projectDocsSetup
@@ -106,6 +109,7 @@ public enum AutopilotOp: String, Codable, Sendable {
     case projectReleaseSetup
     case projectReleaseCreate
     case projectSecretsDownload
+    case projectSecretsWrite
     case projectCreatePullRequest
 }
 
@@ -511,9 +515,39 @@ public struct AutopilotProjectSecretsDownloadBody: Codable, Sendable {
     }
 }
 
-/// Result of `projectSecretsDownload`: filenames actually written, plus the
-/// files skipped because they already existed (only when `overwrite` was false).
-/// The phone re-issues with `overwrite: true` to clobber the conflicts.
+/// Mobile → desktop: secret files the phone already decrypted on-device (using
+/// its passkey-derived KEK — the same iCloud-synced credential the Mac uses) to
+/// be written into the project's folder on the Mac. The plaintext travels only
+/// inside the E2E-encrypted relay channel to the paired Mac, which writes the
+/// files without ever prompting for a passkey. Replaces the Mac-side-decrypt
+/// `projectSecretsDownload` for mobile-initiated downloads.
+public struct AutopilotProjectSecretsWriteBody: Codable, Sendable {
+    public let projectId: UUID
+    public let files: [Plaintext]
+    public let overwrite: Bool
+
+    /// One already-decrypted file. A wire type (unlike `AutopilotSecretFilePlaintext`,
+    /// which is on-device only) because it crosses the encrypted relay.
+    public struct Plaintext: Codable, Sendable {
+        public let filename: String
+        public let content: String
+        public init(filename: String, content: String) {
+            self.filename = filename
+            self.content = content
+        }
+    }
+
+    public init(projectId: UUID, files: [Plaintext], overwrite: Bool) {
+        self.projectId = projectId
+        self.files = files
+        self.overwrite = overwrite
+    }
+}
+
+/// Result of `projectSecretsDownload` / `projectSecretsWrite`: filenames actually
+/// written, plus the files skipped because they already existed (only when
+/// `overwrite` was false). The phone re-issues with `overwrite: true` to clobber
+/// the conflicts.
 public struct AutopilotProjectSecretsDownloadResult: Codable, Sendable {
     public let written: [String]
     public let conflicts: [String]

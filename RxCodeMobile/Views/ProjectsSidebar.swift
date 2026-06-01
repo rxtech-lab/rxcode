@@ -57,8 +57,8 @@ struct ProjectsSidebar: View {
             }
             .onChange(of: state.lastCreatedProjectID) { _, newValue in
                 guard let newValue else { return }
-                selected = newValue
-                showingBriefing = false
+                // Don't auto-select/navigate to a freshly added project — just
+                // surface it in the list. The user opens it when they choose to.
                 AnalyticsService.shared.log(.newProjectStarted, parameters: [
                     "project_id": newValue.uuidString,
                 ])
@@ -385,39 +385,10 @@ private struct GlassProjectCard: View {
     let namespace: Namespace.ID
     var onSelect: (() -> Void)?
 
-    @EnvironmentObject private var state: MobileAppState
-    // Autopilot context menu (1:1 with the desktop project/sidebar menu).
-    @State private var autopilotStatus: AutopilotProjectStatus?
-    @State private var showingSecretsDownload = false
-    @State private var showingReleaseCreate = false
-    @State private var autopilotInfo: AutopilotMenuInfo?
-
     var body: some View {
-        // Attach the autopilot context menu directly to the card (mirrors the
-        // working `GlassThreadCard` pattern in `SessionsList`). Routing it
-        // through a conditional `ViewModifier` previously meant the long-press
-        // menu never registered on the project list. The menu items themselves
-        // stay gated on a linked GitHub repo, matching the desktop.
+        // The autopilot actions now live in the project detail (thread list)
+        // toolbar — the project card is a plain navigation row.
         cardButton
-            .contextMenu {
-                if project.gitHubRepo != nil {
-                    ProjectAutopilotMenuItems(
-                        project: project,
-                        status: autopilotStatus,
-                        showDownloadSheet: $showingSecretsDownload,
-                        showReleaseCreate: $showingReleaseCreate,
-                        info: $autopilotInfo
-                    )
-                }
-            }
-            .projectAutopilotMenuHost(
-                project: project,
-                status: $autopilotStatus,
-                showDownloadSheet: $showingSecretsDownload,
-                showReleaseCreate: $showingReleaseCreate,
-                info: $autopilotInfo,
-                state: state
-            )
     }
 
     @ViewBuilder

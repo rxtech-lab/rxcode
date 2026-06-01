@@ -891,6 +891,7 @@ extension Notification.Name {
     static let mobileSyncBranchOpRequested = Notification.Name("mobileSync.branchOpRequested")
     static let mobileSyncFolderTreeRequested = Notification.Name("mobileSync.folderTreeRequested")
     static let mobileSyncCreateProjectRequested = Notification.Name("mobileSync.createProjectRequested")
+    static let mobileSyncDeleteProjectRequested = Notification.Name("mobileSync.deleteProjectRequested")
     static let mobileSyncRunProfileMutationRequested = Notification.Name("mobileSync.runProfileMutationRequested")
     static let mobileSyncRunProfileRunRequested = Notification.Name("mobileSync.runProfileRunRequested")
     static let mobileSyncRunProfileStopRequested = Notification.Name("mobileSync.runProfileStopRequested")

@@ -14,6 +14,9 @@ struct NewThreadSheet: View {
 
     let projectID: UUID
     var preferredBranch: String? = nil
+    /// Optional prompt to prefill the composer with (e.g. an autopilot setup
+    /// request). The user can review/edit before sending.
+    var initialText: String? = nil
     let onSessionCreated: (String) -> Void
 
     @State private var text: String = ""
@@ -76,6 +79,7 @@ struct NewThreadSheet: View {
         .mobileSheetPresentation()
         .onAppear {
             seedConfigIfNeeded()
+            if let initialText, text.isEmpty { text = initialText }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                 isFocused = true
             }

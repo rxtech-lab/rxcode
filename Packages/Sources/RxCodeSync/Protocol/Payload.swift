@@ -43,6 +43,8 @@ public enum Payload: Sendable {
     case folderTreeResult(FolderTreeResultPayload)
     case createProjectRequest(CreateProjectRequestPayload)
     case createProjectResult(CreateProjectResultPayload)
+    case deleteProjectRequest(DeleteProjectRequestPayload)
+    case deleteProjectResult(DeleteProjectResultPayload)
     case runProfileMutationRequest(RunProfileMutationRequestPayload)
     case runProfileResult(RunProfileResultPayload)
     case runProfileRunRequest(RunProfileRunRequestPayload)
@@ -110,6 +112,8 @@ public extension Payload {
         case .folderTreeResult: return "folder_tree_result"
         case .createProjectRequest: return "create_project_request"
         case .createProjectResult: return "create_project_result"
+        case .deleteProjectRequest: return "delete_project_request"
+        case .deleteProjectResult: return "delete_project_result"
         case .runProfileMutationRequest: return "run_profile_mutation_request"
         case .runProfileResult: return "run_profile_result"
         case .runProfileRunRequest: return "run_profile_run_request"
@@ -731,6 +735,8 @@ extension Payload: Codable {
         case folderTreeResult = "folder_tree_result"
         case createProjectRequest = "create_project_request"
         case createProjectResult = "create_project_result"
+        case deleteProjectRequest = "delete_project_request"
+        case deleteProjectResult = "delete_project_result"
         case runProfileMutationRequest = "run_profile_mutation_request"
         case runProfileResult = "run_profile_result"
         case runProfileRunRequest = "run_profile_run_request"
@@ -802,6 +808,8 @@ extension Payload: Codable {
         case .folderTreeResult: self = .folderTreeResult(try container.decode(FolderTreeResultPayload.self, forKey: .data))
         case .createProjectRequest: self = .createProjectRequest(try container.decode(CreateProjectRequestPayload.self, forKey: .data))
         case .createProjectResult: self = .createProjectResult(try container.decode(CreateProjectResultPayload.self, forKey: .data))
+        case .deleteProjectRequest: self = .deleteProjectRequest(try container.decode(DeleteProjectRequestPayload.self, forKey: .data))
+        case .deleteProjectResult: self = .deleteProjectResult(try container.decode(DeleteProjectResultPayload.self, forKey: .data))
         case .runProfileMutationRequest: self = .runProfileMutationRequest(try container.decode(RunProfileMutationRequestPayload.self, forKey: .data))
         case .runProfileResult: self = .runProfileResult(try container.decode(RunProfileResultPayload.self, forKey: .data))
         case .runProfileRunRequest: self = .runProfileRunRequest(try container.decode(RunProfileRunRequestPayload.self, forKey: .data))
@@ -869,6 +877,8 @@ extension Payload: Codable {
         case .folderTreeResult(let p): try container.encode(TypeKey.folderTreeResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .createProjectRequest(let p): try container.encode(TypeKey.createProjectRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .createProjectResult(let p): try container.encode(TypeKey.createProjectResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .deleteProjectRequest(let p): try container.encode(TypeKey.deleteProjectRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .deleteProjectResult(let p): try container.encode(TypeKey.deleteProjectResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .runProfileMutationRequest(let p): try container.encode(TypeKey.runProfileMutationRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .runProfileResult(let p): try container.encode(TypeKey.runProfileResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .runProfileRunRequest(let p): try container.encode(TypeKey.runProfileRunRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)

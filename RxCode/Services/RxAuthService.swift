@@ -36,6 +36,18 @@ final class RxAuthService {
     /// "infinite loading" while reading repos. One shared task fixes that.
     private var refreshTask: Task<Void, Error>?
 
+    /// In-memory copy of the last access token read from the keychain, with its
+    /// expiry. The keychain read is what triggers macOS's "wants to use
+    /// confidential information" prompt when the running binary's code signature
+    /// no longer matches the item's ACL — and a burst of concurrent
+    /// `accessToken()` callers (repo list, installation list, CI poller, mobile
+    /// sync) each hit that read, turning one stale-signature prompt into a
+    /// storm. Caching here serves every caller from memory, so at most one
+    /// keychain read happens per launch until the token nears expiry. A refresh
+    /// rewrites the keychain items under the *current* signature, so the seed
+    /// read after a refresh no longer prompts either.
+    private var cachedToken: (value: String, expiresAt: Date)?
+
     init() {
         let configuration = RxAuthConfiguration(
             issuer: Self.issuer,
@@ -78,12 +90,24 @@ final class RxAuthService {
     /// despite its name, so we gate it ourselves with the keychain `expires_at`
     /// to avoid a token rotation + userinfo round trip on every autopilot call.
     func accessToken(forceRefresh: Bool = false) async -> String? {
-        // Fast path — a cached, not-yet-expiring token needs no network hop.
-        // Skipped on a forced refresh, where the cached token was just rejected.
+        // Fastest path — an in-memory, not-yet-expiring token needs no keychain
+        // read at all, so concurrent callers never re-trigger the macOS keychain
+        // permission prompt. Skipped on a forced refresh, where the token was
+        // just rejected by the server.
+        if !forceRefresh, let cached = cachedToken, !Self.isExpiring(cached.expiresAt) {
+            return cached.value
+        }
+
+        // Next path — a cached-in-keychain, not-yet-expiring token needs no
+        // network hop. This is the one read that may prompt (once) when the
+        // stored item was written by a build with a different signature; we seed
+        // the in-memory cache from it so the next caller skips the keychain.
         if !forceRefresh,
-           let cached = KeychainBackedTokenReader.readAccessToken(service: Self.keychainService),
-           !Self.accessTokenIsExpiring(service: Self.keychainService) {
-            return cached
+           let token = KeychainBackedTokenReader.readAccessToken(service: Self.keychainService),
+           let expiresAt = Self.readExpiry(service: Self.keychainService),
+           !Self.isExpiring(expiresAt) {
+            cachedToken = (token, expiresAt)
+            return token
         }
 
         do {
@@ -92,7 +116,20 @@ final class RxAuthService {
             logger.warning("RxAuth refresh failed: \(error.localizedDescription, privacy: .public)")
             return nil
         }
-        return KeychainBackedTokenReader.readAccessToken(service: Self.keychainService)
+        return seedCacheFromKeychain()
+    }
+
+    /// Read the freshly-refreshed token + expiry from the keychain once and
+    /// store them in memory. Called after a successful refresh, which rewrites
+    /// the keychain items under the current binary's signature — so this read
+    /// matches the ACL and does not prompt.
+    private func seedCacheFromKeychain() -> String? {
+        guard let token = KeychainBackedTokenReader.readAccessToken(service: Self.keychainService) else {
+            cachedToken = nil
+            return nil
+        }
+        cachedToken = (token, Self.readExpiry(service: Self.keychainService) ?? .distantPast)
+        return token
     }
 
     /// Run at most one `refreshTokenIfNeeded()` at a time; concurrent callers
@@ -118,15 +155,20 @@ final class RxAuthService {
         logger.debug("accessToken: refreshTokenIfNeeded returned in \(ms, privacy: .public)ms")
     }
 
-    /// Mirror RxAuthSwift's `KeychainTokenStorage.isTokenExpired()`: treat the
-    /// token as expiring within 10 minutes of its stored expiry, and as
-    /// expired when no expiry is recorded.
-    private static func accessTokenIsExpiring(service: String) -> Bool {
+    /// Read the stored access-token expiry from the keychain, or `nil` when
+    /// none is recorded.
+    private static func readExpiry(service: String) -> Date? {
         guard
             let timestamp = KeychainHelper.readString(service: service, account: "expires_at"),
             let seconds = Double(timestamp)
-        else { return true }
-        return Date(timeIntervalSince1970: seconds).timeIntervalSinceNow < 600
+        else { return nil }
+        return Date(timeIntervalSince1970: seconds)
+    }
+
+    /// Mirror RxAuthSwift's `KeychainTokenStorage.isTokenExpired()`: treat the
+    /// token as expiring within 10 minutes of its stored expiry.
+    private static func isExpiring(_ expiresAt: Date) -> Bool {
+        expiresAt.timeIntervalSinceNow < 600
     }
 
     func signIn() async throws {
@@ -134,6 +176,7 @@ final class RxAuthService {
     }
 
     func signOut() async {
+        cachedToken = nil
         await manager.logout()
     }
 

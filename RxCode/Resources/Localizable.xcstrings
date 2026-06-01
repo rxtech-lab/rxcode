@@ -12359,6 +12359,7 @@
       }
     },
     "Search Docs" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -13012,7 +13013,11 @@
         }
       }
     },
+    "Set Up Docs" : {
+
+    },
     "Set Up Docs Search" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {

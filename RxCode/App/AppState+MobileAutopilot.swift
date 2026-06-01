@@ -330,6 +330,23 @@ extension AppState {
                 .filter { FileManager.default.fileExists(atPath: directory.appendingPathComponent($0).path) }
             let written = try writeDecryptedSecrets(files, to: directory, overwrite: body.overwrite)
             return try encoder.encode(AutopilotProjectSecretsDownloadResult(written: written, conflicts: conflicts))
+
+        case .projectSecretsWrite:
+            // The phone decrypted the environment on-device with its own
+            // passkey-derived KEK and sent the plaintext over the E2E relay; the
+            // Mac only writes the files into the project folder (no passkey
+            // prompt here). This is the mobile-initiated download path.
+            let body = try decodeAutopilotBody(request, as: AutopilotProjectSecretsWriteBody.self)
+            guard let project = projects.first(where: { $0.id == body.projectId }) else {
+                throw MobileRemoteConfigError.invalidRequest("No project found for the requested id.")
+            }
+            let files = body.files.map { (filename: $0.filename, content: $0.content) }
+            let directory = URL(fileURLWithPath: project.path, isDirectory: true)
+            let conflicts = body.overwrite ? [] : files
+                .map(\.filename)
+                .filter { FileManager.default.fileExists(atPath: directory.appendingPathComponent($0).path) }
+            let written = try writeDecryptedSecrets(files, to: directory, overwrite: body.overwrite)
+            return try encoder.encode(AutopilotProjectSecretsDownloadResult(written: written, conflicts: conflicts))
         }
     }
 

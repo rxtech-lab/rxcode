@@ -416,6 +416,42 @@ struct PayloadTests {
         #expect(createResult.project?.name == "RxCode")
     }
 
+    @Test("mobile delete project payloads round trip")
+    func mobileDeleteProjectPayloadsRoundTrip() throws {
+        let requestID = UUID(uuidString: "DDDDDDDD-EEEE-FFFF-0000-111111111111")!
+        let projectID = UUID(uuidString: "EEEEEEEE-FFFF-0000-1111-222222222222")!
+        let request = Payload.deleteProjectRequest(
+            DeleteProjectRequestPayload(clientRequestID: requestID, projectID: projectID)
+        )
+
+        let requestData = try JSONEncoder().encode(request)
+        let decodedRequest = try JSONDecoder().decode(Payload.self, from: requestData)
+        guard case .deleteProjectRequest(let deleteRequest) = decodedRequest else {
+            Issue.record("Expected delete project request")
+            return
+        }
+        #expect(deleteRequest.clientRequestID == requestID)
+        #expect(deleteRequest.projectID == projectID)
+
+        let result = Payload.deleteProjectResult(
+            DeleteProjectResultPayload(
+                clientRequestID: requestID,
+                projectID: projectID,
+                ok: true
+            )
+        )
+
+        let resultData = try JSONEncoder().encode(result)
+        let decodedResult = try JSONDecoder().decode(Payload.self, from: resultData)
+        guard case .deleteProjectResult(let deleteResult) = decodedResult else {
+            Issue.record("Expected delete project result")
+            return
+        }
+        #expect(deleteResult.ok)
+        #expect(deleteResult.projectID == projectID)
+        #expect(deleteResult.errorMessage == nil)
+    }
+
     @Test("autopilot request payload round trips with an encoded body")
     func autopilotRequestRoundTrips() throws {
         let requestID = UUID(uuidString: "AAAAAAAA-1111-2222-3333-444444444444")!

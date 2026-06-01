@@ -131,3 +131,32 @@ public struct CreateProjectResultPayload: Codable, Sendable {
         self.errorMessage = errorMessage
     }
 }
+
+public struct DeleteProjectRequestPayload: Codable, Sendable {
+    public let clientRequestID: UUID
+    public let projectID: UUID
+
+    public init(clientRequestID: UUID = UUID(), projectID: UUID) {
+        self.clientRequestID = clientRequestID
+        self.projectID = projectID
+    }
+}
+
+public struct DeleteProjectResultPayload: Codable, Sendable {
+    public let clientRequestID: UUID
+    public let projectID: UUID
+    public let ok: Bool
+    public let errorMessage: String?
+
+    public init(
+        clientRequestID: UUID,
+        projectID: UUID,
+        ok: Bool,
+        errorMessage: String? = nil
+    ) {
+        self.clientRequestID = clientRequestID
+        self.projectID = projectID
+        self.ok = ok
+        self.errorMessage = errorMessage
+    }
+}

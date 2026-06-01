@@ -142,6 +142,30 @@ extension MobileAppState {
         }
     }
 
+    /// Delete a project on the desktop. Optimistically drops it from local state
+    /// so the UI updates immediately; the desktop performs the cascading delete
+    /// (sessions, search index, memory) and confirms via `deleteProjectResult`.
+    /// On failure the next snapshot restores the project.
+    func deleteProject(projectID: UUID) async {
+        guard isPaired else { return }
+        let request = DeleteProjectRequestPayload(projectID: projectID)
+        pendingDeleteProjectRequestID = request.clientRequestID
+        remoteProjectDeleteError = nil
+
+        // Optimistic local removal — drop the project and its sessions.
+        projects.removeAll { $0.id == projectID }
+        sessions.removeAll { $0.projectId == projectID }
+
+        do {
+            try await client.send(.deleteProjectRequest(request), toHex: pairedDesktopPubkey)
+        } catch {
+            pendingDeleteProjectRequestID = nil
+            remoteProjectDeleteError = error.localizedDescription
+            // Re-sync to restore the optimistically removed project.
+            await requestSnapshot()
+        }
+    }
+
     // MARK: - Plan mode
 
     /// Plan cards for a session, derived live from the synced messages using the

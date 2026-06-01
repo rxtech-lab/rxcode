@@ -67,12 +67,21 @@ final class RxAuthService {
     /// one is missing or near expiry. Returns `nil` when the user is signed
     /// out or refresh failed.
     ///
+    /// Pass `forceRefresh: true` to skip the cached-token fast path and always
+    /// rotate to a brand-new token. Callers use this after a server `401`: the
+    /// keychain `expires_at` can still look fresh while the server has already
+    /// rejected the token (rotation, revocation, or clock skew), so reusing the
+    /// cached value would just 401 again. Forcing a refresh is what actually
+    /// recovers the session instead of surfacing a spurious "Not signed in".
+    ///
     /// Note: `OAuthManager.refreshTokenIfNeeded()` refreshes *unconditionally*
     /// despite its name, so we gate it ourselves with the keychain `expires_at`
     /// to avoid a token rotation + userinfo round trip on every autopilot call.
-    func accessToken() async -> String? {
+    func accessToken(forceRefresh: Bool = false) async -> String? {
         // Fast path — a cached, not-yet-expiring token needs no network hop.
-        if let cached = KeychainBackedTokenReader.readAccessToken(service: Self.keychainService),
+        // Skipped on a forced refresh, where the cached token was just rejected.
+        if !forceRefresh,
+           let cached = KeychainBackedTokenReader.readAccessToken(service: Self.keychainService),
            !Self.accessTokenIsExpiring(service: Self.keychainService) {
             return cached
         }

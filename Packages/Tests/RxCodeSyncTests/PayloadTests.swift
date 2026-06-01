@@ -148,6 +148,8 @@ struct PayloadTests {
                             lastUpdated: "2026-05-31T00:00:00Z",
                             headSha: "abc123",
                             prNumber: 42,
+                            prState: "open",
+                            prUrl: "https://github.com/rxlab/rxcode/pull/42",
                             workflows: [],
                             failing: [
                                 CIFailingWorkflow(

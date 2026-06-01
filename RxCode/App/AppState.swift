@@ -431,6 +431,12 @@ final class AppState {
     /// `AppState+CIStatus.swift`. Held in memory only.
     var ciStatusByProject: [UUID: ProjectCIStatus] = [:]
 
+    /// Latest CI/PR status keyed by `owner/repo#branch` (lowercased), covering
+    /// every branch shown on briefing cards — not just current branches. Drives
+    /// the per-card PR / merge status and the Create PR button. Refreshed by the
+    /// same poller. Held in memory only.
+    var ciStatusByBranchKey: [String: ProjectCIStatus] = [:]
+
     /// Bumped after every CI refresh so views observing CI status recompute,
     /// mirroring the `branchBriefingRevision` pattern.
     var ciStatusRevision: Int = 0
@@ -452,6 +458,11 @@ final class AppState {
     /// `AppState+Docs.swift`. Lets the docs hook decide whether to surface the
     /// "set up docs" banner without a per-chat round trip. Memory only.
     var docsStatusByRepo: [String: DocsRepoStatus] = [:]
+
+    /// Latest release status keyed by lowercased `owner/repo`, refreshed in
+    /// `AppState+Release.swift`. Drives the "set up release" banner and the
+    /// "Create Release" affordances + briefing version chip. Memory only.
+    var releaseStatusByRepo: [String: ReleaseRepoStatus] = [:]
 
     /// Per-project signature of the last CI failure we already notified / auto-fixed,
     /// so a steady-state red branch doesn't re-fire every 30s. Keyed by project id;
@@ -940,6 +951,20 @@ final class AppState {
     /// `DocsHook.onSessionStart` injects the docs skill into exactly that chat's
     /// system prompt, then clears it.
     @ObservationIgnored var pendingDocsSetupProjectId: UUID?
+    /// Non-nil while a release-setup new chat should be started (opened from the
+    /// release banner's deep link). `MainView` consumes it to start a fresh chat
+    /// seeded with the release skill.
+    var releaseSetupRequest: ReleaseSetupRequest?
+    /// One-shot: when a release-setup chat is kicked off, this holds the project
+    /// so `ReleaseHook.onSessionStart` injects the release skill into exactly
+    /// that chat's system prompt, then clears it.
+    @ObservationIgnored var pendingReleaseSetupProjectId: UUID?
+    /// Session keys of in-flight setup chats, keyed by setup kind ("release",
+    /// "docs"). Recorded when a setup hook injects its skill on session start and
+    /// cleared once the backing status confirms setup, so the hook can re-check on
+    /// each completed turn and drop the banner once setup completes — surviving
+    /// multi-turn setups (where the agent asks a question before doing the work).
+    @ObservationIgnored var setupSessionKeys: [String: Set<String>] = [:]
 
     // MARK: - Services
 
@@ -949,6 +974,8 @@ final class AppState {
     let ciUpdates: CIUpdateService
     /// Talks to github-pm's docs API (search, repos, documents, upload tokens).
     let docs: DocsService
+    /// Talks to github-pm's release API (repos, workflows, dispatch, secret).
+    let release: ReleaseService
     /// Passkey-derived KEK cache for the secrets feature (macOS only).
     let secretsKeyVault = SecretsKeyVault()
     /// Cached enrollment status for the secrets feature: `nil` = unknown.
@@ -1100,6 +1127,7 @@ final class AppState {
         self.secrets = SecretsService(rxAuth: RxAuthService.shared)
         self.ciUpdates = CIUpdateService(rxAuth: RxAuthService.shared)
         self.docs = DocsService(rxAuth: RxAuthService.shared)
+        self.release = ReleaseService(rxAuth: RxAuthService.shared)
         self.runService.onTasksChanged = { [weak self] in
             Task { @MainActor [weak self] in
                 self?.broadcastMobileRunTasks()
@@ -1162,6 +1190,7 @@ final class AppState {
         #if os(macOS)
         hookManager.register(AutopilotHook())
         hookManager.register(DocsHook())
+        hookManager.register(ReleaseHook())
         hookManager.register(CIUpdateHook())
         #endif
     }

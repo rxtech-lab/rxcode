@@ -136,6 +136,44 @@ public protocol HookController: AnyObject {
     /// session's system prompt and clears the pending flag. Returns `nil`
     /// otherwise.
     func consumePendingDocsSetupSkill(projectId: UUID) -> String?
+
+    // MARK: Release
+
+    /// Whether the repo has a release workflow set up (registered with the
+    /// release service AND has a selected dispatchable workflow). Returns `nil`
+    /// when the check can't be completed (signed out, offline, request failed)
+    /// so callers can tell that apart from a genuine "not set up" and avoid
+    /// surfacing a misleading banner.
+    func releaseConfigured(repoFullName: String) async -> Bool?
+
+    /// One-shot: if a release-setup chat was kicked off for `projectId` (via the
+    /// release banner), returns the release skill text to inject as the session's
+    /// system prompt and clears the pending flag. Returns `nil` otherwise.
+    func consumePendingReleaseSetupSkill(projectId: UUID) -> String?
+
+    // MARK: Setup-session tracking
+
+    /// Record that `sessionKey` belongs to a setup chat of the given `kind` (e.g.
+    /// "release", "docs"). A setup hook marks the session on start and re-checks
+    /// the backing status on each completed turn until setup is confirmed — so the
+    /// marker is *peeked* (`isSetupSession`), not consumed, until `clearSetupSession`.
+    /// Multi-turn setups (the agent asks a question first) therefore aren't lost
+    /// after the first turn completes.
+    func markSetupSession(kind: String, sessionKey: String)
+
+    /// Whether `sessionKey` was recorded as a setup chat of `kind`. Non-destructive.
+    func isSetupSession(kind: String, sessionKey: String) -> Bool
+
+    /// Stop tracking `sessionKey` for `kind` — called once setup is confirmed
+    /// complete so later turns don't re-check.
+    func clearSetupSession(kind: String, sessionKey: String)
+}
+
+/// Stable `kind` identifiers for `markSetupSession` / `isSetupSession` /
+/// `clearSetupSession`, so hooks don't collide on free-form strings.
+public enum HookSetupKind {
+    public static let release = "release"
+    public static let docs = "docs"
 }
 
 // MARK: - Banner surfaces

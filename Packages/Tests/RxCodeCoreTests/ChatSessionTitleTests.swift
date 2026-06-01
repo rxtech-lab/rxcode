@@ -63,5 +63,36 @@ struct StripAttachmentMarkersTests {
         let input = "what is swift"
         #expect(ChatSession.stripAttachmentMarkers(from: input) == "what is swift")
     }
+
+    @Test("Strips surrounding **bold** markers")
+    func stripsBold() {
+        let input = "**feat: Complete UI and backend integration**"
+        #expect(ChatSession.stripAttachmentMarkers(from: input) == "feat: Complete UI and backend integration")
+    }
+
+    @Test("Strips inline bold, italic-bold, and code markers")
+    func stripsInlineEmphasis() {
+        let input = "fix the `parser` and __retry__ logic"
+        #expect(ChatSession.stripAttachmentMarkers(from: input) == "fix the parser and retry logic")
+    }
+}
+
+@Suite("ChatSession.stripMarkdownEmphasis")
+struct StripMarkdownEmphasisTests {
+
+    @Test("Removes ** markers, keeps content")
+    func removesBold() {
+        #expect(ChatSession.stripMarkdownEmphasis(from: "**feat: add release mode**") == "feat: add release mode")
+    }
+
+    @Test("Removes __ and backtick markers")
+    func removesUnderscoreAndCode() {
+        #expect(ChatSession.stripMarkdownEmphasis(from: "__chore__: bump `deps`") == "chore: bump deps")
+    }
+
+    @Test("Plain text untouched")
+    func plainText() {
+        #expect(ChatSession.stripMarkdownEmphasis(from: "feat: add ci status scan") == "feat: add ci status scan")
+    }
 }
 

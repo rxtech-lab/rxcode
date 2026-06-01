@@ -608,6 +608,10 @@ struct MainWindowRoot: View {
                             appState.docsSetupRequest = DocsSetupRequest(repoFullName: docs.repoFullName)
                             return .handled
                         }
+                        if let release = ReleaseDeepLink.parse(url), release.action == .setup {
+                            appState.releaseSetupRequest = ReleaseSetupRequest(repoFullName: release.repoFullName)
+                            return .handled
+                        }
                         if let request = SecretsDeepLink.parse(url) {
                             appState.secretsSetupRequest = request
                             return .handled
@@ -627,6 +631,8 @@ struct MainWindowRoot: View {
         .onOpenURL { url in
             if let docs = DocsDeepLink.parse(url), docs.action == .setup {
                 appState.docsSetupRequest = DocsSetupRequest(repoFullName: docs.repoFullName)
+            } else if let release = ReleaseDeepLink.parse(url), release.action == .setup {
+                appState.releaseSetupRequest = ReleaseSetupRequest(repoFullName: release.repoFullName)
             } else if let request = SecretsDeepLink.parse(url) {
                 appState.secretsSetupRequest = request
             } else if let request = CIUpdateDeepLink.parse(url) {
@@ -697,6 +703,10 @@ struct ProjectWindowRoot: View {
                     .environment(\.openURL, OpenURLAction { url in
                         if let docs = DocsDeepLink.parse(url), docs.action == .setup {
                             appState.docsSetupRequest = DocsSetupRequest(repoFullName: docs.repoFullName)
+                            return .handled
+                        }
+                        if let release = ReleaseDeepLink.parse(url), release.action == .setup {
+                            appState.releaseSetupRequest = ReleaseSetupRequest(repoFullName: release.repoFullName)
                             return .handled
                         }
                         if let request = SecretsDeepLink.parse(url) {

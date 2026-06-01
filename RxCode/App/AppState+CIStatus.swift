@@ -64,17 +64,33 @@ extension AppState {
         // current branch. Keep the originating project alongside each query so we
         // can map the response back without ambiguity.
         var pairs: [(project: Project, query: CIStatusQuery)] = []
+        var repoByProject: [UUID: (owner: String, repo: String)] = [:]
         for project in projects {
             guard let slug = project.gitHubRepo else { continue }
             let parts = slug.split(separator: "/", maxSplits: 1).map(String.init)
             guard parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty else { continue }
+            repoByProject[project.id] = (parts[0], parts[1])
             guard let branch = await GitHelper.currentBranch(at: project.path) else { continue }
             pairs.append((project, CIStatusQuery(owner: parts[0], repo: parts[1], branch: branch)))
         }
 
-        guard !pairs.isEmpty else {
-            if !ciStatusByProject.isEmpty {
+        // Query each project's current branch (drives the per-project map + CI
+        // failure handling) AND every branch shown on briefing cards (so each
+        // card can show PR / merge status). De-dup all queries by owner/repo#branch.
+        var queriesByKey: [String: CIStatusQuery] = [:]
+        for pair in pairs {
+            queriesByKey[Self.ciKey(owner: pair.query.owner, repo: pair.query.repo, branch: pair.query.branch)] = pair.query
+        }
+        for item in threadStore.allBranchBriefingItems() {
+            guard let slug = repoByProject[item.projectId] else { continue }
+            let key = Self.ciKey(owner: slug.owner, repo: slug.repo, branch: item.branch)
+            queriesByKey[key] = CIStatusQuery(owner: slug.owner, repo: slug.repo, branch: item.branch)
+        }
+
+        guard !queriesByKey.isEmpty else {
+            if !ciStatusByProject.isEmpty || !ciStatusByBranchKey.isEmpty {
                 ciStatusByProject = [:]
+                ciStatusByBranchKey = [:]
                 ciStatusRevision &+= 1
             }
             return
@@ -82,7 +98,7 @@ extension AppState {
 
         let response: CIStatusBatchResponse
         do {
-            response = try await autopilot.batchCIStatus(pairs.map(\.query))
+            response = try await autopilot.batchCIStatus(Array(queriesByKey.values))
         } catch {
             logger.error("CI status fetch failed: \(error.localizedDescription)")
             return
@@ -106,11 +122,21 @@ extension AppState {
             await handleCITransition(for: pair.project, status: status)
         }
 
-        // Drop status for projects no longer queried (e.g. removed).
-        if next != ciStatusByProject {
+        // Drop status for projects/branches no longer queried (e.g. removed).
+        if next != ciStatusByProject || byKey != ciStatusByBranchKey {
             ciStatusByProject = next
+            ciStatusByBranchKey = byKey
             ciStatusRevision &+= 1
         }
+    }
+
+    /// CI/PR status for an arbitrary project + branch (any branch, not just the
+    /// current one), looked up from the branch-keyed map the poller maintains.
+    func ciStatus(forProjectId projectId: UUID, branch: String) -> ProjectCIStatus? {
+        guard let slug = projects.first(where: { $0.id == projectId })?.gitHubRepo else { return nil }
+        let parts = slug.split(separator: "/", maxSplits: 1).map(String.init)
+        guard parts.count == 2 else { return nil }
+        return ciStatusByBranchKey[Self.ciKey(owner: parts[0], repo: parts[1], branch: branch)]
     }
 
     // MARK: - Failure handling

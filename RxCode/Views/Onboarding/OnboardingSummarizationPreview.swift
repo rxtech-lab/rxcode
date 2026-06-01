@@ -24,13 +24,37 @@ struct SummarizationSetupPreview: View {
                 Text("Provider")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.62))
-                Picker("", selection: $appState.summarizationProvider) {
-                    ForEach(SummarizationProvider.allCases) { provider in
-                        Text(provider.displayName).tag(provider)
+                Menu {
+                    Picker("", selection: $appState.summarizationProvider) {
+                        ForEach(SummarizationProvider.allCases) { provider in
+                            Text(provider.displayName).tag(provider)
+                        }
                     }
+                    .labelsHidden()
+                    .pickerStyle(.inline)
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(appState.summarizationProvider.displayName)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.white)
+                        Spacer()
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.5))
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(.white.opacity(0.08))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+                    )
                 }
-                .labelsHidden()
-                .pickerStyle(.segmented)
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
             }
 
             switch appState.summarizationProvider {

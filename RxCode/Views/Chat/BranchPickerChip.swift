@@ -303,13 +303,34 @@ struct CreateBranchSheet: View {
             }
 
             VStack(alignment: .leading, spacing: 6) {
-                Picker("", selection: $mode) {
-                    ForEach(BranchMode.allCases) { m in
-                        Text(m.label).tag(m)
+                Menu {
+                    Picker("", selection: $mode) {
+                        ForEach(BranchMode.allCases) { m in
+                            Text(m.label).tag(m)
+                        }
                     }
+                    .labelsHidden()
+                    .pickerStyle(.inline)
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(mode.label)
+                            .font(.system(size: ClaudeTheme.size(13), weight: .medium))
+                            .foregroundStyle(ClaudeTheme.textPrimary)
+                        Spacer()
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: ClaudeTheme.size(9), weight: .semibold))
+                            .foregroundStyle(ClaudeTheme.textTertiary)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(ClaudeTheme.surfaceSecondary, in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
+                            .strokeBorder(ClaudeTheme.borderSubtle, lineWidth: 0.5)
+                    )
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
                 .disabled(isCreating)
 
                 Text(mode.hint)

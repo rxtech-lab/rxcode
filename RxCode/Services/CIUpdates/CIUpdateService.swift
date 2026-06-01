@@ -190,7 +190,7 @@ final class CIUpdateService {
         guard let http = response as? HTTPURLResponse else { throw ServiceError.invalidResponse }
 
         if http.statusCode == 401 {
-            guard let refreshed = await rxAuth.accessToken() else {
+            guard let refreshed = await rxAuth.accessToken(forceRefresh: true) else {
                 NotificationCenter.default.post(name: .rxAuthSessionExpired, object: nil)
                 throw ServiceError.notAuthenticated
             }

@@ -25,6 +25,7 @@ struct ProjectTreeView: View {
 
     @State private var showAllChatsSheet = false
     @State private var downloadSecretProject: Project? = nil
+    @State private var createReleaseProject: Project? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -131,6 +132,15 @@ struct ProjectTreeView: View {
             SecretsDownloadSheet(project: project)
                 .environment(appState)
         }
+        .sheet(item: $createReleaseProject) { project in
+            ReleaseCreateSheet(
+                repoId: project.gitHubRepo ?? "",
+                repoFullName: project.gitHubRepo ?? project.name,
+                currentVersion: appState.projectLatestReleaseVersion(project),
+                projectPath: project.path
+            )
+            .environment(appState)
+        }
         .onChange(of: windowState.selectedProject?.id) { _, newId in
             if let newId { expandedProjectIds.insert(newId) }
         }
@@ -141,6 +151,7 @@ struct ProjectTreeView: View {
         }
         .task(id: appState.projects.map { $0.gitHubRepo ?? "" }.joined(separator: ",")) {
             await appState.refreshSecretsStatuses()
+            await appState.refreshReleaseStatuses()
         }
     }
 
@@ -270,7 +281,9 @@ private struct SummarySidebarSection: View {
                                   let url = DocsDeepLink.setupURL(repo: repo) else { return }
                             openURL(url)
                         },
-                        canSetupDocsSearch: project.gitHubRepo != nil
+                        canSetupDocsSearch: project.gitHubRepo != nil,
+                        hasReleaseWorkflow: appState.projectHasReleaseWorkflow(project),
+                        onCreateRelease: { createReleaseProject = project }
                     )
 
                     if expandedProjectIds.contains(project.id) {
@@ -318,6 +331,8 @@ private struct ProjectTreeRow: View {
     let hasSecrets: Bool
     let onSetupDocsSearch: () -> Void
     let canSetupDocsSearch: Bool
+    let hasReleaseWorkflow: Bool
+    let onCreateRelease: () -> Void
 
     @State private var isHovered = false
     @State private var showLocationPopover = false
@@ -450,7 +465,12 @@ private struct ProjectTreeRow: View {
                 Label("Download Secret", systemImage: "key.fill")
             }
         }
-        if canSetupDocsSearch || hasSecrets {
+        if hasReleaseWorkflow {
+            Button { onCreateRelease() } label: {
+                Label("Create Release", systemImage: "tag.fill")
+            }
+        }
+        if canSetupDocsSearch || hasSecrets || hasReleaseWorkflow {
             Divider()
         }
         Button { onRename() } label: {

@@ -326,6 +326,17 @@ struct MainView: View {
             // an attachment thumbnail before it's sent.
             Task { await appState.sendPrompt(prompt, in: windowState) }
         }
+        .onChange(of: appState.releaseSetupRequest?.id) { _, _ in
+            guard let request = appState.releaseSetupRequest else { return }
+            // Start a fresh chat in this project; ReleaseHook.onSessionStart
+            // injects the release skill into its system prompt on first send.
+            appState.pendingReleaseSetupProjectId = windowState.selectedProject?.id
+            appState.startNewChat(in: windowState)
+            let repoText = request.repoFullName.map { " for \($0)" } ?? ""
+            let prompt = "Set up release publishing\(repoText) by following the create-release skill: inspect the repo, create the `.releaserc` and the release CI workflow (ask me whether to trigger releases on branch push or manually), then register the repo and install the RELEASE_TOKEN via the `ide__setup_release` tool."
+            appState.releaseSetupRequest = nil
+            Task { await appState.sendPrompt(prompt, in: windowState) }
+        }
         .sheet(item: Bindable(windowState).diffFile) { file in
             FileDiffView(
                 filePath: file.path,

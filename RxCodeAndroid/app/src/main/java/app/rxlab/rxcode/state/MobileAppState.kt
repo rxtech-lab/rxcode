@@ -70,6 +70,19 @@ class MobileAppState @Inject constructor(
     private var pairingTimeout: Job? = null
     private var pendingThreadChangesId: UUID? = null
 
+    /**
+     * Autopilot remote-management round-trips (mirrors the desktop's Autopilot
+     * settings tab). Sends through the same encrypted [client]; replies are
+     * routed back in [handleInbound] via [AutopilotService.handleResult].
+     */
+    val autopilot: AutopilotService = AutopilotService(
+        send = { payload, hex -> client.send(payload, hex) },
+        activeDesktopHex = { _state.value.activeDesktopPubkey.takeIf { it.isNotEmpty() } },
+    )
+
+    /** On-device secrets crypto orchestration (passkey-derived KEK + relay). */
+    val secrets: SecretsManager = SecretsManager(autopilot)
+
     init {
         viewModelScope.launch { observeStore() }
         viewModelScope.launch { observeSyncEvents() }
@@ -172,6 +185,10 @@ class MobileAppState @Inject constructor(
             is Payload.RunProfileResult -> handleRunProfileResult(fromHex, payload.data)
             is Payload.RunTaskUpdate -> handleRunTaskUpdate(fromHex, payload.data.task)
             is Payload.ThreadChangesResult -> handleThreadChangesResult(fromHex, payload.data)
+            is Payload.AutopilotResult -> {
+                if (!isActiveDesktop(fromHex)) return
+                autopilot.handleResult(payload.data)
+            }
             is Payload.Ping -> {
                 // Reply with pong to satisfy the desktop's liveness check.
                 client.send(Payload.Pong(PongPayload()), fromHex)
@@ -795,6 +812,8 @@ class MobileAppState @Inject constructor(
     }
 
     fun switchActiveDesktop(desktop: PairedDesktop) {
+        autopilot.cancelAll("The paired Mac changed before the request finished.")
+        secrets.clearKek()
         viewModelScope.launch {
             store.setActive(desktop.id)
             desktop.relayUrl?.let {
@@ -806,6 +825,8 @@ class MobileAppState @Inject constructor(
     }
 
     fun removeDesktop(desktop: PairedDesktop) {
+        autopilot.cancelAll("This device is no longer paired with that Mac.")
+        secrets.clearKek()
         viewModelScope.launch {
             store.remove(desktop.id)
             client.removePeer(desktop.pubkeyHex)

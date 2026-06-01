@@ -118,6 +118,12 @@ sealed class Payload {
     data class ThreadChangesResult(val data: ThreadChangesResultPayload) : Payload() {
         override val type = "thread_changes_result"
     }
+    data class AutopilotRequest(val data: AutopilotRequestPayload) : Payload() {
+        override val type = "autopilot_request"
+    }
+    data class AutopilotResult(val data: AutopilotResultPayload) : Payload() {
+        override val type = "autopilot_result"
+    }
     data class Ping(val data: PingPayload) : Payload() {
         override val type = "ping"
     }
@@ -497,6 +503,8 @@ object PayloadSerializer : KSerializer<Payload> {
             "run_task_update" -> Payload.RunTaskUpdate(json.decodeFromJsonElement(RunTaskUpdatePayload.serializer(), data))
             "thread_changes_request" -> Payload.ThreadChangesRequest(json.decodeFromJsonElement(ThreadChangesRequestPayload.serializer(), data))
             "thread_changes_result" -> Payload.ThreadChangesResult(json.decodeFromJsonElement(ThreadChangesResultPayload.serializer(), data))
+            "autopilot_request" -> Payload.AutopilotRequest(json.decodeFromJsonElement(AutopilotRequestPayload.serializer(), data))
+            "autopilot_result" -> Payload.AutopilotResult(json.decodeFromJsonElement(AutopilotResultPayload.serializer(), data))
             "ping" -> Payload.Ping(json.decodeFromJsonElement(PingPayload.serializer(), data))
             "pong" -> Payload.Pong(json.decodeFromJsonElement(PongPayload.serializer(), data))
             else -> Payload.Unknown(type, data)
@@ -536,6 +544,8 @@ object PayloadSerializer : KSerializer<Payload> {
             is Payload.RunTaskUpdate -> value.type to json.encodeToJsonElement(RunTaskUpdatePayload.serializer(), value.data)
             is Payload.ThreadChangesRequest -> value.type to json.encodeToJsonElement(ThreadChangesRequestPayload.serializer(), value.data)
             is Payload.ThreadChangesResult -> value.type to json.encodeToJsonElement(ThreadChangesResultPayload.serializer(), value.data)
+            is Payload.AutopilotRequest -> value.type to json.encodeToJsonElement(AutopilotRequestPayload.serializer(), value.data)
+            is Payload.AutopilotResult -> value.type to json.encodeToJsonElement(AutopilotResultPayload.serializer(), value.data)
             is Payload.Ping -> value.type to json.encodeToJsonElement(PingPayload.serializer(), value.data)
             is Payload.Pong -> value.type to json.encodeToJsonElement(PongPayload.serializer(), value.data)
             is Payload.Unknown -> value.type to (value.raw ?: JsonObject(emptyMap()))

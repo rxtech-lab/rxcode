@@ -1,0 +1,127 @@
+name: Android Build & Release
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+  release:
+    types:
+      - created
+
+jobs:
+  build:
+    name: Build Android App
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: RxCodeAndroid
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Write Firebase config
+        env:
+          FIREBASE_ANDROID_B64: ${{ secrets.FIREBASE_ANDROID_B64 }}
+        # The shared script writes RxCodeAndroid/app/google-services.json from
+        # the secret. Without it the build silently skips the Firebase plugins.
+        run: ../scripts/ci/write-firebase-config.sh
+
+      - name: Decode upload keystore
+        id: keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        # Optional: PRs from forks won't have the secret, so the build falls
+        # back to debug signing (see app/build.gradle.kts). Only release events
+        # strictly require it (enforced below).
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "No ANDROID_KEYSTORE_BASE64 secret; release build will use debug signing."
+            exit 0
+          fi
+          KS_PATH="$RUNNER_TEMP/rxcode-upload.jks"
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KS_PATH"
+          echo "path=$KS_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve version (release only)
+        if: github.event_name == 'release'
+        # versionName = release tag without leading 'v'; versionCode = monotonic
+        # CI run number so every published bundle is strictly increasing.
+        run: |
+          VERSION_NAME="${GITHUB_REF_NAME#v}"
+          echo "ANDROID_VERSION_NAME=${VERSION_NAME}" >> "$GITHUB_ENV"
+          echo "ANDROID_VERSION_CODE=${{ github.run_number }}" >> "$GITHUB_ENV"
+
+      - name: Require keystore for release
+        if: github.event_name == 'release' && steps.keystore.outputs.path == ''
+        run: |
+          echo "::error::ANDROID_KEYSTORE_BASE64 is required to publish a release."
+          exit 1
+
+      - name: Build release AAB
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ steps.keystore.outputs.path }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew :app:bundleRelease --no-daemon --stacktrace
+
+      - name: Locate AAB
+        id: aab
+        run: |
+          AAB_PATH="$(find app/build/outputs/bundle/release -name '*.aab' | head -n1)"
+          if [ -z "$AAB_PATH" ]; then
+            echo "::error::No AAB produced."
+            exit 1
+          fi
+          echo "path=$(pwd)/$AAB_PATH" >> "$GITHUB_OUTPUT"
+          echo "Built $AAB_PATH"
+
+      # Smoke-test artifact for pushes/PRs (1 day retention)
+      - name: Upload AAB artifact (non-release)
+        if: github.event_name != 'release'
+        uses: actions/upload-artifact@v7
+        with:
+          name: RxCode-Android-${{ github.run_number }}
+          path: ${{ steps.aab.outputs.path }}
+          retention-days: 1
+
+      - name: Write Play service account
+        if: github.event_name == 'release'
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -z "$PLAY_SERVICE_ACCOUNT_JSON" ]; then
+            echo "::error::PLAY_SERVICE_ACCOUNT_JSON is required to publish to Google Play."
+            exit 1
+          fi
+          printf '%s' "$PLAY_SERVICE_ACCOUNT_JSON" > "$RUNNER_TEMP/play-service-account.json"
+
+      - name: Publish to Google Play (internal track)
+        if: github.event_name == 'release'
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJson: ${{ runner.temp }}/play-service-account.json
+          packageName: app.rxlab.rxcode
+          releaseFiles: ${{ steps.aab.outputs.path }}
+          track: internal
+          status: completed
+
+      - name: Attach AAB to GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v3
+        with:
+          files: ${{ steps.aab.outputs.path }}
+          token: ${{ secrets.GITHUB_TOKEN }}

@@ -12,6 +12,12 @@ if (file("google-services.json").exists()) {
     apply(plugin = "com.google.firebase.crashlytics")
 }
 
+// Release signing is configured only when the upload keystore is available
+// (CI decodes it from the ANDROID_KEYSTORE_BASE64 secret). Local/debug builds
+// and PRs without the secret fall back to debug signing so the build still runs.
+val releaseKeystorePath: String? = System.getenv("ANDROID_KEYSTORE_PATH")
+    ?: project.findProperty("android.keystore.path")?.toString()
+
 android {
     namespace = "app.rxlab.rxcode"
     compileSdk = 36
@@ -20,10 +26,25 @@ android {
         applicationId = "app.rxlab.rxcode"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        // versionName comes from the release tag and versionCode from the CI run
+        // number; both are overridable so local builds keep working with defaults.
+        versionCode = (System.getenv("ANDROID_VERSION_CODE")
+            ?: project.findProperty("android.versionCode")?.toString() ?: "1").toInt()
+        versionName = System.getenv("ANDROID_VERSION_NAME")
+            ?: project.findProperty("android.versionName")?.toString() ?: "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        if (releaseKeystorePath != null) {
+            create("release") {
+                storeFile = file(releaseKeystorePath)
+                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
@@ -33,6 +54,12 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Use the upload keystore in CI; fall back to debug signing locally.
+            signingConfig = if (releaseKeystorePath != null) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
     compileOptions {

@@ -1,4 +1,5 @@
 import SwiftUI
+import RxCodeCore
 import RxCodeSync
 
 /// Browses the paired Mac's folder tree. Reused for three jobs: adding a new
@@ -33,6 +34,10 @@ struct RemoteFolderPickerView: View {
     @EnvironmentObject private var state: MobileAppState
     @Environment(\.dismiss) private var dismiss
     @State private var navigationPath: [FolderLocation] = []
+    /// Set after a project is created (addProject mode) when it has a linked
+    /// GitHub repo — presents the first-add secrets download form. Dismissing
+    /// that form closes the picker.
+    @State private var firstAddProject: Project?
 
     var mode: Mode = .addProject
 
@@ -113,9 +118,21 @@ struct RemoteFolderPickerView: View {
             Text(state.remoteProjectCreateError ?? String(localized: "Unknown error."))
         }
         .onChange(of: state.lastCreatedProjectID) { _, newValue in
-            if case .addProject = mode, newValue != nil {
+            guard case .addProject = mode, let newValue else { return }
+            // Mirror the desktop's on-repository-add secrets flow: if the new
+            // project is repo-backed, offer to download its secrets (loading
+            // overlay → environment picker) before closing. Otherwise just close.
+            if let created = state.projects.first(where: { $0.id == newValue }),
+               created.gitHubRepo != nil {
+                firstAddProject = created
+            } else {
                 dismiss()
             }
+        }
+        .sheet(item: $firstAddProject, onDismiss: { dismiss() }) { project in
+            ProjectSecretsDownloadSheet(project: project, autoDismissWhenEmpty: true)
+                .environmentObject(state)
+                .mobileSheetPresentation()
         }
     }
 

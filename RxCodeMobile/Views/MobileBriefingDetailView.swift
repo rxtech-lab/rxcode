@@ -9,8 +9,17 @@ struct MobileBriefingDetailView: View {
     let groupKey: BriefingGroupKey
     var onOpenSession: (String) -> Void = { _ in }
 
+    @Environment(\.openURL) private var openURL
     @State private var showingNewThread = false
     @State private var isInitializingGit = false
+    @State private var isCreatingPR = false
+
+    // Autopilot context menu (1:1 with the desktop briefing/project menu).
+    @State private var autopilotStatus: AutopilotProjectStatus?
+    @State private var showingSecretsDownload = false
+    @State private var showingReleaseCreate = false
+    @State private var autopilotSetupChat: AutopilotSetupChat?
+    @State private var autopilotInfo: AutopilotMenuInfo?
 
     var body: some View {
         ScrollView(.vertical) {
@@ -40,14 +49,38 @@ struct MobileBriefingDetailView: View {
                 .accessibilityIdentifier("briefing-detail-new-thread")
             }
 
-            if let gitHubURL {
+            if showsActionsMenu {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        Link(destination: gitHubURL) {
-                            Label(
-                                gitHubURLIsPullRequest ? "Open Pull Request" : "Open on GitHub",
-                                systemImage: "arrow.up.forward.square"
+                        if let project, project.gitHubRepo != nil {
+                            ProjectAutopilotMenuItems(
+                                project: project,
+                                status: autopilotStatus,
+                                showDownloadSheet: $showingSecretsDownload,
+                                showReleaseCreate: $showingReleaseCreate,
+                                setupChat: $autopilotSetupChat,
+                                info: $autopilotInfo
                             )
+                            // Offer "Create PR" for a real branch with no open PR
+                            // yet (mirrors the desktop briefing PR button); once a
+                            // PR exists the "Open Pull Request" link below covers it.
+                            if !isUnknownBranch && !gitHubURLIsPullRequest {
+                                Button {
+                                    createPullRequest(project: project)
+                                } label: {
+                                    Label("Create Pull Request", systemImage: "arrow.triangle.pull.request")
+                                }
+                                .disabled(isCreatingPR)
+                            }
+                            if gitHubURL != nil { Divider() }
+                        }
+                        if let gitHubURL {
+                            Link(destination: gitHubURL) {
+                                Label(
+                                    gitHubURLIsPullRequest ? "Open Pull Request" : "Open on GitHub",
+                                    systemImage: "arrow.up.forward.square"
+                                )
+                            }
                         }
                     } label: {
                         Image(systemName: "ellipsis")
@@ -58,6 +91,15 @@ struct MobileBriefingDetailView: View {
                 }
             }
         }
+        .projectAutopilotMenuHost(
+            project: project,
+            status: $autopilotStatus,
+            showDownloadSheet: $showingSecretsDownload,
+            showReleaseCreate: $showingReleaseCreate,
+            setupChat: $autopilotSetupChat,
+            info: $autopilotInfo,
+            state: state
+        )
         .sheet(isPresented: $showingNewThread) {
             NewThreadSheet(
                 projectID: groupKey.projectId,
@@ -77,6 +119,7 @@ struct MobileBriefingDetailView: View {
                 "branch": groupKey.branch,
             ])
         }
+        .mobileAutopilotLoadingOverlay(isCreatingPR, title: "Creating Pull Request…")
     }
 
     private var group: GroupedBriefing? {
@@ -91,7 +134,17 @@ struct MobileBriefingDetailView: View {
     }
 
     private var projectName: String {
-        state.projects.first(where: { $0.id == groupKey.projectId })?.name ?? "Unknown Project"
+        project?.name ?? "Unknown Project"
+    }
+
+    private var project: Project? {
+        state.projects.first(where: { $0.id == groupKey.projectId })
+    }
+
+    /// Show the ellipsis menu when there's an autopilot-capable repo or a GitHub
+    /// link to surface.
+    private var showsActionsMenu: Bool {
+        project?.gitHubRepo != nil || gitHubURL != nil
     }
 
     /// GitHub destination for the "Open on GitHub" action. Prefers the pull
@@ -128,6 +181,27 @@ struct MobileBriefingDetailView: View {
             await state.initProjectGit(projectID: groupKey.projectId)
             await state.refreshSnapshot()
             isInitializingGit = false
+        }
+    }
+
+    /// Ask the Mac to open a PR for this branch, then open it in the browser.
+    /// The Mac pushes the branch, drafts the title/body from the briefing, and
+    /// creates the PR; on failure we surface the reason in the info alert.
+    private func createPullRequest(project: Project) {
+        guard !isCreatingPR else { return }
+        isCreatingPR = true
+        Task {
+            defer { isCreatingPR = false }
+            do {
+                let url = try await state.requestProjectCreatePullRequest(
+                    projectId: project.id,
+                    branch: groupKey.branch
+                )
+                await state.refreshSnapshot()
+                openURL(url)
+            } catch {
+                autopilotInfo = AutopilotMenuInfo(text: error.localizedDescription, isError: true)
+            }
         }
     }
 

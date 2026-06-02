@@ -18,7 +18,9 @@ extension AppState {
         guard !trimmed.isEmpty else { return }
 
         if isStreaming(in: window) {
-            await cancelStreaming(in: window)
+            // Interrupting to resend an edited message — a new turn starts
+            // immediately, so don't fire the session-stop hooks.
+            await cancelStreaming(in: window, fireStopHooks: false)
         }
 
         snapshot.removeSubrange((index + 1)...)
@@ -221,7 +223,9 @@ extension AppState {
         }
 
         if isStreaming(in: window) {
-            await cancelStreaming(in: window)
+            // A new prompt interrupts the in-flight stream; the session isn't
+            // stopping (a new turn begins now), so skip the session-stop hooks.
+            await cancelStreaming(in: window, fireStopHooks: false)
         }
 
         let streamId = UUID()

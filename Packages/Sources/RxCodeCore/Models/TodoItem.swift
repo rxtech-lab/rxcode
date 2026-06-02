@@ -39,7 +39,88 @@ public enum TodoExtractor {
                 return parse(input: toolCall.input)
             }
         }
-        return nil
+        // Newer Claude Code drives its task list through the incremental
+        // `TaskCreate` / `TaskUpdate` tools instead of `TodoWrite`. Fall back to
+        // reconstructing the list from those when no `TodoWrite` is present.
+        return fromTaskTools(in: messages)
+    }
+
+    /// Reconstruct a todo list from the newer Claude Code task tools
+    /// (`TaskCreate` / `TaskUpdate`).
+    ///
+    /// Unlike `TodoWrite` — which submits the whole list on every call — the
+    /// task tools are incremental: `TaskCreate` adds a single `pending` task
+    /// whose id is assigned by the tool and returned in the result text
+    /// ("Task #N created successfully: …"), and `TaskUpdate` mutates a task by
+    /// `taskId` (status, subject, …; `deleted` removes it). We replay every
+    /// task tool call in message order to rebuild the current state.
+    ///
+    /// Returns `nil` when the transcript contains no task tool calls, so callers
+    /// can distinguish "no task list" from "an empty task list".
+    public static func fromTaskTools(in messages: [ChatMessage]) -> [TodoItem]? {
+        struct Task {
+            var subject: String
+            var activeForm: String
+            var status: TodoItem.Status
+        }
+        var order: [Int] = []
+        var tasks: [Int: Task] = [:]
+        var sawAny = false
+
+        for message in messages {
+            for block in message.blocks {
+                guard let toolCall = block.toolCall else { continue }
+                switch toolCall.name.lowercased() {
+                case "taskcreate":
+                    // The id is only known once the tool result lands; skip
+                    // until then (the task surfaces on the next render).
+                    guard let id = parseCreatedTaskId(fromResult: toolCall.result) else { continue }
+                    sawAny = true
+                    let subject = toolCall.input["subject"]?.stringValue ?? ""
+                    let activeForm = toolCall.input["activeForm"]?.stringValue ?? subject
+                    if tasks[id] == nil { order.append(id) }
+                    tasks[id] = Task(subject: subject, activeForm: activeForm, status: .pending)
+
+                case "taskupdate":
+                    guard let idString = toolCall.input["taskId"]?.stringValue,
+                          let id = Int(idString) else { continue }
+                    let rawStatus = toolCall.input["status"]?.stringValue
+                    if rawStatus == "deleted" {
+                        if tasks.removeValue(forKey: id) != nil {
+                            order.removeAll { $0 == id }
+                            sawAny = true
+                        }
+                        continue
+                    }
+                    guard var task = tasks[id] else { continue }
+                    sawAny = true
+                    if let rawStatus, let status = TodoItem.Status(rawValue: rawStatus) {
+                        task.status = status
+                    }
+                    if let subject = toolCall.input["subject"]?.stringValue { task.subject = subject }
+                    if let activeForm = toolCall.input["activeForm"]?.stringValue { task.activeForm = activeForm }
+                    tasks[id] = task
+
+                default:
+                    continue
+                }
+            }
+        }
+
+        guard sawAny else { return nil }
+        return order.compactMap { id in
+            guard let task = tasks[id] else { return nil }
+            return TodoItem(id: id, content: task.subject, activeForm: task.activeForm, status: task.status)
+        }
+    }
+
+    /// Pull the assigned task id out of a `TaskCreate` result string such as
+    /// "Task #1 created successfully: …". Returns `nil` if the result is absent
+    /// (still streaming) or doesn't carry a `#<number>` id.
+    static func parseCreatedTaskId(fromResult result: String?) -> Int? {
+        guard let result, let hash = result.firstIndex(of: "#") else { return nil }
+        let digits = result[result.index(after: hash)...].prefix { $0.isNumber }
+        return Int(digits)
     }
 
     /// Parse a raw `TodoWrite` `input` dictionary into typed ``TodoItem`` values.

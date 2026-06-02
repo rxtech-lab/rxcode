@@ -20,7 +20,9 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.automirrored.outlined.ArrowForwardIos
 import androidx.compose.material.icons.outlined.DesktopMac
+import androidx.compose.material.icons.outlined.Flight
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Router
 import androidx.compose.material3.AlertDialog
@@ -42,6 +44,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -79,6 +82,17 @@ fun SettingsScreen(
 ) {
     val haptics = rememberHaptics()
     var unpairTarget by remember { mutableStateOf<PairedDesktop?>(null) }
+    var showAutopilot by rememberSaveable { mutableStateOf(false) }
+
+    if (showAutopilot) {
+        app.rxlab.rxcode.ui.autopilot.AutopilotNavHost(
+            app = viewModel,
+            online = state.isPaired &&
+                state.connectionState == RelayClient.ConnectionState.CONNECTED,
+            onExit = { showAutopilot = false },
+        )
+        return
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -144,6 +158,61 @@ fun SettingsScreen(
                         viewModel.requestSnapshot("manual_reconnect")
                     },
                 )
+            }
+
+            // MARK: - Desktop Configuration (Autopilot)
+            if (state.isPaired) {
+                item {
+                    SectionLabel("Desktop Configuration")
+                }
+                item {
+                    ElevatedCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = {
+                            haptics.play(HapticEvent.LightTap)
+                            showAutopilot = true
+                        },
+                        colors = CardDefaults.elevatedCardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                        ),
+                    ) {
+                        Row(
+                            Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.size(44.dp),
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Outlined.Flight, contentDescription = null)
+                                }
+                            }
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    "Autopilot",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                Text(
+                                    "Automation, secrets, CI, docs, and releases",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                )
+                            }
+                            Icon(
+                                Icons.AutoMirrored.Outlined.ArrowForwardIos,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
+                    }
+                }
             }
 
             // MARK: - About

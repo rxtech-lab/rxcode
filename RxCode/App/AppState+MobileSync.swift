@@ -204,6 +204,20 @@ extension AppState {
         }
         mobileSyncObservers.append(createProjectObserver)
 
+        let deleteProjectObserver = center.addObserver(
+            forName: .mobileSyncDeleteProjectRequested,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let fromHex = notification.userInfo?["from"] as? String,
+                  let request = notification.userInfo?["payload"] as? DeleteProjectRequestPayload
+            else { return }
+            Task { @MainActor [weak self] in
+                await self?.handleMobileDeleteProjectRequest(request, fromHex: fromHex)
+            }
+        }
+        mobileSyncObservers.append(deleteProjectObserver)
+
         let runProfileMutationObserver = center.addObserver(
             forName: .mobileSyncRunProfileMutationRequested,
             object: nil,
@@ -383,6 +397,20 @@ extension AppState {
             }
         }
         mobileSyncObservers.append(mcpMutationObserver)
+
+        let autopilotObserver = center.addObserver(
+            forName: .mobileSyncAutopilotRequested,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let fromHex = notification.userInfo?["from"] as? String,
+                  let request = notification.userInfo?["payload"] as? AutopilotRequestPayload
+            else { return }
+            Task { @MainActor [weak self] in
+                await self?.handleMobileAutopilotRequest(request, fromHex: fromHex)
+            }
+        }
+        mobileSyncObservers.append(autopilotObserver)
 
         observeMobileSnapshotInputs()
     }
@@ -690,6 +718,52 @@ extension AppState {
             errorMessage: errorMessage
         )
         await MobileSyncService.shared.send(.createProjectResult(result), toHex: hex)
+    }
+
+    func handleMobileDeleteProjectRequest(_ request: DeleteProjectRequestPayload, fromHex: String) async {
+        guard let project = projects.first(where: { $0.id == request.projectID }) else {
+            // Already gone — treat as success so the phone settles to the same state.
+            await replyDeleteProjectResult(
+                requestID: request.clientRequestID,
+                projectID: request.projectID,
+                ok: true,
+                errorMessage: nil,
+                toHex: fromHex
+            )
+            await sendMobileSnapshot(toHex: fromHex, activeSessionID: nil)
+            return
+        }
+
+        // Mobile actions aren't tied to a desktop window; a fresh WindowState
+        // keeps the data-layer mutators happy without disturbing open windows.
+        let window = WindowState()
+        await deleteProject(project, in: window)
+
+        await replyDeleteProjectResult(
+            requestID: request.clientRequestID,
+            projectID: request.projectID,
+            ok: true,
+            errorMessage: nil,
+            toHex: fromHex
+        )
+        await sendMobileSnapshot(toHex: fromHex, activeSessionID: nil)
+        scheduleMobileSnapshotBroadcast()
+    }
+
+    func replyDeleteProjectResult(
+        requestID: UUID,
+        projectID: UUID,
+        ok: Bool,
+        errorMessage: String?,
+        toHex hex: String
+    ) async {
+        let result = DeleteProjectResultPayload(
+            clientRequestID: requestID,
+            projectID: projectID,
+            ok: ok,
+            errorMessage: errorMessage
+        )
+        await MobileSyncService.shared.send(.deleteProjectResult(result), toHex: hex)
     }
 
 }

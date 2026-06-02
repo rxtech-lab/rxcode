@@ -31,22 +31,13 @@ final class AutopilotDocsHook: Hook {
 
     private func menuItems(for project: Project, controller: any HookController) -> [HookMenuItem] {
         guard project.gitHubRepo != nil else { return [] }
-        if controller.projectHasDocs(project) {
-            return [
-                HookMenuItem(
-                    id: "\(hookID).search.\(project.id.uuidString)",
-                    title: "Search Docs",
-                    systemImage: "books.vertical.fill"
-                ) {
-                    controller.requestDocsSearch(project: project)
-                }
-            ]
-        }
-
+        // Docs search was removed from the menu. Once a repo's docs are indexed
+        // there's nothing to do here; otherwise offer to set them up.
+        guard !controller.projectHasDocs(project) else { return [] }
         return [
             HookMenuItem(
                 id: "\(hookID).setup.\(project.id.uuidString)",
-                title: "Set Up Docs Search",
+                title: "Set Up Docs",
                 systemImage: "books.vertical.fill"
             ) {
                 controller.requestDocsSetup(project: project)

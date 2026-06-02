@@ -57,8 +57,8 @@ struct ProjectsSidebar: View {
             }
             .onChange(of: state.lastCreatedProjectID) { _, newValue in
                 guard let newValue else { return }
-                selected = newValue
-                showingBriefing = false
+                // Don't auto-select/navigate to a freshly added project — just
+                // surface it in the list. The user opens it when they choose to.
                 AnalyticsService.shared.log(.newProjectStarted, parameters: [
                     "project_id": newValue.uuidString,
                 ])
@@ -386,6 +386,13 @@ private struct GlassProjectCard: View {
     var onSelect: (() -> Void)?
 
     var body: some View {
+        // The autopilot actions now live in the project detail (thread list)
+        // toolbar — the project card is a plain navigation row.
+        cardButton
+    }
+
+    @ViewBuilder
+    private var cardButton: some View {
         // The UI-test identifier is applied directly on the button of each
         // branch — applying it to an enclosing container does not reach the
         // button element XCUITest queries.

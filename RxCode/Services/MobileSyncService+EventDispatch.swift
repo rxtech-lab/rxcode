@@ -335,6 +335,13 @@ extension MobileSyncService {
                 object: nil,
                 userInfo: ["from": inbound.fromHex, "payload": req]
             )
+        case .deleteProjectRequest(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "delete_project_request") else { return }
+            NotificationCenter.default.post(
+                name: .mobileSyncDeleteProjectRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": req]
+            )
         case .runProfileMutationRequest(let req):
             guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "run_profile_mutation_request") else { return }
             logger.info("[MobileSync] run profile mutation requested operation=\(req.operation.rawValue, privacy: .public) project=\(req.projectID.uuidString, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
@@ -420,6 +427,14 @@ extension MobileSyncService {
             logger.info("[MobileSync] mcp mutation requested operation=\(req.operation.rawValue, privacy: .public) server=\(req.serverName, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
             NotificationCenter.default.post(
                 name: .mobileSyncMCPMutationRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": req]
+            )
+        case .autopilotRequest(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "autopilot_request") else { return }
+            logger.info("[MobileSync] autopilot requested domain=\(req.domain, privacy: .public) op=\(req.operation, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+            NotificationCenter.default.post(
+                name: .mobileSyncAutopilotRequested,
                 object: nil,
                 userInfo: ["from": inbound.fromHex, "payload": req]
             )

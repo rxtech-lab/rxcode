@@ -1,4 +1,5 @@
 import SwiftUI
+import RxCodeCore
 import RxCodeSync
 import os.log
 
@@ -298,7 +299,8 @@ struct RootView: View {
         NavigationSplitView {
             projectSidebar
         } content: {
-            if let projectID = selectedProject {
+            if let projectID = selectedProject,
+               state.projects.contains(where: { $0.id == projectID }) {
                 SessionsList(projectID: projectID, selected: $selectedSession)
             } else {
                 Text("Select a project")

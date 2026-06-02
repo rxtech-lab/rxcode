@@ -11,6 +11,8 @@
     <key>com.apple.developer.associated-domains</key>
     <array>
         <string>applinks:code.rxlab.app</string>
+        <string>webcredentials:rxlab.app</string>
+        <string>webcredentials:rxlab.app?mode=developer</string>
     </array>
     <key>keychain-access-groups</key>
     <array>

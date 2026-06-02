@@ -42,11 +42,14 @@
 		DF462DCB2FC73FA8002D9562 /* RxAuthSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = DF462DCA2FC73FA8002D9562 /* RxAuthSwiftUI */; };
 		DF4652682FCD34B3002D9562 /* JSONSchemaForm in Frameworks */ = {isa = PBXBuildFile; productRef = DF4652672FCD34B3002D9562 /* JSONSchemaForm */; };
 		DF46526A2FCD34B3002D9562 /* JSONSchemaValidator in Frameworks */ = {isa = PBXBuildFile; productRef = DF4652692FCD34B3002D9562 /* JSONSchemaValidator */; };
+		DF46683A2FCDB56B002D9562 /* JSONSchemaForm in Frameworks */ = {isa = PBXBuildFile; productRef = DF4668392FCDB56B002D9562 /* JSONSchemaForm */; };
+		DF46683C2FCDB56B002D9562 /* JSONSchemaValidator in Frameworks */ = {isa = PBXBuildFile; productRef = DF46683B2FCDB56B002D9562 /* JSONSchemaValidator */; };
 		DFA0CCD12FB4CC01005991E1 /* PlanDecisionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA0CCC02FB4CC01005991E1 /* PlanDecisionTests.swift */; };
 		DFA0CCD22FB4CC01005991E1 /* PlanCardViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA0CCC12FB4CC01005991E1 /* PlanCardViewTests.swift */; };
 		DFA0CCD42FB4CC01005991E1 /* RxCodeChatKit in Frameworks */ = {isa = PBXBuildFile; productRef = DFA0CCC32FB4CC01005991E1 /* RxCodeChatKit */; };
 		DFA0CCE12FB4CC02005991E1 /* HistoryListArchiveFilterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA0CCD52FB4CC02005991E1 /* HistoryListArchiveFilterTests.swift */; };
 		DFAA00012FCD34B3002D9562 /* JSONSchema in Frameworks */ = {isa = PBXBuildFile; productRef = DFAA00022FCD34B3002D9562 /* JSONSchema */; };
+		DFAA01102FCD34B3002D9562 /* JSONSchema in Frameworks */ = {isa = PBXBuildFile; productRef = DFAA01112FCD34B3002D9562 /* JSONSchema */; };
 		E62000012FCB000100000001 /* MemoryIntentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E62000002FCB000100000001 /* MemoryIntentTests.swift */; };
 		E6821AC12F7CEE7200829FC9 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = E6A001012F8A000100000001 /* SwiftTerm */; };
 		E6C001022F9B000100000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = E6C001012F9B000100000001 /* Sparkle */; };
@@ -263,6 +266,9 @@
 				DF230B9F2FBC73BA008929A6 /* RxCodeChatKit in Frameworks */,
 				FB0000070000000000000001 /* FirebaseAnalytics in Frameworks */,
 				FB0000080000000000000001 /* FirebaseCrashlytics in Frameworks */,
+				DF46683C2FCDB56B002D9562 /* JSONSchemaValidator in Frameworks */,
+				DF46683A2FCDB56B002D9562 /* JSONSchemaForm in Frameworks */,
+				DFAA01102FCD34B3002D9562 /* JSONSchema in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -501,6 +507,9 @@
 				DF230BA22FBC73BA008929A6 /* RxCodeSync */,
 				FB0000050000000000000001 /* FirebaseAnalytics */,
 				FB0000060000000000000001 /* FirebaseCrashlytics */,
+				DF4668392FCDB56B002D9562 /* JSONSchemaForm */,
+				DF46683B2FCDB56B002D9562 /* JSONSchemaValidator */,
+				DFAA01112FCD34B3002D9562 /* JSONSchema */,
 			);
 			productName = RxCodeMobile;
 			productReference = DF230B4F2FBC7367008929A6 /* RxCodeMobile.app */;
@@ -992,6 +1001,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = icon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = RxCodeMobile/RxCodeMobile.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = T7GYB573Y6;
@@ -1012,6 +1022,7 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.rxlab.rxcodemobile;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -1029,6 +1040,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = icon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = RxCodeMobile/RxCodeMobile.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = T7GYB573Y6;
@@ -1049,6 +1061,7 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.rxlab.rxcodemobile;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -1653,11 +1666,26 @@
 			package = DF4652662FCD34B3002D9562 /* XCRemoteSwiftPackageReference "swift-jsonschema-form" */;
 			productName = JSONSchemaValidator;
 		};
+		DF4668392FCDB56B002D9562 /* JSONSchemaForm */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DF4652662FCD34B3002D9562 /* XCRemoteSwiftPackageReference "swift-jsonschema-form" */;
+			productName = JSONSchemaForm;
+		};
+		DF46683B2FCDB56B002D9562 /* JSONSchemaValidator */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DF4652662FCD34B3002D9562 /* XCRemoteSwiftPackageReference "swift-jsonschema-form" */;
+			productName = JSONSchemaValidator;
+		};
 		DFA0CCC32FB4CC01005991E1 /* RxCodeChatKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = RxCodeChatKit;
 		};
 		DFAA00022FCD34B3002D9562 /* JSONSchema */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DFAA00032FCD34B3002D9562 /* XCRemoteSwiftPackageReference "swift-json-schema" */;
+			productName = JSONSchema;
+		};
+		DFAA01112FCD34B3002D9562 /* JSONSchema */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = DFAA00032FCD34B3002D9562 /* XCRemoteSwiftPackageReference "swift-json-schema" */;
 			productName = JSONSchema;

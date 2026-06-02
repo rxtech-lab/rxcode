@@ -272,7 +272,8 @@ actor OpenAISummarizationService {
 
         Format rules (MUST follow exactly):
         - The FIRST line is the PR title in Conventional Commits format: `<type>(<optional-scope>): <description>` — under 72 characters, lowercase imperative mood, no trailing period.
-        - `<type>` MUST be one of: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert.
+        - `<type>` MUST be EXACTLY one of these tokens, spelled verbatim: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert.
+        - Use the short token only. Do NOT expand or substitute it (e.g. write `feat`, never `feature`; `perf`, never `performance`). A title whose type is not on the list above is invalid.
         - Then exactly ONE blank line.
         - Then the PR description in GitHub-flavored markdown: a short summary paragraph, then a `## Changes` section with concise bullet points covering the main work. Keep it focused.
         - Do NOT wrap the output in code fences. Do NOT put the title in quotes. Do NOT prefix the title with anything (no "Title:").

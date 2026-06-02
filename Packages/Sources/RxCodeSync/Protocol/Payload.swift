@@ -43,6 +43,8 @@ public enum Payload: Sendable {
     case folderTreeResult(FolderTreeResultPayload)
     case createProjectRequest(CreateProjectRequestPayload)
     case createProjectResult(CreateProjectResultPayload)
+    case deleteProjectRequest(DeleteProjectRequestPayload)
+    case deleteProjectResult(DeleteProjectResultPayload)
     case runProfileMutationRequest(RunProfileMutationRequestPayload)
     case runProfileResult(RunProfileResultPayload)
     case runProfileRunRequest(RunProfileRunRequestPayload)
@@ -64,6 +66,8 @@ public enum Payload: Sendable {
     case mcpConfigResult(MCPConfigResultPayload)
     case mcpMutationRequest(MCPMutationRequestPayload)
     case mcpMutationResult(MCPMutationResultPayload)
+    case autopilotRequest(AutopilotRequestPayload)
+    case autopilotResult(AutopilotResultPayload)
     case ping(PingPayload)
     case pong(PongPayload)
     case unknown(type: String)
@@ -108,6 +112,8 @@ public extension Payload {
         case .folderTreeResult: return "folder_tree_result"
         case .createProjectRequest: return "create_project_request"
         case .createProjectResult: return "create_project_result"
+        case .deleteProjectRequest: return "delete_project_request"
+        case .deleteProjectResult: return "delete_project_result"
         case .runProfileMutationRequest: return "run_profile_mutation_request"
         case .runProfileResult: return "run_profile_result"
         case .runProfileRunRequest: return "run_profile_run_request"
@@ -129,6 +135,8 @@ public extension Payload {
         case .mcpConfigResult: return "mcp_config_result"
         case .mcpMutationRequest: return "mcp_mutation_request"
         case .mcpMutationResult: return "mcp_mutation_result"
+        case .autopilotRequest: return "autopilot_request"
+        case .autopilotResult: return "autopilot_result"
         case .ping: return "ping"
         case .pong: return "pong"
         case .unknown(let type): return type
@@ -727,6 +735,8 @@ extension Payload: Codable {
         case folderTreeResult = "folder_tree_result"
         case createProjectRequest = "create_project_request"
         case createProjectResult = "create_project_result"
+        case deleteProjectRequest = "delete_project_request"
+        case deleteProjectResult = "delete_project_result"
         case runProfileMutationRequest = "run_profile_mutation_request"
         case runProfileResult = "run_profile_result"
         case runProfileRunRequest = "run_profile_run_request"
@@ -748,6 +758,8 @@ extension Payload: Codable {
         case mcpConfigResult = "mcp_config_result"
         case mcpMutationRequest = "mcp_mutation_request"
         case mcpMutationResult = "mcp_mutation_result"
+        case autopilotRequest = "autopilot_request"
+        case autopilotResult = "autopilot_result"
         case ping
         case pong
     }
@@ -796,6 +808,8 @@ extension Payload: Codable {
         case .folderTreeResult: self = .folderTreeResult(try container.decode(FolderTreeResultPayload.self, forKey: .data))
         case .createProjectRequest: self = .createProjectRequest(try container.decode(CreateProjectRequestPayload.self, forKey: .data))
         case .createProjectResult: self = .createProjectResult(try container.decode(CreateProjectResultPayload.self, forKey: .data))
+        case .deleteProjectRequest: self = .deleteProjectRequest(try container.decode(DeleteProjectRequestPayload.self, forKey: .data))
+        case .deleteProjectResult: self = .deleteProjectResult(try container.decode(DeleteProjectResultPayload.self, forKey: .data))
         case .runProfileMutationRequest: self = .runProfileMutationRequest(try container.decode(RunProfileMutationRequestPayload.self, forKey: .data))
         case .runProfileResult: self = .runProfileResult(try container.decode(RunProfileResultPayload.self, forKey: .data))
         case .runProfileRunRequest: self = .runProfileRunRequest(try container.decode(RunProfileRunRequestPayload.self, forKey: .data))
@@ -817,6 +831,8 @@ extension Payload: Codable {
         case .mcpConfigResult: self = .mcpConfigResult(try container.decode(MCPConfigResultPayload.self, forKey: .data))
         case .mcpMutationRequest: self = .mcpMutationRequest(try container.decode(MCPMutationRequestPayload.self, forKey: .data))
         case .mcpMutationResult: self = .mcpMutationResult(try container.decode(MCPMutationResultPayload.self, forKey: .data))
+        case .autopilotRequest: self = .autopilotRequest(try container.decode(AutopilotRequestPayload.self, forKey: .data))
+        case .autopilotResult: self = .autopilotResult(try container.decode(AutopilotResultPayload.self, forKey: .data))
         case .ping: self = .ping(try container.decode(PingPayload.self, forKey: .data))
         case .pong: self = .pong(try container.decode(PongPayload.self, forKey: .data))
         }
@@ -861,6 +877,8 @@ extension Payload: Codable {
         case .folderTreeResult(let p): try container.encode(TypeKey.folderTreeResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .createProjectRequest(let p): try container.encode(TypeKey.createProjectRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .createProjectResult(let p): try container.encode(TypeKey.createProjectResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .deleteProjectRequest(let p): try container.encode(TypeKey.deleteProjectRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .deleteProjectResult(let p): try container.encode(TypeKey.deleteProjectResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .runProfileMutationRequest(let p): try container.encode(TypeKey.runProfileMutationRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .runProfileResult(let p): try container.encode(TypeKey.runProfileResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .runProfileRunRequest(let p): try container.encode(TypeKey.runProfileRunRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
@@ -882,6 +900,8 @@ extension Payload: Codable {
         case .mcpConfigResult(let p): try container.encode(TypeKey.mcpConfigResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .mcpMutationRequest(let p): try container.encode(TypeKey.mcpMutationRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .mcpMutationResult(let p): try container.encode(TypeKey.mcpMutationResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .autopilotRequest(let p): try container.encode(TypeKey.autopilotRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .autopilotResult(let p): try container.encode(TypeKey.autopilotResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .ping(let p): try container.encode(TypeKey.ping.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .pong(let p): try container.encode(TypeKey.pong.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .unknown(let type): try container.encode(type, forKey: .type)

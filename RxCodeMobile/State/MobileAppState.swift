@@ -139,6 +139,19 @@ final class MobileAppState: ObservableObject {
     @Published var inFlightMCPMutations: Set<String> = []
     @Published var lastMCPError: String?
     var pendingMCPConfigRequestID: UUID?
+
+    // MARK: - Remote desktop config: Autopilot
+
+    /// Outstanding autopilot requests keyed by `clientRequestID`. Each entry is
+    /// resumed exactly once — by the matching `.autopilotResult`, by a timeout,
+    /// or by `clearDesktopMirror()` on unpair/desktop-switch.
+    var pendingAutopilotRequests: [UUID: CheckedContinuation<AutopilotResultPayload, Error>] = [:]
+    /// Cached rxlab account status from the active desktop, shown on the
+    /// Autopilot screen header. `nil` until first loaded.
+    @Published var autopilotAccount: AutopilotAccountStatus?
+    /// Derives and caches the passkey PRF KEK so secrets are decrypted/encrypted
+    /// on-device — the desktop only relays opaque ciphertext.
+    let secretsKeyVault = MobileSecretsKeyVault()
     /// IDs of branch operations awaiting a `BranchOpResultPayload`. Used so the
     /// UI can render a spinner on the chip while the desktop runs git.
     @Published var inFlightBranchOps: Set<UUID> = []
@@ -212,8 +225,10 @@ final class MobileAppState: ObservableObject {
     @Published var remoteProjectCreateInFlight = false
     @Published var remoteProjectCreateError: String?
     @Published var lastCreatedProjectID: UUID?
+    @Published var remoteProjectDeleteError: String?
     var pendingFolderTreeRequestID: UUID?
     var pendingCreateProjectRequestID: UUID?
+    var pendingDeleteProjectRequestID: UUID?
 
     var identity: DeviceIdentity
     var client: SyncClient

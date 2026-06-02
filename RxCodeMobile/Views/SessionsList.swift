@@ -22,12 +22,26 @@ enum MobileDraftSessionID {
 
 struct SessionsList: View {
     @EnvironmentObject private var state: MobileAppState
+    @Environment(\.dismiss) private var dismiss
     let projectID: UUID
     @Binding var selected: String?
     var usesSelection = true
     @State private var searchText = ""
     @State private var showingNewThread = false
+    @State private var showingDeleteProjectConfirm = false
     @Namespace private var glassNamespace
+
+    // Autopilot actions (1:1 with the desktop project menu), moved here from the
+    // project list card so they live in the project detail toolbar.
+    @State private var autopilotStatus: AutopilotProjectStatus?
+    @State private var showingSecretsDownload = false
+    @State private var showingReleaseCreate = false
+    @State private var autopilotSetupChat: AutopilotSetupChat?
+    @State private var autopilotInfo: AutopilotMenuInfo?
+
+    private var project: Project? {
+        state.projects.first { $0.id == projectID }
+    }
 
     /// Number of rows currently materialized. The list grows in `pageSize`
     /// increments as the user scrolls so we never render every thread at once.
@@ -70,12 +84,64 @@ struct SessionsList: View {
                     emptyStateView
                 }
             }
+            .projectAutopilotMenuHost(
+                project: project,
+                status: $autopilotStatus,
+                showDownloadSheet: $showingSecretsDownload,
+                showReleaseCreate: $showingReleaseCreate,
+                setupChat: $autopilotSetupChat,
+                info: $autopilotInfo,
+                state: state
+            )
+            .confirmationDialog(
+                "Delete Project?",
+                isPresented: $showingDeleteProjectConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("Delete Project", role: .destructive) {
+                    Task {
+                        await state.deleteProject(projectID: projectID)
+                        dismiss()
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This removes “\(project?.name ?? "this project")” and all its threads from RxCode. Your files on the Mac are not deleted.")
+            }
     }
 
     // MARK: - Toolbar
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
+        if let project {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    // Autopilot actions only apply to repo-backed projects.
+                    if project.gitHubRepo != nil {
+                        ProjectAutopilotMenuItems(
+                            project: project,
+                            status: autopilotStatus,
+                            showDownloadSheet: $showingSecretsDownload,
+                            showReleaseCreate: $showingReleaseCreate,
+                            setupChat: $autopilotSetupChat,
+                            info: $autopilotInfo
+                        )
+                        Divider()
+                    }
+                    Button(role: .destructive) {
+                        showingDeleteProjectConfirm = true
+                    } label: {
+                        Label("Delete Project", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.system(size: 16, weight: .medium))
+                }
+                .accessibilityLabel("Project actions")
+                .accessibilityIdentifier("project-actions-\(projectID.uuidString)")
+            }
+        }
         ToolbarItem(placement: .topBarTrailing) {
             Button {
                 showingNewThread = true

@@ -59,19 +59,15 @@ struct MobileBriefingDetailView: View {
                                 showDownloadSheet: $showingSecretsDownload,
                                 showReleaseCreate: $showingReleaseCreate,
                                 setupChat: $autopilotSetupChat,
-                                info: $autopilotInfo
+                                info: $autopilotInfo,
+                                // Offer "Create PR" for a real branch with no open
+                                // PR yet; once a PR exists the "Open Pull Request"
+                                // link below covers it.
+                                branch: isUnknownBranch ? nil : groupKey.branch,
+                                prNumber: ciStatus?.prNumber,
+                                isCreatingPR: isCreatingPR,
+                                onCreatePR: { createPullRequest(project: project) }
                             )
-                            // Offer "Create PR" for a real branch with no open PR
-                            // yet (mirrors the desktop briefing PR button); once a
-                            // PR exists the "Open Pull Request" link below covers it.
-                            if !isUnknownBranch && !gitHubURLIsPullRequest {
-                                Button {
-                                    createPullRequest(project: project)
-                                } label: {
-                                    Label("Create Pull Request", systemImage: "arrow.triangle.pull.request")
-                                }
-                                .disabled(isCreatingPR)
-                            }
                             if gitHubURL != nil { Divider() }
                         }
                         if let gitHubURL {

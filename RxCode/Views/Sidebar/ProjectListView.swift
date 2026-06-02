@@ -9,6 +9,36 @@ struct ProjectListView: View {
     @State private var projectToDelete: Project? = nil
     @State private var projectToRename: Project? = nil
     @State private var renameText: String = ""
+    @State private var creatingPRProjectId: UUID? = nil
+    @State private var prError: PRErrorAlert? = nil
+
+    private struct PRErrorAlert: Identifiable {
+        let id = UUID()
+        let message: String
+    }
+
+    /// Mirror the briefing card's gate: offer "Create PR" only for a
+    /// GitHub-linked project whose current branch has no PR yet.
+    private func canCreatePR(_ project: Project) -> Bool {
+        guard project.gitHubRepo != nil else { return false }
+        let _ = appState.ciStatusRevision
+        return appState.ciStatusByProject[project.id]?.pullRequestState == nil
+    }
+
+    /// Push the current branch and open a PR for it, then reveal it in the browser.
+    private func startCreatePR(_ project: Project) {
+        guard creatingPRProjectId == nil else { return }
+        creatingPRProjectId = project.id
+        Task { @MainActor in
+            defer { creatingPRProjectId = nil }
+            do {
+                let url = try await appState.createPullRequestForCurrentBranch(project: project)
+                NSWorkspace.shared.open(url)
+            } catch {
+                prError = PRErrorAlert(message: error.localizedDescription)
+            }
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -20,6 +50,16 @@ struct ProjectListView: View {
                 projectRow(project)
                     .tag(project.id)
                     .contextMenu {
+                        if canCreatePR(project) {
+                            Button { startCreatePR(project) } label: {
+                                Label(
+                                    creatingPRProjectId == project.id ? "Creating Pull Request…" : "Create Pull Request",
+                                    systemImage: "arrow.triangle.pull"
+                                )
+                            }
+                            .disabled(creatingPRProjectId == project.id)
+                            Divider()
+                        }
                         let hookItems = appState.projectContextMenuItems(for: project)
                         if !hookItems.isEmpty {
                             HookContextMenuItems(items: hookItems)
@@ -64,6 +104,13 @@ struct ProjectListView: View {
                 RenameProjectSheet(name: $renameText) {
                     Task { await appState.renameProject(project, to: renameText) }
                 }
+            }
+            .alert(item: $prError) { error in
+                Alert(
+                    title: Text("Couldn't Create Pull Request"),
+                    message: Text(error.message),
+                    dismissButton: .default(Text("OK"))
+                )
             }
         }
     }

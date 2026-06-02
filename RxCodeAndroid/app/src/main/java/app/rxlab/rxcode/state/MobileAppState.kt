@@ -77,6 +77,15 @@ class MobileAppState @Inject constructor(
     private var pendingDeleteProjectId: UUID? = null
     private var searchJob: Job? = null
 
+    // Remote-config (MCP / ACP / Skills) request correlation, mirroring the
+    // iOS `MobileAppState+RemoteConfig` stored properties. Touched only from
+    // viewModelScope coroutines (Main dispatcher), so no extra synchronization.
+    private var pendingMCPConfigRequestID: UUID? = null
+    private var pendingACPRegistryRequestID: UUID? = null
+    private var pendingSkillCatalogRequestID: UUID? = null
+    private val acpMutationKeys = mutableMapOf<UUID, String>()
+    private val skillSourceMutationKeys = mutableMapOf<UUID, String>()
+
     /**
      * Autopilot remote-management round-trips (mirrors the desktop's Autopilot
      * settings tab). Sends through the same encrypted [client]; replies are
@@ -207,6 +216,34 @@ class MobileAppState @Inject constructor(
                 if (!isActiveDesktop(fromHex)) return
                 autopilot.handleResult(payload.data)
             }
+            is Payload.MCPConfigResult -> {
+                if (!isActiveDesktop(fromHex)) return
+                applyMCPConfigResult(payload.data)
+            }
+            is Payload.MCPMutationResult -> {
+                if (!isActiveDesktop(fromHex)) return
+                applyMCPMutationResult(payload.data)
+            }
+            is Payload.ACPRegistryResult -> {
+                if (!isActiveDesktop(fromHex)) return
+                applyACPRegistryResult(payload.data)
+            }
+            is Payload.ACPMutationResult -> {
+                if (!isActiveDesktop(fromHex)) return
+                applyACPMutationResult(payload.data)
+            }
+            is Payload.SkillCatalogResult -> {
+                if (!isActiveDesktop(fromHex)) return
+                applySkillCatalogResult(payload.data)
+            }
+            is Payload.SkillMutationResult -> {
+                if (!isActiveDesktop(fromHex)) return
+                applySkillMutationResult(payload.data)
+            }
+            is Payload.SkillSourceMutationResult -> {
+                if (!isActiveDesktop(fromHex)) return
+                applySkillSourceMutationResult(payload.data)
+            }
             is Payload.Ping -> {
                 // Reply with pong to satisfy the desktop's liveness check.
                 client.send(Payload.Pong(PongPayload()), fromHex)
@@ -316,6 +353,9 @@ class MobileAppState @Inject constructor(
                 projectBranches = snap.data.projectBranches
                     ?.associateBy { it.projectId }
                     ?: current.projectBranches,
+                ciStatusByProject = snap.data.ciStatuses
+                    ?.associate { it.projectId to it.status }
+                    ?: current.ciStatusByProject,
                 runProfilesByProject = snap.data.runProfiles
                     ?.associate { it.projectId to it.profiles }
                     ?: current.runProfilesByProject,
@@ -867,6 +907,419 @@ class MobileAppState @Inject constructor(
         _state.update { it.copy(threadChanges = result, isLoadingThreadChanges = false) }
     }
 
+    // MARK: - Remote desktop configuration (MCP / ACP / Skills)
+    //
+    // 1:1 with iOS `MobileAppState+RemoteConfig`/`+Inbound`: each request is
+    // correlated by `clientRequestID`; the desktop replies with the
+    // authoritative list. A `delay` timeout clears a stuck request and surfaces
+    // an error, exactly like iOS `scheduleTimeout`.
+
+    // ---- MCP servers ----
+
+    fun requestMCPConfig() {
+        val hex = _state.value.activeDesktopPubkey
+        if (hex.isEmpty()) {
+            _state.update { it.copy(mcpConfigError = "Connect a Mac to manage MCP servers.") }
+            return
+        }
+        val payload = app.rxlab.rxcode.proto.MCPConfigRequestPayload()
+        pendingMCPConfigRequestID = payload.clientRequestID
+        _state.update { it.copy(mcpConfigLoading = true, mcpConfigError = null) }
+        viewModelScope.launch {
+            val sent = client.send(Payload.MCPConfigRequest(payload), hex)
+            if (!sent) {
+                if (pendingMCPConfigRequestID == payload.clientRequestID) pendingMCPConfigRequestID = null
+                _state.update { it.copy(mcpConfigLoading = false, mcpConfigError = "Failed to request MCP servers.") }
+                return@launch
+            }
+            delay(REMOTE_CONFIG_TIMEOUT_MS)
+            if (pendingMCPConfigRequestID == payload.clientRequestID) {
+                pendingMCPConfigRequestID = null
+                _state.update { it.copy(mcpConfigLoading = false, mcpConfigError = REMOTE_TIMEOUT_MESSAGE) }
+            }
+        }
+    }
+
+    fun addMCPServer(server: app.rxlab.rxcode.proto.MobileMCPServer) =
+        mutateMCP(app.rxlab.rxcode.proto.MCPMutationRequestPayload.Operation.ADD, server.name, server = server)
+
+    fun removeMCPServer(serverName: String) =
+        mutateMCP(app.rxlab.rxcode.proto.MCPMutationRequestPayload.Operation.REMOVE, serverName)
+
+    fun setMCPServerEnabled(serverName: String, enabled: Boolean) =
+        mutateMCP(
+            app.rxlab.rxcode.proto.MCPMutationRequestPayload.Operation.SET_ENABLED,
+            serverName,
+            enabled = enabled,
+        )
+
+    private fun mutateMCP(
+        operation: app.rxlab.rxcode.proto.MCPMutationRequestPayload.Operation,
+        serverName: String,
+        server: app.rxlab.rxcode.proto.MobileMCPServer? = null,
+        enabled: Boolean? = null,
+    ) {
+        val hex = _state.value.activeDesktopPubkey
+        if (hex.isEmpty()) {
+            _state.update { it.copy(lastMCPError = "Connect a Mac first.") }
+            return
+        }
+        if (_state.value.inFlightMCPMutations.contains(serverName)) return
+        val payload = app.rxlab.rxcode.proto.MCPMutationRequestPayload(
+            operation = operation,
+            serverName = serverName,
+            server = server,
+            enabled = enabled,
+        )
+        _state.update {
+            it.copy(inFlightMCPMutations = it.inFlightMCPMutations + serverName, lastMCPError = null)
+        }
+        viewModelScope.launch {
+            val sent = client.send(Payload.MCPMutationRequest(payload), hex)
+            if (!sent) {
+                _state.update {
+                    it.copy(
+                        inFlightMCPMutations = it.inFlightMCPMutations - serverName,
+                        lastMCPError = "Failed to send request.",
+                    )
+                }
+                return@launch
+            }
+            delay(REMOTE_CONFIG_TIMEOUT_MS)
+            if (_state.value.inFlightMCPMutations.contains(serverName)) {
+                _state.update {
+                    it.copy(
+                        inFlightMCPMutations = it.inFlightMCPMutations - serverName,
+                        lastMCPError = REMOTE_TIMEOUT_MESSAGE,
+                    )
+                }
+            }
+        }
+    }
+
+    private fun applyMCPConfigResult(result: app.rxlab.rxcode.proto.MCPConfigResultPayload) {
+        if (pendingMCPConfigRequestID != result.clientRequestID) return
+        pendingMCPConfigRequestID = null
+        _state.update {
+            it.copy(
+                mcpConfigLoading = false,
+                mcpServers = if (result.ok) result.servers else it.mcpServers,
+                mcpConfigError = if (result.ok) null else (result.errorMessage ?: "Failed to load MCP servers."),
+            )
+        }
+    }
+
+    private fun applyMCPMutationResult(result: app.rxlab.rxcode.proto.MCPMutationResultPayload) {
+        _state.update {
+            it.copy(
+                inFlightMCPMutations = it.inFlightMCPMutations - result.serverName,
+                mcpServers = result.servers,
+                lastMCPError = if (result.ok) null else (result.errorMessage ?: "MCP operation failed."),
+            )
+        }
+    }
+
+    // ---- ACP agent clients ----
+
+    fun requestACPRegistry(forceRefresh: Boolean = false) {
+        val hex = _state.value.activeDesktopPubkey
+        if (hex.isEmpty()) {
+            _state.update { it.copy(acpRegistryError = "Connect a Mac to manage agents.") }
+            return
+        }
+        val payload = app.rxlab.rxcode.proto.ACPRegistryRequestPayload(forceRefresh = forceRefresh)
+        pendingACPRegistryRequestID = payload.clientRequestID
+        _state.update { it.copy(acpRegistryLoading = true, acpRegistryError = null) }
+        viewModelScope.launch {
+            val sent = client.send(Payload.ACPRegistryRequest(payload), hex)
+            if (!sent) {
+                if (pendingACPRegistryRequestID == payload.clientRequestID) pendingACPRegistryRequestID = null
+                _state.update { it.copy(acpRegistryLoading = false, acpRegistryError = "Failed to request agents.") }
+                return@launch
+            }
+            delay(REMOTE_CONFIG_TIMEOUT_MS)
+            if (pendingACPRegistryRequestID == payload.clientRequestID) {
+                pendingACPRegistryRequestID = null
+                _state.update { it.copy(acpRegistryLoading = false, acpRegistryError = REMOTE_TIMEOUT_MESSAGE) }
+            }
+        }
+    }
+
+    fun installACPAgent(registryAgentID: String) =
+        mutateACP(
+            app.rxlab.rxcode.proto.ACPMutationRequestPayload.Operation.INSTALL,
+            key = registryAgentID,
+            registryAgentID = registryAgentID,
+        )
+
+    fun uninstallACPClient(clientID: String) =
+        mutateACP(
+            app.rxlab.rxcode.proto.ACPMutationRequestPayload.Operation.UNINSTALL,
+            key = clientID,
+            clientID = clientID,
+        )
+
+    fun setACPClientEnabled(clientID: String, enabled: Boolean) =
+        mutateACP(
+            app.rxlab.rxcode.proto.ACPMutationRequestPayload.Operation.SET_ENABLED,
+            key = clientID,
+            clientID = clientID,
+            enabled = enabled,
+        )
+
+    private fun mutateACP(
+        operation: app.rxlab.rxcode.proto.ACPMutationRequestPayload.Operation,
+        key: String,
+        registryAgentID: String? = null,
+        clientID: String? = null,
+        enabled: Boolean? = null,
+    ) {
+        val hex = _state.value.activeDesktopPubkey
+        if (hex.isEmpty()) {
+            _state.update { it.copy(lastACPError = "Connect a Mac first.") }
+            return
+        }
+        if (_state.value.inFlightACPMutations.contains(key)) return
+        val payload = app.rxlab.rxcode.proto.ACPMutationRequestPayload(
+            operation = operation,
+            registryAgentID = registryAgentID,
+            clientID = clientID,
+            enabled = enabled,
+        )
+        acpMutationKeys[payload.clientRequestID] = key
+        _state.update { it.copy(inFlightACPMutations = it.inFlightACPMutations + key, lastACPError = null) }
+        val timeout = if (operation == app.rxlab.rxcode.proto.ACPMutationRequestPayload.Operation.INSTALL) {
+            ACP_INSTALL_TIMEOUT_MS
+        } else {
+            REMOTE_CONFIG_TIMEOUT_MS
+        }
+        viewModelScope.launch {
+            val sent = client.send(Payload.ACPMutationRequest(payload), hex)
+            if (!sent) {
+                acpMutationKeys.remove(payload.clientRequestID)
+                _state.update {
+                    it.copy(
+                        inFlightACPMutations = it.inFlightACPMutations - key,
+                        lastACPError = "Failed to send request.",
+                    )
+                }
+                return@launch
+            }
+            delay(timeout)
+            if (acpMutationKeys.remove(payload.clientRequestID) != null) {
+                _state.update {
+                    it.copy(
+                        inFlightACPMutations = it.inFlightACPMutations - key,
+                        lastACPError = REMOTE_TIMEOUT_MESSAGE,
+                    )
+                }
+            }
+        }
+    }
+
+    private fun applyACPRegistryResult(result: app.rxlab.rxcode.proto.ACPRegistryResultPayload) {
+        if (pendingACPRegistryRequestID != result.clientRequestID) return
+        pendingACPRegistryRequestID = null
+        _state.update {
+            it.copy(
+                acpRegistryLoading = false,
+                acpRegistryAgents = if (result.ok) result.registryAgents else it.acpRegistryAgents,
+                acpInstalledClients = if (result.ok) result.installedClients else it.acpInstalledClients,
+                acpRegistryError = if (result.ok) null else (result.errorMessage ?: "Failed to load the agent registry."),
+            )
+        }
+    }
+
+    private fun applyACPMutationResult(result: app.rxlab.rxcode.proto.ACPMutationResultPayload) {
+        val key = acpMutationKeys.remove(result.clientRequestID)
+        _state.update {
+            it.copy(
+                inFlightACPMutations = if (key != null) it.inFlightACPMutations - key else it.inFlightACPMutations,
+                acpRegistryAgents = result.registryAgents,
+                acpInstalledClients = result.installedClients,
+                lastACPError = if (result.ok) null else (result.errorMessage ?: "Agent operation failed."),
+            )
+        }
+    }
+
+    // ---- Skills marketplace ----
+
+    fun requestSkillCatalog(forceRefresh: Boolean = false) {
+        val hex = _state.value.activeDesktopPubkey
+        if (hex.isEmpty()) {
+            _state.update { it.copy(skillCatalogError = "Connect a Mac to browse skills.") }
+            return
+        }
+        val payload = app.rxlab.rxcode.proto.SkillCatalogRequestPayload(forceRefresh = forceRefresh)
+        pendingSkillCatalogRequestID = payload.clientRequestID
+        _state.update { it.copy(skillCatalogLoading = true, skillCatalogError = null) }
+        viewModelScope.launch {
+            val sent = client.send(Payload.SkillCatalogRequest(payload), hex)
+            if (!sent) {
+                if (pendingSkillCatalogRequestID == payload.clientRequestID) pendingSkillCatalogRequestID = null
+                _state.update { it.copy(skillCatalogLoading = false, skillCatalogError = "Failed to request skills.") }
+                return@launch
+            }
+            delay(REMOTE_CONFIG_TIMEOUT_MS)
+            if (pendingSkillCatalogRequestID == payload.clientRequestID) {
+                pendingSkillCatalogRequestID = null
+                _state.update { it.copy(skillCatalogLoading = false, skillCatalogError = REMOTE_TIMEOUT_MESSAGE) }
+            }
+        }
+    }
+
+    fun installSkill(pluginID: String) =
+        mutateSkill(pluginID, app.rxlab.rxcode.proto.SkillMutationRequestPayload.Operation.INSTALL)
+
+    fun uninstallSkill(pluginID: String) =
+        mutateSkill(pluginID, app.rxlab.rxcode.proto.SkillMutationRequestPayload.Operation.UNINSTALL)
+
+    private fun mutateSkill(
+        pluginID: String,
+        operation: app.rxlab.rxcode.proto.SkillMutationRequestPayload.Operation,
+    ) {
+        val hex = _state.value.activeDesktopPubkey
+        if (hex.isEmpty()) {
+            _state.update { it.copy(lastSkillError = "Connect a Mac first.") }
+            return
+        }
+        if (_state.value.inFlightSkillMutations.contains(pluginID)) return
+        val payload = app.rxlab.rxcode.proto.SkillMutationRequestPayload(operation = operation, pluginID = pluginID)
+        _state.update {
+            it.copy(inFlightSkillMutations = it.inFlightSkillMutations + pluginID, lastSkillError = null)
+        }
+        viewModelScope.launch {
+            val sent = client.send(Payload.SkillMutationRequest(payload), hex)
+            if (!sent) {
+                _state.update {
+                    it.copy(
+                        inFlightSkillMutations = it.inFlightSkillMutations - pluginID,
+                        lastSkillError = "Failed to send request.",
+                    )
+                }
+                return@launch
+            }
+            delay(REMOTE_CONFIG_TIMEOUT_MS)
+            if (_state.value.inFlightSkillMutations.contains(pluginID)) {
+                _state.update {
+                    it.copy(
+                        inFlightSkillMutations = it.inFlightSkillMutations - pluginID,
+                        lastSkillError = REMOTE_TIMEOUT_MESSAGE,
+                    )
+                }
+            }
+        }
+    }
+
+    /** Add a custom marketplace Git source; [ref] is an optional branch/tag. */
+    fun addSkillGitSource(url: String, ref: String?) {
+        val trimmedURL = url.trim()
+        if (trimmedURL.isEmpty()) {
+            _state.update { it.copy(lastSkillError = "Enter a GitHub repository URL.") }
+            return
+        }
+        val trimmedRef = ref?.trim()?.takeIf { it.isNotEmpty() }
+        mutateSkillSource(
+            key = "add:$trimmedURL",
+            operation = app.rxlab.rxcode.proto.SkillSourceMutationRequestPayload.Operation.ADD,
+            gitURL = trimmedURL,
+            ref = trimmedRef,
+        )
+    }
+
+    fun removeSkillGitSource(sourceID: String) =
+        mutateSkillSource(
+            key = sourceID,
+            operation = app.rxlab.rxcode.proto.SkillSourceMutationRequestPayload.Operation.REMOVE,
+            sourceID = sourceID,
+        )
+
+    private fun mutateSkillSource(
+        key: String,
+        operation: app.rxlab.rxcode.proto.SkillSourceMutationRequestPayload.Operation,
+        sourceID: String? = null,
+        gitURL: String? = null,
+        ref: String? = null,
+    ) {
+        val hex = _state.value.activeDesktopPubkey
+        if (hex.isEmpty()) {
+            _state.update { it.copy(lastSkillError = "Connect a Mac first.") }
+            return
+        }
+        if (_state.value.inFlightSkillSourceMutations.contains(key)) return
+        val payload = app.rxlab.rxcode.proto.SkillSourceMutationRequestPayload(
+            operation = operation,
+            sourceID = sourceID,
+            gitURL = gitURL,
+            ref = ref,
+        )
+        skillSourceMutationKeys[payload.clientRequestID] = key
+        _state.update {
+            it.copy(inFlightSkillSourceMutations = it.inFlightSkillSourceMutations + key, lastSkillError = null)
+        }
+        viewModelScope.launch {
+            val sent = client.send(Payload.SkillSourceMutationRequest(payload), hex)
+            if (!sent) {
+                skillSourceMutationKeys.remove(payload.clientRequestID)
+                _state.update {
+                    it.copy(
+                        inFlightSkillSourceMutations = it.inFlightSkillSourceMutations - key,
+                        lastSkillError = "Failed to send request.",
+                    )
+                }
+                return@launch
+            }
+            delay(REMOTE_CONFIG_TIMEOUT_MS)
+            if (skillSourceMutationKeys.remove(payload.clientRequestID) != null) {
+                _state.update {
+                    it.copy(
+                        inFlightSkillSourceMutations = it.inFlightSkillSourceMutations - key,
+                        lastSkillError = REMOTE_TIMEOUT_MESSAGE,
+                    )
+                }
+            }
+        }
+    }
+
+    private fun applySkillCatalogResult(result: app.rxlab.rxcode.proto.SkillCatalogResultPayload) {
+        if (pendingSkillCatalogRequestID != result.clientRequestID) return
+        pendingSkillCatalogRequestID = null
+        _state.update {
+            it.copy(
+                skillCatalogLoading = false,
+                skillCatalog = if (result.ok) result.plugins else it.skillCatalog,
+                skillSources = if (result.ok) result.sources else it.skillSources,
+                skillCatalogError = if (result.ok) null else (result.errorMessage ?: "Failed to load skills."),
+            )
+        }
+    }
+
+    private fun applySkillMutationResult(result: app.rxlab.rxcode.proto.SkillMutationResultPayload) {
+        _state.update {
+            it.copy(
+                inFlightSkillMutations = it.inFlightSkillMutations - result.pluginID,
+                skillCatalog = result.plugins,
+                skillSources = result.sources,
+                lastSkillError = if (result.ok) null else (result.errorMessage ?: "Skill operation failed."),
+            )
+        }
+    }
+
+    private fun applySkillSourceMutationResult(result: app.rxlab.rxcode.proto.SkillSourceMutationResultPayload) {
+        val key = skillSourceMutationKeys.remove(result.clientRequestID)
+        _state.update {
+            var next = it.inFlightSkillSourceMutations
+            if (key != null) next = next - key
+            if (result.sourceID != null) next = next - result.sourceID
+            it.copy(
+                inFlightSkillSourceMutations = next,
+                skillCatalog = result.plugins,
+                skillSources = result.sources,
+                lastSkillError = if (result.ok) null else (result.errorMessage ?: "Skill source operation failed."),
+            )
+        }
+    }
+
     // MARK: - Pairing
 
     fun beginPairing(token: PairingToken, displayName: String = defaultDisplayName()) {
@@ -992,6 +1445,12 @@ class MobileAppState @Inject constructor(
         const val MESSAGE_PAGE_SIZE = 30
         private const val SEARCH_DEBOUNCE_MS = 200L
         private const val SEARCH_LIMIT = 25
+
+        // Remote-config (MCP/ACP/Skills) timeouts, mirroring iOS: ACP installs
+        // download a binary, so they get a much longer ceiling.
+        private const val REMOTE_CONFIG_TIMEOUT_MS = 20_000L
+        private const val ACP_INSTALL_TIMEOUT_MS = 90_000L
+        private const val REMOTE_TIMEOUT_MESSAGE = "Request timed out. Check your Mac and try again."
 
         fun defaultDisplayName(): String = Build.MODEL.ifBlank { "Android" }
 

@@ -2,14 +2,20 @@ package app.rxlab.rxcode.state
 
 import app.rxlab.rxcode.proto.ChatMessage
 import app.rxlab.rxcode.proto.DocsSearchHit
+import app.rxlab.rxcode.proto.MobileACPClient
+import app.rxlab.rxcode.proto.MobileACPRegistryAgent
 import app.rxlab.rxcode.proto.MobileBranchBriefing
+import app.rxlab.rxcode.proto.MobileMCPServer
 import app.rxlab.rxcode.proto.MobileRunTaskSnapshot
+import app.rxlab.rxcode.proto.MobileSkillPlugin
+import app.rxlab.rxcode.proto.MobileSkillSource
 import app.rxlab.rxcode.proto.MobileThreadSummary
 import app.rxlab.rxcode.proto.MobileWebProxyInfo
 import app.rxlab.rxcode.proto.PendingQuestionPayload
 import app.rxlab.rxcode.proto.PermissionRequestPayload
 import app.rxlab.rxcode.proto.Project
 import app.rxlab.rxcode.proto.ProjectBranchInfo
+import app.rxlab.rxcode.proto.ProjectCIStatus
 import app.rxlab.rxcode.proto.RunProfile
 import app.rxlab.rxcode.proto.SearchHit
 import app.rxlab.rxcode.proto.SessionSummary
@@ -46,6 +52,8 @@ data class MobileState(
     val threadSummaries: List<MobileThreadSummary> = emptyList(),
     /** Current + available branches per project, indexed by project id. */
     val projectBranches: Map<UUID, ProjectBranchInfo> = emptyMap(),
+    /** CI / pull-request status per project (current branch), indexed by project id. */
+    val ciStatusByProject: Map<UUID, ProjectCIStatus> = emptyMap(),
 
     val pendingPermission: PermissionRequestPayload? = null,
     val pendingQuestions: List<PendingQuestionPayload> = emptyList(),
@@ -93,6 +101,34 @@ data class MobileState(
     val searchDocHits: List<DocsSearchHit> = emptyList(),
     val searchProjectIDs: List<UUID> = emptyList(),
     val isSearching: Boolean = false,
+
+    // MARK: - MCP servers (Settings → MCP Servers), mirroring iOS MobileAppState.
+    val mcpServers: List<MobileMCPServer> = emptyList(),
+    val mcpConfigLoading: Boolean = false,
+    val mcpConfigError: String? = null,
+    /** Server names with an in-flight add/remove/toggle mutation. */
+    val inFlightMCPMutations: Set<String> = emptySet(),
+    val lastMCPError: String? = null,
+
+    // MARK: - ACP agent clients (Settings → Agent Clients).
+    val acpRegistryAgents: List<MobileACPRegistryAgent> = emptyList(),
+    val acpInstalledClients: List<MobileACPClient> = emptyList(),
+    val acpRegistryLoading: Boolean = false,
+    val acpRegistryError: String? = null,
+    /** Registry-agent / client ids with an in-flight install/uninstall/toggle. */
+    val inFlightACPMutations: Set<String> = emptySet(),
+    val lastACPError: String? = null,
+
+    // MARK: - Skills marketplace (Settings → Skills).
+    val skillCatalog: List<MobileSkillPlugin> = emptyList(),
+    val skillSources: List<MobileSkillSource> = emptyList(),
+    val skillCatalogLoading: Boolean = false,
+    val skillCatalogError: String? = null,
+    /** Plugin ids with an in-flight install/uninstall. */
+    val inFlightSkillMutations: Set<String> = emptySet(),
+    /** Source keys ("add:<url>" or source id) with an in-flight add/remove. */
+    val inFlightSkillSourceMutations: Set<String> = emptySet(),
+    val lastSkillError: String? = null,
 ) {
     val isPaired: Boolean get() = activeDesktopPubkey.isNotEmpty()
 

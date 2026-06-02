@@ -80,6 +80,16 @@ extension AppState {
         return url
     }
 
+    /// Convenience for the project context menu, which has no branch in hand:
+    /// resolve the project's current branch (the same way the CI poller does)
+    /// and open a PR for it via ``createPullRequestForBranch(project:branch:)``.
+    func createPullRequestForCurrentBranch(project: Project) async throws -> URL {
+        guard let branch = await GitHelper.currentBranch(at: project.path), !branch.isEmpty else {
+            throw PullRequestError.createFailed("Couldn't determine the current branch for this project.")
+        }
+        return try await createPullRequestForBranch(project: project, branch: branch)
+    }
+
     // MARK: - Title / body generation
 
     /// Generate raw PR text (title on the first line, blank line, then a markdown

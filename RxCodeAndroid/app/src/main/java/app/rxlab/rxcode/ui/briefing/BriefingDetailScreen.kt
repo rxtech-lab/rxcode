@@ -126,6 +126,11 @@ fun BriefingDetailScreen(
                             branch = groupKey.branch,
                             branchInfo = branchInfo,
                             viewModel = viewModel,
+                            // Only this branch's PR counts — the synced CI status
+                            // tracks the project's current branch (matches iOS).
+                            prNumber = state.ciStatusByProject[groupKey.projectId]
+                                ?.takeIf { branchInfo?.currentBranch == groupKey.branch }
+                                ?.prNumber,
                             onOpenSession = onOpenSession,
                         )
                     }

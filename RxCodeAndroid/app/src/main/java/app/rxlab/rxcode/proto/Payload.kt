@@ -130,6 +130,48 @@ sealed class Payload {
     data class AutopilotResult(val data: AutopilotResultPayload) : Payload() {
         override val type = "autopilot_result"
     }
+    data class SkillCatalogRequest(val data: SkillCatalogRequestPayload) : Payload() {
+        override val type = "skill_catalog_request"
+    }
+    data class SkillCatalogResult(val data: SkillCatalogResultPayload) : Payload() {
+        override val type = "skill_catalog_result"
+    }
+    data class SkillMutationRequest(val data: SkillMutationRequestPayload) : Payload() {
+        override val type = "skill_mutation_request"
+    }
+    data class SkillMutationResult(val data: SkillMutationResultPayload) : Payload() {
+        override val type = "skill_mutation_result"
+    }
+    data class SkillSourceMutationRequest(val data: SkillSourceMutationRequestPayload) : Payload() {
+        override val type = "skill_source_mutation_request"
+    }
+    data class SkillSourceMutationResult(val data: SkillSourceMutationResultPayload) : Payload() {
+        override val type = "skill_source_mutation_result"
+    }
+    data class ACPRegistryRequest(val data: ACPRegistryRequestPayload) : Payload() {
+        override val type = "acp_registry_request"
+    }
+    data class ACPRegistryResult(val data: ACPRegistryResultPayload) : Payload() {
+        override val type = "acp_registry_result"
+    }
+    data class ACPMutationRequest(val data: ACPMutationRequestPayload) : Payload() {
+        override val type = "acp_mutation_request"
+    }
+    data class ACPMutationResult(val data: ACPMutationResultPayload) : Payload() {
+        override val type = "acp_mutation_result"
+    }
+    data class MCPConfigRequest(val data: MCPConfigRequestPayload) : Payload() {
+        override val type = "mcp_config_request"
+    }
+    data class MCPConfigResult(val data: MCPConfigResultPayload) : Payload() {
+        override val type = "mcp_config_result"
+    }
+    data class MCPMutationRequest(val data: MCPMutationRequestPayload) : Payload() {
+        override val type = "mcp_mutation_request"
+    }
+    data class MCPMutationResult(val data: MCPMutationResultPayload) : Payload() {
+        override val type = "mcp_mutation_result"
+    }
     data class Ping(val data: PingPayload) : Payload() {
         override val type = "ping"
     }
@@ -177,6 +219,7 @@ data class SnapshotPayload(
     val branchBriefings: List<MobileBranchBriefing>? = null,
     val threadSummaries: List<MobileThreadSummary>? = null,
     val projectBranches: List<ProjectBranchInfo>? = null,
+    val ciStatuses: List<MobileProjectCIStatus>? = null,
     val activeSessionID: String? = null,
     val activeSessionMessages: List<ChatMessage>? = null,
     val activeSessionHasMore: Boolean? = null,
@@ -531,6 +574,20 @@ object PayloadSerializer : KSerializer<Payload> {
             "thread_changes_result" -> Payload.ThreadChangesResult(json.decodeFromJsonElement(ThreadChangesResultPayload.serializer(), data))
             "autopilot_request" -> Payload.AutopilotRequest(json.decodeFromJsonElement(AutopilotRequestPayload.serializer(), data))
             "autopilot_result" -> Payload.AutopilotResult(json.decodeFromJsonElement(AutopilotResultPayload.serializer(), data))
+            "skill_catalog_request" -> Payload.SkillCatalogRequest(json.decodeFromJsonElement(SkillCatalogRequestPayload.serializer(), data))
+            "skill_catalog_result" -> Payload.SkillCatalogResult(json.decodeFromJsonElement(SkillCatalogResultPayload.serializer(), data))
+            "skill_mutation_request" -> Payload.SkillMutationRequest(json.decodeFromJsonElement(SkillMutationRequestPayload.serializer(), data))
+            "skill_mutation_result" -> Payload.SkillMutationResult(json.decodeFromJsonElement(SkillMutationResultPayload.serializer(), data))
+            "skill_source_mutation_request" -> Payload.SkillSourceMutationRequest(json.decodeFromJsonElement(SkillSourceMutationRequestPayload.serializer(), data))
+            "skill_source_mutation_result" -> Payload.SkillSourceMutationResult(json.decodeFromJsonElement(SkillSourceMutationResultPayload.serializer(), data))
+            "acp_registry_request" -> Payload.ACPRegistryRequest(json.decodeFromJsonElement(ACPRegistryRequestPayload.serializer(), data))
+            "acp_registry_result" -> Payload.ACPRegistryResult(json.decodeFromJsonElement(ACPRegistryResultPayload.serializer(), data))
+            "acp_mutation_request" -> Payload.ACPMutationRequest(json.decodeFromJsonElement(ACPMutationRequestPayload.serializer(), data))
+            "acp_mutation_result" -> Payload.ACPMutationResult(json.decodeFromJsonElement(ACPMutationResultPayload.serializer(), data))
+            "mcp_config_request" -> Payload.MCPConfigRequest(json.decodeFromJsonElement(MCPConfigRequestPayload.serializer(), data))
+            "mcp_config_result" -> Payload.MCPConfigResult(json.decodeFromJsonElement(MCPConfigResultPayload.serializer(), data))
+            "mcp_mutation_request" -> Payload.MCPMutationRequest(json.decodeFromJsonElement(MCPMutationRequestPayload.serializer(), data))
+            "mcp_mutation_result" -> Payload.MCPMutationResult(json.decodeFromJsonElement(MCPMutationResultPayload.serializer(), data))
             "ping" -> Payload.Ping(json.decodeFromJsonElement(PingPayload.serializer(), data))
             "pong" -> Payload.Pong(json.decodeFromJsonElement(PongPayload.serializer(), data))
             else -> Payload.Unknown(type, data)
@@ -574,6 +631,20 @@ object PayloadSerializer : KSerializer<Payload> {
             is Payload.ThreadChangesResult -> value.type to json.encodeToJsonElement(ThreadChangesResultPayload.serializer(), value.data)
             is Payload.AutopilotRequest -> value.type to json.encodeToJsonElement(AutopilotRequestPayload.serializer(), value.data)
             is Payload.AutopilotResult -> value.type to json.encodeToJsonElement(AutopilotResultPayload.serializer(), value.data)
+            is Payload.SkillCatalogRequest -> value.type to json.encodeToJsonElement(SkillCatalogRequestPayload.serializer(), value.data)
+            is Payload.SkillCatalogResult -> value.type to json.encodeToJsonElement(SkillCatalogResultPayload.serializer(), value.data)
+            is Payload.SkillMutationRequest -> value.type to json.encodeToJsonElement(SkillMutationRequestPayload.serializer(), value.data)
+            is Payload.SkillMutationResult -> value.type to json.encodeToJsonElement(SkillMutationResultPayload.serializer(), value.data)
+            is Payload.SkillSourceMutationRequest -> value.type to json.encodeToJsonElement(SkillSourceMutationRequestPayload.serializer(), value.data)
+            is Payload.SkillSourceMutationResult -> value.type to json.encodeToJsonElement(SkillSourceMutationResultPayload.serializer(), value.data)
+            is Payload.ACPRegistryRequest -> value.type to json.encodeToJsonElement(ACPRegistryRequestPayload.serializer(), value.data)
+            is Payload.ACPRegistryResult -> value.type to json.encodeToJsonElement(ACPRegistryResultPayload.serializer(), value.data)
+            is Payload.ACPMutationRequest -> value.type to json.encodeToJsonElement(ACPMutationRequestPayload.serializer(), value.data)
+            is Payload.ACPMutationResult -> value.type to json.encodeToJsonElement(ACPMutationResultPayload.serializer(), value.data)
+            is Payload.MCPConfigRequest -> value.type to json.encodeToJsonElement(MCPConfigRequestPayload.serializer(), value.data)
+            is Payload.MCPConfigResult -> value.type to json.encodeToJsonElement(MCPConfigResultPayload.serializer(), value.data)
+            is Payload.MCPMutationRequest -> value.type to json.encodeToJsonElement(MCPMutationRequestPayload.serializer(), value.data)
+            is Payload.MCPMutationResult -> value.type to json.encodeToJsonElement(MCPMutationResultPayload.serializer(), value.data)
             is Payload.Ping -> value.type to json.encodeToJsonElement(PingPayload.serializer(), value.data)
             is Payload.Pong -> value.type to json.encodeToJsonElement(PongPayload.serializer(), value.data)
             is Payload.Unknown -> value.type to (value.raw ?: JsonObject(emptyMap()))

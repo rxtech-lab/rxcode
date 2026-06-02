@@ -190,6 +190,9 @@ final class MobileAppState: ObservableObject {
     @Published var searchQuery: String = ""
     @Published var searchProjectIDs: [UUID] = []
     @Published var searchThreadHits: [SearchHit] = []
+    /// Published-docs matches for the current query, mirrored from the desktop.
+    /// Empty when the query is cleared or the desktop returned no docs.
+    @Published var searchDocHits: [DocsSearchHit] = []
     @Published var isSearching: Bool = false
     /// Whether the mobile app has received its first snapshot from the desktop
     /// since launch or pairing. Used to show a loading state instead of

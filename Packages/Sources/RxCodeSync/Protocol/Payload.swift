@@ -496,12 +496,24 @@ public struct BranchOpRequestPayload: Codable, Sendable {
     public let projectID: UUID
     public let operation: Operation
     public let branch: String
+    /// For `.createNew`: when true (or absent, for back-compat with older
+    /// clients), create the branch in an isolated Git worktree. When false,
+    /// create the branch and check it out in the project root instead.
+    /// Ignored for other operations.
+    public let useWorktree: Bool?
 
-    public init(clientRequestID: UUID = UUID(), projectID: UUID, operation: Operation, branch: String) {
+    public init(
+        clientRequestID: UUID = UUID(),
+        projectID: UUID,
+        operation: Operation,
+        branch: String,
+        useWorktree: Bool? = nil
+    ) {
         self.clientRequestID = clientRequestID
         self.projectID = projectID
         self.operation = operation
         self.branch = branch
+        self.useWorktree = useWorktree
     }
 }
 

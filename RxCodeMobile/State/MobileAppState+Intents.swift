@@ -316,15 +316,18 @@ extension MobileAppState {
         try? await client.send(.branchOpRequest(request), toHex: pairedDesktopPubkey)
     }
 
-    /// Tell the desktop to create a new branch + worktree off the current
-    /// branch. The desktop parks the worktree against the project so the next
-    /// new-thread request for this project spawns into it.
-    func createProjectBranch(projectID: UUID, branch: String) async {
+    /// Tell the desktop to create a new branch off the current branch. When
+    /// `useWorktree` is true (the default), the desktop creates an isolated Git
+    /// worktree and parks it against the project so the next new-thread request
+    /// spawns into it. When false, the desktop creates the branch and checks it
+    /// out in the project root instead.
+    func createProjectBranch(projectID: UUID, branch: String, useWorktree: Bool = true) async {
         guard isPaired else { return }
         let request = BranchOpRequestPayload(
             projectID: projectID,
             operation: .createNew,
-            branch: branch
+            branch: branch,
+            useWorktree: useWorktree
         )
         inFlightBranchOps.insert(request.clientRequestID)
         try? await client.send(.branchOpRequest(request), toHex: pairedDesktopPubkey)

@@ -327,6 +327,18 @@ extension MobileAppState {
         try await autopilotSendVoid(.docs, .docsDeleteDocument, body: AutopilotDocsDocBody(repoId: repoId, docId: docId))
     }
 
+    // MARK: - Global search
+
+    /// One round trip that returns both on-device thread matches and published
+    /// docs matches for `query`. The desktop owns both corpora, so this single
+    /// request/response RPC replaces stitching two separate relay messages
+    /// together.
+    func searchThreadsAndDocs(query: String, limit: Int = 25) async throws -> AutopilotSearchResult {
+        try await autopilotSend(.search, .searchThreadsAndDocs,
+                                body: AutopilotSearchBody(query: query, limit: limit),
+                                as: AutopilotSearchResult.self)
+    }
+
     @discardableResult
     func createDocsUploadToken(repoId: String, name: String?) async throws -> DocsUploadToken {
         try await autopilotSend(.docs, .docsCreateUploadToken, body: AutopilotDocsCreateTokenBody(repoId: repoId, name: name), as: DocsUploadToken.self)

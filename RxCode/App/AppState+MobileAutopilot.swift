@@ -347,6 +347,17 @@ extension AppState {
                 .filter { FileManager.default.fileExists(atPath: directory.appendingPathComponent($0).path) }
             let written = try writeDecryptedSecrets(files, to: directory, overwrite: body.overwrite)
             return try encoder.encode(AutopilotProjectSecretsDownloadResult(written: written, conflicts: conflicts))
+
+        // MARK: Global search
+        case .searchThreadsAndDocs:
+            let body = try decodeAutopilotBody(request, as: AutopilotSearchBody.self)
+            let result = await combinedThreadAndDocsSearch(query: body.query, limit: body.limit ?? 25)
+            return try encoder.encode(AutopilotSearchResult(
+                query: body.query,
+                projectIDs: result.projectIDs,
+                threadHits: result.threadHits,
+                docHits: result.docHits
+            ))
         }
     }
 

@@ -27,6 +27,7 @@ public enum AutopilotDomain: String, Codable, Sendable {
     case docs
     case release
     case project
+    case search
 }
 
 /// Every autopilot operation, globally unique so the desktop can switch on it
@@ -111,6 +112,11 @@ public enum AutopilotOp: String, Codable, Sendable {
     case projectSecretsDownload
     case projectSecretsWrite
     case projectCreatePullRequest
+
+    // Global search — one call returns on-device thread matches AND published
+    // docs matches for the same query, so mobile gets a single combined result
+    // instead of stitching two responses together.
+    case searchThreadsAndDocs
 }
 
 /// Mobile → desktop: a single autopilot operation. `body` is a JSON-encoded
@@ -555,5 +561,45 @@ public struct AutopilotProjectSecretsDownloadResult: Codable, Sendable {
     public init(written: [String], conflicts: [String]) {
         self.written = written
         self.conflicts = conflicts
+    }
+}
+
+// MARK: - Global search
+
+/// Mobile → desktop: a single query to run across both on-device threads and
+/// published docs. The desktop owns both corpora (its local thread index and
+/// the rxlab docs service), so one round trip returns everything.
+public struct AutopilotSearchBody: Codable, Sendable {
+    public let query: String
+    /// Max hits per source (threads and docs each). Defaults to a sane page on
+    /// the desktop when nil.
+    public let limit: Int?
+
+    public init(query: String, limit: Int? = nil) {
+        self.query = query
+        self.limit = limit
+    }
+}
+
+/// Desktop → mobile: combined search results for one query. Thread hits come
+/// from the desktop's on-device index; doc hits from the rxlab docs service.
+/// `docHits` is best-effort — a signed-out desktop or a docs-service error
+/// yields an empty array rather than failing the whole search.
+public struct AutopilotSearchResult: Codable, Sendable {
+    public let query: String
+    public let projectIDs: [UUID]
+    public let threadHits: [SearchHit]
+    public let docHits: [DocsSearchHit]
+
+    public init(
+        query: String,
+        projectIDs: [UUID],
+        threadHits: [SearchHit],
+        docHits: [DocsSearchHit]
+    ) {
+        self.query = query
+        self.projectIDs = projectIDs
+        self.threadHits = threadHits
+        self.docHits = docHits
     }
 }

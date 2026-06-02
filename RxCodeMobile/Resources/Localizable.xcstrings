@@ -779,6 +779,9 @@
         }
       }
     },
+    "Branch + checkout" : {
+
+    },
     "Branch briefings collect recent thread summaries from your Mac into a quick mobile status view." : {
       "localizations" : {
         "en" : {
@@ -1662,6 +1665,12 @@
           }
         }
       }
+    },
+    "Creates an isolated worktree so this thread works without touching the main checkout." : {
+
+    },
+    "Creates the branch and checks it out in the project root, changing the main checkout." : {
+
     },
     "Creating Pull Request…" : {
 
@@ -3541,6 +3550,9 @@
         }
       }
     },
+    "Mode" : {
+
+    },
     "Model" : {
       "localizations" : {
         "en" : {
@@ -3634,6 +3646,9 @@
           }
         }
       }
+    },
+    "New worktree" : {
+
     },
     "Next change" : {
       "localizations" : {
@@ -5259,6 +5274,9 @@
         }
       }
     },
+    "Scope" : {
+
+    },
     "Script" : {
       "localizations" : {
         "zh-Hans" : {
@@ -5284,6 +5302,9 @@
           }
         }
       }
+    },
+    "Search" : {
+
     },
     "Search or enter website name" : {
       "localizations" : {
@@ -5326,6 +5347,9 @@
           }
         }
       }
+    },
+    "Search threads and docs" : {
+
     },
     "Searching…" : {
       "localizations" : {

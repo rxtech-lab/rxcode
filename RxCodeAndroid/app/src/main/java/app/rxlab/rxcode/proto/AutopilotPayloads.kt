@@ -28,6 +28,8 @@ enum class AutopilotDomain(val wire: String) {
     CI_UPDATES("ciUpdates"),
     DOCS("docs"),
     RELEASE("release"),
+    PROJECT("project"),
+    SEARCH("search"),
 }
 
 /** Every autopilot operation, globally unique so the desktop can switch on it. */
@@ -87,6 +89,23 @@ enum class AutopilotOp(val wire: String) {
     RELEASE_LIST_WORKFLOWS("releaseListWorkflows"),
     RELEASE_DISPATCH("releaseDispatch"),
     RELEASE_INSTALL_TOKEN("releaseInstallToken"),
+
+    // Project context-menu actions — desktop-mediated so the Mac performs the
+    // exact work its own project/briefing context menu does. The `*Setup` ops
+    // ask the Mac to surface its setup chat/sheet; secrets download decrypts
+    // on-device then relays plaintext via `projectSecretsWrite`.
+    PROJECT_AUTOPILOT_STATUS("projectAutopilotStatus"),
+    PROJECT_SECRETS_SETUP("projectSecretsSetup"),
+    PROJECT_DOCS_SETUP("projectDocsSetup"),
+    PROJECT_DOCS_SEARCH("projectDocsSearch"),
+    PROJECT_RELEASE_SETUP("projectReleaseSetup"),
+    PROJECT_RELEASE_CREATE("projectReleaseCreate"),
+    PROJECT_SECRETS_DOWNLOAD("projectSecretsDownload"),
+    PROJECT_SECRETS_WRITE("projectSecretsWrite"),
+    PROJECT_CREATE_PULL_REQUEST("projectCreatePullRequest"),
+
+    // Global search — one call returns thread matches AND published-docs matches.
+    SEARCH_THREADS_AND_DOCS("searchThreadsAndDocs"),
 }
 
 /**
@@ -198,6 +217,42 @@ data class AutopilotReleaseDispatchBody(val repoId: String, val request: Release
 
 @Serializable
 data class AutopilotReleaseTokenBody(val repoId: String, val value: String)
+
+// MARK: - Project context-menu bodies
+
+/** Addresses a project by id (status + the desktop-mediated setup actions). */
+@Serializable
+data class AutopilotProjectBody(
+    @Serializable(with = UuidSerializer::class) val projectId: UUID,
+)
+
+/** Addresses a project + branch. Used by `projectCreatePullRequest`. */
+@Serializable
+data class AutopilotProjectBranchBody(
+    @Serializable(with = UuidSerializer::class) val projectId: UUID,
+    val branch: String,
+)
+
+/**
+ * Already-decrypted secret files for `projectSecretsWrite`: the phone decrypts
+ * the chosen environment on-device, then relays plaintext over the E2E channel
+ * for the Mac to write into the project folder.
+ */
+@Serializable
+data class AutopilotProjectSecretsWriteBody(
+    @Serializable(with = UuidSerializer::class) val projectId: UUID,
+    val files: List<Plaintext>,
+    val overwrite: Boolean,
+) {
+    @Serializable
+    data class Plaintext(val filename: String, val content: String)
+}
+
+// MARK: - Global search body
+
+/** A single query run across both on-device threads and published docs. */
+@Serializable
+data class AutopilotSearchBody(val query: String, val limit: Int? = null)
 
 // MARK: - Result list wrappers
 

@@ -1,11 +1,15 @@
 package app.rxlab.rxcode.ui
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.ui.Modifier
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -17,6 +21,7 @@ import app.rxlab.rxcode.state.MobileState
 import app.rxlab.rxcode.ui.briefing.BriefingPaneScreen
 import app.rxlab.rxcode.ui.onboarding.OnboardingScreen
 import app.rxlab.rxcode.ui.projects.ProjectsPaneScreen
+import app.rxlab.rxcode.ui.search.SearchScreen
 import app.rxlab.rxcode.ui.settings.SettingsScreen
 import app.rxlab.rxcode.ui.sync.SyncLoadingView
 import androidx.compose.runtime.LaunchedEffect
@@ -76,6 +81,12 @@ fun RxCodeApp(state: MobileState, viewModel: MobileAppState) {
     var currentTab by rememberSaveable { mutableStateOf(RootTab.Briefing.name) }
     val tab = RootTab.valueOf(currentTab)
 
+    // Global search is presented as a full-screen overlay rather than a tab —
+    // every list/detail screen surfaces a toolbar search button that flips this
+    // (mirrors iOS, where search lives in the toolbar, not the tab bar).
+    var showSearch by rememberSaveable { mutableStateOf(false) }
+    val openSearch = { showSearch = true }
+
     // FCM notification tap: select the target session and switch to Projects
     // (where ProjectsPaneScreen reacts to `activeSessionID` and pushes the
     // chat detail). Buffered in state by MobileAppState so we route the UI
@@ -87,45 +98,68 @@ fun RxCodeApp(state: MobileState, viewModel: MobileAppState) {
         viewModel.consumePendingNotificationDeepLink()
     }
 
-    NavigationSuiteScaffold(
-        navigationSuiteItems = {
-            RootTab.allTabs.forEach { t ->
-                item(
-                    selected = t == tab,
-                    onClick = { currentTab = t.name },
-                    icon = { Icon(t.icon, contentDescription = null) },
-                    label = { Text(t.label) },
+    Box(Modifier.fillMaxSize()) {
+        NavigationSuiteScaffold(
+            navigationSuiteItems = {
+                RootTab.allTabs.forEach { t ->
+                    item(
+                        selected = t == tab,
+                        onClick = { currentTab = t.name },
+                        icon = { Icon(t.icon, contentDescription = null) },
+                        label = { Text(t.label) },
+                    )
+                }
+            }
+        ) {
+            when (tab) {
+                RootTab.Briefing -> BriefingPaneScreen(
+                    state = state,
+                    viewModel = viewModel,
+                    onOpenSession = { sid ->
+                        // ProjectsPaneScreen reacts to `state.activeSessionID` and
+                        // pushes the chat detail itself, so we just have to switch
+                        // tabs after selecting the session.
+                        viewModel.selectSession(sid)
+                        currentTab = RootTab.Projects.name
+                    },
+                    onNewThread = { pid ->
+                        viewModel.startNewSession(pid, planMode = false)
+                        currentTab = RootTab.Projects.name
+                    },
+                    onOpenSearch = openSearch,
+                )
+                RootTab.Projects -> ProjectsPaneScreen(
+                    state = state,
+                    viewModel = viewModel,
+                    onSettingsClick = { currentTab = RootTab.Settings.name },
+                    onOpenSearch = openSearch,
+                )
+                RootTab.Settings -> SettingsScreen(
+                    state = state,
+                    viewModel = viewModel,
+                    onBack = { currentTab = RootTab.Briefing.name },
+                    onPairNewMac = { showPairingFromSplash = true },
+                    onOpenSearch = openSearch,
                 )
             }
         }
-    ) {
-        when (tab) {
-            RootTab.Briefing -> BriefingPaneScreen(
-                state = state,
-                viewModel = viewModel,
-                onOpenSession = { sid ->
-                    // ProjectsPaneScreen reacts to `state.activeSessionID` and
-                    // pushes the chat detail itself, so we just have to switch
-                    // tabs after selecting the session.
-                    viewModel.selectSession(sid)
-                    currentTab = RootTab.Projects.name
-                },
-                onNewThread = { pid ->
-                    viewModel.startNewSession(pid, planMode = false)
-                    currentTab = RootTab.Projects.name
-                },
-            )
-            RootTab.Projects -> ProjectsPaneScreen(
-                state = state,
-                viewModel = viewModel,
-                onSettingsClick = { currentTab = RootTab.Settings.name },
-            )
-            RootTab.Settings -> SettingsScreen(
-                state = state,
-                viewModel = viewModel,
-                onBack = { currentTab = RootTab.Briefing.name },
-                onPairNewMac = { showPairingFromSplash = true },
-            )
+
+        if (showSearch) {
+            Surface(Modifier.fillMaxSize()) {
+                SearchScreen(
+                    state = state,
+                    viewModel = viewModel,
+                    onOpenSession = { sid ->
+                        viewModel.selectSession(sid)
+                        currentTab = RootTab.Projects.name
+                        showSearch = false
+                    },
+                    onClose = {
+                        showSearch = false
+                        viewModel.clearSearch()
+                    },
+                )
+            }
         }
     }
 }

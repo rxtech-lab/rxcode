@@ -220,6 +220,12 @@ final class AppStateHookController: HookController {
         do {
             let envs = try await app.secrets.listEnvironments(repo: repoFullName).items
             return envs.map { HookChoice(id: $0.id, label: $0.name) }
+        } catch let SecretsService.ServiceError.apiError(status, _) where status == 404 {
+            // A 404 means the repo simply isn't registered for secrets yet — a
+            // definitive "no environments" answer, not a failed check. Return []
+            // (not nil) so callers surface the "set up secrets" banner.
+            logger.debug("secretEnvironments: repo \(repoFullName, privacy: .public) not registered (404) — treating as no environments")
+            return []
         } catch {
             // nil (not []) so callers don't mistake a failed/cancelled check for
             // a repo that genuinely has no environments and show a stale banner.

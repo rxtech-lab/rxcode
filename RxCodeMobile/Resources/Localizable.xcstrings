@@ -5912,6 +5912,9 @@
         }
       }
     },
+    "The Mac is pushing the branch and opening the PR." : {
+
+    },
     "The Mac returned an empty response." : {
       "localizations" : {
         "zh-Hans" : {
@@ -6655,6 +6658,9 @@
           }
         }
       }
+    },
+    "Working…" : {
+
     },
     "Xcode" : {
       "localizations" : {

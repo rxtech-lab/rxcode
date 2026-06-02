@@ -15,6 +15,14 @@ import app.rxlab.rxcode.proto.AutopilotDocsUploadBody
 import app.rxlab.rxcode.proto.AutopilotDomain
 import app.rxlab.rxcode.proto.AutopilotIDBody
 import app.rxlab.rxcode.proto.AutopilotOp
+import app.rxlab.rxcode.proto.AutopilotProjectBody
+import app.rxlab.rxcode.proto.AutopilotProjectBranchBody
+import app.rxlab.rxcode.proto.AutopilotProjectSecretsDownloadResult
+import app.rxlab.rxcode.proto.AutopilotProjectSecretsWriteBody
+import app.rxlab.rxcode.proto.AutopilotProjectStatus
+import app.rxlab.rxcode.proto.AutopilotPullRequestResult
+import app.rxlab.rxcode.proto.AutopilotSearchBody
+import app.rxlab.rxcode.proto.AutopilotSearchResult
 import app.rxlab.rxcode.proto.AutopilotReleaseDispatchBody
 import app.rxlab.rxcode.proto.AutopilotReleaseTokenBody
 import app.rxlab.rxcode.proto.AutopilotReposQuery
@@ -405,6 +413,83 @@ class AutopilotService(
             rawCall(
                 AutopilotDomain.RELEASE, AutopilotOp.RELEASE_INSTALL_TOKEN,
                 encodeBody(AutopilotReleaseTokenBody(repoId, value)),
+            )
+        )
+
+    // MARK: - Project context-menu actions (desktop-mediated, 1:1 with macOS)
+
+    /** Per-project autopilot state deciding which context-menu items to show. */
+    suspend fun projectAutopilotStatus(projectId: UUID): AutopilotProjectStatus =
+        decodeResult(
+            rawCall(
+                AutopilotDomain.PROJECT, AutopilotOp.PROJECT_AUTOPILOT_STATUS,
+                encodeBody(AutopilotProjectBody(projectId)),
+            )
+        )
+
+    /** Ask the Mac to surface the secrets-setup flow for the project. */
+    suspend fun requestProjectSecretsSetup(projectId: UUID) {
+        rawCall(AutopilotDomain.PROJECT, AutopilotOp.PROJECT_SECRETS_SETUP, encodeBody(AutopilotProjectBody(projectId)))
+    }
+
+    /** Ask the Mac to start the docs-setup chat for the project. */
+    suspend fun requestProjectDocsSetup(projectId: UUID) {
+        rawCall(AutopilotDomain.PROJECT, AutopilotOp.PROJECT_DOCS_SETUP, encodeBody(AutopilotProjectBody(projectId)))
+    }
+
+    /** Ask the Mac to open its docs search overlay. */
+    suspend fun requestProjectDocsSearch(projectId: UUID) {
+        rawCall(AutopilotDomain.PROJECT, AutopilotOp.PROJECT_DOCS_SEARCH, encodeBody(AutopilotProjectBody(projectId)))
+    }
+
+    /** Ask the Mac to start the release-setup chat for the project. */
+    suspend fun requestProjectReleaseSetup(projectId: UUID) {
+        rawCall(AutopilotDomain.PROJECT, AutopilotOp.PROJECT_RELEASE_SETUP, encodeBody(AutopilotProjectBody(projectId)))
+    }
+
+    /** Ask the Mac to present its create-release sheet for the project. */
+    suspend fun requestProjectReleaseCreate(projectId: UUID) {
+        rawCall(AutopilotDomain.PROJECT, AutopilotOp.PROJECT_RELEASE_CREATE, encodeBody(AutopilotProjectBody(projectId)))
+    }
+
+    /**
+     * Ask the Mac to open a pull request for the project's branch (it pushes the
+     * branch, drafts the title/body from the briefing, and opens the PR). Returns
+     * the PR URL so the phone can open it.
+     */
+    suspend fun requestProjectCreatePullRequest(projectId: UUID, branch: String): String =
+        decodeResult<AutopilotPullRequestResult>(
+            rawCall(
+                AutopilotDomain.PROJECT, AutopilotOp.PROJECT_CREATE_PULL_REQUEST,
+                encodeBody(AutopilotProjectBranchBody(projectId, branch)),
+            )
+        ).url
+
+    /**
+     * Relay already-decrypted secret files for the Mac to write into the project
+     * folder. Decryption happens on-device first (see [SecretsManager]); this only
+     * carries plaintext over the E2E channel. Returns files written + conflicts.
+     */
+    suspend fun projectSecretsWrite(
+        projectId: UUID,
+        files: List<AutopilotProjectSecretsWriteBody.Plaintext>,
+        overwrite: Boolean,
+    ): AutopilotProjectSecretsDownloadResult =
+        decodeResult(
+            rawCall(
+                AutopilotDomain.PROJECT, AutopilotOp.PROJECT_SECRETS_WRITE,
+                encodeBody(AutopilotProjectSecretsWriteBody(projectId, files, overwrite)),
+            )
+        )
+
+    // MARK: - Global search
+
+    /** One round trip returning thread matches AND published-docs matches. */
+    suspend fun searchThreadsAndDocs(query: String, limit: Int? = null): AutopilotSearchResult =
+        decodeResult(
+            rawCall(
+                AutopilotDomain.SEARCH, AutopilotOp.SEARCH_THREADS_AND_DOCS,
+                encodeBody(AutopilotSearchBody(query, limit)),
             )
         )
 

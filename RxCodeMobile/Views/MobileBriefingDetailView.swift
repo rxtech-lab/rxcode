@@ -119,7 +119,11 @@ struct MobileBriefingDetailView: View {
                 "branch": groupKey.branch,
             ])
         }
-        .mobileAutopilotLoadingOverlay(isCreatingPR, title: "Creating Pull Request…")
+        .mobileAutopilotLoadingDialog(
+            isCreatingPR,
+            title: "Creating Pull Request…",
+            message: "The Mac is pushing the branch and opening the PR."
+        )
     }
 
     private var group: GroupedBriefing? {

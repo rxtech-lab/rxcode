@@ -122,7 +122,22 @@ final class ExternalEditorService {
 // MARK: - ExternalEditorMenu
 
 struct ExternalEditorMenu: View {
+    @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
+
+    /// Pull request for the selected project's current branch, when one is known
+    /// (mirrors the briefing card). Drives the dedicated "Open Pull Request" item.
+    private func pullRequestURL(for project: Project) -> URL? {
+        _ = appState.ciStatusRevision
+        guard let status = appState.ciStatusByProject[project.id] else { return nil }
+        if let prUrl = status.prUrl, let url = URL(string: prUrl) {
+            return url
+        }
+        if let prNumber = status.prNumber {
+            return URL(string: "https://github.com/\(status.owner)/\(status.repo)/pull/\(prNumber)")
+        }
+        return nil
+    }
 
     var body: some View {
         Menu {
@@ -141,12 +156,20 @@ struct ExternalEditorMenu: View {
                 }
             }
             Divider()
-            if let project = windowState.selectedProject,
-               let gitHubURL = ExternalEditorService.shared.gitHubURL(for: project) {
-                Button {
-                    NSWorkspace.shared.open(gitHubURL)
-                } label: {
-                    Label("Open in GitHub", systemImage: "globe")
+            if let project = windowState.selectedProject {
+                if let prURL = pullRequestURL(for: project) {
+                    Button {
+                        NSWorkspace.shared.open(prURL)
+                    } label: {
+                        Label("Open Pull Request", systemImage: "arrow.triangle.pull")
+                    }
+                }
+                if let repoURL = ExternalEditorService.shared.gitHubURL(for: project) {
+                    Button {
+                        NSWorkspace.shared.open(repoURL)
+                    } label: {
+                        Label("Open Repository", systemImage: "globe")
+                    }
                 }
             }
             Button {

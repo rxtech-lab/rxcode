@@ -21,6 +21,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.automirrored.outlined.TextSnippet
 import androidx.compose.material3.AssistChip
@@ -52,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import app.rxlab.rxcode.proto.MobileThreadSummary
 import app.rxlab.rxcode.state.MobileAppState
 import app.rxlab.rxcode.state.MobileState
+import app.rxlab.rxcode.ui.autopilot.ProjectActionsMenu
 import app.rxlab.rxcode.ui.sheets.NewThreadSheet
 import app.rxlab.rxcode.ui.util.HapticEvent
 import app.rxlab.rxcode.ui.util.RxMarkdownText
@@ -76,6 +78,7 @@ fun BriefingDetailScreen(
     onOpenSession: (String) -> Unit,
     onNewThread: (sessionId: String) -> Unit,
     selectedSessionId: String? = null,
+    onOpenSearch: () -> Unit = {},
 ) {
     val haptics = rememberHaptics()
     val group by remember(state.branchBriefings, state.threadSummaries, groupKey) {
@@ -109,6 +112,22 @@ fun BriefingDetailScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onOpenSearch) {
+                        Icon(Icons.Outlined.Search, contentDescription = "Search")
+                    }
+                    // Autopilot / GitHub context menu, 1:1 with iOS
+                    // MobileBriefingDetailView. Repo-gated like the desktop menu.
+                    project?.takeIf { !it.gitHubRepo.isNullOrEmpty() }?.let { repoProject ->
+                        ProjectActionsMenu(
+                            project = repoProject,
+                            branch = groupKey.branch,
+                            branchInfo = branchInfo,
+                            viewModel = viewModel,
+                            onOpenSession = onOpenSession,
+                        )
                     }
                 },
             )

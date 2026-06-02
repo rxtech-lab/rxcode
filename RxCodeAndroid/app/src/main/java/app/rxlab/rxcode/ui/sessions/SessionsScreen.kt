@@ -27,6 +27,7 @@ import androidx.compose.material.icons.outlined.DriveFileRenameOutline
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
@@ -60,6 +61,7 @@ import app.rxlab.rxcode.proto.SessionSummary
 import app.rxlab.rxcode.proto.TodoItem
 import app.rxlab.rxcode.state.MobileAppState
 import app.rxlab.rxcode.state.MobileState
+import app.rxlab.rxcode.ui.autopilot.ProjectActionsMenu
 import app.rxlab.rxcode.ui.sheets.NewThreadSheet
 import app.rxlab.rxcode.ui.sheets.RenameThreadSheet
 import app.rxlab.rxcode.ui.util.HapticEvent
@@ -86,6 +88,7 @@ fun SessionsScreen(
     onBack: () -> Unit,
     viewModel: MobileAppState,
     selectedSessionId: String? = null,
+    onOpenSearch: () -> Unit = {},
 ) {
     val haptics = rememberHaptics()
     val project = state.projects.firstOrNull { it.id == projectId }
@@ -107,6 +110,25 @@ fun SessionsScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onOpenSearch) {
+                        Icon(Icons.Outlined.Search, contentDescription = "Search")
+                    }
+                    // Project-level context menu (autopilot actions + Delete
+                    // Project), 1:1 with iOS SessionsList. The per-thread row
+                    // menu (rename/archive/delete) stays on each card below.
+                    project?.let { proj ->
+                        ProjectActionsMenu(
+                            project = proj,
+                            branch = branchInfo?.currentBranch,
+                            branchInfo = branchInfo,
+                            viewModel = viewModel,
+                            includeDeleteProject = true,
+                            onOpenSession = onNewThread,
+                            onProjectDeleted = onBack,
+                        )
                     }
                 },
             )

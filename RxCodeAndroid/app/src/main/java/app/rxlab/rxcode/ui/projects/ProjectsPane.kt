@@ -66,6 +66,7 @@ fun ProjectsPaneScreen(
     state: MobileState,
     viewModel: MobileAppState,
     onSettingsClick: () -> Unit,
+    onOpenSearch: () -> Unit,
 ) {
     var selectedProjectId by rememberSaveable(stateSaver = uuidSaver) {
         mutableStateOf<UUID?>(null)
@@ -85,6 +86,7 @@ fun ProjectsPaneScreen(
                 onSelectProject = { selectedProjectId = it },
                 onSettingsClick = onSettingsClick,
                 onBackToProjects = { selectedProjectId = null },
+                onOpenSearch = onOpenSearch,
                 availableWidth = maxWidth,
             )
         } else {
@@ -95,6 +97,7 @@ fun ProjectsPaneScreen(
                 onSelectProject = { selectedProjectId = it },
                 onSettingsClick = onSettingsClick,
                 onBackToProjects = { selectedProjectId = null },
+                onOpenSearch = onOpenSearch,
             )
         }
     }
@@ -109,6 +112,7 @@ private fun CollapsingProjectsPane(
     onSelectProject: (UUID) -> Unit,
     onSettingsClick: () -> Unit,
     onBackToProjects: () -> Unit,
+    onOpenSearch: () -> Unit,
 ) {
     val navigator = rememberListDetailPaneScaffoldNavigator<String>()
     val scope = rememberCoroutineScope()
@@ -152,6 +156,7 @@ private fun CollapsingProjectsPane(
                         onProjectClick = { project -> onSelectProject(project.id) },
                         onSettingsClick = onSettingsClick,
                         viewModel = viewModel,
+                        onOpenSearch = onOpenSearch,
                     )
                 } else {
                     SessionsScreen(
@@ -171,6 +176,7 @@ private fun CollapsingProjectsPane(
                         },
                         onBack = onBackToProjects,
                         viewModel = viewModel,
+                        onOpenSearch = onOpenSearch,
                     )
                 }
             }
@@ -204,6 +210,7 @@ private fun WideProjectsPane(
     onSelectProject: (UUID) -> Unit,
     onSettingsClick: () -> Unit,
     onBackToProjects: () -> Unit,
+    onOpenSearch: () -> Unit,
     availableWidth: Dp,
 ) {
     var selectedSessionId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -251,6 +258,7 @@ private fun WideProjectsPane(
                         },
                         onSettingsClick = onSettingsClick,
                         viewModel = viewModel,
+                        onOpenSearch = onOpenSearch,
                     )
                 } else {
                     SessionsScreen(
@@ -267,6 +275,7 @@ private fun WideProjectsPane(
                         onBack = onBackToProjects,
                         viewModel = viewModel,
                         selectedSessionId = selectedSessionId,
+                        onOpenSearch = onOpenSearch,
                     )
                 }
             }

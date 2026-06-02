@@ -1,12 +1,17 @@
 package app.rxlab.rxcode.state
 
+import android.content.Context
 import android.os.Build
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.rxlab.rxcode.BuildConfig
+import app.rxlab.rxcode.proto.AutopilotProjectSecretsDownloadResult
+import app.rxlab.rxcode.proto.AutopilotProjectSecretsWriteBody
+import app.rxlab.rxcode.proto.AutopilotProjectStatus
 import app.rxlab.rxcode.proto.BranchOpRequestPayload
 import app.rxlab.rxcode.proto.CancelStreamPayload
+import app.rxlab.rxcode.proto.DeleteProjectRequestPayload
 import app.rxlab.rxcode.proto.LoadMoreMessagesRequestPayload
 import app.rxlab.rxcode.proto.MobileRunTaskSnapshot
 import app.rxlab.rxcode.proto.NewSessionRequestPayload
@@ -69,6 +74,8 @@ class MobileAppState @Inject constructor(
     private var started = false
     private var pairingTimeout: Job? = null
     private var pendingThreadChangesId: UUID? = null
+    private var pendingDeleteProjectId: UUID? = null
+    private var searchJob: Job? = null
 
     /**
      * Autopilot remote-management round-trips (mirrors the desktop's Autopilot
@@ -181,6 +188,17 @@ class MobileAppState @Inject constructor(
                 _state.update { it.copy(pendingBranchOps = it.pendingBranchOps - payload.data.projectID) }
                 if (payload.data.ok) requestSnapshot("branch_op_${payload.data.operation.name}")
                 else Log.w(TAG, "branch op ${payload.data.operation.name} failed: ${payload.data.errorMessage}")
+            }
+            is Payload.DeleteProjectResult -> {
+                if (!isActiveDesktop(fromHex)) return
+                if (payload.data.clientRequestID != pendingDeleteProjectId) return
+                pendingDeleteProjectId = null
+                if (!payload.data.ok) {
+                    Log.w(TAG, "delete project failed: ${payload.data.errorMessage}")
+                    // Restore the optimistically-removed project from the desktop.
+                    _state.update { it.copy(lastError = payload.data.errorMessage ?: "Couldn't delete the project.") }
+                    requestSnapshot("delete_project_failed")
+                }
             }
             is Payload.RunProfileResult -> handleRunProfileResult(fromHex, payload.data)
             is Payload.RunTaskUpdate -> handleRunTaskUpdate(fromHex, payload.data.task)
@@ -571,6 +589,122 @@ class MobileAppState @Inject constructor(
         }
     }
 
+    // MARK: - Project context-menu actions
+
+    /**
+     * Cascade-delete a project on the desktop. Optimistically drops it (and its
+     * sessions) from local state so the UI updates immediately; the desktop
+     * confirms via `delete_project_result`. On failure [handleInbound] re-syncs
+     * to restore the project.
+     */
+    fun deleteProject(projectId: UUID) {
+        if (!_state.value.isPaired) return
+        val request = DeleteProjectRequestPayload(projectID = projectId)
+        pendingDeleteProjectId = request.clientRequestID
+        _state.update {
+            it.copy(
+                projects = it.projects.filterNot { p -> p.id == projectId },
+                sessions = it.sessions.filterNot { s -> s.projectId == projectId },
+            )
+        }
+        viewModelScope.launch {
+            val sent = client.send(Payload.DeleteProjectRequest(request), _state.value.activeDesktopPubkey)
+            if (!sent) {
+                pendingDeleteProjectId = null
+                _state.update { it.copy(lastError = "Couldn't reach your Mac to delete the project.") }
+                requestSnapshot("delete_project_send_failed")
+            }
+        }
+    }
+
+    /**
+     * Per-project autopilot state (has secrets / docs / release), used by the
+     * project context menu to choose the same items the desktop menu shows.
+     */
+    suspend fun projectAutopilotStatus(projectId: UUID): AutopilotProjectStatus =
+        autopilot.projectAutopilotStatus(projectId)
+
+    /** Open a PR for the project's branch on the Mac; returns the PR URL. */
+    suspend fun requestProjectCreatePullRequest(projectId: UUID, branch: String): String =
+        autopilot.requestProjectCreatePullRequest(projectId, branch)
+
+    /**
+     * Download a secret environment into the project folder: decrypt on-device
+     * with the passkey-derived KEK, then relay the plaintext for the Mac to write.
+     * Mirrors iOS `downloadProjectSecrets`. Returns files written + conflicts.
+     */
+    suspend fun downloadProjectSecrets(
+        context: Context,
+        projectId: UUID,
+        repo: String,
+        envId: String,
+        overwrite: Boolean,
+    ): AutopilotProjectSecretsDownloadResult {
+        val plaintext = secrets.environmentPlaintext(context, repo, envId)
+        val files = plaintext.map { AutopilotProjectSecretsWriteBody.Plaintext(it.filename, it.content) }
+        return autopilot.projectSecretsWrite(projectId, files, overwrite)
+    }
+
+    // MARK: - Global search
+
+    /**
+     * Run a combined threads + docs search for [query], debounced by 200 ms.
+     * Mirrors iOS `updateSearchQuery`: a blank query clears results; otherwise one
+     * `searchThreadsAndDocs` autopilot round trip populates both hit lists. Each
+     * keystroke cancels the previous in-flight search so only the latest applies.
+     */
+    fun updateSearchQuery(query: String) {
+        _state.update { it.copy(searchQuery = query) }
+        searchJob?.cancel()
+        val trimmed = query.trim()
+        if (trimmed.isEmpty()) {
+            _state.update {
+                it.copy(
+                    isSearching = false,
+                    searchThreadHits = emptyList(),
+                    searchDocHits = emptyList(),
+                    searchProjectIDs = emptyList(),
+                )
+            }
+            return
+        }
+        searchJob = viewModelScope.launch {
+            delay(SEARCH_DEBOUNCE_MS)
+            _state.update { it.copy(isSearching = true) }
+            try {
+                val result = autopilot.searchThreadsAndDocs(trimmed, limit = SEARCH_LIMIT)
+                // Ignore stale results whose query no longer matches the field.
+                if (_state.value.searchQuery.trim() != trimmed) return@launch
+                _state.update {
+                    it.copy(
+                        isSearching = false,
+                        searchThreadHits = result.threadHits,
+                        searchDocHits = result.docHits,
+                        searchProjectIDs = result.projectIDs,
+                    )
+                }
+            } catch (t: Throwable) {
+                if (_state.value.searchQuery.trim() != trimmed) return@launch
+                Log.w(TAG, "search failed: ${t.message}")
+                _state.update { it.copy(isSearching = false) }
+            }
+        }
+    }
+
+    /** Clear the search field and any results (e.g. when leaving the search UI). */
+    fun clearSearch() {
+        searchJob?.cancel()
+        _state.update {
+            it.copy(
+                searchQuery = "",
+                isSearching = false,
+                searchThreadHits = emptyList(),
+                searchDocHits = emptyList(),
+                searchProjectIDs = emptyList(),
+            )
+        }
+    }
+
     fun respondToPermission(allow: Boolean, denyReason: String? = null) {
         val req = _state.value.pendingPermission ?: return
         _state.update { it.copy(pendingPermission = null) }
@@ -856,6 +990,8 @@ class MobileAppState @Inject constructor(
         private const val TAG = "MobileAppState"
         private const val PAIRING_TIMEOUT_MS = 25_000L
         const val MESSAGE_PAGE_SIZE = 30
+        private const val SEARCH_DEBOUNCE_MS = 200L
+        private const val SEARCH_LIMIT = 25
 
         fun defaultDisplayName(): String = Build.MODEL.ifBlank { "Android" }
 

@@ -25,26 +25,48 @@ struct BriefingFlowLayout: Layout {
     }
 
     private func layout(sizes: [CGSize], containerWidth: CGFloat) -> (offsets: [CGPoint], size: CGSize) {
-        var offsets: [CGPoint] = []
+        // First pass: assign each subview to a line, tracking each line's
+        // height so we can vertically center items within their row.
+        struct Item { var x: CGFloat; var line: Int; var height: CGFloat }
+        var items: [Item] = []
+        var lineHeights: [CGFloat] = []
         var currentX: CGFloat = 0
-        var currentY: CGFloat = 0
+        var line = 0
         var lineHeight: CGFloat = 0
         var maxWidth: CGFloat = 0
 
         for size in sizes {
             if currentX + size.width > containerWidth && currentX > 0 {
+                lineHeights.append(lineHeight)
+                line += 1
                 currentX = 0
-                currentY += lineHeight + spacing
                 lineHeight = 0
             }
 
-            offsets.append(CGPoint(x: currentX, y: currentY))
+            items.append(Item(x: currentX, line: line, height: size.height))
             lineHeight = max(lineHeight, size.height)
             currentX += size.width + spacing
             maxWidth = max(maxWidth, currentX - spacing)
         }
+        lineHeights.append(lineHeight)
 
-        return (offsets, CGSize(width: maxWidth, height: currentY + lineHeight))
+        // Second pass: resolve each line's Y origin, then center items vertically.
+        var lineY: [CGFloat] = []
+        var y: CGFloat = 0
+        for height in lineHeights {
+            lineY.append(y)
+            y += height + spacing
+        }
+
+        let offsets = items.map { item in
+            CGPoint(
+                x: item.x,
+                y: lineY[item.line] + (lineHeights[item.line] - item.height) / 2
+            )
+        }
+
+        let totalHeight = lineY.last.map { $0 + lineHeights[lineHeights.count - 1] } ?? 0
+        return (offsets, CGSize(width: maxWidth, height: totalHeight))
     }
 }
 

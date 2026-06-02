@@ -555,12 +555,40 @@ struct NewThreadConfigStrip: View {
 // MARK: - Create Branch Sheet
 
 struct CreateBranchSheet: View {
+    /// How a new branch gets materialized on the desktop. Mirrors the desktop's
+    /// `CreateBranchSheet.BranchMode`.
+    enum BranchMode: String, CaseIterable, Identifiable {
+        /// `git worktree add -b` — isolated checkout in a sibling directory.
+        case worktree
+        /// `git checkout -b` in the project root — mutates the main repo.
+        case checkout
+
+        var id: String { rawValue }
+
+        var label: LocalizedStringResource {
+            switch self {
+            case .worktree: "New worktree"
+            case .checkout: "Branch + checkout"
+            }
+        }
+
+        var hint: LocalizedStringResource {
+            switch self {
+            case .worktree:
+                "Creates an isolated worktree so this thread works without touching the main checkout."
+            case .checkout:
+                "Creates the branch and checks it out in the project root, changing the main checkout."
+            }
+        }
+    }
+
     @EnvironmentObject private var state: MobileAppState
     @Environment(\.dismiss) private var dismiss
     let projectID: UUID
     let baseBranch: String?
 
     @State private var branchText: String = "rxcode/"
+    @State private var mode: BranchMode = .worktree
     @State private var isSubmitting = false
     @FocusState private var isFocused: Bool
 
@@ -600,6 +628,20 @@ struct CreateBranchSheet: View {
                 if let error = validationError, !trimmed.isEmpty, trimmed != "rxcode/" {
                     Section { Text(error).foregroundStyle(.secondary) }
                 }
+
+                Section {
+                    Picker("Mode", selection: $mode) {
+                        ForEach(BranchMode.allCases) { m in
+                            Text(m.label).tag(m)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .disabled(isSubmitting)
+                } header: {
+                    Text("Mode")
+                } footer: {
+                    Text(mode.hint)
+                }
             }
             .navigationTitle("Create branch")
             .navigationBarTitleDisplayMode(.inline)
@@ -633,8 +675,9 @@ struct CreateBranchSheet: View {
         guard validationError == nil else { return }
         isSubmitting = true
         let name = trimmed
+        let useWorktree = mode == .worktree
         Task {
-            await state.createProjectBranch(projectID: projectID, branch: name)
+            await state.createProjectBranch(projectID: projectID, branch: name, useWorktree: useWorktree)
             isSubmitting = false
             dismiss()
         }

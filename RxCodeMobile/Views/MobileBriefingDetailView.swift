@@ -228,7 +228,9 @@ struct MobileBriefingDetailView: View {
                     .truncationMode(.tail)
                     .fixedSize(horizontal: false, vertical: true)
                 
-                HStack(spacing: 12) {
+                // Chips wrap to the next line when the branch name is long
+                // instead of overflowing the card width.
+                BriefingFlowLayout(spacing: 12) {
                     // Branch chip — falls back to an Init Git action when the
                     // desktop hasn't initialized a repo (branch is "unknown").
                     if isUnknownBranch {
@@ -258,6 +260,8 @@ struct MobileBriefingDetailView: View {
                                 .font(.system(size: 10, weight: .medium))
                             Text(groupKey.branch)
                                 .font(.caption.weight(.medium))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
                         }
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 8)

@@ -246,7 +246,8 @@ struct ProjectsSidebar: View {
     // MARK: - Helpers
 
     private var showsSearch: Bool {
-        !usesSelection
+        // Search is now handled by the dedicated search tab on iPhone
+        false
     }
 
     private func threadCount(for projectID: UUID) -> Int {

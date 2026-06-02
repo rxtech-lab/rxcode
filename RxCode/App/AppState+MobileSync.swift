@@ -574,7 +574,15 @@ extension AppState {
                 try await attachWorktreeForExistingBranch(trimmed, in: window)
                 updateMobilePendingWorktree(from: window, projectID: project.id)
             case .createNew:
-                try await attachWorktree(branch: trimmed, in: window)
+                // Honor the mobile picker: worktree (default) keeps the main
+                // checkout untouched; checkout creates the branch in the
+                // project root and clears any parked worktree so the next
+                // thread spawns there.
+                if request.useWorktree ?? true {
+                    try await attachWorktree(branch: trimmed, in: window)
+                } else {
+                    try await createBranchInPlace(branch: trimmed, in: window)
+                }
                 updateMobilePendingWorktree(from: window, projectID: project.id)
             case .initGit:
                 break // handled above

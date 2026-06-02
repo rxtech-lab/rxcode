@@ -344,11 +344,22 @@ public struct SearchResultsPayload: Codable, Sendable {
     public let query: String
     public let projectIDs: [UUID]
     public let threadHits: [SearchHit]
-    public init(clientRequestID: UUID, query: String, projectIDs: [UUID], threadHits: [SearchHit]) {
+    /// Published-docs matches for the same query. Optional for wire-compatibility
+    /// with desktops that predate mobile docs search — older builds omit the key
+    /// and mobile decodes it as `nil` (rendered as no docs results).
+    public let docHits: [DocsSearchHit]?
+    public init(
+        clientRequestID: UUID,
+        query: String,
+        projectIDs: [UUID],
+        threadHits: [SearchHit],
+        docHits: [DocsSearchHit]? = nil
+    ) {
         self.clientRequestID = clientRequestID
         self.query = query
         self.projectIDs = projectIDs
         self.threadHits = threadHits
+        self.docHits = docHits
     }
 }
 

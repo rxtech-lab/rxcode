@@ -34,23 +34,37 @@ extension AppState {
     }
 
     func handleMobileSearchRequest(_ request: SearchRequestPayload, fromHex hex: String) async {
-        let trimmed = request.query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            let empty = SearchResultsPayload(
-                clientRequestID: request.clientRequestID,
-                query: request.query,
-                projectIDs: [],
-                threadHits: []
-            )
-            await MobileSyncService.shared.send(.searchResults(empty), toHex: hex)
-            return
-        }
+        let result = await combinedThreadAndDocsSearch(query: request.query, limit: request.limit)
+        let payload = SearchResultsPayload(
+            clientRequestID: request.clientRequestID,
+            query: request.query,
+            projectIDs: result.projectIDs,
+            threadHits: result.threadHits,
+            docHits: result.docHits
+        )
+        await MobileSyncService.shared.send(.searchResults(payload), toHex: hex)
+    }
 
+    /// Runs one query across both corpora the desktop owns: its on-device thread
+    /// index (semantic + title match) and the rxlab docs service. Shared by the
+    /// legacy `searchResults` relay and the `searchThreadsAndDocs` autopilot RPC
+    /// so both stay in lockstep. Docs are best-effort — a signed-out desktop or a
+    /// docs-service error collapses to an empty docs list and never fails the
+    /// thread search. Mirrors the desktop overlay's global docs search
+    /// (GlobalSearchOverlay).
+    func combinedThreadAndDocsSearch(
+        query: String,
+        limit: Int
+    ) async -> (projectIDs: [UUID], threadHits: [SearchHit], docHits: [DocsSearchHit]) {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return ([], [], []) }
+
+        let cappedLimit = max(limit, 1)
         let knownProjectIDs = Set(projects.map(\.id))
         let summaries = allSessionSummaries.filter { knownProjectIDs.contains($0.projectId) }
         let summaryByID = Dictionary(uniqueKeysWithValues: summaries.map { ($0.id, $0) })
 
-        let semantic = await searchService.search(trimmed, limit: max(request.limit, 1))
+        let semantic = await searchService.search(trimmed, limit: cappedLimit)
 
         var threadHitByID: [String: SearchHit] = [:]
         for group in semantic {
@@ -88,7 +102,7 @@ extension AppState {
                 if lhs.score != rhs.score { return lhs.score > rhs.score }
                 return lhs.updatedAt > rhs.updatedAt
             }
-            .prefix(max(request.limit, 1))
+            .prefix(cappedLimit)
 
         let projectIDs = projects
             .filter { project in
@@ -97,13 +111,9 @@ extension AppState {
             }
             .map(\.id)
 
-        let payload = SearchResultsPayload(
-            clientRequestID: request.clientRequestID,
-            query: request.query,
-            projectIDs: projectIDs,
-            threadHits: Array(threadHits)
-        )
-        await MobileSyncService.shared.send(.searchResults(payload), toHex: hex)
+        let docHits = (try? await docs.search(query: trimmed, repo: nil, limit: cappedLimit)) ?? []
+
+        return (projectIDs, Array(threadHits), docHits)
     }
 
     func sendMobileSnapshot(toHex hex: String, activeSessionID: String?) async {

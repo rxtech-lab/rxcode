@@ -307,9 +307,12 @@ extension MobileAppState {
         }
     }
 
-    /// Update the search query and dispatch a debounced search request to the
-    /// paired desktop. Empty queries clear results without hitting the network.
-    /// Stale requests are discarded by `clientRequestID`.
+    /// Update the search query and dispatch a debounced combined search to the
+    /// paired desktop. The desktop runs threads + docs in one round trip
+    /// (`searchThreadsAndDocs` RPC) and returns both, so a single awaitable call
+    /// populates every result list. Empty queries clear results without hitting
+    /// the network; stale responses for superseded queries are discarded by
+    /// comparing the in-flight `pendingSearchID`.
     func updateSearchQuery(_ query: String) {
         searchQuery = query
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -319,12 +322,14 @@ extension MobileAppState {
             isSearching = false
             searchProjectIDs = []
             searchThreadHits = []
+            searchDocHits = []
             return
         }
         guard isPaired else {
             isSearching = false
             searchProjectIDs = []
             searchThreadHits = []
+            searchDocHits = []
             return
         }
         let id = UUID()
@@ -334,8 +339,21 @@ extension MobileAppState {
             try? await Task.sleep(nanoseconds: 200_000_000)
             guard !Task.isCancelled, let self else { return }
             guard self.pendingSearchID == id else { return }
-            let payload = SearchRequestPayload(clientRequestID: id, query: trimmed, limit: 25)
-            try? await self.client.send(.searchRequest(payload), toHex: self.pairedDesktopPubkey)
+            do {
+                let result = try await self.searchThreadsAndDocs(query: trimmed, limit: 25)
+                // Ignore a response whose query the user has already moved past.
+                guard self.pendingSearchID == id else { return }
+                self.searchProjectIDs = result.projectIDs
+                self.searchThreadHits = result.threadHits
+                self.searchDocHits = result.docHits
+                self.isSearching = false
+            } catch {
+                guard self.pendingSearchID == id else { return }
+                self.searchProjectIDs = []
+                self.searchThreadHits = []
+                self.searchDocHits = []
+                self.isSearching = false
+            }
         }
     }
 

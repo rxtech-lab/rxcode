@@ -29,6 +29,7 @@ struct SessionsList: View {
     @State private var searchText = ""
     @State private var showingNewThread = false
     @State private var showingDeleteProjectConfirm = false
+    @State private var showingSearch = false
     @Namespace private var glassNamespace
 
     // Autopilot actions (1:1 with the desktop project menu), moved here from the
@@ -53,6 +54,23 @@ struct SessionsList: View {
             .navigationTitle("Threads")
             .toolbar { toolbarContent }
             .toolbar(usesSelection ? .automatic : .hidden, for: .tabBar)
+            .toolbar {
+                // Show search button in bottom bar on iPhone when tab bar is hidden
+                if !usesSelection {
+                    ToolbarItemGroup(placement: .bottomBar) {
+                        Spacer()
+                        Button {
+                            showingSearch = true
+                        } label: {
+                            Image(systemName: "magnifyingglass")
+                        }
+                    }
+                }
+            }
+            .fullScreenCover(isPresented: $showingSearch) {
+                FullScreenSearchView(isPresented: $showingSearch)
+                    .environmentObject(state)
+            }
             .sheet(isPresented: $showingNewThread) {
                 NewThreadSheet(projectID: projectID) { newSessionID in
                     selected = newSessionID
@@ -60,21 +78,13 @@ struct SessionsList: View {
                 .environmentObject(state)
                 .mobileSheetPresentation()
             }
-            .searchable(
-                text: $searchText,
-                placement: .navigationBarDrawer(displayMode: .automatic),
-                prompt: "Global search"
-            )
-            .autocorrectionDisabled(true)
-            .textInputAutocapitalization(.never)
-            .onChange(of: searchText) { _, newValue in
-                // Restart paging so search results always begin at the top.
-                displayLimit = Self.pageSize
-                state.updateSearchQuery(newValue)
-            }
-            .onDisappear {
-                state.updateSearchQuery("")
-            }
+            .modifier(SessionsListSearchModifier(
+                isEnabled: usesSelection, // Only show search on iPad (usesSelection=true)
+                searchText: $searchText,
+                displayLimit: $displayLimit,
+                pageSize: Self.pageSize,
+                state: state
+            ))
             .overlay {
                 if usesDesktopSearch, !state.isSearching, desktopSearchHits.isEmpty {
                     ContentUnavailableView.search(text: searchText)
@@ -682,11 +692,11 @@ extension MobileAppState {
     static var preview: MobileAppState {
         let state = MobileAppState()
         let projectID = UUID()
-        
+
         state.projects = [
             Project(id: projectID, name: "RxCode", path: "/Users/dev/RxCode")
         ]
-        
+
         state.sessions = [
             SessionSummary(
                 id: "session-1",
@@ -769,20 +779,20 @@ extension MobileAppState {
                 hasUncheckedCompletion: false
             )
         ]
-        
+
         return state
     }
-    
+
     /// A preview-ready MobileAppState with no sessions (empty state).
     static var previewEmpty: MobileAppState {
         let state = MobileAppState()
         let projectID = UUID()
-        
+
         state.projects = [
             Project(id: projectID, name: "New Project", path: "/Users/dev/NewProject")
         ]
         state.sessions = []
-        
+
         return state
     }
 }
@@ -828,3 +838,37 @@ extension MobileAppState {
     .environmentObject(state)
 }
 #endif
+
+// MARK: - Search Modifier
+
+private struct SessionsListSearchModifier: ViewModifier {
+    let isEnabled: Bool
+    @Binding var searchText: String
+    @Binding var displayLimit: Int
+    let pageSize: Int
+    let state: MobileAppState
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content
+                .searchable(
+                    text: $searchText,
+                    placement: .navigationBarDrawer(displayMode: .automatic),
+                    prompt: "Global search"
+                )
+                .autocorrectionDisabled(true)
+                .textInputAutocapitalization(.never)
+                .onChange(of: searchText) { _, newValue in
+                    // Restart paging so search results always begin at the top.
+                    displayLimit = pageSize
+                    state.updateSearchQuery(newValue)
+                }
+                .onDisappear {
+                    state.updateSearchQuery("")
+                }
+        } else {
+            content
+        }
+    }
+}

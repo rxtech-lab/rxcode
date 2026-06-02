@@ -168,6 +168,7 @@ extension MobileAppState {
             guard let pending = pendingSearchID, results.clientRequestID == pending else { return }
             searchProjectIDs = results.projectIDs
             searchThreadHits = results.threadHits
+            searchDocHits = results.docHits ?? []
             isSearching = false
         case .threadChangesResult(let result):
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "thread_changes_result") else { return }

@@ -1,7 +1,7 @@
-import SwiftUI
+import os.log
 import RxCodeCore
 import RxCodeSync
-import os.log
+import SwiftUI
 
 private let logger = Logger(subsystem: "com.idealapp.RxCode", category: "RootView")
 
@@ -9,6 +9,7 @@ private enum MobileRootTab: Hashable {
     case briefing
     case projects
     case settings
+    case search
 }
 
 /// Mobile app root. iPad / wide screens use NavigationSplitView; iPhone uses
@@ -62,7 +63,7 @@ struct RootView: View {
     /// Whether the loading splash should be dismissed (data loaded AND minimum time elapsed, but NOT timed out)
     private var shouldShowContent: Bool {
         let result = state.hasReceivedInitialSnapshot && minimumLoadingTimeElapsed && !connectionTimedOut
-        logger.debug("shouldShowContent: \(result) (hasSnapshot: \(self.state.hasReceivedInitialSnapshot), minTimeElapsed: \(self.minimumLoadingTimeElapsed), timedOut: \(self.connectionTimedOut))")
+        logger.debug("shouldShowContent: \(result) (hasSnapshot: \(state.hasReceivedInitialSnapshot), minTimeElapsed: \(minimumLoadingTimeElapsed), timedOut: \(connectionTimedOut))")
         return result
     }
 
@@ -124,18 +125,18 @@ struct RootView: View {
 
     /// Performs initial load with timeout handling
     private func initialLoad() async {
-        logger.info("initialLoad started, current hasReceivedInitialSnapshot: \(self.state.hasReceivedInitialSnapshot)")
-        
+        logger.info("initialLoad started, current hasReceivedInitialSnapshot: \(state.hasReceivedInitialSnapshot)")
+
         // Send the snapshot request (returns immediately, snapshot arrives async)
         consumePendingDeepLink()
         await state.refreshSnapshot()
         logger.info("Snapshot request sent")
-        
+
         // Wait for either snapshot to arrive or timeout
         let timeoutSeconds = 15
         let pollIntervalMs: UInt64 = 100
         let maxPolls = (timeoutSeconds * 1000) / Int(pollIntervalMs)
-        
+
         var pollCount = 0
         while !state.hasReceivedInitialSnapshot && pollCount < maxPolls {
             try? await Task.sleep(for: .milliseconds(pollIntervalMs))
@@ -144,17 +145,17 @@ struct RootView: View {
                 logger.debug("Still waiting for snapshot... polls=\(pollCount)/\(maxPolls)")
             }
         }
-        
+
         let hasSnapshot = state.hasReceivedInitialSnapshot
         logger.info("Wait completed: hasSnapshot=\(hasSnapshot), polls=\(pollCount)/\(maxPolls)")
-        
+
         // Ensure minimum 2 second display time for smooth UX
         if pollCount < 20 { // Less than 2 seconds elapsed
             let remainingMs = (20 - pollCount) * Int(pollIntervalMs)
             logger.debug("Waiting additional \(remainingMs)ms for minimum display time")
             try? await Task.sleep(for: .milliseconds(remainingMs))
         }
-        
+
         if hasSnapshot {
             logger.info("Connection successful - showing content")
             withAnimation {
@@ -185,47 +186,51 @@ struct RootView: View {
         }
     }
 
+    @State private var searchText = ""
+
     private var phoneTabs: some View {
         TabView(selection: $selectedTab) {
-            NavigationStack(path: $briefingDetailPath) {
-                MobileBriefingView(
-                    onCloseChat: { closeBriefingChat() },
-                    onOpenSession: { briefingDetailPath.append($0) }
-                )
-            }
-            .tabItem {
-                Label("Briefing", systemImage: "doc.text")
-            }
-            .tag(MobileRootTab.briefing)
-
-            NavigationStack(path: $projectsPath) {
-                ProjectsSidebar(
-                    selected: $selectedProject,
-                    showingBriefing: $showingBriefing,
-                    showsBriefingItem: false,
-                    usesSelection: false
-                )
-                .navigationDestination(for: UUID.self) { projectID in
-                    SessionsList(
-                        projectID: projectID,
-                        selected: $selectedSession,
-                        usesSelection: false
+            Tab("Briefing", systemImage: "doc.text", value: MobileRootTab.briefing) {
+                NavigationStack(path: $briefingDetailPath) {
+                    MobileBriefingView(
+                        onCloseChat: { closeBriefingChat() },
+                        onOpenSession: { briefingDetailPath.append($0) }
                     )
                 }
-                .navigationDestination(for: String.self) { sessionID in
-                    chatDestination(sessionID)
-                }
             }
-            .tabItem {
-                Label("Projects", systemImage: "folder")
-            }
-            .tag(MobileRootTab.projects)
 
-            MobileSettingsView(showsDoneButton: false)
-                .tabItem {
-                    Label("Settings", systemImage: "gear")
+            Tab("Projects", systemImage: "folder", value: MobileRootTab.projects) {
+                NavigationStack(path: $projectsPath) {
+                    ProjectsSidebar(
+                        selected: $selectedProject,
+                        showingBriefing: $showingBriefing,
+                        showsBriefingItem: false,
+                        usesSelection: false
+                    )
+                    .navigationDestination(for: UUID.self) { projectID in
+                        SessionsList(
+                            projectID: projectID,
+                            selected: $selectedSession,
+                            usesSelection: false
+                        )
+                    }
+                    .navigationDestination(for: String.self) { sessionID in
+                        chatDestination(sessionID)
+                    }
                 }
-                .tag(MobileRootTab.settings)
+            }
+
+            Tab("Settings", systemImage: "gear", value: MobileRootTab.settings) {
+                MobileSettingsView(showsDoneButton: false)
+            }
+
+            Tab(value: MobileRootTab.search, role: .search) {
+                NavigationStack {
+                    MobileSearchContentView(searchText: $searchText)
+                        .navigationTitle("Search")
+                }
+                .searchable(text: $searchText, prompt: "Search threads and docs")
+            }
         }
     }
 
@@ -255,11 +260,22 @@ struct RootView: View {
         NavigationSplitView {
             projectSidebar
         } content: {
-            BriefingListView(selectedGroup: $selectedBriefingGroup)
-                .onChange(of: selectedBriefingGroup) { _, _ in
-                    // Clear navigation path when switching briefing groups
-                    briefingDetailPath.removeLast(briefingDetailPath.count)
-                }
+            NavigationStack {
+                BriefingListView(selectedGroup: $selectedBriefingGroup)
+                    .navigationDestination(for: String.self) { sessionID in
+                        MobileChatView(sessionID: sessionID, onClose: {})
+                            .id(sessionID)
+                            .task(id: sessionID) {
+                                if !MobileDraftSessionID.isDraft(sessionID) {
+                                    await state.subscribe(to: sessionID)
+                                }
+                            }
+                    }
+                    .onChange(of: selectedBriefingGroup) { _, _ in
+                        // Clear navigation path when switching briefing groups
+                        briefingDetailPath.removeLast(briefingDetailPath.count)
+                    }
+            }
         } detail: {
             NavigationStack(path: $briefingDetailPath) {
                 Group {

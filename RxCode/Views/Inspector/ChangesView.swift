@@ -108,13 +108,17 @@ struct ChangesView: View {
     }
 
     /// Cmd+A hooks up to whichever section is currently focused. Hidden button
-    /// avoids stealing focus from the visible UI.
+    /// avoids stealing focus from the visible UI. Disabled when no section is
+    /// focused (e.g. the commit-message editor or another field has focus) so
+    /// the keystroke falls through to the focused field's native select-all
+    /// instead of grabbing the unstaged list.
     @ViewBuilder
     private var selectAllShortcut: some View {
         Button("Select All in Section") {
             selectAllInFocusedSection()
         }
         .keyboardShortcut("a", modifiers: .command)
+        .disabled(focusedSection == nil)
         .frame(width: 0, height: 0)
         .opacity(0)
         .accessibilityHidden(true)
@@ -132,15 +136,9 @@ struct ChangesView: View {
         case .staged:
             selectedStaged = Set(staged.map { $0.displayPath })
         case .none:
-            // No section focused — default to whichever has files, preferring
-            // unstaged. Keeps Cmd+A useful right after the view appears.
-            if !unstaged.isEmpty {
-                selectedUnstaged = Set(unstaged.map { $0.displayPath })
-                focusedSection = .unstaged
-            } else if !staged.isEmpty {
-                selectedStaged = Set(staged.map { $0.displayPath })
-                focusedSection = .staged
-            }
+            // No section focused — the shortcut is disabled in this state, so
+            // the keystroke is handled by whatever field has focus instead.
+            break
         }
     }
 

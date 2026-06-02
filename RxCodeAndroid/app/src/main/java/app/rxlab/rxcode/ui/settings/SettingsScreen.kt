@@ -364,13 +364,12 @@ private fun PairedDesktopCard(
                     shape = CircleShape,
                     color = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.size(32.dp),
+                    modifier = Modifier.size(40.dp),
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             Icons.Outlined.CheckCircle,
                             contentDescription = "Active",
-                            modifier = Modifier.size(20.dp),
                         )
                     }
                 }

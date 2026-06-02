@@ -1,5 +1,6 @@
 package app.rxlab.rxcode.ui.search
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +15,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Article
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Clear
@@ -67,7 +69,10 @@ fun SearchScreen(
     state: MobileState,
     viewModel: MobileAppState,
     onOpenSession: (String) -> Unit,
+    onClose: () -> Unit,
 ) {
+    BackHandler(onBack = onClose)
+
     var scope by remember { mutableStateOf(SearchScope.ALL) }
     var openDoc by remember { mutableStateOf<DocsSearchHit?>(null) }
     val projectsById = remember(state.projects) { state.projects.associateBy { it.id } }
@@ -83,30 +88,35 @@ fun SearchScreen(
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            Column(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp)) {
-                TextField(
-                    value = state.searchQuery,
-                    onValueChange = viewModel::updateSearchQuery,
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("Search threads and docs") },
-                    leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
-                    trailingIcon = {
-                        if (hasQuery) {
-                            IconButton(onClick = { viewModel.clearSearch() }) {
-                                Icon(Icons.Outlined.Clear, contentDescription = "Clear")
+            Column(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 8.dp, vertical = 8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onClose) {
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Close search")
+                    }
+                    TextField(
+                        value = state.searchQuery,
+                        onValueChange = viewModel::updateSearchQuery,
+                        modifier = Modifier.weight(1f),
+                        placeholder = { Text("Search threads and docs") },
+                        leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+                        trailingIcon = {
+                            if (hasQuery) {
+                                IconButton(onClick = { viewModel.clearSearch() }) {
+                                    Icon(Icons.Outlined.Clear, contentDescription = "Clear")
+                                }
                             }
-                        }
-                    },
-                    singleLine = true,
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = ImeAction.Search),
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
-                        unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
-                    ),
-                    shape = MaterialTheme.shapes.large,
-                )
+                        },
+                        singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = ImeAction.Search),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+                            unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+                        ),
+                        shape = MaterialTheme.shapes.large,
+                    )
+                }
                 Row(Modifier.fillMaxWidth().padding(top = 10.dp)) {
                     SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                         SearchScope.entries.forEachIndexed { index, item ->

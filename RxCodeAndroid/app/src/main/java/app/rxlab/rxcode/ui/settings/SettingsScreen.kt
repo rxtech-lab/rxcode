@@ -25,6 +25,7 @@ import androidx.compose.material.icons.outlined.DesktopMac
 import androidx.compose.material.icons.outlined.Flight
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Router
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
@@ -32,8 +33,10 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -79,6 +82,7 @@ fun SettingsScreen(
     viewModel: MobileAppState,
     onBack: () -> Unit,
     onPairNewMac: (() -> Unit)? = null,
+    onOpenSearch: () -> Unit = {},
 ) {
     val haptics = rememberHaptics()
     var unpairTarget by remember { mutableStateOf<PairedDesktop?>(null) }
@@ -102,6 +106,11 @@ fun SettingsScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onOpenSearch) {
+                        Icon(Icons.Outlined.Search, contentDescription = "Search")
                     }
                 },
             )
@@ -351,17 +360,31 @@ private fun PairedDesktopCard(
                 }
             }
             if (isActive) {
-                Icon(
-                    Icons.Outlined.CheckCircle,
-                    contentDescription = "Active",
-                    tint = MaterialTheme.colorScheme.primary,
-                )
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(32.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Outlined.CheckCircle,
+                            contentDescription = "Active",
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
             }
-            IconButton(onClick = onUnpair) {
+            FilledTonalIconButton(
+                onClick = onUnpair,
+                colors = IconButtonDefaults.filledTonalIconButtonColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                ),
+            ) {
                 Icon(
                     Icons.Outlined.Delete,
                     contentDescription = "Unpair",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }

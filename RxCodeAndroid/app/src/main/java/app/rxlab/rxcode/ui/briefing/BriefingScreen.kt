@@ -21,6 +21,7 @@ import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.FilterAlt
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.FilterAltOff
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Schedule
@@ -79,6 +80,7 @@ fun BriefingScreen(
     viewModel: MobileAppState,
     onOpenGroup: (BriefingGroupKey) -> Unit,
     selectedGroupKey: BriefingGroupKey? = null,
+    onOpenSearch: () -> Unit = {},
 ) {
     val haptics = rememberHaptics()
     val scope = rememberCoroutineScope()
@@ -134,6 +136,9 @@ fun BriefingScreen(
             CenterAlignedTopAppBar(
                 title = { Text("Briefing") },
                 actions = {
+                    IconButton(onClick = onOpenSearch) {
+                        Icon(Icons.Outlined.Search, contentDescription = "Search")
+                    }
                     if (hasAnyData) {
                         Box {
                             IconButton(onClick = { menuOpen = true }) {

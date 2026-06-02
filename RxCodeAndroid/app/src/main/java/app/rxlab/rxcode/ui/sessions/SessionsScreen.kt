@@ -27,6 +27,7 @@ import androidx.compose.material.icons.outlined.DriveFileRenameOutline
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
@@ -87,6 +88,7 @@ fun SessionsScreen(
     onBack: () -> Unit,
     viewModel: MobileAppState,
     selectedSessionId: String? = null,
+    onOpenSearch: () -> Unit = {},
 ) {
     val haptics = rememberHaptics()
     val project = state.projects.firstOrNull { it.id == projectId }
@@ -111,6 +113,9 @@ fun SessionsScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = onOpenSearch) {
+                        Icon(Icons.Outlined.Search, contentDescription = "Search")
+                    }
                     // Project-level context menu (autopilot actions + Delete
                     // Project), 1:1 with iOS SessionsList. The per-thread row
                     // menu (rename/archive/delete) stays on each card below.

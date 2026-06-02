@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -59,6 +60,7 @@ fun ProjectsScreen(
     onSettingsClick: () -> Unit,
     selectedProjectId: java.util.UUID? = null,
     viewModel: MobileAppState? = null,
+    onOpenSearch: () -> Unit = {},
 ) {
     val haptics = rememberHaptics()
     val scope = rememberCoroutineScope()
@@ -69,6 +71,9 @@ fun ProjectsScreen(
             CenterAlignedTopAppBar(
                 title = { Text("Projects") },
                 actions = {
+                    IconButton(onClick = onOpenSearch) {
+                        Icon(Icons.Outlined.Search, contentDescription = "Search")
+                    }
                     IconButton(onClick = onSettingsClick) {
                         Icon(Icons.Outlined.Settings, contentDescription = "Settings")
                     }

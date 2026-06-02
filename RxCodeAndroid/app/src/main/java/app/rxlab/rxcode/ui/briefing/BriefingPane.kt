@@ -53,10 +53,12 @@ fun BriefingPaneScreen(
     viewModel: MobileAppState,
     onOpenSession: (String) -> Unit,
     onNewThread: (projectId: java.util.UUID) -> Unit,
+    onOpenSearch: () -> Unit,
 ) {
     BriefingContentSplitPane(
         state = state,
         viewModel = viewModel,
+        onOpenSearch = onOpenSearch,
     )
 }
 
@@ -65,6 +67,7 @@ fun BriefingPaneScreen(
 private fun BriefingContentSplitPane(
     state: MobileState,
     viewModel: MobileAppState,
+    onOpenSearch: () -> Unit,
 ) {
     var selectedGroupKey by rememberSaveable(stateSaver = briefingGroupKeySaver) {
         mutableStateOf<BriefingGroupKey?>(null)
@@ -126,6 +129,7 @@ private fun BriefingContentSplitPane(
                     selectedSessionId = null
                     viewModel.selectSession(null)
                 },
+                onOpenSearch = onOpenSearch,
                 availableWidth = maxWidth,
             )
             return@BoxWithConstraints
@@ -154,6 +158,7 @@ private fun BriefingContentSplitPane(
                 selectedSessionId = null
                 viewModel.selectSession(null)
             },
+            onOpenSearch = onOpenSearch,
         )
     }
 }
@@ -168,6 +173,7 @@ private fun CompactBriefingPane(
     onSelectSession: (String) -> Unit,
     onClearGroup: () -> Unit,
     onClearSession: () -> Unit,
+    onOpenSearch: () -> Unit,
 ) {
     val sid = selectedSessionId
     val key = selectedGroupKey
@@ -191,6 +197,7 @@ private fun CompactBriefingPane(
                     onSelectSession(newSessionId)
                 },
                 selectedSessionId = selectedSessionId,
+                onOpenSearch = onOpenSearch,
             )
         }
         else -> {
@@ -199,6 +206,7 @@ private fun CompactBriefingPane(
                 viewModel = viewModel,
                 onOpenGroup = onSelectGroup,
                 selectedGroupKey = selectedGroupKey,
+                onOpenSearch = onOpenSearch,
             )
         }
     }
@@ -214,6 +222,7 @@ private fun WideBriefingPane(
     onSelectSession: (String) -> Unit,
     onClearGroup: () -> Unit,
     onClearSession: () -> Unit,
+    onOpenSearch: () -> Unit,
     availableWidth: Dp,
 ) {
     var isDetailExpanded by rememberSaveable { mutableStateOf(false) }
@@ -243,6 +252,7 @@ private fun WideBriefingPane(
                             onSelectSession(newSessionId)
                         },
                         selectedSessionId = selectedSessionId,
+                        onOpenSearch = onOpenSearch,
                     )
                 } else {
                     BriefingScreen(
@@ -250,6 +260,7 @@ private fun WideBriefingPane(
                         viewModel = viewModel,
                         onOpenGroup = onSelectGroup,
                         selectedGroupKey = selectedGroupKey,
+                        onOpenSearch = onOpenSearch,
                     )
                 }
             }

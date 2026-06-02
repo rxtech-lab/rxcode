@@ -15,6 +15,7 @@ struct MobileSecretsView: View {
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var searchTask: Task<Void, Never>?
+    @State private var hasAppeared = false
 
     var body: some View {
         List {
@@ -75,7 +76,16 @@ struct MobileSecretsView: View {
         }
         .mobileAutopilotLoadingOverlay(enrolled == nil && isLoading)
         .refreshable { await load() }
-        .task { await load() }
+        .task {
+            guard !hasAppeared else { return }
+            hasAppeared = true
+            await load()
+        }
+        .onAppear {
+            // Always refresh when returning to this screen (the very first
+            // appear is handled by `.task` above).
+            if hasAppeared { Task { await load() } }
+        }
     }
 
     private func load() async {
@@ -110,6 +120,9 @@ struct MobileSecretsRepoView: View {
     @State private var showingAdd = false
     @State private var newName = ""
     @State private var pendingDelete: SecretsEnvironment?
+    @State private var isMutating = false
+    @State private var mutatingTitle: LocalizedStringKey = "Working…"
+    @State private var hasAppeared = false
 
     var body: some View {
         List {
@@ -164,8 +177,18 @@ struct MobileSecretsRepoView: View {
             Text("This permanently deletes the environment and its secret files.")
         }
         .mobileAutopilotLoadingOverlay(isLoading && environments.isEmpty)
+        .mobileAutopilotLoadingDialog(isMutating, title: mutatingTitle)
         .refreshable { await reload() }
-        .task { await reload() }
+        .task {
+            guard !hasAppeared else { return }
+            hasAppeared = true
+            await reload()
+        }
+        .onAppear {
+            // Always refresh when returning to this screen (e.g. after editing
+            // files in a child environment changes the file counts).
+            if hasAppeared { Task { await reload() } }
+        }
     }
 
     private func reload() async {
@@ -182,6 +205,9 @@ struct MobileSecretsRepoView: View {
     private func create() async {
         let name = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return }
+        mutatingTitle = "Creating environment…"
+        isMutating = true
+        defer { isMutating = false }
         do {
             try await state.createSecretEnvironment(repo: repoFullName, name: name)
             await reload()
@@ -191,6 +217,9 @@ struct MobileSecretsRepoView: View {
     }
 
     private func delete(_ env: SecretsEnvironment) async {
+        mutatingTitle = "Deleting environment…"
+        isMutating = true
+        defer { isMutating = false }
         do {
             try await state.deleteSecretEnvironment(repo: repoFullName, envId: env.id)
             await reload()
@@ -213,6 +242,8 @@ struct MobileSecretsEnvironmentView: View {
     @State private var errorMessage: String?
     @State private var editingFile: EditingFile?
     @State private var pendingDelete: SecretsFileMeta?
+    @State private var isMutating = false
+    @State private var hasAppeared = false
 
     struct EditingFile: Identifiable {
         let id = UUID()
@@ -287,8 +318,17 @@ struct MobileSecretsEnvironmentView: View {
             }
         }
         .mobileAutopilotLoadingOverlay(isLoading && files.isEmpty)
+        .mobileAutopilotLoadingDialog(isMutating, title: "Deleting file…")
         .refreshable { await reload() }
-        .task { await reload() }
+        .task {
+            guard !hasAppeared else { return }
+            hasAppeared = true
+            await reload()
+        }
+        .onAppear {
+            // Always refresh when returning to this screen.
+            if hasAppeared { Task { await reload() } }
+        }
     }
 
     private func reload() async {
@@ -333,6 +373,8 @@ struct MobileSecretsEnvironmentView: View {
     }
 
     private func delete(_ file: SecretsFileMeta) async {
+        isMutating = true
+        defer { isMutating = false }
         do {
             try await state.deleteSecretFile(repo: repoFullName, envId: environment.id, fileId: file.id)
             await reload()
@@ -400,6 +442,7 @@ struct MobileSecretFileEditor: View {
                         .disabled(isSaving || filename.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
+            .mobileAutopilotLoadingDialog(isSaving, title: file.isNew ? "Creating file…" : "Saving file…")
         }
     }
 

@@ -3964,7 +3964,20 @@
       }
     },
     "Create Pull Request" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "풀 리퀘스트 생성"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建拉取请求"
+          }
+        }
+      }
     },
     "Create Release" : {
       "localizations" : {
@@ -4063,7 +4076,20 @@
       }
     },
     "Creating Pull Request…" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "풀 리퀘스트 생성 중…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在创建拉取请求…"
+          }
+        }
+      }
     },
     "Creating…" : {
       "localizations" : {
@@ -9876,7 +9902,20 @@
       }
     },
     "Open Repository" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장소 열기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开仓库"
+          }
+        }
+      }
     },
     "Open RxCode" : {
       "localizations" : {
@@ -13024,7 +13063,20 @@
       }
     },
     "Set Up Docs" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "문서 설정"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置文档"
+          }
+        }
+      }
     },
     "Set Up Docs Search" : {
       "extractionState" : "stale",
@@ -15432,7 +15484,20 @@
       }
     },
     "You're already in this setup chat" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이미 이 설정 대화에 있습니다"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你已在此设置对话中"
+          }
+        }
+      }
     }
   },
   "version" : "1.1"

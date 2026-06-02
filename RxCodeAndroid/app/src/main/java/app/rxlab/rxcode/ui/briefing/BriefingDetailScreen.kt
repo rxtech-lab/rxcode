@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import app.rxlab.rxcode.proto.MobileThreadSummary
 import app.rxlab.rxcode.state.MobileAppState
 import app.rxlab.rxcode.state.MobileState
+import app.rxlab.rxcode.ui.autopilot.ProjectActionsMenu
 import app.rxlab.rxcode.ui.sheets.NewThreadSheet
 import app.rxlab.rxcode.ui.util.HapticEvent
 import app.rxlab.rxcode.ui.util.RxMarkdownText
@@ -109,6 +110,19 @@ fun BriefingDetailScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    // Autopilot / GitHub context menu, 1:1 with iOS
+                    // MobileBriefingDetailView. Repo-gated like the desktop menu.
+                    project?.takeIf { !it.gitHubRepo.isNullOrEmpty() }?.let { repoProject ->
+                        ProjectActionsMenu(
+                            project = repoProject,
+                            branch = groupKey.branch,
+                            branchInfo = branchInfo,
+                            viewModel = viewModel,
+                            onOpenSession = onOpenSession,
+                        )
                     }
                 },
             )

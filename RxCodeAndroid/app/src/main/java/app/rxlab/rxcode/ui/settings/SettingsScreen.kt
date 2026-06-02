@@ -326,9 +326,9 @@ private fun PairedDesktopCard(
             Surface(
                 shape = CircleShape,
                 color = if (isActive) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.secondaryContainer,
+                else MaterialTheme.colorScheme.secondary,
                 contentColor = if (isActive) MaterialTheme.colorScheme.onPrimary
-                else MaterialTheme.colorScheme.onSecondaryContainer,
+                else MaterialTheme.colorScheme.onSecondary,
                 modifier = Modifier.size(44.dp),
             ) {
                 Box(contentAlignment = Alignment.Center) {
@@ -345,7 +345,7 @@ private fun PairedDesktopCard(
                     Text(
                         it,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                     )
                 }

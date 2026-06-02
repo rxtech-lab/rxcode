@@ -97,6 +97,12 @@ sealed class Payload {
     data class BranchOpResult(val data: BranchOpResultPayload) : Payload() {
         override val type = "branch_op_result"
     }
+    data class DeleteProjectRequest(val data: DeleteProjectRequestPayload) : Payload() {
+        override val type = "delete_project_request"
+    }
+    data class DeleteProjectResult(val data: DeleteProjectResultPayload) : Payload() {
+        override val type = "delete_project_result"
+    }
     data class RunProfileMutationRequest(val data: RunProfileMutationRequestPayload) : Payload() {
         override val type = "run_profile_mutation_request"
     }
@@ -443,6 +449,24 @@ data class ThreadChangesResultPayload(
     val uncommitted: List<SyncGitChange> = emptyList(),
 )
 
+/**
+ * Mobile → desktop: cascade-delete a project (sessions, search index, memory).
+ * The desktop confirms via [DeleteProjectResultPayload].
+ */
+@Serializable
+data class DeleteProjectRequestPayload(
+    @Serializable(with = UuidSerializer::class) val clientRequestID: UUID = UUID.randomUUID(),
+    @Serializable(with = UuidSerializer::class) val projectID: UUID,
+)
+
+@Serializable
+data class DeleteProjectResultPayload(
+    @Serializable(with = UuidSerializer::class) val clientRequestID: UUID,
+    @Serializable(with = UuidSerializer::class) val projectID: UUID,
+    val ok: Boolean,
+    val errorMessage: String? = null,
+)
+
 @Serializable
 data class PingPayload(
     @Serializable(with = SwiftDateSerializer::class) val t: Instant = Instant.now(),
@@ -496,6 +520,8 @@ object PayloadSerializer : KSerializer<Payload> {
             "plan_decision" -> Payload.PlanDecision(json.decodeFromJsonElement(PlanDecisionPayload.serializer(), data))
             "branch_op_request" -> Payload.BranchOpRequest(json.decodeFromJsonElement(BranchOpRequestPayload.serializer(), data))
             "branch_op_result" -> Payload.BranchOpResult(json.decodeFromJsonElement(BranchOpResultPayload.serializer(), data))
+            "delete_project_request" -> Payload.DeleteProjectRequest(json.decodeFromJsonElement(DeleteProjectRequestPayload.serializer(), data))
+            "delete_project_result" -> Payload.DeleteProjectResult(json.decodeFromJsonElement(DeleteProjectResultPayload.serializer(), data))
             "run_profile_mutation_request" -> Payload.RunProfileMutationRequest(json.decodeFromJsonElement(RunProfileMutationRequestPayload.serializer(), data))
             "run_profile_result" -> Payload.RunProfileResult(json.decodeFromJsonElement(RunProfileResultPayload.serializer(), data))
             "run_profile_run_request" -> Payload.RunProfileRunRequest(json.decodeFromJsonElement(RunProfileRunRequestPayload.serializer(), data))
@@ -537,6 +563,8 @@ object PayloadSerializer : KSerializer<Payload> {
             is Payload.PlanDecision -> value.type to json.encodeToJsonElement(PlanDecisionPayload.serializer(), value.data)
             is Payload.BranchOpRequest -> value.type to json.encodeToJsonElement(BranchOpRequestPayload.serializer(), value.data)
             is Payload.BranchOpResult -> value.type to json.encodeToJsonElement(BranchOpResultPayload.serializer(), value.data)
+            is Payload.DeleteProjectRequest -> value.type to json.encodeToJsonElement(DeleteProjectRequestPayload.serializer(), value.data)
+            is Payload.DeleteProjectResult -> value.type to json.encodeToJsonElement(DeleteProjectResultPayload.serializer(), value.data)
             is Payload.RunProfileMutationRequest -> value.type to json.encodeToJsonElement(RunProfileMutationRequestPayload.serializer(), value.data)
             is Payload.RunProfileResult -> value.type to json.encodeToJsonElement(RunProfileResultPayload.serializer(), value.data)
             is Payload.RunProfileRunRequest -> value.type to json.encodeToJsonElement(RunProfileRunRequestPayload.serializer(), value.data)

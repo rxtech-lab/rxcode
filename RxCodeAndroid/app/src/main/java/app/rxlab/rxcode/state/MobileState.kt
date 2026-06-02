@@ -1,6 +1,7 @@
 package app.rxlab.rxcode.state
 
 import app.rxlab.rxcode.proto.ChatMessage
+import app.rxlab.rxcode.proto.DocsSearchHit
 import app.rxlab.rxcode.proto.MobileBranchBriefing
 import app.rxlab.rxcode.proto.MobileRunTaskSnapshot
 import app.rxlab.rxcode.proto.MobileThreadSummary
@@ -10,6 +11,7 @@ import app.rxlab.rxcode.proto.PermissionRequestPayload
 import app.rxlab.rxcode.proto.Project
 import app.rxlab.rxcode.proto.ProjectBranchInfo
 import app.rxlab.rxcode.proto.RunProfile
+import app.rxlab.rxcode.proto.SearchHit
 import app.rxlab.rxcode.proto.SessionSummary
 import app.rxlab.rxcode.proto.ThreadChangesResultPayload
 import app.rxlab.rxcode.relay.RelayClient
@@ -80,6 +82,17 @@ data class MobileState(
      * then clears it via [MobileAppState.consumePendingNotificationDeepLink].
      */
     val pendingNotificationSessionID: String? = null,
+
+    /**
+     * Global search state (threads + published docs), mirroring iOS
+     * `MobileAppState`. Populated by [MobileAppState.updateSearchQuery], which
+     * runs one combined `searchThreadsAndDocs` autopilot call per debounced query.
+     */
+    val searchQuery: String = "",
+    val searchThreadHits: List<SearchHit> = emptyList(),
+    val searchDocHits: List<DocsSearchHit> = emptyList(),
+    val searchProjectIDs: List<UUID> = emptyList(),
+    val isSearching: Boolean = false,
 ) {
     val isPaired: Boolean get() = activeDesktopPubkey.isNotEmpty()
 

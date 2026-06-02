@@ -3,6 +3,7 @@ package app.rxlab.rxcode.ui
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -17,6 +18,7 @@ import app.rxlab.rxcode.state.MobileState
 import app.rxlab.rxcode.ui.briefing.BriefingPaneScreen
 import app.rxlab.rxcode.ui.onboarding.OnboardingScreen
 import app.rxlab.rxcode.ui.projects.ProjectsPaneScreen
+import app.rxlab.rxcode.ui.search.SearchScreen
 import app.rxlab.rxcode.ui.settings.SettingsScreen
 import app.rxlab.rxcode.ui.sync.SyncLoadingView
 import androidx.compose.runtime.LaunchedEffect
@@ -120,6 +122,14 @@ fun RxCodeApp(state: MobileState, viewModel: MobileAppState) {
                 viewModel = viewModel,
                 onSettingsClick = { currentTab = RootTab.Settings.name },
             )
+            RootTab.Search -> SearchScreen(
+                state = state,
+                viewModel = viewModel,
+                onOpenSession = { sid ->
+                    viewModel.selectSession(sid)
+                    currentTab = RootTab.Projects.name
+                },
+            )
             RootTab.Settings -> SettingsScreen(
                 state = state,
                 viewModel = viewModel,
@@ -136,10 +146,11 @@ enum class RootTab(
 ) {
     Briefing("Briefing", Icons.Outlined.Description),
     Projects("Projects", Icons.Outlined.Folder),
+    Search("Search", Icons.Outlined.Search),
     Settings("Settings", Icons.Outlined.Settings);
 
     companion object {
-        val allTabs: List<RootTab> = listOf(Briefing, Projects, Settings)
+        val allTabs: List<RootTab> = listOf(Briefing, Projects, Search, Settings)
     }
 }
 

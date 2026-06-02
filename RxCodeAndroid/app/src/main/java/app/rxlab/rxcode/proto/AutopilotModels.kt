@@ -15,6 +15,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.longOrNull
 import java.time.Instant
+import java.util.UUID
 
 /**
  * Domain models for the autopilot remote-management feature. Mirrors the
@@ -474,4 +475,67 @@ data class ReleaseDispatchResult(
 data class ReleaseGithubSecretResult(
     val secretName: String,
     val repositoryFullName: String,
+)
+
+// MARK: - Project context-menu results
+
+/**
+ * Per-project autopilot state powering the mobile context menu. Mirrors the
+ * desktop's hasSecrets / hasDocs / hasRelease checks so the phone picks the
+ * same menu items (Download vs Set Up, etc.).
+ */
+@Serializable
+data class AutopilotProjectStatus(
+    val gitHubRepo: String? = null,
+    val hasSecrets: Boolean = false,
+    val hasDocs: Boolean = false,
+    val hasRelease: Boolean = false,
+)
+
+/** Result of `projectCreatePullRequest`: the URL of the opened pull request. */
+@Serializable
+data class AutopilotPullRequestResult(val url: String)
+
+/** Result of `projectSecretsWrite`: files written and any skipped conflicts. */
+@Serializable
+data class AutopilotProjectSecretsDownloadResult(
+    val written: List<String> = emptyList(),
+    val conflicts: List<String> = emptyList(),
+)
+
+// MARK: - Global search
+
+/** One thread match from the desktop's on-device index. */
+@Serializable
+data class SearchHit(
+    val sessionID: String,
+    @Serializable(with = UuidSerializer::class) val projectID: UUID,
+    val title: String,
+    val snippet: String,
+    @Serializable(with = SwiftDateSerializer::class) val updatedAt: Instant,
+    val score: Float = 0f,
+)
+
+/** One published-docs match from the rxlab docs service. */
+@Serializable
+data class DocsSearchHit(
+    val documentId: String? = null,
+    val docId: String,
+    val docsRepositoryId: String? = null,
+    val repositoryFullName: String? = null,
+    val version: Int? = null,
+    val similarity: Double? = null,
+    val snippet: String? = null,
+    val originalLink: String? = null,
+) {
+    val stableId: String get() = documentId ?: "${repositoryFullName ?: ""}:$docId"
+}
+
+/** Combined search results for one query: thread hits + doc hits. */
+@Serializable
+data class AutopilotSearchResult(
+    val query: String,
+    val projectIDs: List<@Serializable(with = UuidSerializer::class) UUID> = emptyList(),
+    val threadHits: List<SearchHit> = emptyList(),
+    val docHits: List<DocsSearchHit> = emptyList(),
 )

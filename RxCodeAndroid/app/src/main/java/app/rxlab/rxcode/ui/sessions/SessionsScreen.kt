@@ -60,6 +60,7 @@ import app.rxlab.rxcode.proto.SessionSummary
 import app.rxlab.rxcode.proto.TodoItem
 import app.rxlab.rxcode.state.MobileAppState
 import app.rxlab.rxcode.state.MobileState
+import app.rxlab.rxcode.ui.autopilot.ProjectActionsMenu
 import app.rxlab.rxcode.ui.sheets.NewThreadSheet
 import app.rxlab.rxcode.ui.sheets.RenameThreadSheet
 import app.rxlab.rxcode.ui.util.HapticEvent
@@ -107,6 +108,22 @@ fun SessionsScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    // Project-level context menu (autopilot actions + Delete
+                    // Project), 1:1 with iOS SessionsList. The per-thread row
+                    // menu (rename/archive/delete) stays on each card below.
+                    project?.let { proj ->
+                        ProjectActionsMenu(
+                            project = proj,
+                            branch = branchInfo?.currentBranch,
+                            branchInfo = branchInfo,
+                            viewModel = viewModel,
+                            includeDeleteProject = true,
+                            onOpenSession = onNewThread,
+                            onProjectDeleted = onBack,
+                        )
                     }
                 },
             )

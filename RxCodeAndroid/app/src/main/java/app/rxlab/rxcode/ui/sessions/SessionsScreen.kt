@@ -125,6 +125,7 @@ fun SessionsScreen(
                             branch = branchInfo?.currentBranch,
                             branchInfo = branchInfo,
                             viewModel = viewModel,
+                            prNumber = state.ciStatusByProject[projectId]?.prNumber,
                             includeDeleteProject = true,
                             onOpenSession = onNewThread,
                             onProjectDeleted = onBack,

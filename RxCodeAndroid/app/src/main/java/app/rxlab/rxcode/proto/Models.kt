@@ -145,3 +145,30 @@ data class ProjectBranchInfo(
     val currentBranch: String,
     val availableBranches: List<String>? = null,
 )
+
+/**
+ * Per-repo CI / pull-request status mirrored from the desktop, used to gate the
+ * "Create Pull Request" menu item (only offered when a branch has no PR yet).
+ * Mirrors a subset of Swift `ProjectCIStatus`; unknown keys (workflows, failing,
+ * etc.) are ignored by [RxJson].
+ */
+@Serializable
+data class ProjectCIStatus(
+    val owner: String = "",
+    val repo: String = "",
+    val branch: String? = null,
+    val found: Boolean = false,
+    val prNumber: Int? = null,
+    val prState: String? = null,
+    val prUrl: String? = null,
+)
+
+/**
+ * One project's CI status, keyed by project id. Mirrors Swift
+ * `MobileProjectCIStatus` from the snapshot payload.
+ */
+@Serializable
+data class MobileProjectCIStatus(
+    @Serializable(with = UuidSerializer::class) val projectId: UUID,
+    val status: ProjectCIStatus,
+)

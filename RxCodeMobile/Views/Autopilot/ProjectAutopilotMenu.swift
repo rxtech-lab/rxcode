@@ -44,6 +44,13 @@ struct ProjectAutopilotMenuItems: View {
     @Binding var showReleaseCreate: Bool
     @Binding var setupChat: AutopilotSetupChat?
     @Binding var info: AutopilotMenuInfo?
+    /// Create-PR support (mirrors the desktop briefing "Create PR" button). The
+    /// in-flight state and the actual request live with the host so the loading
+    /// dialog can attach there; this view only renders the gated menu item.
+    var branch: String? = nil
+    var prNumber: Int? = nil
+    var isCreatingPR: Bool = false
+    var onCreatePR: () -> Void = {}
 
     var body: some View {
         // Mirror the desktop guard: no repo → no autopilot items.
@@ -53,6 +60,7 @@ struct ProjectAutopilotMenuItems: View {
             secretsItem(status)
             docsItem(status)
             releaseItem(status)
+            createPRItem()
         } else {
             Button {} label: {
                 Label("Loading Autopilot…", systemImage: "hourglass")
@@ -115,6 +123,21 @@ struct ProjectAutopilotMenuItems: View {
             } label: {
                 Label("Set Up Release Workflow", systemImage: "tag.fill")
             }
+        }
+    }
+
+    @ViewBuilder
+    private func createPRItem() -> some View {
+        // Offer "Create PR" for a real branch with no open PR yet (mirrors the
+        // desktop briefing PR button); once a PR exists the host's "Open Pull
+        // Request" link covers it.
+        if let branch, branch.lowercased() != "unknown", prNumber == nil {
+            Button {
+                onCreatePR()
+            } label: {
+                Label("Create Pull Request", systemImage: "arrow.triangle.pull.request")
+            }
+            .disabled(isCreatingPR)
         }
     }
 }

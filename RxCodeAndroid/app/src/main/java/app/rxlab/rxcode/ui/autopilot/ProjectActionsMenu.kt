@@ -60,6 +60,9 @@ private const val RELEASE_SETUP_PROMPT =
  *
  * @param branch current branch — enables "Create Pull Request" (hidden when null
  *   or `"unknown"`) and seeds the release form's branch picker.
+ * @param prNumber the open PR number for [branch], or null when none exists.
+ *   Mirrors the desktop briefing gate: "Create Pull Request" is only offered
+ *   when the branch has no PR linked yet.
  * @param onOpenSession navigate to a chat after a setup action creates one.
  * @param onProjectDeleted called after confirming "Delete Project" so the host
  *   can pop back (only reachable when [includeDeleteProject] is true).
@@ -70,6 +73,7 @@ fun ProjectActionsMenu(
     branch: String?,
     branchInfo: ProjectBranchInfo?,
     viewModel: MobileAppState,
+    prNumber: Int? = null,
     includeDeleteProject: Boolean = false,
     onOpenSession: (String) -> Unit = {},
     onProjectDeleted: () -> Unit = {},
@@ -77,7 +81,9 @@ fun ProjectActionsMenu(
     val scope = rememberCoroutineScope()
     val uriHandler = LocalUriHandler.current
     val hasRepo = !project.gitHubRepo.isNullOrEmpty()
-    val canCreatePR = branch != null && !branch.equals("unknown", ignoreCase = true)
+    // Offer "Create PR" for a real branch with no open PR yet (mirrors the
+    // desktop briefing PR button); once a PR exists "Open on GitHub" covers it.
+    val canCreatePR = branch != null && !branch.equals("unknown", ignoreCase = true) && prNumber == null
 
     var menuOpen by remember { mutableStateOf(false) }
     var status by remember(project.id) { mutableStateOf<AutopilotProjectStatus?>(null) }

@@ -22,10 +22,14 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.automirrored.outlined.ArrowForwardIos
 import androidx.compose.material.icons.outlined.DesktopMac
+import androidx.compose.material.icons.outlined.Dns
+import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.Flight
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Memory
 import androidx.compose.material.icons.outlined.Router
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
@@ -87,13 +91,42 @@ fun SettingsScreen(
     val haptics = rememberHaptics()
     var unpairTarget by remember { mutableStateOf<PairedDesktop?>(null) }
     var showAutopilot by rememberSaveable { mutableStateOf(false) }
+    var showSkills by rememberSaveable { mutableStateOf(false) }
+    var showAcpClients by rememberSaveable { mutableStateOf(false) }
+    var showMcpServers by rememberSaveable { mutableStateOf(false) }
+
+    val online = state.isPaired &&
+        state.connectionState == RelayClient.ConnectionState.CONNECTED
 
     if (showAutopilot) {
         app.rxlab.rxcode.ui.autopilot.AutopilotNavHost(
             app = viewModel,
-            online = state.isPaired &&
-                state.connectionState == RelayClient.ConnectionState.CONNECTED,
+            online = online,
             onExit = { showAutopilot = false },
+        )
+        return
+    }
+    if (showSkills) {
+        app.rxlab.rxcode.ui.skills.SkillsMarketScreen(
+            app = viewModel,
+            online = online,
+            onExit = { showSkills = false },
+        )
+        return
+    }
+    if (showAcpClients) {
+        app.rxlab.rxcode.ui.acp.AcpClientsScreen(
+            app = viewModel,
+            online = online,
+            onExit = { showAcpClients = false },
+        )
+        return
+    }
+    if (showMcpServers) {
+        app.rxlab.rxcode.ui.mcp.McpServersScreen(
+            app = viewModel,
+            online = online,
+            onExit = { showMcpServers = false },
         )
         return
     }
@@ -222,6 +255,41 @@ fun SettingsScreen(
                         }
                     }
                 }
+                // Match the iOS MobileSettingsView ordering: Skills, Agent
+                // Clients, then MCP Servers.
+                item {
+                    ConfigNavCard(
+                        icon = Icons.Outlined.Extension,
+                        title = "Skills",
+                        subtitle = "Browse and install marketplace skills",
+                        onClick = {
+                            haptics.play(HapticEvent.LightTap)
+                            showSkills = true
+                        },
+                    )
+                }
+                item {
+                    ConfigNavCard(
+                        icon = Icons.Outlined.Memory,
+                        title = "Agent Clients",
+                        subtitle = "Install and manage ACP agents",
+                        onClick = {
+                            haptics.play(HapticEvent.LightTap)
+                            showAcpClients = true
+                        },
+                    )
+                }
+                item {
+                    ConfigNavCard(
+                        icon = Icons.Outlined.Dns,
+                        title = "MCP Servers",
+                        subtitle = "Configure global MCP servers",
+                        onClick = {
+                            haptics.play(HapticEvent.LightTap)
+                            showMcpServers = true
+                        },
+                    )
+                }
             }
 
             // MARK: - About
@@ -298,6 +366,63 @@ fun SettingsScreen(
                 TextButton(onClick = { unpairTarget = null }) { Text("Cancel") }
             },
         )
+    }
+}
+
+/**
+ * A tappable Desktop-Configuration row (icon + title + subtitle + chevron),
+ * matching the Autopilot card. Used for the Skills / Agent Clients / MCP
+ * Servers entries that take over the screen with their own nav host.
+ */
+@Composable
+private fun ConfigNavCard(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+) {
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick,
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        ),
+    ) {
+        Row(
+            Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.size(44.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(icon, contentDescription = null)
+                }
+            }
+            Column(Modifier.weight(1f)) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
+            Icon(
+                Icons.AutoMirrored.Outlined.ArrowForwardIos,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(14.dp),
+            )
+        }
     }
 }
 

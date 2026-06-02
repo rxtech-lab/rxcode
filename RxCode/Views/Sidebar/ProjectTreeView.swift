@@ -295,6 +295,8 @@ struct ProjectTreeView: View {
 // MARK: - ProjectTreeRow
 
 private struct ProjectTreeRow: View {
+    @Environment(AppState.self) private var appState
+
     let project: Project
     @Binding var isExpanded: Bool
     let isSelected: Bool
@@ -308,6 +310,22 @@ private struct ProjectTreeRow: View {
     @State private var isHovered = false
     @State private var showLocationPopover = false
     @State private var hoverTask: Task<Void, Never>?
+    @State private var creatingPR = false
+    @State private var prError: PRErrorAlert?
+
+    private struct PRErrorAlert: Identifiable {
+        let id = UUID()
+        let message: String
+    }
+
+    /// Mirror the briefing card's gate: offer "Create PR" only for a
+    /// GitHub-linked project whose current branch has no PR yet. Reading
+    /// `ciStatusRevision` keeps the menu in sync as the CI poller updates.
+    private var canCreatePR: Bool {
+        guard project.gitHubRepo != nil else { return false }
+        let _ = appState.ciStatusRevision
+        return appState.ciStatusByProject[project.id]?.pullRequestState == nil
+    }
 
     private var displayPath: String {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
@@ -413,6 +431,13 @@ private struct ProjectTreeRow: View {
         .contextMenu {
             projectMenuItems
         }
+        .alert(item: $prError) { error in
+            Alert(
+                title: Text("Couldn't Create Pull Request"),
+                message: Text(error.message),
+                dismissButton: .default(Text("OK"))
+            )
+        }
     }
 
     /// Shared items for both the "More" (ellipsis) menu and the right-click
@@ -425,6 +450,13 @@ private struct ProjectTreeRow: View {
         Button { onOpenInNewWindow() } label: {
             Label("Open in New Window", systemImage: "macwindow.badge.plus")
         }
+        if canCreatePR {
+            Button { startCreatePR() } label: {
+                Label(creatingPR ? "Creating Pull Request…" : "Create Pull Request",
+                      systemImage: "arrow.triangle.pull")
+            }
+            .disabled(creatingPR)
+        }
         if !hookMenuItems.isEmpty {
             Divider()
             HookContextMenuItems(items: hookMenuItems)
@@ -435,6 +467,22 @@ private struct ProjectTreeRow: View {
         }
         Button(role: .destructive) { onDelete() } label: {
             Label("Delete Project", systemImage: "trash")
+        }
+    }
+
+    /// Push the current branch and open a PR for it (mirrors the briefing card's
+    /// "Create PR" button), then reveal the new PR in the browser.
+    private func startCreatePR() {
+        guard !creatingPR else { return }
+        creatingPR = true
+        Task { @MainActor in
+            defer { creatingPR = false }
+            do {
+                let url = try await appState.createPullRequestForCurrentBranch(project: project)
+                NSWorkspace.shared.open(url)
+            } catch {
+                prError = PRErrorAlert(message: error.localizedDescription)
+            }
         }
     }
 }

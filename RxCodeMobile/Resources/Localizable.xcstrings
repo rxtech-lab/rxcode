@@ -5,13 +5,52 @@
 
     },
     "-- --port 3000" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "-- --port 3000"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "-- --port 3000"
+          }
+        }
+      }
     },
     ".env" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : ".env"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : ".env"
+          }
+        }
+      }
     },
     "#%lld" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "#%lld"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "#%lld"
+          }
+        }
+      }
     },
     "%@ · %lld model%@" : {
       "localizations" : {
@@ -19,6 +58,18 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "%1$@ · %2$lld model%3$@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · 모델 %lld개"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · %lld 个模型"
           }
         }
       }
@@ -31,6 +82,12 @@
             "value" : "%@, Active"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, 활성"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -41,6 +98,12 @@
     },
     "%@. Tap to answer." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@. 답하려면 탭하세요."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -51,6 +114,12 @@
     },
     "%@. Tap to review." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@. 검토하려면 탭하세요."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -60,10 +129,29 @@
       }
     },
     "%lld" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld"
+          }
+        }
+      }
     },
     "%lld active" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld개 활성"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -74,6 +162,12 @@
     },
     "%lld active jobs" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "활성 작업 %lld개"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -84,6 +178,12 @@
     },
     "%lld document(s)" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "문서 %lld개"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -100,6 +200,12 @@
             "value" : "%1$lld environment(s), %2$lld file(s)"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "환경 %lld개, 파일 %lld개"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -110,6 +216,12 @@
     },
     "%lld outdated action(s)" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "오래된 액션 %lld개"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -120,6 +232,12 @@
     },
     "%lld queued" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld개 대기 중"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -134,6 +252,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "%lld queued messages. Tap to view all."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "대기 중인 메시지 %lld개. 모두 보려면 탭하세요."
           }
         },
         "zh-Hans" : {
@@ -151,14 +275,52 @@
             "state" : "new",
             "value" : "%1$lld/%2$lld"
           }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld/%lld"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld/%2$lld"
+          }
         }
       }
     },
     "•" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "•"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "•"
+          }
+        }
+      }
     },
     "+%lld" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+%lld"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+%lld"
+          }
+        }
+      }
     },
     "+%lld more pending" : {
       "localizations" : {
@@ -166,6 +328,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "+%lld more pending"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld개 더 대기 중"
           }
         },
         "zh-Hans" : {
@@ -177,7 +345,20 @@
       }
     },
     "−%lld" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "−%lld"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "−%lld"
+          }
+        }
+      }
     },
     "5-hour limit" : {
       "localizations" : {
@@ -185,6 +366,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "5-hour limit"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "5시간 한도"
           }
         },
         "zh-Hans" : {
@@ -203,6 +390,12 @@
             "value" : "7-day limit"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "7일 한도"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -219,6 +412,12 @@
             "value" : "A summary will appear after threads complete"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스레드가 완료되면 요약이 표시됩니다"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -229,6 +428,12 @@
     },
     "Account" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "계정"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -243,6 +448,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Action"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "작업"
           }
         },
         "zh-Hans" : {
@@ -261,6 +472,12 @@
             "value" : "Active"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "활성"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -275,6 +492,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Add"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "추가"
           }
         },
         "zh-Hans" : {
@@ -293,6 +516,12 @@
             "value" : "Add a branch name after the prefix."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "접두사 뒤에 브랜치 이름을 추가하세요."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -307,6 +536,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Add a project from your Mac"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac에서 프로젝트 추가"
           }
         },
         "zh-Hans" : {
@@ -325,6 +560,12 @@
             "value" : "Add a project from your Mac to get started."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "시작하려면 Mac에서 프로젝트를 추가하세요."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -335,6 +576,12 @@
     },
     "Add a QR code" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "QR 코드 추가"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -351,6 +598,12 @@
             "value" : "Add Argument"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "인자 추가"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -361,6 +614,12 @@
     },
     "Add Document" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "문서 추가"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -375,6 +634,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Add Git Source"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git 소스 추가"
           }
         },
         "zh-Hans" : {
@@ -393,6 +658,12 @@
             "value" : "Add MCP Server"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MCP 서버 추가"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -407,6 +678,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Add Project"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 추가"
           }
         },
         "zh-Hans" : {
@@ -425,6 +702,12 @@
             "value" : "Agent Clients"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "에이전트 클라이언트"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -439,6 +722,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Agent operation failed."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "에이전트 작업에 실패했습니다."
           }
         },
         "zh-Hans" : {
@@ -457,6 +746,12 @@
             "value" : "All"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "전체"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -471,6 +766,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "All branches"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모든 브랜치"
           }
         },
         "zh-Hans" : {
@@ -489,6 +790,12 @@
             "value" : "All projects"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모든 프로젝트"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -503,6 +810,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Allow"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "허용"
           }
         },
         "zh-Hans" : {
@@ -521,6 +834,12 @@
             "value" : "Answer"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "답변"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -537,6 +856,12 @@
             "value" : "API keys stay on the Mac and are not synced to this device."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API 키는 Mac에 저장되며 이 기기와 동기화되지 않습니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -546,7 +871,20 @@
       }
     },
     "App.xcodeproj" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App.xcodeproj"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App.xcodeproj"
+          }
+        }
+      }
     },
     "Archive" : {
       "localizations" : {
@@ -554,6 +892,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Archive"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "보관"
           }
         },
         "zh-Hans" : {
@@ -572,6 +916,12 @@
             "value" : "Archive after %lld day"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld일 후 보관"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -586,6 +936,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Archive after %lld days"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld일 후 보관"
           }
         },
         "zh-Hans" : {
@@ -604,6 +960,12 @@
             "value" : "Archive this thread?"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 스레드를 보관할까요?"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -618,6 +980,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Archived threads are hidden from the list. You can still find them on your Mac."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "보관된 스레드는 목록에서 숨겨집니다. Mac에서는 계속 찾을 수 있습니다."
           }
         },
         "zh-Hans" : {
@@ -636,6 +1004,12 @@
             "value" : "Argument"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "인자"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -650,6 +1024,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Arguments"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "인자"
           }
         },
         "zh-Hans" : {
@@ -668,6 +1048,12 @@
             "value" : "Assistant has a question"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "어시스턴트가 질문이 있습니다"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -682,6 +1068,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Attachment Auto-Preview"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "첨부 파일 자동 미리보기"
           }
         },
         "zh-Hans" : {
@@ -700,6 +1092,12 @@
             "value" : "Auto-archive"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "자동 보관"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -710,6 +1108,12 @@
     },
     "Automation" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "자동화"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -719,7 +1123,20 @@
       }
     },
     "Autopilot" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autopilot"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autopilot"
+          }
+        }
+      }
     },
     "Available in Registry" : {
       "localizations" : {
@@ -727,6 +1144,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Available in Registry"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "레지스트리에서 사용 가능"
           }
         },
         "zh-Hans" : {
@@ -742,6 +1165,12 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
+            "value" : "Bash"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
             "value" : "Bash"
           }
         },
@@ -761,6 +1190,12 @@
             "value" : "Bash Configuration"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bash 구성"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -771,6 +1206,12 @@
     },
     "Branch" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "브랜치"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -780,7 +1221,20 @@
       }
     },
     "Branch + checkout" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "브랜치 + 체크아웃"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分支 + 检出"
+          }
+        }
+      }
     },
     "Branch briefings collect recent thread summaries from your Mac into a quick mobile status view." : {
       "localizations" : {
@@ -788,6 +1242,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Branch briefings collect recent thread summaries from your Mac into a quick mobile status view."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "브랜치 브리핑은 Mac의 최근 스레드 요약을 모바일용 빠른 상태 보기로 모읍니다."
           }
         },
         "zh-Hans" : {
@@ -806,6 +1266,12 @@
             "value" : "Branch name"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "브랜치 이름"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -820,6 +1286,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Branch name cannot end with “/”."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "브랜치 이름은 “/”로 끝날 수 없습니다."
           }
         },
         "zh-Hans" : {
@@ -838,6 +1310,12 @@
             "value" : "Branch name is required."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "브랜치 이름이 필요합니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -852,6 +1330,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Branch operation failed"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "브랜치 작업에 실패했습니다"
           }
         },
         "zh-Hans" : {
@@ -870,6 +1354,12 @@
             "value" : "Branch operation failed."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "브랜치 작업에 실패했습니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -880,6 +1370,12 @@
     },
     "Branch Ruleset (optional)" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "브랜치 규칙 집합 (선택 사항)"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -894,6 +1390,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Branches"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "브랜치"
           }
         },
         "zh-Hans" : {
@@ -912,6 +1414,12 @@
             "value" : "Briefing"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "브리핑"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -926,6 +1434,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Briefings appear here after threads finish on your Mac."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac에서 스레드가 완료되면 브리핑이 여기에 표시됩니다."
           }
         },
         "zh-Hans" : {
@@ -944,6 +1458,12 @@
             "value" : "Browse"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "둘러보기"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -954,6 +1474,12 @@
     },
     "Browser Error" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "브라우저 오류"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -968,6 +1494,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Cancel"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "취소"
           }
         },
         "zh-Hans" : {
@@ -986,6 +1518,12 @@
             "value" : "Change the summarization provider from mobile; API keys and endpoint secrets stay on the Mac."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모바일에서 요약 제공자를 변경하세요. API 키와 엔드포인트 시크릿은 Mac에 유지됩니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1002,6 +1540,12 @@
             "value" : "Changes"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "변경사항"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1012,6 +1556,12 @@
     },
     "Checking account…" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "계정 확인 중…"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1026,6 +1576,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Choose from Photos"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "사진에서 선택"
           }
         },
         "zh-Hans" : {
@@ -1044,6 +1600,12 @@
             "value" : "Choose one"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "하나 선택"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1060,6 +1622,12 @@
             "value" : "Choose the thread agent"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스레드 에이전트 선택"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1069,10 +1637,29 @@
       }
     },
     "CI" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CI"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CI"
+          }
+        }
+      }
     },
     "CI Auto-Update" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CI 자동 업데이트"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1087,6 +1674,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Claude Code Usage"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claude Code 사용량"
           }
         },
         "zh-Hans" : {
@@ -1105,6 +1698,12 @@
             "value" : "Close"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "닫기"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1121,6 +1720,12 @@
             "value" : "Close — answer later from the queue"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "닫기 — 나중에 대기열에서 답변"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1131,6 +1736,12 @@
     },
     "Close Browser" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "브라우저 닫기"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1141,6 +1752,12 @@
     },
     "Close PR" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PR 닫기"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1151,6 +1768,12 @@
     },
     "Close pull request?" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "풀 리퀘스트를 닫을까요?"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1165,6 +1788,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Codex Usage"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Codex 사용량"
           }
         },
         "zh-Hans" : {
@@ -1183,6 +1812,12 @@
             "value" : "Command"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "커맨드"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1197,6 +1832,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Computer Status"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "컴퓨터 상태"
           }
         },
         "zh-Hans" : {
@@ -1215,6 +1856,12 @@
             "value" : "Configuration"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "구성"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1229,6 +1876,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Connect a Mac first."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "먼저 Mac을 연결하세요."
           }
         },
         "zh-Hans" : {
@@ -1247,6 +1900,12 @@
             "value" : "Connect a Mac to browse skills."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스킬을 둘러보려면 Mac을 연결하세요."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1261,6 +1920,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Connect a Mac to manage agents."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "에이전트를 관리하려면 Mac을 연결하세요."
           }
         },
         "zh-Hans" : {
@@ -1279,6 +1944,12 @@
             "value" : "Connect a Mac to manage MCP servers."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MCP 서버를 관리하려면 Mac을 연결하세요."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1289,6 +1960,12 @@
     },
     "Connect an online Mac to use Autopilot." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autopilot을 사용하려면 온라인 상태의 Mac을 연결하세요."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1305,6 +1982,12 @@
             "value" : "Connect to"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연결 대상"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1315,6 +1998,12 @@
     },
     "Connect to an online Mac to manage Autopilot." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autopilot을 관리하려면 온라인 상태의 Mac에 연결하세요."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1329,6 +2018,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Connect to your Mac and try again."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac에 연결한 후 다시 시도하세요."
           }
         },
         "zh-Hans" : {
@@ -1347,6 +2042,12 @@
             "value" : "Connecting to %@"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@에 연결 중"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1361,6 +2062,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Connecting…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연결 중…"
           }
         },
         "zh-Hans" : {
@@ -1379,6 +2086,12 @@
             "value" : "Connection"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연결"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1393,6 +2106,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Connection Timed Out"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연결 시간 초과"
           }
         },
         "zh-Hans" : {
@@ -1411,6 +2130,12 @@
             "value" : "Contents"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "내용"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1427,6 +2152,12 @@
             "value" : "Control desktop summaries"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "데스크톱 요약 제어"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1437,6 +2168,12 @@
     },
     "Control what autopilot does automatically and the templates applied to new repositories." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autopilot이 자동으로 수행하는 작업과 새 저장소에 적용되는 템플릿을 제어합니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1446,7 +2183,20 @@
       }
     },
     "Couldn’t Complete" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "완료할 수 없습니다"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法完成"
+          }
+        }
+      }
     },
     "Couldn't connect to the relay from the QR code. Check the relay address and try again." : {
       "localizations" : {
@@ -1454,6 +2204,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Couldn't connect to the relay from the QR code. Check the relay address and try again."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "QR 코드의 릴레이에 연결할 수 없습니다. 릴레이 주소를 확인하고 다시 시도하세요."
           }
         },
         "zh-Hans" : {
@@ -1472,6 +2228,12 @@
             "value" : "Couldn't Load Changes"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "변경사항을 불러올 수 없습니다"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1481,10 +2243,29 @@
       }
     },
     "Couldn’t Load Environments" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "환경을 불러올 수 없습니다"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法加载环境"
+          }
+        }
+      }
     },
     "Couldn't Load File" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "파일을 불러올 수 없습니다"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1499,6 +2280,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Couldn't load the selected image."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "선택한 이미지를 불러올 수 없습니다."
           }
         },
         "zh-Hans" : {
@@ -1517,6 +2304,12 @@
             "value" : "Couldn't reach the relay. Check your network and try again."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "릴레이에 도달할 수 없습니다. 네트워크를 확인하고 다시 시도하세요."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1533,6 +2326,12 @@
             "value" : "Couldn't read the selected image."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "선택한 이미지를 읽을 수 없습니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1546,6 +2345,12 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
+            "value" : "CPU"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
             "value" : "CPU"
           }
         },
@@ -1565,6 +2370,12 @@
             "value" : "Create"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "생성"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1579,6 +2390,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Create a profile to run a command on your Mac."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac에서 명령을 실행할 프로필을 생성하세요."
           }
         },
         "zh-Hans" : {
@@ -1597,6 +2414,12 @@
             "value" : "Create branch"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "브랜치 생성"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1613,6 +2436,12 @@
             "value" : "Create new branch…"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 브랜치 생성…"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1622,10 +2451,29 @@
       }
     },
     "Create Pull Request" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "풀 리퀘스트 생성"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建拉取请求"
+          }
+        }
+      }
     },
     "Create Release" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "릴리스 생성"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1640,6 +2488,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Created from %@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@에서 생성됨"
           }
         },
         "zh-Hans" : {
@@ -1658,6 +2512,12 @@
             "value" : "Created from the project's current branch"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트의 현재 브랜치에서 생성됨"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1667,13 +2527,52 @@
       }
     },
     "Creates an isolated worktree so this thread works without touching the main checkout." : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "격리된 워크트리를 생성하여 이 스레드가 메인 체크아웃을 건드리지 않고 작동하도록 합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建一个独立的工作树，让此对话无需改动主检出即可进行。"
+          }
+        }
+      }
     },
     "Creates the branch and checks it out in the project root, changing the main checkout." : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 루트에서 브랜치를 생성하고 체크아웃하여 메인 체크아웃을 변경합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在项目根目录创建并检出该分支，会更改主检出。"
+          }
+        }
+      }
     },
     "Creating Pull Request…" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "풀 리퀘스트 생성 중…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在创建拉取请求…"
+          }
+        }
+      }
     },
     "Critical" : {
       "localizations" : {
@@ -1681,6 +2580,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Critical"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "심각"
           }
         },
         "zh-Hans" : {
@@ -1699,6 +2604,12 @@
             "value" : "Current branch"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "현재 브랜치"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1709,6 +2620,12 @@
     },
     "Current project" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "현재 프로젝트"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1725,6 +2642,12 @@
             "value" : "Custom Scheme"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "사용자 지정 스킴"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1735,6 +2658,12 @@
     },
     "Custom Script" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "사용자 지정 스크립트"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1749,6 +2678,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Custom Sources"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "사용자 지정 소스"
           }
         },
         "zh-Hans" : {
@@ -1767,6 +2702,12 @@
             "value" : "Custom Target"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "사용자 지정 타깃"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1781,6 +2722,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Custom…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "사용자 지정…"
           }
         },
         "zh-Hans" : {
@@ -1799,6 +2746,12 @@
             "value" : "Daily summary of your projects"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트의 일일 요약"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1809,6 +2762,12 @@
     },
     "Default" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기본값"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1819,6 +2778,12 @@
     },
     "Default for new repositories" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 저장소의 기본값"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1835,6 +2800,12 @@
             "value" : "Delete"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "삭제"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1845,6 +2816,12 @@
     },
     "Delete document?" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "문서를 삭제할까요?"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1855,6 +2832,12 @@
     },
     "Delete environment?" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "환경을 삭제할까요?"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1865,6 +2848,12 @@
     },
     "Delete file?" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "파일을 삭제할까요?"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1874,13 +2863,45 @@
       }
     },
     "Delete Project" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 삭제"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除项目"
+          }
+        }
+      }
     },
     "Delete Project?" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트를 삭제할까요?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除项目？"
+          }
+        }
+      }
     },
     "Delete template?" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "템플릿을 삭제할까요?"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1895,6 +2916,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Delete this thread?"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 스레드를 삭제할까요?"
           }
         },
         "zh-Hans" : {
@@ -1913,6 +2940,12 @@
             "value" : "Deny"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "거부"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1927,6 +2960,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Describe a task, paste a snippet, or ask a question."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "작업을 설명하거나 스니펫을 붙여넣거나 질문하세요."
           }
         },
         "zh-Hans" : {
@@ -1945,6 +2984,12 @@
             "value" : "Describe what to build…"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "무엇을 만들지 설명하세요…"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1954,7 +2999,20 @@
       }
     },
     "design/overview" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "design/overview"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "design/overview"
+          }
+        }
+      }
     },
     "Desktop Behavior" : {
       "localizations" : {
@@ -1962,6 +3020,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Desktop Behavior"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "데스크톱 동작"
           }
         },
         "zh-Hans" : {
@@ -1980,6 +3044,12 @@
             "value" : "Desktop Configuration"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "데스크톱 구성"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1994,6 +3064,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Desktop Settings"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "데스크톱 설정"
           }
         },
         "zh-Hans" : {
@@ -2012,6 +3088,12 @@
             "value" : "Destination"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "대상"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2022,6 +3104,12 @@
     },
     "Detected · Make" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "감지됨 · Make"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2032,6 +3120,12 @@
     },
     "Detected · Scripts" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "감지됨 · 스크립트"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2042,6 +3136,12 @@
     },
     "Detected · Xcode" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "감지됨 · Xcode"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2056,6 +3156,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Device name"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기기 이름"
           }
         },
         "zh-Hans" : {
@@ -2074,6 +3180,12 @@
             "value" : "Diff truncated — open this file on your Mac for the full diff."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "차이가 잘렸습니다 — 전체 차이를 보려면 Mac에서 이 파일을 여세요."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2084,6 +3196,12 @@
     },
     "Disabled" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "비활성화됨"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2100,6 +3218,12 @@
             "value" : "Disconnected"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연결 끊김"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2110,6 +3234,12 @@
     },
     "Dispatch" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "디스패치"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2120,6 +3250,12 @@
     },
     "Document ID (slug)" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "문서 ID (슬러그)"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2130,6 +3266,12 @@
     },
     "Documentation" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "문서"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2140,6 +3282,12 @@
     },
     "Documents" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "문서"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2156,6 +3304,12 @@
             "value" : "Done"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "완료"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2165,10 +3319,36 @@
       }
     },
     "Download" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다운로드"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载"
+          }
+        }
+      }
     },
     "Download Secret" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "시크릿 다운로드"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载密钥"
+          }
+        }
+      }
     },
     "Duplicate" : {
       "localizations" : {
@@ -2176,6 +3356,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Duplicate"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "복제"
           }
         },
         "zh-Hans" : {
@@ -2194,6 +3380,12 @@
             "value" : "Edit"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "편집"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2210,6 +3402,12 @@
             "value" : "Edit MCP Server"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MCP 서버 편집"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2220,6 +3418,12 @@
     },
     "Edit Template" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "템플릿 편집"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2234,6 +3438,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Empty Folder"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "빈 폴더"
           }
         },
         "zh-Hans" : {
@@ -2252,6 +3462,12 @@
             "value" : "Enable Plan before sending a new thread so the desktop agent drafts a read-only plan first."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 스레드를 보내기 전에 계획을 활성화하면 데스크톱 에이전트가 먼저 읽기 전용 계획을 작성합니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2262,6 +3478,12 @@
     },
     "Enabled" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "활성화됨"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2272,6 +3494,12 @@
     },
     "Encryption not set up" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "암호화가 설정되지 않음"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2288,6 +3516,12 @@
             "value" : "Endpoint"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "엔드포인트"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2298,6 +3532,12 @@
     },
     "Enroll with your passkey on your Mac to manage secrets." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "시크릿을 관리하려면 Mac에서 패스키로 등록하세요."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2312,6 +3552,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Enter a GitHub repository URL."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GitHub 저장소 URL을 입력하세요."
           }
         },
         "zh-Hans" : {
@@ -2330,6 +3576,12 @@
             "value" : "Enter a new name for this Mac."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 Mac의 새 이름을 입력하세요."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2339,10 +3591,29 @@
       }
     },
     "Environment" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "환경"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "环境"
+          }
+        }
+      }
     },
     "Error" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "오류"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2357,6 +3628,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Extra High"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "매우 높음"
           }
         },
         "zh-Hans" : {
@@ -2375,6 +3652,12 @@
             "value" : "Failed to add project."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 추가에 실패했습니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2384,7 +3667,20 @@
       }
     },
     "Failed to delete project." : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 삭제에 실패했습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除项目失败。"
+          }
+        }
+      }
     },
     "Failed to detect runnables." : {
       "localizations" : {
@@ -2392,6 +3688,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Failed to detect runnables."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실행 가능 항목 감지에 실패했습니다."
           }
         },
         "zh-Hans" : {
@@ -2410,6 +3712,12 @@
             "value" : "Failed to load folders."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "폴더를 불러오지 못했습니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2424,6 +3732,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Failed to load MCP servers."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MCP 서버를 불러오지 못했습니다."
           }
         },
         "zh-Hans" : {
@@ -2442,6 +3756,12 @@
             "value" : "Failed to load skills."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스킬을 불러오지 못했습니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2456,6 +3776,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Failed to load the agent registry."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "에이전트 레지스트리를 불러오지 못했습니다."
           }
         },
         "zh-Hans" : {
@@ -2474,6 +3800,12 @@
             "value" : "Failed to request agents: %@"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "에이전트 요청에 실패했습니다: %@"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2490,6 +3822,12 @@
             "value" : "Failed to request detection: %@"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "감지 요청에 실패했습니다: %@"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2500,6 +3838,12 @@
     },
     "Failed to request file: %@" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "파일 요청에 실패했습니다: %@"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2514,6 +3858,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Failed to request MCP servers: %@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MCP 서버 요청에 실패했습니다: %@"
           }
         },
         "zh-Hans" : {
@@ -2532,6 +3882,12 @@
             "value" : "Failed to request skills: %@"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스킬 요청에 실패했습니다: %@"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2546,6 +3902,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Failed to send request: %@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "요청 전송에 실패했습니다: %@"
           }
         },
         "zh-Hans" : {
@@ -2564,6 +3926,12 @@
             "value" : "Failed to send run profile delete: %@"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실행 프로필 삭제 전송에 실패했습니다: %@"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2578,6 +3946,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Failed to send run profile update: %@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실행 프로필 업데이트 전송에 실패했습니다: %@"
           }
         },
         "zh-Hans" : {
@@ -2596,6 +3970,12 @@
             "value" : "Failed to send run request: %@"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실행 요청 전송에 실패했습니다: %@"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2612,6 +3992,12 @@
             "value" : "Failed to send stop request: %@"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "중지 요청 전송에 실패했습니다: %@"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2621,7 +4007,20 @@
       }
     },
     "Failed to trigger the release workflow." : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "릴리스 워크플로 트리거에 실패했습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "触发发布工作流失败。"
+          }
+        }
+      }
     },
     "Failing" : {
       "localizations" : {
@@ -2629,6 +4028,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Failing"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실패 중"
           }
         },
         "zh-Hans" : {
@@ -2647,6 +4052,12 @@
             "value" : "Fair"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "보통"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2657,6 +4068,12 @@
     },
     "Favorites" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "즐겨찾기"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2673,6 +4090,12 @@
             "value" : "File paths"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "파일 경로"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2683,6 +4106,12 @@
     },
     "File preview truncated." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "파일 미리보기가 잘렸습니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2693,6 +4122,12 @@
     },
     "Filename" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "파일 이름"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2703,6 +4138,12 @@
     },
     "Files" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "파일"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2712,7 +4153,20 @@
       }
     },
     "Files are decrypted on this device with your passkey, then written into the project folder on your Mac." : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "파일은 이 기기에서 패스키로 복호화된 후 Mac의 프로젝트 폴더에 기록됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件将使用你的通行密钥在本设备上解密，然后写入 Mac 上的项目文件夹。"
+          }
+        }
+      }
     },
     "Filter Skills" : {
       "localizations" : {
@@ -2720,6 +4174,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Filter Skills"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스킬 필터링"
           }
         },
         "zh-Hans" : {
@@ -2738,6 +4198,12 @@
             "value" : "Focus mode"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "집중 모드"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2752,6 +4218,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Folders"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "폴더"
           }
         },
         "zh-Hans" : {
@@ -2770,6 +4242,12 @@
             "value" : "Folders Unavailable"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "폴더를 사용할 수 없음"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2780,6 +4258,12 @@
     },
     "Form couldn't be rendered — edit raw JSON." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "양식을 렌더링할 수 없습니다 — 원본 JSON을 편집하세요."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2790,6 +4274,12 @@
     },
     "Frequency" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "빈도"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2799,7 +4289,20 @@
       }
     },
     "ghp_… or github_pat_…" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ghp_… 또는 github_pat_…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ghp_… 或 github_pat_…"
+          }
+        }
+      }
     },
     "Git Source" : {
       "localizations" : {
@@ -2807,6 +4310,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Git Source"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git 소스"
           }
         },
         "zh-Hans" : {
@@ -2825,6 +4334,12 @@
             "value" : "Git Sources"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git 소스"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2841,6 +4356,12 @@
             "value" : "Global search"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "전역 검색"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2851,6 +4372,12 @@
     },
     "Go" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이동"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2867,6 +4394,12 @@
             "value" : "Go to **Settings → Mobile** and tap *Pair new device*."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "**설정 → 모바일**로 이동하여 *새 기기 페어링*을 탭하세요."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2877,6 +4410,12 @@
     },
     "Hide values" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "값 숨기기"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2893,6 +4432,12 @@
             "value" : "High"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "높음"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2902,13 +4447,52 @@
       }
     },
     "HTTP" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "HTTP"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "HTTP"
+          }
+        }
+      }
     },
     "https://…" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "https://…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "https://…"
+          }
+        }
+      }
     },
     "https://github.com/owner/repo" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "https://github.com/owner/repo"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "https://github.com/owner/repo"
+          }
+        }
+      }
     },
     "Images" : {
       "localizations" : {
@@ -2916,6 +4500,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Images"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이미지"
           }
         },
         "zh-Hans" : {
@@ -2928,6 +4518,12 @@
     },
     "Initialize Git" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git 초기화"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2938,6 +4534,12 @@
     },
     "Initializing…" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "초기화 중…"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2954,6 +4556,12 @@
             "value" : "Input"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "입력"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2964,6 +4572,12 @@
     },
     "Inputs" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "입력"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2980,6 +4594,12 @@
             "value" : "Install"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설치"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2990,6 +4610,12 @@
     },
     "Install CI upload token" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CI 업로드 토큰 설치"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3000,6 +4626,12 @@
     },
     "Install RELEASE_TOKEN" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RELEASE_TOKEN 설치"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3017,6 +4649,12 @@
             "value" : "Install skills and agents, and configure MCP servers on the active Mac."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "활성 Mac에서 스킬과 에이전트를 설치하고 MCP 서버를 구성하세요."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3027,6 +4665,12 @@
     },
     "Install skills and agents, configure MCP servers, and manage Autopilot on the active Mac." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "활성 Mac에서 스킬과 에이전트를 설치하고 MCP 서버를 구성하며 Autopilot을 관리하세요."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3043,6 +4687,12 @@
             "value" : "Installed"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설치됨"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3053,6 +4703,12 @@
     },
     "Installed as the repo's GitHub Actions secret so the release workflow can publish." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "릴리스 워크플로가 게시할 수 있도록 저장소의 GitHub Actions 시크릿으로 설치됩니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3067,6 +4723,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Installing…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설치 중…"
           }
         },
         "zh-Hans" : {
@@ -3085,6 +4747,12 @@
             "value" : "Invalid or expired pairing code."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "잘못되었거나 만료된 페어링 코드입니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3101,6 +4769,12 @@
             "value" : "Key"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "키"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3111,6 +4785,12 @@
     },
     "Latest: %@" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "최신: %@"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3127,6 +4807,12 @@
             "value" : "Live"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실시간"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3137,6 +4823,12 @@
     },
     "Load more" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "더 보기"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3146,7 +4838,20 @@
       }
     },
     "Loading Autopilot…" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autopilot 불러오는 중…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在加载 Autopilot…"
+          }
+        }
+      }
     },
     "Loading changes…" : {
       "localizations" : {
@@ -3154,6 +4859,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Loading changes…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "변경사항 불러오는 중…"
           }
         },
         "zh-Hans" : {
@@ -3165,7 +4876,20 @@
       }
     },
     "Loading environments…" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "환경 불러오는 중…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在加载环境…"
+          }
+        }
+      }
     },
     "Loading folders" : {
       "localizations" : {
@@ -3173,6 +4897,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Loading folders"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "폴더 불러오는 중"
           }
         },
         "zh-Hans" : {
@@ -3185,6 +4915,12 @@
     },
     "Loading messages" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "메시지 불러오는 중"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3201,6 +4937,12 @@
             "value" : "Loading skills…"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스킬 불러오는 중…"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3211,6 +4953,12 @@
     },
     "Loading thread" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스레드 불러오는 중"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3220,7 +4968,20 @@
       }
     },
     "Loading workflows…" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "워크플로 불러오는 중…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在加载工作流…"
+          }
+        }
+      }
     },
     "Loading…" : {
       "localizations" : {
@@ -3228,6 +4989,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Loading…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "불러오는 중…"
           }
         },
         "zh-Hans" : {
@@ -3246,6 +5013,12 @@
             "value" : "Long text"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "긴 텍스트"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3262,6 +5035,12 @@
             "value" : "Low"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "낮음"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3275,6 +5054,12 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
+            "value" : "Mac"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
             "value" : "Mac"
           }
         },
@@ -3294,6 +5079,12 @@
             "value" : "Mac name"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac 이름"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3304,6 +5095,12 @@
     },
     "Mac offline" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac 오프라인"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3313,13 +5110,32 @@
       }
     },
     "main" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "main"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "main"
+          }
+        }
+      }
     },
     "Make" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
+            "value" : "Make"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
             "value" : "Make"
           }
         },
@@ -3339,6 +5155,12 @@
             "value" : "Make Configuration"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Make 구성"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3355,6 +5177,12 @@
             "value" : "Make sure RxCode is open on your Mac."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac에서 RxCode가 열려 있는지 확인하세요."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3368,6 +5196,12 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
+            "value" : "Makefile"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
             "value" : "Makefile"
           }
         },
@@ -3387,6 +5221,12 @@
             "value" : "Malformed question payload"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "잘못된 형식의 질문 페이로드"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3397,6 +5237,12 @@
     },
     "Manage end-to-end encrypted secrets, CI auto-update scans, indexed docs, and release workflows." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "종단 간 암호화된 시크릿, CI 자동 업데이트 스캔, 색인된 문서, 릴리스 워크플로를 관리합니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3406,7 +5252,20 @@
       }
     },
     "Markdown" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Markdown"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Markdown"
+          }
+        }
+      }
     },
     "Marketplaces" : {
       "localizations" : {
@@ -3414,6 +5273,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Marketplaces"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "마켓플레이스"
           }
         },
         "zh-Hans" : {
@@ -3432,6 +5297,12 @@
             "value" : "Max"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "최대"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3446,6 +5317,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "MCP operation failed."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MCP 작업에 실패했습니다."
           }
         },
         "zh-Hans" : {
@@ -3464,6 +5341,12 @@
             "value" : "MCP Servers"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MCP 서버"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3478,6 +5361,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Medium"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "중간"
           }
         },
         "zh-Hans" : {
@@ -3496,6 +5385,12 @@
             "value" : "Memory"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "메모리"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3506,6 +5401,12 @@
     },
     "Merge Settings" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "병합 설정"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3522,6 +5423,12 @@
             "value" : "Message…"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "메시지…"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3532,6 +5439,12 @@
     },
     "Messages you queue while a response is streaming appear here." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "응답이 스트리밍되는 동안 대기열에 넣은 메시지가 여기에 표시됩니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3542,6 +5455,12 @@
     },
     "Mints a DOCS_UPLOAD_TOKEN and installs it as the repo's GitHub Actions secret so CI can publish docs automatically." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DOCS_UPLOAD_TOKEN을 발급하여 CI가 문서를 자동으로 게시할 수 있도록 저장소의 GitHub Actions 시크릿으로 설치합니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3551,7 +5470,20 @@
       }
     },
     "Mode" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모드"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模式"
+          }
+        }
+      }
     },
     "Model" : {
       "localizations" : {
@@ -3559,6 +5491,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Model"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모델"
           }
         },
         "zh-Hans" : {
@@ -3577,6 +5515,12 @@
             "value" : "Name"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이름"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3587,6 +5531,12 @@
     },
     "Name (e.g. production)" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이름 (예: production)"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3603,6 +5553,12 @@
             "value" : "New"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "신규"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3613,6 +5569,12 @@
     },
     "New environment" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 환경"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3623,6 +5585,12 @@
     },
     "New Template" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 템플릿"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3639,6 +5607,12 @@
             "value" : "New Thread"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 스레드"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3648,10 +5622,29 @@
       }
     },
     "New worktree" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 워크트리"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建工作树"
+          }
+        }
+      }
     },
     "Next change" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다음 변경"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3666,6 +5659,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "No agents found."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "에이전트를 찾을 수 없습니다."
           }
         },
         "zh-Hans" : {
@@ -3684,6 +5683,12 @@
             "value" : "No briefings for the current branch."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "현재 브랜치에 대한 브리핑이 없습니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3698,6 +5703,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "No briefings for the current branch. Choose All branches to see other branches."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "현재 브랜치에 대한 브리핑이 없습니다. 다른 브랜치를 보려면 모든 브랜치를 선택하세요."
           }
         },
         "zh-Hans" : {
@@ -3716,6 +5727,12 @@
             "value" : "No briefings match the selected projects."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "선택한 프로젝트와 일치하는 브리핑이 없습니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3730,6 +5747,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "No Briefings Yet"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "아직 브리핑 없음"
           }
         },
         "zh-Hans" : {
@@ -3748,6 +5771,12 @@
             "value" : "No Changes"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "변경사항 없음"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3762,6 +5791,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "No custom Git sources added."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "추가된 사용자 지정 Git 소스가 없습니다."
           }
         },
         "zh-Hans" : {
@@ -3780,6 +5815,12 @@
             "value" : "No diff content available."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "사용 가능한 차이 내용이 없습니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3789,10 +5830,29 @@
       }
     },
     "No dispatchable release workflow found for %@. Add a workflow_dispatch release workflow and rescan, then try again." : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@에 대해 디스패치 가능한 릴리스 워크플로를 찾을 수 없습니다. workflow_dispatch 릴리스 워크플로를 추가하고 다시 스캔한 후 시도하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未找到 %@ 可触发的发布工作流。请添加一个 workflow_dispatch 发布工作流并重新扫描，然后重试。"
+          }
+        }
+      }
     },
     "No documentation repositories. Tap + to add one." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "문서 저장소가 없습니다. +를 탭하여 추가하세요."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3803,6 +5863,12 @@
     },
     "No documents indexed yet." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "아직 색인된 문서가 없습니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3813,6 +5879,12 @@
     },
     "No environments yet. Tap + to add one." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "아직 환경이 없습니다. +를 탭하여 추가하세요."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3823,6 +5895,12 @@
     },
     "No files yet. Tap + to add one." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "아직 파일이 없습니다. +를 탭하여 추가하세요."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3837,6 +5915,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "No Folders"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "폴더 없음"
           }
         },
         "zh-Hans" : {
@@ -3855,6 +5939,12 @@
             "value" : "No MCP servers configured. Tap + to add one."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "구성된 MCP 서버가 없습니다. +를 탭하여 추가하세요."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3871,6 +5961,12 @@
             "value" : "No models available"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "사용 가능한 모델 없음"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3881,6 +5977,12 @@
     },
     "No open auto-update pull requests." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "열려 있는 자동 업데이트 풀 리퀘스트가 없습니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3895,6 +5997,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "No Projects"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 없음"
           }
         },
         "zh-Hans" : {
@@ -3913,6 +6021,12 @@
             "value" : "No QR code found in that image."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "해당 이미지에서 QR 코드를 찾을 수 없습니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3923,6 +6037,12 @@
     },
     "No Queued Messages" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "대기 중인 메시지 없음"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3933,6 +6053,12 @@
     },
     "No release repositories. Tap + to add one." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "릴리스 저장소가 없습니다. +를 탭하여 추가하세요."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3943,6 +6069,12 @@
     },
     "No repositories available to add." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "추가할 수 있는 저장소가 없습니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3953,6 +6085,12 @@
     },
     "No repositories available." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "사용 가능한 저장소가 없습니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3969,6 +6107,12 @@
             "value" : "No Run Profiles"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실행 프로필 없음"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3979,6 +6123,12 @@
     },
     "No scans yet." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "아직 스캔이 없습니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -3988,10 +6138,29 @@
       }
     },
     "No Secrets" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "시크릿 없음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂无密钥"
+          }
+        }
+      }
     },
     "No Selection" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "선택 항목 없음"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4006,6 +6175,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "No skills found."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스킬을 찾을 수 없습니다."
           }
         },
         "zh-Hans" : {
@@ -4024,6 +6199,12 @@
             "value" : "No status"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "상태 없음"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4038,6 +6219,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "No summary available yet"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "아직 사용 가능한 요약이 없습니다"
           }
         },
         "zh-Hans" : {
@@ -4056,6 +6243,12 @@
             "value" : "No summary yet"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "아직 요약 없음"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4066,6 +6259,12 @@
     },
     "No summary yet. A summary is generated once the thread finishes a turn on your Mac." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "아직 요약이 없습니다. Mac에서 스레드가 한 턴을 마치면 요약이 생성됩니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4076,6 +6275,12 @@
     },
     "No templates yet. Tap + to create one." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "아직 템플릿이 없습니다. +를 탭하여 생성하세요."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4090,6 +6295,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "No Threads"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스레드 없음"
           }
         },
         "zh-Hans" : {
@@ -4108,6 +6319,12 @@
             "value" : "No threads yet"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "아직 스레드 없음"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4118,6 +6335,12 @@
     },
     "No todos for this thread." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 스레드에 대한 할 일이 없습니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4128,6 +6351,12 @@
     },
     "No watched repositories. Tap + to add one." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "감시 중인 저장소가 없습니다. +를 탭하여 추가하세요."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4138,6 +6367,12 @@
     },
     "No workflows scanned yet." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "아직 스캔된 워크플로가 없습니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4154,6 +6389,12 @@
             "value" : "Normal"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "보통"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4164,6 +6405,12 @@
     },
     "Not connected to your Mac." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac에 연결되어 있지 않습니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4174,6 +6421,12 @@
     },
     "Not signed in" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "로그인되지 않음"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4188,6 +6441,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Nothing to Show"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "표시할 항목 없음"
           }
         },
         "zh-Hans" : {
@@ -4206,6 +6465,12 @@
             "value" : "of %@"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 중"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4220,6 +6485,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Off"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "끔"
           }
         },
         "zh-Hans" : {
@@ -4238,6 +6509,12 @@
             "value" : "OK"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "확인"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4254,6 +6531,12 @@
             "value" : "On"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "켬"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4264,6 +6547,12 @@
     },
     "Open" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "열기"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4278,6 +6567,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Open **RxCode** on your Mac."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac에서 **RxCode**를 여세요."
           }
         },
         "zh-Hans" : {
@@ -4296,6 +6591,12 @@
             "value" : "Open failing CI run"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실패한 CI 실행 열기"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4312,6 +6613,12 @@
             "value" : "Open in Browser"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "브라우저에서 열기"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4322,6 +6629,12 @@
     },
     "Open on GitHub" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GitHub에서 열기"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4332,6 +6645,12 @@
     },
     "Open Pull Request" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pull Request 열기"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4348,6 +6667,12 @@
             "value" : "Opens todos and thread summary"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "할 일과 스레드 요약 열기"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4358,6 +6683,12 @@
     },
     "Optional xcodebuild destination" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "선택적 xcodebuild 대상"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4367,13 +6698,45 @@
       }
     },
     "Overwrite existing files" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기존 파일 덮어쓰기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "覆盖现有文件"
+          }
+        }
+      }
     },
     "Package" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "패키지"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "软件包"
+          }
+        }
+      }
     },
     "Package Configuration" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "패키지 구성"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4384,6 +6747,12 @@
     },
     "Package Manager" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "패키지 관리자"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4398,6 +6767,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Pair New Mac"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 Mac 페어링"
           }
         },
         "zh-Hans" : {
@@ -4416,6 +6791,12 @@
             "value" : "Pair with your Mac"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac과 페어링"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4430,6 +6811,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Paired %@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 페어링됨"
           }
         },
         "zh-Hans" : {
@@ -4448,6 +6835,12 @@
             "value" : "Paired Macs"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페어링된 Mac"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4462,6 +6855,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Pairing with your Mac…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac과 페어링 중…"
           }
         },
         "zh-Hans" : {
@@ -4480,6 +6879,12 @@
             "value" : "Passing"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "통과"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4490,6 +6895,12 @@
     },
     "Passkey authentication failed: %@" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "패스키 인증에 실패했습니다: %@"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4500,6 +6911,12 @@
     },
     "Passkey authentication was cancelled." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "패스키 인증이 취소되었습니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4510,6 +6927,12 @@
     },
     "Paste a GitHub ruleset JSON with name, target, enforcement, and rules." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "name, target, enforcement, rules가 포함된 GitHub 규칙 집합 JSON을 붙여넣으세요."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4524,6 +6947,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Permission needed"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "권한이 필요합니다"
           }
         },
         "zh-Hans" : {
@@ -4542,6 +6971,12 @@
             "value" : "Pick a desktop folder remotely, then start or continue its threads from mobile."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "데스크톱 폴더를 원격으로 선택한 다음 모바일에서 해당 스레드를 시작하거나 이어가세요."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4558,6 +6993,12 @@
             "value" : "Plan mode"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "계획 모드"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4568,6 +7009,12 @@
     },
     "Previous change" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이전 변경"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4578,6 +7025,12 @@
     },
     "Privacy Report" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "개인정보 보고서"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4592,6 +7045,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Profiles"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로필"
           }
         },
         "zh-Hans" : {
@@ -4610,6 +7069,12 @@
             "value" : "Project / Workspace"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 / 작업 공간"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4620,6 +7085,12 @@
     },
     "Project actions" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 작업"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4630,6 +7101,12 @@
     },
     "Project root" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 루트"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4644,6 +7121,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Projects"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트"
           }
         },
         "zh-Hans" : {
@@ -4662,6 +7145,12 @@
             "value" : "Provider"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "제공자"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4672,6 +7161,12 @@
     },
     "Pull Requests" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "풀 리퀘스트"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4688,6 +7183,12 @@
             "value" : "Queue a message..."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "메시지 대기열에 추가..."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4698,6 +7199,12 @@
     },
     "Queued Messages" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "대기 중인 메시지"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4712,6 +7219,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Reconnecting in %llds"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld초 후 재연결"
           }
         },
         "zh-Hans" : {
@@ -4730,6 +7243,12 @@
             "value" : "Refresh"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새로고침"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4740,6 +7259,12 @@
     },
     "Release" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "릴리스"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4749,13 +7274,45 @@
       }
     },
     "Release workflow triggered" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "릴리스 워크플로가 트리거됨"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已触发发布工作流"
+          }
+        }
+      }
     },
     "RELEASE_TOKEN" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RELEASE_TOKEN"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RELEASE_TOKEN"
+          }
+        }
+      }
     },
     "Releases" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "릴리스"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4766,6 +7323,12 @@
     },
     "Reload" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새로고침"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4780,6 +7343,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Remove"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "제거"
           }
         },
         "zh-Hans" : {
@@ -4798,6 +7367,12 @@
             "value" : "Remove %@"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 제거"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4808,6 +7383,12 @@
     },
     "Remove agent?" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "에이전트를 제거할까요?"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4818,6 +7399,12 @@
     },
     "Remove MCP server?" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MCP 서버를 제거하시겠습니까?"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4834,6 +7421,12 @@
             "value" : "Remove pairing?"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "페어링을 제거할까요?"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4844,6 +7437,12 @@
     },
     "Remove repository?" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장소를 제거할까요?"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4858,6 +7457,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Rename"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이름 변경"
           }
         },
         "zh-Hans" : {
@@ -4876,6 +7481,12 @@
             "value" : "Rename Mac"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac 이름 변경"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4886,6 +7497,12 @@
     },
     "Rename Thread" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스레드 이름 변경"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4896,6 +7513,12 @@
     },
     "Repo Setup" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장소 설정"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4906,6 +7529,12 @@
     },
     "Repositories" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장소"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4915,7 +7544,20 @@
       }
     },
     "Repository" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장소"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仓库"
+          }
+        }
+      }
     },
     "Request timed out. Check your Mac and try again." : {
       "localizations" : {
@@ -4923,6 +7565,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Request timed out. Check your Mac and try again."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "요청 시간이 초과되었습니다. Mac을 확인하고 다시 시도하세요."
           }
         },
         "zh-Hans" : {
@@ -4941,6 +7589,12 @@
             "value" : "Resets %@"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@에 재설정"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4951,6 +7605,12 @@
     },
     "Response in progress" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "응답 진행 중"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4965,6 +7625,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Response notifications"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "응답 알림"
           }
         },
         "zh-Hans" : {
@@ -4983,6 +7649,12 @@
             "value" : "Retry"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "재시도"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -4997,6 +7669,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Review"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "검토"
           }
         },
         "zh-Hans" : {
@@ -5015,6 +7693,12 @@
             "value" : "Review project briefings"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 브리핑 검토"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5029,6 +7713,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Run Profile Error"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실행 프로필 오류"
           }
         },
         "zh-Hans" : {
@@ -5047,6 +7737,12 @@
             "value" : "Run profile operation failed."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실행 프로필 작업에 실패했습니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5061,6 +7757,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Run Profiles"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실행 프로필"
           }
         },
         "zh-Hans" : {
@@ -5079,6 +7781,12 @@
             "value" : "Running"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실행 중"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5095,6 +7803,12 @@
             "value" : "Runs"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실행"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5105,6 +7819,12 @@
     },
     "RxCode keeps this browser session separate from your regular Safari data." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RxCode는 이 브라우저 세션을 일반 Safari 데이터와 분리해서 유지합니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5114,7 +7834,20 @@
       }
     },
     "rxcode/feature-name" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "rxcode/feature-name"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "rxcode/feature-name"
+          }
+        }
+      }
     },
     "Save" : {
       "localizations" : {
@@ -5122,6 +7855,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Save"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장"
           }
         },
         "zh-Hans" : {
@@ -5134,6 +7873,12 @@
     },
     "Scan" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스캔"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5144,6 +7889,12 @@
     },
     "Scan History" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스캔 기록"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5158,6 +7909,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Scan QR"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "QR 스캔"
           }
         },
         "zh-Hans" : {
@@ -5176,6 +7933,12 @@
             "value" : "Scan QR Code"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "QR 코드 스캔"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5190,6 +7953,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Scan the QR code from RxCode Settings on your Mac to control threads and approvals from this device."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 기기에서 스레드와 승인을 제어하려면 Mac의 RxCode 설정에 있는 QR 코드를 스캔하세요."
           }
         },
         "zh-Hans" : {
@@ -5208,6 +7977,12 @@
             "value" : "Scan the QR code shown on your Mac with this app."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 앱으로 Mac에 표시된 QR 코드를 스캔하세요."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5222,6 +7997,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Scan the QR code shown on your Mac, or pick a screenshot from your library."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac에 표시된 QR 코드를 스캔하거나 라이브러리에서 스크린샷을 선택하세요."
           }
         },
         "zh-Hans" : {
@@ -5240,6 +8021,12 @@
             "value" : "Scan with Camera"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "카메라로 스캔"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5250,6 +8037,12 @@
     },
     "Scanning…" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스캔 중…"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5266,6 +8059,12 @@
             "value" : "Scheme"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스킴"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5275,10 +8074,29 @@
       }
     },
     "Scope" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "범위"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "范围"
+          }
+        }
+      }
     },
     "Script" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스크립트"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5295,6 +8113,12 @@
             "value" : "Scroll to bottom"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "맨 아래로 스크롤"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5304,10 +8128,29 @@
       }
     },
     "Search" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "검색"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索"
+          }
+        }
+      }
     },
     "Search or enter website name" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "웹사이트 이름 검색 또는 입력"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5322,6 +8165,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Search projects and threads"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 및 스레드 검색"
           }
         },
         "zh-Hans" : {
@@ -5340,6 +8189,12 @@
             "value" : "Search skills"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스킬 검색"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5349,7 +8204,20 @@
       }
     },
     "Search threads and docs" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스레드 및 문서 검색"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索对话和文档"
+          }
+        }
+      }
     },
     "Searching…" : {
       "localizations" : {
@@ -5357,6 +8225,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Searching…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "검색 중…"
           }
         },
         "zh-Hans" : {
@@ -5369,6 +8243,12 @@
     },
     "Secrets" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "시크릿"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5385,6 +8265,12 @@
             "value" : "Securely link this device to RxCode in seconds."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 기기를 몇 초 만에 RxCode에 안전하게 연결하세요."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5395,6 +8281,12 @@
     },
     "Select a briefing to view details" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "세부 정보를 보려면 브리핑을 선택하세요"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5405,6 +8297,12 @@
     },
     "Select a project" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 선택"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5415,6 +8313,12 @@
     },
     "Select a thread" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스레드 선택"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5429,6 +8333,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Select all that apply"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "해당하는 항목 모두 선택"
           }
         },
         "zh-Hans" : {
@@ -5447,6 +8357,12 @@
             "value" : "Select Folder"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "폴더 선택"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5461,6 +8377,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Select which Mac this device controls. Removing one pairing does not reset this device's identity."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 기기가 제어할 Mac을 선택하세요. 페어링 하나를 제거해도 이 기기의 ID는 초기화되지 않습니다."
           }
         },
         "zh-Hans" : {
@@ -5479,6 +8401,12 @@
             "value" : "Serious"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "심각"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5495,6 +8423,12 @@
             "value" : "Server"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "서버"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5504,13 +8438,52 @@
       }
     },
     "Set Up Docs" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "문서 설정"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置文档"
+          }
+        }
+      }
     },
     "Set Up Release Workflow" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "릴리스 워크플로 설정"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置发布工作流"
+          }
+        }
+      }
     },
     "Set Up Secrets" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "시크릿 설정"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置密钥"
+          }
+        }
+      }
     },
     "Settings" : {
       "localizations" : {
@@ -5518,6 +8491,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Settings"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설정"
           }
         },
         "zh-Hans" : {
@@ -5536,6 +8515,12 @@
             "value" : "Sign in to Claude Code or Codex on your Mac to see usage."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "사용량을 보려면 Mac에서 Claude Code 또는 Codex에 로그인하세요."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5546,6 +8531,12 @@
     },
     "Sign in with rxlab on your Mac to enable Autopilot." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autopilot을 사용하려면 Mac에서 rxlab으로 로그인하세요."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5560,6 +8551,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Skill operation failed."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스킬 작업에 실패했습니다."
           }
         },
         "zh-Hans" : {
@@ -5578,6 +8575,12 @@
             "value" : "Skill source operation failed."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스킬 소스 작업에 실패했습니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5592,6 +8595,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Skills"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스킬"
           }
         },
         "zh-Hans" : {
@@ -5610,6 +8619,12 @@
             "value" : "Skip All Questions"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모든 질문 건너뛰기"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5620,6 +8635,12 @@
     },
     "Source link (optional)" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "소스 링크 (선택 사항)"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5629,7 +8650,20 @@
       }
     },
     "SSE" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SSE"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SSE"
+          }
+        }
+      }
     },
     "Start a conversation from your Mac" : {
       "localizations" : {
@@ -5637,6 +8671,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Start a conversation from your Mac"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac에서 대화 시작"
           }
         },
         "zh-Hans" : {
@@ -5655,6 +8695,12 @@
             "value" : "Start a mobile-created thread with Claude Code, Codex, or an ACP agent synced from your Mac."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac에서 동기화된 Claude Code, Codex 또는 ACP 에이전트로 모바일에서 생성한 스레드를 시작하세요."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5669,6 +8715,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Start a new conversation to get help with your project."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트에 대한 도움을 받으려면 새 대화를 시작하세요."
           }
         },
         "zh-Hans" : {
@@ -5687,6 +8739,12 @@
             "value" : "Start with a plan"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "계획으로 시작"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5696,7 +8754,20 @@
       }
     },
     "stdio" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "stdio"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "stdio"
+          }
+        }
+      }
     },
     "Stop" : {
       "localizations" : {
@@ -5704,6 +8775,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Stop"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "중지"
           }
         },
         "zh-Hans" : {
@@ -5716,6 +8793,12 @@
     },
     "Stop watching?" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "감시를 중지할까요?"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5726,6 +8809,12 @@
     },
     "Success" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "성공"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5740,6 +8829,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Summarization"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "요약"
           }
         },
         "zh-Hans" : {
@@ -5758,6 +8853,12 @@
             "value" : "Summary"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "요약"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5772,6 +8873,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Switch branch"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "브랜치 전환"
           }
         },
         "zh-Hans" : {
@@ -5790,6 +8897,12 @@
             "value" : "Switch to %@"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@(으)로 전환"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5800,6 +8913,12 @@
     },
     "Switch to horizontal scroll" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "가로 스크롤로 전환"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5810,6 +8929,12 @@
     },
     "Switch to wrap" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "줄 바꿈으로 전환"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5824,6 +8949,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Syncing settings…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설정 동기화 중…"
           }
         },
         "zh-Hans" : {
@@ -5842,6 +8973,12 @@
             "value" : "Syncing with Mac"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac과 동기화 중"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5858,6 +8995,12 @@
             "value" : "Target"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "대상"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5868,6 +9011,12 @@
     },
     "Template" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "템플릿"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5878,6 +9027,12 @@
     },
     "Templates of GitHub merge settings and branch rulesets. The default template is applied to newly created repositories." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GitHub 병합 설정 및 브랜치 규칙 집합의 템플릿입니다. 기본 템플릿은 새로 생성된 저장소에 적용됩니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5894,6 +9049,12 @@
             "value" : "The desktop sent an AskUserQuestion call this app could not parse."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "데스크톱이 이 앱에서 구문 분석할 수 없는 AskUserQuestion 호출을 보냈습니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5904,6 +9065,12 @@
     },
     "The Mac could not complete the request." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac이 요청을 완료할 수 없었습니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5913,10 +9080,29 @@
       }
     },
     "The Mac is pushing the branch and opening the PR." : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac이 브랜치를 푸시하고 PR을 여는 중입니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac 正在推送分支并创建 PR。"
+          }
+        }
+      }
     },
     "The Mac returned an empty response." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac이 빈 응답을 반환했습니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5926,13 +9112,45 @@
       }
     },
     "The Mac returned an invalid pull-request URL." : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac이 잘못된 풀 리퀘스트 URL을 반환했습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac 返回了无效的拉取请求 URL。"
+          }
+        }
+      }
     },
     "The next version is computed by semantic-release from the commit history." : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다음 버전은 semantic-release가 커밋 기록에서 계산합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下一个版本由 semantic-release 根据提交历史计算。"
+          }
+        }
+      }
     },
     "The paired Mac changed before the request finished." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "요청이 완료되기 전에 페어링된 Mac이 변경되었습니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5949,6 +9167,12 @@
             "value" : "Thermal"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "발열"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5958,10 +9182,29 @@
       }
     },
     "These files already exist and were skipped: %@. Turn on overwrite to replace them." : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다음 파일이 이미 존재하여 건너뛰었습니다: %@. 덮어쓰기를 켜면 교체됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这些文件已存在并被跳过：%@。开启覆盖以替换它们。"
+          }
+        }
+      }
     },
     "Thinking" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "생각 중"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -5976,6 +9219,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "This location has no visible folders."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 위치에 표시할 폴더가 없습니다."
           }
         },
         "zh-Hans" : {
@@ -5994,6 +9243,12 @@
             "value" : "This location has nothing to show."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 위치에 표시할 항목이 없습니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -6004,6 +9259,12 @@
     },
     "This passkey can't unlock secrets — it doesn't support the PRF extension. Use the passkey you enrolled with." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 패스키로는 시크릿을 잠금 해제할 수 없습니다 — PRF 확장을 지원하지 않습니다. 등록할 때 사용한 패스키를 사용하세요."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -6014,6 +9275,12 @@
     },
     "This permanently deletes the environment and its secret files." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 작업은 환경과 그 시크릿 파일을 영구적으로 삭제합니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -6028,6 +9295,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "This permanently deletes the thread and all of its messages. This cannot be undone."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 작업은 스레드와 모든 메시지를 영구적으로 삭제합니다. 실행 취소할 수 없습니다."
           }
         },
         "zh-Hans" : {
@@ -6046,6 +9319,12 @@
             "value" : "this project"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 프로젝트"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -6055,7 +9334,20 @@
       }
     },
     "This project is not linked to a GitHub repo." : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 프로젝트는 GitHub 저장소에 연결되어 있지 않습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此项目未关联到 GitHub 仓库。"
+          }
+        }
+      }
     },
     "This QR has expired. Generate a new one on your Mac." : {
       "localizations" : {
@@ -6063,6 +9355,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "This QR has expired. Generate a new one on your Mac."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 QR이 만료되었습니다. Mac에서 새 QR을 생성하세요."
           }
         },
         "zh-Hans" : {
@@ -6074,7 +9372,20 @@
       }
     },
     "This removes “%@” and all its threads from RxCode. Your files on the Mac are not deleted." : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 작업은 RxCode에서 “%@”과(와) 그 모든 스레드를 제거합니다. Mac의 파일은 삭제되지 않습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这将从 RxCode 中移除“%@”及其所有对话。Mac 上的文件不会被删除。"
+          }
+        }
+      }
     },
     "This removes %@ and its downloaded binary from your Mac." : {
       "localizations" : {
@@ -6082,6 +9393,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "This removes %@ and its downloaded binary from your Mac."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 작업은 Mac에서 %@과(와) 그 다운로드된 바이너리를 제거합니다."
           }
         },
         "zh-Hans" : {
@@ -6100,6 +9417,12 @@
             "value" : "This removes %@ from this device. Other paired Macs stay available."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 작업은 이 기기에서 %@을(를) 제거합니다. 다른 페어링된 Mac은 계속 사용할 수 있습니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -6116,6 +9439,12 @@
             "value" : "This removes %@ from your Mac's global MCP configuration."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 작업은 Mac의 전역 MCP 구성에서 %@을(를) 제거합니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -6126,6 +9455,12 @@
     },
     "This removes the repository and its indexed documents from docs search." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 작업은 문서 검색에서 저장소와 그 색인된 문서를 제거합니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -6135,10 +9470,29 @@
       }
     },
     "This repository has no secret environments to download." : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 저장소에는 다운로드할 시크릿 환경이 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此仓库没有可下载的密钥环境。"
+          }
+        }
+      }
     },
     "This settings form couldn't be rendered. Edit the raw JSON instead." : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 설정 양식을 렌더링할 수 없습니다. 대신 원시 JSON을 편집하세요."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -6153,6 +9507,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "This Turn"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이번 턴"
           }
         },
         "zh-Hans" : {
@@ -6171,6 +9531,12 @@
             "value" : "Thread actions"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스레드 작업"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -6181,6 +9547,12 @@
     },
     "Thread name" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스레드 이름"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -6191,6 +9563,12 @@
     },
     "Thread Summary" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스레드 요약"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -6207,6 +9585,12 @@
             "value" : "Threads"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스레드"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -6217,6 +9601,12 @@
     },
     "Todos" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "할 일"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -6227,6 +9617,12 @@
     },
     "Todos & Summary" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "할 일 및 요약"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -6241,6 +9637,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Tool"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "도구"
           }
         },
         "zh-Hans" : {
@@ -6259,6 +9661,12 @@
             "value" : "Transport"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "전송"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -6269,6 +9677,12 @@
     },
     "Trigger scan now" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "지금 스캔 트리거"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -6283,6 +9697,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Try Again"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다시 시도"
           }
         },
         "zh-Hans" : {
@@ -6301,6 +9721,12 @@
             "value" : "Type"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "유형"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -6315,6 +9741,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Type your answer…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "답변을 입력하세요…"
           }
         },
         "zh-Hans" : {
@@ -6333,6 +9765,12 @@
             "value" : "Unable to Add Project"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트를 추가할 수 없습니다"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -6347,6 +9785,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Unable to connect to your Mac. Make sure RxCode is running on your desktop and both devices are on the same network."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac에 연결할 수 없습니다. 데스크톱에서 RxCode가 실행 중이고 두 기기가 같은 네트워크에 있는지 확인하세요."
           }
         },
         "zh-Hans" : {
@@ -6365,6 +9809,12 @@
             "value" : "Unable to Load Folder"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "폴더를 불러올 수 없습니다"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -6379,6 +9829,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Uncommitted"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "커밋되지 않음"
           }
         },
         "zh-Hans" : {
@@ -6397,6 +9853,12 @@
             "value" : "Unknown"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "알 수 없음"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -6411,6 +9873,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Unknown error."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "알 수 없는 오류입니다."
           }
         },
         "zh-Hans" : {
@@ -6429,6 +9897,12 @@
             "value" : "Unrecognized pairing link. Generate a new QR code on your Mac."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "인식할 수 없는 페어링 링크입니다. Mac에서 새 QR 코드를 생성하세요."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -6443,6 +9917,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Unrecognized QR. Try scanning the one from the Mac app."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "인식할 수 없는 QR입니다. Mac 앱의 QR을 스캔해 보세요."
           }
         },
         "zh-Hans" : {
@@ -6461,6 +9941,12 @@
             "value" : "Updated %@. Pull to refresh."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 업데이트됨. 당겨서 새로고침하세요."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -6471,6 +9957,12 @@
     },
     "Upload" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "업로드"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -6480,7 +9972,20 @@
       }
     },
     "URL" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "URL"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "URL"
+          }
+        }
+      }
     },
     "URLs" : {
       "localizations" : {
@@ -6488,6 +9993,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "URLs"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "URL"
           }
         },
         "zh-Hans" : {
@@ -6506,6 +10017,12 @@
             "value" : "Usage"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "사용량"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -6520,6 +10037,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Use a GitHub repository that exposes .claude-plugin/marketplace.json."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : ".claude-plugin/marketplace.json을 노출하는 GitHub 저장소를 사용하세요."
           }
         },
         "zh-Hans" : {
@@ -6538,6 +10061,12 @@
             "value" : "Use mobile search to find synced projects, thread titles, and desktop search hits."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모바일 검색을 사용하여 동기화된 프로젝트, 스레드 제목, 데스크톱 검색 결과를 찾으세요."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -6548,6 +10077,12 @@
     },
     "Use Workspace" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "작업 공간 사용"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -6562,6 +10097,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Value"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "값"
           }
         },
         "zh-Hans" : {
@@ -6580,6 +10121,12 @@
             "value" : "View Changes"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "변경사항 보기"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -6590,6 +10137,12 @@
     },
     "View pull request" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "풀 리퀘스트 보기"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -6600,6 +10153,12 @@
     },
     "View values" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "값 보기"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -6609,7 +10168,20 @@
       }
     },
     "View workflow run on GitHub" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GitHub에서 워크플로 실행 보기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 GitHub 上查看工作流运行"
+          }
+        }
+      }
     },
     "What should we build in %@?" : {
       "localizations" : {
@@ -6617,6 +10189,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "What should we build in %@?"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@에서 무엇을 만들까요?"
           }
         },
         "zh-Hans" : {
@@ -6628,13 +10206,45 @@
       }
     },
     "Workflow" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "워크플로"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作流"
+          }
+        }
+      }
     },
     "Workflow inputs" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "워크플로 입력"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作流输入"
+          }
+        }
+      }
     },
     "Workflows" : {
       "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "워크플로"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -6651,6 +10261,12 @@
             "value" : "Working Directory"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "작업 디렉터리"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -6660,13 +10276,32 @@
       }
     },
     "Working…" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "작업 중…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "处理中…"
+          }
+        }
+      }
     },
     "Xcode" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
+            "value" : "Xcode"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
             "value" : "Xcode"
           }
         },
@@ -6686,6 +10321,12 @@
             "value" : "Xcode Configuration"
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Xcode 구성"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -6700,6 +10341,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Xcode Project"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Xcode 프로젝트"
           }
         },
         "zh-Hans" : {
@@ -6718,6 +10365,12 @@
             "value" : "Your Mac declined the pairing request."
           }
         },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac이 페어링 요청을 거부했습니다."
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -6732,6 +10385,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Your Mac didn't respond. Make sure RxCode is open and connected, then try again."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac이 응답하지 않았습니다. RxCode가 열려 있고 연결되어 있는지 확인한 후 다시 시도하세요."
           }
         },
         "zh-Hans" : {

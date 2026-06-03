@@ -5,24 +5,20 @@ metadata:
   namespace: rxcode-relay
   labels:
     app: rxcode-relay
-  annotations:
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
-    # WebSocket connections are long-lived: the relay only pings every 25s, so
-    # the proxy must not time out an otherwise idle /ws stream, and responses
-    # must stream through unbuffered.
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
-    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+  # No cert-manager / TLS block: this cluster has no cert-manager, and
+  # relaycode.rxlab.app is fronted by a proxied Cloudflare Load Balancer that
+  # terminates the public TLS cert (Cloudflare SSL mode "Full"). The
+  # Cloudflare→origin leg rides Traefik's default self-signed cert, so the
+  # Ingress itself needs no `tls:` section. DNS for the host is owned by the
+  # cluster-service Pulumi stack — do not create a Cloudflare record here.
+  #
+  # Traefik (the MicroK8s ingress addon) handles WebSocket `/ws` upgrades
+  # natively, so the old nginx websocket/proxy-timeout annotations are dropped
+  # — Traefik ignores `nginx.ingress.kubernetes.io/*` entirely.
 spec:
-  ingressClassName: nginx
-  tls:
-    - hosts:
-        - relay.code.rxlab.app
-      secretName: rxcode-relay-tls
+  ingressClassName: public
   rules:
-    - host: relay.code.rxlab.app
+    - host: relaycode.rxlab.app
       http:
         paths:
           - path: /

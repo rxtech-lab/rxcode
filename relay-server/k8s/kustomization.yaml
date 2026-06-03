@@ -10,14 +10,18 @@ resources:
   # secrets.yaml is intentionally excluded — apply it manually after filling in
   # real APNs values: `kubectl apply -f k8s/secrets.yaml`.
   - configmap.yaml
-  - deployment.yaml
+  # DaemonSet (one pod per node) instead of a Deployment + HPA: nodes are
+  # single-per-region, so one relay per node == one relay per region, and the
+  # set auto-extends as regional nodes join. No HPA — DaemonSets scale with
+  # nodes, not CPU.
+  - daemonset.yaml
   - service.yaml
   - ingress.yaml
   - pdb.yaml
-  - hpa.yaml
 
 namespace: rxcode-relay
 
 images:
   - name: ghcr.io/rxtech-lab/rxcode-relay
-    newTag: latest
+    # Latest release cut from git (HEAD 6bda708). Bump on each relay release.
+    newTag: v1.14.0

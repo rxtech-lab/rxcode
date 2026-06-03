@@ -36,7 +36,7 @@ final class RelayPresetCatalog {
         RelayPreset(
             id: "rxlab-hosted",
             name: "RxLab Hosted Relay",
-            url: "wss://relay.code.rxlab.app",
+            url: "wss://relaycode.rxlab.app",
             description: "Official end-to-end encrypted relay operated by RxLab. Recommended for most setups.",
             recommended: true
         )

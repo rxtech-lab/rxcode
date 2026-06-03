@@ -24,7 +24,7 @@ func healthHandler(hub *Hub, apnsSender *PushSender, fcmSender *FCMSender) http.
 			"apns":       apnsSender != nil,
 			"fcm":        fcmSender != nil,
 			"mode":       mode,
-			"version":    "0.2.0",
+			"version":    version,
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)

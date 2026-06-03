@@ -1,22 +1,27 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: DaemonSet
 metadata:
   name: rxcode-relay
   namespace: rxcode-relay
   labels:
     app: rxcode-relay
 spec:
-  # Safe to scale: the Redis backplane (REDIS_URL) routes envelopes across
-  # replicas, so a desktop and mobile peer may land on different pods.
-  replicas: 2
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxUnavailable: 0
-      maxSurge: 1
+  # One relay pod per node. Each node lives in a different AWS region
+  # (ap-east-1 / ap-southeast-1 / …), so a DaemonSet pins exactly one replica
+  # per region and auto-extends as new regional nodes join the cluster — no
+  # replica count or topology labels to maintain. The Redis backplane
+  # (REDIS_URL) still fans WebSocket envelopes across every pod, so a desktop
+  # and its mobile peer may connect to relays in different regions.
   selector:
     matchLabels:
       app: rxcode-relay
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # Keep serving WebSocket clients on the surviving regional pods while one
+      # node updates. With only one pod per node, maxUnavailable: 1 rolls a
+      # single region at a time.
+      maxUnavailable: 1
   template:
     metadata:
       labels:

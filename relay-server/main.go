@@ -18,6 +18,12 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// version is the relay's reported build version, surfaced at /healthz. It
+// defaults to "dev" for local/`go run` builds and is overridden at release
+// build time via -ldflags "-X main.version=<tag>" (see Dockerfile + the
+// relay-deploy workflow, which passes the git release tag).
+var version = "dev"
+
 func main() {
 	// Load .env before reading any env vars so flag defaults see them.
 	// Path overridable via RELAY_ENV_FILE; default ".env" in CWD. Missing

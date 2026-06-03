@@ -402,6 +402,9 @@ private fun PairingCameraScreen(
     var scanLocked by remember { mutableStateOf(false) }
     var scannerKey by remember { mutableStateOf(0) }
     var scanError by remember { mutableStateOf<String?>(null) }
+    // Manual scanning: the camera previews continuously, but barcode analysis
+    // only runs after the user taps "Scan" (not automatically on every frame).
+    var scanArmed by remember { mutableStateOf(false) }
 
     LaunchedEffect(camPermission.status.isGranted) {
         pairingLog("camera permission granted=${camPermission.status.isGranted}")
@@ -430,17 +433,20 @@ private fun PairingCameraScreen(
                 QRCameraPreview(
                     modifier = Modifier.fillMaxSize(),
                     scanKey = scannerKey,
-                    enabled = !scanLocked && pairing !is PairingStatus.InProgress,
+                    enabled = scanArmed && !scanLocked && pairing !is PairingStatus.InProgress,
                     onToken = { token ->
                         pairingLog("camera QR accepted: ${token.logSummary()}")
                         scanLocked = true
+                        scanArmed = false
                         scanError = null
                         onToken(token)
                     },
                     onInvalidQr = {
                         if (!scanLocked) {
                             Log.w(TAG, "camera QR rejected: not an RxCode pairing token")
-                            scanError = "That QR code is not an RxCode pairing code."
+                            // Stop scanning and let the user reposition and tap again.
+                            scanArmed = false
+                            scanError = "That QR code is not an RxCode pairing code. Tap Scan to try again."
                         }
                     },
                 )
@@ -477,11 +483,18 @@ private fun PairingCameraScreen(
             PairingCameraStatus(
                 pairing = pairing,
                 scanError = scanError,
+                scanArmed = scanArmed,
+                onScan = {
+                    pairingLog("user armed camera QR scan")
+                    scanError = null
+                    scanArmed = true
+                },
                 onRetry = {
                     pairingLog("retrying camera QR scan")
                     onRetry()
                     scanError = null
                     scanLocked = false
+                    scanArmed = false
                     scannerKey += 1
                 },
                 modifier = Modifier
@@ -512,6 +525,8 @@ private fun CameraShade() {
 private fun PairingCameraStatus(
     pairing: PairingStatus,
     scanError: String?,
+    scanArmed: Boolean,
+    onScan: () -> Unit,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -524,8 +539,22 @@ private fun PairingCameraStatus(
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             when (pairing) {
                 PairingStatus.Idle -> {
-                    Text("Align the QR code inside the frame.", style = MaterialTheme.typography.titleMedium)
-                    scanError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    if (scanArmed) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Outlined.QrCodeScanner, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.width(10.dp))
+                            Text("Scanning…", style = MaterialTheme.typography.titleMedium)
+                        }
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    } else {
+                        Text("Position the QR code inside the frame, then tap Scan.", style = MaterialTheme.typography.titleMedium)
+                        scanError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                        Button(onClick = onScan, modifier = Modifier.fillMaxWidth()) {
+                            Icon(Icons.Outlined.QrCodeScanner, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Scan")
+                        }
+                    }
                 }
                 PairingStatus.InProgress -> {
                     Row(verticalAlignment = Alignment.CenterVertically) {

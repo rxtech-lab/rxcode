@@ -1,4 +1,5 @@
 import Foundation
+import os
 import RxCodeCore
 
 /// Errors surfaced while opening a pull request from a briefing card.
@@ -51,8 +52,7 @@ extension AppState {
         let briefing = threadStore.allBranchBriefingItems()
             .first(where: { $0.projectId == project.id && $0.branch == branch })?
             .briefing ?? ""
-        let raw = await generatePullRequestContent(briefing: briefing, branch: branch)
-        let (title, body) = Self.parsePullRequestContent(raw, branch: branch)
+        let (title, body) = await generateValidatedPullRequestContent(briefing: briefing, branch: branch)
 
         // 3. Open the PR via autopilot.
         let response: CreatePullRequestResponse
@@ -128,6 +128,56 @@ extension AppState {
             }
             return await claude.generatePullRequestContent(briefing: briefing, branch: branch)
         }
+    }
+
+    /// Generate PR content and guarantee the title is a valid Conventional
+    /// Commit (its `<type>` is one of ``conventionalCommitTypes``). The model
+    /// occasionally returns a non-conforming title (e.g. `feature:` or a plain
+    /// sentence); when it does we re-prompt up to `maxAttempts` times before
+    /// falling back to a safe `chore:` title while keeping the generated body.
+    func generateValidatedPullRequestContent(
+        briefing: String,
+        branch: String,
+        maxAttempts: Int = 3
+    ) async -> (title: String, body: String) {
+        var lastBody = ""
+        for attempt in 1...maxAttempts {
+            let raw = await generatePullRequestContent(briefing: briefing, branch: branch)
+            let (title, body) = Self.parsePullRequestContent(raw, branch: branch)
+            if Self.isConventionalCommitTitle(title) {
+                return (title, body)
+            }
+            lastBody = body
+            logger.warning("PR title is not a valid Conventional Commit (attempt \(attempt)/\(maxAttempts)); retrying: \(title, privacy: .public)")
+        }
+        logger.warning("PR title still invalid after \(maxAttempts) attempts; using fallback title")
+        return ("chore: update \(branch)", lastBody)
+    }
+
+    /// Conventional Commit `<type>` tokens accepted in commit and PR titles.
+    /// Single source of truth shared across title generation, normalization, and
+    /// validation.
+    static let conventionalCommitTypes: Set<String> = [
+        "feat", "fix", "docs", "style", "refactor", "perf",
+        "test", "build", "ci", "chore", "revert"
+    ]
+
+    /// True when `title` matches `<type>(<optional-scope>)<!>: <description>` and
+    /// `<type>` is one of ``conventionalCommitTypes``. Used to gate generated PR
+    /// titles so a non-conforming title triggers a model retry.
+    static func isConventionalCommitTitle(_ title: String) -> Bool {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        let pattern = #"^([A-Za-z]+)(\([^)\n]+\))?!?\s*:\s+\S.*$"#
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(
+                in: trimmed,
+                range: NSRange(trimmed.startIndex..<trimmed.endIndex, in: trimmed)
+              ),
+              let typeRange = Range(match.range(at: 1), in: trimmed) else {
+            return false
+        }
+        return conventionalCommitTypes.contains(trimmed[typeRange].lowercased())
     }
 
     /// Split generated PR text into a Conventional-Commit title and a markdown

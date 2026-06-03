@@ -487,16 +487,12 @@ extension AppState {
 
         // Drop leading lines that look like markdown headings or empty lines
         // until we reach a Conventional Commits subject (or any plain text).
-        let conventionalPrefixes = [
-            "feat", "fix", "docs", "style", "refactor", "perf",
-            "test", "build", "ci", "chore", "revert"
-        ]
         var lines = text.components(separatedBy: "\n")
         while let first = lines.first {
             let trimmed = first.trimmingCharacters(in: .whitespaces)
             let isHeading = trimmed.hasPrefix("#")
             let isEmpty = trimmed.isEmpty
-            let startsWithType = conventionalPrefixes.contains { type in
+            let startsWithType = Self.conventionalCommitTypes.contains { type in
                 trimmed.lowercased().hasPrefix(type + ":") ||
                 trimmed.lowercased().hasPrefix(type + "(")
             }

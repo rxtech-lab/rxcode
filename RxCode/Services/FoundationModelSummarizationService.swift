@@ -112,21 +112,9 @@ actor FoundationModelSummarizationService {
         threadSummaries: [(title: String, summary: String)]
     ) async -> String? {
         guard !threadSummaries.isEmpty else { return nil }
-        let joined = threadSummaries.map { item -> String in
-            let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
-            let summary = String(item.summary.prefix(1500)).trimmingCharacters(in: .whitespacesAndNewlines)
-            return "### \(title.isEmpty ? "Untitled thread" : title)\n\(summary)"
-        }.joined(separator: "\n\n")
-
-        let prompt = """
-        Write a concise overall briefing for one git branch by synthesizing the per-thread summaries below into a single coherent overview.
-        Cover the main themes, completed work, important decisions, files or areas touched, and unresolved follow-ups across the whole branch.
-        Do not list threads individually — produce a unified summary. Use 4-8 short bullet points. Reply with only the briefing.
-
-        Thread summaries (newest first):
-
-        \(joined)
-        """
+        // Share the exact prompt used by the other providers so the categorized
+        // briefing format stays consistent regardless of backend.
+        let prompt = OpenAISummarizationService.branchBriefingPrompt(threadSummaries: threadSummaries)
         let raw = await respond(
             instructions: "You maintain concise local project summaries.",
             prompt: prompt

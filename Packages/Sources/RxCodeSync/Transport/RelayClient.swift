@@ -280,6 +280,12 @@ public actor RelayClient {
         closeSocketLocally()
         guard shouldReconnect else { return }
         reconnectAttempt += 1
+        // Exponential backoff capped at 30s. Clamp the attempt counter once it
+        // reaches the ceiling: left unbounded, pow(2, n) eventually exceeds
+        // Int.max (then +inf) and the Int() conversion traps *before* min(30,…)
+        // can clamp it. 2^5 = 32 > 30, so the exponent never needs to exceed 5.
+        let maxBackoffExponent = 5
+        if reconnectAttempt > maxBackoffExponent { reconnectAttempt = maxBackoffExponent }
         let delay = min(30, Int(pow(2.0, Double(reconnectAttempt))))
         logger.error("[Relay] socket failed relay=\(self.relayURL.absoluteString, privacy: .public) error=\(error.localizedDescription, privacy: .public) reconnectIn=\(delay, privacy: .public)s")
         updateState(.reconnecting(nextAttemptInSeconds: delay))

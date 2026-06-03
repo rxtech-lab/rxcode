@@ -28,11 +28,34 @@ struct PairedDesktop: Codable, Identifiable, Equatable, Hashable {
 
     /// Composite id: same Mac paired via different relays produces distinct entries.
     var id: String {
-        let normalizedRelay = (relayURL ?? "")
+        Self.compositeID(pubkeyHex: pubkeyHex, relayURL: relayURL)
+    }
+
+    /// Normalize a relay URL string for comparison (trim whitespace/slashes, lowercase).
+    static func normalizeRelay(_ relayURL: String?) -> String {
+        (relayURL ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        return "\(pubkeyHex)::\(normalizedRelay)"
+    }
+
+    /// Build the composite id (pubkey + normalized relay) without an instance,
+    /// so inbound handlers can locate the entry for a specific relay.
+    static func compositeID(pubkeyHex: String, relayURL: String?) -> String {
+        "\(pubkeyHex)::\(normalizeRelay(relayURL))"
+    }
+
+    /// Selects the pairing an inbound unpair targets. The unpair arrives over the
+    /// relay this client is currently connected to, so it identifies the entry for
+    /// that specific relay — matching by pubkey alone would remove an entry for the
+    /// same Mac on a *different* relay. Falls back to the sole pairing for a Mac
+    /// when there is only one (covers legacy entries that predate stored relay
+    /// URLs), and returns `nil` when the choice is ambiguous so we never remove the
+    /// wrong relay's entry.
+    static func matchForUnpair(in desktops: [PairedDesktop], fromHex: String, currentRelay: String?) -> PairedDesktop? {
+        let samePubkey = desktops.filter { $0.pubkeyHex == fromHex }
+        let targetID = compositeID(pubkeyHex: fromHex, relayURL: currentRelay)
+        return samePubkey.first(where: { $0.id == targetID }) ?? (samePubkey.count == 1 ? samePubkey.first : nil)
     }
 
     /// Human-readable relay host for display (e.g. "relay.example.com").

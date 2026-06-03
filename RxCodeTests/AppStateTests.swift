@@ -545,6 +545,25 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(result.body, "Adds the docs search flow.")
     }
 
+    func testIsConventionalCommitTitleAcceptsValidTitles() {
+        XCTAssertTrue(AppState.isConventionalCommitTitle("fix: correct the crash"))
+        XCTAssertTrue(AppState.isConventionalCommitTitle("feat(autopilot): add docs search"))
+        XCTAssertTrue(AppState.isConventionalCommitTitle("docs: update readme"))
+        XCTAssertTrue(AppState.isConventionalCommitTitle("feat!: drop legacy api"))
+        XCTAssertTrue(AppState.isConventionalCommitTitle("refactor(core)!: restructure store"))
+    }
+
+    func testIsConventionalCommitTitleRejectsInvalidTitles() {
+        // Type not on the allowed list.
+        XCTAssertFalse(AppState.isConventionalCommitTitle("feature: add docs search"))
+        XCTAssertFalse(AppState.isConventionalCommitTitle("update: tweak things"))
+        // No conventional prefix at all.
+        XCTAssertFalse(AppState.isConventionalCommitTitle("Add a new docs search flow"))
+        // Missing description after the colon.
+        XCTAssertFalse(AppState.isConventionalCommitTitle("fix:"))
+        XCTAssertFalse(AppState.isConventionalCommitTitle(""))
+    }
+
     // MARK: - Helpers
 
     private func makeProject(_ name: String) -> Project {

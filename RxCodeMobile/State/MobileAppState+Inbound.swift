@@ -55,7 +55,15 @@ extension MobileAppState {
                 failPairing(String(localized: "Your Mac declined the pairing request."))
             }
         case .unpair:
-            guard let desktop = pairedDesktops.first(where: { $0.pubkeyHex == inbound.fromHex }) else { return }
+            // The unpair arrived over the relay this client is currently connected
+            // to, so it targets the pairing for that specific relay. Matching by
+            // pubkey alone would remove an entry for the same Mac on a *different*
+            // relay (see `PairedDesktop.matchForUnpair`).
+            guard let desktop = PairedDesktop.matchForUnpair(
+                in: pairedDesktops,
+                fromHex: inbound.fromHex,
+                currentRelay: relayURL.absoluteString
+            ) else { return }
             Task { await self.removePairedDesktopAfterRemoteUnpair(desktop) }
         case .snapshot(let snap):
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "snapshot") else { return }

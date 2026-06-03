@@ -670,13 +670,16 @@ private struct BriefingCard: View {
             // Summary content
             VStack(alignment: .leading, spacing: 12) {
                 if let summary = group.briefing?.briefing, !summary.isEmpty {
-                    ChatTextContentView(
-                        markdown: summary,
-                        size: 14,
-                        color: .secondary,
-                        lineSpacing: 3,
-                        maximumNumberOfLines: 4
-                    )
+                    // Compact, uniform list-card preview: strip the markdown
+                    // markers (headings / bullets) to a clean snippet that
+                    // truncates cleanly. The full markdown renders on the detail
+                    // screen.
+                    Text(stripMarkdown(summary))
+                        .font(.system(size: 14))
+                        .foregroundStyle(.secondary)
+                        .lineSpacing(3)
+                        .lineLimit(4)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
                     Text("No summary available yet")
                         .font(.subheadline)

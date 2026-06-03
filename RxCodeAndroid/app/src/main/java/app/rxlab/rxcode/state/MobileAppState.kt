@@ -280,9 +280,21 @@ class MobileAppState @Inject constructor(
     }
 
     private suspend fun handleUnpair(fromHex: String) {
-        val desktop = _state.value.pairedDesktops.firstOrNull { it.pubkeyHex == fromHex } ?: return
+        // The unpair arrived over the relay this client is currently connected to,
+        // so it targets the pairing for that specific relay. Matching by pubkey
+        // alone would remove an entry for the same Mac on a *different* relay
+        // (see `PairedDesktop.matchForUnpair`).
+        val desktop = PairedDesktop.matchForUnpair(
+            desktops = _state.value.pairedDesktops,
+            fromHex = fromHex,
+            currentRelay = _state.value.relayUrl,
+        ) ?: return
         store.remove(desktop.id)
-        client.removePeer(fromHex)
+        // Only forget the crypto peer if no other pairing uses the same pubkey
+        // (e.g. the same Mac reached through another relay).
+        if (_state.value.pairedDesktops.none { it.pubkeyHex == fromHex && it.id != desktop.id }) {
+            client.removePeer(fromHex)
+        }
     }
 
     private fun handleSnapshot(fromHex: String, snap: Payload.Snapshot) {

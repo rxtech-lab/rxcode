@@ -306,14 +306,12 @@ struct MobileBriefingDetailView: View {
             }
 
             if let summary = group?.briefing?.briefing, !summary.isEmpty {
-                ChatTextContentView(
-                    markdown: summary,
-                    size: 15,
-                    color: .primary,
-                    lineSpacing: 4
-                )
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
+                // Full block markdown so the categorized briefing (### Fixes,
+                // ### Improvements, bullet lists, …) renders as formatted text
+                // rather than raw markdown markers.
+                MarkdownContentView(text: summary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
             } else {
                 HStack(spacing: 10) {
                     Image(systemName: "text.justify.leading")
@@ -456,15 +454,13 @@ struct MobileBriefingThreadCard: View {
                     .multilineTextAlignment(.leading)
                 
                 if !thread.summary.isEmpty {
-                    ChatTextContentView(
-                        markdown: thread.summary,
-                        size: 13,
-                        color: .secondary,
-                        lineSpacing: 2,
-                        maximumNumberOfLines: 3
-                    )
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .fixedSize(horizontal: false, vertical: true)
+                    // Render the thread description as block markdown (bullets /
+                    // emphasis) instead of inline-only text with raw markers.
+                    MarkdownContentView(text: thread.summary)
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 
                 if isStreaming {

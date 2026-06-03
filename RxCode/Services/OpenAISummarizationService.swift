@@ -293,9 +293,15 @@ actor OpenAISummarizationService {
         }.joined(separator: "\n\n")
 
         return """
-        Write a concise overall briefing for one git branch by synthesizing the per-thread summaries below into a single coherent overview.
-        Cover the main themes, completed work, important decisions, files or areas touched, and unresolved follow-ups across the whole branch.
-        Do not list threads individually — produce a unified summary. Use 4-8 short bullet points. Reply with only the briefing.
+        Write a concise briefing for one git branch by synthesizing the per-thread summaries below into a single coherent overview, grouped into clearly labelled categories so it is easy to scan.
+
+        Format rules (MUST follow exactly):
+        - Use GitHub-flavored markdown.
+        - Group related work under `###` category headings. Use ONLY these headings, in this order, and INCLUDE A HEADING ONLY when there is real work for it: Features, Fixes, Improvements, Docs, Refactors, Decisions, Follow-ups.
+        - Under each heading, write `- ` bullet points (1-5 per category), each a short, factual, past-tense statement. Mention the key files or areas touched inline within the relevant bullet.
+        - Synthesize across threads — do NOT list threads individually, and do NOT repeat the same point under more than one heading.
+        - Put unresolved or pending work under `### Follow-ups`.
+        - Reply with only the briefing markdown. No preamble, no closing remarks, no surrounding code fences.
 
         Thread summaries (newest first):
 

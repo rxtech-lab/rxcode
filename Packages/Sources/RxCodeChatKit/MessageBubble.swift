@@ -240,7 +240,8 @@ struct MessageBubble: View {
                 let collapsed = isLong && !isLongTextExpanded
                 MarkdownContentView(
                     text: markdownUserText(displayText),
-                    style: .rxCodeChatUser
+                    style: .rxCodeChatUser,
+                    expandsHorizontally: false
                 ) { url in
                     // Intercept the synthetic `rxcode-image://<index>` link emitted
                     // by markdownUserText and open the matching image in the preview

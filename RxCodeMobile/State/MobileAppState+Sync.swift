@@ -466,6 +466,7 @@ extension MobileAppState {
         desktopWebProxy = nil
         projectBranches = [:]
         availableBranchesByProject = [:]
+        projectDirtyByProject = [:]
         runProfilesByProject = [:]
         runTasks = []
         inFlightRunProfileRequests = []

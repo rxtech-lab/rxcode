@@ -469,16 +469,20 @@ private fun SessionCard(
                     Icon(Icons.Outlined.MoreVert, contentDescription = "More")
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                    DropdownMenuItem(
-                        text = { Text("Code Review") },
-                        leadingIcon = { Icon(Icons.Outlined.RateReview, contentDescription = null) },
-                        onClick = { menuOpen = false; onCodeReview() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Commit Files") },
-                        leadingIcon = { Icon(Icons.Outlined.CheckCircle, contentDescription = null) },
-                        onClick = { menuOpen = false; onCommitFiles() },
-                    )
+                    if (!session.isCodeReviewThread) {
+                        DropdownMenuItem(
+                            text = { Text("Code Review") },
+                            leadingIcon = { Icon(Icons.Outlined.RateReview, contentDescription = null) },
+                            onClick = { menuOpen = false; onCodeReview() },
+                        )
+                        if (session.hasRecordedFileChanges) {
+                            DropdownMenuItem(
+                                text = { Text("Commit Files") },
+                                leadingIcon = { Icon(Icons.Outlined.CheckCircle, contentDescription = null) },
+                                onClick = { menuOpen = false; onCommitFiles() },
+                            )
+                        }
+                    }
                     DropdownMenuItem(
                         text = { Text("Rename") },
                         leadingIcon = { Icon(Icons.Outlined.DriveFileRenameOutline, contentDescription = null) },

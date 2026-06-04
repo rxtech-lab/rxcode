@@ -23,6 +23,49 @@ enum CommitFilesError: LocalizedError {
 extension AppState {
     static let manualCommitLabel = "Commit"
 
+    // MARK: - Commit affordance gating
+
+    /// Whether the thread-level "Commit Files" action should be offered: hidden
+    /// when the thread recorded no file edits. Read directly from the local
+    /// `ThreadStore`, so it's always accurate on the desktop.
+    func threadHasFileChanges(sessionId: String) -> Bool {
+        threadStore.fileEditCount(sessionId: sessionId) > 0
+    }
+
+    /// Whether the project-level "Commit All Changes" action should be offered.
+    /// Hidden only when the working tree is positively known to be clean; an
+    /// unresolved project (no cached entry yet) keeps the action visible so a
+    /// not-yet-computed status never hides a valid commit. See `projectGitDirty`.
+    func projectHasUncommittedChanges(_ projectId: UUID) -> Bool {
+        projectGitDirty[projectId] ?? true
+    }
+
+    /// Recompute the working-tree dirty flag for every known project and publish
+    /// the result into `projectGitDirty`. Git calls run concurrently so a large
+    /// project list doesn't serialize on disk I/O. A failed/`nil` status (not a
+    /// repo, transient error) leaves the project "unknown" rather than marking it
+    /// clean, so the Commit All action isn't hidden on a hiccup.
+    func refreshProjectGitDirty() async {
+        let inputs = projects.map { (id: $0.id, path: $0.path) }
+        let results = await withTaskGroup(of: (UUID, Bool?).self) { group in
+            for input in inputs {
+                group.addTask {
+                    let status = await GitHelper.run(["status", "--porcelain"], at: input.path)
+                    let dirty = status.map {
+                        !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    }
+                    return (input.id, dirty)
+                }
+            }
+            var collected: [UUID: Bool] = [:]
+            for await (id, dirty) in group {
+                if let dirty { collected[id] = dirty }
+            }
+            return collected
+        }
+        projectGitDirty = results
+    }
+
     /// Send a commit-only follow-up into the selected thread. The prompt names
     /// the files recorded for that thread so the agent can avoid staging
     /// unrelated work.

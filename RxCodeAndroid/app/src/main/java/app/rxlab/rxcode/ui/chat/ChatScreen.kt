@@ -283,34 +283,38 @@ fun ChatScreen(
                             },
                             leadingIcon = { Icon(Icons.Outlined.Difference, contentDescription = null) },
                         )
-                        androidx.compose.material3.DropdownMenuItem(
-                            text = { Text("Code Review") },
-                            onClick = {
-                                menuExpanded = false
-                                menuScope.launch {
-                                    runCatching {
-                                        val threadId = viewModel.requestThreadCreateCodeReview(resolvedId)
-                                        viewModel.requestSnapshot("code_review_started")
-                                        viewModel.selectSession(threadId)
+                        if (session?.isCodeReviewThread != true) {
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("Code Review") },
+                                onClick = {
+                                    menuExpanded = false
+                                    menuScope.launch {
+                                        runCatching {
+                                            val threadId = viewModel.requestThreadCreateCodeReview(resolvedId)
+                                            viewModel.requestSnapshot("code_review_started")
+                                            viewModel.selectSession(threadId)
+                                        }
                                     }
-                                }
-                            },
-                            leadingIcon = { Icon(Icons.Outlined.RateReview, contentDescription = null) },
-                        )
-                        androidx.compose.material3.DropdownMenuItem(
-                            text = { Text("Commit Files") },
-                            onClick = {
-                                menuExpanded = false
-                                menuScope.launch {
-                                    runCatching {
-                                        val threadId = viewModel.requestThreadCommitFiles(resolvedId)
-                                        viewModel.requestSnapshot("commit_started")
-                                        viewModel.selectSession(threadId)
-                                    }
-                                }
-                            },
-                            leadingIcon = { Icon(Icons.Outlined.CheckCircle, contentDescription = null) },
-                        )
+                                },
+                                leadingIcon = { Icon(Icons.Outlined.RateReview, contentDescription = null) },
+                            )
+                            if (session?.hasRecordedFileChanges != false) {
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = { Text("Commit Files") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        menuScope.launch {
+                                            runCatching {
+                                                val threadId = viewModel.requestThreadCommitFiles(resolvedId)
+                                                viewModel.requestSnapshot("commit_started")
+                                                viewModel.selectSession(threadId)
+                                            }
+                                        }
+                                    },
+                                    leadingIcon = { Icon(Icons.Outlined.CheckCircle, contentDescription = null) },
+                                )
+                            }
+                        }
                         androidx.compose.material3.DropdownMenuItem(
                             text = { Text("Open in Browser") },
                             onClick = {

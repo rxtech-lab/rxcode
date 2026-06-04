@@ -107,6 +107,11 @@ final class MobileAppState: ObservableObject {
     @Published var projectBranches: [UUID: String] = [:]
     /// Local branch list per project, mirrored from the desktop's snapshot.
     @Published var availableBranchesByProject: [UUID: [String]] = [:]
+    /// Per-project working-tree dirty flag, mirrored from the desktop's snapshot.
+    /// Gates the project-level "Commit All Changes" action — hidden when a
+    /// project is positively known to be clean. A missing entry (older desktop or
+    /// not-yet-synced) is treated as "unknown" and keeps the action visible.
+    @Published var projectDirtyByProject: [UUID: Bool] = [:]
     /// Desktop-owned run profiles per project, mirrored into the mobile app.
     @Published var runProfilesByProject: [UUID: [RunProfile]] = [:]
     /// Recent and active run tasks mirrored from the desktop.

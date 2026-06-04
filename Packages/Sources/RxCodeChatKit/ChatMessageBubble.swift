@@ -93,7 +93,7 @@ private struct CompactChatMessageBubble: View {
     }
 
     private func userTextBubble(_ text: String) -> some View {
-        MarkdownContentView(text: text, style: .rxCodeChatUser)
+        MarkdownContentView(text: text, style: .rxCodeChatUser, expandsHorizontally: false)
             .bubbleStyle(.user)
             .frame(maxWidth: 500, alignment: .trailing)
     }

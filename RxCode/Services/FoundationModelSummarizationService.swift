@@ -165,6 +165,12 @@ actor FoundationModelSummarizationService {
         return cleanSummary(raw, limit: 4000)
     }
 
+    /// Generic one-shot completion for an arbitrary prompt (e.g. a hook condition
+    /// gate). Returns nil when the on-device model is unavailable.
+    func generatePlainCompletion(instructions: String, prompt: String) async -> String? {
+        await respond(instructions: instructions, prompt: prompt)
+    }
+
     private func respond(instructions: String, prompt: String) async -> String? {
         guard Self.isAvailable else { return nil }
         return await respond(instructions: instructions, prompt: prompt, allowRollingWindow: true)

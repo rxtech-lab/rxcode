@@ -778,6 +778,9 @@ extension AppState {
                     let wasHookInjectedTurn = isSetupSession(
                         kind: HookSetupKind.commitPush,
                         sessionKey: sessionKey
+                    ) || isSetupSession(
+                        kind: HookSetupKind.sendMessage,
+                        sessionKey: sessionKey
                     )
 
                     // After-session-stop hooks: shown only, not re-saved. This

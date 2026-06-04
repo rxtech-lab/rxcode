@@ -231,16 +231,56 @@ final class AppStateHookController: HookController {
         }
     }
 
-    func sendThreadMessage(sessionId: String, prompt: String) {
+    func sendThreadMessage(sessionId: String, prompt: String, setupKind: String?) {
         guard let app else { return }
         Task { [weak app] in
             _ = try? await app?.sendCrossProject(
                 projectId: nil,
                 threadId: sessionId,
                 prompt: prompt,
-                waitForResponse: false
+                waitForResponse: false,
+                setupKind: setupKind
             )
         }
+    }
+
+    func evaluateCondition(condition: String, lastAssistantText: String, model: String?, sessionId: String) async -> Bool? {
+        guard let app else { return nil }
+        let trimmedCondition = condition.trimmingCharacters(in: .whitespacesAndNewlines)
+        // An empty condition is treated as "always send" by the caller, but guard
+        // here too so we never spend a model call on nothing.
+        guard !trimmedCondition.isEmpty else { return true }
+
+        let prompt = """
+        You are a gate that decides whether a follow-up automation should run for a coding chat thread. \
+        Answer with exactly one word — YES or NO. No punctuation, no explanation.
+
+        Condition to evaluate:
+        \(trimmedCondition)
+
+        The assistant's final response this turn:
+        \(String(lastAssistantText.prefix(4000)))
+
+        Does the condition hold? Reply YES or NO.
+        """
+
+        // A per-hook model override (provider-qualified) wins; otherwise the app's
+        // configured summarization model is used.
+        let override: (provider: AgentProvider, model: String)? = {
+            guard let trimmed = model?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else { return nil }
+            return resolveAgentModelSelection(storedModel: trimmed, fallbackSessionId: sessionId)
+        }()
+
+        guard let raw = await app.runHookConditionCompletion(
+            prompt: prompt,
+            overrideSelection: override,
+            fallbackSessionId: sessionId
+        ) else { return nil }
+
+        let verdict = raw.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        if verdict.hasPrefix("YES") { return true }
+        if verdict.hasPrefix("NO") { return false }
+        return nil
     }
 
     func setReviewPassed(_ passed: Bool, sessionId: String) {
@@ -262,6 +302,11 @@ final class AppStateHookController: HookController {
         } else {
             app.reviewRoundBySession[sessionId] = round
         }
+    }
+
+    func repromptThreadAfterReviewFailure(feedback: String, project: Project, sessionKey: String) -> Int? {
+        guard let app else { return nil }
+        return app.repromptAfterReviewFailure(feedback: feedback, project: project, sessionKey: sessionKey)
     }
 
     func responseNotificationFallback(from responseText: String) -> String {

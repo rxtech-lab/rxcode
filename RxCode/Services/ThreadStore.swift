@@ -653,6 +653,16 @@ final class ThreadStore {
         return (try? context.fetch(descriptor)) ?? []
     }
 
+    /// Number of distinct files this session recorded edits to. There is one row
+    /// per `(sessionId, path)`, so a row count equals the distinct-file count —
+    /// a cheap query (no content loaded) used to gate the "Commit Files" action.
+    func fileEditCount(sessionId: String) -> Int {
+        let descriptor = FetchDescriptor<ThreadFileEdit>(
+            predicate: #Predicate { $0.sessionId == sessionId }
+        )
+        return (try? context.fetchCount(descriptor)) ?? 0
+    }
+
     private func fetchFileEdit(sessionId: String, path: String) -> ThreadFileEdit? {
         var descriptor = FetchDescriptor<ThreadFileEdit>(
             predicate: #Predicate { $0.sessionId == sessionId && $0.path == path }

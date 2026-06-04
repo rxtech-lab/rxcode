@@ -167,16 +167,23 @@ fun ProjectActionsMenu(
         Icon(Icons.Outlined.MoreVert, contentDescription = "Project actions")
     }
 
+    // Hide "Commit All Changes" when the project is positively known to have a
+    // clean working tree (synced from the desktop). Unknown → still shown.
+    val canCommitAll = branchInfo?.hasUncommittedChanges != false
+
     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-        DropdownMenuItem(
-            text = { Text("Commit All Changes") },
-            leadingIcon = { Icon(Icons.Outlined.CheckCircle, contentDescription = null) },
-            enabled = !isCommittingAll,
-            onClick = { commitAllChanges() },
-        )
+        if (canCommitAll) {
+            DropdownMenuItem(
+                text = { Text("Commit All Changes") },
+                leadingIcon = { Icon(Icons.Outlined.CheckCircle, contentDescription = null) },
+                enabled = !isCommittingAll,
+                onClick = { commitAllChanges() },
+            )
+        }
 
         if (hasRepo) {
-            HorizontalDivider()
+            // Only separate from the commit item when it's actually shown.
+            if (canCommitAll) HorizontalDivider()
             val loaded = status
             if (loaded == null) {
                 DropdownMenuItem(

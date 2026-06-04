@@ -29,15 +29,19 @@ extension MobileChatView {
                     } label: {
                         Label("View Changes", systemImage: "plus.forwardslash.minus")
                     }
-                    Button {
-                        startCodeReview()
-                    } label: {
-                        Label("Code Review", systemImage: "checklist")
-                    }
-                    Button {
-                        startCommitFiles()
-                    } label: {
-                        Label("Commit Files", systemImage: "checkmark.circle")
+                    if !isCodeReviewThread {
+                        Button {
+                            startCodeReview()
+                        } label: {
+                            Label("Code Review", systemImage: "checklist")
+                        }
+                        if threadHasFileChanges {
+                            Button {
+                                startCommitFiles()
+                            } label: {
+                                Label("Commit Files", systemImage: "checkmark.circle")
+                            }
+                        }
                     }
                     Divider()
                     Button {
@@ -113,6 +117,20 @@ extension MobileChatView {
     var threadExists: Bool {
         !MobileDraftSessionID.isDraft(sessionID)
             && state.sessions.contains(where: { $0.id == sessionID })
+    }
+
+    /// True when the open thread is itself a `[Code Review]` thread — hides the
+    /// "Code Review" / "Commit Files" actions since you don't review or commit a
+    /// review thread itself (mirrors the session-list context menu gating).
+    var isCodeReviewThread: Bool {
+        state.sessionSummary(sessionID: sessionID)?.isCodeReviewThread ?? false
+    }
+
+    /// Whether the open thread recorded any file edits — gates "Commit Files".
+    /// Unknown (summary missing, or an older desktop that didn't sync the count)
+    /// keeps the action visible.
+    var threadHasFileChanges: Bool {
+        state.sessionSummary(sessionID: sessionID)?.hasRecordedFileChanges ?? true
     }
 
     /// Start a `[Code Review]` thread reviewing this thread's changes (the manual

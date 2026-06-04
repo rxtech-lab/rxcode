@@ -427,6 +427,13 @@ final class AppState {
         didSet { UserDefaults.standard.set(enableAutoCIFix, forKey: "enableAutoCIFix") }
     }
 
+    /// Per-project working-tree dirty flag (`git status` non-empty), refreshed by
+    /// `refreshProjectGitDirty()`. Gates the project-level "Commit All Changes"
+    /// action on project rows and briefing cards — the action is hidden only when
+    /// a project is positively known to be clean (`false`). A missing entry means
+    /// "not yet computed" and keeps the action visible. Held in memory only.
+    var projectGitDirty: [UUID: Bool] = [:]
+
     /// Latest CI status per project (current branch), refreshed by the poller in
     /// `AppState+CIStatus.swift`. Held in memory only.
     var ciStatusByProject: [UUID: ProjectCIStatus] = [:]
@@ -1259,6 +1266,7 @@ final class AppState {
         // must come before CommitPushHook so the commit gate sees the verdict.
         hookManager.register(CodeReviewHook())
         hookManager.register(CommitPushHook())
+        hookManager.register(SendMessageHook())
     }
 
 

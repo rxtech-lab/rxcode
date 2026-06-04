@@ -67,8 +67,16 @@ public protocol HookController: AnyObject {
         prompt: String,
         timeoutSeconds: TimeInterval
     ) async -> HookLinkedThreadResult?
-    /// Send a follow-up prompt into an existing thread without waiting.
-    func sendThreadMessage(sessionId: String, prompt: String)
+    /// Send a follow-up prompt into an existing thread without waiting. Pass
+    /// `setupKind` to mark the session for once-per-session loop prevention; the
+    /// marker is recorded *after* the message is appended, so the resulting turn
+    /// doesn't clear its own marker.
+    func sendThreadMessage(sessionId: String, prompt: String, setupKind: String?)
+    /// Ask a lightweight model whether `condition` holds given the turn's final
+    /// assistant text. Returns `true` only on an explicit YES, `false` on NO, and
+    /// `nil` when no verdict could be obtained. `model` is a provider-qualified
+    /// override (empty/`nil` ⇒ the configured summarization model).
+    func evaluateCondition(condition: String, lastAssistantText: String, model: String?, sessionId: String) async -> Bool?
     /// Record the latest review verdict for a session (shared between the
     /// code-review and commit hooks within one stop cycle).
     func setReviewPassed(_ passed: Bool, sessionId: String)
@@ -79,6 +87,13 @@ public protocol HookController: AnyObject {
     func reviewRound(sessionId: String) -> Int
     /// Set the failed-review round counter for a session.
     func setReviewRound(_ round: Int, sessionId: String)
+    /// Feed a failing code review's feedback back into the reviewed thread as a
+    /// bounded auto-continue fix turn (rendered as an auto-continue card, not a
+    /// user message). The thread runs the Code Review hook again when the fix
+    /// turn finishes, so the change is re-reviewed. Returns the 1-based attempt
+    /// number started, or `nil` if the per-session fix-round cap was already
+    /// reached (the caller then surfaces a "stopped" card instead of looping).
+    func repromptThreadAfterReviewFailure(feedback: String, project: Project, sessionKey: String) -> Int?
     /// First-sentence fallback body for a response-complete notification.
     func responseNotificationFallback(from responseText: String) -> String
     /// Optionally generate an AI summary of the response for a notification body.
@@ -236,6 +251,11 @@ public enum HookSetupKind {
     /// Marks the follow-up turn the Commit & Push hook itself triggered, so the
     /// hook short-circuits on that turn instead of looping forever.
     public static let commitPush = "commitPush"
+    /// Marks a thread that the Send Message hook has already fired for this
+    /// session. Unlike `commitPush` it is *not* self-cleared; it persists until
+    /// the user sends a new message (reset in `AppState.sendPrompt`), giving the
+    /// hook once-per-session semantics.
+    public static let sendMessage = "sendMessage"
 }
 
 /// Result of spawning a linked thread via `spawnLinkedThread`.
@@ -286,6 +306,11 @@ public struct HookBannerItem: Identifiable {
 }
 
 public extension HookController {
+    /// Convenience: send a follow-up prompt without marking a setup session.
+    func sendThreadMessage(sessionId: String, prompt: String) {
+        sendThreadMessage(sessionId: sessionId, prompt: prompt, setupKind: nil)
+    }
+
     /// Ergonomic `@ViewBuilder` form mirroring the requested call site:
     /// `controller.showBanner(in: .newProject, position: .aboveInputBox, id: …) { MyBanner() }`.
     func showBanner<Content: View>(

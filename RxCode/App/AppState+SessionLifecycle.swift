@@ -78,6 +78,16 @@ extension AppState {
         return keys.contains { resolveCurrentSessionId($0) == target }
     }
 
+    /// Redirect-aware removal of a setup marker (mirrors the hook controller's
+    /// `clearSetupSession`). Used to reset once-per-session hook markers when the
+    /// user starts a fresh turn.
+    func clearSetupSession(kind: String, sessionKey: String) {
+        guard let keys = setupSessionKeys[kind] else { return }
+        let target = resolveCurrentSessionId(sessionKey)
+        let stale = keys.filter { resolveCurrentSessionId($0) == target }
+        setupSessionKeys[kind]?.subtract(stale)
+    }
+
     /// Spawn a one-shot summarization call to generate a 3–6 word title for the given
     /// session, then persist it via `renameSession` if the title is still the placeholder.
     /// No-op if the session was already renamed manually or the LLM call fails.
@@ -656,6 +666,60 @@ extension AppState {
             .models
             .first?
             .id
+    }
+
+    /// One-shot completion used by the Send Message hook's condition gate. Honors
+    /// a per-hook provider/model `overrideSelection`; otherwise routes through the
+    /// configured `summarizationProvider` (defaulting to the thread's model for the
+    /// `.selectedClient` case). Returns nil when no engine could run; callers
+    /// treat that as "do not fire".
+    func runHookConditionCompletion(
+        prompt: String,
+        overrideSelection: (provider: AgentProvider, model: String)?,
+        fallbackSessionId: String
+    ) async -> String? {
+        if let sel = overrideSelection {
+            switch sel.provider {
+            case .claudeCode:
+                return await claude.generatePlainSummary(prompt: prompt, model: sel.model, limit: 200)
+            case .codex:
+                return await codex.generateCodexPlainSummary(prompt: prompt, model: sel.model)
+            case .acp:
+                break // ACP has no one-shot; fall through to the summarization model.
+            }
+        }
+
+        switch summarizationProvider {
+        case .selectedClient:
+            let summary = allSessionSummaries.first { $0.id == fallbackSessionId }
+            let provider = summary?.agentProvider ?? selectedAgentProvider
+            let model = summary?.model ?? selectedSummarizationModel(for: provider)
+            switch provider {
+            case .claudeCode:
+                return await claude.generatePlainSummary(prompt: prompt, model: model ?? "haiku", limit: 200)
+            case .codex:
+                return await codex.generateCodexPlainSummary(prompt: prompt, model: model)
+            case .acp:
+                // ACP can't run a one-shot; fall back to a cheap Claude classifier.
+                return await claude.generatePlainSummary(prompt: prompt, model: "haiku", limit: 200)
+            }
+        case .openAI:
+            guard !openAISummarizationModel.isEmpty else {
+                return await claude.generatePlainSummary(prompt: prompt, model: "haiku", limit: 200)
+            }
+            return await openAISummarization.generatePlainCompletion(
+                prompt: prompt,
+                endpoint: openAISummarizationEndpoint,
+                apiKey: openAISummarizationAPIKey,
+                model: openAISummarizationModel,
+                maxTokens: 16
+            )
+        case .appleFoundationModel:
+            return await foundationModelSummarization.generatePlainCompletion(
+                instructions: "You answer strictly with YES or NO.",
+                prompt: prompt
+            )
+        }
     }
 
     func togglePinSession(_ session: ChatSession) async {

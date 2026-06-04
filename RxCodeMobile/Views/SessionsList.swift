@@ -348,16 +348,20 @@ struct SessionsList: View {
 
     @ViewBuilder
     private func threadContextMenu(for session: SessionSummary) -> some View {
-        Button {
-            createThreadCodeReview(sessionID: session.id)
-        } label: {
-            Label("Code Review", systemImage: "checklist")
-        }
+        if !session.isCodeReviewThread {
+            Button {
+                createThreadCodeReview(sessionID: session.id)
+            } label: {
+                Label("Code Review", systemImage: "checklist")
+            }
 
-        Button {
-            commitThreadFiles(sessionID: session.id)
-        } label: {
-            Label("Commit Files", systemImage: "checkmark.circle")
+            if session.hasRecordedFileChanges {
+                Button {
+                    commitThreadFiles(sessionID: session.id)
+                } label: {
+                    Label("Commit Files", systemImage: "checkmark.circle")
+                }
+            }
         }
 
         Button {

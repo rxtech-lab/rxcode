@@ -108,8 +108,18 @@ struct ProjectChatRow: View {
     /// Latest code-review verdict for this thread: `true` passed, `false` found
     /// issues, `nil` not reviewed (no icon shown).
     var reviewPassed: Bool? = nil
+    /// Whether to offer "Commit Files" — hidden when the thread recorded no file
+    /// edits (nothing to commit).
+    var canCommitFiles: Bool = true
 
     @State private var isHovered = false
+
+    /// True when this row *is* a `[Code Review]` thread (manual or hook-spawned).
+    /// Such threads hide the "Code Review" / "Commit Files" actions since you
+    /// don't review or commit a review thread itself.
+    private var isCodeReviewThread: Bool {
+        summary.threadLabel == AppState.manualCodeReviewLabel
+    }
 
     private var isActiveStatus: Bool {
         switch status {
@@ -212,12 +222,16 @@ struct ProjectChatRow: View {
                     Label("Archive", systemImage: "archivebox")
                 }
             }
-            Divider()
-            Button { onCodeReview() } label: {
-                Label("Code Review for this thread", systemImage: "checklist")
-            }
-            Button { onCommitFiles() } label: {
-                Label("Commit Files", systemImage: "checkmark.circle")
+            if !isCodeReviewThread {
+                Divider()
+                Button { onCodeReview() } label: {
+                    Label("Code Review for this thread", systemImage: "checklist")
+                }
+                if canCommitFiles {
+                    Button { onCommitFiles() } label: {
+                        Label("Commit Files", systemImage: "checkmark.circle")
+                    }
+                }
             }
             if !hookMenuItems.isEmpty {
                 Divider()

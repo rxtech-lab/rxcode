@@ -24,6 +24,12 @@ struct ProjectTreeView: View {
 
     @State private var showAllChatsSheet = false
 
+    /// Identity for the dirty-flag refresh task — changes whenever a project is
+    /// added/removed or its path changes, re-running `refreshProjectGitDirty`.
+    private var gitDirtyRefreshKey: String {
+        appState.projects.map { "\($0.id.uuidString):\($0.path)" }.joined(separator: "|")
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             SummarySidebarSection()
@@ -40,6 +46,17 @@ struct ProjectTreeView: View {
                 emptyState
             } else {
                 projectList
+            }
+        }
+        // Keep the per-project dirty flag fresh so "Commit All Changes" hides on
+        // clean projects. Recompute when the project set changes and whenever a
+        // turn finishes (a commit/agent run may have cleaned the tree).
+        .task(id: gitDirtyRefreshKey) {
+            await appState.refreshProjectGitDirty()
+        }
+        .onChange(of: appState.isStreaming(in: windowState)) { old, new in
+            if old && !new {
+                Task { await appState.refreshProjectGitDirty() }
             }
         }
         .alert("Rename Project", isPresented: Binding(
@@ -477,8 +494,10 @@ private struct ProjectTreeRow: View {
         Button { onCodeReview() } label: {
             Label("Code Review for Current Branch", systemImage: "checklist")
         }
-        Button { onCommitAll() } label: {
-            Label("Commit All Changes", systemImage: "checkmark.circle")
+        if appState.projectHasUncommittedChanges(project.id) {
+            Button { onCommitAll() } label: {
+                Label("Commit All Changes", systemImage: "checkmark.circle")
+            }
         }
         if canCreatePR {
             Button { startCreatePR() } label: {
@@ -758,7 +777,8 @@ private struct ProjectChatsList: View {
             titleOverride: titleOverride,
             showLabelChip: showLabelChip,
             reviewDisclosure: reviewDisclosure,
-            reviewPassed: appState.reviewPassedBySession[sessionId]
+            reviewPassed: appState.reviewPassedBySession[sessionId],
+            canCommitFiles: appState.threadHasFileChanges(sessionId: sessionId)
         )
     }
 }

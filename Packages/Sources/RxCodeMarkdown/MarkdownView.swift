@@ -80,6 +80,7 @@ public struct MarkdownView: View {
     private let baseURL: URL?
     private let style: MarkdownStyle
     private let fadeNewText: Bool
+    private let expandsHorizontally: Bool
     private let imageCache: MarkdownImageCache
     private let onOpenLink: LinkHandler?
 
@@ -94,6 +95,7 @@ public struct MarkdownView: View {
         baseURL: URL? = nil,
         style: MarkdownStyle = MarkdownStyle(),
         fadeNewText: Bool = false,
+        expandsHorizontally: Bool = true,
         imageCache: MarkdownImageCache = .shared,
         onOpenLink: LinkHandler? = nil
     ) {
@@ -103,6 +105,7 @@ public struct MarkdownView: View {
         self.baseURL = baseURL
         self.style = style
         self.fadeNewText = fadeNewText
+        self.expandsHorizontally = expandsHorizontally
         self.imageCache = imageCache
         self.onOpenLink = onOpenLink
         _observedText = State(initialValue: text)
@@ -122,7 +125,7 @@ public struct MarkdownView: View {
             fadeSegments: fadeSegments
         )
         .textSelection(.enabled)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: expandsHorizontally ? .infinity : nil, alignment: .leading)
         .onChange(of: text) { _, newText in
             updateFadeState(for: newText)
         }

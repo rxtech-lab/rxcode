@@ -157,6 +157,7 @@ struct BriefingView: View {
         .background(ClaudeTheme.background)
         .task(id: projectPathsKey) {
             await refreshCurrentBranches()
+            await appState.refreshProjectGitDirty()
         }
         .onAppear {
             AnalyticsService.shared.log(.briefingListOpened)
@@ -686,10 +687,12 @@ struct BriefingView: View {
                 Label("Code Review for \(group.branch)", systemImage: "checklist")
             }
 
-            Button {
-                startCommitAll(for: project)
-            } label: {
-                Label("Commit All Changes", systemImage: "checkmark.circle")
+            if appState.projectHasUncommittedChanges(project.id) {
+                Button {
+                    startCommitAll(for: project)
+                } label: {
+                    Label("Commit All Changes", systemImage: "checkmark.circle")
+                }
             }
 
             let hookItems = appState.projectContextMenuItems(for: project)

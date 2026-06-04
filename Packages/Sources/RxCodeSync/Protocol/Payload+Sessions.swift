@@ -50,6 +50,11 @@ public struct SessionSummary: Codable, Sendable, Identifiable {
     public let parentThreadId: String?
     /// Short label chip (e.g. `"Code Review"`). `nil` for ordinary threads.
     public let threadLabel: String?
+    /// Number of distinct files this thread recorded edits to (the desktop's
+    /// `ThreadStore` file-edit history). Drives whether the "Commit Files" action
+    /// is offered — it's hidden when this is `0`. `nil` from older desktops that
+    /// predate this field, which is treated as "unknown" (action still shown).
+    public let changedFileCount: Int?
 
     public init(
         id: String,
@@ -65,7 +70,8 @@ public struct SessionSummary: Codable, Sendable, Identifiable {
         queuedMessages: [QueuedUserMessage]? = nil,
         hasUncheckedCompletion: Bool = false,
         parentThreadId: String? = nil,
-        threadLabel: String? = nil
+        threadLabel: String? = nil,
+        changedFileCount: Int? = nil
     ) {
         self.id = id
         self.projectId = projectId
@@ -81,10 +87,11 @@ public struct SessionSummary: Codable, Sendable, Identifiable {
         self.hasUncheckedCompletion = hasUncheckedCompletion
         self.parentThreadId = parentThreadId
         self.threadLabel = threadLabel
+        self.changedFileCount = changedFileCount
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, projectId, title, updatedAt, isPinned, isArchived, isStreaming, attention, progress, todos, queuedMessages, hasUncheckedCompletion, parentThreadId, threadLabel
+        case id, projectId, title, updatedAt, isPinned, isArchived, isStreaming, attention, progress, todos, queuedMessages, hasUncheckedCompletion, parentThreadId, threadLabel, changedFileCount
     }
 
     public init(from decoder: Decoder) throws {
@@ -103,7 +110,24 @@ public struct SessionSummary: Codable, Sendable, Identifiable {
         hasUncheckedCompletion = try container.decodeIfPresent(Bool.self, forKey: .hasUncheckedCompletion) ?? false
         parentThreadId = try container.decodeIfPresent(String.self, forKey: .parentThreadId)
         threadLabel = try container.decodeIfPresent(String.self, forKey: .threadLabel)
+        changedFileCount = try container.decodeIfPresent(Int.self, forKey: .changedFileCount)
     }
+}
+
+public extension SessionSummary {
+    /// Canonical chip label stamped on `[Code Review]` threads (manual or
+    /// hook-spawned). Matches the desktop's `AppState.manualCodeReviewLabel`.
+    static let codeReviewLabel = "Code Review"
+
+    /// True when this summary *is* a `[Code Review]` thread. Such threads hide
+    /// the "Code Review" / "Commit Files" actions since you don't review or
+    /// commit a review thread itself.
+    var isCodeReviewThread: Bool { threadLabel == Self.codeReviewLabel }
+
+    /// Whether the "Commit Files" action should be offered for this thread.
+    /// Hidden only when the desktop positively reported zero recorded file edits;
+    /// an unknown count (`nil`, from an older desktop) keeps the action visible.
+    var hasRecordedFileChanges: Bool { changedFileCount.map { $0 > 0 } ?? true }
 }
 
 public struct SessionUpdatePayload: Codable, Sendable {

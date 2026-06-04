@@ -839,7 +839,8 @@ struct BriefingView: View {
         BriefingThreadRow(
             item: item,
             isInProgress: appState.sessionStates[item.sessionId]?.isStreaming == true,
-            todoProgress: appState.todoProgress(forSessionId: item.sessionId)
+            todoProgress: appState.todoProgress(forSessionId: item.sessionId),
+            reviewPassed: appState.reviewPassedBySession[item.sessionId]
         ) {
             appState.selectSession(id: item.sessionId, in: windowState)
         }

@@ -8,6 +8,9 @@ struct BriefingThreadRow: View {
     let item: ThreadSummaryItem
     let isInProgress: Bool
     let todoProgress: ChatTodoProgress?
+    /// Latest code-review verdict for the thread: `true` passed, `false`
+    /// failed, `nil` not reviewed (no dot shown).
+    var reviewPassed: Bool? = nil
     let onSelect: () -> Void
 
     var body: some View {
@@ -24,6 +27,14 @@ struct BriefingThreadRow: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .frame(maxWidth: .infinity, alignment: .leading)
+
+                if let reviewPassed {
+                    Circle()
+                        .fill(reviewPassed ? ClaudeTheme.statusSuccess : ClaudeTheme.statusError)
+                        .frame(width: 6, height: 6)
+                        .help(reviewPassed ? "Code review passed" : "Code review found issues")
+                        .accessibilityLabel(reviewPassed ? "Code review passed" : "Code review found issues")
+                }
 
                 if isInProgress {
                     BriefingThreadProgressBadge(progress: todoProgress)

@@ -33,33 +33,15 @@ struct HookProfileDetailForm: View {
                 Text("Lifecycle")
             }
 
-            Section {
-                TextEditor(text: $hook.bash.command)
-                    .font(.system(.body, design: .monospaced))
-                    .frame(minHeight: 60, maxHeight: 120)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .strokeBorder(ClaudeTheme.borderSubtle, lineWidth: 0.5)
-                    )
-                HStack {
-                    TextField("Working Directory", text: $hook.bash.workingDirectory, prompt: Text(project.path))
-                    Button("Browse…") {
-                        pickDirectory { picked in
-                            hook.bash.workingDirectory = picked
-                        }
-                    }
-                    Button {
-                        hook.bash.workingDirectory = ""
-                    } label: {
-                        Image(systemName: "arrow.uturn.backward")
-                    }
-                    .help("Reset to project root")
-                }
-            } header: {
-                Text("Command")
-            } footer: {
-                Text("Runs with `/bin/zsh -lc`. Absolute or project-relative working directory; leave empty to use the project root.")
-            }
+            ProfileCommandSections(
+                profileID: hook.id,
+                project: project,
+                type: $hook.type,
+                bash: $hook.bash,
+                xcode: $hook.xcode,
+                make: $hook.make,
+                package: $hook.package
+            )
 
             BashEnvironmentEditor(bash: $hook.bash, projectPath: project.path)
         }
@@ -77,25 +59,6 @@ struct HookProfileDetailForm: View {
         }
     }
 
-    // MARK: - Directory picker
-
-    private func pickDirectory(onPick: @escaping (String) -> Void) {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        panel.directoryURL = URL(fileURLWithPath: project.path)
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        let root = (project.path as NSString).standardizingPath
-        let std = (url.path as NSString).standardizingPath
-        if std.hasPrefix(root + "/") {
-            onPick(String(std.dropFirst(root.count + 1)))
-        } else if std == root {
-            onPick("")
-        } else {
-            onPick(std)
-        }
-    }
 }
 
 // MARK: - Lifecycle diagram

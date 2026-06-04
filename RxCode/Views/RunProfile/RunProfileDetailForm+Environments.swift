@@ -6,28 +6,6 @@ import UniformTypeIdentifiers
 // MARK: - Environments
 
 extension RunProfileDetailForm {
-    func pickXcodeContainer(onPick: @escaping (String, Bool) -> Void) {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = true
-        panel.allowsMultipleSelection = false
-        panel.directoryURL = URL(fileURLWithPath: project.path)
-        panel.allowedContentTypes = [
-            UTType(filenameExtension: "xcodeproj") ?? .package,
-            UTType(filenameExtension: "xcworkspace") ?? .package,
-        ]
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        let name: String
-        let root = (project.path as NSString).standardizingPath
-        let std = (url.path as NSString).standardizingPath
-        if std.hasPrefix(root + "/") {
-            name = String(std.dropFirst(root.count + 1))
-        } else {
-            name = std
-        }
-        onPick(name, url.pathExtension == "xcworkspace")
-    }
-
     var activePresetIndex: Int? {
         guard let id = profile.bash.activePresetId ?? profile.bash.environments.first?.id else { return nil }
         return profile.bash.environments.firstIndex { $0.id == id }

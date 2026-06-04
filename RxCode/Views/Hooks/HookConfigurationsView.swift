@@ -129,12 +129,22 @@ struct HookConfigurationsView: View {
     @ViewBuilder
     private func hookRow(_ hook: HookProfile) -> some View {
         HStack {
-            Image(systemName: "bolt.horizontal.circle")
+            Image(systemName: iconName(for: hook.type))
                 .foregroundStyle(hook.enabled ? ClaudeTheme.accent : ClaudeTheme.textTertiary)
             Text(hook.name.isEmpty ? "Untitled" : hook.name)
                 .foregroundStyle(hook.enabled ? ClaudeTheme.textPrimary : ClaudeTheme.textTertiary)
         }
         .tag(hook.id)
+    }
+
+    /// SF Symbol per type — matches `RunConfigurationsView.iconName(for:)`.
+    private func iconName(for type: RunProfileType) -> String {
+        switch type {
+        case .xcode: return "hammer.fill"
+        case .make: return "wrench.and.screwdriver.fill"
+        case .bash: return "terminal"
+        case .packageScript: return "shippingbox.fill"
+        }
     }
 
     private var addMenu: some View {

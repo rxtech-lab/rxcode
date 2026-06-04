@@ -6,8 +6,20 @@ public enum RunProfileType: String, Codable, Sendable, CaseIterable, Hashable {
     case make
     /// Runs a `package.json` / `deno.json` script through a selected package
     /// manager. Named `packageScript` to avoid the `package` access-control
-    /// keyword; the rawValue stays `"package"` so it renders as "Package".
+    /// keyword; the rawValue stays `"package"` for backward-compatible
+    /// persistence and mobile/Android sync. User-facing label is "Node.js".
     case packageScript = "package"
+
+    /// User-facing label. `packageScript` shows as "Node.js" (the old
+    /// "Package" label was too broad); the rest are their capitalized names.
+    public var displayName: String {
+        switch self {
+        case .bash: return "Bash"
+        case .xcode: return "Xcode"
+        case .make: return "Make"
+        case .packageScript: return "Node.js"
+        }
+    }
 }
 
 public struct RunProfile: Identifiable, Codable, Sendable, Hashable {

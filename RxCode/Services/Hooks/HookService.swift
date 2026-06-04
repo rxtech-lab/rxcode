@@ -21,12 +21,18 @@ enum HookService {
     /// store or the injected system prompt.
     private static let maxOutputBytes = 64 * 1024
 
-    /// Run a bash hook. Resolves working directory and environment with the same
-    /// helpers `RunService` uses, then executes the command under a login zsh so
-    /// the user's PATH (bun, pnpm, pyenv, …) is available — matching how
-    /// `RunTaskExecutor` and the interactive terminal source PATH.
+    /// Run a hook. Synthesizes the command from the hook's type with the same
+    /// builder run profiles use (`RunTaskExecutor.mainCommandLines`), so a hook
+    /// can be bash, `xcodebuild`, `make`, or a package script. Resolves working
+    /// directory and environment with the same helpers `RunService` uses, then
+    /// executes under a login zsh so the user's PATH (bun, pnpm, pyenv, …) is
+    /// available — matching how `RunTaskExecutor` and the interactive terminal
+    /// source PATH.
     static func run(_ profile: HookProfile, project: Project) async -> HookRunResult {
-        let command = profile.bash.command.trimmingCharacters(in: .whitespacesAndNewlines)
+        let command = RunTaskExecutor
+            .mainCommandLines(for: profile.asRunProfile, projectPath: project.path)
+            .joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !command.isEmpty else {
             return HookRunResult(output: "", exitCode: 0)
         }

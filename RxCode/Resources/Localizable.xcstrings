@@ -5428,7 +5428,11 @@
         }
       }
     },
+    "Empty Node.js Configuration" : {
+
+    },
     "Empty Package Configuration" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -6585,28 +6589,6 @@
         }
       }
     },
-    "hook.secrets.checking" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Checking for secrets…"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "시크릿 확인 중…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在检查密钥…"
-          }
-        }
-      }
-    },
     "hook.pullRequest.creating" : {
       "localizations" : {
         "en" : {
@@ -6625,6 +6607,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在创建拉取请求…"
+          }
+        }
+      }
+    },
+    "hook.secrets.checking" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checking for secrets…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "시크릿 확인 중…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在检查密钥…"
           }
         }
       }
@@ -9475,6 +9479,9 @@
         }
       }
     },
+    "Node.js" : {
+
+    },
     "Non-zero → agent continues" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -10197,6 +10204,7 @@
       }
     },
     "Package" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -12103,6 +12111,7 @@
       }
     },
     "Runs with `/bin/zsh -lc`. Absolute or project-relative working directory; leave empty to use the project root." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {

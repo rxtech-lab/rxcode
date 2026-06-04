@@ -21,22 +21,26 @@ public enum HookTrigger: String, Codable, Sendable, CaseIterable, Hashable {
     }
 }
 
-/// What a hook runs. Bash-only today; typed so other kinds can be added later.
-public enum HookType: String, Codable, Sendable, CaseIterable, Hashable {
-    case bash
-}
-
 /// A single project-scoped automation that runs a command at a session
-/// lifecycle point. Modeled on `RunProfile`; reuses `BashRunConfig` for the
-/// command, working directory, and environment presets.
+/// lifecycle point. Mirrors `RunProfile` one-to-one: it carries the same
+/// `RunProfileType` and per-type config structs so a hook can run a bash
+/// command, an `xcodebuild` invocation, a `make` target, or a package script.
+/// The only hook-specific fields are `enabled` and the lifecycle `trigger`.
 public struct HookProfile: Identifiable, Codable, Sendable, Hashable {
     public var id: UUID
     public var projectId: UUID
     public var name: String
     public var enabled: Bool
     public var trigger: HookTrigger
-    public var type: HookType
+    public var type: RunProfileType
     public var bash: BashRunConfig
+    /// Populated when `type == .xcode`. Optional so hooks written before the
+    /// typed configs existed (bash-only) decode cleanly.
+    public var xcode: XcodeRunConfig?
+    /// Populated when `type == .make`. Optional for backward-compatible decode.
+    public var make: MakeRunConfig?
+    /// Populated when `type == .packageScript`. Optional for backward-compatible decode.
+    public var package: PackageRunConfig?
     public var createdAt: Date
     public var updatedAt: Date
 
@@ -46,8 +50,11 @@ public struct HookProfile: Identifiable, Codable, Sendable, Hashable {
         name: String,
         enabled: Bool = true,
         trigger: HookTrigger = .beforeSessionStart,
-        type: HookType = .bash,
+        type: RunProfileType = .bash,
         bash: BashRunConfig = BashRunConfig(),
+        xcode: XcodeRunConfig? = nil,
+        make: MakeRunConfig? = nil,
+        package: PackageRunConfig? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -58,7 +65,28 @@ public struct HookProfile: Identifiable, Codable, Sendable, Hashable {
         self.trigger = trigger
         self.type = type
         self.bash = bash
+        self.xcode = xcode
+        self.make = make
+        self.package = package
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+    }
+
+    /// Bridge to `RunProfile` so a hook can reuse the run-profile command
+    /// synthesis (`RunTaskExecutor.mainCommandLines`). Hooks have no
+    /// before/after steps, so those are left empty.
+    public var asRunProfile: RunProfile {
+        RunProfile(
+            id: id,
+            projectId: projectId,
+            name: name,
+            type: type,
+            bash: bash,
+            xcode: xcode,
+            make: make,
+            package: package,
+            createdAt: createdAt,
+            updatedAt: updatedAt
+        )
     }
 }

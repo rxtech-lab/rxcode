@@ -64,17 +64,6 @@ extension RunProfileDetailForm {
 
     // MARK: - File pickers
 
-    func pickDirectory(onPick: @escaping (String) -> Void) {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        panel.directoryURL = URL(fileURLWithPath: project.path)
-        if panel.runModal() == .OK, let url = panel.url {
-            onPick(displayPath(for: url))
-        }
-    }
-
     func pickFile(onPick: @escaping (String) -> Void) {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = false

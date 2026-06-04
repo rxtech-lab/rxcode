@@ -401,25 +401,38 @@ struct SessionsList: View {
             .mapValues { $0.sorted { $0.updatedAt < $1.updatedAt } }
     }
 
-    /// A top-level thread row (with a disclosure control when it has review
-    /// children) plus, when expanded, its nested review children.
+    /// A top-level thread row. When it has review children, an attached
+    /// disclosure bar hangs beneath it and reveals the nested reviews — every
+    /// top-level card stays aligned to the same leading edge.
     @ViewBuilder
     private func threadGroup(for session: SessionSummary) -> some View {
         let children = childrenByParent[session.id] ?? []
-        let isExpanded = expandedReviewParentIds.contains(session.id)
 
         if children.isEmpty {
             threadCard(for: session)
         } else {
-            HStack(spacing: 6) {
-                reviewDisclosureButton(for: session, children: children, isExpanded: isExpanded)
-                threadCard(for: session)
-            }
-        }
+            let isExpanded = expandedReviewParentIds.contains(session.id)
 
-        if isExpanded {
-            ForEach(Array(children.enumerated()), id: \.element.id) { index, child in
-                threadCard(for: child, indentLevel: 1, titleOverride: "Review \(index + 1)")
+            VStack(spacing: 6) {
+                threadCard(for: session)
+                reviewDisclosureBar(for: session, children: children, isExpanded: isExpanded)
+
+                if isExpanded {
+                    VStack(spacing: 8) {
+                        ForEach(Array(children.enumerated()), id: \.element.id) { index, child in
+                            threadCard(for: child, indentLevel: 1, titleOverride: "Review \(index + 1)")
+                        }
+                    }
+                    .overlay(alignment: .leading) {
+                        // Vertical rail visually tying the reviews to their parent.
+                        Capsule()
+                            .fill(ClaudeTheme.accent.opacity(0.25))
+                            .frame(width: 2)
+                            .padding(.vertical, 6)
+                            .padding(.leading, 12)
+                    }
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
             }
         }
     }
@@ -447,12 +460,18 @@ struct SessionsList: View {
         }
     }
 
-    private func reviewDisclosureButton(
+    /// A slim, full-width control attached beneath a parent thread that owns
+    /// code reviews. Replaces the old chevron badge that floated in the left
+    /// margin and knocked every parent card out of alignment.
+    private func reviewDisclosureBar(
         for session: SessionSummary,
         children: [SessionSummary],
         isExpanded: Bool
     ) -> some View {
-        Button {
+        let isStreaming = children.contains { $0.isStreaming }
+        let countLabel = "\(children.count) \(children.count == 1 ? "Code Review" : "Code Reviews")"
+
+        return Button {
             withAnimation(.easeInOut(duration: 0.2)) {
                 if expandedReviewParentIds.contains(session.id) {
                     expandedReviewParentIds.remove(session.id)
@@ -461,24 +480,38 @@ struct SessionsList: View {
                 }
             }
         } label: {
-            VStack(spacing: 2) {
-                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+            HStack(spacing: 8) {
+                Image(systemName: "checklist")
                     .font(.system(size: 12, weight: .semibold))
-                if children.contains(where: { $0.isStreaming }) {
+
+                Text(countLabel)
+                    .font(.system(size: 13, weight: .semibold))
+
+                if isStreaming {
                     ProgressView()
                         .controlSize(.mini)
-                        .scaleEffect(0.7)
-                } else {
-                    Text("\(children.count)")
-                        .font(.system(size: 10, weight: .semibold))
-                        .monospacedDigit()
+                        .scaleEffect(0.8)
                 }
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 11, weight: .bold))
+                    .rotationEffect(.degrees(isExpanded ? 0 : -90))
             }
-            .foregroundStyle(.secondary)
-            .frame(width: 24)
-            .contentShape(Rectangle())
+            .foregroundStyle(ClaudeTheme.accent)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(ClaudeTheme.accent.opacity(0.08))
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         .buttonStyle(.plain)
+        // Indented under the parent's content to read as its child.
+        .padding(.leading, 28)
         .accessibilityLabel(isExpanded ? "Hide code reviews" : "Show \(children.count) code reviews")
     }
 

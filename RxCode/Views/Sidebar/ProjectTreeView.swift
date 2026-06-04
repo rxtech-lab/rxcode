@@ -274,6 +274,13 @@ struct ProjectTreeView: View {
                         onCodeReview: {
                             startBranchCodeReview(for: project)
                         },
+                        onCommitAll: {
+                            Task {
+                                if let threadId = try? await appState.commitAllChangesForProject(project: project) {
+                                    appState.selectSession(id: threadId, in: windowState)
+                                }
+                            }
+                        },
                         hookMenuItems: appState.projectContextMenuItems(for: project)
                     )
 
@@ -321,6 +328,7 @@ private struct ProjectTreeRow: View {
     let onDelete: () -> Void
     let onNewChat: () -> Void
     let onCodeReview: () -> Void
+    let onCommitAll: () -> Void
     let hookMenuItems: [HookMenuItem]
 
     @State private var isHovered = false
@@ -468,6 +476,9 @@ private struct ProjectTreeRow: View {
         }
         Button { onCodeReview() } label: {
             Label("Code Review for Current Branch", systemImage: "checklist")
+        }
+        Button { onCommitAll() } label: {
+            Label("Commit All Changes", systemImage: "checkmark.circle")
         }
         if canCreatePR {
             Button { startCreatePR() } label: {
@@ -731,6 +742,13 @@ private struct ProjectChatsList: View {
             onCodeReview: {
                 Task {
                     if let threadId = try? await appState.createCodeReviewForThread(sessionId: sessionId) {
+                        appState.selectSession(id: threadId, in: windowState)
+                    }
+                }
+            },
+            onCommitFiles: {
+                Task {
+                    if let threadId = try? await appState.commitFilesForThread(sessionId: sessionId) {
                         appState.selectSession(id: threadId, in: windowState)
                     }
                 }

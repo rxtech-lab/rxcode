@@ -468,6 +468,24 @@ extension MobileAppState {
                                 as: AutopilotCodeReviewResult.self).threadId
     }
 
+    /// Asks the Mac to start a commit-only thread for all current uncommitted
+    /// project changes. Returns the thread id.
+    @discardableResult
+    func requestProjectCommitAll(projectId: UUID) async throws -> String {
+        try await autopilotSend(.project, .projectCommitAll,
+                                body: AutopilotProjectBody(projectId: projectId),
+                                as: AutopilotCodeReviewResult.self).threadId
+    }
+
+    /// Asks the Mac to commit only the files recorded for one thread. Returns the
+    /// updated thread id.
+    @discardableResult
+    func requestThreadCommitFiles(sessionId: String) async throws -> String {
+        try await autopilotSend(.project, .threadCommitFiles,
+                                body: AutopilotThreadBody(sessionId: sessionId),
+                                as: AutopilotCodeReviewResult.self).threadId
+    }
+
     /// Downloads the chosen environment into the project folder. The phone
     /// decrypts on-device with its passkey-derived KEK (the same iCloud-synced
     /// credential the Mac uses) — running the phone's own passkey ceremony — then

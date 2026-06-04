@@ -133,6 +133,16 @@ fun SessionsScreen(
         }
     }
 
+    fun startThreadCommit(sessionId: String) {
+        scope.launch {
+            runCatching {
+                val threadId = viewModel.requestThreadCommitFiles(sessionId)
+                viewModel.requestSnapshot("commit_started")
+                onNewThread(threadId)
+            }
+        }
+    }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
@@ -219,6 +229,7 @@ fun SessionsScreen(
                                 },
                                 onDelete = { deleteTarget = parent },
                                 onCodeReview = { startThreadReview(parent.id) },
+                                onCommitFiles = { startThreadCommit(parent.id) },
                                 reviewCount = children.size,
                                 isExpanded = expanded,
                                 isReviewing = children.any { it.isStreaming },
@@ -251,6 +262,7 @@ fun SessionsScreen(
                                     },
                                     onDelete = { deleteTarget = child },
                                     onCodeReview = { startThreadReview(child.id) },
+                                    onCommitFiles = { startThreadCommit(child.id) },
                                     indentLevel = 1,
                                     titleOverride = "Review ${index + 1}",
                                     showLabel = false,
@@ -360,6 +372,7 @@ private fun SessionCard(
     onArchive: () -> Unit,
     onDelete: () -> Unit,
     onCodeReview: () -> Unit = {},
+    onCommitFiles: () -> Unit = {},
     reviewCount: Int = 0,
     isExpanded: Boolean = false,
     isReviewing: Boolean = false,
@@ -460,6 +473,11 @@ private fun SessionCard(
                         text = { Text("Code Review") },
                         leadingIcon = { Icon(Icons.Outlined.RateReview, contentDescription = null) },
                         onClick = { menuOpen = false; onCodeReview() },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Commit Files") },
+                        leadingIcon = { Icon(Icons.Outlined.CheckCircle, contentDescription = null) },
+                        onClick = { menuOpen = false; onCommitFiles() },
                     )
                     DropdownMenuItem(
                         text = { Text("Rename") },

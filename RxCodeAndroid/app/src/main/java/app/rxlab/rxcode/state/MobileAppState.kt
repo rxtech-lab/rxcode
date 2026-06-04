@@ -852,6 +852,14 @@ class MobileAppState @Inject constructor(
     suspend fun requestThreadCreateCodeReview(sessionId: String): String =
         autopilot.requestThreadCreateCodeReview(sessionId)
 
+    /** Start a commit-only thread on the Mac for all current project changes. */
+    suspend fun requestProjectCommitAll(projectId: UUID): String =
+        autopilot.requestProjectCommitAll(projectId)
+
+    /** Ask the Mac to commit only the files recorded for one thread. */
+    suspend fun requestThreadCommitFiles(sessionId: String): String =
+        autopilot.requestThreadCommitFiles(sessionId)
+
     /**
      * Download a secret environment into the project folder: decrypt on-device
      * with the passkey-derived KEK, then relay the plaintext for the Mac to write.

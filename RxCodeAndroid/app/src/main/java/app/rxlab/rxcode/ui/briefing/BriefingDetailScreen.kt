@@ -118,9 +118,10 @@ fun BriefingDetailScreen(
                     IconButton(onClick = onOpenSearch) {
                         Icon(Icons.Outlined.Search, contentDescription = "Search")
                     }
-                    // Autopilot / GitHub context menu, 1:1 with iOS
-                    // MobileBriefingDetailView. Repo-gated like the desktop menu.
-                    project?.takeIf { !it.gitHubRepo.isNullOrEmpty() }?.let { repoProject ->
+                    // Project actions, 1:1 with iOS MobileBriefingDetailView.
+                    // GitHub/autopilot items stay gated inside the menu, while
+                    // local actions such as commit remain available.
+                    project?.let { repoProject ->
                         ProjectActionsMenu(
                             project = repoProject,
                             branch = groupKey.branch,

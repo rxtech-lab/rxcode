@@ -120,6 +120,10 @@ public enum AutopilotOp: String, Codable, Sendable {
     // equivalent of the built-in Code Review hook).
     case projectCreateCodeReview
     case threadCreateCodeReview
+    // Manual commit actions. The desktop starts an agent turn: project commits
+    // all uncommitted files, thread commits only that thread's recorded files.
+    case projectCommitAll
+    case threadCommitFiles
 
     // Global search — one call returns on-device thread matches AND published
     // docs matches for the same query, so mobile gets a single combined result
@@ -514,8 +518,9 @@ public struct AutopilotThreadBody: Codable, Sendable {
     public init(sessionId: String) { self.sessionId = sessionId }
 }
 
-/// Result of `projectCreateCodeReview` / `threadCreateCodeReview`: the id of the
-/// spawned `[Code Review]` thread, so the phone can navigate to it once it syncs.
+/// Result of thread-spawning project actions such as code review and commit:
+/// the id of the spawned or updated thread, so the phone can navigate to it once
+/// it syncs.
 public struct AutopilotCodeReviewResult: Codable, Sendable {
     public let threadId: String
     public init(threadId: String) { self.threadId = threadId }

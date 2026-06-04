@@ -109,6 +109,8 @@ enum class AutopilotOp(val wire: String) {
     // Code review (desktop-mediated): spawn a `[Code Review]` thread on the Mac.
     PROJECT_CREATE_CODE_REVIEW("projectCreateCodeReview"),
     THREAD_CREATE_CODE_REVIEW("threadCreateCodeReview"),
+    PROJECT_COMMIT_ALL("projectCommitAll"),
+    THREAD_COMMIT_FILES("threadCommitFiles"),
 
     // Global search — one call returns thread matches AND published-docs matches.
     SEARCH_THREADS_AND_DOCS("searchThreadsAndDocs"),

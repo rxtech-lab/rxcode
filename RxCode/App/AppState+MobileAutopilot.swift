@@ -356,6 +356,22 @@ extension AppState {
             let threadId = try await createCodeReviewForThread(sessionId: body.sessionId)
             return try encoder.encode(AutopilotCodeReviewResult(threadId: threadId))
 
+        case .projectCommitAll:
+            // Same as the desktop project/briefing "Commit All Changes" action:
+            // start a commit-only thread for the current project worktree.
+            let body = try decodeAutopilotBody(request, as: AutopilotProjectBody.self)
+            guard let project = projects.first(where: { $0.id == body.projectId }) else {
+                throw MobileRemoteConfigError.invalidRequest("No project found for the requested id.")
+            }
+            let threadId = try await commitAllChangesForProject(project: project)
+            return try encoder.encode(AutopilotCodeReviewResult(threadId: threadId))
+
+        case .threadCommitFiles:
+            // Commit only the files recorded for one thread.
+            let body = try decodeAutopilotBody(request, as: AutopilotThreadBody.self)
+            let threadId = try await commitFilesForThread(sessionId: body.sessionId)
+            return try encoder.encode(AutopilotCodeReviewResult(threadId: threadId))
+
         case .projectSecretsDownload:
             let body = try decodeAutopilotBody(request, as: AutopilotProjectSecretsDownloadBody.self)
             guard let project = projects.first(where: { $0.id == body.projectId }) else {

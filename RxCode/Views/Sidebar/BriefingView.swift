@@ -647,6 +647,18 @@ struct BriefingView: View {
         }
     }
 
+    /// Start a commit-only thread for all current project changes and open it.
+    private func startCommitAll(for project: Project) {
+        Task {
+            if windowState.selectedProject?.id != project.id {
+                appState.selectProject(project, in: windowState)
+            }
+            if let threadId = try? await appState.commitAllChangesForProject(project: project) {
+                appState.selectSession(id: threadId, in: windowState)
+            }
+        }
+    }
+
     private func cardMenu(for group: BriefingGroup, project: Project) -> some View {
         Menu {
             Button {
@@ -672,6 +684,12 @@ struct BriefingView: View {
                 startCodeReview(for: group, project: project)
             } label: {
                 Label("Code Review for \(group.branch)", systemImage: "checklist")
+            }
+
+            Button {
+                startCommitAll(for: project)
+            } label: {
+                Label("Commit All Changes", systemImage: "checkmark.circle")
             }
 
             let hookItems = appState.projectContextMenuItems(for: project)

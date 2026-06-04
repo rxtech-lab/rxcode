@@ -510,6 +510,24 @@ class AutopilotService(
             )
         ).threadId
 
+    /** Ask the Mac to start a commit-only thread for all current project changes. */
+    suspend fun requestProjectCommitAll(projectId: UUID): String =
+        decodeResult<AutopilotCodeReviewResult>(
+            rawCall(
+                AutopilotDomain.PROJECT, AutopilotOp.PROJECT_COMMIT_ALL,
+                encodeBody(AutopilotProjectBody(projectId)),
+            )
+        ).threadId
+
+    /** Ask the Mac to commit only the files recorded for one thread. */
+    suspend fun requestThreadCommitFiles(sessionId: String): String =
+        decodeResult<AutopilotCodeReviewResult>(
+            rawCall(
+                AutopilotDomain.PROJECT, AutopilotOp.THREAD_COMMIT_FILES,
+                encodeBody(AutopilotThreadBody(sessionId)),
+            )
+        ).threadId
+
     /**
      * Relay already-decrypted secret files for the Mac to write into the project
      * folder. Decryption happens on-device first (see [SecretsManager]); this only

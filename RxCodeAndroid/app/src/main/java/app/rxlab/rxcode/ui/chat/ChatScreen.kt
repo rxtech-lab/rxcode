@@ -37,6 +37,7 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.automirrored.outlined.ViewSidebar
 import androidx.compose.material.icons.outlined.Build
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Difference
 import androidx.compose.material.icons.outlined.Edit
@@ -295,6 +296,20 @@ fun ChatScreen(
                                 }
                             },
                             leadingIcon = { Icon(Icons.Outlined.RateReview, contentDescription = null) },
+                        )
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text("Commit Files") },
+                            onClick = {
+                                menuExpanded = false
+                                menuScope.launch {
+                                    runCatching {
+                                        val threadId = viewModel.requestThreadCommitFiles(resolvedId)
+                                        viewModel.requestSnapshot("commit_started")
+                                        viewModel.selectSession(threadId)
+                                    }
+                                }
+                            },
+                            leadingIcon = { Icon(Icons.Outlined.CheckCircle, contentDescription = null) },
                         )
                         androidx.compose.material3.DropdownMenuItem(
                             text = { Text("Open in Browser") },

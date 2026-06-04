@@ -55,12 +55,18 @@ struct ProjectAutopilotMenuItems: View {
     /// menu). Spawns a `[Code Review]` thread on the Mac reviewing the branch.
     var isCreatingReview: Bool = false
     var onCodeReview: () -> Void = {}
+    /// Manual commit support. Starts a commit-only thread on the Mac that
+    /// commits all current project changes.
+    var isCommittingAll: Bool = false
+    var onCommitAll: () -> Void = {}
 
     var body: some View {
+        commitAllItem()
         // Mirror the desktop guard: no repo → no autopilot items.
         if project.gitHubRepo == nil {
             EmptyView()
         } else if let status {
+            Divider()
             secretsItem(status)
             docsItem(status)
             releaseItem(status)
@@ -72,6 +78,15 @@ struct ProjectAutopilotMenuItems: View {
             }
             .disabled(true)
         }
+    }
+
+    private func commitAllItem() -> some View {
+        Button {
+            onCommitAll()
+        } label: {
+            Label("Commit All Changes", systemImage: "checkmark.circle")
+        }
+        .disabled(isCommittingAll)
     }
 
     @ViewBuilder

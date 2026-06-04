@@ -21,10 +21,6 @@ final class CommitPushHook: Hook {
     private let logger = Logger(subsystem: "com.claudework", category: "CommitPushHook")
 
     func afterSessionEnd(_ payload: SessionEndPayload, controller: any HookController) async -> HookOutcome {
-        let hooks = await controller.enabledHookProfiles(projectId: payload.project.id, trigger: .afterSessionStop)
-            .filter { $0.action == .commitPush }
-        guard let hook = hooks.first else { return .ignored }
-
         // Loop guard FIRST, so the commit turn always consumes its marker even if
         // that turn errored — otherwise a stale marker would skip the next real
         // turn's commit.
@@ -33,6 +29,10 @@ final class CommitPushHook: Hook {
             logger.debug("[Hook] commit turn detected for session \(payload.sessionId, privacy: .public) — not re-triggering")
             return .ignored
         }
+
+        let hooks = await controller.enabledHookProfiles(projectId: payload.project.id, trigger: .afterSessionStop)
+            .filter { $0.action == .commitPush }
+        guard let hook = hooks.first else { return .ignored }
 
         guard payload.reason == .completed, !payload.turnDidError else { return .ignored }
 

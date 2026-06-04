@@ -33,6 +33,7 @@ struct SessionsList: View {
     @State private var showingSearch = false
     @State private var isCreatingPR = false
     @State private var isCreatingReview = false
+    @State private var isCommittingProject = false
     @Namespace private var glassNamespace
 
     // Autopilot actions (1:1 with the desktop project menu), moved here from the
@@ -144,6 +145,11 @@ struct SessionsList: View {
                 title: "Starting Code Review…",
                 message: "The Mac is starting a Code Review thread for this branch."
             )
+            .mobileAutopilotLoadingDialog(
+                isCommittingProject,
+                title: "Committing Changes…",
+                message: "The Mac is starting a commit thread for this project."
+            )
     }
 
     /// Ask the Mac to open a PR for the project's current branch, then open it
@@ -200,6 +206,36 @@ struct SessionsList: View {
         }
     }
 
+    /// Ask the Mac to start a commit-only thread for all project changes, then
+    /// open it once it syncs.
+    private func commitProjectChanges(project: Project) {
+        guard !isCommittingProject else { return }
+        isCommittingProject = true
+        Task {
+            defer { isCommittingProject = false }
+            do {
+                let threadId = try await state.requestProjectCommitAll(projectId: project.id)
+                await state.refreshSnapshot()
+                selected = threadId
+            } catch {
+                autopilotInfo = AutopilotMenuInfo(text: error.localizedDescription, isError: true)
+            }
+        }
+    }
+
+    /// Ask the Mac to commit only the files recorded for a single thread.
+    private func commitThreadFiles(sessionID: String) {
+        Task {
+            do {
+                let threadId = try await state.requestThreadCommitFiles(sessionId: sessionID)
+                await state.refreshSnapshot()
+                selected = threadId
+            } catch {
+                autopilotInfo = AutopilotMenuInfo(text: error.localizedDescription, isError: true)
+            }
+        }
+    }
+
     // MARK: - Toolbar
 
     @ToolbarContentBuilder
@@ -207,32 +243,33 @@ struct SessionsList: View {
         if let project {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    // Autopilot actions only apply to repo-backed projects.
-                    if project.gitHubRepo != nil {
-                        ProjectAutopilotMenuItems(
-                            project: project,
-                            status: autopilotStatus,
-                            showDownloadSheet: $showingSecretsDownload,
-                            showReleaseCreate: $showingReleaseCreate,
-                            setupChat: $autopilotSetupChat,
-                            info: $autopilotInfo,
-                            branch: currentBranch,
-                            prNumber: ciStatus?.prNumber,
-                            isCreatingPR: isCreatingPR,
-                            onCreatePR: {
-                                if let branch = currentBranch {
-                                    createPullRequest(project: project, branch: branch)
-                                }
-                            },
-                            isCreatingReview: isCreatingReview,
-                            onCodeReview: {
-                                if let branch = currentBranch {
-                                    createBranchCodeReview(project: project, branch: branch)
-                                }
+                    ProjectAutopilotMenuItems(
+                        project: project,
+                        status: autopilotStatus,
+                        showDownloadSheet: $showingSecretsDownload,
+                        showReleaseCreate: $showingReleaseCreate,
+                        setupChat: $autopilotSetupChat,
+                        info: $autopilotInfo,
+                        branch: currentBranch,
+                        prNumber: ciStatus?.prNumber,
+                        isCreatingPR: isCreatingPR,
+                        onCreatePR: {
+                            if let branch = currentBranch {
+                                createPullRequest(project: project, branch: branch)
                             }
-                        )
-                        Divider()
-                    }
+                        },
+                        isCreatingReview: isCreatingReview,
+                        onCodeReview: {
+                            if let branch = currentBranch {
+                                createBranchCodeReview(project: project, branch: branch)
+                            }
+                        },
+                        isCommittingAll: isCommittingProject,
+                        onCommitAll: {
+                            commitProjectChanges(project: project)
+                        }
+                    )
+                    Divider()
                     Button(role: .destructive) {
                         showingDeleteProjectConfirm = true
                     } label: {
@@ -315,6 +352,12 @@ struct SessionsList: View {
             createThreadCodeReview(sessionID: session.id)
         } label: {
             Label("Code Review", systemImage: "checklist")
+        }
+
+        Button {
+            commitThreadFiles(sessionID: session.id)
+        } label: {
+            Label("Commit Files", systemImage: "checkmark.circle")
         }
 
         Button {

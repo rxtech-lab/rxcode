@@ -95,6 +95,7 @@ struct ProjectChatRow: View {
     let onToggleArchive: () -> Void
     let onDelete: () -> Void
     let onCodeReview: () -> Void
+    let onCommitFiles: () -> Void
     let hookMenuItems: [HookMenuItem]
     /// Nesting depth; review children render one level in from their parent.
     var indentLevel: Int = 0
@@ -214,6 +215,9 @@ struct ProjectChatRow: View {
             Divider()
             Button { onCodeReview() } label: {
                 Label("Code Review for this thread", systemImage: "checklist")
+            }
+            Button { onCommitFiles() } label: {
+                Label("Commit Files", systemImage: "checkmark.circle")
             }
             if !hookMenuItems.isEmpty {
                 Divider()

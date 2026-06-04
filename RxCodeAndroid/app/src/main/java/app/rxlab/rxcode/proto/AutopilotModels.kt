@@ -505,7 +505,7 @@ data class AutopilotProjectStatus(
 @Serializable
 data class AutopilotPullRequestResult(val url: String)
 
-/** Result of `projectCreateCodeReview` / `threadCreateCodeReview`: the id of the spawned `[Code Review]` thread. */
+/** Result of thread-spawning project actions such as code review and commit. */
 @Serializable
 data class AutopilotCodeReviewResult(val threadId: String)
 

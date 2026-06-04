@@ -14,6 +14,7 @@ struct MobileBriefingDetailView: View {
     @State private var isInitializingGit = false
     @State private var isCreatingPR = false
     @State private var isCreatingReview = false
+    @State private var isCommittingProject = false
 
     // Autopilot context menu (1:1 with the desktop briefing/project menu).
     @State private var autopilotStatus: AutopilotProjectStatus?
@@ -53,7 +54,7 @@ struct MobileBriefingDetailView: View {
             if showsActionsMenu {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        if let project, project.gitHubRepo != nil {
+                        if let project {
                             ProjectAutopilotMenuItems(
                                 project: project,
                                 status: autopilotStatus,
@@ -69,7 +70,9 @@ struct MobileBriefingDetailView: View {
                                 isCreatingPR: isCreatingPR,
                                 onCreatePR: { createPullRequest(project: project) },
                                 isCreatingReview: isCreatingReview,
-                                onCodeReview: { createCodeReview(project: project) }
+                                onCodeReview: { createCodeReview(project: project) },
+                                isCommittingAll: isCommittingProject,
+                                onCommitAll: { commitProjectChanges(project: project) }
                             )
                             if gitHubURL != nil { Divider() }
                         }
@@ -128,6 +131,11 @@ struct MobileBriefingDetailView: View {
             title: "Starting Code Review…",
             message: "The Mac is starting a Code Review thread for this branch."
         )
+        .mobileAutopilotLoadingDialog(
+            isCommittingProject,
+            title: "Committing Changes…",
+            message: "The Mac is starting a commit thread for this project."
+        )
     }
 
     private var group: GroupedBriefing? {
@@ -152,7 +160,7 @@ struct MobileBriefingDetailView: View {
     /// Show the ellipsis menu when there's an autopilot-capable repo or a GitHub
     /// link to surface.
     private var showsActionsMenu: Bool {
-        project?.gitHubRepo != nil || gitHubURL != nil
+        project != nil || gitHubURL != nil
     }
 
     /// GitHub destination for the "Open on GitHub" action. Prefers the pull
@@ -226,6 +234,23 @@ struct MobileBriefingDetailView: View {
                     projectId: project.id,
                     branch: groupKey.branch
                 )
+                await state.refreshSnapshot()
+                onOpenSession(threadId)
+            } catch {
+                autopilotInfo = AutopilotMenuInfo(text: error.localizedDescription, isError: true)
+            }
+        }
+    }
+
+    /// Ask the Mac to start a commit-only thread for all project changes, then
+    /// open it once it syncs over.
+    private func commitProjectChanges(project: Project) {
+        guard !isCommittingProject else { return }
+        isCommittingProject = true
+        Task {
+            defer { isCommittingProject = false }
+            do {
+                let threadId = try await state.requestProjectCommitAll(projectId: project.id)
                 await state.refreshSnapshot()
                 onOpenSession(threadId)
             } catch {

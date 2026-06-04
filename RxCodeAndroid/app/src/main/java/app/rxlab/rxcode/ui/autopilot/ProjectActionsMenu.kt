@@ -7,6 +7,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.MergeType
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Book
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.HourglassEmpty
 import androidx.compose.material.icons.outlined.Key
@@ -97,6 +98,7 @@ fun ProjectActionsMenu(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var isCreatingPR by remember { mutableStateOf(false) }
     var isCreatingReview by remember { mutableStateOf(false) }
+    var isCommittingAll by remember { mutableStateOf(false) }
     var info by remember { mutableStateOf<String?>(null) }
 
     // Only repo-backed projects have autopilot state to load.
@@ -144,12 +146,37 @@ fun ProjectActionsMenu(
         }
     }
 
+    fun commitAllChanges() {
+        if (isCommittingAll) return
+        isCommittingAll = true
+        menuOpen = false
+        scope.launch {
+            try {
+                val threadId = viewModel.requestProjectCommitAll(project.id)
+                viewModel.requestSnapshot("commit_started")
+                onOpenSession(threadId)
+            } catch (t: Throwable) {
+                info = t.message ?: "Couldn't start the commit."
+            } finally {
+                isCommittingAll = false
+            }
+        }
+    }
+
     IconButton(onClick = { menuOpen = true }) {
         Icon(Icons.Outlined.MoreVert, contentDescription = "Project actions")
     }
 
     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+        DropdownMenuItem(
+            text = { Text("Commit All Changes") },
+            leadingIcon = { Icon(Icons.Outlined.CheckCircle, contentDescription = null) },
+            enabled = !isCommittingAll,
+            onClick = { commitAllChanges() },
+        )
+
         if (hasRepo) {
+            HorizontalDivider()
             val loaded = status
             if (loaded == null) {
                 DropdownMenuItem(
@@ -295,6 +322,20 @@ fun ProjectActionsMenu(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
                     Text("The Mac is starting a Code Review thread for this branch.")
+                }
+            },
+        )
+    }
+
+    if (isCommittingAll) {
+        AlertDialog(
+            onDismissRequest = {},
+            confirmButton = {},
+            title = { Text("Committing Changes…") },
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+                    Text("The Mac is starting a commit thread for this project.")
                 }
             },
         )

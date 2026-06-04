@@ -3391,6 +3391,12 @@
         }
       }
     },
+    "Commit All Changes" : {
+
+    },
+    "Commit Files" : {
+
+    },
     "Commit message" : {
       "localizations" : {
         "ko" : {

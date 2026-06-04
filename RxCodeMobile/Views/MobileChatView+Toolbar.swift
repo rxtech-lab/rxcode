@@ -34,6 +34,11 @@ extension MobileChatView {
                     } label: {
                         Label("Code Review", systemImage: "checklist")
                     }
+                    Button {
+                        startCommitFiles()
+                    } label: {
+                        Label("Commit Files", systemImage: "checkmark.circle")
+                    }
                     Divider()
                     Button {
                         showingRenameSheet = true
@@ -118,6 +123,19 @@ extension MobileChatView {
         let projectID = currentProjectID
         Task {
             guard let threadId = try? await state.requestThreadCreateCodeReview(sessionId: sid) else { return }
+            await state.refreshSnapshot()
+            if let projectID {
+                state.pendingDeepLink = MobileDeepLink(sessionID: threadId, projectID: projectID)
+            }
+        }
+    }
+
+    /// Ask the Mac to commit only the files recorded for this thread.
+    func startCommitFiles() {
+        let sid = sessionID
+        let projectID = currentProjectID
+        Task {
+            guard let threadId = try? await state.requestThreadCommitFiles(sessionId: sid) else { return }
             await state.refreshSnapshot()
             if let projectID {
                 state.pendingDeepLink = MobileDeepLink(sessionID: threadId, projectID: projectID)

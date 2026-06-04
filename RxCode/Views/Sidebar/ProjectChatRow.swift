@@ -1,5 +1,5 @@
-import SwiftUI
 import RxCodeCore
+import SwiftUI
 
 // MARK: - ChatStatus
 
@@ -206,7 +206,7 @@ struct ProjectChatRow: View {
             }
             Divider()
             Button { onCodeReview() } label: {
-                Label("Code Review", systemImage: "checklist")
+                Label("Code Review for this thread", systemImage: "checklist")
             }
             if !hookMenuItems.isEmpty {
                 Divider()
@@ -255,8 +255,8 @@ struct ProjectChatRow: View {
         }
         .buttonStyle(.plain)
         .help(disclosure.isReviewing
-              ? "Code review in progress"
-              : (disclosure.isExpanded ? "Hide code reviews" : "Show \(disclosure.count) code review(s)"))
+            ? "Code review in progress"
+            : (disclosure.isExpanded ? "Hide code reviews" : "Show \(disclosure.count) code review(s)"))
     }
 
     private static func compactElapsedTime(since date: Date, now: Date = Date()) -> String {

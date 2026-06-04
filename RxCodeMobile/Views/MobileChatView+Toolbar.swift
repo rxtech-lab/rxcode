@@ -29,6 +29,11 @@ extension MobileChatView {
                     } label: {
                         Label("View Changes", systemImage: "plus.forwardslash.minus")
                     }
+                    Button {
+                        startCodeReview()
+                    } label: {
+                        Label("Code Review", systemImage: "checklist")
+                    }
                     Divider()
                     Button {
                         showingRenameSheet = true
@@ -103,6 +108,21 @@ extension MobileChatView {
     var threadExists: Bool {
         !MobileDraftSessionID.isDraft(sessionID)
             && state.sessions.contains(where: { $0.id == sessionID })
+    }
+
+    /// Start a `[Code Review]` thread reviewing this thread's changes (the manual
+    /// equivalent of the built-in Code Review hook), then deep-link to the new
+    /// review thread once it syncs over from the Mac.
+    func startCodeReview() {
+        let sid = sessionID
+        let projectID = currentProjectID
+        Task {
+            guard let threadId = try? await state.requestThreadCreateCodeReview(sessionId: sid) else { return }
+            await state.refreshSnapshot()
+            if let projectID {
+                state.pendingDeepLink = MobileDeepLink(sessionID: threadId, projectID: projectID)
+            }
+        }
     }
 
     func performArchive() {

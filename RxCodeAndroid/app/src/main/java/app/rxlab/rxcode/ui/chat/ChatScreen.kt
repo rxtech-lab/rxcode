@@ -45,6 +45,7 @@ import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.RateReview
 import androidx.compose.material.icons.outlined.QuestionAnswer
 import androidx.compose.material.icons.outlined.QueuePlayNext
 import androidx.compose.material3.AssistChip
@@ -141,6 +142,7 @@ fun ChatScreen(
     var showQueuedSheet by remember { mutableStateOf(false) }
     var openEditPreview by remember { mutableStateOf<EditPreviewData?>(null) }
     var menuExpanded by remember { mutableStateOf(false) }
+    val menuScope = rememberCoroutineScope()
     var showRunProfiles by remember { mutableStateOf(false) }
     var editingProfile by remember { mutableStateOf<RunProfile?>(null) }
     var showBrowser by remember { mutableStateOf(false) }
@@ -279,6 +281,20 @@ fun ChatScreen(
                                 showThreadChanges = true
                             },
                             leadingIcon = { Icon(Icons.Outlined.Difference, contentDescription = null) },
+                        )
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text("Code Review") },
+                            onClick = {
+                                menuExpanded = false
+                                menuScope.launch {
+                                    runCatching {
+                                        val threadId = viewModel.requestThreadCreateCodeReview(resolvedId)
+                                        viewModel.requestSnapshot("code_review_started")
+                                        viewModel.selectSession(threadId)
+                                    }
+                                }
+                            },
+                            leadingIcon = { Icon(Icons.Outlined.RateReview, contentDescription = null) },
                         )
                         androidx.compose.material3.DropdownMenuItem(
                             text = { Text("Open in Browser") },

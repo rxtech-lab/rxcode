@@ -29,10 +29,18 @@ public enum PlanLogic {
 
     public static func isPlanFileWrite(_ toolCall: ToolCall) -> Bool {
         guard toolCall.name.lowercased() == "write",
-              let path = toolCall.input["file_path"]?.stringValue,
-              path.hasSuffix(".md") else {
+              let path = toolCall.input["file_path"]?.stringValue else {
             return false
         }
+        return isPlanFilePath(path)
+    }
+
+    /// True when `path` points at a Claude plan markdown file living under a
+    /// `.../.claude/plans/` (or `.../claude/plans/`) directory. These plan
+    /// documents are planning scaffolding, not real project edits, so the
+    /// thread changes list excludes them.
+    public static func isPlanFilePath(_ path: String) -> Bool {
+        guard path.hasSuffix(".md") else { return false }
         return path.contains("/.claude/plans/") || path.contains("/claude/plans/")
     }
 

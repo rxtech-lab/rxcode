@@ -22,7 +22,9 @@ extension AppState {
     /// Returns an empty array for a not-yet-persisted (placeholder) session.
     func threadFileEdits(in window: WindowState) -> [FileEditSummary] {
         let key = window.currentSessionId ?? window.newSessionKey
-        return threadStore.fetchFileEdits(sessionId: key).map { $0.toSummary() }
+        return threadStore.fetchFileEdits(sessionId: key)
+            .map { $0.toSummary() }
+            .filter { !PlanLogic.isPlanFilePath($0.path) }
     }
 
     func isStreaming(in window: WindowState) -> Bool {

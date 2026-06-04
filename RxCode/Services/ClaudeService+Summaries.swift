@@ -187,14 +187,8 @@ extension ClaudeCodeServer {
     }
 
     func cleanGeneratedSummary(_ raw: String, limit: Int) -> String? {
-        let cleaned = raw
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
-        guard !cleaned.isEmpty else { return nil }
-        let lower = cleaned.lowercased()
         let errorPrefixes = ["api error", "error:", "execution error", "request failed", "claude error"]
-        guard !errorPrefixes.contains(where: { lower.hasPrefix($0) }) else { return nil }
-        return String(cleaned.prefix(limit))
+        return GeneratedTextSanitizer.cleanSummary(raw, limit: limit, errorPrefixes: errorPrefixes)
     }
 
     /// Write a one-off MCP config file (with no servers) used by the title-generation

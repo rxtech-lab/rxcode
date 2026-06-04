@@ -37,6 +37,8 @@ enum class AutopilotOp(val wire: String) {
     // Account
     ACCOUNT_STATUS("accountStatus"),
     LIST_MANAGED_REPOS("listManagedRepos"),
+    CLONE_MANAGED_REPO("cloneManagedRepo"),
+    INSTALL_GITHUB_APP_URL("installGitHubAppUrl"),
 
     // Automation settings (schema-driven form)
     AUTOMATION_SCHEMA("automationSchema"),

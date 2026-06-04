@@ -40,6 +40,8 @@ public enum AutopilotOp: String, Codable, Sendable {
     // by every "add repository" flow — mirrors the desktop add sheets which all
     // source `secrets.listManagedRepositories`).
     case listManagedRepos
+    case cloneManagedRepo
+    case installGitHubAppUrl
 
     // Automation settings (schema-driven form)
     case automationSchema
@@ -206,6 +208,16 @@ public struct AutopilotIDBody: Codable, Sendable {
 public struct AutopilotRepoIDBody: Codable, Sendable {
     public let repoId: String
     public init(repoId: String) { self.repoId = repoId }
+}
+
+public struct AutopilotCloneRepoBody: Codable, Sendable {
+    public let fullName: String
+    public init(fullName: String) { self.fullName = fullName }
+}
+
+public struct AutopilotCloneRepoResult: Codable, Sendable {
+    public let project: Project
+    public init(project: Project) { self.project = project }
 }
 
 // MARK: - Repo setup bodies

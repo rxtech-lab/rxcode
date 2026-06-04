@@ -10,17 +10,19 @@ import SwiftUI
 struct MobileAutopilotRepoPicker: View {
     @EnvironmentObject private var state: MobileAppState
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
 
     let title: String
     /// Full names already registered, hidden from the picker.
     let existingRepoFullNames: Set<String>
-    let onSelect: (SecretsManagedRepo) async -> Void
+    let onSelect: (SecretsManagedRepo) async throws -> Void
 
     @State private var repos: [SecretsManagedRepo] = []
     @State private var search = ""
     @State private var nextCursor: String?
     @State private var hasMore = false
     @State private var isLoading = false
+    @State private var isOpeningInstallURL = false
     @State private var addingFullName: String?
     @State private var errorMessage: String?
     @State private var searchTask: Task<Void, Never>?
@@ -90,6 +92,19 @@ struct MobileAutopilotRepoPicker: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        Task { await openGitHubAppInstallURL() }
+                    } label: {
+                        if isOpeningInstallURL {
+                            ProgressView()
+                        } else {
+                            Image(systemName: "app.badge.checkmark")
+                        }
+                    }
+                    .accessibilityLabel("Install GitHub App")
+                    .disabled(isOpeningInstallURL)
+                }
             }
             .task { await reload() }
         }
@@ -128,7 +143,22 @@ struct MobileAutopilotRepoPicker: View {
     private func select(_ repo: SecretsManagedRepo) async {
         addingFullName = repo.fullName
         defer { addingFullName = nil }
-        await onSelect(repo)
-        dismiss()
+        do {
+            try await onSelect(repo)
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func openGitHubAppInstallURL() async {
+        isOpeningInstallURL = true
+        errorMessage = nil
+        defer { isOpeningInstallURL = false }
+        do {
+            openURL(try await state.githubAppInstallURL())
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 }

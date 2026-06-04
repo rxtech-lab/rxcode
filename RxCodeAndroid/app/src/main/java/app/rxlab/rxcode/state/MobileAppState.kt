@@ -11,7 +11,9 @@ import app.rxlab.rxcode.proto.AutopilotProjectSecretsWriteBody
 import app.rxlab.rxcode.proto.AutopilotProjectStatus
 import app.rxlab.rxcode.proto.BranchOpRequestPayload
 import app.rxlab.rxcode.proto.CancelStreamPayload
+import app.rxlab.rxcode.proto.CreateProjectRequestPayload
 import app.rxlab.rxcode.proto.DeleteProjectRequestPayload
+import app.rxlab.rxcode.proto.FolderTreeRequestPayload
 import app.rxlab.rxcode.proto.LoadMoreMessagesRequestPayload
 import app.rxlab.rxcode.proto.MobileRunTaskSnapshot
 import app.rxlab.rxcode.proto.NewSessionRequestPayload
@@ -27,6 +29,7 @@ import app.rxlab.rxcode.proto.RunProfile
 import app.rxlab.rxcode.proto.RunProfileMutationRequestPayload
 import app.rxlab.rxcode.proto.RunProfileRunRequestPayload
 import app.rxlab.rxcode.proto.RunProfileStopRequestPayload
+import app.rxlab.rxcode.proto.SecretsManagedRepo
 import app.rxlab.rxcode.proto.SessionUpdatePayload
 import app.rxlab.rxcode.proto.SubscribeSessionPayload
 import app.rxlab.rxcode.proto.ThreadActionRequestPayload
@@ -73,6 +76,8 @@ class MobileAppState @Inject constructor(
 
     private var started = false
     private var pairingTimeout: Job? = null
+    private var pendingFolderTreeRequestId: UUID? = null
+    private var pendingCreateProjectId: UUID? = null
     private var pendingThreadChangesId: UUID? = null
     private var pendingDeleteProjectId: UUID? = null
     private var searchJob: Job? = null
@@ -211,6 +216,52 @@ class MobileAppState @Inject constructor(
                 _state.update { it.copy(pendingBranchOps = it.pendingBranchOps - payload.data.projectID) }
                 if (payload.data.ok) requestSnapshot("branch_op_${payload.data.operation.name}")
                 else Log.w(TAG, "branch op ${payload.data.operation.name} failed: ${payload.data.errorMessage}")
+            }
+            is Payload.FolderTreeResult -> {
+                if (!isActiveDesktop(fromHex)) return
+                if (payload.data.clientRequestID != pendingFolderTreeRequestId) return
+                pendingFolderTreeRequestId = null
+                _state.update {
+                    if (payload.data.ok && payload.data.root != null) {
+                        it.copy(
+                            remoteFolderRoot = payload.data.root,
+                            remoteFolderIsLoading = false,
+                            remoteFolderError = null,
+                        )
+                    } else {
+                        it.copy(
+                            remoteFolderIsLoading = false,
+                            remoteFolderError = payload.data.errorMessage ?: "Failed to load folders.",
+                        )
+                    }
+                }
+            }
+            is Payload.CreateProjectResult -> {
+                if (!isActiveDesktop(fromHex)) return
+                if (payload.data.clientRequestID != pendingCreateProjectId) return
+                pendingCreateProjectId = null
+                _state.update { current ->
+                    if (payload.data.ok && payload.data.project != null) {
+                        val project = payload.data.project
+                        val projects = if (current.projects.any { it.id == project.id }) {
+                            current.projects
+                        } else {
+                            current.projects + project
+                        }
+                        current.copy(
+                            projects = projects,
+                            remoteProjectCreateInFlight = false,
+                            remoteProjectCreateError = null,
+                            lastCreatedProjectID = project.id,
+                        )
+                    } else {
+                        current.copy(
+                            remoteProjectCreateInFlight = false,
+                            remoteProjectCreateError = payload.data.errorMessage ?: "Failed to add project.",
+                        )
+                    }
+                }
+                if (payload.data.ok) requestSnapshot("create_project")
             }
             is Payload.DeleteProjectResult -> {
                 if (!isActiveDesktop(fromHex)) return
@@ -680,6 +731,81 @@ class MobileAppState @Inject constructor(
     }
 
     // MARK: - Project context-menu actions
+
+    fun requestRemoteFolder(path: String? = null, includeFiles: Boolean = false) {
+        val hex = _state.value.activeDesktopPubkey
+        if (hex.isEmpty()) return
+        val request = FolderTreeRequestPayload(path = path, depth = 1, includeFiles = includeFiles)
+        pendingFolderTreeRequestId = request.clientRequestID
+        _state.update {
+            it.copy(
+                remoteFolderIsLoading = true,
+                remoteFolderError = null,
+            )
+        }
+        viewModelScope.launch {
+            val sent = client.send(Payload.FolderTreeRequest(request), hex)
+            if (!sent && pendingFolderTreeRequestId == request.clientRequestID) {
+                pendingFolderTreeRequestId = null
+                _state.update {
+                    it.copy(
+                        remoteFolderIsLoading = false,
+                        remoteFolderError = "Couldn't reach your Mac to load folders.",
+                    )
+                }
+            }
+        }
+    }
+
+    fun clearRemoteFolderError() {
+        _state.update { it.copy(remoteFolderError = null) }
+    }
+
+    fun createProjectFromRemoteFolder(path: String) {
+        val hex = _state.value.activeDesktopPubkey
+        if (hex.isEmpty()) return
+        val trimmed = path.trim()
+        if (trimmed.isEmpty()) return
+        val request = CreateProjectRequestPayload(path = trimmed)
+        pendingCreateProjectId = request.clientRequestID
+        _state.update {
+            it.copy(
+                remoteProjectCreateInFlight = true,
+                remoteProjectCreateError = null,
+                lastCreatedProjectID = null,
+            )
+        }
+        viewModelScope.launch {
+            val sent = client.send(Payload.CreateProjectRequest(request), hex)
+            if (!sent && pendingCreateProjectId == request.clientRequestID) {
+                pendingCreateProjectId = null
+                _state.update {
+                    it.copy(
+                        remoteProjectCreateInFlight = false,
+                        remoteProjectCreateError = "Couldn't reach your Mac to add the project.",
+                    )
+                }
+            }
+        }
+    }
+
+    fun clearRemoteProjectCreateError() {
+        _state.update { it.copy(remoteProjectCreateError = null) }
+    }
+
+    suspend fun cloneAutopilotRepo(repo: SecretsManagedRepo): app.rxlab.rxcode.proto.Project {
+        val project = autopilot.cloneManagedRepo(repo.fullName)
+        _state.update { current ->
+            val projects = if (current.projects.any { it.id == project.id }) {
+                current.projects
+            } else {
+                current.projects + project
+            }
+            current.copy(projects = projects, lastCreatedProjectID = project.id)
+        }
+        requestSnapshot("clone_managed_repo")
+        return project
+    }
 
     /**
      * Cascade-delete a project on the desktop. Optimistically drops it (and its

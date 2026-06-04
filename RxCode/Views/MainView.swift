@@ -196,18 +196,19 @@ struct MainView: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         if columnVisibility != .detailOnly {
-            ToolbarItem(placement: .navigation) {
-                Button {
-                    showGitHubSheet = true
-                } label: {
-                    Image(systemName: "square.and.arrow.down")
-                }
-                .help(appState.isSignedIn ? "Import Repository" : "Sign in to rxlab")
-            }
+            ToolbarItemGroup(placement: .navigation) {
+                Menu {
+                    Button {
+                        showFilePicker = true
+                    } label: {
+                        Label("Add project locally", systemImage: "folder.badge.plus")
+                    }
 
-            ToolbarItem(placement: .navigation) {
-                Button {
-                    showFilePicker = true
+                    Button {
+                        showGitHubSheet = true
+                    } label: {
+                        Label("Add project from remote repositories", systemImage: "square.and.arrow.down")
+                    }
                 } label: {
                     Image(systemName: "plus")
                 }
@@ -219,9 +220,7 @@ struct MainView: View {
                 ) { result in
                     handleFolderSelection(result)
                 }
-            }
 
-            ToolbarItem(placement: .navigation) {
                 Button {
                     windowState.showGlobalSearch = true
                 } label: {
@@ -229,9 +228,7 @@ struct MainView: View {
                 }
                 .help(String(localized: "Search Threads and Docs (⌘K)"))
                 .popoverTip(RxCodeTips.GlobalSearchTip(), arrowEdge: .top)
-            }
 
-            ToolbarItem(placement: .navigation) {
                 ThreadTitlePopoverButton(title: navigationTitleText)
             }
         }

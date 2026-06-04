@@ -385,7 +385,20 @@ extension AppState {
         }
     }
 
+    @discardableResult
+    func cloneAndAddProjectForMobile(_ repo: AutopilotRepo) async throws -> Project? {
+        if let existing = projects.first(where: { $0.gitHubRepo?.lowercased() == repo.fullName.lowercased() }) {
+            return existing
+        }
+        return try await cloneAndRegisterProject(repo, selectingIn: nil)
+    }
+
     func cloneAndAddProject(_ repo: AutopilotRepo, in window: WindowState) async throws {
+        _ = try await cloneAndRegisterProject(repo, selectingIn: window)
+    }
+
+    @discardableResult
+    private func cloneAndRegisterProject(_ repo: AutopilotRepo, selectingIn window: WindowState?) async throws -> Project? {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let clonePath = "\(home)/RxCode/\(repo.name)"
         let parentDir = "\(home)/RxCode"
@@ -399,12 +412,16 @@ extension AppState {
         // auto-download run for clones too) and the more specific
         // `onRepositoryCloned`. No built-in hook handles both, so there is no
         // double-processing.
-        let project = await addAndSelectProject(
-            name: repo.name, path: clonePath, gitHubRepo: repo.fullName, in: window
-        )
+        let project: Project?
+        if let window {
+            project = await addAndSelectProject(name: repo.name, path: clonePath, gitHubRepo: repo.fullName, in: window)
+        } else {
+            project = await addProject(name: repo.name, path: clonePath, gitHubRepo: repo.fullName)
+        }
         if let project {
             await hookManager.dispatchRepositoryCloned(RepositoryPayload(project: project, wasCloned: true))
         }
+        return project
     }
 
     private func gitClone(from url: String, to path: String) async throws {

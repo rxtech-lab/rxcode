@@ -136,6 +136,15 @@ data class SecretsManagedRepoPage(
     val pagination: Pagination = Pagination(),
 )
 
+@Serializable
+data class AutopilotCloneRepoBody(val fullName: String)
+
+@Serializable
+data class AutopilotCloneRepoResult(val project: Project)
+
+@Serializable
+data class AutopilotInstallUrlResponse(val url: String)
+
 // MARK: - Secrets
 
 @Serializable

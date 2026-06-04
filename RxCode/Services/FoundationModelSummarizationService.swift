@@ -324,11 +324,6 @@ actor FoundationModelSummarizationService {
     }
 
     private func cleanSummary(_ raw: String?, limit: Int) -> String? {
-        guard let raw else { return nil }
-        let cleaned = raw
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
-        guard !cleaned.isEmpty else { return nil }
-        return String(cleaned.prefix(limit))
+        GeneratedTextSanitizer.cleanSummary(raw, limit: limit, errorPrefixes: [])
     }
 }

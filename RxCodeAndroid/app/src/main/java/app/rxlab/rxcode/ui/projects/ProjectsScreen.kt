@@ -16,12 +16,16 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
@@ -32,6 +36,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,9 +49,13 @@ import androidx.compose.material.icons.outlined.AccountTree
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
+import app.rxlab.rxcode.proto.AutopilotAccountStatus
 import app.rxlab.rxcode.proto.Project
+import app.rxlab.rxcode.relay.RelayClient
+import app.rxlab.rxcode.state.AutopilotException
 import app.rxlab.rxcode.state.MobileAppState
 import app.rxlab.rxcode.state.MobileState
+import app.rxlab.rxcode.ui.autopilot.AutopilotRepoPicker
 import app.rxlab.rxcode.ui.util.HapticEvent
 import app.rxlab.rxcode.ui.util.rememberHaptics
 import kotlinx.coroutines.delay
@@ -65,12 +74,57 @@ fun ProjectsScreen(
     val haptics = rememberHaptics()
     val scope = rememberCoroutineScope()
     var refreshing by remember { mutableStateOf(false) }
+    var showingAddProjectMenu by remember { mutableStateOf(false) }
+    var showingLocalProjectPicker by remember { mutableStateOf(false) }
+    var showingRemoteProjectPicker by remember { mutableStateOf(false) }
+    var autopilotAccount by remember { mutableStateOf<AutopilotAccountStatus?>(null) }
+
+    LaunchedEffect(viewModel, state.activeDesktopPubkey, state.connectionState) {
+        if (viewModel == null || state.connectionState != RelayClient.ConnectionState.CONNECTED) {
+            autopilotAccount = null
+            return@LaunchedEffect
+        }
+        try {
+            autopilotAccount = viewModel.autopilot.accountStatus()
+        } catch (_: AutopilotException) {
+            autopilotAccount = null
+        }
+    }
+
+    val canAddFromRemoteRepositories = viewModel != null &&
+        state.isPaired &&
+        state.connectionState == RelayClient.ConnectionState.CONNECTED &&
+        autopilotAccount?.isSignedIn == true
+    val existingGitHubRepoNames = remember(state.projects) {
+        state.projects.mapNotNull { it.gitHubRepo?.lowercase() }.toSet()
+    }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text("Projects") },
                 actions = {
+                    if (viewModel != null) {
+                        Box {
+                            IconButton(onClick = { showingAddProjectMenu = true }) {
+                                Icon(Icons.Outlined.Add, contentDescription = "Add Project")
+                            }
+                            AddProjectDropdownMenu(
+                                expanded = showingAddProjectMenu,
+                                canAddFromRemoteRepositories = canAddFromRemoteRepositories,
+                                onDismiss = { showingAddProjectMenu = false },
+                                onAddLocal = {
+                                    showingAddProjectMenu = false
+                                    showingLocalProjectPicker = true
+                                },
+                                onAddRemote = {
+                                    showingAddProjectMenu = false
+                                    showingRemoteProjectPicker = true
+                                },
+                            )
+                        }
+                    }
                     IconButton(onClick = onOpenSearch) {
                         Icon(Icons.Outlined.Search, contentDescription = "Search")
                     }
@@ -96,7 +150,11 @@ fun ProjectsScreen(
                 Modifier.fillMaxSize().padding(padding),
                 contentAlignment = Alignment.Center,
             ) {
-                EmptyProjects()
+                EmptyProjects(
+                    onAddProject = viewModel?.let {
+                        { showingAddProjectMenu = true }
+                    },
+                )
             }
 
             else -> PullToRefreshBox(
@@ -224,10 +282,52 @@ fun ProjectsScreen(
             }
         }
     }
+    if (showingLocalProjectPicker && viewModel != null) {
+        RemoteFolderPickerSheet(
+            state = state,
+            viewModel = viewModel,
+            onDismiss = { showingLocalProjectPicker = false },
+        )
+    }
+    if (showingRemoteProjectPicker && viewModel != null) {
+        AutopilotRepoPicker(
+            service = viewModel.autopilot,
+            title = "Add Project",
+            existingFullNames = existingGitHubRepoNames,
+            onSelect = { repo ->
+                viewModel.cloneAutopilotRepo(repo)
+            },
+            onDismiss = { showingRemoteProjectPicker = false },
+        )
+    }
 }
 
 @Composable
-private fun EmptyProjects() {
+private fun AddProjectDropdownMenu(
+    expanded: Boolean,
+    canAddFromRemoteRepositories: Boolean,
+    onDismiss: () -> Unit,
+    onAddLocal: () -> Unit,
+    onAddRemote: () -> Unit,
+) {
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        DropdownMenuItem(
+            text = { Text("Add project locally") },
+            leadingIcon = { Icon(Icons.Outlined.Folder, contentDescription = null) },
+            onClick = onAddLocal,
+        )
+        if (canAddFromRemoteRepositories) {
+            DropdownMenuItem(
+                text = { Text("Add project from remote repositories") },
+                leadingIcon = { Icon(Icons.Outlined.Add, contentDescription = null) },
+                onClick = onAddRemote,
+            )
+        }
+    }
+}
+
+@Composable
+private fun EmptyProjects(onAddProject: (() -> Unit)? = null) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Surface(
             shape = CircleShape,
@@ -240,6 +340,13 @@ private fun EmptyProjects() {
             }
         }
         Text("No projects yet", style = MaterialTheme.typography.titleMedium)
-        Text("Add a project on macOS.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Add a project from your Mac.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (onAddProject != null) {
+            Button(onClick = onAddProject) {
+                Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Add Project")
+            }
+        }
     }
 }

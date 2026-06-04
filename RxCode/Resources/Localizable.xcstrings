@@ -1370,6 +1370,12 @@
         }
       }
     },
+    "Add project from remote repositories" : {
+
+    },
+    "Add project locally" : {
+
+    },
     "Add Relay Server" : {
       "localizations" : {
         "ko" : {
@@ -13594,6 +13600,7 @@
       }
     },
     "Sign in to rxlab" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {

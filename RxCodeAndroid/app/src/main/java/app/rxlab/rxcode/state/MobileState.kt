@@ -16,6 +16,7 @@ import app.rxlab.rxcode.proto.PermissionRequestPayload
 import app.rxlab.rxcode.proto.Project
 import app.rxlab.rxcode.proto.ProjectBranchInfo
 import app.rxlab.rxcode.proto.ProjectCIStatus
+import app.rxlab.rxcode.proto.RemoteFolderNode
 import app.rxlab.rxcode.proto.RunProfile
 import app.rxlab.rxcode.proto.SearchHit
 import app.rxlab.rxcode.proto.SessionSummary
@@ -83,6 +84,13 @@ data class MobileState(
 
     val hasReceivedInitialSnapshot: Boolean = false,
     val lastError: String? = null,
+
+    val remoteFolderRoot: RemoteFolderNode? = null,
+    val remoteFolderIsLoading: Boolean = false,
+    val remoteFolderError: String? = null,
+    val remoteProjectCreateInFlight: Boolean = false,
+    val remoteProjectCreateError: String? = null,
+    val lastCreatedProjectID: UUID? = null,
 
     /**
      * Set by [MobileAppState.openThreadFromNotification] when an FCM

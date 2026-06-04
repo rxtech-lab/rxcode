@@ -83,6 +83,32 @@ extension AppState {
             let q = optionalAutopilotBody(request, as: AutopilotReposQuery.self)
             let page = try await secrets.listManagedRepositories(search: q?.search, cursor: q?.cursor)
             return try encoder.encode(page)
+        case .cloneManagedRepo:
+            let body = try decodeAutopilotBody(request, as: AutopilotCloneRepoBody.self)
+            let target = body.fullName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard !target.isEmpty else {
+                throw MobileRemoteConfigError.invalidRequest("Repository name is required.")
+            }
+            guard isSignedIn else {
+                throw MobileRemoteConfigError.invalidRequest("Sign in with rxlab on your Mac before importing GitHub repositories.")
+            }
+            if let existing = projects.first(where: { $0.gitHubRepo?.lowercased() == target }) {
+                return try encoder.encode(AutopilotCloneRepoResult(project: existing))
+            }
+            let page = try await autopilot.listRepositories(search: body.fullName, cursor: nil)
+            guard let repo = page.items.first(where: { $0.fullName.lowercased() == target }) else {
+                throw MobileRemoteConfigError.invalidRequest("Repository is not available from the signed-in rxlab account.")
+            }
+            guard let project = try await cloneAndAddProjectForMobile(repo) else {
+                throw MobileRemoteConfigError.invalidRequest("Failed to add cloned repository.")
+            }
+            scheduleMobileSnapshotBroadcast()
+            return try encoder.encode(AutopilotCloneRepoResult(project: project))
+        case .installGitHubAppUrl:
+            guard isSignedIn else {
+                throw MobileRemoteConfigError.invalidRequest("Sign in with rxlab on your Mac before installing the GitHub App.")
+            }
+            return try encoder.encode(try await autopilot.installUrl())
 
         // MARK: Automation settings
         case .automationSchema:

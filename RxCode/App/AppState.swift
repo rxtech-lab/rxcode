@@ -917,6 +917,51 @@ final class AppState {
     var codexInstalled = false
     var onboardingCompleted = UserDefaults.standard.bool(forKey: "onboardingCompleted")
 
+    // MARK: - What's New
+
+    private static let seenWhatsNewKey = "seenWhatsNewSlugs"
+
+    /// Whether onboarding had already been completed when this launch started.
+    /// Distinguishes an existing user (who should see "What's New" for newly
+    /// added features) from a brand-new install (for whom nothing is "new").
+    let wasOnboardedAtLaunch = UserDefaults.standard.bool(forKey: "onboardingCompleted")
+
+    /// Slugs of "What's New" feature cards the user has already seen.
+    private(set) var seenWhatsNewSlugs: Set<String> =
+        Set(UserDefaults.standard.stringArray(forKey: AppState.seenWhatsNewKey) ?? [])
+
+    /// Controls presentation of the What's New sheet.
+    var showWhatsNewSheet = false
+
+    /// The batch of features being presented. Captured once when the sheet is
+    /// triggered so it stays stable while cards are marked seen mid-flow (which
+    /// would otherwise shrink `unseenWhatsNewFeatures` underneath the sheet).
+    var whatsNewBatch: [WhatsNewFeature] = []
+
+    /// Shipped feature cards the user has not yet seen, in display order.
+    var unseenWhatsNewFeatures: [WhatsNewFeature] {
+        WhatsNewFeature.all.filter { !seenWhatsNewSlugs.contains($0.slug) }
+    }
+
+    func markWhatsNewSeen(_ slug: String) {
+        markWhatsNewSeen([slug])
+    }
+
+    func markWhatsNewSeen<S: Sequence>(_ slugs: S) where S.Element == String {
+        var changed = false
+        for slug in slugs where seenWhatsNewSlugs.insert(slug).inserted {
+            changed = true
+        }
+        guard changed else { return }
+        UserDefaults.standard.set(Array(seenWhatsNewSlugs), forKey: Self.seenWhatsNewKey)
+    }
+
+    /// Marks every shipped feature as seen. Used for brand-new installs so the
+    /// "What's New" sheet never greets a first-time user.
+    func markAllWhatsNewSeen() {
+        markWhatsNewSeen(WhatsNewFeature.all.map(\.slug))
+    }
+
     // MARK: - App Initialization
 
     /// True once `initialize()` has finished its first run. UI shows a loading

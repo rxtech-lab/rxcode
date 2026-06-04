@@ -112,6 +112,27 @@ struct MainView: View {
                 }
             }
             .hookUI()
+            .task(id: appState.isInitialized) {
+                guard appState.isInitialized else { return }
+                if appState.wasOnboardedAtLaunch {
+                    // Existing user: surface any feature cards they haven't seen.
+                    let unseen = appState.unseenWhatsNewFeatures
+                    if !unseen.isEmpty {
+                        appState.whatsNewBatch = unseen
+                        appState.showWhatsNewSheet = true
+                    }
+                } else {
+                    // Brand-new install this session — these features aren't
+                    // "new" to them, so record them all as seen up front.
+                    appState.markAllWhatsNewSeen()
+                }
+            }
+            .sheet(isPresented: Bindable(appState).showWhatsNewSheet) {
+                WhatsNewSheet(features: appState.whatsNewBatch) {
+                    appState.showWhatsNewSheet = false
+                }
+                .environment(appState)
+            }
         }
     }
 

@@ -124,6 +124,7 @@ dependencies {
     implementation(libs.accompanist.permissions)
 
     implementation(libs.coil.compose)
+    implementation(libs.coil.svg)
     implementation(libs.compose.markdown)
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)

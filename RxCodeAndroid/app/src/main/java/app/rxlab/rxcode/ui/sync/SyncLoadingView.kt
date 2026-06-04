@@ -56,7 +56,7 @@ import kotlinx.coroutines.delay
 fun SyncLoadingView(
     isTimedOut: Boolean,
     pairedDesktops: List<PairedDesktop>,
-    activeDesktopPubkey: String,
+    activeDesktopId: String,
     onRetry: () -> Unit,
     onSelectDesktop: (PairedDesktop) -> Unit,
     onPairNewDesktop: () -> Unit,
@@ -137,7 +137,7 @@ fun SyncLoadingView(
                     items(pairedDesktops, key = { it.id }) { desktop ->
                         DesktopRow(
                             desktop = desktop,
-                            isActive = desktop.pubkeyHex == activeDesktopPubkey,
+                            isActive = desktop.id == activeDesktopId,
                             onClick = { onSelectDesktop(desktop) },
                         )
                     }

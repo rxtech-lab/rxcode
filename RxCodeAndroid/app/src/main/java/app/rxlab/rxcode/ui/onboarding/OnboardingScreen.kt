@@ -4,12 +4,15 @@ import android.content.Context
 import android.net.Uri
 import android.os.Build
 import android.util.Log
+import android.util.Size
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
@@ -82,15 +85,20 @@ import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.mlkit.vision.barcode.BarcodeScanner
+import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import java.util.concurrent.Executors
 
 /** Pair-with-Mac screen: device name, camera scanner, and photo QR fallback. */
-@OptIn(ExperimentalPermissionsApi::class)
+@OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
 @Composable
-fun OnboardingScreen(state: MobileState, viewModel: MobileAppState) {
+fun OnboardingScreen(
+    state: MobileState,
+    viewModel: MobileAppState,
+    onDismiss: (() -> Unit)? = null,
+) {
     val context = LocalContext.current
     var scannerOpen by remember { mutableStateOf(false) }
     var scanOptionsOpen by remember { mutableStateOf(false) }
@@ -156,6 +164,18 @@ fun OnboardingScreen(state: MobileState, viewModel: MobileAppState) {
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
+        topBar = {
+            if (onDismiss != null) {
+                CenterAlignedTopAppBar(
+                    title = { Text("Pair with your Mac") },
+                    navigationIcon = {
+                        IconButton(onClick = onDismiss) {
+                            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                        }
+                    },
+                )
+            }
+        },
     ) { padding ->
         Column(
             modifier = Modifier
@@ -402,9 +422,6 @@ private fun PairingCameraScreen(
     var scanLocked by remember { mutableStateOf(false) }
     var scannerKey by remember { mutableStateOf(0) }
     var scanError by remember { mutableStateOf<String?>(null) }
-    // Manual scanning: the camera previews continuously, but barcode analysis
-    // only runs after the user taps "Scan" (not automatically on every frame).
-    var scanArmed by remember { mutableStateOf(false) }
 
     LaunchedEffect(camPermission.status.isGranted) {
         pairingLog("camera permission granted=${camPermission.status.isGranted}")
@@ -429,24 +446,22 @@ private fun PairingCameraScreen(
                 .padding(padding)
                 .background(Color.Black),
         ) {
+            val scannerActive = camPermission.status.isGranted && !scanLocked && pairing !is PairingStatus.InProgress
             if (camPermission.status.isGranted) {
                 QRCameraPreview(
                     modifier = Modifier.fillMaxSize(),
                     scanKey = scannerKey,
-                    enabled = scanArmed && !scanLocked && pairing !is PairingStatus.InProgress,
+                    enabled = scannerActive,
                     onToken = { token ->
                         pairingLog("camera QR accepted: ${token.logSummary()}")
                         scanLocked = true
-                        scanArmed = false
                         scanError = null
                         onToken(token)
                     },
                     onInvalidQr = {
                         if (!scanLocked) {
                             Log.w(TAG, "camera QR rejected: not an RxCode pairing token")
-                            // Stop scanning and let the user reposition and tap again.
-                            scanArmed = false
-                            scanError = "That QR code is not an RxCode pairing code. Tap Scan to try again."
+                            scanError = "That QR code is not an RxCode pairing code."
                         }
                     },
                 )
@@ -483,18 +498,12 @@ private fun PairingCameraScreen(
             PairingCameraStatus(
                 pairing = pairing,
                 scanError = scanError,
-                scanArmed = scanArmed,
-                onScan = {
-                    pairingLog("user armed camera QR scan")
-                    scanError = null
-                    scanArmed = true
-                },
+                scanning = scannerActive,
                 onRetry = {
                     pairingLog("retrying camera QR scan")
                     onRetry()
                     scanError = null
                     scanLocked = false
-                    scanArmed = false
                     scannerKey += 1
                 },
                 modifier = Modifier
@@ -525,8 +534,7 @@ private fun CameraShade() {
 private fun PairingCameraStatus(
     pairing: PairingStatus,
     scanError: String?,
-    scanArmed: Boolean,
-    onScan: () -> Unit,
+    scanning: Boolean,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -539,21 +547,22 @@ private fun PairingCameraStatus(
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             when (pairing) {
                 PairingStatus.Idle -> {
-                    if (scanArmed) {
+                    if (scanning) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Outlined.QrCodeScanner, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                             Spacer(Modifier.width(10.dp))
                             Text("Scanning…", style = MaterialTheme.typography.titleMedium)
                         }
+                        Text(
+                            "Position the QR code inside the frame.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        scanError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                         LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                     } else {
-                        Text("Position the QR code inside the frame, then tap Scan.", style = MaterialTheme.typography.titleMedium)
+                        Text("Position the QR code inside the frame.", style = MaterialTheme.typography.titleMedium)
                         scanError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                        Button(onClick = onScan, modifier = Modifier.fillMaxWidth()) {
-                            Icon(Icons.Outlined.QrCodeScanner, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Scan")
-                        }
                     }
                 }
                 PairingStatus.InProgress -> {
@@ -641,9 +650,21 @@ private fun bindCamera(
         val preview = Preview.Builder().build().apply {
             setSurfaceProvider(previewView.surfaceProvider)
         }
-        scanner = BarcodeScanning.getClient()
-        pairingLog("ML Kit barcode scanner created")
+        val scannerOptions = BarcodeScannerOptions.Builder()
+            .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+            .build()
+        scanner = BarcodeScanning.getClient(scannerOptions)
+        pairingLog("ML Kit QR scanner created")
+        val analysisResolution = ResolutionSelector.Builder()
+            .setResolutionStrategy(
+                ResolutionStrategy(
+                    Size(1280, 720),
+                    ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER,
+                )
+            )
+            .build()
         val analysis = ImageAnalysis.Builder()
+            .setResolutionSelector(analysisResolution)
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .build()
         var lastSeen: String? = null
@@ -679,7 +700,7 @@ private fun bindCamera(
             activeScanner.process(input)
                 .addOnSuccessListener(mainExecutor) { barcodes ->
                     val qrValues = barcodes
-                        .filter { it.format == Barcode.FORMAT_QR_CODE || it.rawValue != null }
+                        .filter { it.format == Barcode.FORMAT_QR_CODE }
                         .mapNotNull { it.rawValue }
                     if (qrValues.isEmpty()) {
                         if (analyzedFrames % 90 == 0) {

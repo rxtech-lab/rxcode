@@ -70,8 +70,14 @@ fun SkillsMarketScreen(
     var filterMenuOpen by remember { mutableStateOf(false) }
     var showGitSourceSheet by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
-        if (state.skillCatalog.isEmpty()) app.requestSkillCatalog()
+    LaunchedEffect(online, state.activeDesktopPubkey, state.hasReceivedInitialSnapshot) {
+        if (online &&
+            state.hasReceivedInitialSnapshot &&
+            !state.skillCatalogLoading &&
+            state.skillCatalog.isEmpty()
+        ) {
+            app.requestSkillCatalog()
+        }
     }
 
     val availableMarketplaces = remember(state.skillCatalog) {
@@ -134,7 +140,15 @@ fun SkillsMarketScreen(
 
             if (state.skillCatalog.isEmpty()) {
                 item {
-                    if (state.skillCatalogLoading) {
+                    if (online && !state.hasReceivedInitialSnapshot) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp))
+                            Text("Waiting for Mac sync…", style = MaterialTheme.typography.bodyMedium)
+                        }
+                    } else if (state.skillCatalogLoading) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),

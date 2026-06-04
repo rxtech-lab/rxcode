@@ -2558,6 +2558,12 @@
         }
       }
     },
+    "Creating environment…" : {
+
+    },
+    "Creating file…" : {
+
+    },
     "Creating Pull Request…" : {
       "localizations" : {
         "ko" : {
@@ -2931,6 +2937,12 @@
           }
         }
       }
+    },
+    "Deleting environment…" : {
+
+    },
+    "Deleting file…" : {
+
     },
     "Deny" : {
       "localizations" : {
@@ -7870,6 +7882,9 @@
           }
         }
       }
+    },
+    "Saving file…" : {
+
     },
     "Scan" : {
       "localizations" : {

@@ -158,18 +158,7 @@ struct MobileACPClientsView: View {
     }
 
     private func agentIcon(_ urlString: String?) -> some View {
-        Group {
-            if let urlString, let url = URL(string: urlString) {
-                AsyncImage(url: url) { image in
-                    image.resizable().scaledToFit()
-                } placeholder: {
-                    Image(systemName: "cpu").foregroundStyle(.secondary)
-                }
-            } else {
-                Image(systemName: "cpu").foregroundStyle(.secondary)
-            }
-        }
-        .frame(width: 28, height: 28)
+        MobileACPIconView(url: urlString, size: 28)
     }
 
     private func errorRow(_ message: String) -> some View {

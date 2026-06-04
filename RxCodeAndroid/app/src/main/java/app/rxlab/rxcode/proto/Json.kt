@@ -18,7 +18,13 @@ import java.util.UUID
 /** Shared JSON config: Swift's default JSONEncoder/JSONDecoder behavior. */
 val RxJson: Json = Json {
     ignoreUnknownKeys = true
-    encodeDefaults = false
+    // Swift's JSONEncoder always emits every stored property, and its JSONDecoder
+    // requires every non-optional one. kotlinx defaults to omitting a property when
+    // it equals its default value — which silently drops fields like
+    // `forceRefresh = false`, causing Swift to fail decoding with keyNotFound and
+    // the relay to drop the whole payload. Always encode defaults so the wire shape
+    // matches what Swift's non-optional Codable structs expect.
+    encodeDefaults = true
     explicitNulls = false
     isLenient = true
     coerceInputValues = true

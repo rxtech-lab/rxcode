@@ -144,14 +144,28 @@ class MobileAppState @Inject constructor(
         }.collect { (paired, activeId, relay) ->
             val active = paired
                 .firstOrNull { it.id == activeId }
-                ?.pubkeyHex
-                ?: paired.firstOrNull()?.pubkeyHex
-                ?: ""
-            val resolvedRelay = (relay ?: paired.firstOrNull()?.relayUrl ?: defaultRelayUrl())
+                ?: paired.firstOrNull()
+            val activeHex = active?.pubkeyHex ?: ""
+            val activeCompositeId = active?.id ?: ""
+            val resolvedRelay = (relay ?: active?.relayUrl ?: paired.firstOrNull()?.relayUrl ?: defaultRelayUrl())
             // Sync peers + relay with the new persisted snapshot.
             paired.forEach { client.addPeer(it.pubkeyHex) }
             if (resolvedRelay != _state.value.relayUrl) client.setRelayUrl(resolvedRelay)
-            _state.update { it.copy(pairedDesktops = paired, activeDesktopPubkey = active, relayUrl = resolvedRelay) }
+            _state.update {
+                val desktopChanged = it.activeDesktopId != activeCompositeId ||
+                    it.activeDesktopPubkey != activeHex
+                it.copy(
+                    pairedDesktops = paired,
+                    activeDesktopId = activeCompositeId,
+                    activeDesktopPubkey = activeHex,
+                    relayUrl = resolvedRelay,
+                    hasReceivedInitialSnapshot = if (desktopChanged) false else it.hasReceivedInitialSnapshot,
+                    acpRegistryLoading = if (desktopChanged) false else it.acpRegistryLoading,
+                    skillCatalogLoading = if (desktopChanged) false else it.skillCatalogLoading,
+                    acpRegistryError = if (desktopChanged) null else it.acpRegistryError,
+                    skillCatalogError = if (desktopChanged) null else it.skillCatalogError,
+                )
+            }
         }
     }
 
@@ -225,7 +239,19 @@ class MobileAppState @Inject constructor(
                 applyMCPMutationResult(payload.data)
             }
             is Payload.ACPRegistryResult -> {
-                if (!isActiveDesktop(fromHex)) return
+                if (!isActiveDesktop(fromHex)) {
+                    Log.w(
+                        TAG,
+                        "acp registry result ignored inactive from=${fromHex.take(12)} " +
+                            "active=${_state.value.activeDesktopPubkey.take(12)} id=${payload.data.clientRequestID}",
+                    )
+                    return
+                }
+                Log.w(
+                    TAG,
+                    "acp registry result inbound id=${payload.data.clientRequestID} ok=${payload.data.ok} " +
+                        "agents=${payload.data.registryAgents.size} clients=${payload.data.installedClients.size}",
+                )
                 applyACPRegistryResult(payload.data)
             }
             is Payload.ACPMutationResult -> {
@@ -233,7 +259,19 @@ class MobileAppState @Inject constructor(
                 applyACPMutationResult(payload.data)
             }
             is Payload.SkillCatalogResult -> {
-                if (!isActiveDesktop(fromHex)) return
+                if (!isActiveDesktop(fromHex)) {
+                    Log.w(
+                        TAG,
+                        "skill catalog result ignored inactive from=${fromHex.take(12)} " +
+                            "active=${_state.value.activeDesktopPubkey.take(12)} id=${payload.data.clientRequestID}",
+                    )
+                    return
+                }
+                Log.w(
+                    TAG,
+                    "skill catalog result inbound id=${payload.data.clientRequestID} ok=${payload.data.ok} " +
+                        "plugins=${payload.data.plugins.size} sources=${payload.data.sources.size}",
+                )
                 applySkillCatalogResult(payload.data)
             }
             is Payload.SkillMutationResult -> {
@@ -1033,25 +1071,47 @@ class MobileAppState @Inject constructor(
 
     // ---- ACP agent clients ----
 
-    fun requestACPRegistry(forceRefresh: Boolean = false) {
+    fun requestACPRegistry(forceRefresh: Boolean = false, retryOnTimeout: Boolean = true) {
         val hex = _state.value.activeDesktopPubkey
         if (hex.isEmpty()) {
+            Log.w(TAG, "acp registry request skipped: no active desktop")
+            pendingACPRegistryRequestID = null
             _state.update { it.copy(acpRegistryError = "Connect a Mac to manage agents.") }
+            return
+        }
+        if (!_state.value.hasReceivedInitialSnapshot) {
+            Log.w(TAG, "acp registry request skipped: waiting for initial snapshot")
+            pendingACPRegistryRequestID = null
+            _state.update { it.copy(acpRegistryLoading = false, acpRegistryError = null) }
             return
         }
         val payload = app.rxlab.rxcode.proto.ACPRegistryRequestPayload(forceRefresh = forceRefresh)
         pendingACPRegistryRequestID = payload.clientRequestID
+        Log.w(
+            TAG,
+            "acp registry request start id=${payload.clientRequestID} forceRefresh=$forceRefresh " +
+                "desktop=${hex.take(12)} connection=${_state.value.connectionState} " +
+                "agents=${_state.value.acpRegistryAgents.size} clients=${_state.value.acpInstalledClients.size}",
+        )
         _state.update { it.copy(acpRegistryLoading = true, acpRegistryError = null) }
         viewModelScope.launch {
             val sent = client.send(Payload.ACPRegistryRequest(payload), hex)
+            Log.w(TAG, "acp registry request send id=${payload.clientRequestID} sent=$sent desktop=${hex.take(12)}")
             if (!sent) {
                 if (pendingACPRegistryRequestID == payload.clientRequestID) pendingACPRegistryRequestID = null
+                Log.w(TAG, "acp registry request failed to send id=${payload.clientRequestID}")
                 _state.update { it.copy(acpRegistryLoading = false, acpRegistryError = "Failed to request agents.") }
                 return@launch
             }
             delay(REMOTE_CONFIG_TIMEOUT_MS)
             if (pendingACPRegistryRequestID == payload.clientRequestID) {
                 pendingACPRegistryRequestID = null
+                Log.w(TAG, "acp registry request timed out id=${payload.clientRequestID}")
+                if (retryOnTimeout) {
+                    Log.w(TAG, "acp registry request retrying once after timeout id=${payload.clientRequestID}")
+                    requestACPRegistry(forceRefresh = forceRefresh, retryOnTimeout = false)
+                    return@launch
+                }
                 _state.update { it.copy(acpRegistryLoading = false, acpRegistryError = REMOTE_TIMEOUT_MESSAGE) }
             }
         }
@@ -1130,8 +1190,21 @@ class MobileAppState @Inject constructor(
     }
 
     private fun applyACPRegistryResult(result: app.rxlab.rxcode.proto.ACPRegistryResultPayload) {
-        if (pendingACPRegistryRequestID != result.clientRequestID) return
+        val pending = pendingACPRegistryRequestID
+        if (pending != result.clientRequestID) {
+            Log.w(
+                TAG,
+                "acp registry result dropped id=${result.clientRequestID} pending=$pending " +
+                    "ok=${result.ok} agents=${result.registryAgents.size} clients=${result.installedClients.size}",
+            )
+            return
+        }
         pendingACPRegistryRequestID = null
+        Log.w(
+            TAG,
+            "acp registry result applied id=${result.clientRequestID} ok=${result.ok} " +
+                "agents=${result.registryAgents.size} clients=${result.installedClients.size}",
+        )
         _state.update {
             it.copy(
                 acpRegistryLoading = false,
@@ -1156,25 +1229,47 @@ class MobileAppState @Inject constructor(
 
     // ---- Skills marketplace ----
 
-    fun requestSkillCatalog(forceRefresh: Boolean = false) {
+    fun requestSkillCatalog(forceRefresh: Boolean = false, retryOnTimeout: Boolean = true) {
         val hex = _state.value.activeDesktopPubkey
         if (hex.isEmpty()) {
+            Log.w(TAG, "skill catalog request skipped: no active desktop")
+            pendingSkillCatalogRequestID = null
             _state.update { it.copy(skillCatalogError = "Connect a Mac to browse skills.") }
+            return
+        }
+        if (!_state.value.hasReceivedInitialSnapshot) {
+            Log.w(TAG, "skill catalog request skipped: waiting for initial snapshot")
+            pendingSkillCatalogRequestID = null
+            _state.update { it.copy(skillCatalogLoading = false, skillCatalogError = null) }
             return
         }
         val payload = app.rxlab.rxcode.proto.SkillCatalogRequestPayload(forceRefresh = forceRefresh)
         pendingSkillCatalogRequestID = payload.clientRequestID
+        Log.w(
+            TAG,
+            "skill catalog request start id=${payload.clientRequestID} forceRefresh=$forceRefresh " +
+                "desktop=${hex.take(12)} connection=${_state.value.connectionState} " +
+                "plugins=${_state.value.skillCatalog.size} sources=${_state.value.skillSources.size}",
+        )
         _state.update { it.copy(skillCatalogLoading = true, skillCatalogError = null) }
         viewModelScope.launch {
             val sent = client.send(Payload.SkillCatalogRequest(payload), hex)
+            Log.w(TAG, "skill catalog request send id=${payload.clientRequestID} sent=$sent desktop=${hex.take(12)}")
             if (!sent) {
                 if (pendingSkillCatalogRequestID == payload.clientRequestID) pendingSkillCatalogRequestID = null
+                Log.w(TAG, "skill catalog request failed to send id=${payload.clientRequestID}")
                 _state.update { it.copy(skillCatalogLoading = false, skillCatalogError = "Failed to request skills.") }
                 return@launch
             }
             delay(REMOTE_CONFIG_TIMEOUT_MS)
             if (pendingSkillCatalogRequestID == payload.clientRequestID) {
                 pendingSkillCatalogRequestID = null
+                Log.w(TAG, "skill catalog request timed out id=${payload.clientRequestID}")
+                if (retryOnTimeout) {
+                    Log.w(TAG, "skill catalog request retrying once after timeout id=${payload.clientRequestID}")
+                    requestSkillCatalog(forceRefresh = forceRefresh, retryOnTimeout = false)
+                    return@launch
+                }
                 _state.update { it.copy(skillCatalogLoading = false, skillCatalogError = REMOTE_TIMEOUT_MESSAGE) }
             }
         }
@@ -1294,8 +1389,21 @@ class MobileAppState @Inject constructor(
     }
 
     private fun applySkillCatalogResult(result: app.rxlab.rxcode.proto.SkillCatalogResultPayload) {
-        if (pendingSkillCatalogRequestID != result.clientRequestID) return
+        val pending = pendingSkillCatalogRequestID
+        if (pending != result.clientRequestID) {
+            Log.w(
+                TAG,
+                "skill catalog result dropped id=${result.clientRequestID} pending=$pending " +
+                    "ok=${result.ok} plugins=${result.plugins.size} sources=${result.sources.size}",
+            )
+            return
+        }
         pendingSkillCatalogRequestID = null
+        Log.w(
+            TAG,
+            "skill catalog result applied id=${result.clientRequestID} ok=${result.ok} " +
+                "plugins=${result.plugins.size} sources=${result.sources.size}",
+        )
         _state.update {
             it.copy(
                 skillCatalogLoading = false,
@@ -1350,7 +1458,18 @@ class MobileAppState @Inject constructor(
             _state.update { it.copy(pairing = PairingStatus.Failed("The pairing QR code has expired. Generate a fresh one on your Mac.")) }
             return
         }
-        _state.update { it.copy(pairing = PairingStatus.InProgress) }
+        pendingACPRegistryRequestID = null
+        pendingSkillCatalogRequestID = null
+        _state.update {
+            it.copy(
+                pairing = PairingStatus.InProgress,
+                hasReceivedInitialSnapshot = false,
+                acpRegistryLoading = false,
+                skillCatalogLoading = false,
+                acpRegistryError = null,
+                skillCatalogError = null,
+            )
+        }
         viewModelScope.launch {
             try {
                 Log.w(TAG, "pairing relay setup: relay=${token.relayURL} desktop=${token.desktopPubkeyHex.take(12)}")

@@ -32,6 +32,7 @@ struct SessionsList: View {
     @State private var showingDeleteProjectConfirm = false
     @State private var showingSearch = false
     @State private var isCreatingPR = false
+    @State private var isCreatingReview = false
     @Namespace private var glassNamespace
 
     // Autopilot actions (1:1 with the desktop project menu), moved here from the
@@ -60,6 +61,9 @@ struct SessionsList: View {
     /// increments as the user scrolls so we never render every thread at once.
     @State private var displayLimit = SessionsList.pageSize
     private static let pageSize = 20
+
+    /// Parent thread ids whose nested review children are currently expanded.
+    @State private var expandedReviewParentIds: Set<String> = []
 
     var body: some View {
         glassThreadList
@@ -135,6 +139,11 @@ struct SessionsList: View {
                 title: "Creating Pull Request…",
                 message: "The Mac is pushing the branch and opening the PR."
             )
+            .mobileAutopilotLoadingDialog(
+                isCreatingReview,
+                title: "Starting Code Review…",
+                message: "The Mac is starting a Code Review thread for this branch."
+            )
     }
 
     /// Ask the Mac to open a PR for the project's current branch, then open it
@@ -151,6 +160,40 @@ struct SessionsList: View {
                 )
                 await state.refreshSnapshot()
                 openURL(url)
+            } catch {
+                autopilotInfo = AutopilotMenuInfo(text: error.localizedDescription, isError: true)
+            }
+        }
+    }
+
+    /// Ask the Mac to start a `[Code Review]` thread reviewing the project's
+    /// current branch (grounded in its briefing), then open it once it syncs.
+    private func createBranchCodeReview(project: Project, branch: String) {
+        guard !isCreatingReview else { return }
+        isCreatingReview = true
+        Task {
+            defer { isCreatingReview = false }
+            do {
+                let threadId = try await state.requestProjectCreateCodeReview(
+                    projectId: project.id,
+                    branch: branch
+                )
+                await state.refreshSnapshot()
+                selected = threadId
+            } catch {
+                autopilotInfo = AutopilotMenuInfo(text: error.localizedDescription, isError: true)
+            }
+        }
+    }
+
+    /// Ask the Mac to start a `[Code Review]` thread reviewing a single thread's
+    /// changes (the manual equivalent of the built-in Code Review hook).
+    private func createThreadCodeReview(sessionID: String) {
+        Task {
+            do {
+                let threadId = try await state.requestThreadCreateCodeReview(sessionId: sessionID)
+                await state.refreshSnapshot()
+                selected = threadId
             } catch {
                 autopilotInfo = AutopilotMenuInfo(text: error.localizedDescription, isError: true)
             }
@@ -179,6 +222,12 @@ struct SessionsList: View {
                             onCreatePR: {
                                 if let branch = currentBranch {
                                     createPullRequest(project: project, branch: branch)
+                                }
+                            },
+                            isCreatingReview: isCreatingReview,
+                            onCodeReview: {
+                                if let branch = currentBranch {
+                                    createBranchCodeReview(project: project, branch: branch)
                                 }
                             }
                         )
@@ -217,23 +266,11 @@ struct SessionsList: View {
                 } else {
                     GlassEffectContainer(spacing: 12) {
                         ForEach(visible) { session in
-                            GlassThreadCard(
-                                session: session,
-                                isSelected: selected == session.id,
-                                usesNavigationLink: !usesSelection,
-                                onSelect: usesSelection ? { selected = session.id } : nil
-                            )
-                            .glassEffectID(session.id, in: glassNamespace)
-                            .onAppear {
-                                if session.id == visible.last?.id { loadMore() }
-                            }
-                            .contextMenu {
-                                threadContextMenu(for: session)
-                            }
+                            threadGroup(for: session)
                         }
                     }
 
-                    if displayLimit < filtered.count {
+                    if displayLimit < topLevelFiltered.count {
                         loadingIndicator
                     }
                 }
@@ -243,6 +280,7 @@ struct SessionsList: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .animation(.spring(duration: 0.3), value: filtered.map(\.id))
+        .animation(.easeInOut(duration: 0.2), value: expandedReviewParentIds)
         .accessibilityIdentifier("thread-list-screen")
     }
 
@@ -273,6 +311,12 @@ struct SessionsList: View {
 
     @ViewBuilder
     private func threadContextMenu(for session: SessionSummary) -> some View {
+        Button {
+            createThreadCodeReview(sessionID: session.id)
+        } label: {
+            Label("Code Review", systemImage: "checklist")
+        }
+
         Button {
             Task { await state.archiveThread(sessionID: session.id) }
         } label: {
@@ -329,9 +373,113 @@ struct SessionsList: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    /// The slice of `filtered` currently rendered.
+    /// The slice of top-level threads currently rendered.
     private var visible: [SessionSummary] {
-        Array(filtered.prefix(displayLimit))
+        Array(topLevelFiltered.prefix(displayLimit))
+    }
+
+    /// Top-level threads only — review children (`parentThreadId` pointing at a
+    /// thread that is also in this list) are nested under their parent. A child
+    /// whose parent isn't here falls back to the top level so it's never hidden.
+    private var topLevelFiltered: [SessionSummary] {
+        let ids = Set(filtered.map(\.id))
+        return filtered.filter { session in
+            guard let parent = session.parentThreadId else { return true }
+            return !ids.contains(parent)
+        }
+    }
+
+    /// Review children grouped by their parent thread id, oldest first so they
+    /// number naturally as `Review 1`, `Review 2`, …
+    private var childrenByParent: [String: [SessionSummary]] {
+        let ids = Set(filtered.map(\.id))
+        let children = filtered.filter { session in
+            guard let parent = session.parentThreadId else { return false }
+            return ids.contains(parent)
+        }
+        return Dictionary(grouping: children, by: { $0.parentThreadId! })
+            .mapValues { $0.sorted { $0.updatedAt < $1.updatedAt } }
+    }
+
+    /// A top-level thread row (with a disclosure control when it has review
+    /// children) plus, when expanded, its nested review children.
+    @ViewBuilder
+    private func threadGroup(for session: SessionSummary) -> some View {
+        let children = childrenByParent[session.id] ?? []
+        let isExpanded = expandedReviewParentIds.contains(session.id)
+
+        if children.isEmpty {
+            threadCard(for: session)
+        } else {
+            HStack(spacing: 6) {
+                reviewDisclosureButton(for: session, children: children, isExpanded: isExpanded)
+                threadCard(for: session)
+            }
+        }
+
+        if isExpanded {
+            ForEach(Array(children.enumerated()), id: \.element.id) { index, child in
+                threadCard(for: child, indentLevel: 1, titleOverride: "Review \(index + 1)")
+            }
+        }
+    }
+
+    private func threadCard(
+        for session: SessionSummary,
+        indentLevel: Int = 0,
+        titleOverride: String? = nil
+    ) -> some View {
+        GlassThreadCard(
+            session: session,
+            isSelected: selected == session.id,
+            usesNavigationLink: !usesSelection,
+            onSelect: usesSelection ? { selected = session.id } : nil,
+            indentLevel: indentLevel,
+            titleOverride: titleOverride,
+            showLabelChip: indentLevel == 0
+        )
+        .glassEffectID(session.id, in: glassNamespace)
+        .onAppear {
+            if indentLevel == 0, session.id == visible.last?.id { loadMore() }
+        }
+        .contextMenu {
+            threadContextMenu(for: session)
+        }
+    }
+
+    private func reviewDisclosureButton(
+        for session: SessionSummary,
+        children: [SessionSummary],
+        isExpanded: Bool
+    ) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                if expandedReviewParentIds.contains(session.id) {
+                    expandedReviewParentIds.remove(session.id)
+                } else {
+                    expandedReviewParentIds.insert(session.id)
+                }
+            }
+        } label: {
+            VStack(spacing: 2) {
+                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                if children.contains(where: { $0.isStreaming }) {
+                    ProgressView()
+                        .controlSize(.mini)
+                        .scaleEffect(0.7)
+                } else {
+                    Text("\(children.count)")
+                        .font(.system(size: 10, weight: .semibold))
+                        .monospacedDigit()
+                }
+            }
+            .foregroundStyle(.secondary)
+            .frame(width: 24)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isExpanded ? "Hide code reviews" : "Show \(children.count) code reviews")
     }
 
     private var usesDesktopSearch: Bool {
@@ -347,8 +495,8 @@ struct SessionsList: View {
     }
 
     private func loadMore() {
-        guard displayLimit < filtered.count else { return }
-        displayLimit = min(displayLimit + Self.pageSize, filtered.count)
+        guard displayLimit < topLevelFiltered.count else { return }
+        displayLimit = min(displayLimit + Self.pageSize, topLevelFiltered.count)
     }
 
     private var filtered: [SessionSummary] {

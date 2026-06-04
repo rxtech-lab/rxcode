@@ -844,6 +844,14 @@ class MobileAppState @Inject constructor(
     suspend fun requestProjectCreatePullRequest(projectId: UUID, branch: String): String =
         autopilot.requestProjectCreatePullRequest(projectId, branch)
 
+    /** Start a `[Code Review]` thread on the Mac reviewing the whole branch; returns its id. */
+    suspend fun requestProjectCreateCodeReview(projectId: UUID, branch: String): String =
+        autopilot.requestProjectCreateCodeReview(projectId, branch)
+
+    /** Start a `[Code Review]` thread on the Mac reviewing one thread's changes; returns its id. */
+    suspend fun requestThreadCreateCodeReview(sessionId: String): String =
+        autopilot.requestThreadCreateCodeReview(sessionId)
+
     /**
      * Download a secret environment into the project folder: decrypt on-device
      * with the passkey-derived KEK, then relay the plaintext for the Mac to write.

@@ -74,6 +74,17 @@ struct StatusBadgeDot: View {
 // MARK: - ProjectChatRow
 
 struct ProjectChatRow: View {
+    /// Leading disclosure control shown on a thread that has nested review
+    /// children (the `[Code Review]` threads spawned from it).
+    struct ReviewDisclosure {
+        let count: Int
+        let isExpanded: Bool
+        /// True while at least one review child is still streaming — surfaces
+        /// "this thread is being code-reviewed" on the parent row.
+        let isReviewing: Bool
+        let onToggle: () -> Void
+    }
+
     let summary: ChatSession.Summary
     let isCurrent: Bool
     let status: ChatStatus
@@ -83,7 +94,16 @@ struct ProjectChatRow: View {
     let onTogglePin: () -> Void
     let onToggleArchive: () -> Void
     let onDelete: () -> Void
+    let onCodeReview: () -> Void
     let hookMenuItems: [HookMenuItem]
+    /// Nesting depth; review children render one level in from their parent.
+    var indentLevel: Int = 0
+    /// Replaces the thread title (e.g. `"Review 1"` for a nested review child).
+    var titleOverride: String? = nil
+    /// Whether to show the `threadLabel` chip (hidden on review children since
+    /// the nesting already conveys what they are).
+    var showLabelChip: Bool = true
+    var reviewDisclosure: ReviewDisclosure? = nil
 
     @State private var isHovered = false
 
@@ -97,6 +117,7 @@ struct ProjectChatRow: View {
     /// Title cleaned of `[Attached image: ...]` / `[ImageN]` / etc. markers that may
     /// be baked into older persisted summaries from before title stripping landed.
     private var displayTitle: String {
+        if let titleOverride, !titleOverride.isEmpty { return titleOverride }
         let cleaned = ChatSession.stripAttachmentMarkers(from: summary.title)
         let resolved = cleaned.isEmpty ? ChatSession.defaultTitle : cleaned
         return resolved.prefix(1).uppercased() + resolved.dropFirst()
@@ -104,6 +125,10 @@ struct ProjectChatRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
+            if let disclosure = reviewDisclosure {
+                reviewDisclosureControl(disclosure)
+            }
+
             if isActiveStatus {
                 statusIndicator
             }
@@ -114,7 +139,7 @@ struct ProjectChatRow: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
 
-            if let label = summary.threadLabel, !label.isEmpty {
+            if showLabelChip, let label = summary.threadLabel, !label.isEmpty {
                 Text(label)
                     .font(.system(size: ClaudeTheme.size(9), weight: .semibold))
                     .foregroundStyle(ClaudeTheme.accent)
@@ -143,7 +168,7 @@ struct ProjectChatRow: View {
                     .frame(width: 28, alignment: .trailing)
             }
         }
-        .padding(.leading, 18)
+        .padding(.leading, 18 + CGFloat(indentLevel) * 18)
         .padding(.trailing, 14)
         .padding(.vertical, 7)
         .background(
@@ -179,6 +204,10 @@ struct ProjectChatRow: View {
                     Label("Archive", systemImage: "archivebox")
                 }
             }
+            Divider()
+            Button { onCodeReview() } label: {
+                Label("Code Review", systemImage: "checklist")
+            }
             if !hookMenuItems.isEmpty {
                 Divider()
                 HookContextMenuItems(items: hookMenuItems)
@@ -198,6 +227,36 @@ struct ProjectChatRow: View {
         case .idle, .streaming:
             EmptyView()
         }
+    }
+
+    /// Leading chevron that expands/collapses the nested review children, plus a
+    /// review count / "reviewing" spinner.
+    @ViewBuilder
+    private func reviewDisclosureControl(_ disclosure: ReviewDisclosure) -> some View {
+        Button(action: disclosure.onToggle) {
+            HStack(spacing: 3) {
+                Image(systemName: disclosure.isExpanded ? "chevron.down" : "chevron.right")
+                    .font(.system(size: ClaudeTheme.size(9), weight: .semibold))
+                    .frame(width: 10, height: 10)
+                if disclosure.isReviewing {
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                        .controlSize(.mini)
+                        .scaleEffect(0.7)
+                        .frame(width: 10, height: 10)
+                } else {
+                    Text("\(disclosure.count)")
+                        .font(.system(size: ClaudeTheme.size(9), weight: .semibold))
+                        .monospacedDigit()
+                }
+            }
+            .foregroundStyle(ClaudeTheme.textTertiary)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(disclosure.isReviewing
+              ? "Code review in progress"
+              : (disclosure.isExpanded ? "Hide code reviews" : "Show \(disclosure.count) code review(s)"))
     }
 
     private static func compactElapsedTime(since date: Date, now: Date = Date()) -> String {

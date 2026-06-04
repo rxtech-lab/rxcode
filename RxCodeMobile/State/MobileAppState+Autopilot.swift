@@ -448,6 +448,26 @@ extension MobileAppState {
         return url
     }
 
+    /// Asks the Mac to start a `[Code Review]` thread reviewing the whole branch
+    /// (grounded in its briefing). Returns the new thread id so the phone can
+    /// navigate to it once it syncs over.
+    @discardableResult
+    func requestProjectCreateCodeReview(projectId: UUID, branch: String) async throws -> String {
+        try await autopilotSend(.project, .projectCreateCodeReview,
+                                body: AutopilotProjectBranchBody(projectId: projectId, branch: branch),
+                                as: AutopilotCodeReviewResult.self).threadId
+    }
+
+    /// Asks the Mac to start a `[Code Review]` thread reviewing a single thread's
+    /// changes (the manual equivalent of the built-in Code Review hook). Returns
+    /// the new review thread's id.
+    @discardableResult
+    func requestThreadCreateCodeReview(sessionId: String) async throws -> String {
+        try await autopilotSend(.project, .threadCreateCodeReview,
+                                body: AutopilotThreadBody(sessionId: sessionId),
+                                as: AutopilotCodeReviewResult.self).threadId
+    }
+
     /// Downloads the chosen environment into the project folder. The phone
     /// decrypts on-device with its passkey-derived KEK (the same iCloud-synced
     /// credential the Mac uses) — running the phone's own passkey ceremony — then

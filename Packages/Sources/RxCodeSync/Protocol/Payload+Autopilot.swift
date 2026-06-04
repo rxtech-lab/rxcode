@@ -114,6 +114,12 @@ public enum AutopilotOp: String, Codable, Sendable {
     case projectSecretsDownload
     case projectSecretsWrite
     case projectCreatePullRequest
+    // Code review (desktop-mediated): spawn a `[Code Review]` thread on the Mac.
+    // `projectCreateCodeReview` reviews a whole branch grounded in its briefing;
+    // `threadCreateCodeReview` reviews a single thread's changes (the manual
+    // equivalent of the built-in Code Review hook).
+    case projectCreateCodeReview
+    case threadCreateCodeReview
 
     // Global search — one call returns on-device thread matches AND published
     // docs matches for the same query, so mobile gets a single combined result
@@ -498,6 +504,21 @@ public struct AutopilotProjectBranchBody: Codable, Sendable {
 public struct AutopilotPullRequestResult: Codable, Sendable {
     public let url: String
     public init(url: String) { self.url = url }
+}
+
+/// Addresses a single thread by id. Used by `threadCreateCodeReview`, where the
+/// desktop spawns a `[Code Review]` thread reviewing that thread's changes
+/// (the manual equivalent of the built-in Code Review hook).
+public struct AutopilotThreadBody: Codable, Sendable {
+    public let sessionId: String
+    public init(sessionId: String) { self.sessionId = sessionId }
+}
+
+/// Result of `projectCreateCodeReview` / `threadCreateCodeReview`: the id of the
+/// spawned `[Code Review]` thread, so the phone can navigate to it once it syncs.
+public struct AutopilotCodeReviewResult: Codable, Sendable {
+    public let threadId: String
+    public init(threadId: String) { self.threadId = threadId }
 }
 
 /// Per-project autopilot state powering the mobile context menu. Mirrors the

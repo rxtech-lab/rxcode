@@ -11,6 +11,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.HourglassEmpty
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.RateReview
 import androidx.compose.material.icons.outlined.Sell
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -85,12 +86,17 @@ fun ProjectActionsMenu(
     // desktop briefing PR button); once a PR exists "Open on GitHub" covers it.
     val canCreatePR = branch != null && !branch.equals("unknown", ignoreCase = true) && prNumber == null
 
+    // Offer a branch-wide code review for any real branch (mirrors the desktop
+    // briefing/project "Code Review" menu).
+    val canCodeReview = branch != null && !branch.equals("unknown", ignoreCase = true)
+
     var menuOpen by remember { mutableStateOf(false) }
     var status by remember(project.id) { mutableStateOf<AutopilotProjectStatus?>(null) }
     var showDownload by remember { mutableStateOf(false) }
     var showReleaseCreate by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var isCreatingPR by remember { mutableStateOf(false) }
+    var isCreatingReview by remember { mutableStateOf(false) }
     var info by remember { mutableStateOf<String?>(null) }
 
     // Only repo-backed projects have autopilot state to load.
@@ -117,6 +123,23 @@ fun ProjectActionsMenu(
                 info = t.message ?: "Couldn't create the pull request."
             } finally {
                 isCreatingPR = false
+            }
+        }
+    }
+
+    fun createCodeReview() {
+        if (isCreatingReview || branch == null) return
+        isCreatingReview = true
+        menuOpen = false
+        scope.launch {
+            try {
+                val threadId = viewModel.requestProjectCreateCodeReview(project.id, branch)
+                viewModel.requestSnapshot("code_review_started")
+                onOpenSession(threadId)
+            } catch (t: Throwable) {
+                info = t.message ?: "Couldn't start the code review."
+            } finally {
+                isCreatingReview = false
             }
         }
     }
@@ -178,6 +201,14 @@ fun ProjectActionsMenu(
                         leadingIcon = { Icon(Icons.AutoMirrored.Outlined.MergeType, contentDescription = null) },
                         enabled = !isCreatingPR,
                         onClick = { createPullRequest() },
+                    )
+                }
+                if (canCodeReview) {
+                    DropdownMenuItem(
+                        text = { Text("Code Review for $branch") },
+                        leadingIcon = { Icon(Icons.Outlined.RateReview, contentDescription = null) },
+                        enabled = !isCreatingReview,
+                        onClick = { createCodeReview() },
                     )
                 }
                 HorizontalDivider()
@@ -250,6 +281,20 @@ fun ProjectActionsMenu(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
                     Text("The Mac is pushing the branch and opening the PR.")
+                }
+            },
+        )
+    }
+
+    if (isCreatingReview) {
+        AlertDialog(
+            onDismissRequest = {},
+            confirmButton = {},
+            title = { Text("Starting Code Review…") },
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+                    Text("The Mac is starting a Code Review thread for this branch.")
                 }
             },
         )

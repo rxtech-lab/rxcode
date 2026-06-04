@@ -13,6 +13,7 @@ struct MobileBriefingDetailView: View {
     @State private var showingNewThread = false
     @State private var isInitializingGit = false
     @State private var isCreatingPR = false
+    @State private var isCreatingReview = false
 
     // Autopilot context menu (1:1 with the desktop briefing/project menu).
     @State private var autopilotStatus: AutopilotProjectStatus?
@@ -66,7 +67,9 @@ struct MobileBriefingDetailView: View {
                                 branch: isUnknownBranch ? nil : groupKey.branch,
                                 prNumber: ciStatus?.prNumber,
                                 isCreatingPR: isCreatingPR,
-                                onCreatePR: { createPullRequest(project: project) }
+                                onCreatePR: { createPullRequest(project: project) },
+                                isCreatingReview: isCreatingReview,
+                                onCodeReview: { createCodeReview(project: project) }
                             )
                             if gitHubURL != nil { Divider() }
                         }
@@ -119,6 +122,11 @@ struct MobileBriefingDetailView: View {
             isCreatingPR,
             title: "Creating Pull Request…",
             message: "The Mac is pushing the branch and opening the PR."
+        )
+        .mobileAutopilotLoadingDialog(
+            isCreatingReview,
+            title: "Starting Code Review…",
+            message: "The Mac is starting a Code Review thread for this branch."
         )
     }
 
@@ -199,6 +207,27 @@ struct MobileBriefingDetailView: View {
                 )
                 await state.refreshSnapshot()
                 openURL(url)
+            } catch {
+                autopilotInfo = AutopilotMenuInfo(text: error.localizedDescription, isError: true)
+            }
+        }
+    }
+
+    /// Ask the Mac to start a `[Code Review]` thread reviewing this branch, then
+    /// open it once it syncs over. The Mac grounds the review in the branch
+    /// briefing; on failure we surface the reason in the info alert.
+    private func createCodeReview(project: Project) {
+        guard !isCreatingReview, !isUnknownBranch else { return }
+        isCreatingReview = true
+        Task {
+            defer { isCreatingReview = false }
+            do {
+                let threadId = try await state.requestProjectCreateCodeReview(
+                    projectId: project.id,
+                    branch: groupKey.branch
+                )
+                await state.refreshSnapshot()
+                onOpenSession(threadId)
             } catch {
                 autopilotInfo = AutopilotMenuInfo(text: error.localizedDescription, isError: true)
             }

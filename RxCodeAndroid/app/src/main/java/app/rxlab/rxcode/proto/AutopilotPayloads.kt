@@ -106,6 +106,10 @@ enum class AutopilotOp(val wire: String) {
     PROJECT_SECRETS_WRITE("projectSecretsWrite"),
     PROJECT_CREATE_PULL_REQUEST("projectCreatePullRequest"),
 
+    // Code review (desktop-mediated): spawn a `[Code Review]` thread on the Mac.
+    PROJECT_CREATE_CODE_REVIEW("projectCreateCodeReview"),
+    THREAD_CREATE_CODE_REVIEW("threadCreateCodeReview"),
+
     // Global search — one call returns thread matches AND published-docs matches.
     SEARCH_THREADS_AND_DOCS("searchThreadsAndDocs"),
 }
@@ -228,12 +232,16 @@ data class AutopilotProjectBody(
     @Serializable(with = UuidSerializer::class) val projectId: UUID,
 )
 
-/** Addresses a project + branch. Used by `projectCreatePullRequest`. */
+/** Addresses a project + branch. Used by `projectCreatePullRequest` and `projectCreateCodeReview`. */
 @Serializable
 data class AutopilotProjectBranchBody(
     @Serializable(with = UuidSerializer::class) val projectId: UUID,
     val branch: String,
 )
+
+/** Addresses a single thread by id. Used by `threadCreateCodeReview`. */
+@Serializable
+data class AutopilotThreadBody(val sessionId: String)
 
 /**
  * Already-decrypted secret files for `projectSecretsWrite`: the phone decrypts

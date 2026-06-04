@@ -227,6 +227,18 @@ struct ProjectTreeView: View {
         .frame(maxWidth: .infinity)
     }
 
+    /// Resolve the project's current branch and start a `[Code Review]` thread
+    /// reviewing it (grounded in its briefing), then open the new thread.
+    private func startBranchCodeReview(for project: Project) {
+        Task {
+            appState.selectProject(project, in: windowState)
+            guard let branch = await GitHelper.currentBranch(at: project.path), !branch.isEmpty else { return }
+            if let threadId = try? await appState.createCodeReviewForBranch(project: project, branch: branch) {
+                appState.selectSession(id: threadId, in: windowState)
+            }
+        }
+    }
+
     // MARK: - Project List
 
     private var projectList: some View {
@@ -258,6 +270,9 @@ struct ProjectTreeView: View {
                         onNewChat: {
                             appState.selectProject(project, in: windowState)
                             appState.startNewChat(in: windowState)
+                        },
+                        onCodeReview: {
+                            startBranchCodeReview(for: project)
                         },
                         hookMenuItems: appState.projectContextMenuItems(for: project)
                     )
@@ -305,6 +320,7 @@ private struct ProjectTreeRow: View {
     let onRename: () -> Void
     let onDelete: () -> Void
     let onNewChat: () -> Void
+    let onCodeReview: () -> Void
     let hookMenuItems: [HookMenuItem]
 
     @State private var isHovered = false
@@ -450,6 +466,9 @@ private struct ProjectTreeRow: View {
         Button { onOpenInNewWindow() } label: {
             Label("Open in New Window", systemImage: "macwindow.badge.plus")
         }
+        Button { onCodeReview() } label: {
+            Label("Code Review for Current Branch", systemImage: "checklist")
+        }
         if canCreatePR {
             Button { startCreatePR() } label: {
                 Label(creatingPR ? "Creating Pull Request…" : "Create Pull Request",
@@ -506,13 +525,41 @@ private struct ProjectChatsList: View {
     let onDeleteSession: (ChatSession) -> Void
 
     @State private var showsAllThreads = false
+    /// Parent thread ids whose nested review children are currently expanded.
+    @State private var expandedReviewParentIds: Set<String> = []
 
-    private var sessions: [ChatSession.Summary] {
+    /// All non-archived threads for this project, used as the source for the
+    /// parent/child split below.
+    private var allSessions: [ChatSession.Summary] {
         HistoryListView.filteredSummaries(
             from: appState.allSessionSummaries,
             projectId: project.id,
             showArchived: false
         )
+    }
+
+    /// Top-level threads only — review children (`parentThreadId` pointing at a
+    /// thread that is also in this list) are nested under their parent instead.
+    /// A child whose parent isn't here (archived/elsewhere) falls back to the
+    /// top level so it's never hidden.
+    private var sessions: [ChatSession.Summary] {
+        let ids = Set(allSessions.map(\.id))
+        return allSessions.filter { summary in
+            guard let parent = summary.parentThreadId else { return true }
+            return !ids.contains(parent)
+        }
+    }
+
+    /// Review children grouped by their parent thread id, oldest first so they
+    /// number naturally as `Review 1`, `Review 2`, …
+    private var childrenByParent: [String: [ChatSession.Summary]] {
+        let ids = Set(allSessions.map(\.id))
+        let children = allSessions.filter { summary in
+            guard let parent = summary.parentThreadId else { return false }
+            return ids.contains(parent)
+        }
+        return Dictionary(grouping: children, by: { $0.parentThreadId! })
+            .mapValues { $0.sorted { $0.updatedAt < $1.updatedAt } }
     }
 
     private var collapsedVisibleCount: Int {
@@ -545,7 +592,7 @@ private struct ProjectChatsList: View {
                     .padding(.vertical, 4)
             } else {
                 ForEach(visibleSessions) { summary in
-                    chatRow(for: summary)
+                    threadGroup(for: summary)
                         .transition(.asymmetric(
                             insertion: .move(edge: .top).combined(with: .opacity),
                             removal: .move(edge: .top).combined(with: .opacity)
@@ -560,6 +607,60 @@ private struct ProjectChatsList: View {
         }
         .clipped()
         .animation(.easeInOut(duration: 0.18), value: showsAllThreads)
+        .animation(.easeInOut(duration: 0.18), value: expandedReviewParentIds)
+    }
+
+    /// A top-level thread row plus, when expanded, its nested review children.
+    @ViewBuilder
+    private func threadGroup(for summary: ChatSession.Summary) -> some View {
+        let children = childrenByParent[summary.id] ?? []
+        let isExpanded = expandedReviewParentIds.contains(summary.id)
+
+        VStack(alignment: .leading, spacing: 0) {
+            chatRow(for: summary, reviewDisclosure: disclosure(for: summary, children: children))
+
+            if isExpanded {
+                ForEach(Array(children.enumerated()), id: \.element.id) { index, child in
+                    chatRow(
+                        for: child,
+                        indentLevel: 1,
+                        titleOverride: "Review \(index + 1)",
+                        showLabelChip: false
+                    )
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .top).combined(with: .opacity),
+                        removal: .move(edge: .top).combined(with: .opacity)
+                    ))
+                }
+            }
+        }
+    }
+
+    private func disclosure(
+        for summary: ChatSession.Summary,
+        children: [ChatSession.Summary]
+    ) -> ProjectChatRow.ReviewDisclosure? {
+        guard !children.isEmpty else { return nil }
+        let isReviewing = children.contains { child in
+            if case .streaming = appState.chatStatus(forSessionId: child.id, in: windowState) {
+                return true
+            }
+            return false
+        }
+        return ProjectChatRow.ReviewDisclosure(
+            count: children.count,
+            isExpanded: expandedReviewParentIds.contains(summary.id),
+            isReviewing: isReviewing,
+            onToggle: {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    if expandedReviewParentIds.contains(summary.id) {
+                        expandedReviewParentIds.remove(summary.id)
+                    } else {
+                        expandedReviewParentIds.insert(summary.id)
+                    }
+                }
+            }
+        )
     }
 
     private var threadLimitToggle: some View {
@@ -593,7 +694,13 @@ private struct ProjectChatsList: View {
         .help(showsAllThreads ? "Show only the first five threads" : "Show all threads in this project")
     }
 
-    private func chatRow(for summary: ChatSession.Summary) -> some View {
+    private func chatRow(
+        for summary: ChatSession.Summary,
+        indentLevel: Int = 0,
+        titleOverride: String? = nil,
+        showLabelChip: Bool = true,
+        reviewDisclosure: ProjectChatRow.ReviewDisclosure? = nil
+    ) -> some View {
         let sessionId = summary.id
         let session = summary.makeSession()
         let status = appState.chatStatus(forSessionId: sessionId, in: windowState)
@@ -621,7 +728,18 @@ private struct ProjectChatsList: View {
             onDelete: {
                 onDeleteSession(session)
             },
-            hookMenuItems: appState.threadContextMenuItems(for: summary)
+            onCodeReview: {
+                Task {
+                    if let threadId = try? await appState.createCodeReviewForThread(sessionId: sessionId) {
+                        appState.selectSession(id: threadId, in: windowState)
+                    }
+                }
+            },
+            hookMenuItems: appState.threadContextMenuItems(for: summary),
+            indentLevel: indentLevel,
+            titleOverride: titleOverride,
+            showLabelChip: showLabelChip,
+            reviewDisclosure: reviewDisclosure
         )
     }
 }

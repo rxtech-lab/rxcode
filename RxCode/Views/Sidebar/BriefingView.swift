@@ -627,6 +627,19 @@ struct BriefingView: View {
             && appState.ciStatusByProject[group.projectId]?.prNumber != nil
     }
 
+    /// Start a `[Code Review]` thread reviewing the whole branch (grounded in
+    /// its briefing) and open it, mirroring the project/thread review menus.
+    private func startCodeReview(for group: BriefingGroup, project: Project) {
+        Task {
+            if windowState.selectedProject?.id != project.id {
+                appState.selectProject(project, in: windowState)
+            }
+            if let threadId = try? await appState.createCodeReviewForBranch(project: project, branch: group.branch) {
+                appState.selectSession(id: threadId, in: windowState)
+            }
+        }
+    }
+
     private func cardMenu(for group: BriefingGroup, project: Project) -> some View {
         Menu {
             Button {
@@ -644,6 +657,14 @@ struct BriefingView: View {
                 }
             } label: {
                 Label("Open Project", systemImage: "folder")
+            }
+
+            Divider()
+
+            Button {
+                startCodeReview(for: group, project: project)
+            } label: {
+                Label("Code Review for \(group.branch)", systemImage: "checklist")
             }
 
             let hookItems = appState.projectContextMenuItems(for: project)

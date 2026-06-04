@@ -9,6 +9,7 @@ import app.rxlab.rxcode.proto.AutopilotCIFrequencyBody
 import app.rxlab.rxcode.proto.AutopilotCIHistoryBody
 import app.rxlab.rxcode.proto.AutopilotCloneRepoBody
 import app.rxlab.rxcode.proto.AutopilotCloneRepoResult
+import app.rxlab.rxcode.proto.AutopilotCodeReviewResult
 import app.rxlab.rxcode.proto.AutopilotCursorQuery
 import app.rxlab.rxcode.proto.AutopilotDocsCreateTokenBody
 import app.rxlab.rxcode.proto.AutopilotDocsDocBody
@@ -19,6 +20,7 @@ import app.rxlab.rxcode.proto.AutopilotIDBody
 import app.rxlab.rxcode.proto.AutopilotOp
 import app.rxlab.rxcode.proto.AutopilotProjectBody
 import app.rxlab.rxcode.proto.AutopilotProjectBranchBody
+import app.rxlab.rxcode.proto.AutopilotThreadBody
 import app.rxlab.rxcode.proto.AutopilotProjectSecretsDownloadResult
 import app.rxlab.rxcode.proto.AutopilotProjectSecretsWriteBody
 import app.rxlab.rxcode.proto.AutopilotProjectStatus
@@ -481,6 +483,32 @@ class AutopilotService(
                 encodeBody(AutopilotProjectBranchBody(projectId, branch)),
             )
         ).url
+
+    /**
+     * Ask the Mac to start a `[Code Review]` thread reviewing the whole branch
+     * (grounded in its briefing). Returns the new thread id so the phone can
+     * navigate to it once it syncs over.
+     */
+    suspend fun requestProjectCreateCodeReview(projectId: UUID, branch: String): String =
+        decodeResult<AutopilotCodeReviewResult>(
+            rawCall(
+                AutopilotDomain.PROJECT, AutopilotOp.PROJECT_CREATE_CODE_REVIEW,
+                encodeBody(AutopilotProjectBranchBody(projectId, branch)),
+            )
+        ).threadId
+
+    /**
+     * Ask the Mac to start a `[Code Review]` thread reviewing a single thread's
+     * changes (the manual equivalent of the built-in Code Review hook). Returns
+     * the new review thread's id.
+     */
+    suspend fun requestThreadCreateCodeReview(sessionId: String): String =
+        decodeResult<AutopilotCodeReviewResult>(
+            rawCall(
+                AutopilotDomain.PROJECT, AutopilotOp.THREAD_CREATE_CODE_REVIEW,
+                encodeBody(AutopilotThreadBody(sessionId)),
+            )
+        ).threadId
 
     /**
      * Relay already-decrypted secret files for the Mac to write into the project

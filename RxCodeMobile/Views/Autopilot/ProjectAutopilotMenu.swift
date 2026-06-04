@@ -51,6 +51,10 @@ struct ProjectAutopilotMenuItems: View {
     var prNumber: Int? = nil
     var isCreatingPR: Bool = false
     var onCreatePR: () -> Void = {}
+    /// Code-review support (mirrors the desktop briefing/project "Code Review"
+    /// menu). Spawns a `[Code Review]` thread on the Mac reviewing the branch.
+    var isCreatingReview: Bool = false
+    var onCodeReview: () -> Void = {}
 
     var body: some View {
         // Mirror the desktop guard: no repo → no autopilot items.
@@ -61,6 +65,7 @@ struct ProjectAutopilotMenuItems: View {
             docsItem(status)
             releaseItem(status)
             createPRItem()
+            codeReviewItem()
         } else {
             Button {} label: {
                 Label("Loading Autopilot…", systemImage: "hourglass")
@@ -138,6 +143,21 @@ struct ProjectAutopilotMenuItems: View {
                 Label("Create Pull Request", systemImage: "arrow.triangle.pull.request")
             }
             .disabled(isCreatingPR)
+        }
+    }
+
+    @ViewBuilder
+    private func codeReviewItem() -> some View {
+        // Offer a branch-wide code review for any real branch (mirrors the
+        // desktop briefing/project "Code Review" menu); the Mac spawns a
+        // `[Code Review]` thread that reviews the branch diff.
+        if let branch, branch.lowercased() != "unknown" {
+            Button {
+                onCodeReview()
+            } label: {
+                Label("Code Review for \(branch)", systemImage: "checklist")
+            }
+            .disabled(isCreatingReview)
         }
     }
 }

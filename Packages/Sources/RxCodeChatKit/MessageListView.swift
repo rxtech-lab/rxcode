@@ -5,6 +5,12 @@ import os
 
 #if os(macOS)
 
+nonisolated enum MessageListViewScrollPolicy {
+    static func shouldRequestLiveBottomScroll(wasAtBottom: Bool) -> Bool {
+        wasAtBottom
+    }
+}
+
 /// Message scroll area — extracted from ChatView to isolate @Observable
 /// dependencies on `messages`.
 ///
@@ -376,7 +382,7 @@ struct MessageListView: View {
 
     private func requestScrollToBottomIfAtBottom(_ atBottom: Bool? = nil) {
         let shouldFollowBottom = atBottom ?? isAtBottom
-        guard shouldFollowBottom else {
+        guard MessageListViewScrollPolicy.shouldRequestLiveBottomScroll(wasAtBottom: shouldFollowBottom) else {
             logScrollState("scrollToBottom.skippedNotAtBottom")
             return
         }

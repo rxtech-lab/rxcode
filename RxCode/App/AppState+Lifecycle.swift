@@ -234,6 +234,8 @@ extension AppState {
         // CLI is still the transcript backend (replay on thread open), but
         // it does not drive thread discovery.
         allSessionSummaries = threadStore.loadAllSummaries()
+        // Restore persisted code-review verdicts so sidebar review dots survive a reload.
+        reviewPassedBySession = threadStore.loadReviewVerdicts()
         autoArchiveExpiredSessionsIfNeeded()
         await autoDeleteExpiredSessionsIfNeeded()
         purgeStaleBranchBriefingsIfNeeded()

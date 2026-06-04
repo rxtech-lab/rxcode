@@ -285,6 +285,8 @@ final class AppStateHookController: HookController {
 
     func setReviewPassed(_ passed: Bool, sessionId: String) {
         app?.reviewPassedBySession[sessionId] = passed
+        // Persist on the thread row so the sidebar review dot survives a reload.
+        app?.threadStore.setReviewPassed(sessionId: sessionId, passed: passed)
     }
 
     func reviewPassed(sessionId: String) -> Bool? {

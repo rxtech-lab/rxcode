@@ -72,6 +72,8 @@ public final class MarkdownImageCache: @unchecked Sendable {
 public struct MarkdownView: View {
     public typealias LinkHandler = (URL) -> OpenURLAction.Result
 
+    private static let newTextFadeDuration: Duration = .milliseconds(650)
+
     private let text: String
     private let showsTrailingCursor: Bool
     private let isCursorVisible: Bool
@@ -166,10 +168,10 @@ public struct MarkdownView: View {
         fadeTasks[segment.id] = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(16))
             guard !Task.isCancelled else { return }
-            withAnimation(.easeOut(duration: 0.85)) {
+            withAnimation(.easeOut(duration: Self.newTextFadeDuration.timeInterval)) {
                 setFadeSegmentOpacity(id: segment.id, opacity: 1)
             }
-            try? await Task.sleep(for: .milliseconds(850))
+            try? await Task.sleep(for: Self.newTextFadeDuration)
             guard !Task.isCancelled else { return }
             fadeSegments.removeAll { $0.id == segment.id }
             fadeTasks[segment.id] = nil
@@ -524,6 +526,13 @@ private extension Range where Bound == Int {
 
     func clampedLength(to length: Int) -> Range<Int> {
         lowerBound..<Swift.min(upperBound, lowerBound + length)
+    }
+}
+
+private extension Duration {
+    var timeInterval: TimeInterval {
+        let components = components
+        return TimeInterval(components.seconds) + TimeInterval(components.attoseconds) / 1_000_000_000_000_000_000
     }
 }
 

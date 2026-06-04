@@ -5,13 +5,19 @@ import os
 
 #if os(macOS)
 
+nonisolated enum MessageListViewScrollPolicy {
+    static func shouldRequestLiveBottomScroll(wasAtBottom: Bool) -> Bool {
+        wasAtBottom
+    }
+}
+
 /// Message scroll area — extracted from ChatView to isolate @Observable
 /// dependencies on `messages`.
 ///
-/// Behavior: the transcript stays anchored to the bottom. A freshly opened
-/// thread, a new send, and a streaming response all keep the latest message in
-/// view. `AutoScrollAnchor` releases that anchor only when the user deliberately
-/// scrolls up; `scrollPhase` keeps auto-scroll from fighting an active drag.
+/// Behavior: freshly opened threads and new sends bring the latest turn into
+/// view. Live assistant updates follow the bottom only while the user is still
+/// at the bottom, so reading older messages is not interrupted by streaming
+/// deltas or the streaming-to-settled handoff.
 struct MessageListView: View {
     @Environment(ChatBridge.self) private var chatBridge
     @Environment(WindowState.self) private var windowState
@@ -166,7 +172,7 @@ struct MessageListView: View {
             }
             .onChange(of: chatBridge.messages.last?.content) { _, _ in
                 guard isSessionReady else { return }
-                requestScrollToBottom()
+                requestScrollToBottomIfAtBottom()
             }
             .onChange(of: isSessionReady) { _, new in
                 Self.log.info("[MessageList.ready] isSessionReady=\(new) sid=\(windowState.currentSessionId ?? "<nil>", privacy: .public) settled=\(settledItems.count)")
@@ -195,7 +201,7 @@ struct MessageListView: View {
         if chatBridge.isStreaming {
             rebuildSettledItems()
             if !isSessionReady { isSessionReady = true }
-            requestScrollToBottom()
+            requestScrollToBottomIfAtBottom()
             Self.log.info("[MessageList.task] streaming-path settled=\(settledItems.count) sid=\(sid, privacy: .public)")
             return
         }
@@ -256,18 +262,22 @@ struct MessageListView: View {
 
     private func handleStreamingChange(old: Bool, new: Bool) {
         logScrollState("streamingChange", extra: "old=\(old) new=\(new) lastRole=\(chatBridge.messages.last?.role.rawValue ?? "<nil>")")
+        let wasAtBottom = isAtBottom
         // Only react when streaming ends — the settled list doesn't change at start.
         guard old && !new else {
-            requestScrollToBottom()
+            requestScrollToBottomIfAtBottom(wasAtBottom)
             return
         }
         pendingIndicatorSpacerReduction = 0
         rebuildSettledItems()
-        anchor.resetToBottom()
         // The just-finished turn moves out of `StreamingMessageView` and into
         // the settled list. That row handoff makes the scroll content reload and can
-        // momentarily snap the offset; re-assert the bottom across the handoff.
-        requestScrollToBottom()
+        // momentarily snap the offset. Re-assert the bottom only if the user was
+        // still following the bottom before the handoff.
+        if wasAtBottom {
+            anchor.resetToBottom()
+            requestScrollToBottom()
+        }
     }
 
     // MARK: - Helpers
@@ -337,11 +347,12 @@ struct MessageListView: View {
 
     private func handleLastMessageChange() {
         guard isSessionReady, !chatBridge.isLoadingFromDisk else { return }
+        let wasAtBottom = isAtBottom
         rebuildSettledItems()
         guard let last = chatBridge.messages.last else { return }
         logScrollState("lastMessageChange", extra: "lastRole=\(last.role.rawValue) lastID=\(last.id.uuidString)")
         if last.role != .user {
-            requestScrollToBottom()
+            requestScrollToBottomIfAtBottom(wasAtBottom)
         }
     }
 
@@ -367,6 +378,15 @@ struct MessageListView: View {
             guard !Task.isCancelled else { return }
             shouldScrollToBottom = true
         }
+    }
+
+    private func requestScrollToBottomIfAtBottom(_ atBottom: Bool? = nil) {
+        let shouldFollowBottom = atBottom ?? isAtBottom
+        guard MessageListViewScrollPolicy.shouldRequestLiveBottomScroll(wasAtBottom: shouldFollowBottom) else {
+            logScrollState("scrollToBottom.skippedNotAtBottom")
+            return
+        }
+        requestScrollToBottom()
     }
 
     /// Returns the last consecutive assistant sequence (including streaming turn) while streaming.

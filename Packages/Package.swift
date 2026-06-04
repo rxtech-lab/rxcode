@@ -9,13 +9,12 @@ let package = Package(
         .library(name: "MessageList", targets: ["MessageList"]),
         .library(name: "RxCodeCore", targets: ["RxCodeCore"]),
         .library(name: "RxCodeChatKit", targets: ["RxCodeChatKit"]),
+        .library(name: "RxCodeMarkdown", targets: ["RxCodeMarkdown"]),
         .library(name: "RxCodeSync", targets: ["RxCodeSync"]),
         .library(name: "DiffView", targets: ["DiffView"]),
     ],
     dependencies: [
         .package(url: "https://github.com/nalexn/ViewInspector", from: "0.10.0"),
-        .package(url: "https://github.com/gonzalezreal/textual", from: "0.3.1"),
-        .package(url: "https://github.com/gonzalezreal/swift-markdown-ui", from: "2.4.1"),
     ],
     targets: [
         .target(
@@ -30,13 +29,16 @@ let package = Package(
             path: "Sources/RxCodeCore"
         ),
         .target(
+            name: "RxCodeMarkdown",
+            path: "Sources/RxCodeMarkdown"
+        ),
+        .target(
             name: "RxCodeChatKit",
             dependencies: [
                 "DiffView",
                 "MessageList",
                 "RxCodeCore",
-                .product(name: "Textual", package: "textual"),
-                .product(name: "MarkdownUI", package: "swift-markdown-ui"),
+                "RxCodeMarkdown",
             ],
             path: "Sources/RxCodeChatKit",
             resources: [
@@ -85,6 +87,11 @@ let package = Package(
                 .product(name: "ViewInspector", package: "ViewInspector"),
             ],
             path: "Tests/RxCodeChatKitTests"
+        ),
+        .testTarget(
+            name: "RxCodeMarkdownTests",
+            dependencies: ["RxCodeMarkdown"],
+            path: "Tests/RxCodeMarkdownTests"
         ),
         .testTarget(
             name: "RxCodeSyncTests",

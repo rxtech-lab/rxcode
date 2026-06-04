@@ -137,7 +137,7 @@ struct BashEnvironmentEditor: View {
             } else {
                 ForEach(preset.wrappedValue.manualVars.indices, id: \.self) { i in
                     HStack(spacing: 8) {
-                        TextField("API_KEY", text: Binding(
+                        TextField("Key", text: Binding(
                             get: { preset.wrappedValue.manualVars[i].key },
                             set: { preset.wrappedValue.manualVars[i].key = $0 }
                         ))

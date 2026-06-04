@@ -23,6 +23,15 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 Set `NEXT_PUBLIC_GOOGLE_ANALYTICS_ID` to enable Google Analytics page-view
 tracking and CTA click events.
 
+Set `NEXT_PUBLIC_APP_STORE_URL` to show the public App Store download badge in
+the mobile companion section.
+
+Set `NEXT_PUBLIC_IOS_EXTERNAL_TESTFLIGHT_URL` to show a TestFlight download
+button for the iOS external test.
+
+Set `NEXT_PUBLIC_GOOGLE_PLAY_EXTERNAL_TEST_URL` to show a Google Play download
+button for the Android external test.
+
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
 ## Learn More

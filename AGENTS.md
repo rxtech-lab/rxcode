@@ -39,7 +39,7 @@ Project notes:
 - Swift tools version: 6.2
 - Main app bundle ID: `com.rxlab.RxCode`
 - App-level dependencies: SwiftTerm and Sparkle
-- Package dependencies: ViewInspector, Textual, and MarkdownUI
+- Package dependencies: ViewInspector
 
 ## Repository Layout
 

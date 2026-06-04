@@ -241,6 +241,54 @@ body {
   font-weight: 600;
 }
 
+.legal-content {
+  color: var(--color-on-surface);
+  line-height: 1.7;
+  font-size: 1rem;
+}
+
+.legal-content > :first-child {
+  margin-top: 0;
+}
+
+.legal-content h2 {
+  font-family: var(--font-display);
+  font-size: 1.45rem;
+  font-weight: 600;
+  color: var(--color-on-surface);
+  margin-top: 1.8em;
+  margin-bottom: 0.65em;
+  padding-bottom: 0.35em;
+  border-bottom: 1px solid var(--color-surface-variant);
+}
+
+.legal-content p {
+  margin: 0.9em 0;
+  color: var(--color-on-surface-variant);
+}
+
+.legal-content a {
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--color-primary) 40%, transparent);
+  text-underline-offset: 3px;
+}
+
+.legal-content a:hover {
+  text-decoration-color: var(--color-primary);
+}
+
+.legal-content ul,
+.legal-content ol {
+  margin: 0.75em 0;
+  padding-left: 1.4em;
+  color: var(--color-on-surface-variant);
+}
+
+.legal-content li {
+  margin: 0.35em 0;
+}
+
 /* --- Agent collaboration diagram --- */
 @keyframes agent-stream {
   to {

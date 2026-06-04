@@ -89,6 +89,13 @@ public struct MessageList<Message: MessageListItem, RowContent: View>: View {
 
                     tailMarker
                     bottomLoadTrigger
+                    // The tail spacer is sized so that `turnHeight + spacer == viewport`
+                    // (see `pinTailSpacerHeight`). The bottom anchor therefore sits BELOW
+                    // the spacer: scrolling to it places the spacer's end at the viewport
+                    // bottom, which is exactly the position where the latest user message
+                    // rests at the top with the reserved space filling the rest. As the
+                    // turn grows the spacer shrinks toward zero, at which point the same
+                    // anchor naturally follows the streaming response.
                     pinTailSpacer
                     bottomAnchor
                 }
@@ -99,7 +106,6 @@ public struct MessageList<Message: MessageListItem, RowContent: View>: View {
                 geometry.size.height
             } action: { height in
                 scrollViewHeight = height
-                updateActiveTurnMaxMeasuredHeight()
             }
             .onScrollGeometryChange(for: MessageListScrollMetrics.self) { geometry in
                 MessageListScrollMetrics(
@@ -205,7 +211,14 @@ public struct MessageList<Message: MessageListItem, RowContent: View>: View {
     }
 
     private var pinTailSpacerHeight: CGFloat {
-        guard pinning.isPinningUserMessage, scrollViewHeight > 0 else { return 0 }
+        // Persistent reservation: as long as there is a latest user message, reserve
+        // `viewport - turnHeight` at the bottom so the turn (latest user message →
+        // end of content) can rest at the top of the viewport. This is keyed off the
+        // tracked user message — NOT the transient `isPinningUserMessage` flag — so the
+        // reserved space survives scrolling and the pin "releasing"; it only collapses
+        // naturally as the turn grows to fill the viewport, or when the latest user
+        // message changes (which resets the measurement to the new turn).
+        guard pinning.pinnedUserMessageID != nil, scrollViewHeight > 0 else { return 0 }
         return max(0, scrollViewHeight - activeTurnHeight - MessageListConstants.minimumPinnedTailSpacing)
     }
 
@@ -214,7 +227,10 @@ public struct MessageList<Message: MessageListItem, RowContent: View>: View {
     }
 
     private var activeTurnHeight: CGFloat {
-        max(activeTurnMaxMeasuredHeight, rawActiveTurnMeasuredHeight)
+        // Use only the settled, ratcheted height (committed from `handleScrollMetrics`).
+        // Mixing in the live `rawActiveTurnMeasuredHeight` here would let a mid-frame
+        // desync between the two geometry anchors momentarily shrink the spacer.
+        activeTurnMaxMeasuredHeight
     }
 
     private var pinnedTurnFillsViewport: Bool {
@@ -265,6 +281,16 @@ public struct MessageList<Message: MessageListItem, RowContent: View>: View {
         )
         updateIsAtBottomBinding(anchor.isNearBottom)
 
+        // Commit the active-turn height here rather than from the per-row geometry
+        // callbacks. This callback fires once the scroll view's geometry has settled
+        // for the frame, so `latestUserMinY` and `tailMarkerMinY` are guaranteed to
+        // reflect the same layout pass. Reading them from the individual row
+        // callbacks could capture a transient state where one anchor moved (e.g. a
+        // lazy row above the turn was just realized while scrolling) but the other
+        // had not — which would ratchet a bogus height and permanently collapse the
+        // reserved tail spacer.
+        updateActiveTurnMaxMeasuredHeight()
+
         if shouldReleasePinnedUserMessageForFilledTurn, !isUserDrivenScroll {
             releasePinnedUserMessage(proxy: proxy)
         }
@@ -295,6 +321,15 @@ public struct MessageList<Message: MessageListItem, RowContent: View>: View {
         newToken: MessageListChangeToken<Message.ID>,
         proxy: ScrollViewProxy
     ) {
+        // Drop a stale pin if its message is no longer present (e.g. switching
+        // sessions or deleting messages). The persistent tail spacer is keyed off
+        // `pinnedUserMessageID`, so a dangling id would otherwise reserve space for a
+        // message that no longer exists.
+        if let pinnedID = pinning.pinnedUserMessageID,
+           !messages.contains(where: { $0.id == pinnedID }) {
+            clearPinnedUserMessage()
+        }
+
         let latestContentItem = latestContentItem
         if oldToken.latestUserMessageID != newToken.latestUserMessageID,
            let latestUserMessageID = newToken.latestUserMessageID,
@@ -324,6 +359,13 @@ public struct MessageList<Message: MessageListItem, RowContent: View>: View {
     }
 
     private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool) {
+        // While reserved spacing exists below the latest turn, the content already fits
+        // in the viewport — a follow/auto scroll would only pull the empty reserved
+        // space into view and shove the turn around. Only scroll once the turn has
+        // outgrown the viewport (no spacing left). The one scroll that is allowed to
+        // move into the reserved area is the initial turn placement, which goes through
+        // `scrollLatestTurnIntoView` (a direct `proxy.scrollTo`), not this path.
+        guard pinTailSpacerHeight <= 0 else { return }
         if animated {
             withAnimation(.easeInOut(duration: MessageListConstants.scrollAnimationSeconds)) {
                 proxy.scrollTo(MessageListConstants.bottomAnchorID, anchor: .bottom)
@@ -359,7 +401,15 @@ public struct MessageList<Message: MessageListItem, RowContent: View>: View {
         return UInt64(delay * 1_000_000_000)
     }
 
-    private func pinUserMessageToTop(_ id: Message.ID, proxy: ScrollViewProxy, animated: Bool) {
+    /// Positions the latest user turn by scrolling to the bottom anchor — NOT by
+    /// scrolling the user message to the top. Because the tail spacer is sized so that
+    /// `turnHeight + spacer == viewport`, scrolling to the bottom anchor lands the
+    /// latest user message at the top with the reserved space filling the rest. Using
+    /// the bottom anchor here (the same target the auto-scroll uses) means the two
+    /// never fight: a separate `scrollTo(userMessage, .top)` would disagree with the
+    /// auto-scroll whenever the spacer hadn't settled yet, which caused the visible
+    /// jump when a new message was added.
+    private func scrollLatestTurnIntoView(proxy: ScrollViewProxy, animated: Bool) {
         bottomScrollTask?.cancel()
         bottomScrollTask = nil
         pinTask?.cancel()
@@ -371,17 +421,20 @@ public struct MessageList<Message: MessageListItem, RowContent: View>: View {
 
             if animated {
                 withAnimation(.easeInOut(duration: MessageListConstants.pinAnimationSeconds)) {
-                    proxy.scrollTo(id, anchor: .top)
+                    proxy.scrollTo(MessageListConstants.bottomAnchorID, anchor: .bottom)
                 }
                 try? await Task.sleep(for: MessageListConstants.pinAnimationDuration)
             }
 
+            // Re-assert across several frames so the position tracks the tail spacer
+            // as it settles to its final size (the turn height is measured a frame or
+            // two after the freshly-added content lays out).
             for _ in 0..<8 {
                 guard !Task.isCancelled else { return }
                 var transaction = Transaction()
                 transaction.animation = nil
                 withTransaction(transaction) {
-                    proxy.scrollTo(id, anchor: .top)
+                    proxy.scrollTo(MessageListConstants.bottomAnchorID, anchor: .bottom)
                 }
                 try? await Task.sleep(for: .milliseconds(16))
             }
@@ -418,12 +471,17 @@ public struct MessageList<Message: MessageListItem, RowContent: View>: View {
             break
         case .clearPin:
             clearPinnedUserMessage()
-        case .pinUserMessageToTop(let id):
+        case .pinUserMessageToTop:
             resetPinnedTurnMeasurements()
             canReleasePinnedUserMessageByScroll = false
-            pinUserMessageToTop(id, proxy: proxy, animated: true)
-        case .repinUserMessageToTop(let id):
-            pinUserMessageToTop(id, proxy: proxy, animated: false)
+            scrollLatestTurnIntoView(proxy: proxy, animated: true)
+        case .repinUserMessageToTop:
+            // New streaming content arrived. While the reserved spacing still absorbs
+            // the growth, the turn stays put on its own — re-asserting the scroll would
+            // just cause an unnecessary jump. Only re-position once the spacing is gone.
+            if pinTailSpacerHeight <= 0 {
+                scrollLatestTurnIntoView(proxy: proxy, animated: false)
+            }
         case .releasePinAndScrollToBottom:
             releasePinnedUserMessage(proxy: proxy)
         case .scrollToBottom:
@@ -444,7 +502,6 @@ public struct MessageList<Message: MessageListItem, RowContent: View>: View {
         withTransaction(transaction) {
             latestUserMinY = value
         }
-        updateActiveTurnMaxMeasuredHeight()
     }
 
     private func updateTailMarkerMinY(_ value: CGFloat) {
@@ -454,11 +511,12 @@ public struct MessageList<Message: MessageListItem, RowContent: View>: View {
         withTransaction(transaction) {
             tailMarkerMinY = value
         }
-        updateActiveTurnMaxMeasuredHeight()
     }
 
     private func updateActiveTurnMaxMeasuredHeight() {
-        guard pinning.isPinningUserMessage else { return }
+        // Keep measuring the turn height while a latest user message is tracked, even
+        // after the pin "releases", so the persistent tail spacer stays correctly sized.
+        guard pinning.pinnedUserMessageID != nil else { return }
         let measured = rawActiveTurnMeasuredHeight
         guard measured > activeTurnMaxMeasuredHeight + 0.5 else { return }
         var transaction = Transaction()

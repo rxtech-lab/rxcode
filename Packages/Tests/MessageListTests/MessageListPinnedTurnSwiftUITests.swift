@@ -7,8 +7,8 @@ import ViewInspector
 @MainActor
 @Suite("MessageList pinned turn SwiftUI behavior")
 struct MessageListPinnedTurnSwiftUITests {
-    @Test("Pinned user message releases when streaming content fills the reserved space")
-    func pinnedUserMessageReleasesWhenStreamingContentFillsReservedSpace() async throws {
+    @Test("Streaming content that fills the reserved space keeps the list following the bottom")
+    func streamingContentFillingReservedSpaceFollowsBottom() async throws {
         let model = MessageListPinnedTurnModel()
         let view = MessageListPinnedTurnHarness(model: model)
 
@@ -19,23 +19,27 @@ struct MessageListPinnedTurnSwiftUITests {
         )
         defer { ViewHosting.expel(function: #function) }
 
+        // A fresh user message pins to the top with reserved space below it.
         model.messages = [
             .init(text: "user", isUserMessage: true, height: 44),
         ]
 
         try await Task.sleep(for: .milliseconds(450))
-        model.shouldObserveRelease = true
+
+        // The streaming response grows the turn until it outgrows the viewport,
+        // collapsing the reserved space. The pin releases and the list must keep
+        // following the bottom — it must not be stranded above the bottom.
         model.messages.append(contentsOf: [
             .init(text: "assistant 1", isUserMessage: false, height: 88),
             .init(text: "assistant 2", isUserMessage: false, height: 88),
             .init(text: "assistant 3", isUserMessage: false, height: 88),
         ])
 
-        try await waitUntil(timeout: .seconds(2)) {
-            model.observedBottomRelease
-        }
+        // Let the layout settle after the turn fills the viewport, then assert the
+        // list reports it is following the bottom rather than stranded.
+        try await Task.sleep(for: .milliseconds(600))
 
-        #expect(model.observedBottomRelease)
+        #expect(model.isAtBottom)
     }
 }
 
@@ -43,15 +47,6 @@ struct MessageListPinnedTurnSwiftUITests {
 private final class MessageListPinnedTurnModel: ObservableObject {
     @Published var messages: [MessageListPinnedTurnMessage] = []
     @Published var isAtBottom = false
-    var shouldObserveRelease = false
-    var observedBottomRelease = false
-
-    func updateIsAtBottom(_ value: Bool) {
-        isAtBottom = value
-        if shouldObserveRelease, value {
-            observedBottomRelease = true
-        }
-    }
 }
 
 private struct MessageListPinnedTurnHarness: View {
@@ -63,7 +58,7 @@ private struct MessageListPinnedTurnHarness: View {
             isStreaming: true,
             isAtBottom: Binding(
                 get: { model.isAtBottom },
-                set: { model.updateIsAtBottom($0) }
+                set: { model.isAtBottom = $0 }
             )
         ) { message in
             Text(message.text)
@@ -77,20 +72,5 @@ private struct MessageListPinnedTurnMessage: MessageListItem {
     let text: String
     let isUserMessage: Bool
     let height: CGFloat
-}
-
-private func waitUntil(
-    timeout: Duration,
-    interval: Duration = .milliseconds(20),
-    condition: @MainActor @escaping () -> Bool
-) async throws {
-    let start = ContinuousClock.now
-    while !(await condition()) {
-        if ContinuousClock.now - start >= timeout {
-            Issue.record("Timed out waiting for condition")
-            return
-        }
-        try await Task.sleep(for: interval)
-    }
 }
 #endif

@@ -6601,6 +6601,28 @@
         }
       }
     },
+    "hook.pullRequest.creating" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Creating pull request…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "풀 리퀘스트 생성 중…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在创建拉取请求…"
+          }
+        }
+      }
+    },
     "hook.secrets.downloading" : {
       "localizations" : {
         "en" : {

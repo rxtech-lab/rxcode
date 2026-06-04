@@ -286,8 +286,14 @@ private struct MarkdownDocumentView: View {
     }
 
     private func opacity(for range: Range<Int>) -> Double {
+        // A block-level element fades in only when it first appears. We key the
+        // fade off the segment containing the block's start offset rather than
+        // any overlapping segment. Otherwise, appending content to an existing
+        // block during streaming (e.g. new table rows or code lines) keeps
+        // overlapping the newest fade segment and re-fades the whole block on
+        // every chunk — which shows up as the block blinking repeatedly.
         fadeSegments
-            .filter { $0.range.overlaps(range) }
+            .filter { $0.range.contains(range.lowerBound) }
             .map(\.opacity)
             .min() ?? 1
     }

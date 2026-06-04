@@ -77,6 +77,7 @@ struct ProjectWindowView: View {
         .onAppear {
             windowState.isProjectWindow = true
         }
+        .hookUI()
         .sheet(item: Bindable(windowState).inspectorFile) { file in
             FileInspectorView(filePath: file.path, fileName: file.name)
                 .frame(minWidth: 1000, idealWidth: 1400, maxWidth: 1920,

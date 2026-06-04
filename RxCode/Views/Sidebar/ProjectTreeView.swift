@@ -475,8 +475,12 @@ private struct ProjectTreeRow: View {
     private func startCreatePR() {
         guard !creatingPR else { return }
         creatingPR = true
+        appState.hookProgressStatus = "hook.pullRequest.creating"
         Task { @MainActor in
-            defer { creatingPR = false }
+            defer {
+                creatingPR = false
+                appState.hookProgressStatus = nil
+            }
             do {
                 let url = try await appState.createPullRequestForCurrentBranch(project: project)
                 NSWorkspace.shared.open(url)

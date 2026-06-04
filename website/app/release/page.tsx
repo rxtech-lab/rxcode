@@ -265,6 +265,18 @@ function Footer() {
           </span>
         </div>
         <nav className="flex flex-wrap gap-6 text-sm">
+          <Link
+            href="/privacy"
+            className="text-on-surface-variant hover:text-primary transition-colors"
+          >
+            Privacy
+          </Link>
+          <Link
+            href="/user-agreement"
+            className="text-on-surface-variant hover:text-primary transition-colors"
+          >
+            User Agreement
+          </Link>
           <a
             href={GITHUB_REPO_URL}
             target="_blank"

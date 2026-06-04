@@ -1878,6 +1878,7 @@
       }
     },
     "API_KEY" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -7304,6 +7305,9 @@
           }
         }
       }
+    },
+    "Key" : {
+
     },
     "KEY" : {
       "localizations" : {

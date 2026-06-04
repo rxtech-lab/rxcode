@@ -6,7 +6,9 @@ export const isGoogleAnalyticsEnabled = Boolean(GOOGLE_ANALYTICS_ID);
 
 export type AnalyticsEventName =
   | "download_button_click"
-  | "app_store_button_click";
+  | "app_store_button_click"
+  | "testflight_button_click"
+  | "google_play_button_click";
 
 type AnalyticsEventParams = Record<string, string | number | boolean | null>;
 
@@ -54,4 +56,3 @@ export function trackAnalyticsEvent(
 
   window.gtag?.("event", eventName, params);
 }
-

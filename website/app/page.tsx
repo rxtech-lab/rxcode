@@ -433,6 +433,13 @@ function FeatureCard({
 
 function MobileCompanion() {
   const appStoreUrl = process.env.NEXT_PUBLIC_APP_STORE_URL?.trim();
+  const iosExternalTestFlightUrl =
+    process.env.NEXT_PUBLIC_IOS_EXTERNAL_TESTFLIGHT_URL?.trim();
+  const googlePlayExternalTestUrl =
+    process.env.NEXT_PUBLIC_GOOGLE_PLAY_EXTERNAL_TEST_URL?.trim();
+  const hasMobileDownloadLinks = Boolean(
+    appStoreUrl || iosExternalTestFlightUrl || googlePlayExternalTestUrl
+  );
 
   return (
     <section
@@ -472,25 +479,74 @@ function MobileCompanion() {
               </li>
             ))}
           </ul>
-          {appStoreUrl ? (
-            <TrackedLink
-              href={appStoreUrl}
-              analyticsEventName="app_store_button_click"
-              analyticsLabel="Download on the App Store"
-              analyticsLocation="mobile_companion"
-              target="_blank"
-              rel="noreferrer"
-              className="mt-8 inline-block w-fit hover:opacity-85 transition-opacity active:scale-95"
-            >
-              <Image
-                src="/download-appstore.svg"
-                alt="Download on the App Store"
-                width={540}
-                height={160}
-                unoptimized
-                className="h-[52px] w-auto"
-              />
-            </TrackedLink>
+          {hasMobileDownloadLinks ? (
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              {appStoreUrl ? (
+                <TrackedLink
+                  href={appStoreUrl}
+                  analyticsEventName="app_store_button_click"
+                  analyticsLabel="Download on the App Store"
+                  analyticsLocation="mobile_companion"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-block w-fit hover:opacity-85 transition-opacity active:scale-95"
+                >
+                  <Image
+                    src="/download-appstore.svg"
+                    alt="Download on the App Store"
+                    width={540}
+                    height={160}
+                    unoptimized
+                    className="h-[52px] w-auto"
+                  />
+                </TrackedLink>
+              ) : null}
+              {iosExternalTestFlightUrl ? (
+                <TrackedLink
+                  href={iosExternalTestFlightUrl}
+                  analyticsEventName="testflight_button_click"
+                  analyticsLabel="Download iOS external test on TestFlight"
+                  analyticsLocation="mobile_companion"
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="Download iOS external test on TestFlight"
+                  className="group inline-flex h-[52px] w-[176px] items-center gap-3 rounded-[7px] border border-[#a6a6a6] bg-black px-3.5 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] transition-[opacity,transform,box-shadow] hover:opacity-85 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.16)] active:scale-95"
+                >
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#0a84ff] text-white">
+                    <TestFlightLogo className="h-6 w-6" />
+                  </span>
+                  <span className="flex flex-col items-start leading-none">
+                    <span className="text-[9px] tracking-wide text-white/85">
+                      Join beta on
+                    </span>
+                    <span className="mt-1 font-sans text-[20px] font-semibold tracking-normal">
+                      TestFlight
+                    </span>
+                  </span>
+                </TrackedLink>
+              ) : null}
+              {googlePlayExternalTestUrl ? (
+                <TrackedLink
+                  href={googlePlayExternalTestUrl}
+                  analyticsEventName="google_play_button_click"
+                  analyticsLabel="Download Android external test on Google Play"
+                  analyticsLocation="mobile_companion"
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="Download Android external test on Google Play"
+                  className="inline-block w-fit hover:opacity-85 transition-opacity active:scale-95"
+                >
+                  <Image
+                    src="/download-google-play.svg"
+                    alt="Get it on Google Play"
+                    width={540}
+                    height={160}
+                    unoptimized
+                    className="h-[52px] w-auto"
+                  />
+                </TrackedLink>
+              ) : null}
+            </div>
           ) : null}
         </div>
         <div className="grid grid-cols-2 gap-4 sm:gap-5">
@@ -569,6 +625,18 @@ function Footer() {
           </span>
         </div>
         <nav className="flex flex-wrap gap-6 text-sm">
+          <Link
+            href="/privacy"
+            className="text-on-surface-variant hover:text-primary transition-colors"
+          >
+            Privacy
+          </Link>
+          <Link
+            href="/user-agreement"
+            className="text-on-surface-variant hover:text-primary transition-colors"
+          >
+            User Agreement
+          </Link>
           <a
             href={GITHUB_REPO_URL}
             target="_blank"
@@ -612,6 +680,41 @@ function AppleIcon({ className = "" }: { className?: string }) {
       aria-hidden="true"
     >
       <path d="M16.365 1.43c0 1.14-.42 2.24-1.18 3.04-.78.82-2.06 1.46-3.1 1.38-.13-1.12.43-2.28 1.16-3.04.82-.86 2.22-1.5 3.12-1.38Zm3.95 16.94c-.55 1.26-1.18 2.46-2.07 3.5-1.04 1.22-2.07 2.04-3.34 2.04-1.22 0-1.57-.78-3.13-.78-1.6 0-1.98.76-3.18.8-1.28.04-2.42-1.04-3.45-2.26-2.16-2.56-3.82-7.24-1.6-10.4 1.1-1.56 3.05-2.54 5.13-2.58 1.4-.04 2.74.94 3.6.94.84 0 2.46-1.16 4.16-.98.72.04 2.66.3 3.92 2.22-.1.08-2.34 1.36-2.3 4.06.04 3.22 2.84 4.32 2.86 4.34-.02.08-.42 1.44-1.4 2.94Z" />
+    </svg>
+  );
+}
+
+function TestFlightLogo({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      fill="none"
+      aria-hidden="true"
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="8.25"
+        stroke="currentColor"
+        strokeWidth="1.7"
+      />
+      <circle
+        cx="12"
+        cy="12"
+        r="3.15"
+        stroke="currentColor"
+        strokeWidth="1.7"
+      />
+      <path
+        d="M12 8.85V4.5M15.15 13.85l3.77 2.18M8.85 13.85l-3.77 2.18"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+      />
+      <circle cx="12" cy="4.5" r="1.1" fill="currentColor" />
+      <circle cx="18.92" cy="16.03" r="1.1" fill="currentColor" />
+      <circle cx="5.08" cy="16.03" r="1.1" fill="currentColor" />
     </svg>
   );
 }

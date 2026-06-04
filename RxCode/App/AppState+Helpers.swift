@@ -263,7 +263,13 @@ extension AppState {
             worktreePath: summary?.worktreePath,
             worktreeBranch: summary?.worktreeBranch,
             isArchived: summary?.isArchived ?? false,
-            archivedAt: summary?.archivedAt
+            archivedAt: summary?.archivedAt,
+            // Preserve review-thread linkage. Without this, re-saving a finished
+            // `[Code Review]` child wipes its `parentThreadId`, un-nesting it from
+            // the parent and making the sidebar disclosure control disappear.
+            parentThreadId: summary?.parentThreadId,
+            threadLabel: summary?.threadLabel,
+            skipHooks: summary?.skipHooks ?? false
         )
 
         do {

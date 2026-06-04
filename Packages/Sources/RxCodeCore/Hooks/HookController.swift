@@ -22,8 +22,10 @@ public protocol HookController: AnyObject {
     func completeCard(_ handle: HookCardHandle, sessionKey: String, result: String, isError: Bool)
 
     /// Persist a session's "last hook" so the synthetic card can be rebuilt on
-    /// reload (hook cards never reach the CLI transcript).
-    func persistHookStatus(sessionKey: String, toolId: String, name: String, trigger: String, output: String, isError: Bool)
+    /// reload (hook cards never reach the CLI transcript). Pass `isComplete:
+    /// false` at insert time for a long-running hook so an in-progress card
+    /// survives a reload; call again with `isComplete: true` on completion.
+    func persistHookStatus(sessionKey: String, toolId: String, name: String, trigger: String, output: String, isError: Bool, isComplete: Bool)
 
     /// Enabled user hook profiles for a project + trigger, loading from disk on
     /// first access.

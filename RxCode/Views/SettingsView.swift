@@ -11,12 +11,14 @@ struct SettingsView: View {
     @State private var selectedTab = 0
     @State private var showUserManual = false
     @State private var showOnboarding = false
+    @State private var showWhatsNew = false
 
     var body: some View {
         TabView(selection: $selectedTab) {
             GeneralSettingsTab(
                 showUserManual: $showUserManual,
-                showOnboarding: $showOnboarding
+                showOnboarding: $showOnboarding,
+                showWhatsNew: $showWhatsNew
             )
             .tabItem {
                 Label("General", systemImage: "slider.horizontal.3")
@@ -82,6 +84,12 @@ struct SettingsView: View {
             }
             .environment(appState)
         }
+        .sheet(isPresented: $showWhatsNew) {
+            WhatsNewSheet(features: WhatsNewFeature.all) {
+                showWhatsNew = false
+            }
+            .environment(appState)
+        }
     }
 }
 
@@ -91,6 +99,7 @@ struct GeneralSettingsTab: View {
     @Environment(AppState.self) private var appState
     @Binding var showUserManual: Bool
     @Binding var showOnboarding: Bool
+    @Binding var showWhatsNew: Bool
     @State private var showThemePicker = false
     @AppStorage("showMenuBarExtra") private var showMenuBarExtra: Bool = true
 
@@ -116,6 +125,7 @@ struct GeneralSettingsTab: View {
                 Divider()
                 VStack(alignment: .leading, spacing: 8) {
                     onboardingSection
+                    whatsNewSection
                     helpSection
                     sourceCodeSection
                 }
@@ -388,6 +398,39 @@ struct GeneralSettingsTab: View {
                         .font(.system(size: ClaudeTheme.size(13)))
                         .foregroundStyle(.primary)
                     Text("Review the CLI setup check")
+                        .font(.system(size: ClaudeTheme.size(11)))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(Color(NSColor.controlBackgroundColor))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var whatsNewSection: some View {
+        Button {
+            showWhatsNew = true
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "wand.and.stars")
+                    .font(.system(size: ClaudeTheme.size(14)))
+                    .frame(width: 20)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("What's New")
+                        .font(.system(size: ClaudeTheme.size(13)))
+                        .foregroundStyle(.primary)
+                    Text("See the latest features and updates")
                         .font(.system(size: ClaudeTheme.size(11)))
                         .foregroundStyle(.secondary)
                 }

@@ -27,6 +27,16 @@ extension AppState {
     /// the sidebar review UI).
     static let manualCodeReviewLabel = "Code Review"
 
+    /// Session ids of `[Code Review]` threads (manual or hook-spawned),
+    /// identified by their thread label. Used to keep review threads out of
+    /// briefings — both desktop and the mobile snapshot — even for summaries
+    /// persisted before review threads were excluded at write time.
+    var codeReviewThreadIds: Set<String> {
+        Set(allSessionSummaries
+            .filter { $0.threadLabel == Self.manualCodeReviewLabel }
+            .map(\.id))
+    }
+
     // MARK: - Branch-level review
 
     /// Start a `[Code Review]` thread that reviews *all* the changes on `branch`,

@@ -78,6 +78,10 @@ extension AppState {
         }
         guard !alreadyPresent else { return messages }
 
+        // A still-running record (e.g. a code review in flight) rebuilds as a
+        // spinner: `result == nil` drives the "running" hook card in
+        // `ToolResultView`. It's finalized live by `completeCard` (matched on
+        // tool id) or swept to "interrupted" on the next launch.
         let toolCall = ToolCall(
             id: record.toolId,
             name: Self.hookToolName(for: record.name),
@@ -85,7 +89,7 @@ extension AppState {
                 "name": .string(record.name),
                 "trigger": .string(record.trigger),
             ],
-            result: record.output,
+            result: record.isComplete ? record.output : nil,
             isError: record.isError
         )
         var result = messages
@@ -93,7 +97,7 @@ extension AppState {
             id: UUID(),
             role: .assistant,
             blocks: [.toolCall(toolCall)],
-            isResponseComplete: true,
+            isResponseComplete: record.isComplete,
             timestamp: record.updatedAt
         ))
         return result

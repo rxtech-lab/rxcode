@@ -161,7 +161,8 @@ struct MainView: View {
                 // is active, clear the terminal; otherwise open global search.
                 if showRightSidebar,
                    windowState.inspectorMode == .inspector,
-                   windowState.inspectorTab == .terminal {
+                   windowState.inspectorTab == .terminal
+                {
                     windowState.clearTerminalRequest = UUID()
                 } else {
                     windowState.showGlobalSearch.toggle()
@@ -343,7 +344,8 @@ struct MainView: View {
             // the docs-publishing skill into its system prompt on first send.
             if let projectId = request.projectId,
                let project = appState.projects.first(where: { $0.id == projectId }),
-               windowState.selectedProject?.id != projectId {
+               windowState.selectedProject?.id != projectId
+            {
                 appState.selectProject(project, in: windowState)
             }
             appState.pendingDocsSetupProjectId = request.projectId ?? windowState.selectedProject?.id
@@ -364,7 +366,8 @@ struct MainView: View {
             // injects the release skill into its system prompt on first send.
             if let projectId = request.projectId,
                let project = appState.projects.first(where: { $0.id == projectId }),
-               windowState.selectedProject?.id != projectId {
+               windowState.selectedProject?.id != projectId
+            {
                 appState.selectProject(project, in: windowState)
             }
             appState.pendingReleaseSetupProjectId = request.projectId ?? windowState.selectedProject?.id

@@ -11,18 +11,53 @@ struct GlassThreadCard: View {
     /// When false, uses Button with onSelect callback for selection-based navigation (iPad).
     var usesNavigationLink: Bool = true
     var onSelect: (() -> Void)?
-    
+    /// Nesting depth; review children render one level in from their parent.
+    var indentLevel: Int = 0
+    /// Replaces the thread title (e.g. `"Review 1"` for a nested review child).
+    var titleOverride: String? = nil
+    /// Whether to show the `threadLabel` chip (hidden on review children since
+    /// the nesting already conveys what they are).
+    var showLabelChip: Bool = true
+
+    // MARK: Review disclosure (Android-parity, in-card leading control)
+
+    /// Number of nested code-review children this thread owns. Zero means no
+    /// disclosure control is shown.
+    var reviewCount: Int = 0
+    /// Whether the nested reviews are currently expanded.
+    var isReviewExpanded: Bool = false
+    /// Whether any nested review is actively streaming (shows a spinner instead
+    /// of the count).
+    var isReviewStreaming: Bool = false
+    /// Toggles review expansion. When non-nil, an in-card disclosure control is
+    /// rendered at the leading edge (mirrors Android's `SessionCard`).
+    var onToggleReviews: (() -> Void)?
+
     @Environment(\.colorScheme) private var colorScheme
-    
+
     private var displayTitle: String {
+        if let titleOverride, !titleOverride.isEmpty { return titleOverride }
         let cleaned = ChatSession.stripAttachmentMarkers(from: session.title)
         return cleaned.isEmpty ? ChatSession.defaultTitle : cleaned
     }
-    
+
     var body: some View {
-        // The UI-test identifier is applied directly on the button of each
-        // branch — applying it to an enclosing container does not reach the
-        // button element XCUITest queries.
+        Group {
+            if let onToggleReviews {
+                cardWithDisclosure(onToggleReviews: onToggleReviews)
+            } else {
+                plainCard
+            }
+        }
+        .padding(.leading, CGFloat(indentLevel) * 28)
+    }
+
+    /// Standard card: the whole surface is one navigable button.
+    /// The UI-test identifier is applied directly on the button of each branch —
+    /// applying it to an enclosing container does not reach the button element
+    /// XCUITest queries.
+    @ViewBuilder
+    private var plainCard: some View {
         if usesNavigationLink {
             NavigationLink(value: session.id) {
                 cardContent
@@ -38,6 +73,70 @@ struct GlassThreadCard: View {
             .buttonStyle(GlassCardButtonStyle(isSelected: isSelected))
             .accessibilityIdentifier("thread-row-\(session.id)")
         }
+    }
+
+    /// Parent card with nested reviews: a leading disclosure control and the
+    /// navigable content sit side by side as independent tap targets sharing one
+    /// glass surface (SwiftUI can't reliably nest a button inside a button, so
+    /// they're siblings rather than nested). Mirrors Android's `SessionCard`.
+    private func cardWithDisclosure(onToggleReviews: @escaping () -> Void) -> some View {
+        HStack(spacing: 0) {
+            disclosureControl(onToggle: onToggleReviews)
+                .padding(.leading, 12)
+
+            navigableContent
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(isSelected ? ClaudeTheme.accent.opacity(0.15) : .clear)
+        }
+        .glassEffect(
+            isSelected
+                ? .regular.tint(ClaudeTheme.accent.opacity(0.3)).interactive()
+                : .regular.interactive(),
+            in: .rect(cornerRadius: 16)
+        )
+    }
+
+    @ViewBuilder
+    private var navigableContent: some View {
+        if usesNavigationLink {
+            NavigationLink(value: session.id) { cardContent }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("thread-row-\(session.id)")
+        } else {
+            Button { onSelect?() } label: { cardContent }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("thread-row-\(session.id)")
+        }
+    }
+
+    /// Leading chevron + review-count column, tappable independently of the row.
+    private func disclosureControl(onToggle: @escaping () -> Void) -> some View {
+        Button {
+            onToggle()
+        } label: {
+            VStack(spacing: 2) {
+                Image(systemName: isReviewExpanded ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 12, weight: .bold))
+                if isReviewStreaming {
+                    ProgressView()
+                        .controlSize(.mini)
+                        .scaleEffect(0.7)
+                } else {
+                    Text("\(reviewCount)")
+                        .font(.system(size: 10, weight: .bold))
+                        .monospacedDigit()
+                }
+            }
+            .foregroundStyle(ClaudeTheme.accent)
+            .frame(width: 22)
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isReviewExpanded ? "Hide code reviews" : "Show \(reviewCount) code reviews")
     }
     
     private var cardContent: some View {
@@ -60,7 +159,7 @@ struct GlassThreadCard: View {
                         .foregroundStyle(.primary)
                         .lineLimit(1)
 
-                    if let label = session.threadLabel, !label.isEmpty {
+                    if showLabelChip, let label = session.threadLabel, !label.isEmpty {
                         Text(label)
                             .font(.system(size: 10, weight: .semibold))
                             .foregroundStyle(ClaudeTheme.accent)

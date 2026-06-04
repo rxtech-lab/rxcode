@@ -443,7 +443,7 @@ extension AppState {
     func mobileThreadSummaries() -> [MobileThreadSummary] {
         let knownProjectIds = Set(projects.map(\.id))
         // Exclude `[Code Review]` threads — they aren't briefing threads.
-        let reviewIds = threadStore.codeReviewThreadIds(label: Self.manualCodeReviewLabel)
+        let reviewIds = codeReviewThreadIds
         return threadStore.allThreadSummaryItems()
             .filter { knownProjectIds.contains($0.projectId) && !reviewIds.contains($0.sessionId) }
             .map {

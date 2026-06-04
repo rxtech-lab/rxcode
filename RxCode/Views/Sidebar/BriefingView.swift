@@ -57,7 +57,7 @@ struct BriefingView: View {
     /// any summaries persisted before that exclusion existed.
     private func visibleThreadSummaryItems() -> [ThreadSummaryItem] {
         let knownIds = knownProjectIds
-        let reviewIds = appState.threadStore.codeReviewThreadIds(label: AppState.manualCodeReviewLabel)
+        let reviewIds = appState.codeReviewThreadIds
         return appState.threadStore.allThreadSummaryItems()
             .filter { knownIds.contains($0.projectId) && !reviewIds.contains($0.sessionId) }
     }

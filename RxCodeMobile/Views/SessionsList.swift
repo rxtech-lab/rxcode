@@ -401,38 +401,19 @@ struct SessionsList: View {
             .mapValues { $0.sorted { $0.updatedAt < $1.updatedAt } }
     }
 
-    /// A top-level thread row. When it has review children, an attached
-    /// disclosure bar hangs beneath it and reveals the nested reviews — every
-    /// top-level card stays aligned to the same leading edge.
+    /// A top-level thread row. When it owns review children, an in-card leading
+    /// disclosure control (chevron + count) toggles the nested reviews — mirrors
+    /// Android's `SessionCard`. Every card stays full-width and left-aligned.
     @ViewBuilder
     private func threadGroup(for session: SessionSummary) -> some View {
         let children = childrenByParent[session.id] ?? []
+        let isExpanded = expandedReviewParentIds.contains(session.id)
 
-        if children.isEmpty {
-            threadCard(for: session)
-        } else {
-            let isExpanded = expandedReviewParentIds.contains(session.id)
+        threadCard(for: session, reviewChildren: children, isReviewExpanded: isExpanded)
 
-            VStack(spacing: 6) {
-                threadCard(for: session)
-                reviewDisclosureBar(for: session, children: children, isExpanded: isExpanded)
-
-                if isExpanded {
-                    VStack(spacing: 8) {
-                        ForEach(Array(children.enumerated()), id: \.element.id) { index, child in
-                            threadCard(for: child, indentLevel: 1, titleOverride: "Review \(index + 1)")
-                        }
-                    }
-                    .overlay(alignment: .leading) {
-                        // Vertical rail visually tying the reviews to their parent.
-                        Capsule()
-                            .fill(ClaudeTheme.accent.opacity(0.25))
-                            .frame(width: 2)
-                            .padding(.vertical, 6)
-                            .padding(.leading, 12)
-                    }
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                }
+        if isExpanded {
+            ForEach(Array(children.enumerated()), id: \.element.id) { index, child in
+                threadCard(for: child, indentLevel: 1, titleOverride: "Review \(index + 1)")
             }
         }
     }
@@ -440,7 +421,9 @@ struct SessionsList: View {
     private func threadCard(
         for session: SessionSummary,
         indentLevel: Int = 0,
-        titleOverride: String? = nil
+        titleOverride: String? = nil,
+        reviewChildren: [SessionSummary] = [],
+        isReviewExpanded: Bool = false
     ) -> some View {
         GlassThreadCard(
             session: session,
@@ -449,7 +432,11 @@ struct SessionsList: View {
             onSelect: usesSelection ? { selected = session.id } : nil,
             indentLevel: indentLevel,
             titleOverride: titleOverride,
-            showLabelChip: indentLevel == 0
+            showLabelChip: indentLevel == 0,
+            reviewCount: reviewChildren.count,
+            isReviewExpanded: isReviewExpanded,
+            isReviewStreaming: reviewChildren.contains { $0.isStreaming },
+            onToggleReviews: reviewChildren.isEmpty ? nil : { toggleReviews(for: session.id) }
         )
         .glassEffectID(session.id, in: glassNamespace)
         .onAppear {
@@ -460,59 +447,14 @@ struct SessionsList: View {
         }
     }
 
-    /// A slim, full-width control attached beneath a parent thread that owns
-    /// code reviews. Replaces the old chevron badge that floated in the left
-    /// margin and knocked every parent card out of alignment.
-    private func reviewDisclosureBar(
-        for session: SessionSummary,
-        children: [SessionSummary],
-        isExpanded: Bool
-    ) -> some View {
-        let isStreaming = children.contains { $0.isStreaming }
-        let countLabel = "\(children.count) \(children.count == 1 ? "Code Review" : "Code Reviews")"
-
-        return Button {
-            withAnimation(.easeInOut(duration: 0.2)) {
-                if expandedReviewParentIds.contains(session.id) {
-                    expandedReviewParentIds.remove(session.id)
-                } else {
-                    expandedReviewParentIds.insert(session.id)
-                }
+    private func toggleReviews(for parentID: String) {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            if expandedReviewParentIds.contains(parentID) {
+                expandedReviewParentIds.remove(parentID)
+            } else {
+                expandedReviewParentIds.insert(parentID)
             }
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "checklist")
-                    .font(.system(size: 12, weight: .semibold))
-
-                Text(countLabel)
-                    .font(.system(size: 13, weight: .semibold))
-
-                if isStreaming {
-                    ProgressView()
-                        .controlSize(.mini)
-                        .scaleEffect(0.8)
-                }
-
-                Spacer(minLength: 0)
-
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 11, weight: .bold))
-                    .rotationEffect(.degrees(isExpanded ? 0 : -90))
-            }
-            .foregroundStyle(ClaudeTheme.accent)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 9)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(ClaudeTheme.accent.opacity(0.08))
-            }
-            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
-        .buttonStyle(.plain)
-        // Indented under the parent's content to read as its child.
-        .padding(.leading, 28)
-        .accessibilityLabel(isExpanded ? "Hide code reviews" : "Show \(children.count) code reviews")
     }
 
     private var usesDesktopSearch: Bool {

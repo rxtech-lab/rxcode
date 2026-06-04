@@ -41,21 +41,28 @@ final class AppStateHookController: HookController {
 
     func completeCard(_ handle: HookCardHandle, sessionKey: String, result: String, isError: Bool) {
         app?.updateState(sessionKey) { state in
-            guard let idx = state.messages.firstIndex(where: { $0.id == handle.messageId }) else { return }
+            // Match by message id OR tool id: after a mid-run reload the card may
+            // have been rebuilt from the persisted record with a fresh message id
+            // but the same tool id, and we still want completion to land live.
+            guard let idx = state.messages.firstIndex(where: { message in
+                message.id == handle.messageId
+                    || message.blocks.contains { $0.toolCall?.id == handle.toolId }
+            }) else { return }
             state.messages[idx].setToolResult(id: handle.toolId, result: result, isError: isError)
             state.messages[idx].isStreaming = false
             state.messages[idx].isResponseComplete = true
         }
     }
 
-    func persistHookStatus(sessionKey: String, toolId: String, name: String, trigger: String, output: String, isError: Bool) {
+    func persistHookStatus(sessionKey: String, toolId: String, name: String, trigger: String, output: String, isError: Bool, isComplete: Bool) {
         app?.threadStore.setHookStatus(
             sessionId: sessionKey,
             toolId: toolId,
             name: name,
             trigger: trigger,
             output: output,
-            isError: isError
+            isError: isError,
+            isComplete: isComplete
         )
     }
 
@@ -157,9 +164,11 @@ final class AppStateHookController: HookController {
                 threadId: nil,
                 prompt: prompt,
                 model: model,
-                // Plan mode keeps the reviewer read-only (no edits) and runs
-                // unattended without permission prompts.
-                permissionMode: .plan,
+                // Auto mode lets the reviewer run unattended, bypassing almost
+                // all permission prompts so it can freely inspect the repo (read
+                // files, grep, run checks). The prompt still instructs it not to
+                // edit; it just isn't gated on per-tool approvals like plan mode.
+                permissionMode: .auto,
                 waitForResponse: true,
                 timeoutSeconds: timeoutSeconds,
                 parentThreadId: parentThreadId,

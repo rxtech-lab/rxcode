@@ -36,6 +36,11 @@ final class CommitPushHook: Hook {
 
         guard payload.reason == .completed, !payload.turnDidError else { return .ignored }
 
+        // Defer while the user still has queued messages — they'll run as further
+        // turns, so don't commit a half-finished change. The next stop (queue
+        // drained) triggers the commit.
+        if payload.hasQueuedFollowups { return .ignored }
+
         // Review gate: when a Code Review hook is also configured, only commit if
         // the latest review passed.
         let reviewConfigured = await controller.enabledHookProfiles(projectId: payload.project.id, trigger: .afterSessionStop)

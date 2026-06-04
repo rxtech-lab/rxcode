@@ -698,6 +698,11 @@ extension AppState {
                     let markUnread = !isFg && !resultEvent.isError
 
                     let stopProject = projects.first(where: { $0.id == projectId })
+                    // Capture queued-followup state now, synchronously, before
+                    // `finalizeStreamSession` schedules the auto-flush that pops
+                    // the next queued message. Stop hooks (review/commit) use this
+                    // to defer until the queue has fully drained.
+                    let hasQueuedFollowups = !threadStore.loadQueue(sessionKey: sessionKey).isEmpty
 
                     finalizeStreamSession(for: sessionKey) { state in
                         if let cost = resultEvent.totalCostUsd { state.costUsd = cost }
@@ -726,7 +731,8 @@ extension AppState {
                             sessionId: resultEvent.sessionId,
                             reason: .completed,
                             turnDidError: resultEvent.isError,
-                            lastAssistantText: lastAssistantResponseText(in: stateForSession(sessionKey).messages)
+                            lastAssistantText: lastAssistantResponseText(in: stateForSession(sessionKey).messages),
+                            hasQueuedFollowups: hasQueuedFollowups
                         ))
                         if stopResult.hasError {
                             stopHookFailureOutput = stopResult.combinedOutput
@@ -762,6 +768,18 @@ extension AppState {
                         reconcileFromDisk(sessionId: resultEvent.sessionId, projectId: projectId, cwd: cwd)
                     }
 
+                    // Whether this turn was the synthetic commit/push follow-up the
+                    // Commit & Push hook injected. Captured BEFORE the after-stop
+                    // dispatch below, which is where CommitPushHook consumes the
+                    // marker. A hook-injected turn's last "user" message is the
+                    // commit prompt, not the user's words — summarizing or
+                    // extracting memories from it pollutes the briefing/memories
+                    // with "Commit the changes from this session…" boilerplate.
+                    let wasHookInjectedTurn = isSetupSession(
+                        kind: HookSetupKind.commitPush,
+                        sessionKey: sessionKey
+                    )
+
                     // After-session-stop hooks: shown only, not re-saved. This
                     // dispatch also drives the response-complete notification
                     // (ResponseNotificationHook), which self-suppresses unless
@@ -773,7 +791,8 @@ extension AppState {
                             sessionId: resultEvent.sessionId,
                             reason: .completed,
                             turnDidError: resultEvent.isError,
-                            lastAssistantText: lastAssistantResponseText(in: stateForSession(sessionKey).messages)
+                            lastAssistantText: lastAssistantResponseText(in: stateForSession(sessionKey).messages),
+                            hasQueuedFollowups: hasQueuedFollowups
                         ))
                     }
 
@@ -801,17 +820,23 @@ extension AppState {
                         // ResponseNotificationHook via the after-session-end
                         // dispatch above.
 
-                        scheduleThreadSummaryUpdate(
-                            sessionId: resultEvent.sessionId,
-                            projectId: projectId,
-                            cwd: cwd,
-                            messages: stateForSession(sessionKey).messages
-                        )
-                        scheduleMemoryExtraction(
-                            sessionId: resultEvent.sessionId,
-                            projectId: projectId,
-                            messages: stateForSession(sessionKey).messages
-                        )
+                        // Skip summary/memory updates for the hook-injected
+                        // commit & push turn — its last user message is the
+                        // commit prompt, not the user's, and would otherwise
+                        // leak into the thread summary and extracted memories.
+                        if !wasHookInjectedTurn {
+                            scheduleThreadSummaryUpdate(
+                                sessionId: resultEvent.sessionId,
+                                projectId: projectId,
+                                cwd: cwd,
+                                messages: stateForSession(sessionKey).messages
+                            )
+                            scheduleMemoryExtraction(
+                                sessionId: resultEvent.sessionId,
+                                projectId: projectId,
+                                messages: stateForSession(sessionKey).messages
+                            )
+                        }
 
                         // If this session is running in the background, automatically process any queued messages.
                         // Foreground sessions are handled by InputBarView via isStreaming onChange.

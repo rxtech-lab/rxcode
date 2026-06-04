@@ -104,6 +104,9 @@ struct ProjectChatRow: View {
     /// the nesting already conveys what they are).
     var showLabelChip: Bool = true
     var reviewDisclosure: ReviewDisclosure? = nil
+    /// Latest code-review verdict for this thread: `true` passed, `false` found
+    /// issues, `nil` not reviewed (no icon shown).
+    var reviewPassed: Bool? = nil
 
     @State private var isHovered = false
 
@@ -150,6 +153,10 @@ struct ProjectChatRow: View {
             }
 
             Spacer(minLength: 4)
+
+            if let reviewPassed {
+                reviewVerdictIcon(passed: reviewPassed)
+            }
 
             if summary.isPinned {
                 Image(systemName: "pin.fill")
@@ -227,6 +234,17 @@ struct ProjectChatRow: View {
         case .idle, .streaming:
             EmptyView()
         }
+    }
+
+    /// Code-review verdict badge: a green check when the latest review passed,
+    /// a red exclamation when it found issues.
+    @ViewBuilder
+    private func reviewVerdictIcon(passed: Bool) -> some View {
+        Image(systemName: passed ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+            .font(.system(size: ClaudeTheme.size(11), weight: .semibold))
+            .foregroundStyle(passed ? ClaudeTheme.statusSuccess : ClaudeTheme.statusError)
+            .help(passed ? "Code review passed" : "Code review found issues")
+            .accessibilityLabel(passed ? "Code review passed" : "Code review found issues")
     }
 
     /// Leading chevron that expands/collapses the nested review children, plus a

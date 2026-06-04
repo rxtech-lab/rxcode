@@ -739,7 +739,8 @@ private struct ProjectChatsList: View {
             indentLevel: indentLevel,
             titleOverride: titleOverride,
             showLabelChip: showLabelChip,
-            reviewDisclosure: reviewDisclosure
+            reviewDisclosure: reviewDisclosure,
+            reviewPassed: appState.reviewPassedBySession[sessionId]
         )
     }
 }

@@ -7,8 +7,8 @@ import os
 /// AppState is the only caller; all reads/writes happen on the main actor.
 @MainActor
 final class ThreadStore {
-    private let logger = Logger(subsystem: "com.claudework", category: "ThreadStore")
-    private let context: ModelContext
+    let logger = Logger(subsystem: "com.claudework", category: "ThreadStore")
+    let context: ModelContext
 
     init(context: ModelContext) {
         self.context = context
@@ -105,17 +105,6 @@ final class ThreadStore {
             sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
         )
         return ((try? context.fetch(descriptor)) ?? []).map { $0.toItem() }
-    }
-
-    /// Session ids of `[Code Review]` threads (manual or hook-spawned),
-    /// identified by their thread label. Used to keep review threads out of
-    /// briefings even for summaries persisted before review threads were
-    /// excluded at write time. Filters in memory rather than via `#Predicate`
-    /// to avoid SwiftData's optional-vs-non-optional comparison pitfalls on the
-    /// optional `threadLabel`.
-    func codeReviewThreadIds(label: String) -> Set<String> {
-        let rows = (try? context.fetch(FetchDescriptor<ChatThread>())) ?? []
-        return Set(rows.filter { $0.threadLabel == label }.map { $0.id })
     }
 
     func branchBriefingItem(projectId: UUID, branch: String) -> BranchBriefingItem? {
@@ -821,151 +810,7 @@ final class ThreadStore {
         for row in rows { context.delete(row) }
     }
 
-    // MARK: - Memories
-
-    func loadAllMemories() -> [MemoryRecord] {
-        let descriptor = FetchDescriptor<MemoryRecord>(
-            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
-        )
-        return (try? context.fetch(descriptor)) ?? []
-    }
-
-    func loadAllMemorySnapshots() -> [MemoryVectorSnapshot] {
-        loadAllMemories().map { $0.toVectorSnapshot() }
-    }
-
-    func fetchMemory(id: String) -> MemoryRecord? {
-        var descriptor = FetchDescriptor<MemoryRecord>(predicate: #Predicate { $0.id == id })
-        descriptor.fetchLimit = 1
-        return (try? context.fetch(descriptor))?.first
-    }
-
-    func upsertMemory(
-        id: String?,
-        content: String,
-        projectId: UUID?,
-        sessionId: String?,
-        sourceMessageId: UUID?,
-        kind: String,
-        scope: String,
-        vector: Data,
-        dim: Int
-    ) -> MemoryItem {
-        let memoryId = id ?? UUID().uuidString
-        let now = Date()
-        if let existing = fetchMemory(id: memoryId) {
-            existing.apply(
-                content: content,
-                projectId: projectId,
-                sessionId: sessionId,
-                sourceMessageId: sourceMessageId,
-                kind: kind,
-                scope: scope,
-                vector: vector,
-                dim: dim,
-                updatedAt: now
-            )
-            save()
-            return existing.toItem()
-        } else {
-            let row = MemoryRecord(
-                id: memoryId,
-                content: content,
-                projectId: projectId,
-                sessionId: sessionId,
-                sourceMessageId: sourceMessageId,
-                createdAt: now,
-                updatedAt: now,
-                kind: kind,
-                scope: scope,
-                vector: vector,
-                dim: dim
-            )
-            context.insert(row)
-            save()
-            return row.toItem()
-        }
-    }
-
-    func touchMemories(ids: [String], at date: Date = .now) {
-        guard !ids.isEmpty else { return }
-        for id in ids {
-            fetchMemory(id: id)?.touch(at: date)
-        }
-        save()
-    }
-
-    func deleteMemory(id: String) {
-        guard let row = fetchMemory(id: id) else { return }
-        context.delete(row)
-        save()
-    }
-
-    func deleteAllMemories(projectId: UUID? = nil) {
-        if let projectId {
-            deleteMemoryRows(projectId: projectId)
-        } else {
-            let rows = (try? context.fetch(FetchDescriptor<MemoryRecord>())) ?? []
-            for row in rows { context.delete(row) }
-        }
-        save()
-    }
-
-    private func deleteMemoryRows(projectId: UUID) {
-        let descriptor = FetchDescriptor<MemoryRecord>(
-            predicate: #Predicate { $0.projectId == projectId }
-        )
-        let rows = (try? context.fetch(descriptor)) ?? []
-        for row in rows { context.delete(row) }
-    }
-
-    // MARK: - Thread Embedding Chunks
-
-    func loadAllEmbeddingChunks() -> [ThreadEmbeddingChunk] {
-        let descriptor = FetchDescriptor<ThreadEmbeddingChunk>()
-        return (try? context.fetch(descriptor)) ?? []
-    }
-
-    func loadEmbeddingChunks(threadId: String) -> [ThreadEmbeddingChunk] {
-        let descriptor = FetchDescriptor<ThreadEmbeddingChunk>(
-            predicate: #Predicate { $0.threadId == threadId },
-            sortBy: [SortDescriptor(\.chunkIndex, order: .forward)]
-        )
-        return (try? context.fetch(descriptor)) ?? []
-    }
-
-    /// Replace all chunks for a thread atomically. Old rows are deleted first
-    /// so re-indexing cannot leave orphans behind.
-    func replaceEmbeddingChunks(threadId: String, chunks: [ThreadEmbeddingChunk]) {
-        deleteEmbeddingChunkRows(threadId: threadId)
-        for chunk in chunks {
-            context.insert(chunk)
-        }
-        save()
-    }
-
-    func deleteEmbeddingChunks(threadId: String) {
-        deleteEmbeddingChunkRows(threadId: threadId)
-        save()
-    }
-
-    /// Wipe every persisted embedding chunk across all threads.
-    func deleteAllEmbeddingChunks() {
-        let descriptor = FetchDescriptor<ThreadEmbeddingChunk>()
-        let rows = (try? context.fetch(descriptor)) ?? []
-        for row in rows { context.delete(row) }
-        save()
-    }
-
-    private func deleteEmbeddingChunkRows(threadId: String) {
-        let descriptor = FetchDescriptor<ThreadEmbeddingChunk>(
-            predicate: #Predicate { $0.threadId == threadId }
-        )
-        let rows = (try? context.fetch(descriptor)) ?? []
-        for row in rows { context.delete(row) }
-    }
-
-    private func save() {
+    func save() {
         guard context.hasChanges else { return }
         do { try context.save() }
         catch { logger.error("Save failed: \(error.localizedDescription)") }

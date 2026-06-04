@@ -48,6 +48,7 @@
 		DFA0CCD22FB4CC01005991E1 /* PlanCardViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA0CCC12FB4CC01005991E1 /* PlanCardViewTests.swift */; };
 		DFA0CCD42FB4CC01005991E1 /* RxCodeChatKit in Frameworks */ = {isa = PBXBuildFile; productRef = DFA0CCC32FB4CC01005991E1 /* RxCodeChatKit */; };
 		DFA0CCE12FB4CC02005991E1 /* HistoryListArchiveFilterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA0CCD52FB4CC02005991E1 /* HistoryListArchiveFilterTests.swift */; };
+		DFA8E3B42FD1A27F00F33E7F /* SDWebImageSVGCoder in Frameworks */ = {isa = PBXBuildFile; productRef = DFA8E3B32FD1A27F00F33E7F /* SDWebImageSVGCoder */; };
 		DFAA00012FCD34B3002D9562 /* JSONSchema in Frameworks */ = {isa = PBXBuildFile; productRef = DFAA00022FCD34B3002D9562 /* JSONSchema */; };
 		DFAA01102FCD34B3002D9562 /* JSONSchema in Frameworks */ = {isa = PBXBuildFile; productRef = DFAA01112FCD34B3002D9562 /* JSONSchema */; };
 		E62000012FCB000100000001 /* MemoryIntentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E62000002FCB000100000001 /* MemoryIntentTests.swift */; };
@@ -264,6 +265,7 @@
 				DF230BA32FBC73BA008929A6 /* RxCodeSync in Frameworks */,
 				DF230BA12FBC73BA008929A6 /* RxCodeCore in Frameworks */,
 				DF230B9F2FBC73BA008929A6 /* RxCodeChatKit in Frameworks */,
+				DFA8E3B42FD1A27F00F33E7F /* SDWebImageSVGCoder in Frameworks */,
 				FB0000070000000000000001 /* FirebaseAnalytics in Frameworks */,
 				FB0000080000000000000001 /* FirebaseCrashlytics in Frameworks */,
 				DF46683C2FCDB56B002D9562 /* JSONSchemaValidator in Frameworks */,
@@ -510,6 +512,7 @@
 				DF4668392FCDB56B002D9562 /* JSONSchemaForm */,
 				DF46683B2FCDB56B002D9562 /* JSONSchemaValidator */,
 				DFAA01112FCD34B3002D9562 /* JSONSchema */,
+				DFA8E3B32FD1A27F00F33E7F /* SDWebImageSVGCoder */,
 			);
 			productName = RxCodeMobile;
 			productReference = DF230B4F2FBC7367008929A6 /* RxCodeMobile.app */;
@@ -685,6 +688,7 @@
 				DF462DC72FC73FA8002D9562 /* XCRemoteSwiftPackageReference "RxAuthSwift" */,
 				DF4652662FCD34B3002D9562 /* XCRemoteSwiftPackageReference "swift-jsonschema-form" */,
 				DFAA00032FCD34B3002D9562 /* XCRemoteSwiftPackageReference "swift-json-schema" */,
+				DFA8E3B22FD1A27F00F33E7F /* XCRemoteSwiftPackageReference "SDWebImageSVGCoder" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = E67335392F7356F600FD26C7 /* Products */;
@@ -1546,6 +1550,14 @@
 				kind = branch;
 			};
 		};
+		DFA8E3B22FD1A27F00F33E7F /* XCRemoteSwiftPackageReference "SDWebImageSVGCoder" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/SDWebImage/SDWebImageSVGCoder";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.8.0;
+			};
+		};
 		DFAA00032FCD34B3002D9562 /* XCRemoteSwiftPackageReference "swift-json-schema" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/sirily11/swift-json-schema";
@@ -1679,6 +1691,11 @@
 		DFA0CCC32FB4CC01005991E1 /* RxCodeChatKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = RxCodeChatKit;
+		};
+		DFA8E3B32FD1A27F00F33E7F /* SDWebImageSVGCoder */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DFA8E3B22FD1A27F00F33E7F /* XCRemoteSwiftPackageReference "SDWebImageSVGCoder" */;
+			productName = SDWebImageSVGCoder;
 		};
 		DFAA00022FCD34B3002D9562 /* JSONSchema */ = {
 			isa = XCSwiftPackageProductDependency;

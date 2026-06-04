@@ -1,5 +1,6 @@
 package app.rxlab.rxcode.ui.settings
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -99,6 +100,7 @@ fun SettingsScreen(
         state.connectionState == RelayClient.ConnectionState.CONNECTED
 
     if (showAutopilot) {
+        BackHandler { showAutopilot = false }
         app.rxlab.rxcode.ui.autopilot.AutopilotNavHost(
             app = viewModel,
             online = online,
@@ -107,6 +109,7 @@ fun SettingsScreen(
         return
     }
     if (showSkills) {
+        BackHandler { showSkills = false }
         app.rxlab.rxcode.ui.skills.SkillsMarketScreen(
             app = viewModel,
             online = online,
@@ -115,6 +118,7 @@ fun SettingsScreen(
         return
     }
     if (showAcpClients) {
+        BackHandler { showAcpClients = false }
         app.rxlab.rxcode.ui.acp.AcpClientsScreen(
             app = viewModel,
             online = online,
@@ -123,6 +127,7 @@ fun SettingsScreen(
         return
     }
     if (showMcpServers) {
+        BackHandler { showMcpServers = false }
         app.rxlab.rxcode.ui.mcp.McpServersScreen(
             app = viewModel,
             online = online,
@@ -163,7 +168,7 @@ fun SettingsScreen(
             items(state.pairedDesktops, key = { it.id }) { desktop ->
                 PairedDesktopCard(
                     desktop = desktop,
-                    isActive = desktop.pubkeyHex == state.activeDesktopPubkey,
+                    isActive = desktop.id == state.activeDesktopId,
                     onSwitch = {
                         haptics.play(HapticEvent.Selection)
                         viewModel.switchActiveDesktop(desktop)

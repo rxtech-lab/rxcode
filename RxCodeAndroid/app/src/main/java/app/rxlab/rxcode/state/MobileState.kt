@@ -31,6 +31,7 @@ import java.util.UUID
  */
 data class MobileState(
     val pairedDesktops: List<PairedDesktop> = emptyList(),
+    val activeDesktopId: String = "",
     val activeDesktopPubkey: String = "",
     val relayUrl: String = "",
     val connectionState: RelayClient.ConnectionState = RelayClient.ConnectionState.DISCONNECTED,
@@ -133,7 +134,8 @@ data class MobileState(
     val isPaired: Boolean get() = activeDesktopPubkey.isNotEmpty()
 
     val activeDesktop: PairedDesktop?
-        get() = pairedDesktops.firstOrNull { it.pubkeyHex == activeDesktopPubkey }
+        get() = pairedDesktops.firstOrNull { it.id == activeDesktopId }
+            ?: pairedDesktops.firstOrNull { it.pubkeyHex == activeDesktopPubkey }
 }
 
 sealed interface PairingStatus {

@@ -38,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.rxlab.rxcode.proto.MobileACPClient
@@ -63,8 +64,13 @@ fun AcpClientsScreen(
     val state by app.state.collectAsState()
     var pendingUninstall by remember { mutableStateOf<MobileACPClient?>(null) }
 
-    LaunchedEffect(Unit) {
-        if (state.acpRegistryAgents.isEmpty() && state.acpInstalledClients.isEmpty()) {
+    LaunchedEffect(online, state.activeDesktopPubkey, state.hasReceivedInitialSnapshot) {
+        if (online &&
+            state.hasReceivedInitialSnapshot &&
+            !state.acpRegistryLoading &&
+            state.acpRegistryAgents.isEmpty() &&
+            state.acpInstalledClients.isEmpty()
+        ) {
             app.requestACPRegistry()
         }
     }
@@ -91,6 +97,18 @@ fun AcpClientsScreen(
             state.acpRegistryError?.let { item { AutopilotErrorRow(it) } }
             state.lastACPError?.let { item { AutopilotErrorRow(it) } }
 
+            if (online && !state.hasReceivedInitialSnapshot) {
+                item {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp))
+                        Text("Waiting for Mac sync…", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+
             if (state.acpInstalledClients.isNotEmpty()) {
                 item { AutopilotSectionLabel("Installed") }
                 items(state.acpInstalledClients, key = { it.id }) { client ->
@@ -114,7 +132,8 @@ fun AcpClientsScreen(
                         onInstall = { app.installACPAgent(agent.id) },
                     )
                 }
-            } else if (state.acpInstalledClients.isEmpty() &&
+            } else if (state.hasReceivedInitialSnapshot &&
+                state.acpInstalledClients.isEmpty() &&
                 !state.acpRegistryLoading &&
                 state.acpRegistryError == null
             ) {
@@ -143,17 +162,21 @@ fun AcpClientsScreen(
 
 @Composable
 private fun AgentIcon(iconURL: String?) {
+    // Tint the logo to match the title text color (1:1 with iOS template-tinting),
+    // so monochrome ACP SVG logos render in the same color as the agent name.
+    val titleColor = MaterialTheme.colorScheme.onSurface
     if (iconURL.isNullOrEmpty()) {
         Icon(
             Icons.Outlined.Memory,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = titleColor,
             modifier = Modifier.size(28.dp),
         )
     } else {
         AsyncImage(
             model = iconURL,
             contentDescription = null,
+            colorFilter = ColorFilter.tint(titleColor),
             modifier = Modifier
                 .size(28.dp)
                 .clip(RoundedCornerShape(6.dp)),

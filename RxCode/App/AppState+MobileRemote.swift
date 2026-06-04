@@ -48,8 +48,10 @@ extension AppState {
     }
 
     func handleMobileSkillCatalogRequest(_ request: SkillCatalogRequestPayload, fromHex: String) async {
+        logger.info("[MobileSync] skill catalog handler start requestID=\(request.clientRequestID.uuidString, privacy: .public) forceRefresh=\(request.forceRefresh, privacy: .public) mobileKey=\(String(fromHex.prefix(12)), privacy: .public)")
         let plugins = await mobileSkillPlugins(forceRefresh: request.forceRefresh)
         let sources = await mobileSkillSources()
+        logger.info("[MobileSync] skill catalog handler result requestID=\(request.clientRequestID.uuidString, privacy: .public) plugins=\(plugins.count, privacy: .public) sources=\(sources.count, privacy: .public) mobileKey=\(String(fromHex.prefix(12)), privacy: .public)")
         let result = SkillCatalogResultPayload(
             clientRequestID: request.clientRequestID,
             ok: true,
@@ -207,14 +209,18 @@ extension AppState {
     }
 
     func handleMobileACPRegistryRequest(_ request: ACPRegistryRequestPayload, fromHex: String) async {
+        logger.info("[MobileSync] acp registry handler start requestID=\(request.clientRequestID.uuidString, privacy: .public) forceRefresh=\(request.forceRefresh, privacy: .public) mobileKey=\(String(fromHex.prefix(12)), privacy: .public)")
         await refreshACPRegistry(forceRefresh: request.forceRefresh)
         let ok = acpRegistry != nil
+        let agents = mobileACPRegistryAgents()
+        let clients = mobileACPClients()
+        logger.info("[MobileSync] acp registry handler result requestID=\(request.clientRequestID.uuidString, privacy: .public) ok=\(ok, privacy: .public) agents=\(agents.count, privacy: .public) clients=\(clients.count, privacy: .public) mobileKey=\(String(fromHex.prefix(12)), privacy: .public)")
         let result = ACPRegistryResultPayload(
             clientRequestID: request.clientRequestID,
             ok: ok,
             errorMessage: ok ? nil : "Could not load the ACP agent registry.",
-            registryAgents: mobileACPRegistryAgents(),
-            installedClients: mobileACPClients()
+            registryAgents: agents,
+            installedClients: clients
         )
         await MobileSyncService.shared.send(.acpRegistryResult(result), toHex: fromHex)
     }

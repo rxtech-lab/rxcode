@@ -3,6 +3,10 @@ import UserNotifications
 import CryptoKit
 import RxCodeSync
 import os.log
+#if canImport(SDWebImageSVGCoder)
+import SDWebImage
+import SDWebImageSVGCoder
+#endif
 
 /// Bridges UIKit's APNs registration into `MobileAppState`. The state object
 /// forwards the device token to the paired desktop over the encrypted relay.
@@ -23,6 +27,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         FirebaseBootstrap.configure()
+        #if canImport(SDWebImageSVGCoder)
+        // ACP registry icons are monochrome SVGs; register the coder so
+        // SDWebImage can decode them for `MobileACPIconView`.
+        SDImageCodersManager.shared.addCoder(SDImageSVGCoder.shared)
+        #endif
         UNUserNotificationCenter.current().delegate = self
         logger.info("[APNs] notification delegate installed")
         Task {

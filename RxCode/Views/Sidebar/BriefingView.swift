@@ -52,6 +52,16 @@ struct BriefingView: View {
         Set(appState.projects.map(\.id))
     }
 
+    /// Thread summaries for known projects, excluding `[Code Review]` threads.
+    /// Review threads are kept out of briefings at write time; this also filters
+    /// any summaries persisted before that exclusion existed.
+    private func visibleThreadSummaryItems() -> [ThreadSummaryItem] {
+        let knownIds = knownProjectIds
+        let reviewIds = appState.threadStore.codeReviewThreadIds(label: AppState.manualCodeReviewLabel)
+        return appState.threadStore.allThreadSummaryItems()
+            .filter { knownIds.contains($0.projectId) && !reviewIds.contains($0.sessionId) }
+    }
+
     private var groups: [BriefingGroup] {
         _ = appState.branchBriefingRevision
         _ = appState.threadSummaryRevision
@@ -59,8 +69,7 @@ struct BriefingView: View {
         let knownIds = knownProjectIds
         let briefings = appState.threadStore.allBranchBriefingItems()
             .filter { knownIds.contains($0.projectId) }
-        let summaries = appState.threadStore.allThreadSummaryItems()
-            .filter { knownIds.contains($0.projectId) }
+        let summaries = visibleThreadSummaryItems()
 
         struct Bucket {
             var projectId: UUID
@@ -127,9 +136,7 @@ struct BriefingView: View {
             appState.threadStore.allBranchBriefingItems()
                 .filter { knownIds.contains($0.projectId) }
                 .map(\.projectId)
-            + appState.threadStore.allThreadSummaryItems()
-                .filter { knownIds.contains($0.projectId) }
-                .map(\.projectId)
+            + visibleThreadSummaryItems().map(\.projectId)
         )
         return appState.projects.filter { ids.contains($0.id) }
     }
@@ -171,7 +178,7 @@ struct BriefingView: View {
         _ = appState.threadSummaryRevision
         let knownIds = knownProjectIds
         return appState.threadStore.allBranchBriefingItems().contains { knownIds.contains($0.projectId) }
-            || appState.threadStore.allThreadSummaryItems().contains { knownIds.contains($0.projectId) }
+            || !visibleThreadSummaryItems().isEmpty
     }
 
     private var projectPathsKey: String {

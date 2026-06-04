@@ -119,6 +119,10 @@ extension AppState {
     }
 
     func storeThreadSummaryTitle(_ summary: ChatSession.Summary, title: String) async {
+        // `[Code Review]` threads are excluded from briefings — reviewing a
+        // review isn't meaningful and they shouldn't appear as briefing threads.
+        guard summary.threadLabel != Self.manualCodeReviewLabel else { return }
+
         let projectPath = projects.first(where: { $0.id == summary.projectId })?.path
         let branchPath = summary.worktreePath ?? projectPath
         let currentBranch: String?
@@ -213,6 +217,11 @@ extension AppState {
         finalResponse: String,
         summary: ChatSession.Summary
     ) async {
+        // `[Code Review]` threads are excluded from briefings (and from the
+        // branch briefing aggregation below) — they review the work, they aren't
+        // part of the branch's story.
+        guard summary.threadLabel != Self.manualCodeReviewLabel else { return }
+
         let previousSummary = threadStore.threadSummaryItem(sessionId: sessionId)?.summary
         guard let threadSummary = await generateThreadSummary(
             previousSummary: previousSummary,

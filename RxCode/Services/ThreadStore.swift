@@ -33,7 +33,11 @@ final class ThreadStore {
         let config = ModelConfiguration(schema: schema, url: url)
         do {
             let container = try ModelContainer(for: schema, configurations: [config])
-            return ThreadStore(context: ModelContext(container))
+            let store = ThreadStore(context: ModelContext(container))
+            // Sweep hook cards left mid-run by a previous launch so they don't
+            // rebuild as a perpetual spinner.
+            store.finalizeInterruptedHooks()
+            return store
         } catch {
             // Fall back to an in-memory container so the app still launches.
             let fallback = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -101,6 +105,17 @@ final class ThreadStore {
             sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
         )
         return ((try? context.fetch(descriptor)) ?? []).map { $0.toItem() }
+    }
+
+    /// Session ids of `[Code Review]` threads (manual or hook-spawned),
+    /// identified by their thread label. Used to keep review threads out of
+    /// briefings even for summaries persisted before review threads were
+    /// excluded at write time. Filters in memory rather than via `#Predicate`
+    /// to avoid SwiftData's optional-vs-non-optional comparison pitfalls on the
+    /// optional `threadLabel`.
+    func codeReviewThreadIds(label: String) -> Set<String> {
+        let rows = (try? context.fetch(FetchDescriptor<ChatThread>())) ?? []
+        return Set(rows.filter { $0.threadLabel == label }.map { $0.id })
     }
 
     func branchBriefingItem(projectId: UUID, branch: String) -> BranchBriefingItem? {
@@ -565,7 +580,8 @@ final class ThreadStore {
         name: String,
         trigger: String,
         output: String,
-        isError: Bool
+        isError: Bool,
+        isComplete: Bool = true
     ) {
         if let existing = fetchHookStatus(sessionId: sessionId) {
             existing.toolId = toolId
@@ -573,6 +589,7 @@ final class ThreadStore {
             existing.trigger = trigger
             existing.output = output
             existing.isError = isError
+            existing.isComplete = isComplete
             existing.updatedAt = .now
         } else {
             context.insert(HookStatusRecord(
@@ -581,8 +598,28 @@ final class ThreadStore {
                 name: name,
                 trigger: trigger,
                 output: output,
-                isError: isError
+                isError: isError,
+                isComplete: isComplete
             ))
+        }
+        save()
+    }
+
+    /// Finalize any hook rows left "in progress" by a previous launch (the app
+    /// closed while a long-running hook like code review was still streaming).
+    /// Without this they would rebuild as a spinner that never resolves.
+    func finalizeInterruptedHooks() {
+        let descriptor = FetchDescriptor<HookStatusRecord>(
+            predicate: #Predicate { $0.isComplete == false }
+        )
+        guard let rows = try? context.fetch(descriptor), !rows.isEmpty else { return }
+        for row in rows {
+            row.isComplete = true
+            row.isError = true
+            if row.output.isEmpty {
+                row.output = "Interrupted — the app closed while this hook was running."
+            }
+            row.updatedAt = .now
         }
         save()
     }

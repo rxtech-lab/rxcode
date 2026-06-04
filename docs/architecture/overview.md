@@ -34,7 +34,7 @@ Android), a Go relay server for mobile sync, and the public website.
 - Swift tools version: 6.2
 - Main app bundle ID: `com.rxlab.RxCode`
 - App-level dependencies: SwiftTerm, Sparkle
-- Package dependencies: ViewInspector, Textual, MarkdownUI
+- Package dependencies: ViewInspector
 - `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` and
   `SWIFT_APPROACHABLE_CONCURRENCY = YES` are enabled for app/mobile targets.
 - App Sandbox is disabled for the main macOS app because RxCode integrates with

@@ -35,7 +35,11 @@ private struct MessageListManualTestView: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 6)
             }
+            #if os(iOS)
             .background(Color(uiColor: .systemBackground))
+            #else
+            .background(Color(nsColor: .windowBackgroundColor))
+            #endif
         }
     }
 
@@ -73,7 +77,11 @@ private struct MessageListManualTestView: View {
             .foregroundStyle(.secondary)
         }
         .padding(12)
+        #if os(iOS)
         .background(Color(uiColor: .secondarySystemBackground))
+        #else
+        .background(Color(nsColor: .controlBackgroundColor))
+        #endif
     }
 
     private func appendUserMessage() {
@@ -143,7 +151,11 @@ private struct DemoMessageRow: View {
                 .padding(.vertical, 9)
                 .background {
                     RoundedRectangle(cornerRadius: 8)
+                        #if os(iOS)
                         .fill(message.isUserMessage ? Color.accentColor : Color(uiColor: .secondarySystemBackground))
+                        #else
+                        .fill(message.isUserMessage ? Color.accentColor : Color(nsColor: .controlBackgroundColor))
+                        #endif
                 }
                 .accessibilityIdentifier("message-\(message.text)")
 

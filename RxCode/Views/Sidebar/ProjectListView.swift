@@ -70,6 +70,12 @@ struct ProjectListView: View {
                             Divider()
                         }
                         Button {
+                            Task { _ = try? await appState.commitAllChangesForProject(project: project) }
+                        } label: {
+                            Label("Commit All Changes", systemImage: "checkmark.circle")
+                        }
+                        Divider()
+                        Button {
                             renameText = project.name
                             projectToRename = project
                         } label: {

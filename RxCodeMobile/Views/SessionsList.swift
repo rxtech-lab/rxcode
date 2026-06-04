@@ -32,6 +32,8 @@ struct SessionsList: View {
     @State private var showingDeleteProjectConfirm = false
     @State private var showingSearch = false
     @State private var isCreatingPR = false
+    @State private var isCreatingReview = false
+    @State private var isCommittingProject = false
     @Namespace private var glassNamespace
 
     // Autopilot actions (1:1 with the desktop project menu), moved here from the
@@ -60,6 +62,9 @@ struct SessionsList: View {
     /// increments as the user scrolls so we never render every thread at once.
     @State private var displayLimit = SessionsList.pageSize
     private static let pageSize = 20
+
+    /// Parent thread ids whose nested review children are currently expanded.
+    @State private var expandedReviewParentIds: Set<String> = []
 
     var body: some View {
         glassThreadList
@@ -135,6 +140,16 @@ struct SessionsList: View {
                 title: "Creating Pull Request…",
                 message: "The Mac is pushing the branch and opening the PR."
             )
+            .mobileAutopilotLoadingDialog(
+                isCreatingReview,
+                title: "Starting Code Review…",
+                message: "The Mac is starting a Code Review thread for this branch."
+            )
+            .mobileAutopilotLoadingDialog(
+                isCommittingProject,
+                title: "Committing Changes…",
+                message: "The Mac is starting a commit thread for this project."
+            )
     }
 
     /// Ask the Mac to open a PR for the project's current branch, then open it
@@ -157,6 +172,70 @@ struct SessionsList: View {
         }
     }
 
+    /// Ask the Mac to start a `[Code Review]` thread reviewing the project's
+    /// current branch (grounded in its briefing), then open it once it syncs.
+    private func createBranchCodeReview(project: Project, branch: String) {
+        guard !isCreatingReview else { return }
+        isCreatingReview = true
+        Task {
+            defer { isCreatingReview = false }
+            do {
+                let threadId = try await state.requestProjectCreateCodeReview(
+                    projectId: project.id,
+                    branch: branch
+                )
+                await state.refreshSnapshot()
+                selected = threadId
+            } catch {
+                autopilotInfo = AutopilotMenuInfo(text: error.localizedDescription, isError: true)
+            }
+        }
+    }
+
+    /// Ask the Mac to start a `[Code Review]` thread reviewing a single thread's
+    /// changes (the manual equivalent of the built-in Code Review hook).
+    private func createThreadCodeReview(sessionID: String) {
+        Task {
+            do {
+                let threadId = try await state.requestThreadCreateCodeReview(sessionId: sessionID)
+                await state.refreshSnapshot()
+                selected = threadId
+            } catch {
+                autopilotInfo = AutopilotMenuInfo(text: error.localizedDescription, isError: true)
+            }
+        }
+    }
+
+    /// Ask the Mac to start a commit-only thread for all project changes, then
+    /// open it once it syncs.
+    private func commitProjectChanges(project: Project) {
+        guard !isCommittingProject else { return }
+        isCommittingProject = true
+        Task {
+            defer { isCommittingProject = false }
+            do {
+                let threadId = try await state.requestProjectCommitAll(projectId: project.id)
+                await state.refreshSnapshot()
+                selected = threadId
+            } catch {
+                autopilotInfo = AutopilotMenuInfo(text: error.localizedDescription, isError: true)
+            }
+        }
+    }
+
+    /// Ask the Mac to commit only the files recorded for a single thread.
+    private func commitThreadFiles(sessionID: String) {
+        Task {
+            do {
+                let threadId = try await state.requestThreadCommitFiles(sessionId: sessionID)
+                await state.refreshSnapshot()
+                selected = threadId
+            } catch {
+                autopilotInfo = AutopilotMenuInfo(text: error.localizedDescription, isError: true)
+            }
+        }
+    }
+
     // MARK: - Toolbar
 
     @ToolbarContentBuilder
@@ -164,26 +243,33 @@ struct SessionsList: View {
         if let project {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    // Autopilot actions only apply to repo-backed projects.
-                    if project.gitHubRepo != nil {
-                        ProjectAutopilotMenuItems(
-                            project: project,
-                            status: autopilotStatus,
-                            showDownloadSheet: $showingSecretsDownload,
-                            showReleaseCreate: $showingReleaseCreate,
-                            setupChat: $autopilotSetupChat,
-                            info: $autopilotInfo,
-                            branch: currentBranch,
-                            prNumber: ciStatus?.prNumber,
-                            isCreatingPR: isCreatingPR,
-                            onCreatePR: {
-                                if let branch = currentBranch {
-                                    createPullRequest(project: project, branch: branch)
-                                }
+                    ProjectAutopilotMenuItems(
+                        project: project,
+                        status: autopilotStatus,
+                        showDownloadSheet: $showingSecretsDownload,
+                        showReleaseCreate: $showingReleaseCreate,
+                        setupChat: $autopilotSetupChat,
+                        info: $autopilotInfo,
+                        branch: currentBranch,
+                        prNumber: ciStatus?.prNumber,
+                        isCreatingPR: isCreatingPR,
+                        onCreatePR: {
+                            if let branch = currentBranch {
+                                createPullRequest(project: project, branch: branch)
                             }
-                        )
-                        Divider()
-                    }
+                        },
+                        isCreatingReview: isCreatingReview,
+                        onCodeReview: {
+                            if let branch = currentBranch {
+                                createBranchCodeReview(project: project, branch: branch)
+                            }
+                        },
+                        isCommittingAll: isCommittingProject,
+                        onCommitAll: {
+                            commitProjectChanges(project: project)
+                        }
+                    )
+                    Divider()
                     Button(role: .destructive) {
                         showingDeleteProjectConfirm = true
                     } label: {
@@ -217,23 +303,11 @@ struct SessionsList: View {
                 } else {
                     GlassEffectContainer(spacing: 12) {
                         ForEach(visible) { session in
-                            GlassThreadCard(
-                                session: session,
-                                isSelected: selected == session.id,
-                                usesNavigationLink: !usesSelection,
-                                onSelect: usesSelection ? { selected = session.id } : nil
-                            )
-                            .glassEffectID(session.id, in: glassNamespace)
-                            .onAppear {
-                                if session.id == visible.last?.id { loadMore() }
-                            }
-                            .contextMenu {
-                                threadContextMenu(for: session)
-                            }
+                            threadGroup(for: session)
                         }
                     }
 
-                    if displayLimit < filtered.count {
+                    if displayLimit < topLevelFiltered.count {
                         loadingIndicator
                     }
                 }
@@ -243,6 +317,7 @@ struct SessionsList: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .animation(.spring(duration: 0.3), value: filtered.map(\.id))
+        .animation(.easeInOut(duration: 0.2), value: expandedReviewParentIds)
         .accessibilityIdentifier("thread-list-screen")
     }
 
@@ -273,6 +348,18 @@ struct SessionsList: View {
 
     @ViewBuilder
     private func threadContextMenu(for session: SessionSummary) -> some View {
+        Button {
+            createThreadCodeReview(sessionID: session.id)
+        } label: {
+            Label("Code Review", systemImage: "checklist")
+        }
+
+        Button {
+            commitThreadFiles(sessionID: session.id)
+        } label: {
+            Label("Commit Files", systemImage: "checkmark.circle")
+        }
+
         Button {
             Task { await state.archiveThread(sessionID: session.id) }
         } label: {
@@ -329,9 +416,88 @@ struct SessionsList: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    /// The slice of `filtered` currently rendered.
+    /// The slice of top-level threads currently rendered.
     private var visible: [SessionSummary] {
-        Array(filtered.prefix(displayLimit))
+        Array(topLevelFiltered.prefix(displayLimit))
+    }
+
+    /// Top-level threads only — review children (`parentThreadId` pointing at a
+    /// thread that is also in this list) are nested under their parent. A child
+    /// whose parent isn't here falls back to the top level so it's never hidden.
+    private var topLevelFiltered: [SessionSummary] {
+        let ids = Set(filtered.map(\.id))
+        return filtered.filter { session in
+            guard let parent = session.parentThreadId else { return true }
+            return !ids.contains(parent)
+        }
+    }
+
+    /// Review children grouped by their parent thread id, oldest first so they
+    /// number naturally as `Review 1`, `Review 2`, …
+    private var childrenByParent: [String: [SessionSummary]] {
+        let ids = Set(filtered.map(\.id))
+        let children = filtered.filter { session in
+            guard let parent = session.parentThreadId else { return false }
+            return ids.contains(parent)
+        }
+        return Dictionary(grouping: children, by: { $0.parentThreadId! })
+            .mapValues { $0.sorted { $0.updatedAt < $1.updatedAt } }
+    }
+
+    /// A top-level thread row. When it owns review children, an in-card leading
+    /// disclosure control (chevron + count) toggles the nested reviews — mirrors
+    /// Android's `SessionCard`. Every card stays full-width and left-aligned.
+    @ViewBuilder
+    private func threadGroup(for session: SessionSummary) -> some View {
+        let children = childrenByParent[session.id] ?? []
+        let isExpanded = expandedReviewParentIds.contains(session.id)
+
+        threadCard(for: session, reviewChildren: children, isReviewExpanded: isExpanded)
+
+        if isExpanded {
+            ForEach(Array(children.enumerated()), id: \.element.id) { index, child in
+                threadCard(for: child, indentLevel: 1, titleOverride: "Review \(index + 1)")
+            }
+        }
+    }
+
+    private func threadCard(
+        for session: SessionSummary,
+        indentLevel: Int = 0,
+        titleOverride: String? = nil,
+        reviewChildren: [SessionSummary] = [],
+        isReviewExpanded: Bool = false
+    ) -> some View {
+        GlassThreadCard(
+            session: session,
+            isSelected: selected == session.id,
+            usesNavigationLink: !usesSelection,
+            onSelect: usesSelection ? { selected = session.id } : nil,
+            indentLevel: indentLevel,
+            titleOverride: titleOverride,
+            showLabelChip: indentLevel == 0,
+            reviewCount: reviewChildren.count,
+            isReviewExpanded: isReviewExpanded,
+            isReviewStreaming: reviewChildren.contains { $0.isStreaming },
+            onToggleReviews: reviewChildren.isEmpty ? nil : { toggleReviews(for: session.id) }
+        )
+        .glassEffectID(session.id, in: glassNamespace)
+        .onAppear {
+            if indentLevel == 0, session.id == visible.last?.id { loadMore() }
+        }
+        .contextMenu {
+            threadContextMenu(for: session)
+        }
+    }
+
+    private func toggleReviews(for parentID: String) {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            if expandedReviewParentIds.contains(parentID) {
+                expandedReviewParentIds.remove(parentID)
+            } else {
+                expandedReviewParentIds.insert(parentID)
+            }
+        }
     }
 
     private var usesDesktopSearch: Bool {
@@ -347,8 +513,8 @@ struct SessionsList: View {
     }
 
     private func loadMore() {
-        guard displayLimit < filtered.count else { return }
-        displayLimit = min(displayLimit + Self.pageSize, filtered.count)
+        guard displayLimit < topLevelFiltered.count else { return }
+        displayLimit = min(displayLimit + Self.pageSize, topLevelFiltered.count)
     }
 
     private var filtered: [SessionSummary] {

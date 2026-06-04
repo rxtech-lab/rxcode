@@ -12,20 +12,25 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.DriveFileRenameOutline
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
+import androidx.compose.material.icons.outlined.RateReview
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.CardDefaults
@@ -95,12 +100,48 @@ fun SessionsScreen(
     val sessions = remember(state.sessions, projectId) {
         state.sessions.filter { it.projectId == projectId && !it.isArchived }
     }
+    // Split into top-level threads and their nested review children. A review
+    // child (`parentThreadId` set) nests under its parent when that parent is in
+    // this list; an orphan child falls back to the top level so it's never hidden.
+    val sessionIds = remember(sessions) { sessions.map { it.id }.toSet() }
+    val topLevel = remember(sessions, sessionIds) {
+        sessions.filter { it.parentThreadId == null || it.parentThreadId !in sessionIds }
+    }
+    val childrenByParent = remember(sessions, sessionIds) {
+        sessions
+            .filter { it.parentThreadId != null && it.parentThreadId in sessionIds }
+            .groupBy { it.parentThreadId!! }
+            .mapValues { (_, group) -> group.sortedBy { it.updatedAt } }
+    }
+    var expandedParentIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     val branchInfo = state.projectBranches[projectId]
     var newThreadOpen by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<SessionSummary?>(null) }
     var deleteTarget by remember { mutableStateOf<SessionSummary?>(null) }
     val scope = rememberCoroutineScope()
     var refreshing by remember { mutableStateOf(false) }
+
+    // Start a `[Code Review]` thread on the Mac for one thread's changes (the
+    // manual equivalent of the built-in Code Review hook), then navigate to it.
+    fun startThreadReview(sessionId: String) {
+        scope.launch {
+            runCatching {
+                val threadId = viewModel.requestThreadCreateCodeReview(sessionId)
+                viewModel.requestSnapshot("code_review_started")
+                onNewThread(threadId)
+            }
+        }
+    }
+
+    fun startThreadCommit(sessionId: String) {
+        scope.launch {
+            runCatching {
+                val threadId = viewModel.requestThreadCommitFiles(sessionId)
+                viewModel.requestSnapshot("commit_started")
+                onNewThread(threadId)
+            }
+        }
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -170,21 +211,64 @@ fun SessionsScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    items(sessions, key = { it.id }) { session ->
-                        SessionCard(
-                            session = session,
-                            isSelected = session.id == selectedSessionId,
-                            onClick = {
-                                haptics.play(HapticEvent.LightTap)
-                                onSessionClick(session)
-                            },
-                            onRename = { renameTarget = session },
-                            onArchive = {
-                                haptics.play(HapticEvent.HeavyImpact)
-                                viewModel.archiveThread(session.id)
-                            },
-                            onDelete = { deleteTarget = session },
-                        )
+                    topLevel.forEach { parent ->
+                        val children = childrenByParent[parent.id].orEmpty()
+                        val expanded = parent.id in expandedParentIds
+                        item(key = parent.id) {
+                            SessionCard(
+                                session = parent,
+                                isSelected = parent.id == selectedSessionId,
+                                onClick = {
+                                    haptics.play(HapticEvent.LightTap)
+                                    onSessionClick(parent)
+                                },
+                                onRename = { renameTarget = parent },
+                                onArchive = {
+                                    haptics.play(HapticEvent.HeavyImpact)
+                                    viewModel.archiveThread(parent.id)
+                                },
+                                onDelete = { deleteTarget = parent },
+                                onCodeReview = { startThreadReview(parent.id) },
+                                onCommitFiles = { startThreadCommit(parent.id) },
+                                reviewCount = children.size,
+                                isExpanded = expanded,
+                                isReviewing = children.any { it.isStreaming },
+                                onToggleReviews = if (children.isEmpty()) {
+                                    null
+                                } else {
+                                    {
+                                        expandedParentIds = if (expanded) {
+                                            expandedParentIds - parent.id
+                                        } else {
+                                            expandedParentIds + parent.id
+                                        }
+                                    }
+                                },
+                            )
+                        }
+                        if (expanded) {
+                            itemsIndexed(children, key = { _, child -> child.id }) { index, child ->
+                                SessionCard(
+                                    session = child,
+                                    isSelected = child.id == selectedSessionId,
+                                    onClick = {
+                                        haptics.play(HapticEvent.LightTap)
+                                        onSessionClick(child)
+                                    },
+                                    onRename = { renameTarget = child },
+                                    onArchive = {
+                                        haptics.play(HapticEvent.HeavyImpact)
+                                        viewModel.archiveThread(child.id)
+                                    },
+                                    onDelete = { deleteTarget = child },
+                                    onCodeReview = { startThreadReview(child.id) },
+                                    onCommitFiles = { startThreadCommit(child.id) },
+                                    indentLevel = 1,
+                                    titleOverride = "Review ${index + 1}",
+                                    showLabel = false,
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -287,10 +371,21 @@ private fun SessionCard(
     onRename: () -> Unit,
     onArchive: () -> Unit,
     onDelete: () -> Unit,
+    onCodeReview: () -> Unit = {},
+    onCommitFiles: () -> Unit = {},
+    reviewCount: Int = 0,
+    isExpanded: Boolean = false,
+    isReviewing: Boolean = false,
+    onToggleReviews: (() -> Unit)? = null,
+    indentLevel: Int = 0,
+    titleOverride: String? = null,
+    showLabel: Boolean = true,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     ElevatedCard(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = (indentLevel * 24).dp),
         onClick = onClick,
         colors = CardDefaults.elevatedCardColors(
             containerColor = if (isSelected) {
@@ -305,15 +400,46 @@ private fun SessionCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+            // Disclosure control for a thread that has nested review children;
+            // tapping it toggles expansion (separate from the card's onClick).
+            if (onToggleReviews != null) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(1.dp),
+                    modifier = Modifier
+                        .clickable { onToggleReviews() }
+                        .padding(2.dp),
+                ) {
+                    Icon(
+                        if (isExpanded) Icons.Outlined.KeyboardArrowDown else Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                        contentDescription = if (isExpanded) "Hide code reviews" else "Show code reviews",
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (isReviewing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(10.dp),
+                            strokeWidth = 1.5.dp,
+                        )
+                    } else {
+                        Text(
+                            "$reviewCount",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
             StatusDot(session)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    session.title.ifBlank { "Untitled" },
+                    titleOverride ?: session.title.ifBlank { "Untitled" },
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 2,
                 )
-                session.threadLabel?.takeIf { it.isNotBlank() }?.let { label ->
+                session.threadLabel?.takeIf { showLabel && it.isNotBlank() }?.let { label ->
                     Surface(
                         shape = MaterialTheme.shapes.small,
                         color = MaterialTheme.colorScheme.primaryContainer,
@@ -343,6 +469,16 @@ private fun SessionCard(
                     Icon(Icons.Outlined.MoreVert, contentDescription = "More")
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Code Review") },
+                        leadingIcon = { Icon(Icons.Outlined.RateReview, contentDescription = null) },
+                        onClick = { menuOpen = false; onCodeReview() },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Commit Files") },
+                        leadingIcon = { Icon(Icons.Outlined.CheckCircle, contentDescription = null) },
+                        onClick = { menuOpen = false; onCommitFiles() },
+                    )
                     DropdownMenuItem(
                         text = { Text("Rename") },
                         leadingIcon = { Icon(Icons.Outlined.DriveFileRenameOutline, contentDescription = null) },

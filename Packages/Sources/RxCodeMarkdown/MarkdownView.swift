@@ -275,7 +275,7 @@ private struct MarkdownDocumentView: View {
             )
             .opacity(opacity(for: range))
         case .table(let headers, let rows, let range):
-            MarkdownTableView(headers: headers, rows: rows, style: style)
+            MarkdownTableView(headers: headers, rows: rows, baseURL: baseURL, style: style)
                 .opacity(opacity(for: range))
         case .divider(let range):
             Rectangle()
@@ -605,6 +605,7 @@ private struct MarkdownCodeBlockView: View {
 private struct MarkdownTableView: View {
     let headers: [String]
     let rows: [[String]]
+    let baseURL: URL?
     let style: MarkdownStyle
 
     var body: some View {
@@ -612,18 +613,14 @@ private struct MarkdownTableView: View {
             Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 8) {
                 GridRow {
                     ForEach(Array(headers.enumerated()), id: \.offset) { _, header in
-                        Text(header)
-                            .font(.system(size: style.bodyFontSize * 0.92, weight: .semibold))
-                            .foregroundStyle(style.bodyColor)
+                        cell(header, weight: .semibold, color: style.bodyColor)
                             .padding(.vertical, 5)
                     }
                 }
                 ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                     GridRow {
                         ForEach(0..<max(headers.count, row.count), id: \.self) { index in
-                            Text(index < row.count ? row[index] : "")
-                                .font(.system(size: style.bodyFontSize * 0.92))
-                                .foregroundStyle(style.secondaryColor)
+                            cell(index < row.count ? row[index] : "", weight: .regular, color: style.secondaryColor)
                                 .padding(.vertical, 3)
                         }
                     }
@@ -636,6 +633,19 @@ private struct MarkdownTableView: View {
                     .strokeBorder(style.borderColor, lineWidth: 0.5)
             )
         }
+    }
+
+    @ViewBuilder
+    private func cell(_ content: String, weight: Font.Weight, color: Color) -> some View {
+        InlineMarkdownText(
+            inlines: MarkdownDocumentParser.parseInlines(content),
+            style: style,
+            baseURL: baseURL,
+            fontSize: style.bodyFontSize * 0.92,
+            weight: weight,
+            overrideColor: color,
+            fadeSegments: []
+        )
     }
 }
 
@@ -763,8 +773,8 @@ private func copyToPasteboard(_ text: String) {
 
             | Component | Status |
             | --- | --- |
-            | Parser | Native |
-            | Images | Cached |
+            | **Parser** | `Native` |
+            | [Images](https://rxlab.dev) | *Cached* |
 
             ```swift
             MarkdownView(text: markdown, fadeNewText: true)

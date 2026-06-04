@@ -3,7 +3,7 @@ import RxCodeCore
 import RxCodeMarkdown
 
 extension MarkdownStyle {
-    static var rxCodeChat: MarkdownStyle {
+    public static var rxCodeChat: MarkdownStyle {
         MarkdownStyle(
             bodyFontSize: ClaudeTheme.messageSize(15),
             bodyColor: ClaudeTheme.textPrimary,
@@ -19,6 +19,27 @@ extension MarkdownStyle {
             cornerRadius: ClaudeTheme.cornerRadiusSmall
         )
     }
+
+    /// Markdown styling tuned for the accent-tinted user bubble: text and
+    /// inline accents derive from `userBubbleText` so they stay legible on the
+    /// dark bubble background instead of using the global primary/accent colors.
+    public static var rxCodeChatUser: MarkdownStyle {
+        let text = ClaudeTheme.userBubbleText
+        return MarkdownStyle(
+            bodyFontSize: ClaudeTheme.messageSize(14),
+            bodyColor: text,
+            secondaryColor: text.opacity(0.85),
+            accentColor: text,
+            codeTextColor: text,
+            codeBackground: text.opacity(0.12),
+            codeHeaderBackground: text.opacity(0.08),
+            borderColor: text.opacity(0.22),
+            tableHeaderBackground: text.opacity(0.1),
+            lineSpacing: 3,
+            blockSpacing: 8,
+            cornerRadius: ClaudeTheme.cornerRadiusSmall
+        )
+    }
 }
 
 /// Renders markdown text through the pure SwiftUI markdown package while
@@ -28,6 +49,7 @@ public struct MarkdownContentView: View {
     let showsTrailingCursor: Bool
     let isCursorVisible: Bool
     let baseURL: URL?
+    let style: MarkdownStyle
     let fadeNewText: Bool
     let onOpenLink: MarkdownView.LinkHandler?
 
@@ -36,6 +58,7 @@ public struct MarkdownContentView: View {
         showsTrailingCursor: Bool = false,
         isCursorVisible: Bool = true,
         baseURL: URL? = nil,
+        style: MarkdownStyle = .rxCodeChat,
         fadeNewText: Bool = false,
         onOpenLink: MarkdownView.LinkHandler? = nil
     ) {
@@ -43,6 +66,7 @@ public struct MarkdownContentView: View {
         self.showsTrailingCursor = showsTrailingCursor
         self.isCursorVisible = isCursorVisible
         self.baseURL = baseURL
+        self.style = style
         self.fadeNewText = fadeNewText
         self.onOpenLink = onOpenLink
     }
@@ -53,7 +77,7 @@ public struct MarkdownContentView: View {
             showsTrailingCursor: showsTrailingCursor,
             isCursorVisible: isCursorVisible,
             baseURL: baseURL,
-            style: .rxCodeChat,
+            style: style,
             fadeNewText: fadeNewText,
             onOpenLink: onOpenLink
         )

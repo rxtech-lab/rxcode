@@ -4,8 +4,8 @@ import RxCodeCore
 
 /// Built-in `.commitPush` hook. On a clean session stop, if the project has an
 /// enabled Commit & Push hook, it sends a follow-up message into the same thread
-/// instructing the agent to commit the changed files and push (the agent decides
-/// new vs. existing branch).
+/// instructing the agent to commit the changed files on the current branch and
+/// push them.
 ///
 /// Loop prevention: the follow-up commit turn ends and re-enters this hook. The
 /// hook marks the session via `markSetupSession(.commitPush)` before sending, and
@@ -21,10 +21,6 @@ final class CommitPushHook: Hook {
     private let logger = Logger(subsystem: "com.claudework", category: "CommitPushHook")
 
     func afterSessionEnd(_ payload: SessionEndPayload, controller: any HookController) async -> HookOutcome {
-        let hooks = await controller.enabledHookProfiles(projectId: payload.project.id, trigger: .afterSessionStop)
-            .filter { $0.action == .commitPush }
-        guard let hook = hooks.first else { return .ignored }
-
         // Loop guard FIRST, so the commit turn always consumes its marker even if
         // that turn errored — otherwise a stale marker would skip the next real
         // turn's commit.
@@ -34,7 +30,16 @@ final class CommitPushHook: Hook {
             return .ignored
         }
 
+        let hooks = await controller.enabledHookProfiles(projectId: payload.project.id, trigger: .afterSessionStop)
+            .filter { $0.action == .commitPush }
+        guard let hook = hooks.first else { return .ignored }
+
         guard payload.reason == .completed, !payload.turnDidError else { return .ignored }
+
+        // Defer while the user still has queued messages — they'll run as further
+        // turns, so don't commit a half-finished change. The next stop (queue
+        // drained) triggers the commit.
+        if payload.hasQueuedFollowups { return .ignored }
 
         // Review gate: when a Code Review hook is also configured, only commit if
         // the latest review passed.
@@ -81,7 +86,7 @@ final class CommitPushHook: Hook {
 
         Steps:
         1. Stage the changed files and create a commit with a clear, conventional commit message describing the change.
-        2. Choose an appropriate branch — reuse the current branch if suitable, or create a new branch if that is more appropriate — and push it to the remote (set upstream if needed).
+        2. Check the current branch. If you are already on a branch, commit on that branch; do not create a new branch. If there is no current branch, create an appropriate branch before committing. Push the branch to the remote and set upstream if needed.
         3. Report the branch name and the pushed commit.
 
         Do not make further code changes beyond what is needed to commit and push.

@@ -8,9 +8,12 @@ import RxCodeCore
 /// files, the user's task, and the agent's final response. The reviewer ends its
 /// reply with `REVIEW_RESULT: PASS` or `REVIEW_RESULT: FAIL`:
 ///   - PASS → records the verdict so `CommitPushHook` may proceed.
-///   - FAIL (or no verdict) → sends the review notes back into the original
-///     thread as a follow-up prompt so the agent fixes the issues and is then
-///     re-reviewed. Bounded by `maxReviewRounds` to stop a fix→fail→fix loop.
+///   - FAIL → sends the review notes back into the original thread as a
+///     follow-up prompt so the agent fixes the issues and is then re-reviewed.
+///     Bounded by `maxReviewRounds` to stop a fix→fail→fix loop.
+///   - No verdict marker (a cancelled/interrupted review, or a reply missing the
+///     marker) → records not-passed but does NOT re-prompt, so a manually
+///     cancelled review never kicks off an auto-retry turn.
 ///
 /// Runs on `.afterSessionStop` (after the thread is finalized/saved). Registered
 /// last so its (possibly long) work doesn't delay the response notification.
@@ -43,6 +46,11 @@ final class CodeReviewHook: Hook {
             .filter { $0.action == .codeReview }
         guard let hook = hooks.first else { return .ignored }
 
+        // Defer while the user still has queued messages — they'll run as further
+        // turns, so don't review a half-finished change. The next stop (queue
+        // drained) triggers the review.
+        if payload.hasQueuedFollowups { return .ignored }
+
         let changedFiles = controller.changedFilePaths(sessionId: payload.sessionId)
         guard !changedFiles.isEmpty else {
             // Nothing changed — treat as passed so a paired commit hook can no-op
@@ -52,8 +60,10 @@ final class CodeReviewHook: Hook {
         }
 
         let task = controller.firstUserPrompt(sessionId: payload.sessionKey) ?? "(task unknown)"
-        let model = hook.codeReview?.model?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let resolvedModel = (model?.isEmpty == false) ? model : controller.threadModel(sessionId: payload.sessionId)
+        let selection = controller.resolveAgentModelSelection(
+            storedModel: hook.codeReview?.model,
+            fallbackSessionId: payload.sessionId
+        )
         let prompt = reviewPrompt(
             task: task,
             changedFiles: changedFiles,
@@ -70,13 +80,25 @@ final class CodeReviewHook: Hook {
                 "summary": .string("Code review · \(changedFiles.count) changed file(s)"),
             ]
         )
+        // Persist the card in-progress so it survives a reload while the review
+        // (which can take minutes) is still running. `finishCard` updates it.
+        controller.persistHookStatus(
+            sessionKey: payload.sessionKey,
+            toolId: card.toolId,
+            name: hook.name,
+            trigger: hook.trigger.displayName,
+            output: "",
+            isError: false,
+            isComplete: false
+        )
 
         logger.debug("[Hook] spawning code-review thread for session \(payload.sessionId, privacy: .public) files=\(changedFiles.count)")
         let result = await controller.spawnLinkedThread(
             projectId: payload.project.id,
             parentThreadId: payload.sessionId,
             label: "Code Review",
-            model: resolvedModel,
+            agentProvider: selection?.provider,
+            model: selection?.model,
             prompt: prompt,
             timeoutSeconds: Self.reviewTimeout
         )
@@ -108,7 +130,7 @@ final class CodeReviewHook: Hook {
             controller.setReviewRound(0, sessionId: payload.sessionId)
             return .proceed
 
-        case .fail(let notes), .unknown(let notes):
+        case .fail(let notes):
             recordVerdict(false, payload: payload, controller: controller)
             let round = controller.reviewRound(sessionId: payload.sessionId)
             if round + 1 >= Self.maxReviewRounds {
@@ -135,6 +157,21 @@ final class CodeReviewHook: Hook {
                 """
             )
             return .proceed
+
+        case .unknown:
+            // The reviewer ended without a PASS/FAIL marker. The dominant cause
+            // is a review thread the user manually cancelled (or one that was
+            // interrupted) — its partial reply has no verdict. Don't auto-retry:
+            // record not-passed (so a paired commit hook still holds off) and
+            // finish the card, but leave the agent alone. A genuine "reviewer
+            // forgot the marker" is rare and is better surfaced quietly here than
+            // by silently kicking off an unwanted fix turn.
+            recordVerdict(false, payload: payload, controller: controller)
+            controller.setReviewRound(0, sessionId: payload.sessionId)
+            finishCard(card, hook: hook, payload: payload, controller: controller,
+                       result: "⚠️ Code review ended without a verdict (it may have been cancelled or interrupted) — not retrying.\n\(reviewLink)\n\n\(body)",
+                       isError: true)
+            return .ignored
         }
     }
 
@@ -155,7 +192,8 @@ final class CodeReviewHook: Hook {
             name: hook.name,
             trigger: hook.trigger.displayName,
             output: result,
-            isError: isError
+            isError: isError,
+            isComplete: true
         )
     }
 

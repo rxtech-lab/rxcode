@@ -442,8 +442,10 @@ extension AppState {
 
     func mobileThreadSummaries() -> [MobileThreadSummary] {
         let knownProjectIds = Set(projects.map(\.id))
+        // Exclude `[Code Review]` threads — they aren't briefing threads.
+        let reviewIds = codeReviewThreadIds
         return threadStore.allThreadSummaryItems()
-            .filter { knownProjectIds.contains($0.projectId) }
+            .filter { knownProjectIds.contains($0.projectId) && !reviewIds.contains($0.sessionId) }
             .map {
                 MobileThreadSummary(
                     sessionId: $0.sessionId,
@@ -750,7 +752,9 @@ extension AppState {
         let resolvedID = resolveCurrentSessionId(request.sessionID)
 
         // This Turn: every file edited in the thread session (SwiftData history).
-        let editSummaries = threadStore.fetchFileEdits(sessionId: resolvedID).map { $0.toSummary() }
+        let editSummaries = threadStore.fetchFileEdits(sessionId: resolvedID)
+            .map { $0.toSummary() }
+            .filter { !PlanLogic.isPlanFilePath($0.path) }
         let unboundedEdits = await withTaskGroup(of: (Int, SyncFileEdit).self) { group in
             for (index, summary) in editSummaries.enumerated() {
                 group.addTask {

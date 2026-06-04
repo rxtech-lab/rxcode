@@ -56,8 +56,9 @@ public enum HookAction: String, Codable, Sendable, CaseIterable, Hashable {
 
 /// Per-hook configuration for the `.codeReview` action.
 public struct CodeReviewConfig: Codable, Sendable, Hashable {
-    /// Model id for the review thread. Empty/`nil` ⇒ inherit the reviewed
-    /// thread's model.
+    /// Provider-qualified model key for the review thread (`<provider>:<model>`).
+    /// Empty/`nil` ⇒ inherit the reviewed thread's model. Older bare model ids
+    /// are still accepted by the app and resolved against the available model list.
     public var model: String?
     /// Optional extra guidance appended to the reviewer's prompt.
     public var instructions: String?

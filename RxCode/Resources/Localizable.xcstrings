@@ -1036,6 +1036,9 @@
         }
       }
     },
+    "Add a Code Review hook and a second agent reviews every change before you ship it." : {
+
+    },
     "Add a Git repository by URL" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1599,6 +1602,9 @@
           }
         }
       }
+    },
+    "After the session is finalized, the change is sent to a linked [Code Review] thread that runs no hooks. If the review requests changes, its notes are sent back into this thread so the agent keeps fixing and is re-reviewed (up to 3 times)." : {
+
     },
     "Agent Availability" : {
       "localizations" : {
@@ -2391,6 +2397,9 @@
           }
         }
       }
+    },
+    "Automatic code review" : {
+
     },
     "Automation" : {
       "localizations" : {
@@ -3275,6 +3284,24 @@
     "Code Review" : {
 
     },
+    "Code Review for %@" : {
+
+    },
+    "Code Review for Current Branch" : {
+
+    },
+    "Code Review for this thread" : {
+
+    },
+    "Code review found issues" : {
+
+    },
+    "Code review in progress" : {
+
+    },
+    "Code review passed" : {
+
+    },
     "Collapse chats" : {
       "localizations" : {
         "ko" : {
@@ -3364,6 +3391,12 @@
         }
       }
     },
+    "Commit All Changes" : {
+
+    },
+    "Commit Files" : {
+
+    },
     "Commit message" : {
       "localizations" : {
         "ko" : {
@@ -3379,6 +3412,9 @@
           }
         }
       }
+    },
+    "Commit when a session finishes" : {
+
     },
     "Configuration" : {
       "localizations" : {
@@ -5901,6 +5937,9 @@
         }
       }
     },
+    "Failed reviews are sent back to the original thread so the agent can fix and get re-reviewed." : {
+
+    },
     "Failed to check status" : {
       "localizations" : {
         "en" : {
@@ -6475,6 +6514,9 @@
         }
       }
     },
+    "Got it" : {
+
+    },
     "Headers" : {
       "localizations" : {
         "ko" : {
@@ -6490,6 +6532,9 @@
           }
         }
       }
+    },
+    "Hide code reviews" : {
+
     },
     "Hide details" : {
       "localizations" : {
@@ -8566,6 +8611,9 @@
         }
       }
     },
+    "New in RxCode" : {
+
+    },
     "New Template" : {
       "localizations" : {
         "ko" : {
@@ -9727,9 +9775,6 @@
         }
       }
     },
-    "On a clean session stop, the change is sent to a linked [Code Review] thread that runs no hooks. If the review requests changes, its notes are fed back to the agent to keep fixing (up to 3 times)." : {
-
-    },
     "On failure the hook output is sent back to the agent, which keeps fixing until the hook passes (max 3 retries)." : {
       "localizations" : {
         "ko" : {
@@ -10510,6 +10555,9 @@
         }
       }
     },
+    "Pick which model performs the review — defaults to the same model as the thread." : {
+
+    },
     "Pin" : {
       "localizations" : {
         "en" : {
@@ -10908,6 +10956,9 @@
           }
         }
       }
+    },
+    "Push to the remote automatically, or keep the commit local." : {
+
     },
     "Quit" : {
       "localizations" : {
@@ -12045,6 +12096,9 @@
         }
       }
     },
+    "Runs after a session finishes and reviews the modified files in a linked thread." : {
+
+    },
     "Runs after streaming stops. Its output is shown only — nothing is passed back to the session." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -12752,6 +12806,9 @@
         }
       }
     },
+    "See the latest features and updates" : {
+
+    },
     "Select a dispatchable release workflow first (re-add the repo to rescan if needed)." : {
       "localizations" : {
         "ko" : {
@@ -13306,6 +13363,9 @@
           }
         }
       }
+    },
+    "Show %lld code review(s)" : {
+
     },
     "Show active chats" : {
       "localizations" : {
@@ -14282,6 +14342,9 @@
         }
       }
     },
+    "The new Commit & Push hook commits — and optionally pushes — your work the moment an agent session completes." : {
+
+    },
     "The next version is computed by semantic-release from the commit history." : {
       "localizations" : {
         "ko" : {
@@ -14716,6 +14779,9 @@
           }
         }
       }
+    },
+    "Triggers automatically once an agent session finishes." : {
+
     },
     "Type" : {
       "localizations" : {
@@ -15336,6 +15402,12 @@
           }
         }
       }
+    },
+    "What's New" : {
+
+    },
+    "When a Code Review hook is configured, commits only happen after the review passes." : {
+
     },
     "When CI fails on a project's current branch, automatically start a thread so an agent can fix it. CI failures are always notified; this only controls the automatic fix." : {
       "localizations" : {

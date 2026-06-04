@@ -66,7 +66,8 @@ final class UserAddedHook: Hook {
                 name: hook.name,
                 trigger: hook.trigger.displayName,
                 output: displayOutput,
-                isError: result.isError
+                isError: result.isError,
+                isComplete: true
             )
 
             if result.isError { anyError = true }

@@ -91,6 +91,11 @@ public struct SessionEndPayload: Codable, Sendable {
     /// The most recent assistant text, captured at dispatch time for the
     /// response-complete notification body fallback.
     public let lastAssistantText: String
+    /// True when the thread still had user messages queued at the moment it
+    /// stopped — captured synchronously before the auto-flush pops one. Stop
+    /// hooks that act on the change (code review, commit & push) defer while
+    /// this is true so they only run once the queue has fully drained.
+    public let hasQueuedFollowups: Bool
 
     public init(
         project: Project,
@@ -98,7 +103,8 @@ public struct SessionEndPayload: Codable, Sendable {
         sessionId: String,
         reason: SessionEndReason,
         turnDidError: Bool,
-        lastAssistantText: String
+        lastAssistantText: String,
+        hasQueuedFollowups: Bool = false
     ) {
         self.project = project
         self.sessionKey = sessionKey
@@ -106,6 +112,7 @@ public struct SessionEndPayload: Codable, Sendable {
         self.reason = reason
         self.turnDidError = turnDidError
         self.lastAssistantText = lastAssistantText
+        self.hasQueuedFollowups = hasQueuedFollowups
     }
 }
 

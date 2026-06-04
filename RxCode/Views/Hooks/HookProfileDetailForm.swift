@@ -76,8 +76,8 @@ struct HookProfileDetailForm: View {
                 Text("Same as thread").tag("")
                 ForEach(appState.availableAgentModelSections(), id: \.id) { section in
                     Section(section.title) {
-                        ForEach(section.models, id: \.id) { model in
-                            Text(model.displayName).tag(model.id)
+                        ForEach(section.models, id: \.key) { model in
+                            Text(model.displayName).tag(model.key)
                         }
                     }
                 }
@@ -109,13 +109,27 @@ struct HookProfileDetailForm: View {
 
     private var codeReviewModelBinding: Binding<String> {
         Binding(
-            get: { hook.codeReview?.model ?? "" },
+            get: { normalizedCodeReviewModelTag(hook.codeReview?.model ?? "") },
             set: { newValue in
                 var cfg = hook.codeReview ?? CodeReviewConfig()
                 cfg.model = newValue.isEmpty ? nil : newValue
                 hook.codeReview = cfg
             }
         )
+    }
+
+    private func normalizedCodeReviewModelTag(_ storedValue: String) -> String {
+        let trimmed = storedValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+
+        let models = appState.availableAgentModelSections().flatMap(\.models)
+        if models.contains(where: { $0.key == trimmed }) {
+            return trimmed
+        }
+        if let match = models.first(where: { $0.id == trimmed }) {
+            return match.key
+        }
+        return trimmed
     }
 
     private var codeReviewInstructionsBinding: Binding<String> {

@@ -1167,6 +1167,7 @@
       }
     },
     "Bash" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1787,6 +1788,12 @@
           }
         }
       }
+    },
+    "Code Review" : {
+
+    },
+    "Code Review for %@" : {
+
     },
     "Codex Usage" : {
       "localizations" : {
@@ -4426,6 +4433,9 @@
         }
       }
     },
+    "Hide code reviews" : {
+
+    },
     "Hide values" : {
       "localizations" : {
         "ko" : {
@@ -6402,6 +6412,12 @@
         }
       }
     },
+    "Node.js" : {
+
+    },
+    "Node.js Configuration" : {
+
+    },
     "Normal" : {
       "localizations" : {
         "en" : {
@@ -6735,6 +6751,7 @@
       }
     },
     "Package" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -6751,6 +6768,7 @@
       }
     },
     "Package Configuration" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -8531,6 +8549,9 @@
         }
       }
     },
+    "Show %lld code reviews" : {
+
+    },
     "Sign in to Claude Code or Codex on your Mac to see usage." : {
       "localizations" : {
         "en" : {
@@ -8776,6 +8797,9 @@
           }
         }
       }
+    },
+    "Starting Code Review…" : {
+
     },
     "stdio" : {
       "localizations" : {
@@ -9118,6 +9142,9 @@
           }
         }
       }
+    },
+    "The Mac is starting a Code Review thread for this branch." : {
+
     },
     "The Mac returned an empty response." : {
       "localizations" : {

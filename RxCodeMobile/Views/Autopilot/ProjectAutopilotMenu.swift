@@ -51,22 +51,42 @@ struct ProjectAutopilotMenuItems: View {
     var prNumber: Int? = nil
     var isCreatingPR: Bool = false
     var onCreatePR: () -> Void = {}
+    /// Code-review support (mirrors the desktop briefing/project "Code Review"
+    /// menu). Spawns a `[Code Review]` thread on the Mac reviewing the branch.
+    var isCreatingReview: Bool = false
+    var onCodeReview: () -> Void = {}
+    /// Manual commit support. Starts a commit-only thread on the Mac that
+    /// commits all current project changes.
+    var isCommittingAll: Bool = false
+    var onCommitAll: () -> Void = {}
 
     var body: some View {
+        commitAllItem()
         // Mirror the desktop guard: no repo → no autopilot items.
         if project.gitHubRepo == nil {
             EmptyView()
         } else if let status {
+            Divider()
             secretsItem(status)
             docsItem(status)
             releaseItem(status)
             createPRItem()
+            codeReviewItem()
         } else {
             Button {} label: {
                 Label("Loading Autopilot…", systemImage: "hourglass")
             }
             .disabled(true)
         }
+    }
+
+    private func commitAllItem() -> some View {
+        Button {
+            onCommitAll()
+        } label: {
+            Label("Commit All Changes", systemImage: "checkmark.circle")
+        }
+        .disabled(isCommittingAll)
     }
 
     @ViewBuilder
@@ -138,6 +158,21 @@ struct ProjectAutopilotMenuItems: View {
                 Label("Create Pull Request", systemImage: "arrow.triangle.pull.request")
             }
             .disabled(isCreatingPR)
+        }
+    }
+
+    @ViewBuilder
+    private func codeReviewItem() -> some View {
+        // Offer a branch-wide code review for any real branch (mirrors the
+        // desktop briefing/project "Code Review" menu); the Mac spawns a
+        // `[Code Review]` thread that reviews the branch diff.
+        if let branch, branch.lowercased() != "unknown" {
+            Button {
+                onCodeReview()
+            } label: {
+                Label("Code Review for \(branch)", systemImage: "checklist")
+            }
+            .disabled(isCreatingReview)
         }
     }
 }

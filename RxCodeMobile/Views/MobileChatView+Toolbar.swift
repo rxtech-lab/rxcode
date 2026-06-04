@@ -29,6 +29,16 @@ extension MobileChatView {
                     } label: {
                         Label("View Changes", systemImage: "plus.forwardslash.minus")
                     }
+                    Button {
+                        startCodeReview()
+                    } label: {
+                        Label("Code Review", systemImage: "checklist")
+                    }
+                    Button {
+                        startCommitFiles()
+                    } label: {
+                        Label("Commit Files", systemImage: "checkmark.circle")
+                    }
                     Divider()
                     Button {
                         showingRenameSheet = true
@@ -103,6 +113,34 @@ extension MobileChatView {
     var threadExists: Bool {
         !MobileDraftSessionID.isDraft(sessionID)
             && state.sessions.contains(where: { $0.id == sessionID })
+    }
+
+    /// Start a `[Code Review]` thread reviewing this thread's changes (the manual
+    /// equivalent of the built-in Code Review hook), then deep-link to the new
+    /// review thread once it syncs over from the Mac.
+    func startCodeReview() {
+        let sid = sessionID
+        let projectID = currentProjectID
+        Task {
+            guard let threadId = try? await state.requestThreadCreateCodeReview(sessionId: sid) else { return }
+            await state.refreshSnapshot()
+            if let projectID {
+                state.pendingDeepLink = MobileDeepLink(sessionID: threadId, projectID: projectID)
+            }
+        }
+    }
+
+    /// Ask the Mac to commit only the files recorded for this thread.
+    func startCommitFiles() {
+        let sid = sessionID
+        let projectID = currentProjectID
+        Task {
+            guard let threadId = try? await state.requestThreadCommitFiles(sessionId: sid) else { return }
+            await state.refreshSnapshot()
+            if let projectID {
+                state.pendingDeepLink = MobileDeepLink(sessionID: threadId, projectID: projectID)
+            }
+        }
     }
 
     func performArchive() {

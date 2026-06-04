@@ -41,7 +41,8 @@ extension AppState {
         timeoutSeconds: TimeInterval = 120,
         parentThreadId: String? = nil,
         threadLabel: String? = nil,
-        skipHooks: Bool = false
+        skipHooks: Bool = false,
+        setupKind: String? = nil
     ) async throws -> CrossProjectSendResult {
         // Resolve target project + thread.
         let resolvedProject: Project
@@ -108,6 +109,9 @@ extension AppState {
         // id before returning so the caller's agent never sees `pending-...`
         // (which it can't use to follow up via `get_thread_messages` etc.).
         let postSendKey = window.currentSessionId ?? resolvedThreadId ?? ""
+        if let setupKind {
+            setupSessionKeys[setupKind, default: []].insert(postSendKey)
+        }
         let resolvedThreadIdForReturn: String
         if postSendKey.hasPrefix("pending-") {
             // Cap the rename wait at the request's timeout so we still honor
@@ -120,6 +124,9 @@ extension AppState {
             ) ?? postSendKey
         } else {
             resolvedThreadIdForReturn = postSendKey
+        }
+        if let setupKind, resolvedThreadIdForReturn != postSendKey {
+            setupSessionKeys[setupKind, default: []].insert(resolvedThreadIdForReturn)
         }
 
         // Stamp linkage (parent thread / label / skip-hooks) onto the freshly

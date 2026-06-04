@@ -7,8 +7,8 @@ import os
 /// AppState is the only caller; all reads/writes happen on the main actor.
 @MainActor
 final class ThreadStore {
-    private let logger = Logger(subsystem: "com.claudework", category: "ThreadStore")
-    private let context: ModelContext
+    let logger = Logger(subsystem: "com.claudework", category: "ThreadStore")
+    let context: ModelContext
 
     init(context: ModelContext) {
         self.context = context
@@ -33,7 +33,11 @@ final class ThreadStore {
         let config = ModelConfiguration(schema: schema, url: url)
         do {
             let container = try ModelContainer(for: schema, configurations: [config])
-            return ThreadStore(context: ModelContext(container))
+            let store = ThreadStore(context: ModelContext(container))
+            // Sweep hook cards left mid-run by a previous launch so they don't
+            // rebuild as a perpetual spinner.
+            store.finalizeInterruptedHooks()
+            return store
         } catch {
             // Fall back to an in-memory container so the app still launches.
             let fallback = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -565,7 +569,8 @@ final class ThreadStore {
         name: String,
         trigger: String,
         output: String,
-        isError: Bool
+        isError: Bool,
+        isComplete: Bool = true
     ) {
         if let existing = fetchHookStatus(sessionId: sessionId) {
             existing.toolId = toolId
@@ -573,6 +578,7 @@ final class ThreadStore {
             existing.trigger = trigger
             existing.output = output
             existing.isError = isError
+            existing.isComplete = isComplete
             existing.updatedAt = .now
         } else {
             context.insert(HookStatusRecord(
@@ -581,8 +587,28 @@ final class ThreadStore {
                 name: name,
                 trigger: trigger,
                 output: output,
-                isError: isError
+                isError: isError,
+                isComplete: isComplete
             ))
+        }
+        save()
+    }
+
+    /// Finalize any hook rows left "in progress" by a previous launch (the app
+    /// closed while a long-running hook like code review was still streaming).
+    /// Without this they would rebuild as a spinner that never resolves.
+    func finalizeInterruptedHooks() {
+        let descriptor = FetchDescriptor<HookStatusRecord>(
+            predicate: #Predicate { $0.isComplete == false }
+        )
+        guard let rows = try? context.fetch(descriptor), !rows.isEmpty else { return }
+        for row in rows {
+            row.isComplete = true
+            row.isError = true
+            if row.output.isEmpty {
+                row.output = "Interrupted — the app closed while this hook was running."
+            }
+            row.updatedAt = .now
         }
         save()
     }
@@ -784,151 +810,7 @@ final class ThreadStore {
         for row in rows { context.delete(row) }
     }
 
-    // MARK: - Memories
-
-    func loadAllMemories() -> [MemoryRecord] {
-        let descriptor = FetchDescriptor<MemoryRecord>(
-            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
-        )
-        return (try? context.fetch(descriptor)) ?? []
-    }
-
-    func loadAllMemorySnapshots() -> [MemoryVectorSnapshot] {
-        loadAllMemories().map { $0.toVectorSnapshot() }
-    }
-
-    func fetchMemory(id: String) -> MemoryRecord? {
-        var descriptor = FetchDescriptor<MemoryRecord>(predicate: #Predicate { $0.id == id })
-        descriptor.fetchLimit = 1
-        return (try? context.fetch(descriptor))?.first
-    }
-
-    func upsertMemory(
-        id: String?,
-        content: String,
-        projectId: UUID?,
-        sessionId: String?,
-        sourceMessageId: UUID?,
-        kind: String,
-        scope: String,
-        vector: Data,
-        dim: Int
-    ) -> MemoryItem {
-        let memoryId = id ?? UUID().uuidString
-        let now = Date()
-        if let existing = fetchMemory(id: memoryId) {
-            existing.apply(
-                content: content,
-                projectId: projectId,
-                sessionId: sessionId,
-                sourceMessageId: sourceMessageId,
-                kind: kind,
-                scope: scope,
-                vector: vector,
-                dim: dim,
-                updatedAt: now
-            )
-            save()
-            return existing.toItem()
-        } else {
-            let row = MemoryRecord(
-                id: memoryId,
-                content: content,
-                projectId: projectId,
-                sessionId: sessionId,
-                sourceMessageId: sourceMessageId,
-                createdAt: now,
-                updatedAt: now,
-                kind: kind,
-                scope: scope,
-                vector: vector,
-                dim: dim
-            )
-            context.insert(row)
-            save()
-            return row.toItem()
-        }
-    }
-
-    func touchMemories(ids: [String], at date: Date = .now) {
-        guard !ids.isEmpty else { return }
-        for id in ids {
-            fetchMemory(id: id)?.touch(at: date)
-        }
-        save()
-    }
-
-    func deleteMemory(id: String) {
-        guard let row = fetchMemory(id: id) else { return }
-        context.delete(row)
-        save()
-    }
-
-    func deleteAllMemories(projectId: UUID? = nil) {
-        if let projectId {
-            deleteMemoryRows(projectId: projectId)
-        } else {
-            let rows = (try? context.fetch(FetchDescriptor<MemoryRecord>())) ?? []
-            for row in rows { context.delete(row) }
-        }
-        save()
-    }
-
-    private func deleteMemoryRows(projectId: UUID) {
-        let descriptor = FetchDescriptor<MemoryRecord>(
-            predicate: #Predicate { $0.projectId == projectId }
-        )
-        let rows = (try? context.fetch(descriptor)) ?? []
-        for row in rows { context.delete(row) }
-    }
-
-    // MARK: - Thread Embedding Chunks
-
-    func loadAllEmbeddingChunks() -> [ThreadEmbeddingChunk] {
-        let descriptor = FetchDescriptor<ThreadEmbeddingChunk>()
-        return (try? context.fetch(descriptor)) ?? []
-    }
-
-    func loadEmbeddingChunks(threadId: String) -> [ThreadEmbeddingChunk] {
-        let descriptor = FetchDescriptor<ThreadEmbeddingChunk>(
-            predicate: #Predicate { $0.threadId == threadId },
-            sortBy: [SortDescriptor(\.chunkIndex, order: .forward)]
-        )
-        return (try? context.fetch(descriptor)) ?? []
-    }
-
-    /// Replace all chunks for a thread atomically. Old rows are deleted first
-    /// so re-indexing cannot leave orphans behind.
-    func replaceEmbeddingChunks(threadId: String, chunks: [ThreadEmbeddingChunk]) {
-        deleteEmbeddingChunkRows(threadId: threadId)
-        for chunk in chunks {
-            context.insert(chunk)
-        }
-        save()
-    }
-
-    func deleteEmbeddingChunks(threadId: String) {
-        deleteEmbeddingChunkRows(threadId: threadId)
-        save()
-    }
-
-    /// Wipe every persisted embedding chunk across all threads.
-    func deleteAllEmbeddingChunks() {
-        let descriptor = FetchDescriptor<ThreadEmbeddingChunk>()
-        let rows = (try? context.fetch(descriptor)) ?? []
-        for row in rows { context.delete(row) }
-        save()
-    }
-
-    private func deleteEmbeddingChunkRows(threadId: String) {
-        let descriptor = FetchDescriptor<ThreadEmbeddingChunk>(
-            predicate: #Predicate { $0.threadId == threadId }
-        )
-        let rows = (try? context.fetch(descriptor)) ?? []
-        for row in rows { context.delete(row) }
-    }
-
-    private func save() {
+    func save() {
         guard context.hasChanges else { return }
         do { try context.save() }
         catch { logger.error("Save failed: \(error.localizedDescription)") }

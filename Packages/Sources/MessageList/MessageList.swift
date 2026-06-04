@@ -277,7 +277,8 @@ public struct MessageList<Message: MessageListItem, RowContent: View>: View {
     private func handleScrollMetrics(_ metrics: MessageListScrollMetrics, proxy: ScrollViewProxy) {
         let decision = anchor.apply(
             contentHeight: metrics.contentHeight,
-            visibleMaxY: metrics.visibleMaxY
+            visibleMaxY: metrics.visibleMaxY,
+            isUserDriven: isUserDrivenScroll
         )
         updateIsAtBottomBinding(anchor.isNearBottom)
 

@@ -41,21 +41,28 @@ final class AppStateHookController: HookController {
 
     func completeCard(_ handle: HookCardHandle, sessionKey: String, result: String, isError: Bool) {
         app?.updateState(sessionKey) { state in
-            guard let idx = state.messages.firstIndex(where: { $0.id == handle.messageId }) else { return }
+            // Match by message id OR tool id: after a mid-run reload the card may
+            // have been rebuilt from the persisted record with a fresh message id
+            // but the same tool id, and we still want completion to land live.
+            guard let idx = state.messages.firstIndex(where: { message in
+                message.id == handle.messageId
+                    || message.blocks.contains { $0.toolCall?.id == handle.toolId }
+            }) else { return }
             state.messages[idx].setToolResult(id: handle.toolId, result: result, isError: isError)
             state.messages[idx].isStreaming = false
             state.messages[idx].isResponseComplete = true
         }
     }
 
-    func persistHookStatus(sessionKey: String, toolId: String, name: String, trigger: String, output: String, isError: Bool) {
+    func persistHookStatus(sessionKey: String, toolId: String, name: String, trigger: String, output: String, isError: Bool, isComplete: Bool) {
         app?.threadStore.setHookStatus(
             sessionId: sessionKey,
             toolId: toolId,
             name: name,
             trigger: trigger,
             output: output,
-            isError: isError
+            isError: isError,
+            isComplete: isComplete
         )
     }
 
@@ -88,12 +95,55 @@ final class AppStateHookController: HookController {
         return app.threadStore.fetch(id: sessionId)?.skipHooks ?? false
     }
 
-    func threadModel(sessionId: String) -> String? {
+    func resolveAgentModelSelection(storedModel: String?, fallbackSessionId: String) -> (provider: AgentProvider, model: String)? {
         guard let app else { return nil }
-        if let model = app.allSessionSummaries.first(where: { $0.id == sessionId })?.model {
-            return model
+
+        let fallback: (provider: AgentProvider, model: String)? = {
+            if let summary = app.allSessionSummaries.first(where: { $0.id == fallbackSessionId }),
+               let model = summary.model {
+                return (summary.agentProvider, model)
+            }
+            if let session = app.threadStore.fetch(id: fallbackSessionId),
+               let model = session.model {
+                return (session.toSummary().agentProvider, model)
+            }
+            return nil
+        }()
+
+        guard let trimmed = storedModel?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty
+        else {
+            return fallback
         }
-        return app.threadStore.fetch(id: sessionId)?.model
+
+        if let separator = trimmed.firstIndex(of: ":") {
+            let rawProvider = String(trimmed[..<separator])
+            let model = String(trimmed[trimmed.index(after: separator)...])
+            if let provider = AgentProvider(rawValue: rawProvider), !model.isEmpty {
+                return (provider, model)
+            }
+        }
+
+        let models = app.availableAgentModelSections().flatMap(\.models)
+        if let fallback,
+           let match = models.first(where: { $0.provider == fallback.provider && ($0.id == trimmed || $0.key == trimmed) }) {
+            return (match.provider, match.id)
+        }
+        if let match = models.first(where: { $0.id == trimmed || $0.key == trimmed }) {
+            return (match.provider, match.id)
+        }
+        if trimmed.lowercased().hasPrefix("gpt-") {
+            return (.codex, trimmed)
+        }
+
+        if let fallback {
+            return (fallback.provider, trimmed)
+        }
+        let projectId = app.allSessionSummaries.first(where: { $0.id == fallbackSessionId })?.projectId
+            ?? app.threadStore.fetch(id: fallbackSessionId)?.projectId
+        let project = projectId.flatMap { id in app.projects.first { $0.id == id } }
+        let defaultSelection = app.defaultModelSelection(for: project)
+        return (defaultSelection.provider, trimmed)
     }
 
     func changedFilePaths(sessionId: String) -> [String] {
@@ -146,6 +196,7 @@ final class AppStateHookController: HookController {
         projectId: UUID,
         parentThreadId: String,
         label: String,
+        agentProvider: AgentProvider?,
         model: String?,
         prompt: String,
         timeoutSeconds: TimeInterval
@@ -156,10 +207,13 @@ final class AppStateHookController: HookController {
                 projectId: projectId,
                 threadId: nil,
                 prompt: prompt,
+                agentProvider: agentProvider,
                 model: model,
-                // Plan mode keeps the reviewer read-only (no edits) and runs
-                // unattended without permission prompts.
-                permissionMode: .plan,
+                // Auto mode lets the reviewer run unattended, bypassing almost
+                // all permission prompts so it can freely inspect the repo (read
+                // files, grep, run checks). The prompt still instructs it not to
+                // edit; it just isn't gated on per-tool approvals like plan mode.
+                permissionMode: .auto,
                 waitForResponse: true,
                 timeoutSeconds: timeoutSeconds,
                 parentThreadId: parentThreadId,

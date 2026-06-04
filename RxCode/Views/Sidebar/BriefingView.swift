@@ -52,6 +52,16 @@ struct BriefingView: View {
         Set(appState.projects.map(\.id))
     }
 
+    /// Thread summaries for known projects, excluding `[Code Review]` threads.
+    /// Review threads are kept out of briefings at write time; this also filters
+    /// any summaries persisted before that exclusion existed.
+    private func visibleThreadSummaryItems() -> [ThreadSummaryItem] {
+        let knownIds = knownProjectIds
+        let reviewIds = appState.codeReviewThreadIds
+        return appState.threadStore.allThreadSummaryItems()
+            .filter { knownIds.contains($0.projectId) && !reviewIds.contains($0.sessionId) }
+    }
+
     private var groups: [BriefingGroup] {
         _ = appState.branchBriefingRevision
         _ = appState.threadSummaryRevision
@@ -59,8 +69,7 @@ struct BriefingView: View {
         let knownIds = knownProjectIds
         let briefings = appState.threadStore.allBranchBriefingItems()
             .filter { knownIds.contains($0.projectId) }
-        let summaries = appState.threadStore.allThreadSummaryItems()
-            .filter { knownIds.contains($0.projectId) }
+        let summaries = visibleThreadSummaryItems()
 
         struct Bucket {
             var projectId: UUID
@@ -127,9 +136,7 @@ struct BriefingView: View {
             appState.threadStore.allBranchBriefingItems()
                 .filter { knownIds.contains($0.projectId) }
                 .map(\.projectId)
-            + appState.threadStore.allThreadSummaryItems()
-                .filter { knownIds.contains($0.projectId) }
-                .map(\.projectId)
+            + visibleThreadSummaryItems().map(\.projectId)
         )
         return appState.projects.filter { ids.contains($0.id) }
     }
@@ -171,7 +178,7 @@ struct BriefingView: View {
         _ = appState.threadSummaryRevision
         let knownIds = knownProjectIds
         return appState.threadStore.allBranchBriefingItems().contains { knownIds.contains($0.projectId) }
-            || appState.threadStore.allThreadSummaryItems().contains { knownIds.contains($0.projectId) }
+            || !visibleThreadSummaryItems().isEmpty
     }
 
     private var projectPathsKey: String {
@@ -627,6 +634,31 @@ struct BriefingView: View {
             && appState.ciStatusByProject[group.projectId]?.prNumber != nil
     }
 
+    /// Start a `[Code Review]` thread reviewing the whole branch (grounded in
+    /// its briefing) and open it, mirroring the project/thread review menus.
+    private func startCodeReview(for group: BriefingGroup, project: Project) {
+        Task {
+            if windowState.selectedProject?.id != project.id {
+                appState.selectProject(project, in: windowState)
+            }
+            if let threadId = try? await appState.createCodeReviewForBranch(project: project, branch: group.branch) {
+                appState.selectSession(id: threadId, in: windowState)
+            }
+        }
+    }
+
+    /// Start a commit-only thread for all current project changes and open it.
+    private func startCommitAll(for project: Project) {
+        Task {
+            if windowState.selectedProject?.id != project.id {
+                appState.selectProject(project, in: windowState)
+            }
+            if let threadId = try? await appState.commitAllChangesForProject(project: project) {
+                appState.selectSession(id: threadId, in: windowState)
+            }
+        }
+    }
+
     private func cardMenu(for group: BriefingGroup, project: Project) -> some View {
         Menu {
             Button {
@@ -644,6 +676,20 @@ struct BriefingView: View {
                 }
             } label: {
                 Label("Open Project", systemImage: "folder")
+            }
+
+            Divider()
+
+            Button {
+                startCodeReview(for: group, project: project)
+            } label: {
+                Label("Code Review for \(group.branch)", systemImage: "checklist")
+            }
+
+            Button {
+                startCommitAll(for: project)
+            } label: {
+                Label("Commit All Changes", systemImage: "checkmark.circle")
             }
 
             let hookItems = appState.projectContextMenuItems(for: project)
@@ -818,7 +864,8 @@ struct BriefingView: View {
         BriefingThreadRow(
             item: item,
             isInProgress: appState.sessionStates[item.sessionId]?.isStreaming == true,
-            todoProgress: appState.todoProgress(forSessionId: item.sessionId)
+            todoProgress: appState.todoProgress(forSessionId: item.sessionId),
+            reviewPassed: appState.reviewPassedBySession[item.sessionId]
         ) {
             appState.selectSession(id: item.sessionId, in: windowState)
         }

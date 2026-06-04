@@ -44,9 +44,9 @@ public protocol HookController: AnyObject {
 
     /// Whether the thread should skip all lifecycle hooks (e.g. a review thread).
     func threadSkipsHooks(sessionId: String) -> Bool
-    /// The model id stored on a thread, if any (used as the review thread's
-    /// default model).
-    func threadModel(sessionId: String) -> String?
+    /// Resolve a stored hook model selection into the provider/model pair used
+    /// for a spawned agent thread. Empty selections inherit the reviewed thread.
+    func resolveAgentModelSelection(storedModel: String?, fallbackSessionId: String) -> (provider: AgentProvider, model: String)?
     /// Distinct paths of files edited during the thread.
     func changedFilePaths(sessionId: String) -> [String]
     /// The first user prompt text of a thread, if any.
@@ -62,6 +62,7 @@ public protocol HookController: AnyObject {
         projectId: UUID,
         parentThreadId: String,
         label: String,
+        agentProvider: AgentProvider?,
         model: String?,
         prompt: String,
         timeoutSeconds: TimeInterval

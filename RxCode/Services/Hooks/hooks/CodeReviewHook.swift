@@ -60,8 +60,10 @@ final class CodeReviewHook: Hook {
         }
 
         let task = controller.firstUserPrompt(sessionId: payload.sessionKey) ?? "(task unknown)"
-        let model = hook.codeReview?.model?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let resolvedModel = (model?.isEmpty == false) ? model : controller.threadModel(sessionId: payload.sessionId)
+        let selection = controller.resolveAgentModelSelection(
+            storedModel: hook.codeReview?.model,
+            fallbackSessionId: payload.sessionId
+        )
         let prompt = reviewPrompt(
             task: task,
             changedFiles: changedFiles,
@@ -95,7 +97,8 @@ final class CodeReviewHook: Hook {
             projectId: payload.project.id,
             parentThreadId: payload.sessionId,
             label: "Code Review",
-            model: resolvedModel,
+            agentProvider: selection?.provider,
+            model: selection?.model,
             prompt: prompt,
             timeoutSeconds: Self.reviewTimeout
         )

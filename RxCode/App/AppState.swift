@@ -1065,6 +1065,15 @@ final class AppState {
     /// hook passes or the user sends a real message. Keyed by session id.
     var stopHookRepromptCounts: [String: Int] = [:]
 
+    /// Latest code-review verdict per session, set by `CodeReviewHook` and read
+    /// by `CommitPushHook` during the after-stop dispatch so a commit only
+    /// happens once review passed. Keyed by session id.
+    var reviewPassedBySession: [String: Bool] = [:]
+
+    /// Number of failed-review re-prompt rounds per session, bounding the
+    /// review→fix→review loop (see `CodeReviewHook`). Keyed by session id.
+    var reviewRoundBySession: [String: Int] = [:]
+
     func runProfiles(for projectId: UUID) -> [RunProfile] {
         runProfilesByProject[projectId] ?? []
     }
@@ -1200,6 +1209,11 @@ final class AppState {
         hookManager.register(AutopilotReleaseHook())
         hookManager.register(CIUpdateHook())
         #endif
+        // Registered last so their (potentially long) after-stop work runs after
+        // the response-complete notification has already fired. CodeReviewHook
+        // must come before CommitPushHook so the commit gate sees the verdict.
+        hookManager.register(CodeReviewHook())
+        hookManager.register(CommitPushHook())
     }
 
 

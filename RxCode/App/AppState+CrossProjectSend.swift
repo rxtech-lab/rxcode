@@ -38,7 +38,10 @@ extension AppState {
         effort: String? = nil,
         permissionMode: PermissionMode? = nil,
         waitForResponse: Bool = true,
-        timeoutSeconds: TimeInterval = 120
+        timeoutSeconds: TimeInterval = 120,
+        parentThreadId: String? = nil,
+        threadLabel: String? = nil,
+        skipHooks: Bool = false
     ) async throws -> CrossProjectSendResult {
         // Resolve target project + thread.
         let resolvedProject: Project
@@ -117,6 +120,25 @@ extension AppState {
             ) ?? postSendKey
         } else {
             resolvedThreadIdForReturn = postSendKey
+        }
+
+        // Stamp linkage (parent thread / label / skip-hooks) onto the freshly
+        // created thread now that its real id is known. Only for new threads —
+        // existing-thread sends (e.g. the commit message) leave linkage alone.
+        if resolvedThreadId == nil,
+           parentThreadId != nil || threadLabel != nil || skipHooks {
+            threadStore.setThreadLinkage(
+                sessionId: resolvedThreadIdForReturn,
+                parentThreadId: parentThreadId,
+                threadLabel: threadLabel,
+                skipHooks: skipHooks
+            )
+            // Mirror onto the in-memory summary so the UI reflects it immediately.
+            if let idx = allSessionSummaries.firstIndex(where: { $0.id == resolvedThreadIdForReturn }) {
+                allSessionSummaries[idx].parentThreadId = parentThreadId
+                allSessionSummaries[idx].threadLabel = threadLabel
+                allSessionSummaries[idx].skipHooks = skipHooks
+            }
         }
 
         if !waitForResponse {

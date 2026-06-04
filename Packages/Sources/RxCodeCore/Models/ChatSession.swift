@@ -20,6 +20,17 @@ public struct ChatSession: Identifiable, Codable, Sendable {
     public var isArchived: Bool
     public var archivedAt: Date?
 
+    /// Id of the thread this thread was spawned from (e.g. a `[Code Review]`
+    /// thread links back to the thread whose change it reviews). `nil` for
+    /// ordinary user-started threads.
+    public var parentThreadId: String?
+    /// Short label shown as a chip in the UI (e.g. `"Code Review"`). `nil` for
+    /// ordinary threads.
+    public var threadLabel: String?
+    /// When true, lifecycle hooks are skipped for this thread (review threads
+    /// must not themselves trigger reviews/commits and loop).
+    public var skipHooks: Bool
+
     public init(
         id: String,
         projectId: UUID,
@@ -36,7 +47,10 @@ public struct ChatSession: Identifiable, Codable, Sendable {
         worktreePath: String? = nil,
         worktreeBranch: String? = nil,
         isArchived: Bool = false,
-        archivedAt: Date? = nil
+        archivedAt: Date? = nil,
+        parentThreadId: String? = nil,
+        threadLabel: String? = nil,
+        skipHooks: Bool = false
     ) {
         self.id = id
         self.projectId = projectId
@@ -54,10 +68,13 @@ public struct ChatSession: Identifiable, Codable, Sendable {
         self.worktreeBranch = worktreeBranch
         self.isArchived = isArchived
         self.archivedAt = archivedAt
+        self.parentThreadId = parentThreadId
+        self.threadLabel = threadLabel
+        self.skipHooks = skipHooks
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, projectId, title, messages, createdAt, updatedAt, isPinned, agentProvider, model, effort, permissionMode, origin, worktreePath, worktreeBranch, isArchived, archivedAt
+        case id, projectId, title, messages, createdAt, updatedAt, isPinned, agentProvider, model, effort, permissionMode, origin, worktreePath, worktreeBranch, isArchived, archivedAt, parentThreadId, threadLabel, skipHooks
     }
 
     public init(from decoder: Decoder) throws {
@@ -78,6 +95,9 @@ public struct ChatSession: Identifiable, Codable, Sendable {
         worktreeBranch = try container.decodeIfPresent(String.self, forKey: .worktreeBranch)
         isArchived = try container.decodeIfPresent(Bool.self, forKey: .isArchived) ?? false
         archivedAt = try container.decodeIfPresent(Date.self, forKey: .archivedAt)
+        parentThreadId = try container.decodeIfPresent(String.self, forKey: .parentThreadId)
+        threadLabel = try container.decodeIfPresent(String.self, forKey: .threadLabel)
+        skipHooks = try container.decodeIfPresent(Bool.self, forKey: .skipHooks) ?? false
     }
 
     public struct Summary: Identifiable, Codable, Sendable, Equatable {
@@ -96,6 +116,9 @@ public struct ChatSession: Identifiable, Codable, Sendable {
         public var worktreeBranch: String?
         public var isArchived: Bool
         public var archivedAt: Date?
+        public var parentThreadId: String?
+        public var threadLabel: String?
+        public var skipHooks: Bool
 
         public init(
             id: String,
@@ -112,7 +135,10 @@ public struct ChatSession: Identifiable, Codable, Sendable {
             worktreePath: String? = nil,
             worktreeBranch: String? = nil,
             isArchived: Bool = false,
-            archivedAt: Date? = nil
+            archivedAt: Date? = nil,
+            parentThreadId: String? = nil,
+            threadLabel: String? = nil,
+            skipHooks: Bool = false
         ) {
             self.id = id
             self.projectId = projectId
@@ -129,10 +155,13 @@ public struct ChatSession: Identifiable, Codable, Sendable {
             self.worktreeBranch = worktreeBranch
             self.isArchived = isArchived
             self.archivedAt = archivedAt
+            self.parentThreadId = parentThreadId
+            self.threadLabel = threadLabel
+            self.skipHooks = skipHooks
         }
 
         private enum CodingKeys: String, CodingKey {
-            case id, projectId, title, createdAt, updatedAt, isPinned, agentProvider, model, effort, permissionMode, origin, worktreePath, worktreeBranch, isArchived, archivedAt
+            case id, projectId, title, createdAt, updatedAt, isPinned, agentProvider, model, effort, permissionMode, origin, worktreePath, worktreeBranch, isArchived, archivedAt, parentThreadId, threadLabel, skipHooks
         }
 
         public init(from decoder: Decoder) throws {
@@ -152,6 +181,9 @@ public struct ChatSession: Identifiable, Codable, Sendable {
             worktreeBranch = try container.decodeIfPresent(String.self, forKey: .worktreeBranch)
             isArchived = try container.decodeIfPresent(Bool.self, forKey: .isArchived) ?? false
             archivedAt = try container.decodeIfPresent(Date.self, forKey: .archivedAt)
+            parentThreadId = try container.decodeIfPresent(String.self, forKey: .parentThreadId)
+            threadLabel = try container.decodeIfPresent(String.self, forKey: .threadLabel)
+            skipHooks = try container.decodeIfPresent(Bool.self, forKey: .skipHooks) ?? false
         }
     }
 
@@ -171,7 +203,10 @@ public struct ChatSession: Identifiable, Codable, Sendable {
             worktreePath: worktreePath,
             worktreeBranch: worktreeBranch,
             isArchived: isArchived,
-            archivedAt: archivedAt
+            archivedAt: archivedAt,
+            parentThreadId: parentThreadId,
+            threadLabel: threadLabel,
+            skipHooks: skipHooks
         )
     }
 

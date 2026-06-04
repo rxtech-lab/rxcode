@@ -23,6 +23,14 @@ public final class ChatThread {
     public var isArchived: Bool = false
     public var archivedAt: Date?
 
+    /// Id of the thread this thread was spawned from (e.g. a `[Code Review]`
+    /// thread links back to the reviewed thread). Defaulted for clean migration.
+    public var parentThreadId: String? = nil
+    /// Short label chip shown in the UI (e.g. `"Code Review"`).
+    public var threadLabel: String? = nil
+    /// When true, lifecycle hooks are skipped for this thread.
+    public var skipHooks: Bool = false
+
     public init(
         id: String,
         projectId: UUID,
@@ -39,7 +47,10 @@ public final class ChatThread {
         worktreePath: String? = nil,
         worktreeBranch: String? = nil,
         isArchived: Bool = false,
-        archivedAt: Date? = nil
+        archivedAt: Date? = nil,
+        parentThreadId: String? = nil,
+        threadLabel: String? = nil,
+        skipHooks: Bool = false
     ) {
         self.id = id
         self.projectId = projectId
@@ -57,6 +68,9 @@ public final class ChatThread {
         self.worktreeBranch = worktreeBranch
         self.isArchived = isArchived
         self.archivedAt = archivedAt
+        self.parentThreadId = parentThreadId
+        self.threadLabel = threadLabel
+        self.skipHooks = skipHooks
     }
 }
 
@@ -81,7 +95,10 @@ extension ChatThread {
             worktreePath: worktreePath,
             worktreeBranch: worktreeBranch,
             isArchived: isArchived,
-            archivedAt: archivedAt
+            archivedAt: archivedAt,
+            parentThreadId: parentThreadId,
+            threadLabel: threadLabel,
+            skipHooks: skipHooks
         )
     }
 
@@ -98,6 +115,9 @@ extension ChatThread {
         worktreeBranch = summary.worktreeBranch
         isArchived = summary.isArchived
         archivedAt = summary.archivedAt
+        parentThreadId = summary.parentThreadId
+        threadLabel = summary.threadLabel
+        skipHooks = summary.skipHooks
     }
 
     public static func from(_ summary: ChatSession.Summary, cliSessionId: String? = nil) -> ChatThread {
@@ -117,7 +137,10 @@ extension ChatThread {
             worktreePath: summary.worktreePath,
             worktreeBranch: summary.worktreeBranch,
             isArchived: summary.isArchived,
-            archivedAt: summary.archivedAt
+            archivedAt: summary.archivedAt,
+            parentThreadId: summary.parentThreadId,
+            threadLabel: summary.threadLabel,
+            skipHooks: summary.skipHooks
         )
     }
 }

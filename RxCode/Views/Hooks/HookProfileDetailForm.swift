@@ -6,6 +6,7 @@ import SwiftUI
 /// bash-only and adds an enabled toggle + trigger picker. Reuses
 /// `BashEnvironmentEditor` for environment presets.
 struct HookProfileDetailForm: View {
+    @Environment(AppState.self) private var appState
     @Binding var hook: HookProfile
     let project: Project
 
@@ -14,11 +15,24 @@ struct HookProfileDetailForm: View {
             Section {
                 TextField("Name", text: $hook.name)
                 Toggle("Enabled", isOn: $hook.enabled)
+                Picker("Action", selection: $hook.action) {
+                    ForEach(HookAction.allCases, id: \.self) { action in
+                        Text(action.displayName).tag(action)
+                    }
+                }
+                .onChange(of: hook.action) { _, newAction in
+                    // Built-in actions only run at a fixed lifecycle.
+                    if let fixed = newAction.fixedTrigger { hook.trigger = fixed }
+                    if newAction == .codeReview, hook.codeReview == nil {
+                        hook.codeReview = CodeReviewConfig()
+                    }
+                }
                 Picker("Trigger", selection: $hook.trigger) {
                     ForEach(HookTrigger.allCases, id: \.self) { trigger in
                         Text(trigger.displayName).tag(trigger)
                     }
                 }
+                .disabled(hook.action.fixedTrigger != nil)
             } header: {
                 Text("Configuration")
             } footer: {
@@ -33,29 +47,103 @@ struct HookProfileDetailForm: View {
                 Text("Lifecycle")
             }
 
-            ProfileCommandSections(
-                profileID: hook.id,
-                project: project,
-                type: $hook.type,
-                bash: $hook.bash,
-                xcode: $hook.xcode,
-                make: $hook.make,
-                package: $hook.package
-            )
-
-            BashEnvironmentEditor(bash: $hook.bash, projectPath: project.path)
+            switch hook.action {
+            case .command:
+                ProfileCommandSections(
+                    profileID: hook.id,
+                    project: project,
+                    type: $hook.type,
+                    bash: $hook.bash,
+                    xcode: $hook.xcode,
+                    make: $hook.make,
+                    package: $hook.package
+                )
+                BashEnvironmentEditor(bash: $hook.bash, projectPath: project.path)
+            case .codeReview:
+                codeReviewSection
+            case .commitPush:
+                commitPushSection
+            }
         }
         .formStyle(.grouped)
     }
 
+    // MARK: - Built-in action sections
+
+    private var codeReviewSection: some View {
+        Section {
+            Picker("Review model", selection: codeReviewModelBinding) {
+                Text("Same as thread").tag("")
+                ForEach(appState.availableAgentModelSections(), id: \.id) { section in
+                    Section(section.title) {
+                        ForEach(section.models, id: \.id) { model in
+                            Text(model.displayName).tag(model.id)
+                        }
+                    }
+                }
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Extra instructions (optional)")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                TextEditor(text: codeReviewInstructionsBinding)
+                    .font(.system(size: 12, design: .monospaced))
+                    .frame(minHeight: 70)
+            }
+        } header: {
+            Text("Code Review")
+        } footer: {
+            Text("After the session is finalized, the change is sent to a linked [Code Review] thread that runs no hooks. If the review requests changes, its notes are sent back into this thread so the agent keeps fixing and is re-reviewed (up to 3 times).")
+        }
+    }
+
+    private var commitPushSection: some View {
+        Section {
+            Text("After a successful session, the agent is asked to commit the changed files and push them (choosing a new or existing branch). The commit turn itself won't re-trigger this hook. If a Code Review hook is also enabled, the commit only happens after the review passes.")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+        } header: {
+            Text("Commit & Push")
+        }
+    }
+
+    private var codeReviewModelBinding: Binding<String> {
+        Binding(
+            get: { hook.codeReview?.model ?? "" },
+            set: { newValue in
+                var cfg = hook.codeReview ?? CodeReviewConfig()
+                cfg.model = newValue.isEmpty ? nil : newValue
+                hook.codeReview = cfg
+            }
+        )
+    }
+
+    private var codeReviewInstructionsBinding: Binding<String> {
+        Binding(
+            get: { hook.codeReview?.instructions ?? "" },
+            set: { newValue in
+                var cfg = hook.codeReview ?? CodeReviewConfig()
+                cfg.instructions = newValue.isEmpty ? nil : newValue
+                hook.codeReview = cfg
+            }
+        )
+    }
+
     private var triggerHelp: String {
-        switch hook.trigger {
-        case .beforeSessionStart:
-            return "Runs once when a new thread starts. Its output is added to the agent's context for that turn."
-        case .beforeSessionStop:
-            return "Runs when streaming stops. Its output is shown and saved with the thread. If the command exits non-zero, its output is sent back to the agent to continue (up to 3 times)."
-        case .afterSessionStop:
-            return "Runs after streaming stops. Its output is shown only — nothing is passed back to the session."
+        switch hook.action {
+        case .codeReview:
+            return "Code Review runs after the session is finalized; a failing review sends the agent back to work and re-reviews."
+        case .commitPush:
+            return "Commit & Push runs after the session is finalized and saved."
+        case .command:
+            switch hook.trigger {
+            case .beforeSessionStart:
+                return "Runs once when a new thread starts. Its output is added to the agent's context for that turn."
+            case .beforeSessionStop:
+                return "Runs when streaming stops. Its output is shown and saved with the thread. If the command exits non-zero, its output is sent back to the agent to continue (up to 3 times)."
+            case .afterSessionStop:
+                return "Runs after streaming stops. Its output is shown only — nothing is passed back to the session."
+            }
         }
     }
 

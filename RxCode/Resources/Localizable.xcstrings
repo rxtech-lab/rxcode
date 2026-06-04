@@ -1580,6 +1580,9 @@
         }
       }
     },
+    "After a successful session, the agent is asked to commit the changed files and push them (choosing a new or existing branch). The commit turn itself won't re-trigger this hook. If a Code Review hook is also enabled, the commit only happens after the review passes." : {
+
+    },
     "After Session Stop" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -3269,6 +3272,9 @@
         }
       }
     },
+    "Code Review" : {
+
+    },
     "Collapse chats" : {
       "localizations" : {
         "ko" : {
@@ -3338,6 +3344,9 @@
           }
         }
       }
+    },
+    "Commit & Push" : {
+
     },
     "Commit %@" : {
       "localizations" : {
@@ -5850,6 +5859,9 @@
           }
         }
       }
+    },
+    "Extra instructions (optional)" : {
+
     },
     "Fact" : {
       "localizations" : {
@@ -9715,6 +9727,9 @@
         }
       }
     },
+    "On a clean session stop, the change is sent to a linked [Code Review] thread that runs no hooks. If the review requests changes, its notes are fed back to the agent to keep fixing (up to 3 times)." : {
+
+    },
     "On failure the hook output is sent back to the agent, which keeps fixing until the hook passes (max 3 retries)." : {
       "localizations" : {
         "ko" : {
@@ -11883,6 +11898,9 @@
         }
       }
     },
+    "Review model" : {
+
+    },
     "Review the CLI setup check" : {
       "localizations" : {
         "ko" : {
@@ -12223,6 +12241,9 @@
           }
         }
       }
+    },
+    "Same as thread" : {
+
     },
     "Save" : {
       "localizations" : {

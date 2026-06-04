@@ -45,6 +45,11 @@ public struct SessionSummary: Codable, Sendable, Identifiable {
     /// "finished, unread" indicator. Defaults to `false` for summaries from
     /// an older desktop that predates this field.
     public let hasUncheckedCompletion: Bool
+    /// Id of the thread this thread was spawned from (e.g. a `[Code Review]`
+    /// thread links back to the reviewed thread). `nil` for ordinary threads.
+    public let parentThreadId: String?
+    /// Short label chip (e.g. `"Code Review"`). `nil` for ordinary threads.
+    public let threadLabel: String?
 
     public init(
         id: String,
@@ -58,7 +63,9 @@ public struct SessionSummary: Codable, Sendable, Identifiable {
         progress: SessionProgressSnapshot? = nil,
         todos: [TodoItem]? = nil,
         queuedMessages: [QueuedUserMessage]? = nil,
-        hasUncheckedCompletion: Bool = false
+        hasUncheckedCompletion: Bool = false,
+        parentThreadId: String? = nil,
+        threadLabel: String? = nil
     ) {
         self.id = id
         self.projectId = projectId
@@ -72,10 +79,12 @@ public struct SessionSummary: Codable, Sendable, Identifiable {
         self.todos = todos
         self.queuedMessages = queuedMessages
         self.hasUncheckedCompletion = hasUncheckedCompletion
+        self.parentThreadId = parentThreadId
+        self.threadLabel = threadLabel
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, projectId, title, updatedAt, isPinned, isArchived, isStreaming, attention, progress, todos, queuedMessages, hasUncheckedCompletion
+        case id, projectId, title, updatedAt, isPinned, isArchived, isStreaming, attention, progress, todos, queuedMessages, hasUncheckedCompletion, parentThreadId, threadLabel
     }
 
     public init(from decoder: Decoder) throws {
@@ -92,6 +101,8 @@ public struct SessionSummary: Codable, Sendable, Identifiable {
         todos = try container.decodeIfPresent([TodoItem].self, forKey: .todos)
         queuedMessages = try container.decodeIfPresent([QueuedUserMessage].self, forKey: .queuedMessages)
         hasUncheckedCompletion = try container.decodeIfPresent(Bool.self, forKey: .hasUncheckedCompletion) ?? false
+        parentThreadId = try container.decodeIfPresent(String.self, forKey: .parentThreadId)
+        threadLabel = try container.decodeIfPresent(String.self, forKey: .threadLabel)
     }
 }
 

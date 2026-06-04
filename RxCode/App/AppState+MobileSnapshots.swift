@@ -294,7 +294,9 @@ extension AppState {
             progress: progress,
             todos: todos,
             queuedMessages: queued,
-            hasUncheckedCompletion: sessionStates[summary.id]?.hasUncheckedCompletion ?? false
+            hasUncheckedCompletion: sessionStates[summary.id]?.hasUncheckedCompletion ?? false,
+            parentThreadId: summary.parentThreadId,
+            threadLabel: summary.threadLabel
         )
     }
 

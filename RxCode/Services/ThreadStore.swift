@@ -587,6 +587,21 @@ final class ThreadStore {
         save()
     }
 
+    /// Stamp linkage metadata (parent thread / label / skip-hooks) onto a thread
+    /// row. Used right after a linked `[Code Review]` thread's real id resolves.
+    func setThreadLinkage(
+        sessionId: String,
+        parentThreadId: String?,
+        threadLabel: String?,
+        skipHooks: Bool
+    ) {
+        guard let thread = fetch(id: sessionId) else { return }
+        thread.parentThreadId = parentThreadId
+        thread.threadLabel = threadLabel
+        thread.skipHooks = skipHooks
+        save()
+    }
+
     private func renameHookStatus(from oldId: String, to newId: String) {
         guard oldId != newId else { return }
         guard let row = fetchHookStatus(sessionId: oldId) else { return }

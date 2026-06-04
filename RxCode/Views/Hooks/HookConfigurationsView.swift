@@ -129,7 +129,7 @@ struct HookConfigurationsView: View {
     @ViewBuilder
     private func hookRow(_ hook: HookProfile) -> some View {
         HStack {
-            Image(systemName: iconName(for: hook.type))
+            Image(systemName: iconName(for: hook))
                 .foregroundStyle(hook.enabled ? ClaudeTheme.accent : ClaudeTheme.textTertiary)
             Text(hook.name.isEmpty ? "Untitled" : hook.name)
                 .foregroundStyle(hook.enabled ? ClaudeTheme.textPrimary : ClaudeTheme.textTertiary)
@@ -137,24 +137,42 @@ struct HookConfigurationsView: View {
         .tag(hook.id)
     }
 
-    /// SF Symbol per type — matches `RunConfigurationsView.iconName(for:)`.
-    private func iconName(for type: RunProfileType) -> String {
-        switch type {
-        case .xcode: return "hammer.fill"
-        case .make: return "wrench.and.screwdriver.fill"
-        case .bash: return "terminal"
-        case .packageScript: return "shippingbox.fill"
+    /// SF Symbol per hook — built-in actions get their own glyph; command hooks
+    /// fall back to the per-type icon (matches `RunConfigurationsView`).
+    private func iconName(for hook: HookProfile) -> String {
+        switch hook.action {
+        case .codeReview: return "checkmark.seal.fill"
+        case .commitPush: return "arrow.up.circle.fill"
+        case .command:
+            switch hook.type {
+            case .xcode: return "hammer.fill"
+            case .make: return "wrench.and.screwdriver.fill"
+            case .bash: return "terminal"
+            case .packageScript: return "shippingbox.fill"
+            }
         }
     }
 
     private var addMenu: some View {
         Menu {
-            ForEach(HookTrigger.allCases, id: \.self) { trigger in
-                Button {
-                    addHook(trigger: trigger)
-                } label: {
-                    Label(trigger.displayName, systemImage: "bolt.horizontal.circle")
+            Menu("Command") {
+                ForEach(HookTrigger.allCases, id: \.self) { trigger in
+                    Button {
+                        addHook(action: .command, trigger: trigger)
+                    } label: {
+                        Label(trigger.displayName, systemImage: "bolt.horizontal.circle")
+                    }
                 }
+            }
+            Button {
+                addHook(action: .codeReview, trigger: HookAction.codeReview.fixedTrigger ?? .beforeSessionStop)
+            } label: {
+                Label("Code Review", systemImage: "checkmark.seal.fill")
+            }
+            Button {
+                addHook(action: .commitPush, trigger: HookAction.commitPush.fixedTrigger ?? .afterSessionStop)
+            } label: {
+                Label("Commit & Push", systemImage: "arrow.up.circle.fill")
             }
         } label: {
             Image(systemName: "plus")
@@ -167,11 +185,19 @@ struct HookConfigurationsView: View {
 
     // MARK: - Actions
 
-    private func addHook(trigger: HookTrigger) {
+    private func addHook(action: HookAction, trigger: HookTrigger) {
+        let defaultName: String
+        switch action {
+        case .command: defaultName = "New Hook"
+        case .codeReview: defaultName = "Code Review"
+        case .commitPush: defaultName = "Commit & Push"
+        }
         let new = HookProfile(
             projectId: project.id,
-            name: "New Hook",
-            trigger: trigger
+            name: defaultName,
+            trigger: action.fixedTrigger ?? trigger,
+            action: action,
+            codeReview: action == .codeReview ? CodeReviewConfig() : nil
         )
         draft.append(new)
         selectedId = new.id

@@ -114,6 +114,16 @@ struct ProjectChatRow: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
 
+            if let label = summary.threadLabel, !label.isEmpty {
+                Text(label)
+                    .font(.system(size: ClaudeTheme.size(9), weight: .semibold))
+                    .foregroundStyle(ClaudeTheme.accent)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(ClaudeTheme.accentSubtle, in: Capsule())
+                    .fixedSize()
+            }
+
             Spacer(minLength: 4)
 
             if summary.isPinned {

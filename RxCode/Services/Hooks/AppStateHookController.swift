@@ -78,6 +78,138 @@ final class AppStateHookController: HookController {
         app?.allSessionSummaries.first(where: { $0.id == sessionId })?.title
     }
 
+    // MARK: Thread linkage / cross-thread sends
+
+    func threadSkipsHooks(sessionId: String) -> Bool {
+        guard let app else { return false }
+        if let summary = app.allSessionSummaries.first(where: { $0.id == sessionId }) {
+            return summary.skipHooks
+        }
+        return app.threadStore.fetch(id: sessionId)?.skipHooks ?? false
+    }
+
+    func threadModel(sessionId: String) -> String? {
+        guard let app else { return nil }
+        if let model = app.allSessionSummaries.first(where: { $0.id == sessionId })?.model {
+            return model
+        }
+        return app.threadStore.fetch(id: sessionId)?.model
+    }
+
+    func changedFilePaths(sessionId: String) -> [String] {
+        guard let app else { return [] }
+        var seen = Set<String>()
+        var ordered: [String] = []
+        for edit in app.threadStore.fetchFileEdits(sessionId: sessionId) where seen.insert(edit.path).inserted {
+            ordered.append(edit.path)
+        }
+        return ordered
+    }
+
+    func firstUserPrompt(sessionId: String) -> String? {
+        guard let app else { return nil }
+        let messages = app.stateForSession(sessionId).messages
+        for message in messages where message.role == .user {
+            let text = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !text.isEmpty { return text }
+        }
+        return nil
+    }
+
+    func threadTranscript(sessionId: String) -> String {
+        guard let app else { return "" }
+        let messages = app.stateForSession(sessionId).messages
+        var lines: [String] = []
+        for message in messages {
+            switch message.role {
+            case .user:
+                // Skip the injected review instruction (the only user message).
+                continue
+            case .assistant:
+                for toolCall in message.toolCalls {
+                    // Hook/auto-continue synthetic cards aren't part of the
+                    // reviewer's own work — skip them.
+                    if toolCall.name.lowercased().hasPrefix("hook:") { continue }
+                    lines.append("• \(toolCall.name)")
+                }
+                let text = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !text.isEmpty { lines.append(text) }
+            default:
+                let text = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !text.isEmpty { lines.append(text) }
+            }
+        }
+        return lines.joined(separator: "\n\n")
+    }
+
+    func spawnLinkedThread(
+        projectId: UUID,
+        parentThreadId: String,
+        label: String,
+        model: String?,
+        prompt: String,
+        timeoutSeconds: TimeInterval
+    ) async -> HookLinkedThreadResult? {
+        guard let app else { return nil }
+        do {
+            let result = try await app.sendCrossProject(
+                projectId: projectId,
+                threadId: nil,
+                prompt: prompt,
+                model: model,
+                // Plan mode keeps the reviewer read-only (no edits) and runs
+                // unattended without permission prompts.
+                permissionMode: .plan,
+                waitForResponse: true,
+                timeoutSeconds: timeoutSeconds,
+                parentThreadId: parentThreadId,
+                threadLabel: label,
+                skipHooks: true
+            )
+            return HookLinkedThreadResult(
+                threadId: result.threadId,
+                assistantText: result.assistantText,
+                error: result.error
+            )
+        } catch {
+            logger.error("spawnLinkedThread failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    func sendThreadMessage(sessionId: String, prompt: String) {
+        guard let app else { return }
+        Task { [weak app] in
+            _ = try? await app?.sendCrossProject(
+                projectId: nil,
+                threadId: sessionId,
+                prompt: prompt,
+                waitForResponse: false
+            )
+        }
+    }
+
+    func setReviewPassed(_ passed: Bool, sessionId: String) {
+        app?.reviewPassedBySession[sessionId] = passed
+    }
+
+    func reviewPassed(sessionId: String) -> Bool? {
+        app?.reviewPassedBySession[sessionId]
+    }
+
+    func reviewRound(sessionId: String) -> Int {
+        app?.reviewRoundBySession[sessionId] ?? 0
+    }
+
+    func setReviewRound(_ round: Int, sessionId: String) {
+        guard let app else { return }
+        if round == 0 {
+            app.reviewRoundBySession[sessionId] = nil
+        } else {
+            app.reviewRoundBySession[sessionId] = round
+        }
+    }
+
     func responseNotificationFallback(from responseText: String) -> String {
         app?.responseNotificationFallback(from: responseText) ?? ""
     }

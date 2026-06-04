@@ -7,6 +7,8 @@ import app.rxlab.rxcode.proto.AutopilotAccountStatus
 import app.rxlab.rxcode.proto.AutopilotCIClosePRBody
 import app.rxlab.rxcode.proto.AutopilotCIFrequencyBody
 import app.rxlab.rxcode.proto.AutopilotCIHistoryBody
+import app.rxlab.rxcode.proto.AutopilotCloneRepoBody
+import app.rxlab.rxcode.proto.AutopilotCloneRepoResult
 import app.rxlab.rxcode.proto.AutopilotCursorQuery
 import app.rxlab.rxcode.proto.AutopilotDocsCreateTokenBody
 import app.rxlab.rxcode.proto.AutopilotDocsDocBody
@@ -21,6 +23,7 @@ import app.rxlab.rxcode.proto.AutopilotProjectSecretsDownloadResult
 import app.rxlab.rxcode.proto.AutopilotProjectSecretsWriteBody
 import app.rxlab.rxcode.proto.AutopilotProjectStatus
 import app.rxlab.rxcode.proto.AutopilotPullRequestResult
+import app.rxlab.rxcode.proto.AutopilotInstallUrlResponse
 import app.rxlab.rxcode.proto.AutopilotSearchBody
 import app.rxlab.rxcode.proto.AutopilotSearchResult
 import app.rxlab.rxcode.proto.AutopilotReleaseDispatchBody
@@ -53,6 +56,7 @@ import app.rxlab.rxcode.proto.MobileReleaseWorkflow
 import app.rxlab.rxcode.proto.MobileReleaseWorkflowList
 import app.rxlab.rxcode.proto.Payload
 import app.rxlab.rxcode.proto.PreferencesValues
+import app.rxlab.rxcode.proto.Project
 import app.rxlab.rxcode.proto.ReleaseDispatchRequest
 import app.rxlab.rxcode.proto.ReleaseDispatchResult
 import app.rxlab.rxcode.proto.ReleaseGithubSecretResult
@@ -166,6 +170,19 @@ class AutopilotService(
                 encodeBody(AutopilotReposQuery(search = search, cursor = cursor)),
             )
         )
+
+    suspend fun cloneManagedRepo(fullName: String): Project =
+        decodeResult<AutopilotCloneRepoResult>(
+            rawCall(
+                AutopilotDomain.ACCOUNT, AutopilotOp.CLONE_MANAGED_REPO,
+                encodeBody(AutopilotCloneRepoBody(fullName)),
+            )
+        ).project
+
+    suspend fun githubAppInstallUrl(): String =
+        decodeResult<AutopilotInstallUrlResponse>(
+            rawCall(AutopilotDomain.ACCOUNT, AutopilotOp.INSTALL_GITHUB_APP_URL, null)
+        ).url
 
     // MARK: - Automation
 

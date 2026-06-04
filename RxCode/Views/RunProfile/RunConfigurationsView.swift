@@ -115,7 +115,7 @@ struct RunConfigurationsView: View {
                         }
                     }
                     if !packageProfiles.isEmpty {
-                        Section("Package") {
+                        Section("Node.js") {
                             ForEach(packageProfiles) { profile in
                                 profileRow(profile)
                             }
@@ -221,11 +221,11 @@ struct RunConfigurationsView: View {
                 }
             }
 
-            Section("Package") {
+            Section("Node.js") {
                 Button {
                     addPackageProfile()
                 } label: {
-                    Label("Empty Package Configuration", systemImage: "shippingbox.fill")
+                    Label("Empty Node.js Configuration", systemImage: "shippingbox.fill")
                 }
                 ForEach(detected.npm) { runnable in
                     Button {
@@ -285,7 +285,7 @@ struct RunConfigurationsView: View {
         if let package = runnable?.package {
             let new = RunProfile(
                 projectId: project.id,
-                name: runnable?.displayName ?? "New Package Configuration",
+                name: runnable?.displayName ?? "New Node.js Configuration",
                 type: .packageScript,
                 package: package,
                 createdAt: now,
@@ -341,7 +341,7 @@ struct RunConfigurationsView: View {
         let firstDetected = detected.npm.first?.package
         let new = RunProfile(
             projectId: project.id,
-            name: "New Package Configuration",
+            name: "New Node.js Configuration",
             type: .packageScript,
             package: firstDetected ?? PackageRunConfig(),
             createdAt: now,

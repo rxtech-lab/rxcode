@@ -694,6 +694,12 @@
         }
       }
     },
+    "Add project from remote repositories" : {
+
+    },
+    "Add project locally" : {
+
+    },
     "Agent Clients" : {
       "localizations" : {
         "en" : {
@@ -4635,6 +4641,9 @@
           }
         }
       }
+    },
+    "Install GitHub App" : {
+
     },
     "Install RELEASE_TOKEN" : {
       "localizations" : {
@@ -9125,6 +9134,9 @@
           }
         }
       }
+    },
+    "The Mac returned an invalid GitHub App install URL." : {
+
     },
     "The Mac returned an invalid pull-request URL." : {
       "localizations" : {

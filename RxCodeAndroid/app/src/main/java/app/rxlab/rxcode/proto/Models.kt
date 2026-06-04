@@ -34,6 +34,10 @@ data class SessionSummary(
     val hasUncheckedCompletion: Boolean = false,
     val queuedMessages: List<QueuedUserMessage> = emptyList(),
     val todos: List<TodoItem>? = null,
+    /** Id of the thread this was spawned from (e.g. a [Code Review] thread). */
+    val parentThreadId: String? = null,
+    /** Short label chip (e.g. "Code Review"). Null for ordinary threads. */
+    val threadLabel: String? = null,
 )
 
 @Serializable

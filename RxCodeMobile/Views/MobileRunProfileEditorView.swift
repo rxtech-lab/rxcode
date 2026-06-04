@@ -51,10 +51,10 @@ struct MobileRunProfileEditorView: View {
                         if type == .packageScript, draft.package == nil { draft.package = PackageRunConfig() }
                     }
                 )) {
-                    Text("Bash").tag(RunProfileType.bash)
-                    Text("Xcode").tag(RunProfileType.xcode)
-                    Text("Make").tag(RunProfileType.make)
-                    Text("Package").tag(RunProfileType.packageScript)
+                    Text(RunProfileType.bash.displayName).tag(RunProfileType.bash)
+                    Text(RunProfileType.xcode.displayName).tag(RunProfileType.xcode)
+                    Text(RunProfileType.make.displayName).tag(RunProfileType.make)
+                    Text(RunProfileType.packageScript.displayName).tag(RunProfileType.packageScript)
                 }
             }
 
@@ -224,7 +224,7 @@ struct MobileRunProfileEditorView: View {
     }
 
     private var packageSection: some View {
-        Section("Package") {
+        Section("Node.js") {
             let pkg = Binding(
                 get: { draft.package ?? PackageRunConfig() },
                 set: { draft.package = $0 }

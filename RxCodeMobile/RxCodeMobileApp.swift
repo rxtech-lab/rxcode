@@ -1,5 +1,6 @@
 import SwiftUI
 import RxCodeCore
+import RxCodeSync
 import TipKit
 
 @main
@@ -46,9 +47,24 @@ struct RxCodeMobileApp: App {
     }
 
     private func handlePairingURL(_ url: URL) {
+        guard Self.isPairingURL(url) else { return }
         MobileHaptics.buttonTap()
         Task {
             await state.pair(from: url, displayName: UIDevice.current.name)
         }
+    }
+
+    private static func isPairingURL(_ url: URL) -> Bool {
+        if url.absoluteString.hasPrefix(PairingToken.legacySchemePrefix) {
+            return true
+        }
+        guard url.scheme == "https",
+              url.host?.lowercased() == PairingToken.deeplinkHost,
+              url.path == PairingToken.deeplinkPath,
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              components.queryItems?.contains(where: { $0.name == "token" && !($0.value ?? "").isEmpty }) == true else {
+            return false
+        }
+        return true
     }
 }

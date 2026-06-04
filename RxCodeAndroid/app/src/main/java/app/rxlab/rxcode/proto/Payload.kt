@@ -97,6 +97,18 @@ sealed class Payload {
     data class BranchOpResult(val data: BranchOpResultPayload) : Payload() {
         override val type = "branch_op_result"
     }
+    data class FolderTreeRequest(val data: FolderTreeRequestPayload) : Payload() {
+        override val type = "folder_tree_request"
+    }
+    data class FolderTreeResult(val data: FolderTreeResultPayload) : Payload() {
+        override val type = "folder_tree_result"
+    }
+    data class CreateProjectRequest(val data: CreateProjectRequestPayload) : Payload() {
+        override val type = "create_project_request"
+    }
+    data class CreateProjectResult(val data: CreateProjectResultPayload) : Payload() {
+        override val type = "create_project_result"
+    }
     data class DeleteProjectRequest(val data: DeleteProjectRequestPayload) : Payload() {
         override val type = "delete_project_request"
     }
@@ -390,6 +402,47 @@ data class BranchOpResultPayload(
     val errorMessage: String? = null,
 )
 
+@Serializable
+data class RemoteFolderNode(
+    val name: String,
+    val path: String,
+    val isSelectable: Boolean = true,
+    val isDirectory: Boolean = true,
+    val children: List<RemoteFolderNode> = emptyList(),
+)
+
+@Serializable
+data class FolderTreeRequestPayload(
+    @Serializable(with = UuidSerializer::class) val clientRequestID: UUID = UUID.randomUUID(),
+    val path: String? = null,
+    val depth: Int = 1,
+    val includeHidden: Boolean = false,
+    val includeFiles: Boolean = false,
+)
+
+@Serializable
+data class FolderTreeResultPayload(
+    @Serializable(with = UuidSerializer::class) val clientRequestID: UUID,
+    val requestedPath: String? = null,
+    val ok: Boolean,
+    val root: RemoteFolderNode? = null,
+    val errorMessage: String? = null,
+)
+
+@Serializable
+data class CreateProjectRequestPayload(
+    @Serializable(with = UuidSerializer::class) val clientRequestID: UUID = UUID.randomUUID(),
+    val path: String,
+)
+
+@Serializable
+data class CreateProjectResultPayload(
+    @Serializable(with = UuidSerializer::class) val clientRequestID: UUID,
+    val ok: Boolean,
+    val project: Project? = null,
+    val errorMessage: String? = null,
+)
+
 /**
  * Mobile → desktop request to upsert or delete a [RunProfile]. The desktop
  * replies with [RunProfileResultPayload]; on success it also broadcasts a
@@ -563,6 +616,10 @@ object PayloadSerializer : KSerializer<Payload> {
             "plan_decision" -> Payload.PlanDecision(json.decodeFromJsonElement(PlanDecisionPayload.serializer(), data))
             "branch_op_request" -> Payload.BranchOpRequest(json.decodeFromJsonElement(BranchOpRequestPayload.serializer(), data))
             "branch_op_result" -> Payload.BranchOpResult(json.decodeFromJsonElement(BranchOpResultPayload.serializer(), data))
+            "folder_tree_request" -> Payload.FolderTreeRequest(json.decodeFromJsonElement(FolderTreeRequestPayload.serializer(), data))
+            "folder_tree_result" -> Payload.FolderTreeResult(json.decodeFromJsonElement(FolderTreeResultPayload.serializer(), data))
+            "create_project_request" -> Payload.CreateProjectRequest(json.decodeFromJsonElement(CreateProjectRequestPayload.serializer(), data))
+            "create_project_result" -> Payload.CreateProjectResult(json.decodeFromJsonElement(CreateProjectResultPayload.serializer(), data))
             "delete_project_request" -> Payload.DeleteProjectRequest(json.decodeFromJsonElement(DeleteProjectRequestPayload.serializer(), data))
             "delete_project_result" -> Payload.DeleteProjectResult(json.decodeFromJsonElement(DeleteProjectResultPayload.serializer(), data))
             "run_profile_mutation_request" -> Payload.RunProfileMutationRequest(json.decodeFromJsonElement(RunProfileMutationRequestPayload.serializer(), data))
@@ -620,6 +677,10 @@ object PayloadSerializer : KSerializer<Payload> {
             is Payload.PlanDecision -> value.type to json.encodeToJsonElement(PlanDecisionPayload.serializer(), value.data)
             is Payload.BranchOpRequest -> value.type to json.encodeToJsonElement(BranchOpRequestPayload.serializer(), value.data)
             is Payload.BranchOpResult -> value.type to json.encodeToJsonElement(BranchOpResultPayload.serializer(), value.data)
+            is Payload.FolderTreeRequest -> value.type to json.encodeToJsonElement(FolderTreeRequestPayload.serializer(), value.data)
+            is Payload.FolderTreeResult -> value.type to json.encodeToJsonElement(FolderTreeResultPayload.serializer(), value.data)
+            is Payload.CreateProjectRequest -> value.type to json.encodeToJsonElement(CreateProjectRequestPayload.serializer(), value.data)
+            is Payload.CreateProjectResult -> value.type to json.encodeToJsonElement(CreateProjectResultPayload.serializer(), value.data)
             is Payload.DeleteProjectRequest -> value.type to json.encodeToJsonElement(DeleteProjectRequestPayload.serializer(), value.data)
             is Payload.DeleteProjectResult -> value.type to json.encodeToJsonElement(DeleteProjectResultPayload.serializer(), value.data)
             is Payload.RunProfileMutationRequest -> value.type to json.encodeToJsonElement(RunProfileMutationRequestPayload.serializer(), value.data)

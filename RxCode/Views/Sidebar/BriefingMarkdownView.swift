@@ -10,7 +10,7 @@ struct BriefingMarkdownView: View {
     var fontSize: CGFloat = 13.5
 
     private var blocks: [Block] {
-        Self.parse(text)
+        Self.parse(GeneratedTextSanitizer.cleanMarkdownDocument(text))
     }
 
     var body: some View {

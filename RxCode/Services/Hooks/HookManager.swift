@@ -24,6 +24,13 @@ final class HookManager {
 
     private var enabledHooks: [any Hook] { hooks.filter(\.isEnabled) }
 
+    /// Whether a thread opts out of all lifecycle hooks (e.g. a `[Code Review]`
+    /// thread, so it can't itself trigger a review/commit and loop). Checks both
+    /// the in-memory key and the resolved session id since the CLI rotates ids.
+    private func threadSkipsHooks(_ keys: String...) -> Bool {
+        keys.contains { controller.threadSkipsHooks(sessionId: $0) }
+    }
+
     // MARK: - Session lifecycle
 
     func dispatchProjectNewChatStart(_ payload: NewChatStartPayload) async {
@@ -49,6 +56,7 @@ final class HookManager {
     }
 
     func dispatchSessionStart(_ payload: SessionStartPayload) async -> HookAggregateResult {
+        guard !threadSkipsHooks(payload.sessionKey) else { return HookAggregateResult.fold([]) }
         var outcomes: [HookOutcome] = []
         for hook in enabledHooks {
             outcomes.append(await hook.onSessionStart(payload, controller: controller))
@@ -57,6 +65,7 @@ final class HookManager {
     }
 
     func dispatchBeforeSessionEnd(_ payload: SessionEndPayload) async -> HookAggregateResult {
+        guard !threadSkipsHooks(payload.sessionKey, payload.sessionId) else { return HookAggregateResult.fold([]) }
         var outcomes: [HookOutcome] = []
         for hook in enabledHooks {
             outcomes.append(await hook.beforeSessionEnd(payload, controller: controller))
@@ -65,6 +74,7 @@ final class HookManager {
     }
 
     func dispatchAfterSessionEnd(_ payload: SessionEndPayload) async -> HookAggregateResult {
+        guard !threadSkipsHooks(payload.sessionKey, payload.sessionId) else { return HookAggregateResult.fold([]) }
         var outcomes: [HookOutcome] = []
         for hook in enabledHooks {
             outcomes.append(await hook.afterSessionEnd(payload, controller: controller))

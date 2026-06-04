@@ -236,7 +236,7 @@ struct MobileRunProfilesView: View {
                 Button {
                     editingProfile = Self.newProfile(projectID: projectID, type: .packageScript)
                 } label: {
-                    Label("Package Configuration", systemImage: "shippingbox.fill")
+                    Label("Node.js Configuration", systemImage: "shippingbox.fill")
                 }
             }
 
@@ -311,7 +311,7 @@ struct MobileRunProfilesView: View {
         case .packageScript:
             return RunProfile(
                 projectId: projectID,
-                name: "New Package Configuration",
+                name: "New Node.js Configuration",
                 type: .packageScript,
                 package: PackageRunConfig(),
                 createdAt: now,

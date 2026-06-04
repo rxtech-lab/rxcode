@@ -37,6 +37,45 @@ public protocol HookController: AnyObject {
     func project(for id: UUID) -> Project?
     /// The display title of a session (from its summary), if known.
     func sessionTitle(sessionId: String) -> String?
+
+    // MARK: Thread linkage / cross-thread sends (code-review & commit hooks)
+
+    /// Whether the thread should skip all lifecycle hooks (e.g. a review thread).
+    func threadSkipsHooks(sessionId: String) -> Bool
+    /// The model id stored on a thread, if any (used as the review thread's
+    /// default model).
+    func threadModel(sessionId: String) -> String?
+    /// Distinct paths of files edited during the thread.
+    func changedFilePaths(sessionId: String) -> [String]
+    /// The first user prompt text of a thread, if any.
+    func firstUserPrompt(sessionId: String) -> String?
+    /// A readable transcript of a thread's assistant activity (text + tool-call
+    /// summaries), used to fold a review thread's full content into a card on the
+    /// parent thread. Excludes the injected instruction prompt.
+    func threadTranscript(sessionId: String) -> String
+    /// Spawn a new linked thread (e.g. `[Code Review]`) that runs no hooks, and
+    /// wait for its first response. Returns the resolved thread id + assistant
+    /// text, or `nil` if it could not be sent.
+    func spawnLinkedThread(
+        projectId: UUID,
+        parentThreadId: String,
+        label: String,
+        model: String?,
+        prompt: String,
+        timeoutSeconds: TimeInterval
+    ) async -> HookLinkedThreadResult?
+    /// Send a follow-up prompt into an existing thread without waiting.
+    func sendThreadMessage(sessionId: String, prompt: String)
+    /// Record the latest review verdict for a session (shared between the
+    /// code-review and commit hooks within one stop cycle).
+    func setReviewPassed(_ passed: Bool, sessionId: String)
+    /// The latest recorded review verdict for a session, or `nil` if none.
+    func reviewPassed(sessionId: String) -> Bool?
+    /// Number of failed-review re-prompt rounds so far for a session (bounds the
+    /// review→fix→review loop).
+    func reviewRound(sessionId: String) -> Int
+    /// Set the failed-review round counter for a session.
+    func setReviewRound(_ round: Int, sessionId: String)
     /// First-sentence fallback body for a response-complete notification.
     func responseNotificationFallback(from responseText: String) -> String
     /// Optionally generate an AI summary of the response for a notification body.
@@ -191,6 +230,25 @@ public protocol HookController: AnyObject {
 public enum HookSetupKind {
     public static let release = "release"
     public static let docs = "docs"
+    /// Marks the follow-up turn the Commit & Push hook itself triggered, so the
+    /// hook short-circuits on that turn instead of looping forever.
+    public static let commitPush = "commitPush"
+}
+
+/// Result of spawning a linked thread via `spawnLinkedThread`.
+public struct HookLinkedThreadResult: Sendable {
+    /// The resolved (non-`pending-`) thread id of the spawned thread.
+    public let threadId: String
+    /// The reviewer/agent's first response text (empty on timeout).
+    public let assistantText: String
+    /// A transport/agent error, if any.
+    public let error: String?
+
+    public init(threadId: String, assistantText: String, error: String?) {
+        self.threadId = threadId
+        self.assistantText = assistantText
+        self.error = error
+    }
 }
 
 // MARK: - Banner surfaces

@@ -59,6 +59,15 @@ struct GlassThreadCard: View {
                         .font(.system(size: 16, weight: .medium))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
+
+                    if let label = session.threadLabel, !label.isEmpty {
+                        Text(label)
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(ClaudeTheme.accent)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(ClaudeTheme.accent.opacity(0.15), in: Capsule())
+                    }
                 }
                 
                 // Metadata row

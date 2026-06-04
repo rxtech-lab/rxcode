@@ -136,7 +136,7 @@ public enum RunTaskExecutor {
     /// appropriate `xcodebuild` invocation (and, for `.run`, locate the built
     /// `.app` from build settings and `open` it); for `.make` we synthesize
     /// a `make` invocation against the configured Makefile and target.
-    static func mainCommandLines(for profile: RunProfile, projectPath: String) -> [String] {
+    public static func mainCommandLines(for profile: RunProfile, projectPath: String) -> [String] {
         switch profile.type {
         case .bash:
             let cmd = profile.bash.command.trimmingCharacters(in: .whitespaces)

@@ -34,7 +34,10 @@ final class UserAddedHook: Hook {
         sessionKey: String,
         controller: any HookController
     ) async -> HookOutcome {
+        // Only command hooks run here; built-in actions (code review, commit &
+        // push) are handled by their own dedicated hooks.
         let hooks = await controller.enabledHookProfiles(projectId: project.id, trigger: trigger)
+            .filter { $0.action == .command }
         guard !hooks.isEmpty else { return .ignored }
 
         var combined: [String] = []

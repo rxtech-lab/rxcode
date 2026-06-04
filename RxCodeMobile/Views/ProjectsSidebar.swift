@@ -13,6 +13,7 @@ struct ProjectsSidebar: View {
     var usesSelection = true
     @State private var searchText = ""
     @State private var showingRemoteFolderPicker = false
+    @State private var showingGitHubRepoPicker = false
     @Namespace private var glassNamespace
 
     var body: some View {
@@ -20,12 +21,7 @@ struct ProjectsSidebar: View {
             .navigationTitle("Projects")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showingRemoteFolderPicker = true
-                    } label: {
-                        Image(systemName: "folder.badge.plus")
-                    }
-                    .accessibilityLabel("Add Project")
+                    addProjectMenu(iconOnly: true)
                     .popoverTip(MobileTips.RemoteProjectTip(), arrowEdge: .top)
                 }
             }
@@ -34,8 +30,24 @@ struct ProjectsSidebar: View {
                     .environmentObject(state)
                     .mobileSheetPresentation()
             }
+            .sheet(isPresented: $showingGitHubRepoPicker) {
+                MobileAutopilotRepoPicker(
+                    title: "Add Project",
+                    existingRepoFullNames: existingGitHubRepoNames
+                ) { repo in
+                    try await state.cloneAutopilotRepo(repo)
+                }
+                .environmentObject(state)
+                .mobileSheetPresentation()
+            }
             .refreshable {
                 await state.refreshSnapshot()
+            }
+            .task {
+                await loadAutopilotAccountIfNeeded()
+            }
+            .onChange(of: state.connectionState) { _, _ in
+                Task { await loadAutopilotAccountIfNeeded(force: true) }
             }
             .modifier(ProjectSidebarSearchModifier(isEnabled: showsSearch, searchText: $searchText))
             .modifier(ProjectSidebarSearchTipModifier(isEnabled: showsSearch))
@@ -230,12 +242,8 @@ struct ProjectsSidebar: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
 
-            Button {
-                showingRemoteFolderPicker = true
-            } label: {
-                Label("Add Project", systemImage: "plus")
-                    .font(.subheadline.weight(.medium))
-            }
+            addProjectMenu(iconOnly: false)
+                .font(.subheadline.weight(.medium))
             .buttonStyle(.glass)
             .padding(.top, 8)
         }
@@ -248,6 +256,48 @@ struct ProjectsSidebar: View {
     private var showsSearch: Bool {
         // Search is now handled by the dedicated search tab on iPhone
         false
+    }
+
+    private var canAddFromRemoteRepositories: Bool {
+        state.isPaired
+            && state.connectionState == .connected
+            && state.autopilotAccount?.isSignedIn == true
+    }
+
+    private var existingGitHubRepoNames: Set<String> {
+        Set(state.projects.compactMap { $0.gitHubRepo?.lowercased() })
+    }
+
+    @ViewBuilder
+    private func addProjectMenu(iconOnly: Bool) -> some View {
+        Menu {
+            Button {
+                showingRemoteFolderPicker = true
+            } label: {
+                Label("Add project locally", systemImage: "folder.badge.plus")
+            }
+
+            if canAddFromRemoteRepositories {
+                Button {
+                    showingGitHubRepoPicker = true
+                } label: {
+                    Label("Add project from remote repositories", systemImage: "square.and.arrow.down")
+                }
+            }
+        } label: {
+            if iconOnly {
+                Image(systemName: "plus")
+            } else {
+                Label("Add Project", systemImage: "plus")
+            }
+        }
+        .accessibilityLabel("Add Project")
+    }
+
+    private func loadAutopilotAccountIfNeeded(force: Bool = false) async {
+        guard state.isPaired, state.connectionState == .connected else { return }
+        if !force, state.autopilotAccount != nil { return }
+        _ = try? await state.loadAutopilotAccount()
     }
 
     private func threadCount(for projectID: UUID) -> Int {

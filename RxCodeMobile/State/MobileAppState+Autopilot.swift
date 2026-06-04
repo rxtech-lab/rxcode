@@ -130,6 +130,27 @@ extension MobileAppState {
                                 as: SecretsManagedRepoPage.self)
     }
 
+    @discardableResult
+    func cloneAutopilotRepo(_ repo: SecretsManagedRepo) async throws -> Project {
+        let result = try await autopilotSend(.account, .cloneManagedRepo,
+                                             body: AutopilotCloneRepoBody(fullName: repo.fullName),
+                                             as: AutopilotCloneRepoResult.self)
+        if !projects.contains(where: { $0.id == result.project.id }) {
+            projects.append(result.project)
+        }
+        lastCreatedProjectID = result.project.id
+        Task { await requestSnapshot() }
+        return result.project
+    }
+
+    func githubAppInstallURL() async throws -> URL {
+        let response = try await autopilotSend(.account, .installGitHubAppUrl, as: AutopilotInstallUrlResponse.self)
+        guard let url = URL(string: response.url) else {
+            throw AutopilotRemoteError.server(String(localized: "The Mac returned an invalid GitHub App install URL."))
+        }
+        return url
+    }
+
     // MARK: - Automation settings
 
     func automationSchema() async throws -> SchemaEnvelope {

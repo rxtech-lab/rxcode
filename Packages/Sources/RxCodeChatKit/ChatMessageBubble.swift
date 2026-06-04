@@ -93,14 +93,9 @@ private struct CompactChatMessageBubble: View {
     }
 
     private func userTextBubble(_ text: String) -> some View {
-        ChatTextContentView(
-            text,
-            size: ClaudeTheme.messageSize(14),
-            color: ClaudeTheme.userBubbleText,
-            lineSpacing: 2
-        )
-        .bubbleStyle(.user)
-        .frame(maxWidth: 500, alignment: .trailing)
+        MarkdownContentView(text: text, style: .rxCodeChatUser)
+            .bubbleStyle(.user)
+            .frame(maxWidth: 500, alignment: .trailing)
     }
 
     private func assistantText(_ text: String) -> some View {

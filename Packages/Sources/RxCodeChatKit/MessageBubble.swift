@@ -19,6 +19,9 @@ struct MessageBubble: View {
     /// Threshold (character count) for collapsing long text
     private static let longTextThreshold = 500
 
+    /// Height the collapsed (long) user bubble is clipped to before "Show more".
+    private static let collapsedMaxHeight: CGFloat = 120
+
     private enum AssistantRenderBlock: Identifiable {
         case text(MessageBlock)
         case tool(ToolCall)
@@ -234,24 +237,25 @@ struct MessageBubble: View {
         } else {
             VStack(alignment: .leading, spacing: 6) {
                 let isLong = displayText.count > Self.longTextThreshold
-                ChatTextContentView(
-                    attributed: chipifiedAttributedString(displayText),
-                    size: ClaudeTheme.messageSize(14),
-                    color: ClaudeTheme.userBubbleText,
-                    maximumNumberOfLines: isLong && !isLongTextExpanded ? 5 : nil
+                let collapsed = isLong && !isLongTextExpanded
+                MarkdownContentView(
+                    text: markdownUserText(displayText),
+                    style: .rxCodeChatUser
                 ) { url in
                     // Intercept the synthetic `rxcode-image://<index>` link emitted
-                    // by chipifiedAttributedString and open the matching image in the
-                    // preview sheet rather than the system browser.
+                    // by markdownUserText and open the matching image in the preview
+                    // sheet rather than the system browser.
                     guard url.scheme == "rxcode-image",
                           let index = Int(url.host ?? ""),
                           let path = imagePath(forChipIndex: index) else {
-                        return false
+                        return .systemAction
                     }
                     previewImagePath = path
-                    return true
+                    return .handled
                 }
-                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxHeight: collapsed ? Self.collapsedMaxHeight : nil, alignment: .topLeading)
+                .clipped()
+                .fixedSize(horizontal: false, vertical: !collapsed)
                 if isLong {
                     Button {
                         withAnimation(.easeInOut(duration: 0.2)) {
@@ -660,32 +664,21 @@ struct MessageBubble: View {
         return result
     }
 
-    /// Renders `[Image\d+]` tokens with accent-tinted chip styling. The same tokens
-    /// are inserted into the input bar by `WindowState.insertImageToken` and drawn
-    /// with a rounded background there via `ChipLayoutManager`; this mirrors that
-    /// treatment in the sent user bubble.
-    ///
-    /// Each chip also gets a `rxcode-image://<index>` link attribute; an
-    /// `environment(\.openURL, ...)` handler on the Text intercepts the tap and
-    /// opens the corresponding image in `MessageImagePreviewSheet`. The index
-    /// matches `WindowState.imageIndex(for:)` — 1-based, image-only.
-    private func chipifiedAttributedString(_ text: String) -> AttributedString {
-        var attr = AttributedString(text)
+    /// Prepares user-message text for the markdown renderer by rewriting `[ImageN]`
+    /// chip tokens into `[ImageN](rxcode-image://N)` links. The renderer then draws
+    /// them as tappable accents; the `rxcode-image` scheme is intercepted by the
+    /// bubble's link handler to open the image preview rather than the browser. The
+    /// same `[ImageN]` tokens are inserted into the input bar by
+    /// `WindowState.insertImageToken`; the index matches `WindowState.imageIndex(for:)`
+    /// — 1-based, image-only.
+    private func markdownUserText(_ text: String) -> String {
         let ns = text as NSString
         let fullRange = NSRange(location: 0, length: ns.length)
-        Self.imageChipRegex.enumerateMatches(in: text, range: fullRange) { match, _, _ in
-            guard let m = match,
-                  let range = Range(m.range, in: attr),
-                  m.numberOfRanges >= 2,
-                  let indexRange = Range(m.range(at: 1), in: text),
-                  let index = Int(text[indexRange]) else { return }
-            attr[range].backgroundColor = ClaudeTheme.accent.opacity(0.22)
-            attr[range].foregroundColor = ClaudeTheme.accent
-            attr[range].font = .system(size: ClaudeTheme.messageSize(13), weight: .medium)
-            attr[range].link = URL(string: "rxcode-image://\(index)")
-            attr[range].underlineStyle = nil
-        }
-        return attr
+        return Self.imageChipRegex.stringByReplacingMatches(
+            in: text,
+            range: fullRange,
+            withTemplate: "[Image$1](rxcode-image://$1)"
+        )
     }
 
     /// Resolve `[ImageN]` chip index (1-based) to a concrete image file path.

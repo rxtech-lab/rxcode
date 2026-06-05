@@ -510,15 +510,21 @@ extension MobileAppState {
     /// identical items.
     func fetchProjectMenu(projectId: UUID, branch: String? = nil) async throws -> [MenuItem] {
         try await autopilotSend(.project, .menuForProject,
-                                body: AutopilotProjectMenuBody(projectId: projectId, branch: branch),
+                                body: AutopilotProjectMenuBody(projectId: projectId, branch: branch, locale: Self.currentLocaleCode),
                                 as: AutopilotMenuResult.self).items
     }
 
     /// Fetches a thread's context menu from the Mac (see `fetchProjectMenu`).
     func fetchThreadMenu(sessionId: String) async throws -> [MenuItem] {
         try await autopilotSend(.project, .menuForThread,
-                                body: AutopilotThreadBody(sessionId: sessionId),
+                                body: AutopilotThreadBody(sessionId: sessionId, locale: Self.currentLocaleCode),
                                 as: AutopilotMenuResult.self).items
+    }
+
+    /// The phone's current language code (e.g. "ko", "zh-Hans"), sent with menu
+    /// requests so the desktop returns built-in titles translated for the device.
+    static var currentLocaleCode: String {
+        Locale.preferredLanguages.first ?? Locale.current.identifier
     }
 
     /// Runs a tapped `MenuActionCommand` on the Mac through its shared menu

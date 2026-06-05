@@ -1037,7 +1037,20 @@
       }
     },
     "Add a Code Review hook and a second agent reviews every change before you ship it." : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "코드 리뷰 훅을 추가하면 두 번째 에이전트가 배포 전에 모든 변경 사항을 검토합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加代码审查 Hook，第二个智能体会在你发布前审查每一处更改。"
+          }
+        }
+      }
     },
     "Add a Git repository by URL" : {
       "extractionState" : "stale",
@@ -1249,6 +1262,22 @@
         }
       }
     },
+    "Add Item" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "항목 추가"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加项"
+          }
+        }
+      }
+    },
     "Add MCP Server" : {
       "localizations" : {
         "ko" : {
@@ -1374,10 +1403,36 @@
       }
     },
     "Add project from remote repositories" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "원격 저장소에서 프로젝트 추가"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从远程仓库添加项目"
+          }
+        }
+      }
     },
     "Add project locally" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "로컬에서 프로젝트 추가"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从本地添加项目"
+          }
+        }
+      }
     },
     "Add Relay Server" : {
       "localizations" : {
@@ -1561,6 +1616,22 @@
         }
       }
     },
+    "Add your own items to the project, thread, and briefing-card menus. They sync to mobile automatically." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트, 스레드, 브리핑 카드 메뉴에 직접 항목을 추가하세요. 모바일에 자동으로 동기화됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "向项目、线程和简报卡片菜单中添加你自己的项。它们会自动同步到移动设备。"
+          }
+        }
+      }
+    },
     "Added" : {
       "localizations" : {
         "en" : {
@@ -1584,7 +1655,20 @@
       }
     },
     "After a successful session, the agent is asked to commit the changed files and push them (choosing a new or existing branch). The commit turn itself won't re-trigger this hook. If a Code Review hook is also enabled, the commit only happens after the review passes." : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "세션이 성공적으로 끝나면 에이전트에게 변경된 파일을 커밋하고 푸시하도록 요청합니다(새 브랜치 또는 기존 브랜치 선택). 커밋 턴 자체는 이 훅을 다시 트리거하지 않습니다. 코드 리뷰 훅도 활성화된 경우 리뷰를 통과한 후에만 커밋이 이루어집니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会话成功结束后，会要求智能体提交更改的文件并推送（选择新分支或现有分支）。提交这一轮本身不会再次触发此 Hook。如果同时启用了代码审查 Hook，则只有在审查通过后才会提交。"
+          }
+        }
+      }
     },
     "After Session Stop" : {
       "extractionState" : "stale",
@@ -1604,10 +1688,36 @@
       }
     },
     "After the session is finalized, the change is sent to a linked [Code Review] thread that runs no hooks. If the review requests changes, its notes are sent back into this thread so the agent keeps fixing and is re-reviewed (up to 3 times)." : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "세션이 완료되면 변경 사항이 훅을 실행하지 않는 연결된 [Code Review] 스레드로 전송됩니다. 리뷰에서 변경을 요청하면 해당 노트가 이 스레드로 다시 전송되어 에이전트가 계속 수정하고 다시 검토받습니다(최대 3회)."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会话完成后，更改会发送到一个不运行任何 Hook 的关联 [Code Review] 线程。如果审查要求修改，其备注会发送回此线程，以便智能体持续修复并重新接受审查（最多 3 次）。"
+          }
+        }
+      }
     },
     "After the session is finalized, your message is sent to the assistant — as a follow-up in this thread or into a new linked thread that runs no hooks. With a condition, a model first decides yes/no. Fires once per session and resets when you send a new message." : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "세션이 완료되면 메시지가 어시스턴트로 전송됩니다 — 이 스레드의 후속 메시지로 또는 훅을 실행하지 않는 새 연결 스레드로. 조건이 있으면 모델이 먼저 예/아니요를 결정합니다. 세션당 한 번 실행되며 새 메시지를 보내면 초기화됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会话完成后，你的消息会发送给助手——作为此线程中的后续消息，或发送到一个不运行任何 Hook 的新关联线程。设置条件后，模型会先判断是/否。每个会话触发一次，发送新消息时重置。"
+          }
+        }
+      }
     },
     "Agent Availability" : {
       "localizations" : {
@@ -1717,6 +1827,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "所有聊天"
+          }
+        }
+      }
+    },
+    "All projects" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모든 프로젝트"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所有项目"
           }
         }
       }
@@ -1875,6 +2001,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "始终允许此命令"
+          }
+        }
+      }
+    },
+    "An SF Symbol name shown beside the title, e.g. \"bolt\"." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "제목 옆에 표시되는 SF Symbol 이름입니다. 예: \"bolt\"."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示在标题旁边的 SF Symbol 名称，例如 “bolt”。"
           }
         }
       }
@@ -2402,7 +2544,20 @@
       }
     },
     "Automatic code review" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "자동 코드 리뷰"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动代码审查"
+          }
+        }
+      }
     },
     "Automation" : {
       "localizations" : {
@@ -2620,6 +2775,22 @@
         }
       }
     },
+    "Body" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "본문"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正文"
+          }
+        }
+      }
+    },
     "Branch" : {
       "localizations" : {
         "ko" : {
@@ -2680,6 +2851,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "简报"
+          }
+        }
+      }
+    },
+    "Briefing card menu" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "브리핑 카드 메뉴"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "简报卡片菜单"
           }
         }
       }
@@ -2760,6 +2947,54 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "构建会运行 `xcodebuild build`。Run 会先构建，然后启动生成的 .app（macOS），或在所选模拟器上安装并启动。请从运行工具栏选择目标。"
+          }
+        }
+      }
+    },
+    "Build your own project, thread, and briefing-card menu items in Settings → Context Menus. They sync to your phone automatically." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설정 → 컨텍스트 메뉴에서 프로젝트, 스레드, 브리핑 카드 메뉴 항목을 직접 만드세요. 휴대폰에 자동으로 동기화됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在“设置 → 上下文菜单”中构建你自己的项目、线程和简报卡片菜单项。它们会自动同步到你的手机。"
+          }
+        }
+      }
+    },
+    "Call an external API — define the method, URL, headers, and body once, with {{placeholders}} for project and branch context." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "외부 API 호출 — 메서드, URL, 헤더, 본문을 한 번만 정의하고 프로젝트와 브랜치 컨텍스트에 {{placeholders}}를 사용하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "调用外部 API——一次性定义方法、URL、请求头和正文，并使用 {{placeholders}} 表示项目和分支上下文。"
+          }
+        }
+      }
+    },
+    "Call external API" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "외부 API 호출"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "调用外部 API"
           }
         }
       }
@@ -3285,25 +3520,119 @@
       }
     },
     "Code Review" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "코드 리뷰"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "代码审查"
+          }
+        }
+      }
     },
     "Code Review for %@" : {
-
+      "extractionState" : "stale",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 코드 리뷰"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "审查 %@"
+          }
+        }
+      }
     },
     "Code Review for Current Branch" : {
-
+      "extractionState" : "stale",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "현재 브랜치 코드 리뷰"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "审查当前分支"
+          }
+        }
+      }
     },
     "Code Review for this thread" : {
-
+      "extractionState" : "stale",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 스레드 코드 리뷰"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "审查此线程"
+          }
+        }
+      }
     },
     "Code review found issues" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "코드 리뷰에서 문제 발견"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "代码审查发现问题"
+          }
+        }
+      }
     },
     "Code review in progress" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "코드 리뷰 진행 중"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "代码审查进行中"
+          }
+        }
+      }
     },
     "Code review passed" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "코드 리뷰 통과"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "代码审查通过"
+          }
+        }
+      }
     },
     "Collapse chats" : {
       "localizations" : {
@@ -3360,7 +3689,20 @@
       }
     },
     "Command Failed" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "명령 실패"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "命令失败"
+          }
+        }
+      }
     },
     "Commands" : {
       "localizations" : {
@@ -3379,7 +3721,20 @@
       }
     },
     "Commit & Push" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "커밋 및 푸시"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "提交并推送"
+          }
+        }
+      }
     },
     "Commit %@" : {
       "localizations" : {
@@ -3398,10 +3753,38 @@
       }
     },
     "Commit All Changes" : {
-
+      "extractionState" : "stale",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모든 변경 사항 커밋"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "提交所有更改"
+          }
+        }
+      }
     },
     "Commit Files" : {
-
+      "extractionState" : "stale",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "파일 커밋"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "提交文件"
+          }
+        }
+      }
     },
     "Commit message" : {
       "localizations" : {
@@ -3420,13 +3803,52 @@
       }
     },
     "Commit when a session finishes" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "세션이 끝나면 커밋"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会话结束时提交"
+          }
+        }
+      }
     },
     "Condition" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "조건"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "条件"
+          }
+        }
+      }
     },
     "Condition model" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "조건 모델"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "条件模型"
+          }
+        }
+      }
     },
     "Configuration" : {
       "localizations" : {
@@ -3751,6 +4173,22 @@
         }
       }
     },
+    "Context Menus" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "컨텍스트 메뉴"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上下文菜单"
+          }
+        }
+      }
+    },
     "Continue" : {
       "localizations" : {
         "ko" : {
@@ -3763,6 +4201,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "继续"
+          }
+        }
+      }
+    },
+    "Continue existing thread" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기존 스레드 계속하기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "继续现有线程"
+          }
+        }
+      }
+    },
+    "Continue thread" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스레드 계속하기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "继续线程"
           }
         }
       }
@@ -3946,6 +4416,22 @@
         }
       }
     },
+    "Create a new thread or continue an existing one with a templated message." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "템플릿 메시지로 새 스레드를 만들거나 기존 스레드를 계속합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用模板消息创建新线程或继续现有线程。"
+          }
+        }
+      }
+    },
     "Create and checkout" : {
       "localizations" : {
         "ko" : {
@@ -4011,6 +4497,22 @@
         }
       }
     },
+    "Create new thread" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 스레드 만들기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建新线程"
+          }
+        }
+      }
+    },
     "Create PR" : {
       "localizations" : {
         "ko" : {
@@ -4028,6 +4530,7 @@
       }
     },
     "Create Pull Request" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -4249,6 +4752,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "自定义"
+          }
+        }
+      }
+    },
+    "Custom context menus" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "사용자 지정 컨텍스트 메뉴"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自定义上下文菜单"
+          }
+        }
+      }
+    },
+    "Custom Context Menus" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "사용자 지정 컨텍스트 메뉴"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自定义上下文菜单"
           }
         }
       }
@@ -5368,6 +5903,22 @@
         }
       }
     },
+    "Edit Menu Item" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "메뉴 항목 편집"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑菜单项"
+          }
+        }
+      }
+    },
     "Edit Relay Server" : {
       "localizations" : {
         "ko" : {
@@ -5412,6 +5963,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "编辑你的 Autopilot 自动化偏好设置。"
+          }
+        }
+      }
+    },
+    "Edit…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "편집…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑…"
           }
         }
       }
@@ -5487,7 +6054,20 @@
       }
     },
     "Empty Node.js Configuration" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "비어 있는 Node.js 구성"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "空的 Node.js 配置"
+          }
+        }
+      }
     },
     "Empty Package Configuration" : {
       "extractionState" : "stale",
@@ -5910,7 +6490,20 @@
       }
     },
     "Extra instructions (optional)" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "추가 지침 (선택 사항)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "额外说明（可选）"
+          }
+        }
+      }
     },
     "Fact" : {
       "localizations" : {
@@ -5951,7 +6544,20 @@
       }
     },
     "Failed reviews are sent back to the original thread so the agent can fix and get re-reviewed." : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실패한 리뷰는 원래 스레드로 다시 전송되어 에이전트가 수정하고 다시 검토받을 수 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未通过的审查会发送回原始线程，以便智能体修复并重新接受审查。"
+          }
+        }
+      }
     },
     "Failed to check status" : {
       "localizations" : {
@@ -6116,6 +6722,7 @@
       }
     },
     "Fix Failing CI" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -6544,7 +7151,20 @@
       }
     },
     "Got it" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "확인"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "知道了"
+          }
+        }
+      }
     },
     "Headers" : {
       "localizations" : {
@@ -6563,7 +7183,20 @@
       }
     },
     "Hide code reviews" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "코드 리뷰 숨기기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐藏代码审查"
+          }
+        }
+      }
     },
     "Hide details" : {
       "localizations" : {
@@ -7425,7 +8058,20 @@
       }
     },
     "Key" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "키"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "键"
+          }
+        }
+      }
     },
     "KEY" : {
       "localizations" : {
@@ -8332,6 +8978,22 @@
         }
       }
     },
+    "Method" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "메서드"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "方法"
+          }
+        }
+      }
+    },
     "Mobile" : {
       "localizations" : {
         "ko" : {
@@ -8641,7 +9303,36 @@
       }
     },
     "New in RxCode" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RxCode의 새로운 기능"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RxCode 新功能"
+          }
+        }
+      }
+    },
+    "New Menu Item" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 메뉴 항목"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建菜单项"
+          }
+        }
+      }
     },
     "New Template" : {
       "localizations" : {
@@ -8692,10 +9383,36 @@
       }
     },
     "New thread" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 스레드"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建线程"
+          }
+        }
+      }
     },
     "New thread label" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 스레드 레이블"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新线程标签"
+          }
+        }
+      }
     },
     "New thread starts" : {
       "extractionState" : "stale",
@@ -8898,6 +9615,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "尚未添加自定义 Git 来源。"
+          }
+        }
+      }
+    },
+    "No custom items yet." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "아직 사용자 지정 항목이 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂无自定义项。"
           }
         }
       }
@@ -9575,7 +10308,20 @@
       }
     },
     "Node.js" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Node.js"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Node.js"
+          }
+        }
+      }
     },
     "Non-zero → agent continues" : {
       "extractionState" : "stale",
@@ -9843,7 +10589,20 @@
       }
     },
     "Only send when a condition is met" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "조건이 충족될 때만 전송"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅在满足条件时发送"
+          }
+        }
+      }
     },
     "Open" : {
       "localizations" : {
@@ -10594,7 +11353,20 @@
       }
     },
     "Pick which model performs the review — defaults to the same model as the thread." : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "리뷰를 수행할 모델을 선택하세요 — 기본값은 스레드와 동일한 모델입니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择执行审查的模型——默认与线程使用相同的模型。"
+          }
+        }
+      }
     },
     "Pin" : {
       "localizations" : {
@@ -10822,6 +11594,22 @@
         }
       }
     },
+    "Project menu" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 메뉴"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目菜单"
+          }
+        }
+      }
+    },
     "Project name" : {
       "localizations" : {
         "en" : {
@@ -10996,7 +11784,20 @@
       }
     },
     "Push to the remote automatically, or keep the commit local." : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "원격에 자동으로 푸시하거나 커밋을 로컬에 유지합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动推送到远程，或将提交保留在本地。"
+          }
+        }
+      }
     },
     "Quit" : {
       "localizations" : {
@@ -11506,6 +12307,22 @@
         }
       }
     },
+    "Remove menu item?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "메뉴 항목을 제거하시겠습니까?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除菜单项？"
+          }
+        }
+      }
+    },
     "Remove Release Repository" : {
       "localizations" : {
         "ko" : {
@@ -11764,6 +12581,22 @@
         }
       }
     },
+    "Request" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "요청"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请求"
+          }
+        }
+      }
+    },
     "Reset" : {
       "localizations" : {
         "en" : {
@@ -11988,7 +12821,20 @@
       }
     },
     "Review model" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "리뷰 모델"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "审查模型"
+          }
+        }
+      }
     },
     "Review the CLI setup check" : {
       "localizations" : {
@@ -12135,7 +12981,20 @@
       }
     },
     "Runs after a session finishes and reviews the modified files in a linked thread." : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "세션이 끝난 후 실행되어 연결된 스레드에서 수정된 파일을 검토합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在会话结束后运行，并在关联线程中审查已修改的文件。"
+          }
+        }
+      }
     },
     "Runs after streaming stops. Its output is shown only — nothing is passed back to the session." : {
       "extractionState" : "stale",
@@ -12335,10 +13194,36 @@
       }
     },
     "Same as thread" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스레드와 동일"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "与线程相同"
+          }
+        }
+      }
     },
     "Same thread" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "동일한 스레드"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同一线程"
+          }
+        }
+      }
     },
     "Save" : {
       "localizations" : {
@@ -12528,6 +13413,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "范围"
+          }
+        }
+      }
+    },
+    "Scope an item to one project or all of them; it shows up on desktop and mobile alike." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "항목을 하나의 프로젝트 또는 모든 프로젝트로 범위를 지정하세요. 데스크톱과 모바일 모두에 표시됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将某项限定到单个项目或所有项目；它会同时显示在桌面端和移动端。"
           }
         }
       }
@@ -12848,7 +13749,20 @@
       }
     },
     "See the latest features and updates" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "최신 기능 및 업데이트 보기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查看最新功能和更新"
+          }
+        }
+      }
     },
     "Select a dispatchable release workflow first (re-add the repo to rescan if needed)." : {
       "localizations" : {
@@ -13115,7 +14029,20 @@
       }
     },
     "Send Message" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "메시지 보내기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发送消息"
+          }
+        }
+      }
     },
     "Send test notification" : {
       "localizations" : {
@@ -13134,7 +14061,20 @@
       }
     },
     "Send to" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "보낼 대상"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发送至"
+          }
+        }
+      }
     },
     "Sends a system notification while RxCode is in the background." : {
       "localizations" : {
@@ -13229,9 +14169,24 @@
       }
     },
     "Set Up CI Update" : {
-
+      "extractionState" : "stale",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CI 업데이트 설정"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置 CI 更新"
+          }
+        }
+      }
     },
     "Set Up Docs" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -13297,6 +14252,7 @@
       }
     },
     "Set Up Release Workflow" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -13329,6 +14285,7 @@
       }
     },
     "Set Up Secrets" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -13392,6 +14349,22 @@
         }
       }
     },
+    "SF Symbol" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SF Symbol"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SF Symbol"
+          }
+        }
+      }
+    },
     "Shortcuts" : {
       "localizations" : {
         "en" : {
@@ -13415,7 +14388,20 @@
       }
     },
     "Show %lld code review(s)" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "코드 리뷰 %lld개 표시"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示 %lld 个代码审查"
+          }
+        }
+      }
     },
     "Show active chats" : {
       "localizations" : {
@@ -13537,6 +14523,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "显示隐藏文件"
+          }
+        }
+      }
+    },
+    "Show in" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "표시 위치"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示于"
           }
         }
       }
@@ -14113,7 +15115,21 @@
       }
     },
     "Stop Code Review" : {
-
+      "extractionState" : "stale",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "코드 리뷰 중지"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止代码审查"
+          }
+        }
+      }
     },
     "Stop running tasks" : {
       "localizations" : {
@@ -14213,7 +15229,20 @@
       }
     },
     "Summarization model" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "요약 모델"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "摘要模型"
+          }
+        }
+      }
     },
     "Summarization Model" : {
       "localizations" : {
@@ -14318,6 +15347,22 @@
         }
       }
     },
+    "Target thread id" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "대상 스레드 ID"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目标线程 ID"
+          }
+        }
+      }
+    },
     "Templates of GitHub merge settings and an optional branch ruleset. Your default template is applied automatically to new repositories." : {
       "localizations" : {
         "ko" : {
@@ -14399,7 +15444,20 @@
       }
     },
     "The new Commit & Push hook commits — and optionally pushes — your work the moment an agent session completes." : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새로운 커밋 및 푸시 훅은 에이전트 세션이 완료되는 즉시 작업을 커밋하고 선택적으로 푸시합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全新的“提交并推送” Hook 会在智能体会话完成的那一刻提交你的工作——并可选择推送。"
+          }
+        }
+      }
     },
     "The next version is computed by semantic-release from the commit history." : {
       "localizations" : {
@@ -14429,6 +15487,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "发布 CI 使用 RELEASE_TOKEN 密钥向 GitHub 进行身份验证。粘贴一个 GitHub 令牌（具有 contents:write 权限的 PAT），RxCode 会为你将其安装为仓库的 GitHub Actions 密钥 — 无需终端。"
+          }
+        }
+      }
+    },
+    "The session id of the thread to continue. Leave a {{sessionId}} placeholder to target the tapped thread." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "계속할 스레드의 세션 ID입니다. 탭한 스레드를 대상으로 하려면 {{sessionId}} 플레이스홀더를 남겨두세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要继续的线程的会话 ID。保留 {{sessionId}} 占位符可指向所点按的线程。"
           }
         }
       }
@@ -14669,8 +15743,37 @@
         }
       }
     },
+    "Thread menu" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스레드 메뉴"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "线程菜单"
+          }
+        }
+      }
+    },
     "Thread model" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스레드 모델"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "线程模型"
+          }
+        }
+      }
     },
     "Thread Model" : {
       "localizations" : {
@@ -14749,6 +15852,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "对话在设备内搜索 · 文档来自文档服务"
+          }
+        }
+      }
+    },
+    "Title" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "제목"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "标题"
           }
         }
       }
@@ -14840,7 +15959,20 @@
       }
     },
     "Triggers automatically once an agent session finishes." : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "에이전트 세션이 끝나면 자동으로 트리거됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "智能体会话结束后自动触发。"
+          }
+        }
+      }
     },
     "Type" : {
       "localizations" : {
@@ -14995,6 +16127,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "URL 链接"
+          }
+        }
+      }
+    },
+    "URLs, bodies, and messages can use placeholders: {{projectName}}, {{projectPath}}, {{gitHubRepo}}, {{branch}}, {{sessionId}}." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "URL, 본문, 메시지에는 플레이스홀더를 사용할 수 있습니다: {{projectName}}, {{projectPath}}, {{gitHubRepo}}, {{branch}}, {{sessionId}}."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "URL、正文和消息可以使用占位符：{{projectName}}、{{projectPath}}、{{gitHubRepo}}、{{branch}}、{{sessionId}}。"
           }
         }
       }
@@ -15463,10 +16611,36 @@
       }
     },
     "What's New" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새로운 기능"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新功能"
+          }
+        }
+      }
     },
     "When a Code Review hook is configured, commits only happen after the review passes." : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "코드 리뷰 훅이 구성된 경우 리뷰를 통과한 후에만 커밋이 이루어집니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配置代码审查 Hook 后，只有在审查通过后才会提交。"
+          }
+        }
+      }
     },
     "When CI fails on a project's current branch, automatically start a thread so an agent can fix it. CI failures are always notified; this only controls the automatic fix." : {
       "localizations" : {
@@ -15480,6 +16654,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "当项目当前分支的 CI 失败时，自动开启一个对话以便代理修复。CI 失败始终会收到通知；此项仅控制自动修复。"
+          }
+        }
+      }
+    },
+    "When tapped" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "탭했을 때"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "点按时"
           }
         }
       }

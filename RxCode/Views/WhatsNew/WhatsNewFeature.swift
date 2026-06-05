@@ -47,6 +47,17 @@ struct WhatsNewFeature: Identifiable {
                 Highlight(icon: "checkmark.seal", text: "When a Code Review hook is configured, commits only happen after the review passes."),
                 Highlight(icon: "arrow.up.doc", text: "Push to the remote automatically, or keep the commit local.")
             ]
+        ),
+        WhatsNewFeature(
+            slug: "custom-context-menus",
+            title: "Custom context menus",
+            subtitle: "Build your own project, thread, and briefing-card menu items in Settings → Context Menus. They sync to your phone automatically.",
+            icon: "ellipsis.rectangle",
+            highlights: [
+                Highlight(icon: "globe", text: "Call an external API — define the method, URL, headers, and body once, with {{placeholders}} for project and branch context."),
+                Highlight(icon: "bubble.left.and.bubble.right", text: "Create a new thread or continue an existing one with a templated message."),
+                Highlight(icon: "iphone", text: "Scope an item to one project or all of them; it shows up on desktop and mobile alike.")
+            ]
         )
     ]
 }

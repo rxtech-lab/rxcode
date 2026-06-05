@@ -526,7 +526,13 @@ public struct AutopilotPullRequestResult: Codable, Sendable {
 /// (the manual equivalent of the built-in Code Review hook).
 public struct AutopilotThreadBody: Codable, Sendable {
     public let sessionId: String
-    public init(sessionId: String) { self.sessionId = sessionId }
+    /// The phone's locale for `menuForThread` so built-in titles come back
+    /// translated. Ignored by `threadCreateCodeReview`.
+    public let locale: String?
+    public init(sessionId: String, locale: String? = nil) {
+        self.sessionId = sessionId
+        self.locale = locale
+    }
 }
 
 /// Result of thread-spawning project actions such as code review and commit:
@@ -545,9 +551,13 @@ public struct AutopilotCodeReviewResult: Codable, Sendable {
 public struct AutopilotProjectMenuBody: Codable, Sendable {
     public let projectId: UUID
     public let branch: String?
-    public init(projectId: UUID, branch: String? = nil) {
+    /// The phone's locale (language code) so the desktop returns built-in menu
+    /// titles translated for the device, not the Mac's own system locale.
+    public let locale: String?
+    public init(projectId: UUID, branch: String? = nil, locale: String? = nil) {
         self.projectId = projectId
         self.branch = branch
+        self.locale = locale
     }
 }
 

@@ -27,11 +27,11 @@ final class CIUpdateHook: Hook {
     // MARK: Context menu
 
     func onProjectContextMenu(_ payload: ProjectContextMenuPayload, controller: any HookController) -> [MenuItem] {
-        menuItems(for: payload.project, controller: controller)
+        menuItems(for: payload.project, locale: payload.locale, controller: controller)
     }
 
     func onThreadContextMenu(_ payload: ThreadContextMenuPayload, controller: any HookController) -> [MenuItem] {
-        menuItems(for: payload.project, controller: controller)
+        menuItems(for: payload.project, locale: payload.locale, controller: controller)
     }
 
     /// Offers "Set Up CI Update" when the project has a linked GitHub repo that
@@ -40,14 +40,14 @@ final class CIUpdateHook: Hook {
     /// alongside secrets/docs/release), so an already-set-up repo no longer shows
     /// the item. It's a `.deepLink` (presents the CI setup sheet locally) rather
     /// than a `.command`, so desktop and mobile each open their own UI.
-    private func menuItems(for project: Project, controller: any HookController) -> [MenuItem] {
+    private func menuItems(for project: Project, locale: String?, controller: any HookController) -> [MenuItem] {
         guard project.gitHubRepo != nil else { return [] }
         // Already a watched repo → CI auto-update is set up; nothing to offer.
         guard !controller.projectHasCIUpdates(project) else { return [] }
         return [
             MenuItem(
                 id: "\(hookID).setup.\(project.id.uuidString)",
-                title: String(localized: "Set Up CI Update"),
+                title: MenuLocalizer.string("Set Up CI Update", locale: locale),
                 systemImage: "arrow.triangle.2.circlepath",
                 action: .deepLink(MenuDeepLink.url(action: MenuDeepLink.ciSetup, projectId: project.id))
             )

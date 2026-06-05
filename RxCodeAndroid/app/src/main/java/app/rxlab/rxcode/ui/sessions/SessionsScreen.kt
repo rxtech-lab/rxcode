@@ -32,6 +32,7 @@ import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
@@ -47,6 +48,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -63,6 +65,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.rxlab.rxcode.proto.MenuAction
+import app.rxlab.rxcode.proto.MenuCommandKind
 import app.rxlab.rxcode.proto.MenuItem
 import app.rxlab.rxcode.proto.SessionAttentionKind
 import app.rxlab.rxcode.proto.SessionSummary
@@ -70,6 +73,7 @@ import app.rxlab.rxcode.proto.TodoItem
 import app.rxlab.rxcode.state.MobileAppState
 import app.rxlab.rxcode.state.MobileState
 import app.rxlab.rxcode.ui.autopilot.ProjectActionsMenu
+import app.rxlab.rxcode.ui.autopilot.commandLoadingText
 import app.rxlab.rxcode.ui.autopilot.SerializedMenuItems
 import app.rxlab.rxcode.ui.sheets.NewThreadSheet
 import app.rxlab.rxcode.ui.sheets.RenameThreadSheet
@@ -374,16 +378,54 @@ private fun SessionCard(
         threadMenu = runCatching { viewModel.fetchThreadMenu(session.id) }.getOrNull()
     }
 
+    // Drives the loading dialog while an async thread command (e.g. a custom API
+    // call) runs; `dispatchingThreadCommand` guards re-entrancy and `threadCommandError`
+    // surfaces a failure to the user instead of silently swallowing it. Mirrors
+    // `ProjectActionsMenu`.
+    var dispatchingThreadCommand by remember { mutableStateOf(false) }
+    var asyncThreadCommand by remember { mutableStateOf<MenuCommandKind?>(null) }
+    var threadCommandError by remember { mutableStateOf<String?>(null) }
     fun runThreadAction(action: MenuAction?) {
         val command = (action as? MenuAction.Command)?.command ?: return
+        if (dispatchingThreadCommand) return
         menuOpen = false
+        dispatchingThreadCommand = true
+        if (command.isAsync) asyncThreadCommand = command.kind
         cardScope.launch {
-            runCatching {
+            try {
                 val result = viewModel.executeMenuCommand(command)
                 viewModel.requestSnapshot("menu_command")
                 result.threadId?.let { onOpenThread(it) }
+            } catch (t: Throwable) {
+                threadCommandError = t.message ?: "Couldn't complete the action."
+            } finally {
+                dispatchingThreadCommand = false
+                asyncThreadCommand = null
             }
         }
+    }
+
+    asyncThreadCommand?.let { kind ->
+        val (title, message) = commandLoadingText(kind)
+        AlertDialog(
+            onDismissRequest = {},
+            confirmButton = {},
+            title = { Text(title) },
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+                    Text(message)
+                }
+            },
+        )
+    }
+    threadCommandError?.let { message ->
+        AlertDialog(
+            onDismissRequest = { threadCommandError = null },
+            title = { Text("Couldn't Complete") },
+            text = { Text(message) },
+            confirmButton = { TextButton(onClick = { threadCommandError = null }) { Text("OK") } },
+        )
     }
     ElevatedCard(
         modifier = Modifier

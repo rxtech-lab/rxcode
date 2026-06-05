@@ -114,10 +114,16 @@ final class CodeReviewHook: Hook {
             storedModel: hook.codeReview?.model,
             fallbackSessionId: payload.sessionId
         )
+        // If a prior review of this thread failed and the agent has since pushed
+        // a fix turn, hand the reviewer that earlier feedback so it can verify
+        // those specific findings were addressed instead of re-deriving the whole
+        // review from scratch — a faster, more focused re-review.
+        let priorReview = controller.lastReviewFeedback(sessionId: payload.sessionKey)
         let prompt = reviewPrompt(
             task: task,
             changedFiles: changedFiles,
             finalResponse: payload.lastAssistantText,
+            priorReview: priorReview,
             extraInstructions: hook.codeReview?.instructions
         )
 
@@ -197,8 +203,10 @@ final class CodeReviewHook: Hook {
                        result: "✅ Code review passed.\n\(reviewLink)\n\n\(body)", isError: false)
             recordVerdict(true, payload: payload, controller: controller)
             // The change is good — clear the fix-round counter so the next change
-            // on this thread gets the full auto-fix budget again.
+            // on this thread gets the full auto-fix budget again, and drop the
+            // carried-over feedback so a later review starts fresh.
             controller.setReviewRound(0, sessionId: payload.sessionKey)
+            controller.setLastReviewFeedback(nil, sessionId: payload.sessionKey)
             return .proceed
 
         case .fail:
@@ -209,6 +217,9 @@ final class CodeReviewHook: Hook {
             // When that fix turn finishes, this hook runs again on the fixed
             // change (fix → review → fix), capped by `maxReviewFixReprompts`.
             recordVerdict(false, payload: payload, controller: controller)
+            // Remember this feedback so the re-review after the auto-fix turn can
+            // verify these findings were addressed rather than starting over.
+            controller.setLastReviewFeedback(result.assistantText, sessionId: payload.sessionKey)
             let attempt = controller.repromptThreadAfterReviewFailure(
                 feedback: result.assistantText,
                 project: payload.project,
@@ -303,7 +314,7 @@ final class CodeReviewHook: Hook {
         return .unknown(notes: text)
     }
 
-    private func reviewPrompt(task: String, changedFiles: [String], finalResponse: String, extraInstructions: String?) -> String {
+    private func reviewPrompt(task: String, changedFiles: [String], finalResponse: String, priorReview: String?, extraInstructions: String?) -> String {
         let fileList = changedFiles.map { "- \($0)" }.joined(separator: "\n")
         var prompt = """
         You are reviewing another agent's code change in this repository. Do not edit any files — only review.
@@ -316,6 +327,26 @@ final class CodeReviewHook: Hook {
 
         ## The agent's final response
         \(finalResponse)
+        """
+
+        // Re-review: the previous round failed and the agent has since pushed a
+        // fix. Anchor the reviewer on those findings so it can confirm each was
+        // resolved instead of re-deriving the whole review — faster and focused.
+        if let prior = priorReview?.trimmingCharacters(in: .whitespacesAndNewlines), !prior.isEmpty {
+            prompt += """
+
+
+            ## Your previous review of this change (it then FAILED)
+            The agent has just pushed a fix turn addressing this feedback. Focus your
+            re-review on whether each issue below is now resolved; only flag new
+            problems if the fix introduced them.
+
+            \(prior)
+            """
+        }
+
+        prompt += """
+
 
         ## What to do
         Inspect the changed files and judge whether the change correctly and safely accomplishes the task. Look for bugs, missed requirements, regressions, and obvious quality problems.

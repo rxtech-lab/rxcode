@@ -22,20 +22,20 @@ final class AutopilotReleaseHook: Hook {
     }
 
     func onThreadContextMenu(_ payload: ThreadContextMenuPayload, controller: any HookController) -> [MenuItem] {
-        menuItems(for: payload.project, controller: controller)
+        menuItems(for: payload.project, locale: payload.locale, controller: controller)
     }
 
     func onProjectContextMenu(_ payload: ProjectContextMenuPayload, controller: any HookController) -> [MenuItem] {
-        menuItems(for: payload.project, controller: controller)
+        menuItems(for: payload.project, locale: payload.locale, controller: controller)
     }
 
-    private func menuItems(for project: Project, controller: any HookController) -> [MenuItem] {
+    private func menuItems(for project: Project, locale: String?, controller: any HookController) -> [MenuItem] {
         guard project.gitHubRepo != nil else { return [] }
         if controller.projectHasReleaseWorkflow(project) {
             return [
                 MenuItem(
                     id: "\(hookID).create.\(project.id.uuidString)",
-                    title: String(localized: "Create Release"),
+                    title: MenuLocalizer.string("Create Release", locale: locale),
                     systemImage: "tag.fill",
                     action: .deepLink(MenuDeepLink.url(action: MenuDeepLink.releaseCreate, projectId: project.id))
                 )
@@ -45,7 +45,7 @@ final class AutopilotReleaseHook: Hook {
         return [
             MenuItem(
                 id: "\(hookID).setup.\(project.id.uuidString)",
-                title: String(localized: "Set Up Release Workflow"),
+                title: MenuLocalizer.string("Set Up Release Workflow", locale: locale),
                 systemImage: "tag.fill",
                 action: .deepLink(MenuDeepLink.url(action: MenuDeepLink.releaseSetup, projectId: project.id))
             )

@@ -123,6 +123,8 @@ struct GeneralSettingsTab: View {
                 Divider()
                 HooksSettingsSection()
                 Divider()
+                CustomMenusSettingsSection()
+                Divider()
                 VStack(alignment: .leading, spacing: 8) {
                     onboardingSection
                     whatsNewSection

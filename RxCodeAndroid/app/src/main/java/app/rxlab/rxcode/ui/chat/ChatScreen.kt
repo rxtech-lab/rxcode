@@ -47,6 +47,7 @@ import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.QuestionAnswer
 import androidx.compose.material.icons.outlined.QueuePlayNext
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
@@ -82,6 +83,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.rxlab.rxcode.proto.ChatMessage
 import app.rxlab.rxcode.proto.MenuAction
+import app.rxlab.rxcode.proto.MenuCommandKind
+import app.rxlab.rxcode.ui.autopilot.commandLoadingText
 import app.rxlab.rxcode.proto.MenuItem
 import app.rxlab.rxcode.proto.MessageBlock
 import app.rxlab.rxcode.proto.PendingQuestionPayload
@@ -153,17 +156,55 @@ fun ChatScreen(
         threadMenu = if (isDraftSessionId(resolvedId)) null
         else runCatching { viewModel.fetchThreadMenu(resolvedId) }.getOrNull()
     }
+    // Drives the loading dialog while an async thread command (e.g. a custom API
+    // call) runs; `dispatchingThreadCommand` guards re-entrancy and `threadCommandError`
+    // surfaces a failure to the user instead of silently swallowing it. Mirrors
+    // `ProjectActionsMenu`.
+    var dispatchingThreadCommand by remember { mutableStateOf(false) }
+    var asyncThreadCommand by remember { mutableStateOf<MenuCommandKind?>(null) }
+    var threadCommandError by remember { mutableStateOf<String?>(null) }
     fun runThreadAction(action: MenuAction?) {
         val command = (action as? MenuAction.Command)?.command ?: return
+        if (dispatchingThreadCommand) return
         menuExpanded = false
+        dispatchingThreadCommand = true
+        if (command.isAsync) asyncThreadCommand = command.kind
         menuScope.launch {
-            runCatching {
+            try {
                 val result = viewModel.executeMenuCommand(command)
                 viewModel.requestSnapshot("menu_command")
                 result.threadId?.let { viewModel.selectSession(it) }
+            } catch (t: Throwable) {
+                threadCommandError = t.message ?: "Couldn't complete the action."
+            } finally {
+                dispatchingThreadCommand = false
+                asyncThreadCommand = null
             }
         }
     }
+    asyncThreadCommand?.let { kind ->
+        val (title, message) = commandLoadingText(kind)
+        AlertDialog(
+            onDismissRequest = {},
+            confirmButton = {},
+            title = { Text(title) },
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+                    Text(message)
+                }
+            },
+        )
+    }
+    threadCommandError?.let { message ->
+        AlertDialog(
+            onDismissRequest = { threadCommandError = null },
+            title = { Text("Couldn't Complete") },
+            text = { Text(message) },
+            confirmButton = { TextButton(onClick = { threadCommandError = null }) { Text("OK") } },
+        )
+    }
+
     var showRunProfiles by remember { mutableStateOf(false) }
     var editingProfile by remember { mutableStateOf<RunProfile?>(null) }
     var showBrowser by remember { mutableStateOf(false) }

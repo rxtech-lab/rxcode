@@ -176,12 +176,9 @@ final class AppStateHookController: HookController {
                 // Skip the injected review instruction (the only user message).
                 continue
             case .assistant:
-                for toolCall in message.toolCalls {
-                    // Hook/auto-continue synthetic cards aren't part of the
-                    // reviewer's own work — skip them.
-                    if toolCall.name.lowercased().hasPrefix("hook:") { continue }
-                    lines.append("• \(toolCall.name)")
-                }
+                // Text only — tool calls are deliberately excluded so the review
+                // result folded back onto the parent thread (and fed into any
+                // fix turn) is the reviewer's prose, not a list of tool names.
                 let text = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !text.isEmpty { lines.append(text) }
             default:
@@ -593,6 +590,26 @@ final class AppStateHookController: HookController {
         app?.projectHasReleaseWorkflow(project) ?? false
     }
 
+    func projectHasUncommittedChanges(_ project: Project) -> Bool {
+        // Default to visible when status is unknown (mirrors the inline menu).
+        app?.projectHasUncommittedChanges(project.id) ?? true
+    }
+
+    func projectHasOpenPullRequest(_ project: Project, branch: String?) -> Bool {
+        guard let app, project.gitHubRepo != nil else { return false }
+        // For a branch-scoped menu (e.g. a briefing card), check that branch's
+        // PR status from the branch-keyed map; otherwise use the project's
+        // current-branch status. Only an *open* PR should hide "Create Pull
+        // Request" — a closed/merged PR shouldn't.
+        let status = branch.map { app.ciStatus(forProjectId: project.id, branch: $0) }
+            ?? app.ciStatusByProject[project.id]
+        return status?.pullRequestState == .open
+    }
+
+    func threadHasFileChanges(sessionId: String) -> Bool {
+        app?.threadHasFileChanges(sessionId: sessionId) ?? false
+    }
+
     func requestSecretsSetup(project: Project) {
         app?.secretsSetupRequest = SecretsSetupRequest(
             repoFullName: project.gitHubRepo,
@@ -619,6 +636,13 @@ final class AppStateHookController: HookController {
 
     func requestReleaseCreate(project: Project) {
         app?.releaseCreateRequest = project
+    }
+
+    func requestCISetup(project: Project) {
+        app?.ciSetupRequest = CISetupRequest(
+            repoFullName: project.gitHubRepo,
+            projectPath: project.path
+        )
     }
 
     // MARK: Setup-session tracking

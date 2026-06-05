@@ -335,6 +335,7 @@ struct ProjectTreeView: View {
 
 private struct ProjectTreeRow: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowState.self) private var windowState
 
     let project: Project
     @Binding var isExpanded: Bool
@@ -346,7 +347,7 @@ private struct ProjectTreeRow: View {
     let onNewChat: () -> Void
     let onCodeReview: () -> Void
     let onCommitAll: () -> Void
-    let hookMenuItems: [HookMenuItem]
+    let hookMenuItems: [MenuItem]
 
     @State private var isHovered = false
     @State private var showLocationPopover = false
@@ -491,24 +492,13 @@ private struct ProjectTreeRow: View {
         Button { onOpenInNewWindow() } label: {
             Label("Open in New Window", systemImage: "macwindow.badge.plus")
         }
-        Button { onCodeReview() } label: {
-            Label("Code Review for Current Branch", systemImage: "checklist")
-        }
-        if appState.projectHasUncommittedChanges(project.id) {
-            Button { onCommitAll() } label: {
-                Label("Commit All Changes", systemImage: "checkmark.circle")
-            }
-        }
-        if canCreatePR {
-            Button { startCreatePR() } label: {
-                Label(creatingPR ? "Creating Pull Request…" : "Create Pull Request",
-                      systemImage: "arrow.triangle.pull")
-            }
-            .disabled(creatingPR)
-        }
+        // Code review, commit, create PR, and the autopilot setup actions now
+        // come from hooks as serializable MenuItems (gated inside the hooks), so
+        // the desktop and mobile render the same set. Taps dispatch locally here.
         if !hookMenuItems.isEmpty {
             Divider()
-            HookContextMenuItems(items: hookMenuItems)
+            MenuItemsView(hookMenuItems)
+                .menuActionHandler(appState.desktopMenuActionHandler(navigatingIn: windowState))
         }
         Divider()
         Button { onRename() } label: {

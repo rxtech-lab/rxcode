@@ -96,7 +96,10 @@ struct ProjectChatRow: View {
     let onDelete: () -> Void
     let onCodeReview: () -> Void
     let onCommitFiles: () -> Void
-    let hookMenuItems: [HookMenuItem]
+    /// Serializable action items (code review, commit, autopilot setup) supplied
+    /// by hooks. Rendered via `MenuItemsView`; taps route through the desktop
+    /// menu action handler.
+    let hookMenuItems: [MenuItem]
     /// Nesting depth; review children render one level in from their parent.
     var indentLevel: Int = 0
     /// Replaces the thread title (e.g. `"Review 1"` for a nested review child).
@@ -112,6 +115,8 @@ struct ProjectChatRow: View {
     /// edits (nothing to commit).
     var canCommitFiles: Bool = true
 
+    @Environment(AppState.self) private var appState
+    @Environment(WindowState.self) private var windowState
     @State private var isHovered = false
 
     /// True when this row *is* a `[Code Review]` thread (manual or hook-spawned).
@@ -222,20 +227,13 @@ struct ProjectChatRow: View {
                     Label("Archive", systemImage: "archivebox")
                 }
             }
-            if !isCodeReviewThread {
-                Divider()
-                Button { onCodeReview() } label: {
-                    Label("Code Review for this thread", systemImage: "checklist")
-                }
-                if canCommitFiles {
-                    Button { onCommitFiles() } label: {
-                        Label("Commit Files", systemImage: "checkmark.circle")
-                    }
-                }
-            }
+            // Code review / commit / autopilot actions now come from hooks as
+            // serializable MenuItems (gated for review threads and file changes
+            // inside the hooks). The handler dispatches taps locally on desktop.
             if !hookMenuItems.isEmpty {
                 Divider()
-                HookContextMenuItems(items: hookMenuItems)
+                MenuItemsView(hookMenuItems)
+                    .menuActionHandler(appState.desktopMenuActionHandler(navigatingIn: windowState))
             }
             Divider()
             Button(role: .destructive) { onDelete() } label: {

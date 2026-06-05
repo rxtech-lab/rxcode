@@ -1256,10 +1256,15 @@ final class AppState {
         hookManager.register(CINotificationHook())
         hookManager.register(RemoteConfigNotificationHook())
         #if os(macOS)
+        // Menu hook first so the standard project/thread actions (code review,
+        // commit, create PR) lead the context menu, followed by the autopilot
+        // setup items (secrets, docs, release, CI).
+        hookManager.register(ActionsMenuHook())
         hookManager.register(AutopilotSecretsHook())
         hookManager.register(AutopilotDocsHook())
         hookManager.register(AutopilotReleaseHook())
         hookManager.register(CIUpdateHook())
+        hookManager.register(CIUpdateMenuHook())
         #endif
         // Registered last so their (potentially long) after-stop work runs after
         // the response-complete notification has already fired. CodeReviewHook

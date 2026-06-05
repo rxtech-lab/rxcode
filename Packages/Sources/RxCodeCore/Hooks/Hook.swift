@@ -17,8 +17,12 @@ public protocol Hook: AnyObject {
     var isEnabled: Bool { get }
 
     func onProjectNewChatStart(_ payload: NewChatStartPayload, controller: any HookController) async -> HookOutcome
-    func onThreadContextMenu(_ payload: ThreadContextMenuPayload, controller: any HookController) -> [HookMenuItem]
-    func onProjectContextMenu(_ payload: ProjectContextMenuPayload, controller: any HookController) -> [HookMenuItem]
+    /// Serializable menu items for a thread's context menu. The desktop renders
+    /// these `MenuItem`s natively (a `MenuItem` is a `View`); mobile fetches the
+    /// same items over the relay as JSON and renders the identical type.
+    func onThreadContextMenu(_ payload: ThreadContextMenuPayload, controller: any HookController) -> [MenuItem]
+    /// Serializable menu items for a project's context menu (see above).
+    func onProjectContextMenu(_ payload: ProjectContextMenuPayload, controller: any HookController) -> [MenuItem]
     func onProjectDelete(_ payload: ProjectDeletePayload, controller: any HookController) async -> HookOutcome
     func onSessionStart(_ payload: SessionStartPayload, controller: any HookController) async -> HookOutcome
     func beforeSessionEnd(_ payload: SessionEndPayload, controller: any HookController) async -> HookOutcome
@@ -40,8 +44,8 @@ public extension Hook {
     var isEnabled: Bool { true }
 
     func onProjectNewChatStart(_ payload: NewChatStartPayload, controller: any HookController) async -> HookOutcome { .ignored }
-    func onThreadContextMenu(_ payload: ThreadContextMenuPayload, controller: any HookController) -> [HookMenuItem] { [] }
-    func onProjectContextMenu(_ payload: ProjectContextMenuPayload, controller: any HookController) -> [HookMenuItem] { [] }
+    func onThreadContextMenu(_ payload: ThreadContextMenuPayload, controller: any HookController) -> [MenuItem] { [] }
+    func onProjectContextMenu(_ payload: ProjectContextMenuPayload, controller: any HookController) -> [MenuItem] { [] }
     func onProjectDelete(_ payload: ProjectDeletePayload, controller: any HookController) async -> HookOutcome { .ignored }
     func onSessionStart(_ payload: SessionStartPayload, controller: any HookController) async -> HookOutcome { .ignored }
     func beforeSessionEnd(_ payload: SessionEndPayload, controller: any HookController) async -> HookOutcome { .ignored }

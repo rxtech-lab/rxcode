@@ -125,6 +125,14 @@ public enum AutopilotOp: String, Codable, Sendable {
     case projectCommitAll
     case threadCommitFiles
 
+    // Serializable context menus. The desktop builds the same `[MenuItem]` its
+    // own context menus render (from hooks) and ships it as JSON; mobile renders
+    // the identical items. `menuExecuteCommand` runs a `MenuActionCommand` the
+    // user tapped on mobile through the desktop's shared dispatcher.
+    case menuForProject
+    case menuForThread
+    case menuExecuteCommand
+
     // Global search — one call returns on-device thread matches AND published
     // docs matches for the same query, so mobile gets a single combined result
     // instead of stitching two responses together.
@@ -524,6 +532,46 @@ public struct AutopilotThreadBody: Codable, Sendable {
 public struct AutopilotCodeReviewResult: Codable, Sendable {
     public let threadId: String
     public init(threadId: String) { self.threadId = threadId }
+}
+
+// MARK: - Serializable context menus
+
+/// Mobile → desktop: request the serialized project menu. `branch` scopes it to a
+/// briefing card's branch (Code Review / Create PR target that branch); `nil`
+/// returns the generic project menu addressing the current branch.
+public struct AutopilotProjectMenuBody: Codable, Sendable {
+    public let projectId: UUID
+    public let branch: String?
+    public init(projectId: UUID, branch: String? = nil) {
+        self.projectId = projectId
+        self.branch = branch
+    }
+}
+
+/// Desktop → mobile: the serialized context-menu items for a project or thread,
+/// built from the same hooks the desktop renders. Mobile decodes and renders the
+/// identical `MenuItem`s.
+public struct AutopilotMenuResult: Codable, Sendable {
+    public let items: [MenuItem]
+    public init(items: [MenuItem]) { self.items = items }
+}
+
+/// Mobile → desktop: a `MenuActionCommand` the user tapped, to run through the
+/// desktop's shared menu dispatcher.
+public struct AutopilotExecuteCommandBody: Codable, Sendable {
+    public let command: MenuActionCommand
+    public init(command: MenuActionCommand) { self.command = command }
+}
+
+/// Desktop → mobile: the outcome of executing a menu command — a thread to
+/// navigate to and/or a URL (e.g. a created pull request) to open on the phone.
+public struct AutopilotExecuteCommandResult: Codable, Sendable {
+    public let threadId: String?
+    public let openURL: String?
+    public init(threadId: String? = nil, openURL: String? = nil) {
+        self.threadId = threadId
+        self.openURL = openURL
+    }
 }
 
 /// Per-project autopilot state powering the mobile context menu. Mirrors the

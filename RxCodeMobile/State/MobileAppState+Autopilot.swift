@@ -502,4 +502,31 @@ extension MobileAppState {
                                        body: AutopilotProjectSecretsWriteBody(projectId: projectId, files: files, overwrite: overwrite),
                                        as: AutopilotProjectSecretsDownloadResult.self)
     }
+
+    // MARK: - Serializable context menus
+
+    /// Fetches the project's context menu from the Mac — the same `[MenuItem]`
+    /// the desktop renders, built from its hooks — so the phone renders the
+    /// identical items.
+    func fetchProjectMenu(projectId: UUID, branch: String? = nil) async throws -> [MenuItem] {
+        try await autopilotSend(.project, .menuForProject,
+                                body: AutopilotProjectMenuBody(projectId: projectId, branch: branch),
+                                as: AutopilotMenuResult.self).items
+    }
+
+    /// Fetches a thread's context menu from the Mac (see `fetchProjectMenu`).
+    func fetchThreadMenu(sessionId: String) async throws -> [MenuItem] {
+        try await autopilotSend(.project, .menuForThread,
+                                body: AutopilotThreadBody(sessionId: sessionId),
+                                as: AutopilotMenuResult.self).items
+    }
+
+    /// Runs a tapped `MenuActionCommand` on the Mac through its shared menu
+    /// dispatcher, returning a thread to navigate to and/or a URL to open.
+    @discardableResult
+    func executeMenuCommand(_ command: MenuActionCommand) async throws -> AutopilotExecuteCommandResult {
+        try await autopilotSend(.project, .menuExecuteCommand,
+                                body: AutopilotExecuteCommandBody(command: command),
+                                as: AutopilotExecuteCommandResult.self)
+    }
 }

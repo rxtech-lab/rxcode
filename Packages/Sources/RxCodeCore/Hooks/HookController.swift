@@ -51,9 +51,10 @@ public protocol HookController: AnyObject {
     func changedFilePaths(sessionId: String) -> [String]
     /// The first user prompt text of a thread, if any.
     func firstUserPrompt(sessionId: String) -> String?
-    /// A readable transcript of a thread's assistant activity (text + tool-call
-    /// summaries), used to fold a review thread's full content into a card on the
-    /// parent thread. Excludes the injected instruction prompt.
+    /// A readable transcript of a thread's assistant *text*, used to fold a review
+    /// thread's content into a card on the parent thread. Tool calls and the
+    /// injected instruction prompt are excluded so the result shown back on the
+    /// parent thread is prose, not a list of tool names.
     func threadTranscript(sessionId: String) -> String
     /// Spawn a new linked thread (e.g. `[Code Review]`) that runs no hooks, and
     /// wait for its first response. Returns the resolved thread id + assistant
@@ -217,6 +218,16 @@ public protocol HookController: AnyObject {
     func projectHasDocs(_ project: Project) -> Bool
     func projectHasReleaseWorkflow(_ project: Project) -> Bool
 
+    /// Whether the project's working tree has uncommitted changes (gates the
+    /// "Commit All Changes" item). Defaults to visible when status is unknown.
+    func projectHasUncommittedChanges(_ project: Project) -> Bool
+    /// Whether the project already has an open pull request for `branch` (or the
+    /// project's current branch when `branch` is nil). Hides "Create Pull Request"
+    /// when one exists; also false when the project has no GitHub repo.
+    func projectHasOpenPullRequest(_ project: Project, branch: String?) -> Bool
+    /// Whether the thread recorded any file edits (gates "Commit Files").
+    func threadHasFileChanges(sessionId: String) -> Bool
+
     /// Centralized presentation actions used by hook-supplied context menus.
     func requestSecretsSetup(project: Project)
     func requestSecretsDownload(project: Project)
@@ -224,6 +235,7 @@ public protocol HookController: AnyObject {
     func requestDocsSearch(project: Project)
     func requestReleaseSetup(project: Project)
     func requestReleaseCreate(project: Project)
+    func requestCISetup(project: Project)
 
     // MARK: Setup-session tracking
 

@@ -408,6 +408,35 @@ extension AppState {
             let written = try writeDecryptedSecrets(files, to: directory, overwrite: body.overwrite)
             return try encoder.encode(AutopilotProjectSecretsDownloadResult(written: written, conflicts: conflicts))
 
+        // MARK: Serializable context menus
+        case .menuForProject:
+            // Build the project's context menu from the same hooks the desktop
+            // renders and ship it as JSON for mobile to render identically. The
+            // optional branch scopes briefing-card menus to their branch.
+            let body = try decodeAutopilotBody(request, as: AutopilotProjectMenuBody.self)
+            guard let project = projects.first(where: { $0.id == body.projectId }) else {
+                throw MobileRemoteConfigError.invalidRequest("No project found for the requested id.")
+            }
+            return try encoder.encode(AutopilotMenuResult(items: projectContextMenuItems(for: project, branch: body.branch)))
+
+        case .menuForThread:
+            let body = try decodeAutopilotBody(request, as: AutopilotThreadBody.self)
+            guard let summary = allSessionSummaries.first(where: { $0.id == body.sessionId })
+                ?? threadStore.fetch(id: body.sessionId)?.toSummary() else {
+                throw MobileRemoteConfigError.invalidRequest("No thread found for the requested id.")
+            }
+            return try encoder.encode(AutopilotMenuResult(items: threadContextMenuItems(for: summary)))
+
+        case .menuExecuteCommand:
+            // Run a tapped command through the same dispatcher the desktop uses,
+            // returning a thread to navigate to and/or a URL to open on the phone.
+            let body = try decodeAutopilotBody(request, as: AutopilotExecuteCommandBody.self)
+            let result = try await dispatchMenuCommand(body.command)
+            return try encoder.encode(AutopilotExecuteCommandResult(
+                threadId: result.threadId,
+                openURL: result.openURL?.absoluteString
+            ))
+
         // MARK: Global search
         case .searchThreadsAndDocs:
             let body = try decodeAutopilotBody(request, as: AutopilotSearchBody.self)

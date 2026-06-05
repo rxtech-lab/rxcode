@@ -44,11 +44,11 @@ extension AppState {
         )
     }
 
-    func projectContextMenuItems(for project: Project) -> [HookMenuItem] {
-        hookManager.projectContextMenuItems(ProjectContextMenuPayload(project: project))
+    func projectContextMenuItems(for project: Project, branch: String? = nil) -> [MenuItem] {
+        hookManager.projectContextMenuItems(ProjectContextMenuPayload(project: project, branch: branch))
     }
 
-    func threadContextMenuItems(for session: ChatSession.Summary) -> [HookMenuItem] {
+    func threadContextMenuItems(for session: ChatSession.Summary) -> [MenuItem] {
         guard let project = projects.first(where: { $0.id == session.projectId }) else { return [] }
         return hookManager.threadContextMenuItems(ThreadContextMenuPayload(project: project, session: session))
     }

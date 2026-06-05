@@ -21,36 +21,34 @@ final class AutopilotReleaseHook: Hook {
         return "\(repoSlug)-new-project-release"
     }
 
-    func onThreadContextMenu(_ payload: ThreadContextMenuPayload, controller: any HookController) -> [HookMenuItem] {
+    func onThreadContextMenu(_ payload: ThreadContextMenuPayload, controller: any HookController) -> [MenuItem] {
         menuItems(for: payload.project, controller: controller)
     }
 
-    func onProjectContextMenu(_ payload: ProjectContextMenuPayload, controller: any HookController) -> [HookMenuItem] {
+    func onProjectContextMenu(_ payload: ProjectContextMenuPayload, controller: any HookController) -> [MenuItem] {
         menuItems(for: payload.project, controller: controller)
     }
 
-    private func menuItems(for project: Project, controller: any HookController) -> [HookMenuItem] {
+    private func menuItems(for project: Project, controller: any HookController) -> [MenuItem] {
         guard project.gitHubRepo != nil else { return [] }
         if controller.projectHasReleaseWorkflow(project) {
             return [
-                HookMenuItem(
+                MenuItem(
                     id: "\(hookID).create.\(project.id.uuidString)",
-                    title: "Create Release",
-                    systemImage: "tag.fill"
-                ) {
-                    controller.requestReleaseCreate(project: project)
-                }
+                    title: String(localized: "Create Release"),
+                    systemImage: "tag.fill",
+                    action: .deepLink(MenuDeepLink.url(action: MenuDeepLink.releaseCreate, projectId: project.id))
+                )
             ]
         }
 
         return [
-            HookMenuItem(
+            MenuItem(
                 id: "\(hookID).setup.\(project.id.uuidString)",
-                title: "Set Up Release Workflow",
-                systemImage: "tag.fill"
-            ) {
-                controller.requestReleaseSetup(project: project)
-            }
+                title: String(localized: "Set Up Release Workflow"),
+                systemImage: "tag.fill",
+                action: .deepLink(MenuDeepLink.url(action: MenuDeepLink.releaseSetup, projectId: project.id))
+            )
         ]
     }
 

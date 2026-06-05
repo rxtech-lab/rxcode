@@ -21,36 +21,34 @@ final class AutopilotSecretsHook: Hook {
         await run(project: payload.project, controller: controller)
     }
 
-    func onThreadContextMenu(_ payload: ThreadContextMenuPayload, controller: any HookController) -> [HookMenuItem] {
+    func onThreadContextMenu(_ payload: ThreadContextMenuPayload, controller: any HookController) -> [MenuItem] {
         menuItems(for: payload.project, controller: controller)
     }
 
-    func onProjectContextMenu(_ payload: ProjectContextMenuPayload, controller: any HookController) -> [HookMenuItem] {
+    func onProjectContextMenu(_ payload: ProjectContextMenuPayload, controller: any HookController) -> [MenuItem] {
         menuItems(for: payload.project, controller: controller)
     }
 
-    private func menuItems(for project: Project, controller: any HookController) -> [HookMenuItem] {
+    private func menuItems(for project: Project, controller: any HookController) -> [MenuItem] {
         guard project.gitHubRepo != nil else { return [] }
         if controller.projectHasSecrets(project) {
             return [
-                HookMenuItem(
+                MenuItem(
                     id: "\(hookID).download.\(project.id.uuidString)",
-                    title: "Download Secret",
-                    systemImage: "key.fill"
-                ) {
-                    controller.requestSecretsDownload(project: project)
-                }
+                    title: String(localized: "Download Secret"),
+                    systemImage: "key.fill",
+                    action: .deepLink(MenuDeepLink.url(action: MenuDeepLink.secretsDownload, projectId: project.id))
+                )
             ]
         }
 
         return [
-            HookMenuItem(
+            MenuItem(
                 id: "\(hookID).setup.\(project.id.uuidString)",
-                title: "Set Up Secrets",
-                systemImage: "key.fill"
-            ) {
-                controller.requestSecretsSetup(project: project)
-            }
+                title: String(localized: "Set Up Secrets"),
+                systemImage: "key.fill",
+                action: .deepLink(MenuDeepLink.url(action: MenuDeepLink.secretsSetup, projectId: project.id))
+            )
         ]
     }
 

@@ -222,17 +222,6 @@ struct HistoryListView: View {
                     HookContextMenuItems(items: hookItems)
                 }
 
-                if summary.threadLabel != AppState.manualCodeReviewLabel,
-                   appState.threadHasFileChanges(sessionId: summary.id) {
-                    Divider()
-
-                    Button {
-                        Task { _ = try? await appState.commitFilesForThread(sessionId: summary.id) }
-                    } label: {
-                        Label("Commit Files", systemImage: "checkmark.circle")
-                    }
-                }
-
                 Divider()
 
                 Button(role: .destructive) {

@@ -44,6 +44,13 @@ struct SessionsList: View {
     @State private var autopilotSetupChat: AutopilotSetupChat?
     @State private var autopilotInfo: AutopilotMenuInfo?
 
+    // Serializable menus fetched from the desktop (the same hook-built items the
+    // Mac renders). `.contextMenu` builds synchronously, so they're prefetched
+    // into these caches when the project / each thread appears.
+    @State private var projectMenuItems: [MenuItem] = []
+    @State private var threadMenus: [String: [MenuItem]] = [:]
+    @State private var isRunningMenuCommand = false
+
     private var project: Project? {
         state.projects.first { $0.id == projectID }
     }
@@ -150,6 +157,79 @@ struct SessionsList: View {
                 title: "Committing Changes…",
                 message: "The Mac is starting a commit thread for this project."
             )
+            .mobileAutopilotLoadingDialog(
+                isRunningMenuCommand,
+                title: "Working…",
+                message: "The Mac is performing the requested action."
+            )
+            .task(id: projectMenuRefreshKey) {
+                // Prefetch the project's serializable context menu from the Mac,
+                // re-keyed on the git-dirty + PR state it's gated by so it
+                // refreshes after commits / PR creation / status polls.
+                projectMenuItems = (try? await state.fetchProjectMenu(projectId: projectID)) ?? []
+            }
+    }
+
+    /// Invalidation key for the project menu: changes when the desktop status the
+    /// menu is conditionally built from changes, so the prefetch re-runs.
+    private var projectMenuRefreshKey: String {
+        let dirty = state.projectDirtyByProject[projectID].map(String.init) ?? "nil"
+        let pr = ciStatus?.prNumber.map(String.init) ?? "nil"
+        return "\(projectID.uuidString)|\(dirty)|\(pr)"
+    }
+
+    /// Invalidation key for a thread menu: changes when the thread's
+    /// file-edit / review-thread gating changes.
+    private func threadMenuRefreshKey(_ session: SessionSummary) -> String {
+        "\(session.id)|\(session.hasRecordedFileChanges)|\(session.isCodeReviewThread)"
+    }
+
+    // MARK: - Serializable menu handling
+
+    /// The handler installed on fetched `MenuItem`s. Commands run on the Mac via
+    /// the shared dispatcher (`executeMenuCommand`); deep links open the matching
+    /// on-device sheet / setup chat, reusing the existing autopilot UI.
+    private func mobileMenuHandler(project: Project) -> MenuActionHandler {
+        MenuActionHandler { action in
+            switch action {
+            case .command(let command):
+                runMenuCommand(command)
+            case .deepLink(let url):
+                handleMenuDeepLink(url, project: project)
+            }
+        }
+    }
+
+    private func runMenuCommand(_ command: MenuActionCommand) {
+        guard !isRunningMenuCommand else { return }
+        isRunningMenuCommand = true
+        Task {
+            defer { isRunningMenuCommand = false }
+            do {
+                let result = try await state.executeMenuCommand(command)
+                await state.refreshSnapshot()
+                if let threadId = result.threadId { selected = threadId }
+                if let urlString = result.openURL, let url = URL(string: urlString) { openURL(url) }
+            } catch {
+                autopilotInfo = AutopilotMenuInfo(text: error.localizedDescription, isError: true)
+            }
+        }
+    }
+
+    /// Map a `rxcode://menu/…` deep link to the existing on-device autopilot UI
+    /// (sheets / setup chats), so the phone presents its own UI rather than the
+    /// Mac's.
+    private func handleMenuDeepLink(_ url: URL, project: Project) {
+        switch mobileMenuDeepLinkTarget(url) {
+        case .secretsDownload:
+            showingSecretsDownload = true
+        case .releaseCreate:
+            showingReleaseCreate = true
+        case .setupChat(let prompt):
+            autopilotSetupChat = AutopilotSetupChat(prompt: prompt)
+        case nil:
+            break
+        }
     }
 
     /// Ask the Mac to open a PR for the project's current branch, then open it
@@ -243,32 +323,16 @@ struct SessionsList: View {
         if let project {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    ProjectAutopilotMenuItems(
-                        project: project,
-                        status: autopilotStatus,
-                        showDownloadSheet: $showingSecretsDownload,
-                        showReleaseCreate: $showingReleaseCreate,
-                        setupChat: $autopilotSetupChat,
-                        info: $autopilotInfo,
-                        branch: currentBranch,
-                        prNumber: ciStatus?.prNumber,
-                        isCreatingPR: isCreatingPR,
-                        onCreatePR: {
-                            if let branch = currentBranch {
-                                createPullRequest(project: project, branch: branch)
-                            }
-                        },
-                        isCreatingReview: isCreatingReview,
-                        onCodeReview: {
-                            if let branch = currentBranch {
-                                createBranchCodeReview(project: project, branch: branch)
-                            }
-                        },
-                        isCommittingAll: isCommittingProject,
-                        onCommitAll: {
-                            commitProjectChanges(project: project)
-                        }
-                    )
+                    // The project's action items are now fetched from the Mac as
+                    // serializable MenuItems (the same hook-built menu the desktop
+                    // renders) and dispatched through the shared handler.
+                    if projectMenuItems.isEmpty {
+                        Button {} label: { Label("Loading…", systemImage: "hourglass") }
+                            .disabled(true)
+                    } else {
+                        MenuItemsView(projectMenuItems)
+                            .menuActionHandler(mobileMenuHandler(project: project))
+                    }
                     Divider()
                     Button(role: .destructive) {
                         showingDeleteProjectConfirm = true
@@ -348,20 +412,13 @@ struct SessionsList: View {
 
     @ViewBuilder
     private func threadContextMenu(for session: SessionSummary) -> some View {
-        if !session.isCodeReviewThread {
-            Button {
-                createThreadCodeReview(sessionID: session.id)
-            } label: {
-                Label("Code Review", systemImage: "checklist")
-            }
-
-            if session.hasRecordedFileChanges {
-                Button {
-                    commitThreadFiles(sessionID: session.id)
-                } label: {
-                    Label("Commit Files", systemImage: "checkmark.circle")
-                }
-            }
+        // Code review / commit / autopilot items come from the Mac as serializable
+        // MenuItems (the same hook-built thread menu the desktop renders).
+        let items = threadMenus[session.id] ?? []
+        if !items.isEmpty, let project {
+            MenuItemsView(items)
+                .menuActionHandler(mobileMenuHandler(project: project))
+            Divider()
         }
 
         Button {
@@ -488,6 +545,12 @@ struct SessionsList: View {
         .glassEffectID(session.id, in: glassNamespace)
         .onAppear {
             if indentLevel == 0, session.id == visible.last?.id { loadMore() }
+        }
+        .task(id: threadMenuRefreshKey(session)) {
+            // Prefetch this thread's serializable menu from the Mac so the
+            // synchronous `.contextMenu` builder has it ready. Re-keyed on the
+            // thread's gating state so it refreshes after new file edits, etc.
+            threadMenus[session.id] = (try? await state.fetchThreadMenu(sessionId: session.id)) ?? []
         }
         .contextMenu {
             threadContextMenu(for: session)

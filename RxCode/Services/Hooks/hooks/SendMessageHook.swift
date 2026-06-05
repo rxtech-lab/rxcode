@@ -43,16 +43,36 @@ final class SendMessageHook: Hook {
         // turns; act once the queue drains.
         if payload.hasQueuedFollowups { return .ignored }
 
-        // Optional condition gate, evaluated by a (cheap) model.
+        // Optional condition gate, evaluated by a (cheap) model. The check runs
+        // as a one-shot background classifier (no visible thread), so surface a
+        // card with the condition + verdict — otherwise a NO/error verdict skips
+        // the hook silently and the user can't tell it ran at all.
         if cfg.conditionEnabled,
            let condition = cfg.condition?.trimmingCharacters(in: .whitespacesAndNewlines),
            !condition.isEmpty {
+            let conditionCard = controller.insertCard(
+                sessionKey: payload.sessionKey,
+                toolName: AppState.hookToolName(for: hook),
+                input: [
+                    "name": .string(hook.name),
+                    "trigger": .string(hook.trigger.displayName),
+                    "summary": .string("Checking condition: \(condition)"),
+                ]
+            )
             let verdict = await controller.evaluateCondition(
                 condition: condition,
                 lastAssistantText: payload.lastAssistantText,
                 model: cfg.conditionModel,
                 sessionId: payload.sessionId
             )
+            switch verdict {
+            case true:
+                controller.completeCard(conditionCard, sessionKey: payload.sessionKey, result: "Condition met (YES) — sending the message.", isError: false)
+            case false:
+                controller.completeCard(conditionCard, sessionKey: payload.sessionKey, result: "Condition not met (NO) — message skipped.", isError: false)
+            default:
+                controller.completeCard(conditionCard, sessionKey: payload.sessionKey, result: "Could not evaluate the condition — message skipped.", isError: true)
+            }
             guard verdict == true else {
                 logger.debug("[Hook] send-message condition not met for session \(payload.sessionId, privacy: .public) verdict=\(String(describing: verdict), privacy: .public)")
                 return .ignored

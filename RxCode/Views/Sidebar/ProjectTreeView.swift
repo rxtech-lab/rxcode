@@ -640,12 +640,12 @@ private struct ProjectChatsList: View {
             chatRow(for: summary, reviewDisclosure: disclosure(for: summary, children: children))
 
             if isExpanded {
-                ForEach(Array(children.enumerated()), id: \.element.id) { index, child in
+                ForEach(childDisplayItems(children), id: \.summary.id) { item in
                     chatRow(
-                        for: child,
+                        for: item.summary,
                         indentLevel: 1,
-                        titleOverride: "Review \(index + 1)",
-                        showLabelChip: false
+                        titleOverride: item.titleOverride,
+                        showLabelChip: item.showLabelChip
                     )
                     .transition(.asymmetric(
                         insertion: .move(edge: .top).combined(with: .opacity),
@@ -653,6 +653,28 @@ private struct ProjectChatsList: View {
                     ))
                 }
             }
+        }
+    }
+
+    /// How a nested child row should render. Code-review children keep the
+    /// `Review 1`, `Review 2`, … numbering (the nesting + number conveys what
+    /// they are, so no chip). Other linked children — e.g. a Send Message hook's
+    /// new thread — show their own title and keep their `threadLabel` chip so the
+    /// user-chosen label is visible instead of a bogus "Review N".
+    private struct ChildDisplayItem {
+        let summary: ChatSession.Summary
+        let titleOverride: String?
+        let showLabelChip: Bool
+    }
+
+    private func childDisplayItems(_ children: [ChatSession.Summary]) -> [ChildDisplayItem] {
+        var reviewNumber = 0
+        return children.map { child in
+            if child.threadLabel == AppState.manualCodeReviewLabel {
+                reviewNumber += 1
+                return ChildDisplayItem(summary: child, titleOverride: "Review \(reviewNumber)", showLabelChip: false)
+            }
+            return ChildDisplayItem(summary: child, titleOverride: nil, showLabelChip: true)
         }
     }
 

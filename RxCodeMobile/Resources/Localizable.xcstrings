@@ -1839,6 +1839,15 @@
         }
       }
     },
+    "Commit All Changes" : {
+
+    },
+    "Commit Files" : {
+
+    },
+    "Committing Changes…" : {
+
+    },
     "Computer Status" : {
       "localizations" : {
         "en" : {
@@ -9127,6 +9136,9 @@
         }
       }
     },
+    "The Mac is performing the requested action." : {
+
+    },
     "The Mac is pushing the branch and opening the PR." : {
       "localizations" : {
         "ko" : {
@@ -9144,6 +9156,9 @@
       }
     },
     "The Mac is starting a Code Review thread for this branch." : {
+
+    },
+    "The Mac is starting a commit thread for this project." : {
 
     },
     "The Mac returned an empty response." : {

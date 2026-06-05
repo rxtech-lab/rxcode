@@ -96,6 +96,7 @@ public struct MenuActionCommand: Codable, Sendable, Hashable {
         // Thread-scoped.
         case threadCodeReview           // review one thread's changes
         case threadCommitFiles          // commit only this thread's files
+        case threadStopCodeReview       // stop an in-flight code review for the thread
     }
 
     public let kind: Kind

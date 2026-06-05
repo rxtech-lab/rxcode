@@ -78,6 +78,36 @@ public protocol HookController: AnyObject {
     /// `nil` when no verdict could be obtained. `model` is a provider-qualified
     /// override (empty/`nil` ⇒ the configured summarization model).
     func evaluateCondition(condition: String, lastAssistantText: String, model: String?, sessionId: String) async -> Bool?
+    // MARK: Review debounce / cancellation
+
+    /// Debounce applied before an automatic code review starts, in seconds. The
+    /// hook shows a countdown card for this long so a new follow-up message can
+    /// cancel the review before it runs.
+    var reviewCountdownSeconds: TimeInterval { get }
+    /// Suspend until the review countdown for `parentSessionKey` elapses, the
+    /// user taps "Start it now", or it is cancelled (Stop button / new message).
+    /// Returns `true` to proceed with the review, `false` if it was cancelled.
+    func awaitReviewGate(parentSessionKey: String, delaySeconds: TimeInterval) async -> Bool
+    /// Mark/clear that the review thread for `parentSessionKey` is running, so a
+    /// later cancellation can stop the in-flight review thread and the context
+    /// menu can show "Stop Code Review".
+    func markReviewRunning(parentSessionKey: String)
+    func clearReviewRunning(parentSessionKey: String)
+    /// One-shot: whether the running review for `parentSessionKey` was stopped
+    /// (by a new message or the Stop action) rather than finishing on its own.
+    func reviewWasStopped(parentSessionKey: String) -> Bool
+    /// Why the most recent cancel happened for the thread, so the hook can word
+    /// the finalized card correctly (e.g. an explicit Stop vs a new message).
+    func reviewCancelReason(parentSessionKey: String) -> ReviewCancelReason?
+    /// Whether a review is pending (counting down) or running for the thread —
+    /// gates the "Stop Code Review" context-menu item. Synchronous because the
+    /// menu is built synchronously.
+    func threadHasOngoingReview(sessionId: String) -> Bool
+    /// Whether the thread already has a newer turn in progress (streaming or a
+    /// freshly-appended, not-yet-answered user message). Lets the review hook
+    /// skip reviewing a turn the user has already superseded with a follow-up.
+    func threadHasNewerActivity(sessionId: String) -> Bool
+
     /// Record the latest review verdict for a session (shared between the
     /// code-review and commit hooks within one stop cycle).
     func setReviewPassed(_ passed: Bool, sessionId: String)
@@ -217,6 +247,11 @@ public protocol HookController: AnyObject {
     func projectHasSecrets(_ project: Project) -> Bool
     func projectHasDocs(_ project: Project) -> Bool
     func projectHasReleaseWorkflow(_ project: Project) -> Bool
+    /// Whether the project's linked repo is already configured for CI
+    /// auto-updates (a "watched repository"). Hides "Set Up CI Update" when it's
+    /// already set up; also false when the project has no GitHub repo or the
+    /// status cache hasn't been populated yet (fail-open: the item shows).
+    func projectHasCIUpdates(_ project: Project) -> Bool
 
     /// Whether the project's working tree has uncommitted changes (gates the
     /// "Commit All Changes" item). Defaults to visible when status is unknown.

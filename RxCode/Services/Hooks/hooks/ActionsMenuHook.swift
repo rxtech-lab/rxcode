@@ -71,6 +71,19 @@ final class ActionsMenuHook: Hook {
         if payload.session.threadLabel == AppState.manualCodeReviewLabel { return [] }
 
         var items: [MenuItem] = []
+
+        // Stop an in-flight automatic review (countdown or running review thread).
+        // Only shown while a review is actually pending/running for this thread.
+        if controller.threadHasOngoingReview(sessionId: payload.session.id) {
+            items.append(MenuItem(
+                id: "\(hookID).thread.stopCodeReview.\(payload.session.id)",
+                title: String(localized: "Stop Code Review"),
+                systemImage: "stop.circle",
+                role: .destructive,
+                action: .command(MenuActionCommand(kind: .threadStopCodeReview, sessionId: payload.session.id))
+            ))
+        }
+
         items.append(MenuItem(
             id: "\(hookID).thread.codeReview.\(payload.session.id)",
             title: String(localized: "Code Review for this thread"),

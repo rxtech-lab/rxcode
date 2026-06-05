@@ -69,6 +69,12 @@ extension AppState {
         case .threadCommitFiles:
             let sessionId = try requireSession(command.sessionId)
             return MenuCommandResult(threadId: try await commitFilesForThread(sessionId: sessionId))
+
+        case .threadStopCodeReview:
+            let sessionId = try requireSession(command.sessionId)
+            // Cancel the pending countdown and/or stop the running review thread.
+            reviewScheduler.cancel(parentSessionKey: sessionId, reason: .contextMenu)
+            return MenuCommandResult()
         }
     }
 

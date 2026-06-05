@@ -268,6 +268,12 @@ extension AppState {
         if !isStopHookReprompt {
             stopHookRepromptCounts[sessionKey] = nil
             reviewRoundBySession[sessionKey] = nil
+            // A new follow-up message supersedes any pending/in-flight automatic
+            // code review for this thread: cancel the countdown and stop the
+            // review thread if it's already running. Auto-fix reprompts (sent
+            // with `isStopHookReprompt`) deliberately don't cancel — they want
+            // the re-review to run.
+            reviewScheduler?.cancel(parentSessionKey: sessionKey, reason: .newMessage)
         }
 
         // Apply initialMessages if provided. Refuse to clobber an already-

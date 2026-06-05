@@ -146,6 +146,14 @@ extension AppState {
                 allSessionSummaries[idx].threadLabel = threadLabel
                 allSessionSummaries[idx].skipHooks = skipHooks
             }
+            // If this is the spawned code-review thread, hand its now-known
+            // session id to the scheduler so a cancellation (new message / Stop)
+            // can interrupt the exact in-flight review — and apply a stop that
+            // was requested before the id was known. Runs before the response is
+            // awaited below, closing the startup race.
+            if threadLabel == Self.manualCodeReviewLabel, let parent = parentThreadId {
+                reviewScheduler?.registerRunningReviewThread(parentSessionKey: parent, reviewThreadId: resolvedThreadIdForReturn)
+            }
         }
 
         if !waitForResponse {

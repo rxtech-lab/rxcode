@@ -61,6 +61,54 @@ final class CodeReviewHook: Hook {
             return .ignored
         }
 
+        // Debounce before reviewing: show a countdown card and wait. Sending a
+        // new follow-up message in this thread (or tapping Stop Review / the
+        // "Stop Code Review" context-menu item) cancels; "Start it now" skips the
+        // wait. `parentKey` is the resolved session id — the same key the
+        // scheduler is driven by from `sendPrompt`, the countdown buttons, and
+        // the context menu, and the `parentThreadId` stamped on the review thread.
+        let parentKey = payload.sessionId
+
+        // If a newer user turn already superseded this completed turn — the user
+        // sent a follow-up while this review was still queued behind earlier
+        // after-stop hooks, so the `.newMessage` cancel arrived before the gate
+        // existed and no-op'd — skip the review entirely. This check sits
+        // immediately before the countdown card is inserted and the gate is
+        // registered; there is no suspension point between here and gate
+        // registration, so a follow-up is either visible now or arrives once the
+        // gate exists (where the scheduler's cancel handles it). Leave the
+        // verdict not-passed so a paired commit hook holds off on the stale turn.
+        if controller.threadHasNewerActivity(sessionId: parentKey) {
+            recordVerdict(false, payload: payload, controller: controller)
+            return .ignored
+        }
+
+        let delay = controller.reviewCountdownSeconds
+        let countdownCard = controller.insertCard(
+            sessionKey: payload.sessionKey,
+            toolName: ReviewCountdownCard.toolName,
+            input: [
+                ReviewCountdownCard.parentSessionKey: .string(parentKey),
+                ReviewCountdownCard.startAtKey: .number(Date().timeIntervalSince1970 + delay),
+            ]
+        )
+        let proceed = await controller.awaitReviewGate(parentSessionKey: parentKey, delaySeconds: delay)
+        guard proceed else {
+            // Cancelled before it started. Leave the verdict not-passed so a
+            // paired commit hook holds off, matching the "no review ran" state.
+            controller.completeCard(
+                countdownCard, sessionKey: payload.sessionKey,
+                result: Self.cancellationText(reason: controller.reviewCancelReason(parentSessionKey: parentKey), started: false),
+                isError: true
+            )
+            recordVerdict(false, payload: payload, controller: controller)
+            return .ignored
+        }
+        controller.completeCard(
+            countdownCard, sessionKey: payload.sessionKey,
+            result: "Starting code review…", isError: false
+        )
+
         let task = controller.firstUserPrompt(sessionId: payload.sessionKey) ?? "(task unknown)"
         let selection = controller.resolveAgentModelSelection(
             storedModel: hook.codeReview?.model,
@@ -95,6 +143,9 @@ final class CodeReviewHook: Hook {
         )
 
         logger.debug("[Hook] spawning code-review thread for session \(payload.sessionId, privacy: .public) files=\(changedFiles.count)")
+        // Mark running so a follow-up message / Stop action can interrupt the
+        // in-flight review thread; cleared once the spawn returns.
+        controller.markReviewRunning(parentSessionKey: parentKey)
         let result = await controller.spawnLinkedThread(
             projectId: payload.project.id,
             parentThreadId: payload.sessionId,
@@ -104,6 +155,18 @@ final class CodeReviewHook: Hook {
             prompt: prompt,
             timeoutSeconds: Self.reviewTimeout
         )
+        controller.clearReviewRunning(parentSessionKey: parentKey)
+
+        // If we interrupted the review (new message / Stop), don't report it as a
+        // failed or verdict-less review — surface it as cancelled and leave the
+        // verdict not-passed so a paired commit hook holds off.
+        if controller.reviewWasStopped(parentSessionKey: parentKey) {
+            finishCard(card, hook: hook, payload: payload, controller: controller,
+                       result: Self.cancellationText(reason: controller.reviewCancelReason(parentSessionKey: parentKey), started: true),
+                       isError: true)
+            recordVerdict(false, payload: payload, controller: controller)
+            return .ignored
+        }
 
         guard let result, result.error == nil else {
             // Couldn't run the review (transport/agent error or timeout). Don't
@@ -199,6 +262,19 @@ final class CodeReviewHook: Hook {
     }
 
     // MARK: - Helpers
+
+    /// Copy for a cancelled/stopped review card. `started` distinguishes a review
+    /// stopped mid-run from one cancelled during the countdown; `reason` avoids
+    /// mislabeling an explicit Stop (button / menu) as "a new message was sent".
+    private static func cancellationText(reason: ReviewCancelReason?, started: Bool) -> String {
+        let verb = started ? "stopped" : "cancelled"
+        switch reason {
+        case .newMessage:
+            return "Code review \(verb) — a new message was sent."
+        case .stopButton, .contextMenu, .none:
+            return "Code review \(verb)."
+        }
+    }
 
     private func recordVerdict(_ passed: Bool, payload: SessionEndPayload, controller: any HookController) {
         // Store under both the in-memory key and the resolved id; the commit hook

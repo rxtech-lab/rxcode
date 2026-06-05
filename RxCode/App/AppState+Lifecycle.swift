@@ -410,6 +410,16 @@ extension AppState {
             Task { await self.respondToPlanDecision(toolUseId: toolUseId, action: action, in: window) }
         }
 
+        // Install the review-countdown handler. The Stop / Start-now buttons on
+        // the countdown card route through here to the review scheduler.
+        window.reviewCountdownHandler = { [weak self] parentSessionKey, action in
+            guard let self else { return }
+            switch action {
+            case .startNow: self.reviewScheduler.startNow(parentSessionKey: parentSessionKey)
+            case .stop: self.reviewScheduler.cancel(parentSessionKey: parentSessionKey, reason: .stopButton)
+            }
+        }
+
         // Hydrate per-window draft queues from disk-persisted queues so messages
         // typed-while-streaming survive an app relaunch.
         for (key, queue) in persistedQueues where window.draftQueues[key] == nil {

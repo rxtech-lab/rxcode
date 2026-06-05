@@ -49,6 +49,15 @@ struct ToolResultView: View {
     }
 
     var body: some View {
+        if toolCall.name == ReviewCountdownCard.toolName {
+            // Interactive "review will start in N seconds" card (Stop / Start now).
+            ReviewCountdownCardView(toolCall: toolCall)
+        } else {
+            standardBody
+        }
+    }
+
+    private var standardBody: some View {
         Group {
             if isCardTool {
                 cardBody

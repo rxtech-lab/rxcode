@@ -1072,6 +1072,9 @@ final class AppState {
     var hookController: AppStateHookController!
     /// Registry + dispatcher for lifecycle hooks. See `registerBuiltInHooks()`.
     var hookManager: HookManager!
+    /// Debounces and cancels automatic code reviews (countdown card + Stop /
+    /// Start-now / stop-on-new-message). Driven by `CodeReviewHook`.
+    var reviewScheduler: ReviewScheduler!
 
     /// Weak refs to every `WindowState` that's been wired up via `setupChatBridge`.
     /// Used by AppState-driven queue maintenance (e.g. `flushNextQueuedMessageIfNeeded`)
@@ -1241,6 +1244,7 @@ final class AppState {
         let hookController = AppStateHookController(app: self)
         self.hookController = hookController
         self.hookManager = HookManager(controller: hookController)
+        self.reviewScheduler = ReviewScheduler(app: self)
         registerBuiltInHooks()
     }
 
@@ -1264,7 +1268,6 @@ final class AppState {
         hookManager.register(AutopilotDocsHook())
         hookManager.register(AutopilotReleaseHook())
         hookManager.register(CIUpdateHook())
-        hookManager.register(CIUpdateMenuHook())
         #endif
         // Registered last so their (potentially long) after-stop work runs after
         // the response-complete notification has already fired. CodeReviewHook

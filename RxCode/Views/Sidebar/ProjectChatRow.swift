@@ -158,6 +158,8 @@ struct ProjectChatRow: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
 
+            Spacer(minLength: 4)
+
             if showLabelChip, let label = summary.threadLabel, !label.isEmpty {
                 Text(label)
                     .font(.system(size: ClaudeTheme.size(9), weight: .semibold))
@@ -167,8 +169,6 @@ struct ProjectChatRow: View {
                     .background(ClaudeTheme.accentSubtle, in: Capsule())
                     .fixedSize()
             }
-
-            Spacer(minLength: 4)
 
             if let reviewPassed {
                 reviewVerdictIcon(passed: reviewPassed)

@@ -14,10 +14,10 @@ final class ThreadStore {
         self.context = context
     }
 
-    /// Convenience initializer creating its own `ModelContainer` rooted at the
-    /// app's Application Support directory.
-    static func make() -> ThreadStore {
-        let schema = Schema([
+    /// The full SwiftData schema for the thread store, shared by the file-backed
+    /// (`make`) and in-memory (`inMemory`, used by tests) factories.
+    static var schema: Schema {
+        Schema([
             ChatThread.self,
             TodoSnapshot.self,
             ThreadFileEdit.self,
@@ -27,8 +27,23 @@ final class ThreadStore {
             BranchBriefingRecord.self,
             ThreadEmbeddingChunk.self,
             MemoryRecord.self,
-            HookStatusRecord.self
+            HookStatusRecord.self,
+            HookCardRecord.self,
+            CustomMenuItemRecord.self
         ])
+    }
+
+    /// In-memory store over the full schema, for tests.
+    static func inMemory() -> ThreadStore {
+        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try! ModelContainer(for: schema, configurations: [config])
+        return ThreadStore(context: ModelContext(container))
+    }
+
+    /// Convenience initializer creating its own `ModelContainer` rooted at the
+    /// app's Application Support directory.
+    static func make() -> ThreadStore {
+        let schema = Self.schema
         let url = Self.storeURL()
         let config = ModelConfiguration(schema: schema, url: url)
         do {
@@ -37,6 +52,7 @@ final class ThreadStore {
             // Sweep hook cards left mid-run by a previous launch so they don't
             // rebuild as a perpetual spinner.
             store.finalizeInterruptedHooks()
+            store.finalizeInterruptedHookCards()
             return store
         } catch {
             // Fall back to an in-memory container so the app still launches.
@@ -164,6 +180,7 @@ final class ThreadStore {
             deleteQueueRows(sessionKey: id)
             deletePlanDecisionRows(sessionId: id)
             deleteHookStatusRow(sessionId: id)
+            deleteHookCardRows(sessionId: id)
             deleteThreadSummaryRow(sessionId: id)
             deleteEmbeddingChunkRows(threadId: id)
         }
@@ -347,6 +364,7 @@ final class ThreadStore {
         renameQueueKey(from: oldId, to: newId)
         renamePlanDecisions(from: oldId, to: newId)
         renameHookStatus(from: oldId, to: newId)
+        renameHookCards(from: oldId, to: newId)
         renameThreadSummary(from: oldId, to: newId)
         save()
     }
@@ -401,6 +419,7 @@ final class ThreadStore {
         deleteQueueRows(sessionKey: id)
         deletePlanDecisionRows(sessionId: id)
         deleteHookStatusRow(sessionId: id)
+        deleteHookCardRows(sessionId: id)
         deleteThreadSummaryRow(sessionId: id)
         deleteEmbeddingChunkRows(threadId: id)
         save()
@@ -423,6 +442,7 @@ final class ThreadStore {
                 deleteQueueRows(sessionKey: id)
                 deletePlanDecisionRows(sessionId: id)
                 deleteHookStatusRow(sessionId: id)
+                deleteHookCardRows(sessionId: id)
                 deleteThreadSummaryRow(sessionId: id)
                 deleteEmbeddingChunkRows(threadId: id)
             }
@@ -437,6 +457,8 @@ final class ThreadStore {
                 for row in allPlans { context.delete(row) }
                 let allHookStatuses = (try? context.fetch(FetchDescriptor<HookStatusRecord>())) ?? []
                 for row in allHookStatuses { context.delete(row) }
+                let allHookCards = (try? context.fetch(FetchDescriptor<HookCardRecord>())) ?? []
+                for row in allHookCards { context.delete(row) }
                 let allSummaries = (try? context.fetch(FetchDescriptor<ThreadSummaryRecord>())) ?? []
                 for row in allSummaries { context.delete(row) }
                 let allBriefings = (try? context.fetch(FetchDescriptor<BranchBriefingRecord>())) ?? []
@@ -583,11 +605,104 @@ final class ThreadStore {
         for row in planDecisions(sessionId: sessionId) { context.delete(row) }
     }
 
-    // MARK: - Hook Status
+    // MARK: - Hook Cards
 
-    func loadHookStatus(sessionId: String) -> HookStatusRecord? {
-        fetchHookStatus(sessionId: sessionId)
+    /// All persisted hook cards for a session, oldest first, so a reload rebuilds
+    /// them in the order they were originally inserted.
+    func loadHookCards(sessionId: String) -> [HookCardRecord] {
+        let descriptor = FetchDescriptor<HookCardRecord>(
+            predicate: #Predicate { $0.sessionId == sessionId },
+            sortBy: [SortDescriptor(\.createdAt, order: .forward)]
+        )
+        return (try? context.fetch(descriptor)) ?? []
     }
+
+    private func fetchHookCard(toolId: String) -> HookCardRecord? {
+        var descriptor = FetchDescriptor<HookCardRecord>(
+            predicate: #Predicate { $0.toolId == toolId }
+        )
+        descriptor.fetchLimit = 1
+        return (try? context.fetch(descriptor))?.first
+    }
+
+    /// Insert (or update) a hook card row keyed by its tool-call id. Called at
+    /// insert time (in-progress) and again on completion so the card survives a
+    /// reload at any point in its lifecycle.
+    func upsertHookCard(
+        sessionId: String,
+        toolId: String,
+        toolName: String,
+        input: [String: JSONValue],
+        result: String?,
+        isError: Bool,
+        isComplete: Bool
+    ) {
+        let data = (try? JSONEncoder().encode(input)) ?? Data()
+        if let existing = fetchHookCard(toolId: toolId) {
+            existing.sessionId = sessionId
+            existing.toolName = toolName
+            existing.inputData = data
+            existing.result = result
+            existing.isError = isError
+            existing.isComplete = isComplete
+            existing.updatedAt = .now
+        } else {
+            context.insert(HookCardRecord(
+                toolId: toolId,
+                sessionId: sessionId,
+                toolName: toolName,
+                inputData: data,
+                result: result,
+                isError: isError,
+                isComplete: isComplete
+            ))
+        }
+        save()
+    }
+
+    /// Update a previously-inserted card's result/state on completion,
+    /// preserving its stored `toolName`/`input`. Returns `false` (no-op) if the
+    /// row isn't found, so callers can fall back to an insert.
+    @discardableResult
+    func completeHookCard(toolId: String, result: String, isError: Bool, isComplete: Bool = true) -> Bool {
+        guard let row = fetchHookCard(toolId: toolId) else { return false }
+        row.result = result
+        row.isError = isError
+        row.isComplete = isComplete
+        row.updatedAt = .now
+        save()
+        return true
+    }
+
+    /// Finalize any hook card rows left "in progress" by a previous launch (the
+    /// app closed while a long-running hook like code review was still running).
+    /// Without this they would rebuild as a spinner that never resolves.
+    func finalizeInterruptedHookCards() {
+        let descriptor = FetchDescriptor<HookCardRecord>(
+            predicate: #Predicate { $0.isComplete == false }
+        )
+        guard let rows = try? context.fetch(descriptor), !rows.isEmpty else { return }
+        for row in rows {
+            row.isComplete = true
+            row.isError = true
+            if (row.result ?? "").isEmpty {
+                row.result = "Interrupted — the app closed while this hook was running."
+            }
+            row.updatedAt = .now
+        }
+        save()
+    }
+
+    private func renameHookCards(from oldId: String, to newId: String) {
+        guard oldId != newId else { return }
+        for row in loadHookCards(sessionId: oldId) { row.sessionId = newId }
+    }
+
+    private func deleteHookCardRows(sessionId: String) {
+        for row in loadHookCards(sessionId: sessionId) { context.delete(row) }
+    }
+
+    // MARK: - Hook Status (legacy)
 
     private func fetchHookStatus(sessionId: String) -> HookStatusRecord? {
         var descriptor = FetchDescriptor<HookStatusRecord>(
@@ -595,38 +710,6 @@ final class ThreadStore {
         )
         descriptor.fetchLimit = 1
         return (try? context.fetch(descriptor))?.first
-    }
-
-    /// Upsert the last hook card for a session (one row per session).
-    func setHookStatus(
-        sessionId: String,
-        toolId: String,
-        name: String,
-        trigger: String,
-        output: String,
-        isError: Bool,
-        isComplete: Bool = true
-    ) {
-        if let existing = fetchHookStatus(sessionId: sessionId) {
-            existing.toolId = toolId
-            existing.name = name
-            existing.trigger = trigger
-            existing.output = output
-            existing.isError = isError
-            existing.isComplete = isComplete
-            existing.updatedAt = .now
-        } else {
-            context.insert(HookStatusRecord(
-                sessionId: sessionId,
-                toolId: toolId,
-                name: name,
-                trigger: trigger,
-                output: output,
-                isError: isError,
-                isComplete: isComplete
-            ))
-        }
-        save()
     }
 
     /// Finalize any hook rows left "in progress" by a previous launch (the app

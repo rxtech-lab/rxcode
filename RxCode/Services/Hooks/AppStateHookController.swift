@@ -36,6 +36,18 @@ final class AppStateHookController: HookController {
                 isStreaming: false
             ))
         }
+        // Persist the card immediately (in-progress) so it survives an app reload
+        // even before it completes — hook cards never reach the CLI transcript,
+        // so this sidecar row is the only copy. `completeCard` updates it.
+        app?.threadStore.upsertHookCard(
+            sessionId: sessionKey,
+            toolId: toolId,
+            toolName: toolName,
+            input: input,
+            result: nil,
+            isError: false,
+            isComplete: false
+        )
         return HookCardHandle(toolId: toolId, messageId: messageId)
     }
 
@@ -52,18 +64,32 @@ final class AppStateHookController: HookController {
             state.messages[idx].isStreaming = false
             state.messages[idx].isResponseComplete = true
         }
+        // Persist completion so the finished card (result + badge) survives a
+        // reload, matching what's now shown live.
+        app?.threadStore.completeHookCard(toolId: handle.toolId, result: result, isError: isError)
     }
 
     func persistHookStatus(sessionKey: String, toolId: String, name: String, trigger: String, output: String, isError: Bool, isComplete: Bool) {
-        app?.threadStore.setHookStatus(
-            sessionId: sessionKey,
-            toolId: toolId,
-            name: name,
-            trigger: trigger,
-            output: output,
-            isError: isError,
-            isComplete: isComplete
-        )
+        guard let store = app?.threadStore else { return }
+        // The card was already persisted in full by `insertCard`; only update its
+        // status fields so the original `toolName`/`input` (e.g. a code-review
+        // card's `summary`) is preserved on disk. Fall back to an upsert with the
+        // reduced legacy payload only if the card was never inserted through this
+        // controller.
+        if !store.completeHookCard(toolId: toolId, result: output, isError: isError, isComplete: isComplete) {
+            store.upsertHookCard(
+                sessionId: sessionKey,
+                toolId: toolId,
+                toolName: AppState.hookToolName(for: name),
+                input: [
+                    "name": .string(name),
+                    "trigger": .string(trigger),
+                ],
+                result: output,
+                isError: isError,
+                isComplete: isComplete
+            )
+        }
     }
 
     func enabledHookProfiles(projectId: UUID, trigger: HookTrigger) async -> [HookProfile] {
@@ -374,6 +400,15 @@ final class AppStateHookController: HookController {
         } else {
             app.reviewRoundBySession[sessionId] = round
         }
+    }
+
+    func lastReviewFeedback(sessionId: String) -> String? {
+        app?.lastReviewFeedbackBySession[sessionId]
+    }
+
+    func setLastReviewFeedback(_ feedback: String?, sessionId: String) {
+        let trimmed = feedback?.trimmingCharacters(in: .whitespacesAndNewlines)
+        app?.lastReviewFeedbackBySession[sessionId] = (trimmed?.isEmpty == false) ? trimmed : nil
     }
 
     func repromptThreadAfterReviewFailure(feedback: String, project: Project, sessionKey: String) -> Int? {
@@ -695,6 +730,10 @@ final class AppStateHookController: HookController {
 
     func threadHasFileChanges(sessionId: String) -> Bool {
         app?.threadHasFileChanges(sessionId: sessionId) ?? false
+    }
+
+    func customMenuItems(projectId: UUID?, surface: CustomMenuItemRecord.Surface) -> [CustomMenuItemRecord] {
+        app?.threadStore.customMenuItems(projectId: projectId, surface: surface) ?? []
     }
 
     func requestSecretsSetup(project: Project) {

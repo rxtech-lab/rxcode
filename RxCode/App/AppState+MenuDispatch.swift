@@ -108,11 +108,16 @@ extension AppState {
 
         case .createThread:
             let project = try requireProject(command.projectId)
+            // A menu-spawned thread is a utility/automation run (commit, review,
+            // a user's custom action) — it shouldn't itself trigger lifecycle
+            // hooks like code review or auto-continue. Mirrors the built-in
+            // commit / code-review / CI-fix spawners.
             let result = try await sendCrossProject(
                 projectId: project.id,
                 threadId: nil,
                 prompt: config.message ?? "",
-                waitForResponse: false
+                waitForResponse: false,
+                skipHooks: true
             )
             if let error = result.error { throw MenuDispatchError.customActionFailed(error) }
             return MenuCommandResult(threadId: result.threadId)

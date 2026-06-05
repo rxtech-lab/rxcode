@@ -2,8 +2,7 @@ import RxCodeCore
 import SwiftUI
 
 /// A dropdown control for choosing an SF Symbol. Shows a live preview of the
-/// current selection and opens a searchable grid of common symbols. Users can
-/// also type any symbol name directly for symbols not in the curated list.
+/// current selection and opens a searchable grid of common symbols.
 struct SFSymbolPicker: View {
     @Binding var symbol: String
 
@@ -75,10 +74,6 @@ struct SFSymbolPicker: View {
 
     private var pickerBody: some View {
         VStack(spacing: 10) {
-            TextField("Symbol name", text: $symbol, prompt: Text(verbatim: "e.g. bolt"))
-                .textFieldStyle(.roundedBorder)
-                .font(.system(size: ClaudeTheme.size(12), design: .monospaced))
-
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: ClaudeTheme.size(11)))
@@ -103,7 +98,7 @@ struct SFSymbolPicker: View {
             .frame(height: 220)
 
             if filtered.isEmpty {
-                Text("No matches. Type a name above to use it anyway.")
+                Text("No matches.")
                     .font(.system(size: ClaudeTheme.size(10)))
                     .foregroundStyle(.secondary)
             }

@@ -271,7 +271,7 @@ actor OpenAISummarizationService {
         Write a GitHub pull request title and description that summarize the work on a branch, using the branch briefing below.
 
         Format rules (MUST follow exactly):
-        - The FIRST line is the PR title in Conventional Commits format: `<type>(<optional-scope>): <description>` — under 72 characters, lowercase imperative mood, no trailing period.
+        - The FIRST line is the PR title in Conventional Commits format: `<type>(<optional-scope>): <description>` — at most 20 words and under 72 characters, lowercase imperative mood, no trailing period.
         - `<type>` MUST be EXACTLY one of these tokens, spelled verbatim: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert.
         - Use the short token only. Do NOT expand or substitute it (e.g. write `feat`, never `feature`; `perf`, never `performance`). A title whose type is not on the list above is invalid.
         - Then exactly ONE blank line.

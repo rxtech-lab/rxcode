@@ -24,6 +24,7 @@ struct CustomMenusSettingsSection: View {
         .sheet(item: $editing) { draft in
             CustomMenuEditorSheet(draft: draft, projects: appState.projects) { result in
                 appState.threadStore.upsertCustomMenuItem(result.toRecord())
+                appState.customMenuItemsRevision += 1
                 reload()
             }
         }
@@ -33,6 +34,7 @@ struct CustomMenusSettingsSection: View {
                 let id = record.id
                 pendingRemoval = nil
                 appState.threadStore.deleteCustomMenuItem(id: id)
+                appState.customMenuItemsRevision += 1
                 reload()
             }
         } message: { record in
@@ -105,6 +107,7 @@ struct CustomMenusSettingsSection: View {
                             onToggle: { enabled in
                                 record.isEnabled = enabled
                                 appState.threadStore.upsertCustomMenuItem(record)
+                                appState.customMenuItemsRevision += 1
                                 reload()
                             },
                             onRemove: { pendingRemoval = record }

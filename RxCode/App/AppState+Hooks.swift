@@ -48,10 +48,14 @@ extension AppState {
     /// the desktop's own locale (used by native menus). Mobile relay requests pass
     /// the phone's locale so titles come back translated.
     func projectContextMenuItems(for project: Project, branch: String? = nil, locale: String? = nil) -> [MenuItem] {
-        hookManager.projectContextMenuItems(ProjectContextMenuPayload(project: project, branch: branch, locale: locale))
+        // Touch the revision so SwiftUI re-runs this fetch (and thus picks up
+        // newly created/edited custom items) when called from a view body.
+        _ = customMenuItemsRevision
+        return hookManager.projectContextMenuItems(ProjectContextMenuPayload(project: project, branch: branch, locale: locale))
     }
 
     func threadContextMenuItems(for session: ChatSession.Summary, locale: String? = nil) -> [MenuItem] {
+        _ = customMenuItemsRevision
         guard let project = projects.first(where: { $0.id == session.projectId }) else { return [] }
         return hookManager.threadContextMenuItems(ThreadContextMenuPayload(project: project, session: session, locale: locale))
     }

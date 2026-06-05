@@ -117,9 +117,9 @@ final class CodeReviewHook: Hook {
         }
 
         let verdict = parseVerdict(result.assistantText)
-        // Fold the review thread's full activity into the card so it can be
-        // expanded inline on the parent thread (and on paired mobile devices,
-        // since hook cards sync automatically).
+        // Fold the reviewer's prose (text only — no tool-call names) into the card
+        // so it can be expanded inline on the parent thread (and on paired mobile
+        // devices, since hook cards sync automatically).
         let transcript = controller.threadTranscript(sessionId: result.threadId)
         let body = transcript.isEmpty ? result.assistantText : transcript
         let reviewLink = "Review thread: \(result.threadId)"
@@ -240,11 +240,23 @@ final class CodeReviewHook: Hook {
         ## What to do
         Inspect the changed files and judge whether the change correctly and safely accomplishes the task. Look for bugs, missed requirements, regressions, and obvious quality problems.
 
+        ## How to write your final message
+        Your final message is the ONLY thing handed back to the agent that made the
+        change — it cannot see your tool calls, intermediate notes, or the files you
+        read. So make that final message complete and self-contained:
+        - Summarize what you reviewed and your overall judgment in a sentence or two.
+        - For every issue, give the file and line (e.g. `Foo.swift:42`), explain what
+          is wrong and why it matters, and state concretely how to fix it.
+        - Quote the relevant snippet when it makes the fix unambiguous.
+        - Order issues from most to least important. Don't reference "see above" or a
+          tool call — restate everything the agent needs inline.
+
         End your reply with a single line — exactly one of:
         `\(Self.marker) PASS`  (the change is good as-is)
         `\(Self.marker) FAIL`  (changes are needed)
 
-        If you FAIL the review, list the specific, actionable issues to fix above that line.
+        If you FAIL the review, put the full, self-contained list of actionable issues
+        above that line.
         """
         if let extra = extraInstructions?.trimmingCharacters(in: .whitespacesAndNewlines), !extra.isEmpty {
             prompt += "\n\n## Additional instructions\n\(extra)"

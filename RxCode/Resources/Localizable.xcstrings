@@ -4137,6 +4137,7 @@
       }
     },
     "Creating Pull Request…" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -13207,6 +13208,9 @@
           }
         }
       }
+    },
+    "Set Up CI Update" : {
+
     },
     "Set Up Docs" : {
       "localizations" : {

@@ -176,12 +176,9 @@ final class AppStateHookController: HookController {
                 // Skip the injected review instruction (the only user message).
                 continue
             case .assistant:
-                for toolCall in message.toolCalls {
-                    // Hook/auto-continue synthetic cards aren't part of the
-                    // reviewer's own work — skip them.
-                    if toolCall.name.lowercased().hasPrefix("hook:") { continue }
-                    lines.append("• \(toolCall.name)")
-                }
+                // Text only — tool calls are deliberately excluded so the review
+                // result folded back onto the parent thread (and fed into any
+                // fix turn) is the reviewer's prose, not a list of tool names.
                 let text = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !text.isEmpty { lines.append(text) }
             default:
@@ -231,20 +228,135 @@ final class AppStateHookController: HookController {
         }
     }
 
-    func sendThreadMessage(sessionId: String, prompt: String) {
+    func sendThreadMessage(sessionId: String, prompt: String, setupKind: String?) {
         guard let app else { return }
         Task { [weak app] in
             _ = try? await app?.sendCrossProject(
                 projectId: nil,
                 threadId: sessionId,
                 prompt: prompt,
-                waitForResponse: false
+                waitForResponse: false,
+                setupKind: setupKind
             )
         }
     }
 
+    func evaluateCondition(condition: String, lastAssistantText: String, model: String?, sessionId: String) async -> Bool? {
+        guard let app else { return nil }
+        let trimmedCondition = condition.trimmingCharacters(in: .whitespacesAndNewlines)
+        // An empty condition is treated as "always send" by the caller, but guard
+        // here too so we never spend a model call on nothing.
+        guard !trimmedCondition.isEmpty else { return true }
+
+        let prompt = """
+        You are a gate that decides whether a follow-up automation should run for a coding chat thread. \
+        Answer with exactly one word — YES or NO. No punctuation, no explanation.
+
+        Condition to evaluate:
+        \(trimmedCondition)
+
+        The assistant's final response this turn:
+        \(String(lastAssistantText.prefix(4000)))
+
+        Does the condition hold? Reply YES or NO.
+        """
+
+        // A per-hook model override (provider-qualified) wins; otherwise the app's
+        // configured summarization model is used.
+        let override: (provider: AgentProvider, model: String)? = {
+            guard let trimmed = model?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else { return nil }
+            return resolveAgentModelSelection(storedModel: trimmed, fallbackSessionId: sessionId)
+        }()
+
+        guard let raw = await app.runHookConditionCompletion(
+            prompt: prompt,
+            overrideSelection: override,
+            fallbackSessionId: sessionId
+        ) else { return nil }
+
+        let verdict = raw.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        if verdict.hasPrefix("YES") { return true }
+        if verdict.hasPrefix("NO") { return false }
+        return nil
+    }
+
+    // MARK: Review debounce / cancellation
+
+    var reviewCountdownSeconds: TimeInterval { ReviewScheduler.defaultDelaySeconds }
+
+    func awaitReviewGate(parentSessionKey: String, delaySeconds: TimeInterval) async -> Bool {
+        guard let app else { return true }
+        let outcome = await app.reviewScheduler.awaitGate(parentSessionKey: parentSessionKey, delaySeconds: delaySeconds)
+        return outcome == .proceed
+    }
+
+    func markReviewRunning(parentSessionKey: String) {
+        app?.reviewScheduler.markRunning(parentSessionKey: parentSessionKey)
+    }
+
+    func clearReviewRunning(parentSessionKey: String) {
+        app?.reviewScheduler.clearRunning(parentSessionKey: parentSessionKey)
+    }
+
+    func reviewWasStopped(parentSessionKey: String) -> Bool {
+        app?.reviewScheduler.consumeStoppedWhileRunning(parentSessionKey: parentSessionKey) ?? false
+    }
+
+    func reviewCancelReason(parentSessionKey: String) -> ReviewCancelReason? {
+        app?.reviewScheduler.cancelReason(parentSessionKey: parentSessionKey)
+    }
+
+    func threadHasOngoingReview(sessionId: String) -> Bool {
+        app?.reviewScheduler.hasOngoingReview(parentSessionKey: sessionId) ?? false
+    }
+
+    func threadHasNewerActivity(sessionId: String) -> Bool {
+        guard let app else { return false }
+        let state = app.stateForSession(sessionId)
+        // A new turn streaming on this thread.
+        if state.isStreaming { return true }
+        // Walk back to the latest *meaningful* message, skipping synthetic cards
+        // inserted by hooks (hook status cards, auto-continue, the review
+        // countdown). A trailing user message means a follow-up superseded the
+        // completed turn; an assistant turn — whether it ended with prose or only
+        // real tool calls (e.g. file edits and no closing text) — is just the
+        // turn's own response, not newer activity.
+        for message in state.messages.reversed() {
+            switch message.role {
+            case .user:
+                if !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    return true
+                }
+            case .assistant:
+                // First real assistant message reached → the completed turn's
+                // response. Synthetic-only / empty rows fall through and we keep
+                // looking past them.
+                if Self.isMeaningfulAssistantMessage(message) { return false }
+            default:
+                break
+            }
+        }
+        return false
+    }
+
+    /// Whether an assistant message carries real activity — non-empty prose or at
+    /// least one non-synthetic tool call. Hook status cards, the auto-continue
+    /// card, and the review-countdown card are synthetic and don't count.
+    private static func isMeaningfulAssistantMessage(_ message: ChatMessage) -> Bool {
+        if !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
+        return message.blocks.compactMap { $0.toolCall }.contains { !isSyntheticToolName($0.name) }
+    }
+
+    private static func isSyntheticToolName(_ name: String) -> Bool {
+        name.lowercased().hasPrefix("hook:")
+            || name == ToolCall.autoContinueToolName
+            || name == ReviewCountdownCard.toolName
+    }
+
     func setReviewPassed(_ passed: Bool, sessionId: String) {
         app?.reviewPassedBySession[sessionId] = passed
+        // Persist on the thread row so the sidebar review dot survives a reload.
+        app?.threadStore.setReviewPassed(sessionId: sessionId, passed: passed)
     }
 
     func reviewPassed(sessionId: String) -> Bool? {
@@ -262,6 +374,11 @@ final class AppStateHookController: HookController {
         } else {
             app.reviewRoundBySession[sessionId] = round
         }
+    }
+
+    func repromptThreadAfterReviewFailure(feedback: String, project: Project, sessionKey: String) -> Int? {
+        guard let app else { return nil }
+        return app.repromptAfterReviewFailure(feedback: feedback, project: project, sessionKey: sessionKey)
     }
 
     func responseNotificationFallback(from responseText: String) -> String {
@@ -546,6 +663,40 @@ final class AppStateHookController: HookController {
         app?.projectHasReleaseWorkflow(project) ?? false
     }
 
+    func projectHasCIUpdates(_ project: Project) -> Bool {
+        app?.projectHasCIUpdates(project) ?? false
+    }
+
+    func projectHasUncommittedChanges(_ project: Project) -> Bool {
+        // Default to visible when status is unknown (mirrors the inline menu).
+        app?.projectHasUncommittedChanges(project.id) ?? true
+    }
+
+    func projectHasOpenPullRequest(_ project: Project, branch: String?) -> Bool {
+        guard let app, project.gitHubRepo != nil else { return false }
+        // For a branch-scoped menu (e.g. a briefing card), check that branch's
+        // PR status from the branch-keyed map; otherwise use the project's
+        // current-branch status. Only an *open* PR should hide "Create Pull
+        // Request" — a closed/merged PR shouldn't.
+        let status = branch.map { app.ciStatus(forProjectId: project.id, branch: $0) }
+            ?? app.ciStatusByProject[project.id]
+        return status?.pullRequestState == .open
+    }
+
+    func projectCIIsFailing(_ project: Project, branch: String?) -> Bool {
+        guard let app, project.gitHubRepo != nil else { return false }
+        // Branch-scoped menu (e.g. a briefing card) checks that branch's CI from
+        // the branch-keyed map; a generic project menu uses the current-branch
+        // status. Only an outright failure offers the fix item.
+        let status = branch.map { app.ciStatus(forProjectId: project.id, branch: $0) }
+            ?? app.ciStatusByProject[project.id]
+        return status?.overallState == .failure
+    }
+
+    func threadHasFileChanges(sessionId: String) -> Bool {
+        app?.threadHasFileChanges(sessionId: sessionId) ?? false
+    }
+
     func requestSecretsSetup(project: Project) {
         app?.secretsSetupRequest = SecretsSetupRequest(
             repoFullName: project.gitHubRepo,
@@ -572,6 +723,13 @@ final class AppStateHookController: HookController {
 
     func requestReleaseCreate(project: Project) {
         app?.releaseCreateRequest = project
+    }
+
+    func requestCISetup(project: Project) {
+        app?.ciSetupRequest = CISetupRequest(
+            repoFullName: project.gitHubRepo,
+            projectPath: project.path
+        )
     }
 
     // MARK: Setup-session tracking

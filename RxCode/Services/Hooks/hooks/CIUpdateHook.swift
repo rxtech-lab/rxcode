@@ -6,8 +6,10 @@ import SwiftUI
 
 /// Surfaces a "set up CI auto-update" banner on the new-chat screen when the
 /// project has local `.github/workflows/*.yml|yaml` files but its repo isn't yet
-/// watched for CI auto-updates. Passive — never blocks the chat. Mirrors
-/// `DocsHook` / `AutopilotHook`.
+/// watched for CI auto-updates, and contributes the matching "Set Up CI Update"
+/// item to the project/thread context menus. Passive — never blocks the chat.
+/// Mirrors `AutopilotReleaseHook` / `AutopilotDocsHook`, which likewise pair a
+/// banner with a context-menu item in one hook.
 @MainActor
 final class CIUpdateHook: Hook {
     let hookID = "builtin.ciupdate"
@@ -20,6 +22,36 @@ final class CIUpdateHook: Hook {
         guard let repo = project.gitHubRepo else { return nil }
         let repoSlug = repo.split(separator: "/").last.map(String.init) ?? repo
         return "\(repoSlug)-new-project-ci-update"
+    }
+
+    // MARK: Context menu
+
+    func onProjectContextMenu(_ payload: ProjectContextMenuPayload, controller: any HookController) -> [MenuItem] {
+        menuItems(for: payload.project, controller: controller)
+    }
+
+    func onThreadContextMenu(_ payload: ThreadContextMenuPayload, controller: any HookController) -> [MenuItem] {
+        menuItems(for: payload.project, controller: controller)
+    }
+
+    /// Offers "Set Up CI Update" when the project has a linked GitHub repo that
+    /// is *not* already watched for CI auto-updates. The "is watched" status
+    /// comes from the synchronous `ciStatusByRepo` cache (refreshed at launch
+    /// alongside secrets/docs/release), so an already-set-up repo no longer shows
+    /// the item. It's a `.deepLink` (presents the CI setup sheet locally) rather
+    /// than a `.command`, so desktop and mobile each open their own UI.
+    private func menuItems(for project: Project, controller: any HookController) -> [MenuItem] {
+        guard project.gitHubRepo != nil else { return [] }
+        // Already a watched repo → CI auto-update is set up; nothing to offer.
+        guard !controller.projectHasCIUpdates(project) else { return [] }
+        return [
+            MenuItem(
+                id: "\(hookID).setup.\(project.id.uuidString)",
+                title: String(localized: "Set Up CI Update"),
+                systemImage: "arrow.triangle.2.circlepath",
+                action: .deepLink(MenuDeepLink.url(action: MenuDeepLink.ciSetup, projectId: project.id))
+            )
+        ]
     }
 
     func onProjectDelete(_ payload: ProjectDeletePayload, controller: any HookController) async -> HookOutcome {

@@ -26,6 +26,9 @@ struct HookProfileDetailForm: View {
                     if newAction == .codeReview, hook.codeReview == nil {
                         hook.codeReview = CodeReviewConfig()
                     }
+                    if newAction == .sendMessage, hook.sendMessage == nil {
+                        hook.sendMessage = SendMessageConfig()
+                    }
                 }
                 Picker("Trigger", selection: $hook.trigger) {
                     ForEach(HookTrigger.allCases, id: \.self) { trigger in
@@ -63,6 +66,8 @@ struct HookProfileDetailForm: View {
                 codeReviewSection
             case .commitPush:
                 commitPushSection
+            case .sendMessage:
+                sendMessageSection
             }
         }
         .formStyle(.grouped)
@@ -107,6 +112,146 @@ struct HookProfileDetailForm: View {
         }
     }
 
+    private var sendMessageSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Message")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                TextEditor(text: sendMessageMessageBinding)
+                    .font(.system(size: 12, design: .monospaced))
+                    .frame(minHeight: 70)
+            }
+            Picker("Send to", selection: sendMessageTargetBinding) {
+                Text("Same thread").tag(SendMessageTarget.sameThread)
+                Text("New thread").tag(SendMessageTarget.newThread)
+            }
+            if sendMessageTargetBinding.wrappedValue == .newThread {
+                TextField("New thread label", text: sendMessageNewThreadLabelBinding, prompt: Text("Assistant"))
+                Picker("Thread model", selection: sendMessageNewThreadModelBinding) {
+                    Text("Same as thread").tag("")
+                    ForEach(appState.availableAgentModelSections(), id: \.id) { section in
+                        Section(section.title) {
+                            ForEach(section.models, id: \.key) { model in
+                                Text(model.displayName).tag(model.key)
+                            }
+                        }
+                    }
+                }
+            }
+            Toggle("Only send when a condition is met", isOn: sendMessageConditionEnabledBinding)
+            if sendMessageConditionEnabledBinding.wrappedValue {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Condition")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                    TextEditor(text: sendMessageConditionBinding)
+                        .font(.system(size: 12, design: .monospaced))
+                        .frame(minHeight: 60)
+                }
+                Picker("Condition model", selection: sendMessageConditionModelBinding) {
+                    Text("Summarization model").tag("")
+                    ForEach(appState.availableAgentModelSections(), id: \.id) { section in
+                        Section(section.title) {
+                            ForEach(section.models, id: \.key) { model in
+                                Text(model.displayName).tag(model.key)
+                            }
+                        }
+                    }
+                }
+            }
+        } header: {
+            Text("Send Message")
+        } footer: {
+            Text("After the session is finalized, your message is sent to the assistant — as a follow-up in this thread or into a new linked thread that runs no hooks. With a condition, a model first decides yes/no. Fires once per session and resets when you send a new message.")
+        }
+    }
+
+    // MARK: - Send Message bindings
+
+    private var sendMessageMessageBinding: Binding<String> {
+        Binding(
+            get: { hook.sendMessage?.message ?? "" },
+            set: { newValue in
+                var cfg = hook.sendMessage ?? SendMessageConfig()
+                cfg.message = newValue
+                hook.sendMessage = cfg
+            }
+        )
+    }
+
+    private var sendMessageTargetBinding: Binding<SendMessageTarget> {
+        Binding(
+            get: { hook.sendMessage?.target ?? .sameThread },
+            set: { newValue in
+                var cfg = hook.sendMessage ?? SendMessageConfig()
+                cfg.target = newValue
+                hook.sendMessage = cfg
+            }
+        )
+    }
+
+    private var sendMessageNewThreadLabelBinding: Binding<String> {
+        Binding(
+            get: { hook.sendMessage?.newThreadLabel ?? "" },
+            set: { newValue in
+                var cfg = hook.sendMessage ?? SendMessageConfig()
+                cfg.newThreadLabel = newValue.isEmpty ? nil : newValue
+                hook.sendMessage = cfg
+            }
+        )
+    }
+
+    private var sendMessageNewThreadModelBinding: Binding<String> {
+        Binding(
+            get: { normalizedModelTag(hook.sendMessage?.newThreadModel ?? "") },
+            set: { newValue in
+                var cfg = hook.sendMessage ?? SendMessageConfig()
+                cfg.newThreadModel = newValue.isEmpty ? nil : newValue
+                hook.sendMessage = cfg
+            }
+        )
+    }
+
+    private var sendMessageConditionEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { hook.sendMessage?.conditionEnabled ?? false },
+            set: { newValue in
+                var cfg = hook.sendMessage ?? SendMessageConfig()
+                cfg.conditionEnabled = newValue
+                hook.sendMessage = cfg
+            }
+        )
+    }
+
+    private var sendMessageConditionBinding: Binding<String> {
+        Binding(
+            get: { hook.sendMessage?.condition ?? "" },
+            set: { newValue in
+                var cfg = hook.sendMessage ?? SendMessageConfig()
+                cfg.condition = newValue.isEmpty ? nil : newValue
+                hook.sendMessage = cfg
+            }
+        )
+    }
+
+    private var sendMessageConditionModelBinding: Binding<String> {
+        Binding(
+            get: { normalizedModelTag(hook.sendMessage?.conditionModel ?? "") },
+            set: { newValue in
+                var cfg = hook.sendMessage ?? SendMessageConfig()
+                cfg.conditionModel = newValue.isEmpty ? nil : newValue
+                hook.sendMessage = cfg
+            }
+        )
+    }
+
+    /// Map a stored model key/id to the picker tag (`""` ⇒ default). Shared by the
+    /// code-review and send-message model pickers.
+    private func normalizedModelTag(_ storedValue: String) -> String {
+        normalizedCodeReviewModelTag(storedValue)
+    }
+
     private var codeReviewModelBinding: Binding<String> {
         Binding(
             get: { normalizedCodeReviewModelTag(hook.codeReview?.model ?? "") },
@@ -149,6 +294,8 @@ struct HookProfileDetailForm: View {
             return "Code Review runs after the session is finalized; a failing review sends the agent back to work and re-reviews."
         case .commitPush:
             return "Commit & Push runs after the session is finalized and saved."
+        case .sendMessage:
+            return "Send Message runs after the session is finalized. It fires once per session and resets when you send a new message."
         case .command:
             switch hook.trigger {
             case .beforeSessionStart:

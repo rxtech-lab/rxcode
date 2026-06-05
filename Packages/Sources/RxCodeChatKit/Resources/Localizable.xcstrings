@@ -1167,6 +1167,16 @@
         }
       }
     },
+    "Code review will start in %lld %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Code review will start in %1$lld %2$@"
+          }
+        }
+      }
+    },
     "Collapse" : {
       "localizations" : {
         "en" : {
@@ -4617,6 +4627,12 @@
         }
       }
     },
+    "Review cancelled" : {
+
+    },
+    "Review started" : {
+
+    },
     "Rewind to a previous point" : {
       "localizations" : {
         "en" : {
@@ -5385,6 +5401,12 @@
         }
       }
     },
+    "Start it now" : {
+
+    },
+    "Stop Review" : {
+
+    },
     "Subagent" : {
       "localizations" : {
         "en" : {
@@ -6090,6 +6112,9 @@
           }
         }
       }
+    },
+    "Waiting to start review" : {
+
     },
     "What should we build in %@?" : {
       "localizations" : {

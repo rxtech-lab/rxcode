@@ -157,6 +157,7 @@ struct BriefingView: View {
         .background(ClaudeTheme.background)
         .task(id: projectPathsKey) {
             await refreshCurrentBranches()
+            await appState.refreshProjectGitDirty()
         }
         .onAppear {
             AnalyticsService.shared.log(.briefingListOpened)
@@ -680,22 +681,18 @@ struct BriefingView: View {
 
             Divider()
 
-            Button {
-                startCodeReview(for: group, project: project)
-            } label: {
-                Label("Code Review for \(group.branch)", systemImage: "checklist")
+            let handler = appState.desktopMenuActionHandler { threadId in
+                appState.selectSession(id: threadId, in: windowState)
             }
 
-            Button {
-                startCommitAll(for: project)
-            } label: {
-                Label("Commit All Changes", systemImage: "checkmark.circle")
-            }
-
-            let hookItems = appState.projectContextMenuItems(for: project)
-            if !hookItems.isEmpty {
-                Divider()
-                HookContextMenuItems(items: hookItems)
+            // The briefing card represents one branch, so it asks the hooks for a
+            // branch-scoped menu: Code Review / Create PR target `group.branch`,
+            // followed by the project's autopilot setup items. All hook-built — no
+            // items assembled in the view.
+            let items = appState.projectContextMenuItems(for: project, branch: group.branch)
+            if !items.isEmpty {
+                MenuItemsView(items)
+                    .menuActionHandler(handler)
             }
 
             if let url = gitHubURL(for: group, project: project) {

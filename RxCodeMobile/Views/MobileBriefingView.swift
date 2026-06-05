@@ -61,6 +61,7 @@ struct MobileBriefingView: View {
                                     }
                                     .buttonStyle(.plain)
                                     .accessibilityIdentifier("briefing-card-\(group.id)")
+                                    .projectRemoteContextMenu(project: projectsById[group.projectId], branch: group.branch)
                                 }
                             }
                         }
@@ -315,6 +316,7 @@ struct BriefingListView: View {
                             .buttonStyle(BriefingListCardButtonStyle(isSelected: selectedGroup == group.key))
                             .glassEffectID(group.id, in: glassNamespace)
                             .accessibilityIdentifier("briefing-list-card-\(group.id)")
+                            .projectRemoteContextMenu(project: projectsById[group.projectId], branch: group.branch)
                         }
                     }
                 }

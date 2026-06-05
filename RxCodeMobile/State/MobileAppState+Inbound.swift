@@ -111,6 +111,12 @@ extension MobileAppState {
                         return (info.projectId, list)
                     }
                 )
+                projectDirtyByProject = Dictionary(
+                    uniqueKeysWithValues: branches.compactMap { info -> (UUID, Bool)? in
+                        guard let dirty = info.hasUncommittedChanges else { return nil }
+                        return (info.projectId, dirty)
+                    }
+                )
             }
             if let active = snap.activeSessionID {
                 if let messages = snap.activeSessionMessages {

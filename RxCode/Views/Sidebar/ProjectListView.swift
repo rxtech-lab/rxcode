@@ -54,27 +54,15 @@ struct ProjectListView: View {
                 projectRow(project)
                     .tag(project.id)
                     .contextMenu {
-                        if canCreatePR(project) {
-                            Button { startCreatePR(project) } label: {
-                                Label(
-                                    creatingPRProjectId == project.id ? "Creating Pull Request…" : "Create Pull Request",
-                                    systemImage: "arrow.triangle.pull"
-                                )
-                            }
-                            .disabled(creatingPRProjectId == project.id)
-                            Divider()
-                        }
+                        // Create PR, commit, code review, and autopilot setup all
+                        // come from hooks as serializable MenuItems now; taps
+                        // dispatch locally through the desktop menu handler.
                         let hookItems = appState.projectContextMenuItems(for: project)
                         if !hookItems.isEmpty {
-                            HookContextMenuItems(items: hookItems)
+                            MenuItemsView(hookItems)
+                                .menuActionHandler(appState.desktopMenuActionHandler(navigatingIn: windowState))
                             Divider()
                         }
-                        Button {
-                            Task { _ = try? await appState.commitAllChangesForProject(project: project) }
-                        } label: {
-                            Label("Commit All Changes", systemImage: "checkmark.circle")
-                        }
-                        Divider()
                         Button {
                             renameText = project.name
                             projectToRename = project

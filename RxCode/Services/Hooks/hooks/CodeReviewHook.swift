@@ -7,13 +7,17 @@ import RxCodeCore
 /// no hooks, using the configured or inherited model) and feeds it the changed
 /// files, the user's task, and the agent's final response. The reviewer ends its
 /// reply with `REVIEW_RESULT: PASS` or `REVIEW_RESULT: FAIL`:
-///   - PASS → records the verdict so `CommitPushHook` may proceed.
-///   - FAIL → sends the review notes back into the original thread as a
-///     follow-up prompt so the agent fixes the issues and is then re-reviewed.
-///     Bounded by `maxReviewRounds` to stop a fix→fail→fix loop.
+///   - PASS → records the verdict so `CommitPushHook` may proceed, and resets
+///     the fix-round counter so the next change starts fresh.
+///   - FAIL → records not-passed, surfaces the reviewer's suggestions inline on
+///     the original thread (folded into the hook card), AND feeds the feedback
+///     back into the reviewed thread as a bounded auto-continue fix turn. When
+///     that turn finishes this hook runs again on the fixed change (fix → review
+///     → fix), capped by `AppState.maxReviewFixReprompts` so a never-passing
+///     review can't loop the agent forever. Once the cap is hit it stops
+///     auto-fixing and leaves the feedback for the user to act on manually.
 ///   - No verdict marker (a cancelled/interrupted review, or a reply missing the
-///     marker) → records not-passed but does NOT re-prompt, so a manually
-///     cancelled review never kicks off an auto-retry turn.
+///     marker) → records not-passed and surfaces the partial reply, same as FAIL.
 ///
 /// Runs on `.afterSessionStop` (after the thread is finalized/saved). Registered
 /// last so its (possibly long) work doesn't delay the response notification.
@@ -26,8 +30,6 @@ final class CodeReviewHook: Hook {
     private static let marker = "REVIEW_RESULT:"
     /// Upper bound on how long to wait for the review thread's first response.
     private static let reviewTimeout: TimeInterval = 600
-    /// Max failed-review re-prompts per session before giving up.
-    private static let maxReviewRounds = 3
 
     func afterSessionEnd(_ payload: SessionEndPayload, controller: any HookController) async -> HookOutcome {
         // Only review clean completions; errored/cancelled turns aren't reviewable.
@@ -58,6 +60,54 @@ final class CodeReviewHook: Hook {
             recordVerdict(true, payload: payload, controller: controller)
             return .ignored
         }
+
+        // Debounce before reviewing: show a countdown card and wait. Sending a
+        // new follow-up message in this thread (or tapping Stop Review / the
+        // "Stop Code Review" context-menu item) cancels; "Start it now" skips the
+        // wait. `parentKey` is the resolved session id — the same key the
+        // scheduler is driven by from `sendPrompt`, the countdown buttons, and
+        // the context menu, and the `parentThreadId` stamped on the review thread.
+        let parentKey = payload.sessionId
+
+        // If a newer user turn already superseded this completed turn — the user
+        // sent a follow-up while this review was still queued behind earlier
+        // after-stop hooks, so the `.newMessage` cancel arrived before the gate
+        // existed and no-op'd — skip the review entirely. This check sits
+        // immediately before the countdown card is inserted and the gate is
+        // registered; there is no suspension point between here and gate
+        // registration, so a follow-up is either visible now or arrives once the
+        // gate exists (where the scheduler's cancel handles it). Leave the
+        // verdict not-passed so a paired commit hook holds off on the stale turn.
+        if controller.threadHasNewerActivity(sessionId: parentKey) {
+            recordVerdict(false, payload: payload, controller: controller)
+            return .ignored
+        }
+
+        let delay = controller.reviewCountdownSeconds
+        let countdownCard = controller.insertCard(
+            sessionKey: payload.sessionKey,
+            toolName: ReviewCountdownCard.toolName,
+            input: [
+                ReviewCountdownCard.parentSessionKey: .string(parentKey),
+                ReviewCountdownCard.startAtKey: .number(Date().timeIntervalSince1970 + delay),
+            ]
+        )
+        let proceed = await controller.awaitReviewGate(parentSessionKey: parentKey, delaySeconds: delay)
+        guard proceed else {
+            // Cancelled before it started. Leave the verdict not-passed so a
+            // paired commit hook holds off, matching the "no review ran" state.
+            controller.completeCard(
+                countdownCard, sessionKey: payload.sessionKey,
+                result: Self.cancellationText(reason: controller.reviewCancelReason(parentSessionKey: parentKey), started: false),
+                isError: true
+            )
+            recordVerdict(false, payload: payload, controller: controller)
+            return .ignored
+        }
+        controller.completeCard(
+            countdownCard, sessionKey: payload.sessionKey,
+            result: "Starting code review…", isError: false
+        )
 
         let task = controller.firstUserPrompt(sessionId: payload.sessionKey) ?? "(task unknown)"
         let selection = controller.resolveAgentModelSelection(
@@ -93,6 +143,9 @@ final class CodeReviewHook: Hook {
         )
 
         logger.debug("[Hook] spawning code-review thread for session \(payload.sessionId, privacy: .public) files=\(changedFiles.count)")
+        // Mark running so a follow-up message / Stop action can interrupt the
+        // in-flight review thread; cleared once the spawn returns.
+        controller.markReviewRunning(parentSessionKey: parentKey)
         let result = await controller.spawnLinkedThread(
             projectId: payload.project.id,
             parentThreadId: payload.sessionId,
@@ -102,6 +155,18 @@ final class CodeReviewHook: Hook {
             prompt: prompt,
             timeoutSeconds: Self.reviewTimeout
         )
+        controller.clearReviewRunning(parentSessionKey: parentKey)
+
+        // If we interrupted the review (new message / Stop), don't report it as a
+        // failed or verdict-less review — surface it as cancelled and leave the
+        // verdict not-passed so a paired commit hook holds off.
+        if controller.reviewWasStopped(parentSessionKey: parentKey) {
+            finishCard(card, hook: hook, payload: payload, controller: controller,
+                       result: Self.cancellationText(reason: controller.reviewCancelReason(parentSessionKey: parentKey), started: true),
+                       isError: true)
+            recordVerdict(false, payload: payload, controller: controller)
+            return .ignored
+        }
 
         guard let result, result.error == nil else {
             // Couldn't run the review (transport/agent error or timeout). Don't
@@ -115,11 +180,15 @@ final class CodeReviewHook: Hook {
         }
 
         let verdict = parseVerdict(result.assistantText)
-        // Fold the review thread's full activity into the card so it can be
-        // expanded inline on the parent thread (and on paired mobile devices,
-        // since hook cards sync automatically).
-        let transcript = controller.threadTranscript(sessionId: result.threadId)
-        let body = transcript.isEmpty ? result.assistantText : transcript
+        // Fold the reviewer's *final* message into the card so it can be expanded
+        // inline on the parent thread (and on paired mobile devices, since hook
+        // cards sync automatically). Use the final assistant text — the same
+        // self-contained verdict that's fed into any auto-fix turn — rather than
+        // the whole thread transcript, so the card and the fix turn show exactly
+        // the same prose (no intermediate review chatter, no tool-call names).
+        let body = result.assistantText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? controller.threadTranscript(sessionId: result.threadId)
+            : result.assistantText
         let reviewLink = "Review thread: \(result.threadId)"
 
         switch verdict {
@@ -127,49 +196,44 @@ final class CodeReviewHook: Hook {
             finishCard(card, hook: hook, payload: payload, controller: controller,
                        result: "✅ Code review passed.\n\(reviewLink)\n\n\(body)", isError: false)
             recordVerdict(true, payload: payload, controller: controller)
-            controller.setReviewRound(0, sessionId: payload.sessionId)
+            // The change is good — clear the fix-round counter so the next change
+            // on this thread gets the full auto-fix budget again.
+            controller.setReviewRound(0, sessionId: payload.sessionKey)
             return .proceed
 
-        case .fail(let notes):
+        case .fail:
+            // The reviewer requested changes. Record not-passed (so a paired
+            // commit hook holds off), surface the suggestions inline on the
+            // parent thread via the hook card, AND feed the reviewer's feedback
+            // back into the reviewed thread as a bounded auto-continue fix turn.
+            // When that fix turn finishes, this hook runs again on the fixed
+            // change (fix → review → fix), capped by `maxReviewFixReprompts`.
             recordVerdict(false, payload: payload, controller: controller)
-            let round = controller.reviewRound(sessionId: payload.sessionId)
-            if round + 1 >= Self.maxReviewRounds {
-                // Give up re-prompting after the cap so a perpetually-failing
-                // review can't loop the agent forever.
-                controller.setReviewRound(0, sessionId: payload.sessionId)
-                finishCard(card, hook: hook, payload: payload, controller: controller,
-                           result: "⚠️ Code review still requesting changes after \(Self.maxReviewRounds) attempts — stopping.\n\(reviewLink)\n\n\(body)",
-                           isError: true)
-                return .proceed
-            }
-
-            controller.setReviewRound(round + 1, sessionId: payload.sessionId)
-            finishCard(card, hook: hook, payload: payload, controller: controller,
-                       result: "⚠️ Code review requested changes (sent back to the agent, attempt \(round + 1) of \(Self.maxReviewRounds)).\n\(reviewLink)\n\n\(body)",
-                       isError: true)
-            // After-stop can't auto-continue, so re-prompt the thread directly.
-            controller.sendThreadMessage(
-                sessionId: payload.sessionId,
-                prompt: """
-                A Code Review of your change requested changes. Address the feedback below, then finish.
-
-                \(notes)
-                """
+            let attempt = controller.repromptThreadAfterReviewFailure(
+                feedback: result.assistantText,
+                project: payload.project,
+                sessionKey: payload.sessionKey
             )
+            let status: String
+            if let attempt {
+                status = "⚠️ Code review requested changes — sent back to the thread to fix (attempt \(attempt) of \(AppState.maxReviewFixReprompts))."
+            } else {
+                status = "⚠️ Code review still requesting changes after \(AppState.maxReviewFixReprompts) fix attempts — stopping automatic fixes. Review the feedback and continue manually."
+            }
+            finishCard(card, hook: hook, payload: payload, controller: controller,
+                       result: "\(status)\n\(reviewLink)\n\n\(body)",
+                       isError: true)
             return .proceed
 
         case .unknown:
             // The reviewer ended without a PASS/FAIL marker. The dominant cause
             // is a review thread the user manually cancelled (or one that was
-            // interrupted) — its partial reply has no verdict. Don't auto-retry:
-            // record not-passed (so a paired commit hook still holds off) and
-            // finish the card, but leave the agent alone. A genuine "reviewer
-            // forgot the marker" is rare and is better surfaced quietly here than
-            // by silently kicking off an unwanted fix turn.
+            // interrupted) — its partial reply has no verdict. Record not-passed
+            // (so a paired commit hook still holds off) and surface whatever
+            // partial reply we have, but leave the agent alone.
             recordVerdict(false, payload: payload, controller: controller)
-            controller.setReviewRound(0, sessionId: payload.sessionId)
             finishCard(card, hook: hook, payload: payload, controller: controller,
-                       result: "⚠️ Code review ended without a verdict (it may have been cancelled or interrupted) — not retrying.\n\(reviewLink)\n\n\(body)",
+                       result: "⚠️ Code review ended without a verdict (it may have been cancelled or interrupted).\n\(reviewLink)\n\n\(body)",
                        isError: true)
             return .ignored
         }
@@ -198,6 +262,19 @@ final class CodeReviewHook: Hook {
     }
 
     // MARK: - Helpers
+
+    /// Copy for a cancelled/stopped review card. `started` distinguishes a review
+    /// stopped mid-run from one cancelled during the countdown; `reason` avoids
+    /// mislabeling an explicit Stop (button / menu) as "a new message was sent".
+    private static func cancellationText(reason: ReviewCancelReason?, started: Bool) -> String {
+        let verb = started ? "stopped" : "cancelled"
+        switch reason {
+        case .newMessage:
+            return "Code review \(verb) — a new message was sent."
+        case .stopButton, .contextMenu, .none:
+            return "Code review \(verb)."
+        }
+    }
 
     private func recordVerdict(_ passed: Bool, payload: SessionEndPayload, controller: any HookController) {
         // Store under both the in-memory key and the resolved id; the commit hook
@@ -243,11 +320,23 @@ final class CodeReviewHook: Hook {
         ## What to do
         Inspect the changed files and judge whether the change correctly and safely accomplishes the task. Look for bugs, missed requirements, regressions, and obvious quality problems.
 
+        ## How to write your final message
+        Your final message is the ONLY thing handed back to the agent that made the
+        change — it cannot see your tool calls, intermediate notes, or the files you
+        read. So make that final message complete and self-contained:
+        - Summarize what you reviewed and your overall judgment in a sentence or two.
+        - For every issue, give the file and line (e.g. `Foo.swift:42`), explain what
+          is wrong and why it matters, and state concretely how to fix it.
+        - Quote the relevant snippet when it makes the fix unambiguous.
+        - Order issues from most to least important. Don't reference "see above" or a
+          tool call — restate everything the agent needs inline.
+
         End your reply with a single line — exactly one of:
         `\(Self.marker) PASS`  (the change is good as-is)
         `\(Self.marker) FAIL`  (changes are needed)
 
-        If you FAIL the review, list the specific, actionable issues to fix above that line.
+        If you FAIL the review, put the full, self-contained list of actionable issues
+        above that line.
         """
         if let extra = extraInstructions?.trimmingCharacters(in: .whitespacesAndNewlines), !extra.isEmpty {
             prompt += "\n\n## Additional instructions\n\(extra)"

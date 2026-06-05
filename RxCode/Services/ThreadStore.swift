@@ -283,6 +283,41 @@ final class ThreadStore {
         return ids
     }
 
+    /// Persist the latest code-review verdict on the thread row so the sidebar
+    /// review dot survives a reload. `sessionId` may be the thread's local id or
+    /// its resolved CLI session id — match either. No-op if no row is found.
+    func setReviewPassed(sessionId: String, passed: Bool) {
+        let row = fetch(id: sessionId) ?? fetchByCliSessionId(sessionId)
+        guard let row else { return }
+        guard row.reviewPassed != passed else { return }
+        row.reviewPassed = passed
+        save()
+    }
+
+    /// Rehydrate the in-memory `reviewPassedBySession` map at launch. Keyed by
+    /// both the thread's local id and its CLI session id so either lookup hits.
+    func loadReviewVerdicts() -> [String: Bool] {
+        let descriptor = FetchDescriptor<ChatThread>(
+            predicate: #Predicate { $0.reviewPassed != nil }
+        )
+        let rows = (try? context.fetch(descriptor)) ?? []
+        var map: [String: Bool] = [:]
+        for row in rows {
+            guard let passed = row.reviewPassed else { continue }
+            map[row.id] = passed
+            if let cli = row.cliSessionId { map[cli] = passed }
+        }
+        return map
+    }
+
+    private func fetchByCliSessionId(_ cliSessionId: String) -> ChatThread? {
+        var descriptor = FetchDescriptor<ChatThread>(
+            predicate: #Predicate { $0.cliSessionId == cliSessionId }
+        )
+        descriptor.fetchLimit = 1
+        return (try? context.fetch(descriptor))?.first
+    }
+
     /// Set `cliSessionId` on the thread row (used when the CLI assigns a session id mid-stream).
     func setCliSessionId(localId: String, cliSessionId: String) {
         guard let row = fetch(id: localId) else { return }
@@ -651,6 +686,16 @@ final class ThreadStore {
             sortBy: [SortDescriptor(\.firstEditedAt, order: .forward)]
         )
         return (try? context.fetch(descriptor)) ?? []
+    }
+
+    /// Number of distinct files this session recorded edits to. There is one row
+    /// per `(sessionId, path)`, so a row count equals the distinct-file count —
+    /// a cheap query (no content loaded) used to gate the "Commit Files" action.
+    func fileEditCount(sessionId: String) -> Int {
+        let descriptor = FetchDescriptor<ThreadFileEdit>(
+            predicate: #Predicate { $0.sessionId == sessionId }
+        )
+        return (try? context.fetchCount(descriptor)) ?? 0
     }
 
     private func fetchFileEdit(sessionId: String, path: String) -> ThreadFileEdit? {

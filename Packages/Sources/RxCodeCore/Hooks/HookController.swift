@@ -51,9 +51,10 @@ public protocol HookController: AnyObject {
     func changedFilePaths(sessionId: String) -> [String]
     /// The first user prompt text of a thread, if any.
     func firstUserPrompt(sessionId: String) -> String?
-    /// A readable transcript of a thread's assistant activity (text + tool-call
-    /// summaries), used to fold a review thread's full content into a card on the
-    /// parent thread. Excludes the injected instruction prompt.
+    /// A readable transcript of a thread's assistant *text*, used to fold a review
+    /// thread's content into a card on the parent thread. Tool calls and the
+    /// injected instruction prompt are excluded so the result shown back on the
+    /// parent thread is prose, not a list of tool names.
     func threadTranscript(sessionId: String) -> String
     /// Spawn a new linked thread (e.g. `[Code Review]`) that runs no hooks, and
     /// wait for its first response. Returns the resolved thread id + assistant
@@ -67,8 +68,46 @@ public protocol HookController: AnyObject {
         prompt: String,
         timeoutSeconds: TimeInterval
     ) async -> HookLinkedThreadResult?
-    /// Send a follow-up prompt into an existing thread without waiting.
-    func sendThreadMessage(sessionId: String, prompt: String)
+    /// Send a follow-up prompt into an existing thread without waiting. Pass
+    /// `setupKind` to mark the session for once-per-session loop prevention; the
+    /// marker is recorded *after* the message is appended, so the resulting turn
+    /// doesn't clear its own marker.
+    func sendThreadMessage(sessionId: String, prompt: String, setupKind: String?)
+    /// Ask a lightweight model whether `condition` holds given the turn's final
+    /// assistant text. Returns `true` only on an explicit YES, `false` on NO, and
+    /// `nil` when no verdict could be obtained. `model` is a provider-qualified
+    /// override (empty/`nil` ⇒ the configured summarization model).
+    func evaluateCondition(condition: String, lastAssistantText: String, model: String?, sessionId: String) async -> Bool?
+    // MARK: Review debounce / cancellation
+
+    /// Debounce applied before an automatic code review starts, in seconds. The
+    /// hook shows a countdown card for this long so a new follow-up message can
+    /// cancel the review before it runs.
+    var reviewCountdownSeconds: TimeInterval { get }
+    /// Suspend until the review countdown for `parentSessionKey` elapses, the
+    /// user taps "Start it now", or it is cancelled (Stop button / new message).
+    /// Returns `true` to proceed with the review, `false` if it was cancelled.
+    func awaitReviewGate(parentSessionKey: String, delaySeconds: TimeInterval) async -> Bool
+    /// Mark/clear that the review thread for `parentSessionKey` is running, so a
+    /// later cancellation can stop the in-flight review thread and the context
+    /// menu can show "Stop Code Review".
+    func markReviewRunning(parentSessionKey: String)
+    func clearReviewRunning(parentSessionKey: String)
+    /// One-shot: whether the running review for `parentSessionKey` was stopped
+    /// (by a new message or the Stop action) rather than finishing on its own.
+    func reviewWasStopped(parentSessionKey: String) -> Bool
+    /// Why the most recent cancel happened for the thread, so the hook can word
+    /// the finalized card correctly (e.g. an explicit Stop vs a new message).
+    func reviewCancelReason(parentSessionKey: String) -> ReviewCancelReason?
+    /// Whether a review is pending (counting down) or running for the thread —
+    /// gates the "Stop Code Review" context-menu item. Synchronous because the
+    /// menu is built synchronously.
+    func threadHasOngoingReview(sessionId: String) -> Bool
+    /// Whether the thread already has a newer turn in progress (streaming or a
+    /// freshly-appended, not-yet-answered user message). Lets the review hook
+    /// skip reviewing a turn the user has already superseded with a follow-up.
+    func threadHasNewerActivity(sessionId: String) -> Bool
+
     /// Record the latest review verdict for a session (shared between the
     /// code-review and commit hooks within one stop cycle).
     func setReviewPassed(_ passed: Bool, sessionId: String)
@@ -79,6 +118,13 @@ public protocol HookController: AnyObject {
     func reviewRound(sessionId: String) -> Int
     /// Set the failed-review round counter for a session.
     func setReviewRound(_ round: Int, sessionId: String)
+    /// Feed a failing code review's feedback back into the reviewed thread as a
+    /// bounded auto-continue fix turn (rendered as an auto-continue card, not a
+    /// user message). The thread runs the Code Review hook again when the fix
+    /// turn finishes, so the change is re-reviewed. Returns the 1-based attempt
+    /// number started, or `nil` if the per-session fix-round cap was already
+    /// reached (the caller then surfaces a "stopped" card instead of looping).
+    func repromptThreadAfterReviewFailure(feedback: String, project: Project, sessionKey: String) -> Int?
     /// First-sentence fallback body for a response-complete notification.
     func responseNotificationFallback(from responseText: String) -> String
     /// Optionally generate an AI summary of the response for a notification body.
@@ -201,6 +247,25 @@ public protocol HookController: AnyObject {
     func projectHasSecrets(_ project: Project) -> Bool
     func projectHasDocs(_ project: Project) -> Bool
     func projectHasReleaseWorkflow(_ project: Project) -> Bool
+    /// Whether the project's linked repo is already configured for CI
+    /// auto-updates (a "watched repository"). Hides "Set Up CI Update" when it's
+    /// already set up; also false when the project has no GitHub repo or the
+    /// status cache hasn't been populated yet (fail-open: the item shows).
+    func projectHasCIUpdates(_ project: Project) -> Bool
+
+    /// Whether the project's working tree has uncommitted changes (gates the
+    /// "Commit All Changes" item). Defaults to visible when status is unknown.
+    func projectHasUncommittedChanges(_ project: Project) -> Bool
+    /// Whether the project already has an open pull request for `branch` (or the
+    /// project's current branch when `branch` is nil). Hides "Create Pull Request"
+    /// when one exists; also false when the project has no GitHub repo.
+    func projectHasOpenPullRequest(_ project: Project, branch: String?) -> Bool
+    /// Whether CI is currently failing for `branch` (or the project's current
+    /// branch when `branch` is nil). Gates the "Fix Failing CI" item; false when
+    /// the project has no GitHub repo or no CI status is known yet.
+    func projectCIIsFailing(_ project: Project, branch: String?) -> Bool
+    /// Whether the thread recorded any file edits (gates "Commit Files").
+    func threadHasFileChanges(sessionId: String) -> Bool
 
     /// Centralized presentation actions used by hook-supplied context menus.
     func requestSecretsSetup(project: Project)
@@ -209,6 +274,7 @@ public protocol HookController: AnyObject {
     func requestDocsSearch(project: Project)
     func requestReleaseSetup(project: Project)
     func requestReleaseCreate(project: Project)
+    func requestCISetup(project: Project)
 
     // MARK: Setup-session tracking
 
@@ -236,6 +302,11 @@ public enum HookSetupKind {
     /// Marks the follow-up turn the Commit & Push hook itself triggered, so the
     /// hook short-circuits on that turn instead of looping forever.
     public static let commitPush = "commitPush"
+    /// Marks a thread that the Send Message hook has already fired for this
+    /// session. Unlike `commitPush` it is *not* self-cleared; it persists until
+    /// the user sends a new message (reset in `AppState.sendPrompt`), giving the
+    /// hook once-per-session semantics.
+    public static let sendMessage = "sendMessage"
 }
 
 /// Result of spawning a linked thread via `spawnLinkedThread`.
@@ -286,6 +357,11 @@ public struct HookBannerItem: Identifiable {
 }
 
 public extension HookController {
+    /// Convenience: send a follow-up prompt without marking a setup session.
+    func sendThreadMessage(sessionId: String, prompt: String) {
+        sendThreadMessage(sessionId: sessionId, prompt: prompt, setupKind: nil)
+    }
+
     /// Ergonomic `@ViewBuilder` form mirroring the requested call site:
     /// `controller.showBanner(in: .newProject, position: .aboveInputBox, id: …) { MyBanner() }`.
     func showBanner<Content: View>(

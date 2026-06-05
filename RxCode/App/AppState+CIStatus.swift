@@ -175,27 +175,7 @@ extension AppState {
 
     /// Fire-and-forget fix thread using the project's default agent/model/permission.
     private func startAutoCIFix(for project: Project, status: ProjectCIStatus) async {
-        let branch = status.branch ?? "the current branch"
-        let prLine = status.prNumber.map { "PR #\($0) — " } ?? ""
-        let failingList = status.failing
-            .map { wf in
-                let name = wf.workflowName ?? "workflow"
-                if let url = wf.htmlUrl { return "- \(name): \(url)" }
-                return "- \(name)"
-            }
-            .joined(separator: "\n")
-
-        let prompt = """
-        GitHub Actions CI is failing on branch `\(branch)`. \(prLine)Please fix it.
-
-        Failing workflow run(s):
-        \(failingList.isEmpty ? "- (see the GitHub Actions tab for details)" : failingList)
-
-        Investigate the failure (read the run logs at the URLs above if helpful), \
-        find the root cause, apply a fix, and run the relevant checks locally to \
-        confirm CI will pass before finishing.
-        """
-
+        let prompt = Self.ciFixPrompt(status: status, fallbackBranch: status.branch)
         do {
             _ = try await sendCrossProject(
                 projectId: project.id,
@@ -207,6 +187,57 @@ extension AppState {
         } catch {
             logger.error("Failed to start auto CI-fix thread: \(error.localizedDescription)")
         }
+    }
+
+    // MARK: - Manual fix (context menu)
+
+    /// Start a fix thread for a failing-CI branch from the briefing card / project
+    /// context menu. Mirrors the automatic fix but returns the new thread id so the
+    /// caller (desktop tap or relayed mobile command) can navigate to it. `branch`
+    /// is nil for a generic project menu — the current branch's status is used.
+    @discardableResult
+    func createCIFixForBranch(project: Project, branch: String?) async throws -> String {
+        let status: ProjectCIStatus?
+        if let branch, !branch.isEmpty {
+            status = ciStatus(forProjectId: project.id, branch: branch)
+        } else {
+            status = ciStatusByProject[project.id]
+        }
+        let prompt = Self.ciFixPrompt(status: status, fallbackBranch: branch)
+        let result = try await sendCrossProject(
+            projectId: project.id,
+            threadId: nil,
+            prompt: prompt,
+            waitForResponse: false
+        )
+        if let error = result.error { throw CodeReviewError.sendFailed(error) }
+        return result.threadId
+    }
+
+    /// Build the fix prompt from a known CI status, seeding the failing run list /
+    /// branch / PR context. `fallbackBranch` names the branch when the status is
+    /// missing or carries no branch (e.g. a generic project menu).
+    static func ciFixPrompt(status: ProjectCIStatus?, fallbackBranch: String?) -> String {
+        let branch = status?.branch ?? fallbackBranch ?? "the current branch"
+        let prLine = status?.prNumber.map { "PR #\($0) — " } ?? ""
+        let failingList = (status?.failing ?? [])
+            .map { wf in
+                let name = wf.workflowName ?? "workflow"
+                if let url = wf.htmlUrl { return "- \(name): \(url)" }
+                return "- \(name)"
+            }
+            .joined(separator: "\n")
+
+        return """
+        GitHub Actions CI is failing on branch `\(branch)`. \(prLine)Please fix it.
+
+        Failing workflow run(s):
+        \(failingList.isEmpty ? "- (see the GitHub Actions tab for details)" : failingList)
+
+        Investigate the failure (read the run logs at the URLs above if helpful), \
+        find the root cause, apply a fix, and run the relevant checks locally to \
+        confirm CI will pass before finishing.
+        """
     }
 
     // MARK: - Helpers

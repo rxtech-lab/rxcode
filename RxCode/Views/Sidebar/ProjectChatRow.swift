@@ -96,7 +96,10 @@ struct ProjectChatRow: View {
     let onDelete: () -> Void
     let onCodeReview: () -> Void
     let onCommitFiles: () -> Void
-    let hookMenuItems: [HookMenuItem]
+    /// Serializable action items (code review, commit, autopilot setup) supplied
+    /// by hooks. Rendered via `MenuItemsView`; taps route through the desktop
+    /// menu action handler.
+    let hookMenuItems: [MenuItem]
     /// Nesting depth; review children render one level in from their parent.
     var indentLevel: Int = 0
     /// Replaces the thread title (e.g. `"Review 1"` for a nested review child).
@@ -108,8 +111,20 @@ struct ProjectChatRow: View {
     /// Latest code-review verdict for this thread: `true` passed, `false` found
     /// issues, `nil` not reviewed (no icon shown).
     var reviewPassed: Bool? = nil
+    /// Whether to offer "Commit Files" — hidden when the thread recorded no file
+    /// edits (nothing to commit).
+    var canCommitFiles: Bool = true
 
+    @Environment(AppState.self) private var appState
+    @Environment(WindowState.self) private var windowState
     @State private var isHovered = false
+
+    /// True when this row *is* a `[Code Review]` thread (manual or hook-spawned).
+    /// Such threads hide the "Code Review" / "Commit Files" actions since you
+    /// don't review or commit a review thread itself.
+    private var isCodeReviewThread: Bool {
+        summary.threadLabel == AppState.manualCodeReviewLabel
+    }
 
     private var isActiveStatus: Bool {
         switch status {
@@ -143,6 +158,8 @@ struct ProjectChatRow: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
 
+            Spacer(minLength: 4)
+
             if showLabelChip, let label = summary.threadLabel, !label.isEmpty {
                 Text(label)
                     .font(.system(size: ClaudeTheme.size(9), weight: .semibold))
@@ -152,8 +169,6 @@ struct ProjectChatRow: View {
                     .background(ClaudeTheme.accentSubtle, in: Capsule())
                     .fixedSize()
             }
-
-            Spacer(minLength: 4)
 
             if let reviewPassed {
                 reviewVerdictIcon(passed: reviewPassed)
@@ -212,16 +227,13 @@ struct ProjectChatRow: View {
                     Label("Archive", systemImage: "archivebox")
                 }
             }
-            Divider()
-            Button { onCodeReview() } label: {
-                Label("Code Review for this thread", systemImage: "checklist")
-            }
-            Button { onCommitFiles() } label: {
-                Label("Commit Files", systemImage: "checkmark.circle")
-            }
+            // Code review / commit / autopilot actions now come from hooks as
+            // serializable MenuItems (gated for review threads and file changes
+            // inside the hooks). The handler dispatches taps locally on desktop.
             if !hookMenuItems.isEmpty {
                 Divider()
-                HookContextMenuItems(items: hookMenuItems)
+                MenuItemsView(hookMenuItems)
+                    .menuActionHandler(appState.desktopMenuActionHandler(navigatingIn: windowState))
             }
             Divider()
             Button(role: .destructive) { onDelete() } label: {

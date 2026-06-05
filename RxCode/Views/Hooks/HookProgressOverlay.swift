@@ -39,6 +39,18 @@ struct HookUIModifier: ViewModifier {
                     Text(detail)
                 }
             }
+            .alert(
+                "Command Failed",
+                isPresented: Binding(
+                    get: { appState.hookErrorMessage != nil },
+                    set: { if !$0 { appState.hookErrorMessage = nil } }
+                ),
+                presenting: appState.hookErrorMessage
+            ) { _ in
+                Button("OK", role: .cancel) { appState.hookErrorMessage = nil }
+            } message: { message in
+                Text(message)
+            }
     }
 }
 

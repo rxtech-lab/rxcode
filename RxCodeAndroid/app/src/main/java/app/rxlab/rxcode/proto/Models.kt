@@ -38,7 +38,33 @@ data class SessionSummary(
     val parentThreadId: String? = null,
     /** Short label chip (e.g. "Code Review"). Null for ordinary threads. */
     val threadLabel: String? = null,
-)
+    /**
+     * Number of distinct files this thread recorded edits to (the desktop's
+     * thread file-edit history). Drives whether the "Commit Files" action is
+     * offered — hidden when 0. Null from older desktops, treated as unknown
+     * (action still shown).
+     */
+    val changedFileCount: Int? = null,
+) {
+    companion object {
+        /** Canonical chip label stamped on `[Code Review]` threads. */
+        const val CODE_REVIEW_LABEL = "Code Review"
+    }
+
+    /**
+     * True when this summary *is* a `[Code Review]` thread. Such threads hide
+     * the "Code Review" / "Commit Files" actions since you don't review or
+     * commit a review thread itself.
+     */
+    val isCodeReviewThread: Boolean get() = threadLabel == CODE_REVIEW_LABEL
+
+    /**
+     * Whether the "Commit Files" action should be offered for this thread.
+     * Hidden only when the desktop positively reported zero recorded file edits;
+     * an unknown count (null, older desktop) keeps the action visible.
+     */
+    val hasRecordedFileChanges: Boolean get() = changedFileCount?.let { it > 0 } ?: true
+}
 
 @Serializable
 enum class SessionAttentionKind {
@@ -148,11 +174,18 @@ data class ProjectBranchInfo(
     @Serializable(with = UuidSerializer::class) val projectId: UUID,
     val currentBranch: String,
     val availableBranches: List<String>? = null,
+    /**
+     * Whether the project's working tree has uncommitted changes. Drives whether
+     * the project-level "Commit All Changes" action is offered — hidden when
+     * false. Null from older desktops, treated as unknown (action shown).
+     */
+    val hasUncommittedChanges: Boolean? = null,
 )
 
 /**
  * Per-repo CI / pull-request status mirrored from the desktop, used to gate the
- * "Create Pull Request" menu item (only offered when a branch has no PR yet).
+ * "Create Pull Request" menu item (only offered when a branch has no PR yet) and
+ * the "Fix Failing CI" item (only offered when [overallState] is `"failure"`).
  * Mirrors a subset of Swift `ProjectCIStatus`; unknown keys (workflows, failing,
  * etc.) are ignored by [RxJson].
  */
@@ -162,6 +195,7 @@ data class ProjectCIStatus(
     val repo: String = "",
     val branch: String? = null,
     val found: Boolean = false,
+    val overallState: String? = null,
     val prNumber: Int? = null,
     val prState: String? = null,
     val prUrl: String? = null,

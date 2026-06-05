@@ -159,6 +159,13 @@ extension AppState {
         2. Judge whether the changes correctly and safely accomplish the work described above. Look for bugs, missed requirements, regressions, security issues, and obvious quality problems.
         3. List the specific, actionable issues you find (file + line where possible).
 
+        ## How to write your final message
+        Your final message is what gets handed back — it cannot see your tool calls or
+        the files you read. Make it complete and self-contained: summarize your overall
+        judgment, then for every issue give the file and line, explain what is wrong and
+        why, and state concretely how to fix it. Don't reference "see above" or a tool
+        call — restate everything inline.
+
         End your reply with a single line — exactly one of:
         `\(reviewMarker) PASS`  (the changes look good as-is)
         `\(reviewMarker) FAIL`  (changes are needed)
@@ -191,11 +198,20 @@ extension AppState {
         ## What to do
         Inspect the changed files and judge whether the change correctly and safely accomplishes the task. Look for bugs, missed requirements, regressions, and obvious quality problems.
 
+        ## How to write your final message
+        Your final message is what gets handed back — it cannot see your tool calls or
+        the files you read. Make it complete and self-contained:
+        - Summarize what you reviewed and your overall judgment in a sentence or two.
+        - For every issue, give the file and line (e.g. `Foo.swift:42`), explain what
+          is wrong and why, and state concretely how to fix it. Quote the snippet when
+          it makes the fix unambiguous. Don't reference "see above" or a tool call.
+
         End your reply with a single line — exactly one of:
         `\(reviewMarker) PASS`  (the change is good as-is)
         `\(reviewMarker) FAIL`  (changes are needed)
 
-        If you FAIL the review, list the specific, actionable issues to fix above that line.
+        If you FAIL the review, put the full, self-contained list of actionable issues
+        above that line.
         """
     }
 }

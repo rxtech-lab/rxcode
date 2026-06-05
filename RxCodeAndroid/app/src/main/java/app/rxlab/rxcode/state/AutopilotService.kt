@@ -16,7 +16,13 @@ import app.rxlab.rxcode.proto.AutopilotDocsDocBody
 import app.rxlab.rxcode.proto.AutopilotDocsListDocumentsBody
 import app.rxlab.rxcode.proto.AutopilotDocsUploadBody
 import app.rxlab.rxcode.proto.AutopilotDomain
+import app.rxlab.rxcode.proto.AutopilotExecuteCommandBody
+import app.rxlab.rxcode.proto.AutopilotExecuteCommandResult
 import app.rxlab.rxcode.proto.AutopilotIDBody
+import app.rxlab.rxcode.proto.AutopilotMenuResult
+import app.rxlab.rxcode.proto.AutopilotProjectMenuBody
+import app.rxlab.rxcode.proto.MenuActionCommand
+import app.rxlab.rxcode.proto.MenuItem
 import app.rxlab.rxcode.proto.AutopilotOp
 import app.rxlab.rxcode.proto.AutopilotProjectBody
 import app.rxlab.rxcode.proto.AutopilotProjectBranchBody
@@ -519,6 +525,19 @@ class AutopilotService(
             )
         ).threadId
 
+    /**
+     * Ask the Mac to start a thread that fixes failing CI for the branch (seeded
+     * with the failing GitHub Actions run(s)). Returns the new thread id so the
+     * phone can navigate to it once it syncs over.
+     */
+    suspend fun requestProjectFixCI(projectId: UUID, branch: String): String =
+        decodeResult<AutopilotCodeReviewResult>(
+            rawCall(
+                AutopilotDomain.PROJECT, AutopilotOp.PROJECT_FIX_CI,
+                encodeBody(AutopilotProjectBranchBody(projectId, branch)),
+            )
+        ).threadId
+
     /** Ask the Mac to commit only the files recorded for one thread. */
     suspend fun requestThreadCommitFiles(sessionId: String): String =
         decodeResult<AutopilotCodeReviewResult>(
@@ -542,6 +561,42 @@ class AutopilotService(
             rawCall(
                 AutopilotDomain.PROJECT, AutopilotOp.PROJECT_SECRETS_WRITE,
                 encodeBody(AutopilotProjectSecretsWriteBody(projectId, files, overwrite)),
+            )
+        )
+
+    // MARK: - Serializable context menus
+
+    /**
+     * Fetch the project's context menu from the Mac — the same `[MenuItem]` the
+     * desktop renders, built from its hooks — so Android renders the identical
+     * items. `branch` scopes a briefing card to its branch.
+     */
+    suspend fun fetchProjectMenu(projectId: UUID, branch: String?): List<MenuItem> =
+        decodeResult<AutopilotMenuResult>(
+            rawCall(
+                AutopilotDomain.PROJECT, AutopilotOp.MENU_FOR_PROJECT,
+                encodeBody(AutopilotProjectMenuBody(projectId, branch)),
+            )
+        ).items
+
+    /** Fetch a thread's context menu from the Mac (see [fetchProjectMenu]). */
+    suspend fun fetchThreadMenu(sessionId: String): List<MenuItem> =
+        decodeResult<AutopilotMenuResult>(
+            rawCall(
+                AutopilotDomain.PROJECT, AutopilotOp.MENU_FOR_THREAD,
+                encodeBody(AutopilotThreadBody(sessionId)),
+            )
+        ).items
+
+    /**
+     * Run a tapped [MenuActionCommand] on the Mac through its shared dispatcher,
+     * returning a thread to navigate to and/or a URL to open on the phone.
+     */
+    suspend fun executeMenuCommand(command: MenuActionCommand): AutopilotExecuteCommandResult =
+        decodeResult(
+            rawCall(
+                AutopilotDomain.PROJECT, AutopilotOp.MENU_EXECUTE_COMMAND,
+                encodeBody(AutopilotExecuteCommandBody(command)),
             )
         )
 

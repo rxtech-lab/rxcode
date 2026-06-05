@@ -24,6 +24,12 @@ struct ProjectTreeView: View {
 
     @State private var showAllChatsSheet = false
 
+    /// Identity for the dirty-flag refresh task — changes whenever a project is
+    /// added/removed or its path changes, re-running `refreshProjectGitDirty`.
+    private var gitDirtyRefreshKey: String {
+        appState.projects.map { "\($0.id.uuidString):\($0.path)" }.joined(separator: "|")
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             SummarySidebarSection()
@@ -40,6 +46,17 @@ struct ProjectTreeView: View {
                 emptyState
             } else {
                 projectList
+            }
+        }
+        // Keep the per-project dirty flag fresh so "Commit All Changes" hides on
+        // clean projects. Recompute when the project set changes and whenever a
+        // turn finishes (a commit/agent run may have cleaned the tree).
+        .task(id: gitDirtyRefreshKey) {
+            await appState.refreshProjectGitDirty()
+        }
+        .onChange(of: appState.isStreaming(in: windowState)) { old, new in
+            if old && !new {
+                Task { await appState.refreshProjectGitDirty() }
             }
         }
         .alert("Rename Project", isPresented: Binding(
@@ -318,6 +335,7 @@ struct ProjectTreeView: View {
 
 private struct ProjectTreeRow: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowState.self) private var windowState
 
     let project: Project
     @Binding var isExpanded: Bool
@@ -329,7 +347,7 @@ private struct ProjectTreeRow: View {
     let onNewChat: () -> Void
     let onCodeReview: () -> Void
     let onCommitAll: () -> Void
-    let hookMenuItems: [HookMenuItem]
+    let hookMenuItems: [MenuItem]
 
     @State private var isHovered = false
     @State private var showLocationPopover = false
@@ -474,22 +492,13 @@ private struct ProjectTreeRow: View {
         Button { onOpenInNewWindow() } label: {
             Label("Open in New Window", systemImage: "macwindow.badge.plus")
         }
-        Button { onCodeReview() } label: {
-            Label("Code Review for Current Branch", systemImage: "checklist")
-        }
-        Button { onCommitAll() } label: {
-            Label("Commit All Changes", systemImage: "checkmark.circle")
-        }
-        if canCreatePR {
-            Button { startCreatePR() } label: {
-                Label(creatingPR ? "Creating Pull Request…" : "Create Pull Request",
-                      systemImage: "arrow.triangle.pull")
-            }
-            .disabled(creatingPR)
-        }
+        // Code review, commit, create PR, and the autopilot setup actions now
+        // come from hooks as serializable MenuItems (gated inside the hooks), so
+        // the desktop and mobile render the same set. Taps dispatch locally here.
         if !hookMenuItems.isEmpty {
             Divider()
-            HookContextMenuItems(items: hookMenuItems)
+            MenuItemsView(hookMenuItems)
+                .menuActionHandler(appState.desktopMenuActionHandler(navigatingIn: windowState))
         }
         Divider()
         Button { onRename() } label: {
@@ -631,12 +640,12 @@ private struct ProjectChatsList: View {
             chatRow(for: summary, reviewDisclosure: disclosure(for: summary, children: children))
 
             if isExpanded {
-                ForEach(Array(children.enumerated()), id: \.element.id) { index, child in
+                ForEach(childDisplayItems(children), id: \.summary.id) { item in
                     chatRow(
-                        for: child,
+                        for: item.summary,
                         indentLevel: 1,
-                        titleOverride: "Review \(index + 1)",
-                        showLabelChip: false
+                        titleOverride: item.titleOverride,
+                        showLabelChip: item.showLabelChip
                     )
                     .transition(.asymmetric(
                         insertion: .move(edge: .top).combined(with: .opacity),
@@ -644,6 +653,28 @@ private struct ProjectChatsList: View {
                     ))
                 }
             }
+        }
+    }
+
+    /// How a nested child row should render. Code-review children keep the
+    /// `Review 1`, `Review 2`, … numbering (the nesting + number conveys what
+    /// they are, so no chip). Other linked children — e.g. a Send Message hook's
+    /// new thread — show their own title and keep their `threadLabel` chip so the
+    /// user-chosen label is visible instead of a bogus "Review N".
+    private struct ChildDisplayItem {
+        let summary: ChatSession.Summary
+        let titleOverride: String?
+        let showLabelChip: Bool
+    }
+
+    private func childDisplayItems(_ children: [ChatSession.Summary]) -> [ChildDisplayItem] {
+        var reviewNumber = 0
+        return children.map { child in
+            if child.threadLabel == AppState.manualCodeReviewLabel {
+                reviewNumber += 1
+                return ChildDisplayItem(summary: child, titleOverride: "Review \(reviewNumber)", showLabelChip: false)
+            }
+            return ChildDisplayItem(summary: child, titleOverride: nil, showLabelChip: true)
         }
     }
 
@@ -758,7 +789,8 @@ private struct ProjectChatsList: View {
             titleOverride: titleOverride,
             showLabelChip: showLabelChip,
             reviewDisclosure: reviewDisclosure,
-            reviewPassed: appState.reviewPassedBySession[sessionId]
+            reviewPassed: appState.reviewPassedBySession[sessionId],
+            canCommitFiles: appState.threadHasFileChanges(sessionId: sessionId)
         )
     }
 }

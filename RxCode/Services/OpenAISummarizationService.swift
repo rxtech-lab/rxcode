@@ -346,6 +346,12 @@ actor OpenAISummarizationService {
         """
     }
 
+    /// Generic one-shot completion for an arbitrary prompt (e.g. a hook condition
+    /// gate). Returns the model's text, sanitized of error strings.
+    func generatePlainCompletion(prompt: String, endpoint: String, apiKey: String, model: String, maxTokens: Double) async -> String? {
+        await generateSummary(prompt: prompt, endpoint: endpoint, apiKey: apiKey, model: model, maxTokens: maxTokens)
+    }
+
     private func generateSummary(prompt: String, endpoint: String, apiKey: String, model: String, maxTokens: Double) async -> String? {
         let body: JSONValue = .object([
             "model": .string(model),

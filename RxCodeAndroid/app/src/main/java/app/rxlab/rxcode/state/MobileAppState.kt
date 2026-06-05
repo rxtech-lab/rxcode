@@ -6,9 +6,12 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.rxlab.rxcode.BuildConfig
+import app.rxlab.rxcode.proto.AutopilotExecuteCommandResult
 import app.rxlab.rxcode.proto.AutopilotProjectSecretsDownloadResult
 import app.rxlab.rxcode.proto.AutopilotProjectSecretsWriteBody
 import app.rxlab.rxcode.proto.AutopilotProjectStatus
+import app.rxlab.rxcode.proto.MenuActionCommand
+import app.rxlab.rxcode.proto.MenuItem
 import app.rxlab.rxcode.proto.BranchOpRequestPayload
 import app.rxlab.rxcode.proto.CancelStreamPayload
 import app.rxlab.rxcode.proto.CreateProjectRequestPayload
@@ -859,6 +862,20 @@ class MobileAppState @Inject constructor(
     /** Ask the Mac to commit only the files recorded for one thread. */
     suspend fun requestThreadCommitFiles(sessionId: String): String =
         autopilot.requestThreadCommitFiles(sessionId)
+
+    // MARK: - Serializable context menus (desktop is the single source of truth)
+
+    /** Fetch the desktop-built project context menu (optionally branch-scoped). */
+    suspend fun fetchProjectMenu(projectId: UUID, branch: String?): List<MenuItem> =
+        autopilot.fetchProjectMenu(projectId, branch)
+
+    /** Fetch the desktop-built context menu for one thread. */
+    suspend fun fetchThreadMenu(sessionId: String): List<MenuItem> =
+        autopilot.fetchThreadMenu(sessionId)
+
+    /** Run a tapped menu command on the Mac; returns a thread and/or URL to open. */
+    suspend fun executeMenuCommand(command: MenuActionCommand): AutopilotExecuteCommandResult =
+        autopilot.executeMenuCommand(command)
 
     /**
      * Download a secret environment into the project folder: decrypt on-device

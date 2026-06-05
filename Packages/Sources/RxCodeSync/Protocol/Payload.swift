@@ -462,15 +462,26 @@ public struct ProjectBranchInfo: Codable, Sendable, Equatable {
     /// Optional for backward compatibility with older desktops that only sent
     /// the current branch.
     public let availableBranches: [String]?
+    /// Whether the project's working tree has uncommitted changes (`git status`
+    /// is non-empty). Drives whether the project-level "Commit All Changes"
+    /// action is offered — it's hidden when this is `false`. `nil` from older
+    /// desktops that predate this field, treated as "unknown" (action shown).
+    public let hasUncommittedChanges: Bool?
 
-    public init(projectId: UUID, currentBranch: String, availableBranches: [String]? = nil) {
+    public init(
+        projectId: UUID,
+        currentBranch: String,
+        availableBranches: [String]? = nil,
+        hasUncommittedChanges: Bool? = nil
+    ) {
         self.projectId = projectId
         self.currentBranch = currentBranch
         self.availableBranches = availableBranches
+        self.hasUncommittedChanges = hasUncommittedChanges
     }
 
     private enum CodingKeys: String, CodingKey {
-        case projectId, currentBranch, availableBranches
+        case projectId, currentBranch, availableBranches, hasUncommittedChanges
     }
 
     public init(from decoder: Decoder) throws {
@@ -478,6 +489,7 @@ public struct ProjectBranchInfo: Codable, Sendable, Equatable {
         projectId = try c.decode(UUID.self, forKey: .projectId)
         currentBranch = try c.decode(String.self, forKey: .currentBranch)
         availableBranches = try c.decodeIfPresent([String].self, forKey: .availableBranches)
+        hasUncommittedChanges = try c.decodeIfPresent(Bool.self, forKey: .hasUncommittedChanges)
     }
 }
 

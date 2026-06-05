@@ -30,6 +30,10 @@ public final class ChatThread {
     public var threadLabel: String? = nil
     /// When true, lifecycle hooks are skipped for this thread.
     public var skipHooks: Bool = false
+    /// Latest code-review verdict for this thread (set by `CodeReviewHook`):
+    /// `true` = passed, `false` = found issues, `nil` = never reviewed. Persisted
+    /// so the sidebar review dot survives an app reload. Defaulted for clean migration.
+    public var reviewPassed: Bool? = nil
 
     public init(
         id: String,
@@ -50,7 +54,8 @@ public final class ChatThread {
         archivedAt: Date? = nil,
         parentThreadId: String? = nil,
         threadLabel: String? = nil,
-        skipHooks: Bool = false
+        skipHooks: Bool = false,
+        reviewPassed: Bool? = nil
     ) {
         self.id = id
         self.projectId = projectId
@@ -71,6 +76,7 @@ public final class ChatThread {
         self.parentThreadId = parentThreadId
         self.threadLabel = threadLabel
         self.skipHooks = skipHooks
+        self.reviewPassed = reviewPassed
     }
 }
 

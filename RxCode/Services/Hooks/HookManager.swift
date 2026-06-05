@@ -40,11 +40,11 @@ final class HookManager {
         }
     }
 
-    func projectContextMenuItems(_ payload: ProjectContextMenuPayload) -> [HookMenuItem] {
+    func projectContextMenuItems(_ payload: ProjectContextMenuPayload) -> [MenuItem] {
         enabledHooks.flatMap { $0.onProjectContextMenu(payload, controller: controller) }
     }
 
-    func threadContextMenuItems(_ payload: ThreadContextMenuPayload) -> [HookMenuItem] {
+    func threadContextMenuItems(_ payload: ThreadContextMenuPayload) -> [MenuItem] {
         enabledHooks.flatMap { $0.onThreadContextMenu(payload, controller: controller) }
     }
 

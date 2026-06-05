@@ -454,6 +454,7 @@ private struct GlassProjectCard: View {
             .buttonStyle(GlassProjectCardButtonStyle(isSelected: isSelected))
             .glassEffectID(project.id.uuidString, in: namespace)
             .accessibilityIdentifier("project-row-\(project.id.uuidString)")
+            .projectRemoteContextMenu(project: project)
         } else {
             Button {
                 onSelect?()
@@ -463,6 +464,7 @@ private struct GlassProjectCard: View {
             .buttonStyle(GlassProjectCardButtonStyle(isSelected: isSelected))
             .glassEffectID(project.id.uuidString, in: namespace)
             .accessibilityIdentifier("project-row-\(project.id.uuidString)")
+            .projectRemoteContextMenu(project: project)
         }
     }
 

@@ -30,7 +30,6 @@ import androidx.compose.material.icons.outlined.DriveFileRenameOutline
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
-import androidx.compose.material.icons.outlined.RateReview
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.CardDefaults
@@ -41,6 +40,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -49,6 +49,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -61,12 +62,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import app.rxlab.rxcode.proto.MenuAction
+import app.rxlab.rxcode.proto.MenuItem
 import app.rxlab.rxcode.proto.SessionAttentionKind
 import app.rxlab.rxcode.proto.SessionSummary
 import app.rxlab.rxcode.proto.TodoItem
 import app.rxlab.rxcode.state.MobileAppState
 import app.rxlab.rxcode.state.MobileState
 import app.rxlab.rxcode.ui.autopilot.ProjectActionsMenu
+import app.rxlab.rxcode.ui.autopilot.SerializedMenuItems
 import app.rxlab.rxcode.ui.sheets.NewThreadSheet
 import app.rxlab.rxcode.ui.sheets.RenameThreadSheet
 import app.rxlab.rxcode.ui.util.HapticEvent
@@ -120,28 +124,6 @@ fun SessionsScreen(
     var deleteTarget by remember { mutableStateOf<SessionSummary?>(null) }
     val scope = rememberCoroutineScope()
     var refreshing by remember { mutableStateOf(false) }
-
-    // Start a `[Code Review]` thread on the Mac for one thread's changes (the
-    // manual equivalent of the built-in Code Review hook), then navigate to it.
-    fun startThreadReview(sessionId: String) {
-        scope.launch {
-            runCatching {
-                val threadId = viewModel.requestThreadCreateCodeReview(sessionId)
-                viewModel.requestSnapshot("code_review_started")
-                onNewThread(threadId)
-            }
-        }
-    }
-
-    fun startThreadCommit(sessionId: String) {
-        scope.launch {
-            runCatching {
-                val threadId = viewModel.requestThreadCommitFiles(sessionId)
-                viewModel.requestSnapshot("commit_started")
-                onNewThread(threadId)
-            }
-        }
-    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -228,8 +210,8 @@ fun SessionsScreen(
                                     viewModel.archiveThread(parent.id)
                                 },
                                 onDelete = { deleteTarget = parent },
-                                onCodeReview = { startThreadReview(parent.id) },
-                                onCommitFiles = { startThreadCommit(parent.id) },
+                                viewModel = viewModel,
+                                onOpenThread = onNewThread,
                                 reviewCount = children.size,
                                 isExpanded = expanded,
                                 isReviewing = children.any { it.isStreaming },
@@ -261,8 +243,8 @@ fun SessionsScreen(
                                         viewModel.archiveThread(child.id)
                                     },
                                     onDelete = { deleteTarget = child },
-                                    onCodeReview = { startThreadReview(child.id) },
-                                    onCommitFiles = { startThreadCommit(child.id) },
+                                    viewModel = viewModel,
+                                    onOpenThread = onNewThread,
                                     indentLevel = 1,
                                     titleOverride = "Review ${index + 1}",
                                     showLabel = false,
@@ -371,8 +353,8 @@ private fun SessionCard(
     onRename: () -> Unit,
     onArchive: () -> Unit,
     onDelete: () -> Unit,
-    onCodeReview: () -> Unit = {},
-    onCommitFiles: () -> Unit = {},
+    viewModel: MobileAppState,
+    onOpenThread: (String) -> Unit = {},
     reviewCount: Int = 0,
     isExpanded: Boolean = false,
     isReviewing: Boolean = false,
@@ -382,6 +364,27 @@ private fun SessionCard(
     showLabel: Boolean = true,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    val cardScope = rememberCoroutineScope()
+    // The desktop-mediated thread actions (Code Review / Commit Files / Stop) come
+    // from the Mac as the same serialized menu it renders — fetched lazily and
+    // re-keyed on the gating state so it refreshes after edits / a review starts.
+    // Rename / Archive / Delete below are Android-local.
+    var threadMenu by remember(session.id) { mutableStateOf<List<MenuItem>?>(null) }
+    LaunchedEffect(session.id, session.hasRecordedFileChanges, isReviewing) {
+        threadMenu = runCatching { viewModel.fetchThreadMenu(session.id) }.getOrNull()
+    }
+
+    fun runThreadAction(action: MenuAction?) {
+        val command = (action as? MenuAction.Command)?.command ?: return
+        menuOpen = false
+        cardScope.launch {
+            runCatching {
+                val result = viewModel.executeMenuCommand(command)
+                viewModel.requestSnapshot("menu_command")
+                result.threadId?.let { onOpenThread(it) }
+            }
+        }
+    }
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
@@ -469,16 +472,13 @@ private fun SessionCard(
                     Icon(Icons.Outlined.MoreVert, contentDescription = "More")
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                    DropdownMenuItem(
-                        text = { Text("Code Review") },
-                        leadingIcon = { Icon(Icons.Outlined.RateReview, contentDescription = null) },
-                        onClick = { menuOpen = false; onCodeReview() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Commit Files") },
-                        leadingIcon = { Icon(Icons.Outlined.CheckCircle, contentDescription = null) },
-                        onClick = { menuOpen = false; onCommitFiles() },
-                    )
+                    // Desktop-built thread actions (Code Review / Commit Files / Stop
+                    // Code Review), gated by the Mac. Empty for a `[Code Review]`
+                    // thread, which the desktop excludes.
+                    threadMenu?.takeIf { it.isNotEmpty() }?.let { items ->
+                        SerializedMenuItems(items, onAction = ::runThreadAction)
+                        HorizontalDivider()
+                    }
                     DropdownMenuItem(
                         text = { Text("Rename") },
                         leadingIcon = { Icon(Icons.Outlined.DriveFileRenameOutline, contentDescription = null) },

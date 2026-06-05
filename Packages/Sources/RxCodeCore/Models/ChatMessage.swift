@@ -243,7 +243,11 @@ public struct ToolCall: Identifiable, Codable, Sendable, Equatable {
     /// either because the result would be empty by design, or because the UI
     /// needs to render them before the user/CLI produces a result.
     public static let keepAlwaysNames: Set<String> = [
-        "agent", "edit", "multiedit", "multi_edit", "write", "askuserquestion", "exitplanmode", "exit_plan_mode"
+        "agent", "edit", "multiedit", "multi_edit", "write", "askuserquestion", "exitplanmode", "exit_plan_mode",
+        // The review countdown card renders its live timer (and Stop / Start-now
+        // buttons) while `result == nil`; without this the render filter would
+        // drop the whole card until the countdown finished and a result landed.
+        ReviewCountdownCard.toolName.lowercased(),
     ]
 
     public var isKeepAlways: Bool {

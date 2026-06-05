@@ -1606,6 +1606,9 @@
     "After the session is finalized, the change is sent to a linked [Code Review] thread that runs no hooks. If the review requests changes, its notes are sent back into this thread so the agent keeps fixing and is re-reviewed (up to 3 times)." : {
 
     },
+    "After the session is finalized, your message is sent to the assistant — as a follow-up in this thread or into a new linked thread that runs no hooks. With a condition, a model first decides yes/no. Fires once per session and resets when you send a new message." : {
+
+    },
     "Agent Availability" : {
       "localizations" : {
         "ko" : {
@@ -3356,6 +3359,9 @@
         }
       }
     },
+    "Command Failed" : {
+
+    },
     "Commands" : {
       "localizations" : {
         "ko" : {
@@ -3414,6 +3420,12 @@
       }
     },
     "Commit when a session finishes" : {
+
+    },
+    "Condition" : {
+
+    },
+    "Condition model" : {
 
     },
     "Configuration" : {
@@ -4128,6 +4140,7 @@
       }
     },
     "Creating Pull Request…" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -6098,6 +6111,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "第一个 MCP 服务器"
+          }
+        }
+      }
+    },
+    "Fix Failing CI" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실패한 CI 수정"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "修复失败的 CI"
           }
         }
       }
@@ -8662,6 +8691,12 @@
         }
       }
     },
+    "New thread" : {
+
+    },
+    "New thread label" : {
+
+    },
     "New thread starts" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -9806,6 +9841,9 @@
           }
         }
       }
+    },
+    "Only send when a condition is met" : {
+
     },
     "Open" : {
       "localizations" : {
@@ -12299,6 +12337,9 @@
     "Same as thread" : {
 
     },
+    "Same thread" : {
+
+    },
     "Save" : {
       "localizations" : {
         "ko" : {
@@ -13073,6 +13114,9 @@
         }
       }
     },
+    "Send Message" : {
+
+    },
     "Send test notification" : {
       "localizations" : {
         "ko" : {
@@ -13088,6 +13132,9 @@
           }
         }
       }
+    },
+    "Send to" : {
+
     },
     "Sends a system notification while RxCode is in the background." : {
       "localizations" : {
@@ -13180,6 +13227,9 @@
           }
         }
       }
+    },
+    "Set Up CI Update" : {
+
     },
     "Set Up Docs" : {
       "localizations" : {
@@ -14062,6 +14112,9 @@
         }
       }
     },
+    "Stop Code Review" : {
+
+    },
     "Stop running tasks" : {
       "localizations" : {
         "ko" : {
@@ -14158,6 +14211,9 @@
           }
         }
       }
+    },
+    "Summarization model" : {
+
     },
     "Summarization Model" : {
       "localizations" : {
@@ -14612,6 +14668,9 @@
           }
         }
       }
+    },
+    "Thread model" : {
+
     },
     "Thread Model" : {
       "localizations" : {

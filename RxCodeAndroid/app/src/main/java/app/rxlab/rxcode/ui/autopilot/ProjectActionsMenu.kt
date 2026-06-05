@@ -4,16 +4,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.MergeType
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
-import androidx.compose.material.icons.outlined.Book
-import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.HourglassEmpty
-import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.MoreVert
-import androidx.compose.material.icons.outlined.RateReview
-import androidx.compose.material.icons.outlined.Sell
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -25,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,7 +29,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
-import app.rxlab.rxcode.proto.AutopilotProjectStatus
+import app.rxlab.rxcode.proto.MenuAction
+import app.rxlab.rxcode.proto.MenuActionCommand
+import app.rxlab.rxcode.proto.MenuCommandKind
+import app.rxlab.rxcode.proto.MenuItem
 import app.rxlab.rxcode.proto.Project
 import app.rxlab.rxcode.proto.ProjectBranchInfo
 import app.rxlab.rxcode.state.MobileAppState
@@ -42,32 +40,26 @@ import app.rxlab.rxcode.ui.sheets.ProjectReleaseCreateSheet
 import app.rxlab.rxcode.ui.sheets.ProjectSecretsDownloadSheet
 import kotlinx.coroutines.launch
 
-private const val SECRETS_SETUP_PROMPT =
-    "Set up encrypted secrets for this repository so I can sync environment files securely."
-private const val DOCS_SETUP_PROMPT =
-    "Set up documentation publishing for this repository so its docs are indexed into RxCode docs search."
-private const val RELEASE_SETUP_PROMPT =
-    "Set up a release workflow for this repository (semantic-release + a GitHub Actions release workflow)."
-
 /**
- * One-to-one mobile mirror of the desktop project/briefing autopilot context
- * menu (`ProjectAutopilotMenuItems` on iOS), plus the per-screen extras: a
- * "Create Pull Request" / "Open on GitHub" pair (briefing detail) and an
- * optional destructive "Delete Project" (session list).
+ * The project / briefing actions menu — now a thin renderer of the **desktop's**
+ * serialized context menu. The Mac builds the same `[MenuItem]` its own menus
+ * render (from its hooks: Code Review, Commit, Create PR, Fix CI, plus the
+ * autopilot secrets/docs/release/CI setup items) and ships it over the relay;
+ * Android decodes and renders the identical items, exactly like iOS — so the
+ * menu's contents, gating, and per-item behavior have one source of truth.
  *
- * Drop into a `TopAppBar`'s `actions = { }`. Autopilot items only appear for
- * repo-backed projects, gated on the per-project [AutopilotProjectStatus] this
- * loads on first composition. Every item is desktop-mediated except "Download
- * Secret", which decrypts on-device and relays plaintext for the Mac to write.
+ * `.command` items run on the Mac via [MobileAppState.executeMenuCommand] (an
+ * `isAsync` command — e.g. Create PR — blocks behind a loading dialog and waits);
+ * `.deepLink` items open the matching on-device sheet / setup chat. "Open on
+ * GitHub" and the optional destructive "Delete Project" are Android-local extras
+ * the desktop menu doesn't carry.
  *
- * @param branch current branch — enables "Create Pull Request" (hidden when null
- *   or `"unknown"`) and seeds the release form's branch picker.
- * @param prNumber the open PR number for [branch], or null when none exists.
- *   Mirrors the desktop briefing gate: "Create Pull Request" is only offered
- *   when the branch has no PR linked yet.
- * @param onOpenSession navigate to a chat after a setup action creates one.
- * @param onProjectDeleted called after confirming "Delete Project" so the host
- *   can pop back (only reachable when [includeDeleteProject] is true).
+ * @param branch current branch — scopes the fetched menu (briefing cards target
+ *   their own branch); `"unknown"` is treated as no branch.
+ * @param prNumber the open PR number for [branch], if any — only used to refetch
+ *   the menu when PR state changes (the desktop decides whether "Create PR" shows).
+ * @param onOpenSession navigate to a chat after an action spawns / targets one.
+ * @param onProjectDeleted called after confirming "Delete Project".
  */
 @Composable
 fun ProjectActionsMenu(
@@ -83,27 +75,23 @@ fun ProjectActionsMenu(
     val scope = rememberCoroutineScope()
     val uriHandler = LocalUriHandler.current
     val hasRepo = !project.gitHubRepo.isNullOrEmpty()
-    // Offer "Create PR" for a real branch with no open PR yet (mirrors the
-    // desktop briefing PR button); once a PR exists "Open on GitHub" covers it.
-    val canCreatePR = branch != null && !branch.equals("unknown", ignoreCase = true) && prNumber == null
-
-    // Offer a branch-wide code review for any real branch (mirrors the desktop
-    // briefing/project "Code Review" menu).
-    val canCodeReview = branch != null && !branch.equals("unknown", ignoreCase = true)
+    val scopedBranch = branch?.takeIf { it.isNotEmpty() && !it.equals("unknown", ignoreCase = true) }
 
     var menuOpen by remember { mutableStateOf(false) }
-    var status by remember(project.id) { mutableStateOf<AutopilotProjectStatus?>(null) }
+    var menuItems by remember(project.id) { mutableStateOf<List<MenuItem>?>(null) }
     var showDownload by remember { mutableStateOf(false) }
     var showReleaseCreate by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
-    var isCreatingPR by remember { mutableStateOf(false) }
-    var isCreatingReview by remember { mutableStateOf(false) }
-    var isCommittingAll by remember { mutableStateOf(false) }
+    // Set to a command's kind while an async command runs, driving the loading
+    // dialog; a non-async command never sets it. `dispatching` guards re-entrancy.
+    var dispatching by remember { mutableStateOf(false) }
+    var asyncCommand by remember { mutableStateOf<MenuCommandKind?>(null) }
     var info by remember { mutableStateOf<String?>(null) }
 
-    // Only repo-backed projects have autopilot state to load.
-    androidx.compose.runtime.LaunchedEffect(project.id) {
-        if (hasRepo) status = runCatching { viewModel.projectAutopilotStatus(project.id) }.getOrNull()
+    // Prefetch the desktop menu, re-keyed on the git-dirty + PR state it's gated
+    // by so it refreshes after commits / PR creation land in the snapshot.
+    LaunchedEffect(project.id, scopedBranch, branchInfo?.hasUncommittedChanges, prNumber) {
+        menuItems = runCatching { viewModel.fetchProjectMenu(project.id, scopedBranch) }.getOrNull()
     }
 
     fun startSetupChat(prompt: String) {
@@ -112,54 +100,41 @@ fun ProjectActionsMenu(
         onOpenSession(sessionId)
     }
 
-    fun createPullRequest() {
-        if (isCreatingPR || branch == null) return
-        isCreatingPR = true
+    fun runCommand(command: MenuActionCommand) {
+        if (dispatching) return
         menuOpen = false
+        dispatching = true
+        if (command.isAsync) asyncCommand = command.kind
         scope.launch {
             try {
-                val url = viewModel.requestProjectCreatePullRequest(project.id, branch)
-                viewModel.requestSnapshot("pr_created")
-                uriHandler.openUri(url)
+                val result = viewModel.executeMenuCommand(command)
+                viewModel.requestSnapshot("menu_command")
+                result.threadId?.let { onOpenSession(it) }
+                result.openURL?.let { uriHandler.openUri(it) }
             } catch (t: Throwable) {
-                info = t.message ?: "Couldn't create the pull request."
+                info = t.message ?: "Couldn't complete the action."
             } finally {
-                isCreatingPR = false
+                dispatching = false
+                asyncCommand = null
             }
         }
     }
 
-    fun createCodeReview() {
-        if (isCreatingReview || branch == null) return
-        isCreatingReview = true
+    fun handleDeepLink(url: String) {
         menuOpen = false
-        scope.launch {
-            try {
-                val threadId = viewModel.requestProjectCreateCodeReview(project.id, branch)
-                viewModel.requestSnapshot("code_review_started")
-                onOpenSession(threadId)
-            } catch (t: Throwable) {
-                info = t.message ?: "Couldn't start the code review."
-            } finally {
-                isCreatingReview = false
-            }
+        when (val target = mobileMenuDeepLinkTarget(url)) {
+            is MobileMenuDeepLinkTarget.SecretsDownload -> showDownload = true
+            is MobileMenuDeepLinkTarget.ReleaseCreate -> showReleaseCreate = true
+            is MobileMenuDeepLinkTarget.SetupChat -> startSetupChat(target.prompt)
+            is MobileMenuDeepLinkTarget.None -> Unit
         }
     }
 
-    fun commitAllChanges() {
-        if (isCommittingAll) return
-        isCommittingAll = true
-        menuOpen = false
-        scope.launch {
-            try {
-                val threadId = viewModel.requestProjectCommitAll(project.id)
-                viewModel.requestSnapshot("commit_started")
-                onOpenSession(threadId)
-            } catch (t: Throwable) {
-                info = t.message ?: "Couldn't start the commit."
-            } finally {
-                isCommittingAll = false
-            }
+    fun handleAction(action: MenuAction?) {
+        when (action) {
+            is MenuAction.Command -> runCommand(action.command)
+            is MenuAction.DeepLink -> handleDeepLink(action.url)
+            null -> Unit
         }
     }
 
@@ -168,90 +143,33 @@ fun ProjectActionsMenu(
     }
 
     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-        DropdownMenuItem(
-            text = { Text("Commit All Changes") },
-            leadingIcon = { Icon(Icons.Outlined.CheckCircle, contentDescription = null) },
-            enabled = !isCommittingAll,
-            onClick = { commitAllChanges() },
-        )
+        val items = menuItems
+        if (items == null) {
+            DropdownMenuItem(
+                text = { Text("Loading…") },
+                leadingIcon = { Icon(Icons.Outlined.HourglassEmpty, contentDescription = null) },
+                enabled = false,
+                onClick = {},
+            )
+        } else {
+            SerializedMenuItems(items, onAction = ::handleAction)
+        }
 
+        // Android-local extras the desktop menu doesn't carry.
         if (hasRepo) {
-            HorizontalDivider()
-            val loaded = status
-            if (loaded == null) {
-                DropdownMenuItem(
-                    text = { Text("Loading Autopilot…") },
-                    leadingIcon = { Icon(Icons.Outlined.HourglassEmpty, contentDescription = null) },
-                    enabled = false,
-                    onClick = {},
-                )
-            } else {
-                // Secrets: download when present, otherwise offer setup.
-                if (loaded.hasSecrets) {
-                    DropdownMenuItem(
-                        text = { Text("Download Secret") },
-                        leadingIcon = { Icon(Icons.Outlined.Key, contentDescription = null) },
-                        onClick = { menuOpen = false; showDownload = true },
-                    )
-                } else {
-                    DropdownMenuItem(
-                        text = { Text("Set Up Secrets") },
-                        leadingIcon = { Icon(Icons.Outlined.Key, contentDescription = null) },
-                        onClick = { startSetupChat(SECRETS_SETUP_PROMPT) },
-                    )
-                }
-                // Docs: only offer setup when not yet indexed.
-                if (!loaded.hasDocs) {
-                    DropdownMenuItem(
-                        text = { Text("Set Up Docs") },
-                        leadingIcon = { Icon(Icons.Outlined.Book, contentDescription = null) },
-                        onClick = { startSetupChat(DOCS_SETUP_PROMPT) },
-                    )
-                }
-                // Release: create when configured, otherwise offer setup.
-                if (loaded.hasRelease) {
-                    DropdownMenuItem(
-                        text = { Text("Create Release") },
-                        leadingIcon = { Icon(Icons.Outlined.Sell, contentDescription = null) },
-                        onClick = { menuOpen = false; showReleaseCreate = true },
-                    )
-                } else {
-                    DropdownMenuItem(
-                        text = { Text("Set Up Release Workflow") },
-                        leadingIcon = { Icon(Icons.Outlined.Sell, contentDescription = null) },
-                        onClick = { startSetupChat(RELEASE_SETUP_PROMPT) },
-                    )
-                }
-                if (canCreatePR) {
-                    DropdownMenuItem(
-                        text = { Text("Create Pull Request") },
-                        leadingIcon = { Icon(Icons.AutoMirrored.Outlined.MergeType, contentDescription = null) },
-                        enabled = !isCreatingPR,
-                        onClick = { createPullRequest() },
-                    )
-                }
-                if (canCodeReview) {
-                    DropdownMenuItem(
-                        text = { Text("Code Review for $branch") },
-                        leadingIcon = { Icon(Icons.Outlined.RateReview, contentDescription = null) },
-                        enabled = !isCreatingReview,
-                        onClick = { createCodeReview() },
-                    )
-                }
-                HorizontalDivider()
-                DropdownMenuItem(
-                    text = { Text("Open on GitHub") },
-                    leadingIcon = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, contentDescription = null) },
-                    onClick = {
-                        menuOpen = false
-                        uriHandler.openUri("https://github.com/${project.gitHubRepo}")
-                    },
-                )
-            }
+            if (!items.isNullOrEmpty()) HorizontalDivider()
+            DropdownMenuItem(
+                text = { Text("Open on GitHub") },
+                leadingIcon = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, contentDescription = null) },
+                onClick = {
+                    menuOpen = false
+                    uriHandler.openUri("https://github.com/${project.gitHubRepo}")
+                },
+            )
         }
 
         if (includeDeleteProject) {
-            if (hasRepo) HorizontalDivider()
+            if (hasRepo || !items.isNullOrEmpty()) HorizontalDivider()
             DropdownMenuItem(
                 text = { Text("Delete Project", color = MaterialTheme.colorScheme.error) },
                 leadingIcon = {
@@ -299,43 +217,16 @@ fun ProjectActionsMenu(
         )
     }
 
-    if (isCreatingPR) {
+    asyncCommand?.let { kind ->
+        val (title, message) = commandLoadingText(kind)
         AlertDialog(
             onDismissRequest = {},
             confirmButton = {},
-            title = { Text("Creating Pull Request…") },
+            title = { Text(title) },
             text = {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
-                    Text("The Mac is pushing the branch and opening the PR.")
-                }
-            },
-        )
-    }
-
-    if (isCreatingReview) {
-        AlertDialog(
-            onDismissRequest = {},
-            confirmButton = {},
-            title = { Text("Starting Code Review…") },
-            text = {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
-                    Text("The Mac is starting a Code Review thread for this branch.")
-                }
-            },
-        )
-    }
-
-    if (isCommittingAll) {
-        AlertDialog(
-            onDismissRequest = {},
-            confirmButton = {},
-            title = { Text("Committing Changes…") },
-            text = {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
-                    Text("The Mac is starting a commit thread for this project.")
+                    Text(message)
                 }
             },
         )

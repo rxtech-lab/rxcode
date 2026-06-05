@@ -262,9 +262,18 @@ extension AppState {
 
         // A real user turn clears the stop-hook auto-continue tally so a fresh
         // round of fix→fail→fix gets the full retry budget again. A reprompt
-        // turn (this method calling itself) must not reset it.
+        // turn (this method calling itself) must not reset it. The code-review
+        // fix-round counter resets on the same terms (and the review fix turn is
+        // also sent with `isStopHookReprompt`, so it won't reset its own bound).
         if !isStopHookReprompt {
             stopHookRepromptCounts[sessionKey] = nil
+            reviewRoundBySession[sessionKey] = nil
+            // A new follow-up message supersedes any pending/in-flight automatic
+            // code review for this thread: cancel the countdown and stop the
+            // review thread if it's already running. Auto-fix reprompts (sent
+            // with `isStopHookReprompt`) deliberately don't cancel — they want
+            // the re-review to run.
+            reviewScheduler?.cancel(parentSessionKey: sessionKey, reason: .newMessage)
         }
 
         // Apply initialMessages if provided. Refuse to clobber an already-
@@ -288,6 +297,13 @@ extension AppState {
                     attachments: attachments
                 ))
                 state.inFlightUserAttachments = attachments
+            }
+            // A genuine user message resets the Send Message hook's once-per-session
+            // guard so it can fire again. The hook's own injected message marks the
+            // session *after* this point (in `sendCrossProject`), so it isn't cleared
+            // here. Stop-hook reprompts aren't user turns and must not reset it.
+            if !isStopHookReprompt {
+                clearSetupSession(kind: HookSetupKind.sendMessage, sessionKey: sessionKey)
             }
         }
 

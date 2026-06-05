@@ -44,11 +44,11 @@ extension AppState {
         )
     }
 
-    func projectContextMenuItems(for project: Project) -> [HookMenuItem] {
-        hookManager.projectContextMenuItems(ProjectContextMenuPayload(project: project))
+    func projectContextMenuItems(for project: Project, branch: String? = nil) -> [MenuItem] {
+        hookManager.projectContextMenuItems(ProjectContextMenuPayload(project: project, branch: branch))
     }
 
-    func threadContextMenuItems(for session: ChatSession.Summary) -> [HookMenuItem] {
+    func threadContextMenuItems(for session: ChatSession.Summary) -> [MenuItem] {
         guard let project = projects.first(where: { $0.id == session.projectId }) else { return [] }
         return hookManager.threadContextMenuItems(ThreadContextMenuPayload(project: project, session: session))
     }
@@ -163,5 +163,72 @@ extension AppState {
         Task { [weak self] in
             await self?.sendPrompt(prompt, skipAppendingUserMessage: true, isStopHookReprompt: true, in: window)
         }
+    }
+
+    // MARK: - Code-review auto-fix
+
+    /// How many times a failing code review may auto-continue the reviewed thread
+    /// to fix the reported problems before we give up, so a never-passing review
+    /// can't loop the agent forever.
+    static let maxReviewFixReprompts = 3
+
+    /// Feed a failing code review's feedback back into the reviewed thread as a
+    /// new fix turn so the agent can address the reviewer's findings, then
+    /// finish — at which point the Code Review hook runs again on the fixed
+    /// change (fix → review → fix). Bounded per session by `maxReviewFixReprompts`.
+    /// Returns the 1-based attempt number started, or `nil` if the cap was already
+    /// reached (the caller surfaces a "stopped" card instead of looping). The
+    /// counter resets when review passes or the user sends a real message (see
+    /// `sendPrompt`). Mirrors `repromptAfterStopHookFailure`: rendered as an
+    /// auto-continue card (not a user bubble) and sent with `isStopHookReprompt`
+    /// so it doesn't reset its own loop counter.
+    @discardableResult
+    func repromptAfterReviewFailure(feedback: String, project: Project, sessionKey: String) -> Int? {
+        let attempts = reviewRoundBySession[sessionKey, default: 0]
+        guard attempts < Self.maxReviewFixReprompts else {
+            logger.warning("Code-review auto-fix cap (\(Self.maxReviewFixReprompts)) reached for session \(sessionKey, privacy: .public); not auto-continuing.")
+            return nil
+        }
+        let attempt = attempts + 1
+        reviewRoundBySession[sessionKey] = attempt
+
+        let detail = feedback.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "(the reviewer requested changes but gave no detail)"
+            : feedback
+        let prompt = """
+        A code review of your change requested changes (REVIEW_RESULT: FAIL). Address the issues below, then finish:
+
+        \(detail)
+        """
+
+        // Render the auto-continue as its own card (see `ToolResultView`'s
+        // `isAutoContinueTool`) rather than a user bubble, so it reads as a
+        // system action instead of something the user typed.
+        updateState(sessionKey) { state in
+            let toolCall = ToolCall(
+                id: UUID().uuidString,
+                name: ToolCall.autoContinueToolName,
+                input: [
+                    "summary": .string("Code review requested changes — continuing (attempt \(attempt) of \(Self.maxReviewFixReprompts)).")
+                ],
+                result: detail,
+                isError: false
+            )
+            state.messages.append(ChatMessage(
+                id: UUID(),
+                role: .assistant,
+                blocks: [.toolCall(toolCall)],
+                isResponseComplete: true
+            ))
+        }
+
+        let window = WindowState()
+        window.selectedProject = project
+        window.currentSessionId = sessionKey
+
+        Task { [weak self] in
+            await self?.sendPrompt(prompt, skipAppendingUserMessage: true, isStopHookReprompt: true, in: window)
+        }
+        return attempt
     }
 }

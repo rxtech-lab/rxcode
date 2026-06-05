@@ -227,6 +227,14 @@ public final class WindowState {
     /// remains pending until a decision is recorded via `planDecisionHandler`.
     public var presentedPlanToolCallId: String?
 
+    // MARK: - Code Review Countdown Handler
+
+    /// Invoked by the interactive review-countdown card when the user taps
+    /// "Stop Review" or "Start it now". Parameters: (parentSessionKey, action).
+    /// Set by `AppState` at window init on desktop; left `nil` on mobile, which
+    /// renders the countdown read-only (the buttons are hidden when this is nil).
+    public var reviewCountdownHandler: (@MainActor @Sendable (String, ReviewCountdownAction) -> Void)?
+
     // MARK: - UI State
 
     public var interactiveTerminal: InteractiveTerminalState?

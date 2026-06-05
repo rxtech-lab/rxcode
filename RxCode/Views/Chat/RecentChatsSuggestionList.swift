@@ -149,14 +149,6 @@ struct RecentChatsSuggestionList: View {
 
             Divider()
 
-            Button {
-                Task { _ = try? await appState.commitFilesForThread(sessionId: summary.id) }
-            } label: {
-                Label("Commit Files", systemImage: "checkmark.circle")
-            }
-
-            Divider()
-
             Button(role: .destructive) {
                 sessionToDelete = chatSession
             } label: {

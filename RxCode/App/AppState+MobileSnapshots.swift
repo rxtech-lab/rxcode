@@ -296,7 +296,8 @@ extension AppState {
             queuedMessages: queued,
             hasUncheckedCompletion: sessionStates[summary.id]?.hasUncheckedCompletion ?? false,
             parentThreadId: summary.parentThreadId,
-            threadLabel: summary.threadLabel
+            threadLabel: summary.threadLabel,
+            changedFileCount: threadStore.fileEditCount(sessionId: summary.id)
         )
     }
 
@@ -516,12 +517,19 @@ extension AppState {
                 group.addTask {
                     async let current = GitHelper.currentBranch(at: input.path)
                     async let list = GitHelper.listLocalBranches(at: input.path)
+                    async let status = GitHelper.run(["status", "--porcelain"], at: input.path)
                     guard let branch = await current else { return nil }
                     let branches = await list
+                    // `nil` (git call failed / not a repo) stays "unknown" so the
+                    // Commit All action isn't hidden on a transient git error.
+                    let dirty = (await status).map {
+                        !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    }
                     return ProjectBranchInfo(
                         projectId: input.id,
                         currentBranch: branch,
-                        availableBranches: branches.isEmpty ? nil : branches
+                        availableBranches: branches.isEmpty ? nil : branches,
+                        hasUncommittedChanges: dirty
                     )
                 }
             }

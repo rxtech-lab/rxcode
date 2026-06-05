@@ -60,13 +60,24 @@ struct ProjectAutopilotMenuItems: View {
     var isCommittingAll: Bool = false
     var onCommitAll: () -> Void = {}
 
+    /// Hide "Commit All Changes" when the project is positively known to have a
+    /// clean working tree (synced from the desktop). Unknown → still shown.
+    private var showCommitAll: Bool {
+        state.projectDirtyByProject[project.id] != false
+    }
+
     var body: some View {
-        commitAllItem()
+        if showCommitAll {
+            commitAllItem()
+        }
         // Mirror the desktop guard: no repo → no autopilot items.
         if project.gitHubRepo == nil {
             EmptyView()
         } else if let status {
-            Divider()
+            // Only separate from the commit item when it's actually shown.
+            if showCommitAll {
+                Divider()
+            }
             secretsItem(status)
             docsItem(status)
             releaseItem(status)

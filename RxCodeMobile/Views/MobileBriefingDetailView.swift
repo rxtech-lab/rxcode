@@ -12,11 +12,11 @@ struct MobileBriefingDetailView: View {
     @Environment(\.openURL) private var openURL
     @State private var showingNewThread = false
     @State private var isInitializingGit = false
-    @State private var isCreatingPR = false
-    @State private var isCreatingReview = false
-    @State private var isCommittingProject = false
 
-    // Autopilot context menu (1:1 with the desktop briefing/project menu).
+    // Autopilot context menu — fetched from the desktop as serialized MenuItems
+    // (the same branch-scoped hook menu the Mac renders).
+    @State private var menuItems: [MenuItem] = []
+    @State private var isRunningMenuCommand = false
     @State private var autopilotStatus: AutopilotProjectStatus?
     @State private var showingSecretsDownload = false
     @State private var showingReleaseCreate = false
@@ -55,25 +55,17 @@ struct MobileBriefingDetailView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         if let project {
-                            ProjectAutopilotMenuItems(
-                                project: project,
-                                status: autopilotStatus,
-                                showDownloadSheet: $showingSecretsDownload,
-                                showReleaseCreate: $showingReleaseCreate,
-                                setupChat: $autopilotSetupChat,
-                                info: $autopilotInfo,
-                                // Offer "Create PR" for a real branch with no open
-                                // PR yet; once a PR exists the "Open Pull Request"
-                                // link below covers it.
-                                branch: isUnknownBranch ? nil : groupKey.branch,
-                                prNumber: ciStatus?.prNumber,
-                                isCreatingPR: isCreatingPR,
-                                onCreatePR: { createPullRequest(project: project) },
-                                isCreatingReview: isCreatingReview,
-                                onCodeReview: { createCodeReview(project: project) },
-                                isCommittingAll: isCommittingProject,
-                                onCommitAll: { commitProjectChanges(project: project) }
-                            )
+                            // Render the branch-scoped serialized menu the desktop
+                            // returns (Code Review / Create PR target this card's
+                            // branch); commands run on the Mac, deep links open the
+                            // on-device sheet / setup chat.
+                            if menuItems.isEmpty {
+                                Button {} label: { Label("Loading…", systemImage: "hourglass") }
+                                    .disabled(true)
+                            } else {
+                                MenuItemsView(menuItems)
+                                    .menuActionHandler(menuHandler(project: project))
+                            }
                             if gitHubURL != nil { Divider() }
                         }
                         if let gitHubURL {
@@ -122,20 +114,75 @@ struct MobileBriefingDetailView: View {
             ])
         }
         .mobileAutopilotLoadingDialog(
-            isCreatingPR,
-            title: "Creating Pull Request…",
-            message: "The Mac is pushing the branch and opening the PR."
+            isRunningMenuCommand,
+            title: "Working…",
+            message: "The Mac is performing the requested action."
         )
-        .mobileAutopilotLoadingDialog(
-            isCreatingReview,
-            title: "Starting Code Review…",
-            message: "The Mac is starting a Code Review thread for this branch."
-        )
-        .mobileAutopilotLoadingDialog(
-            isCommittingProject,
-            title: "Committing Changes…",
-            message: "The Mac is starting a commit thread for this project."
-        )
+        .task(id: menuRefreshKey) {
+            // Prefetch the branch-scoped serialized menu from the Mac, re-keyed on
+            // the git-dirty + branch PR state it's gated by so it refreshes after
+            // commits / PR creation / status polls land in the snapshot.
+            menuItems = (try? await state.fetchProjectMenu(
+                projectId: groupKey.projectId,
+                branch: isUnknownBranch ? nil : groupKey.branch
+            )) ?? []
+        }
+    }
+
+    /// Invalidation key for the branch-scoped menu prefetch.
+    private var menuRefreshKey: String {
+        let branch = isUnknownBranch ? "nil" : groupKey.branch
+        let dirty = state.projectDirtyByProject[groupKey.projectId].map(String.init) ?? "nil"
+        let pr = ciStatus?.prNumber.map(String.init) ?? "nil"
+        return "\(groupKey.projectId.uuidString)|\(branch)|\(dirty)|\(pr)"
+    }
+
+    // MARK: - Serialized menu handling
+
+    /// Handler installed on the fetched `MenuItem`s: commands run on the Mac via
+    /// the shared dispatcher; deep links open the matching on-device sheet / setup
+    /// chat (reusing the autopilot host bindings).
+    private func menuHandler(project: Project) -> MenuActionHandler {
+        MenuActionHandler { action in
+            switch action {
+            case .command(let command):
+                runMenuCommand(command)
+            case .deepLink(let url):
+                handleMenuDeepLink(url)
+            }
+        }
+    }
+
+    private func runMenuCommand(_ command: MenuActionCommand) {
+        guard !isRunningMenuCommand else { return }
+        // Only block behind the loading dialog for async commands (push + open PR,
+        // code review, …); instant commands skip the scrim.
+        let showsLoading = command.isAsync
+        if showsLoading { isRunningMenuCommand = true }
+        Task {
+            defer { if showsLoading { isRunningMenuCommand = false } }
+            do {
+                let result = try await state.executeMenuCommand(command)
+                await state.refreshSnapshot()
+                if let threadId = result.threadId { onOpenSession(threadId) }
+                if let urlString = result.openURL, let url = URL(string: urlString) { openURL(url) }
+            } catch {
+                autopilotInfo = AutopilotMenuInfo(text: error.localizedDescription, isError: true)
+            }
+        }
+    }
+
+    private func handleMenuDeepLink(_ url: URL) {
+        switch mobileMenuDeepLinkTarget(url) {
+        case .secretsDownload:
+            showingSecretsDownload = true
+        case .releaseCreate:
+            showingReleaseCreate = true
+        case .setupChat(let prompt):
+            autopilotSetupChat = AutopilotSetupChat(prompt: prompt)
+        case nil:
+            break
+        }
     }
 
     private var group: GroupedBriefing? {
@@ -197,65 +244,6 @@ struct MobileBriefingDetailView: View {
             await state.initProjectGit(projectID: groupKey.projectId)
             await state.refreshSnapshot()
             isInitializingGit = false
-        }
-    }
-
-    /// Ask the Mac to open a PR for this branch, then open it in the browser.
-    /// The Mac pushes the branch, drafts the title/body from the briefing, and
-    /// creates the PR; on failure we surface the reason in the info alert.
-    private func createPullRequest(project: Project) {
-        guard !isCreatingPR else { return }
-        isCreatingPR = true
-        Task {
-            defer { isCreatingPR = false }
-            do {
-                let url = try await state.requestProjectCreatePullRequest(
-                    projectId: project.id,
-                    branch: groupKey.branch
-                )
-                await state.refreshSnapshot()
-                openURL(url)
-            } catch {
-                autopilotInfo = AutopilotMenuInfo(text: error.localizedDescription, isError: true)
-            }
-        }
-    }
-
-    /// Ask the Mac to start a `[Code Review]` thread reviewing this branch, then
-    /// open it once it syncs over. The Mac grounds the review in the branch
-    /// briefing; on failure we surface the reason in the info alert.
-    private func createCodeReview(project: Project) {
-        guard !isCreatingReview, !isUnknownBranch else { return }
-        isCreatingReview = true
-        Task {
-            defer { isCreatingReview = false }
-            do {
-                let threadId = try await state.requestProjectCreateCodeReview(
-                    projectId: project.id,
-                    branch: groupKey.branch
-                )
-                await state.refreshSnapshot()
-                onOpenSession(threadId)
-            } catch {
-                autopilotInfo = AutopilotMenuInfo(text: error.localizedDescription, isError: true)
-            }
-        }
-    }
-
-    /// Ask the Mac to start a commit-only thread for all project changes, then
-    /// open it once it syncs over.
-    private func commitProjectChanges(project: Project) {
-        guard !isCommittingProject else { return }
-        isCommittingProject = true
-        Task {
-            defer { isCommittingProject = false }
-            do {
-                let threadId = try await state.requestProjectCommitAll(projectId: project.id)
-                await state.refreshSnapshot()
-                onOpenSession(threadId)
-            } catch {
-                autopilotInfo = AutopilotMenuInfo(text: error.localizedDescription, isError: true)
-            }
         }
     }
 
@@ -508,13 +496,13 @@ struct MobileBriefingThreadCard: View {
                     .multilineTextAlignment(.leading)
                 
                 if !thread.summary.isEmpty {
-                    // Render the thread description as block markdown (bullets /
-                    // emphasis) instead of inline-only text with raw markers.
-                    MarkdownContentView(text: thread.summary)
+                    // Show only the first few lines of the summary to keep cards compact.
+                    Text(thread.summary)
                         .font(.system(size: 13))
                         .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                        .multilineTextAlignment(.leading)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
                 
                 if isStreaming {

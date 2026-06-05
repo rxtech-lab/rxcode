@@ -427,6 +427,13 @@ final class AppState {
         didSet { UserDefaults.standard.set(enableAutoCIFix, forKey: "enableAutoCIFix") }
     }
 
+    /// Per-project working-tree dirty flag (`git status` non-empty), refreshed by
+    /// `refreshProjectGitDirty()`. Gates the project-level "Commit All Changes"
+    /// action on project rows and briefing cards — the action is hidden only when
+    /// a project is positively known to be clean (`false`). A missing entry means
+    /// "not yet computed" and keeps the action visible. Held in memory only.
+    var projectGitDirty: [UUID: Bool] = [:]
+
     /// Latest CI status per project (current branch), refreshed by the poller in
     /// `AppState+CIStatus.swift`. Held in memory only.
     var ciStatusByProject: [UUID: ProjectCIStatus] = [:]
@@ -978,6 +985,10 @@ final class AppState {
     var hookChoiceRequest: HookChoiceRequest?
     /// Non-nil while a hook is awaiting a confirm/cancel decision.
     var hookConfirmRequest: HookConfirmRequest?
+    /// Non-nil to surface a failed menu/hook command as an alert (e.g. a desktop
+    /// context-menu command like Create Pull Request that threw). Rendered by
+    /// `HookUIModifier`, so every desktop context-menu surface is covered.
+    var hookErrorMessage: String?
     /// Hook-supplied banners, keyed by surface. Each surface renders its items
     /// at their requested position (see `HookBannerHost`).
     var hookBanners: [HookBannerSurface: [HookBannerItem]] = [:]
@@ -1065,6 +1076,9 @@ final class AppState {
     var hookController: AppStateHookController!
     /// Registry + dispatcher for lifecycle hooks. See `registerBuiltInHooks()`.
     var hookManager: HookManager!
+    /// Debounces and cancels automatic code reviews (countdown card + Stop /
+    /// Start-now / stop-on-new-message). Driven by `CodeReviewHook`.
+    var reviewScheduler: ReviewScheduler!
 
     /// Weak refs to every `WindowState` that's been wired up via `setupChatBridge`.
     /// Used by AppState-driven queue maintenance (e.g. `flushNextQueuedMessageIfNeeded`)
@@ -1234,6 +1248,7 @@ final class AppState {
         let hookController = AppStateHookController(app: self)
         self.hookController = hookController
         self.hookManager = HookManager(controller: hookController)
+        self.reviewScheduler = ReviewScheduler(app: self)
         registerBuiltInHooks()
     }
 
@@ -1249,6 +1264,10 @@ final class AppState {
         hookManager.register(CINotificationHook())
         hookManager.register(RemoteConfigNotificationHook())
         #if os(macOS)
+        // Menu hook first so the standard project/thread actions (code review,
+        // commit, create PR) lead the context menu, followed by the autopilot
+        // setup items (secrets, docs, release, CI).
+        hookManager.register(ActionsMenuHook())
         hookManager.register(AutopilotSecretsHook())
         hookManager.register(AutopilotDocsHook())
         hookManager.register(AutopilotReleaseHook())
@@ -1259,6 +1278,7 @@ final class AppState {
         // must come before CommitPushHook so the commit gate sees the verdict.
         hookManager.register(CodeReviewHook())
         hookManager.register(CommitPushHook())
+        hookManager.register(SendMessageHook())
     }
 
 

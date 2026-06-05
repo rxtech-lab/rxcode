@@ -143,6 +143,7 @@ struct HookConfigurationsView: View {
         switch hook.action {
         case .codeReview: return "checkmark.seal.fill"
         case .commitPush: return "arrow.up.circle.fill"
+        case .sendMessage: return "paperplane.fill"
         case .command:
             switch hook.type {
             case .xcode: return "hammer.fill"
@@ -174,6 +175,11 @@ struct HookConfigurationsView: View {
             } label: {
                 Label("Commit & Push", systemImage: "arrow.up.circle.fill")
             }
+            Button {
+                addHook(action: .sendMessage, trigger: HookAction.sendMessage.fixedTrigger ?? .afterSessionStop)
+            } label: {
+                Label("Send Message", systemImage: "paperplane.fill")
+            }
         } label: {
             Image(systemName: "plus")
         }
@@ -191,13 +197,15 @@ struct HookConfigurationsView: View {
         case .command: defaultName = "New Hook"
         case .codeReview: defaultName = "Code Review"
         case .commitPush: defaultName = "Commit & Push"
+        case .sendMessage: defaultName = "Send Message"
         }
         let new = HookProfile(
             projectId: project.id,
             name: defaultName,
             trigger: action.fixedTrigger ?? trigger,
             action: action,
-            codeReview: action == .codeReview ? CodeReviewConfig() : nil
+            codeReview: action == .codeReview ? CodeReviewConfig() : nil,
+            sendMessage: action == .sendMessage ? SendMessageConfig() : nil
         )
         draft.append(new)
         selectedId = new.id

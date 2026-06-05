@@ -234,6 +234,8 @@ extension AppState {
         // CLI is still the transcript backend (replay on thread open), but
         // it does not drive thread discovery.
         allSessionSummaries = threadStore.loadAllSummaries()
+        // Restore persisted code-review verdicts so sidebar review dots survive a reload.
+        reviewPassedBySession = threadStore.loadReviewVerdicts()
         autoArchiveExpiredSessionsIfNeeded()
         await autoDeleteExpiredSessionsIfNeeded()
         purgeStaleBranchBriefingsIfNeeded()
@@ -406,6 +408,16 @@ extension AppState {
         window.planDecisionHandler = { [weak self, weak window] toolUseId, action in
             guard let self, let window else { return }
             Task { await self.respondToPlanDecision(toolUseId: toolUseId, action: action, in: window) }
+        }
+
+        // Install the review-countdown handler. The Stop / Start-now buttons on
+        // the countdown card route through here to the review scheduler.
+        window.reviewCountdownHandler = { [weak self] parentSessionKey, action in
+            guard let self else { return }
+            switch action {
+            case .startNow: self.reviewScheduler.startNow(parentSessionKey: parentSessionKey)
+            case .stop: self.reviewScheduler.cancel(parentSessionKey: parentSessionKey, reason: .stopButton)
+            }
         }
 
         // Hydrate per-window draft queues from disk-persisted queues so messages

@@ -62,9 +62,15 @@ public struct ThreadContextMenuPayload: Codable, Sendable {
 
 public struct ProjectContextMenuPayload: Codable, Sendable {
     public let project: Project
+    /// When set, the menu is scoped to a specific branch (e.g. a briefing card,
+    /// which represents one branch). Branch-scoped actions — Code Review, Create
+    /// Pull Request — target this branch instead of the project's current branch.
+    /// `nil` for the project list / sidebar, which act on the current branch.
+    public let branch: String?
 
-    public init(project: Project) {
+    public init(project: Project, branch: String? = nil) {
         self.project = project
+        self.branch = branch
     }
 }
 

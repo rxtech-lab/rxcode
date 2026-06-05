@@ -51,6 +51,7 @@ public struct MarkdownContentView: View {
     let baseURL: URL?
     let style: MarkdownStyle
     let fadeNewText: Bool
+    let expandsHorizontally: Bool
     let onOpenLink: MarkdownView.LinkHandler?
 
     public init(
@@ -60,6 +61,7 @@ public struct MarkdownContentView: View {
         baseURL: URL? = nil,
         style: MarkdownStyle = .rxCodeChat,
         fadeNewText: Bool = false,
+        expandsHorizontally: Bool = true,
         onOpenLink: MarkdownView.LinkHandler? = nil
     ) {
         self.text = text
@@ -68,6 +70,7 @@ public struct MarkdownContentView: View {
         self.baseURL = baseURL
         self.style = style
         self.fadeNewText = fadeNewText
+        self.expandsHorizontally = expandsHorizontally
         self.onOpenLink = onOpenLink
     }
 
@@ -79,6 +82,7 @@ public struct MarkdownContentView: View {
             baseURL: baseURL,
             style: style,
             fadeNewText: fadeNewText,
+            expandsHorizontally: expandsHorizontally,
             onOpenLink: onOpenLink
         )
         .tint(ClaudeTheme.accent)

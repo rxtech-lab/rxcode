@@ -111,6 +111,17 @@ enum class AutopilotOp(val wire: String) {
     THREAD_CREATE_CODE_REVIEW("threadCreateCodeReview"),
     PROJECT_COMMIT_ALL("projectCommitAll"),
     THREAD_COMMIT_FILES("threadCommitFiles"),
+    // Fix failing CI (desktop-mediated): spawn a thread seeded with the failing
+    // GitHub Actions run(s) for the branch and ask the agent to fix it.
+    PROJECT_FIX_CI("projectFixCI"),
+
+    // Serializable context menus. The desktop builds the same `[MenuItem]` its
+    // own context menus render (from hooks) and ships it as JSON; Android renders
+    // the identical items. `menuExecuteCommand` runs a tapped `MenuActionCommand`
+    // through the desktop's shared dispatcher.
+    MENU_FOR_PROJECT("menuForProject"),
+    MENU_FOR_THREAD("menuForThread"),
+    MENU_EXECUTE_COMMAND("menuExecuteCommand"),
 
     // Global search — one call returns thread matches AND published-docs matches.
     SEARCH_THREADS_AND_DOCS("searchThreadsAndDocs"),
@@ -259,6 +270,41 @@ data class AutopilotProjectSecretsWriteBody(
     @Serializable
     data class Plaintext(val filename: String, val content: String)
 }
+
+// MARK: - Serializable context menus
+
+/**
+ * Mobile → desktop: request the serialized project menu. `branch` scopes it to a
+ * briefing card's branch (Code Review / Create PR target that branch); null
+ * returns the generic project menu addressing the current branch.
+ */
+@Serializable
+data class AutopilotProjectMenuBody(
+    @Serializable(with = UuidSerializer::class) val projectId: UUID,
+    val branch: String? = null,
+)
+
+/**
+ * Desktop → mobile: the serialized context-menu items for a project or thread,
+ * built from the same hooks the desktop renders. Android decodes and renders the
+ * identical [MenuItem]s.
+ */
+@Serializable
+data class AutopilotMenuResult(val items: List<MenuItem>)
+
+/** Mobile → desktop: a [MenuActionCommand] the user tapped, run on the Mac. */
+@Serializable
+data class AutopilotExecuteCommandBody(val command: MenuActionCommand)
+
+/**
+ * Desktop → mobile: the outcome of executing a menu command — a thread to
+ * navigate to and/or a URL (e.g. a created pull request) to open on the phone.
+ */
+@Serializable
+data class AutopilotExecuteCommandResult(
+    val threadId: String? = null,
+    val openURL: String? = null,
+)
 
 // MARK: - Global search body
 

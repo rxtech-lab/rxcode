@@ -34,12 +34,18 @@ public enum HookAction: String, Codable, Sendable, CaseIterable, Hashable {
     /// Instruct the agent to commit the changed files and push. Pairs with
     /// `.afterSessionStop`.
     case commitPush
+    /// Send a fixed message to the assistant once the session ends — into the
+    /// same thread or a new linked thread — optionally gated on a model-evaluated
+    /// condition. Fires once per session (reset when the user sends a new
+    /// message). Pairs with `.afterSessionStop`.
+    case sendMessage
 
     public var displayName: String {
         switch self {
         case .command: return "Command"
         case .codeReview: return "Code Review"
         case .commitPush: return "Commit & Push"
+        case .sendMessage: return "Send Message"
         }
     }
 
@@ -50,7 +56,54 @@ public enum HookAction: String, Codable, Sendable, CaseIterable, Hashable {
         case .command: return nil
         case .codeReview: return .afterSessionStop
         case .commitPush: return .afterSessionStop
+        case .sendMessage: return .afterSessionStop
         }
+    }
+}
+
+/// Where a `.sendMessage` hook delivers its message.
+public enum SendMessageTarget: String, Codable, Sendable, CaseIterable, Hashable {
+    /// Inject the message as a follow-up turn in the same thread.
+    case sameThread
+    /// Spawn a new linked child thread (runs no hooks) and send the message there.
+    case newThread
+}
+
+/// Per-hook configuration for the `.sendMessage` action.
+public struct SendMessageConfig: Codable, Sendable, Hashable {
+    /// The fixed text sent to the assistant when the hook fires.
+    public var message: String
+    /// Same-thread follow-up vs. a new linked thread.
+    public var target: SendMessageTarget
+    /// Optional label for the spawned thread (only used when `target == .newThread`).
+    public var newThreadLabel: String?
+    /// Provider-qualified model key for the spawned thread (`<provider>:<model>`).
+    /// Empty/`nil` ⇒ inherit the parent thread's model. Only used for `.newThread`.
+    public var newThreadModel: String?
+    /// Gate the send on a model-evaluated condition.
+    public var conditionEnabled: Bool
+    /// Natural-language condition the model judges (yes ⇒ send).
+    public var condition: String?
+    /// Provider-qualified model key used to evaluate the condition. Empty/`nil` ⇒
+    /// the app's configured summarization model.
+    public var conditionModel: String?
+
+    public init(
+        message: String = "",
+        target: SendMessageTarget = .sameThread,
+        newThreadLabel: String? = nil,
+        newThreadModel: String? = nil,
+        conditionEnabled: Bool = false,
+        condition: String? = nil,
+        conditionModel: String? = nil
+    ) {
+        self.message = message
+        self.target = target
+        self.newThreadLabel = newThreadLabel
+        self.newThreadModel = newThreadModel
+        self.conditionEnabled = conditionEnabled
+        self.condition = condition
+        self.conditionModel = conditionModel
     }
 }
 
@@ -94,6 +147,8 @@ public struct HookProfile: Identifiable, Codable, Sendable, Hashable {
     public var package: PackageRunConfig?
     /// Populated when `action == .codeReview`. Optional for backward-compatible decode.
     public var codeReview: CodeReviewConfig?
+    /// Populated when `action == .sendMessage`. Optional for backward-compatible decode.
+    public var sendMessage: SendMessageConfig?
     public var createdAt: Date
     public var updatedAt: Date
 
@@ -110,6 +165,7 @@ public struct HookProfile: Identifiable, Codable, Sendable, Hashable {
         make: MakeRunConfig? = nil,
         package: PackageRunConfig? = nil,
         codeReview: CodeReviewConfig? = nil,
+        sendMessage: SendMessageConfig? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -125,12 +181,13 @@ public struct HookProfile: Identifiable, Codable, Sendable, Hashable {
         self.make = make
         self.package = package
         self.codeReview = codeReview
+        self.sendMessage = sendMessage
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, projectId, name, enabled, trigger, action, type, bash, xcode, make, package, codeReview, createdAt, updatedAt
+        case id, projectId, name, enabled, trigger, action, type, bash, xcode, make, package, codeReview, sendMessage, createdAt, updatedAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -147,6 +204,7 @@ public struct HookProfile: Identifiable, Codable, Sendable, Hashable {
         make = try container.decodeIfPresent(MakeRunConfig.self, forKey: .make)
         package = try container.decodeIfPresent(PackageRunConfig.self, forKey: .package)
         codeReview = try container.decodeIfPresent(CodeReviewConfig.self, forKey: .codeReview)
+        sendMessage = try container.decodeIfPresent(SendMessageConfig.self, forKey: .sendMessage)
         createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
     }

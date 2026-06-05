@@ -68,3 +68,19 @@ fun groupBriefings(
 
     return buckets.values.sortedByDescending { it.updatedAt }
 }
+
+/**
+ * Reorder briefing groups to follow the sidebar project order (the order of
+ * [projectIds]). Groups whose project isn't listed sort last; within the same
+ * project the most recently updated comes first. Mirrors the desktop
+ * `BriefingView` sort and Swift `sortedByProjectOrder`.
+ */
+fun List<GroupedBriefing>.sortedByProjectOrder(
+    projectIds: List<UUID>,
+): List<GroupedBriefing> {
+    val order = projectIds.withIndex().associate { (index, id) -> id to index }
+    return sortedWith(
+        compareBy<GroupedBriefing> { order[it.projectId] ?: Int.MAX_VALUE }
+            .thenByDescending { it.updatedAt }
+    )
+}

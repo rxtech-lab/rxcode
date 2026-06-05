@@ -100,8 +100,11 @@ fun BriefingScreen(
                 .eachCount()
         }
     }
-    val allGroups by remember(state.branchBriefings, state.threadSummaries) {
-        derivedStateOf { groupBriefings(state.branchBriefings, state.threadSummaries) }
+    val allGroups by remember(state.branchBriefings, state.threadSummaries, state.projects) {
+        derivedStateOf {
+            groupBriefings(state.branchBriefings, state.threadSummaries)
+                .sortedByProjectOrder(state.projects.map { it.id })
+        }
     }
     val visibleGroups by remember(allGroups, selectedProjectIds, showAllBranches, state.projectBranches) {
         derivedStateOf {

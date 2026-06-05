@@ -66,6 +66,12 @@ struct BriefingView: View {
         _ = appState.branchBriefingRevision
         _ = appState.threadSummaryRevision
 
+        // Position of each project in the sidebar order, so briefing cards can be
+        // arranged to follow the project list rather than pure recency.
+        let projectOrder: [UUID: Int] = Dictionary(
+            uniqueKeysWithValues: appState.projects.enumerated().map { ($0.element.id, $0.offset) }
+        )
+
         let knownIds = knownProjectIds
         let briefings = appState.threadStore.allBranchBriefingItems()
             .filter { knownIds.contains($0.projectId) }
@@ -105,7 +111,17 @@ struct BriefingView: View {
                     updatedAt: $0.updated
                 )
             }
-            .sorted { $0.updatedAt > $1.updatedAt }
+            .sorted { lhs, rhs in
+                // Primary: follow the sidebar project order. Unknown projects
+                // (no position) sort after known ones. Within the same project,
+                // fall back to most-recently-updated first.
+                let lhsOrder = projectOrder[lhs.projectId] ?? Int.max
+                let rhsOrder = projectOrder[rhs.projectId] ?? Int.max
+                if lhsOrder != rhsOrder {
+                    return lhsOrder < rhsOrder
+                }
+                return lhs.updatedAt > rhs.updatedAt
+            }
 
         let projectFiltered: [BriefingGroup]
         if selectedProjectIds.isEmpty {

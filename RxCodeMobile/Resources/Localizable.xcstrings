@@ -2,7 +2,20 @@
   "sourceLanguage" : "en",
   "strings" : {
     "" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : ""
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : ""
+          }
+        }
+      }
     },
     "-- --port 3000" : {
       "localizations" : {
@@ -695,10 +708,36 @@
       }
     },
     "Add project from remote repositories" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "원격 저장소에서 프로젝트 추가"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从远程仓库添加项目"
+          }
+        }
+      }
     },
     "Add project locally" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "로컬에서 프로젝트 추가"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从本地添加项目"
+          }
+        }
+      }
     },
     "Agent Clients" : {
       "localizations" : {
@@ -1790,10 +1829,36 @@
       }
     },
     "Code Review" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "코드 리뷰"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "代码审查"
+          }
+        }
+      }
     },
     "Code Review for %@" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@에 대한 코드 리뷰"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "针对 %@ 的代码审查"
+          }
+        }
+      }
     },
     "Codex Usage" : {
       "localizations" : {
@@ -1840,13 +1905,52 @@
       }
     },
     "Commit All Changes" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모든 변경 사항 커밋"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "提交所有更改"
+          }
+        }
+      }
     },
     "Commit Files" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "파일 커밋"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "提交文件"
+          }
+        }
+      }
     },
     "Committing Changes…" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "변경 사항 커밋 중…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在提交更改…"
+          }
+        }
+      }
     },
     "Computer Status" : {
       "localizations" : {
@@ -2581,10 +2685,36 @@
       }
     },
     "Creating environment…" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "환경 생성 중…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在创建环境…"
+          }
+        }
+      }
     },
     "Creating file…" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "파일 생성 중…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在创建文件…"
+          }
+        }
+      }
     },
     "Creating Pull Request…" : {
       "localizations" : {
@@ -2961,10 +3091,36 @@
       }
     },
     "Deleting environment…" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "환경 삭제 중…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在删除环境…"
+          }
+        }
+      }
     },
     "Deleting file…" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "파일 삭제 중…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在删除文件…"
+          }
+        }
+      }
     },
     "Deny" : {
       "localizations" : {
@@ -4443,7 +4599,20 @@
       }
     },
     "Hide code reviews" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "코드 리뷰 숨기기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐藏代码审查"
+          }
+        }
+      }
     },
     "Hide values" : {
       "localizations" : {
@@ -4662,7 +4831,20 @@
       }
     },
     "Install GitHub App" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GitHub 앱 설치"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "安装 GitHub App"
+          }
+        }
+      }
     },
     "Install RELEASE_TOKEN" : {
       "localizations" : {
@@ -6422,10 +6604,36 @@
       }
     },
     "Node.js" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Node.js"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Node.js"
+          }
+        }
+      }
     },
     "Node.js Configuration" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Node.js 구성"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Node.js 配置"
+          }
+        }
+      }
     },
     "Normal" : {
       "localizations" : {
@@ -7920,7 +8128,20 @@
       }
     },
     "Saving file…" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "파일 저장 중…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在保存文件…"
+          }
+        }
+      }
     },
     "Scan" : {
       "localizations" : {
@@ -8559,7 +8780,20 @@
       }
     },
     "Show %lld code reviews" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "코드 리뷰 %lld개 표시"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示 %lld 个代码审查"
+          }
+        }
+      }
     },
     "Sign in to Claude Code or Codex on your Mac to see usage." : {
       "localizations" : {
@@ -8808,7 +9042,20 @@
       }
     },
     "Starting Code Review…" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "코드 리뷰 시작 중…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在启动代码审查…"
+          }
+        }
+      }
     },
     "stdio" : {
       "localizations" : {
@@ -9137,7 +9384,20 @@
       }
     },
     "The Mac is performing the requested action." : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac이 요청한 작업을 수행하고 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac 正在执行请求的操作。"
+          }
+        }
+      }
     },
     "The Mac is pushing the branch and opening the PR." : {
       "localizations" : {
@@ -9156,10 +9416,36 @@
       }
     },
     "The Mac is starting a Code Review thread for this branch." : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac이 이 브랜치에 대한 코드 리뷰 스레드를 시작하고 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac 正在为此分支启动代码审查线程。"
+          }
+        }
+      }
     },
     "The Mac is starting a commit thread for this project." : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac이 이 프로젝트에 대한 커밋 스레드를 시작하고 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac 正在为此项目启动提交线程。"
+          }
+        }
+      }
     },
     "The Mac returned an empty response." : {
       "localizations" : {
@@ -9178,7 +9464,20 @@
       }
     },
     "The Mac returned an invalid GitHub App install URL." : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac이 잘못된 GitHub 앱 설치 URL을 반환했습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac 返回了无效的 GitHub App 安装 URL。"
+          }
+        }
+      }
     },
     "The Mac returned an invalid pull-request URL." : {
       "localizations" : {

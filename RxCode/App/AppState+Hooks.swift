@@ -44,13 +44,16 @@ extension AppState {
         )
     }
 
-    func projectContextMenuItems(for project: Project, branch: String? = nil) -> [MenuItem] {
-        hookManager.projectContextMenuItems(ProjectContextMenuPayload(project: project, branch: branch))
+    /// `locale` (language code) renders built-in titles for that language; nil =>
+    /// the desktop's own locale (used by native menus). Mobile relay requests pass
+    /// the phone's locale so titles come back translated.
+    func projectContextMenuItems(for project: Project, branch: String? = nil, locale: String? = nil) -> [MenuItem] {
+        hookManager.projectContextMenuItems(ProjectContextMenuPayload(project: project, branch: branch, locale: locale))
     }
 
-    func threadContextMenuItems(for session: ChatSession.Summary) -> [MenuItem] {
+    func threadContextMenuItems(for session: ChatSession.Summary, locale: String? = nil) -> [MenuItem] {
         guard let project = projects.first(where: { $0.id == session.projectId }) else { return [] }
-        return hookManager.threadContextMenuItems(ThreadContextMenuPayload(project: project, session: session))
+        return hookManager.threadContextMenuItems(ThreadContextMenuPayload(project: project, session: session, locale: locale))
     }
 
     // MARK: - Hook execution
@@ -67,39 +70,53 @@ extension AppState {
         "Hook: \(name.isEmpty ? "Untitled" : name)"
     }
 
-    /// Rebuild the persisted "last hook" card and append it to a freshly-loaded
-    /// message list so the hook stays visible after a reload. No-op when there's
-    /// no stored hook or when the live list already contains that card (matched
-    /// by its tool id), so an active-stream reconcile won't duplicate it.
+    /// Rebuild every persisted hook card for a session and merge them back into a
+    /// freshly-loaded message list so the hooks stay visible after a reload — and
+    /// at the position where they originally ran. Cards already present in the
+    /// live list (matched by tool id) are skipped, so an active-stream reconcile
+    /// won't duplicate them.
+    ///
+    /// The transcript renders in array order, so each card is inserted at its
+    /// chronological spot by `createdAt` (loaded CLI messages carry real
+    /// timestamps): a before-session-start card stays at the top, a between-turns
+    /// card stays between turns, instead of every card jumping to the bottom.
     func messagesWithPersistedHookCard(_ messages: [ChatMessage], sessionId: String) -> [ChatMessage] {
-        guard let record = threadStore.loadHookStatus(sessionId: sessionId) else { return messages }
-        let alreadyPresent = messages.contains { message in
-            message.blocks.contains { $0.toolCall?.id == record.toolId }
-        }
-        guard !alreadyPresent else { return messages }
+        // Oldest first, so cards inserted in the same gap keep their relative order.
+        let records = threadStore.loadHookCards(sessionId: sessionId)
+        guard !records.isEmpty else { return messages }
 
-        // A still-running record (e.g. a code review in flight) rebuilds as a
-        // spinner: `result == nil` drives the "running" hook card in
-        // `ToolResultView`. It's finalized live by `completeCard` (matched on
-        // tool id) or swept to "interrupted" on the next launch.
-        let toolCall = ToolCall(
-            id: record.toolId,
-            name: Self.hookToolName(for: record.name),
-            input: [
-                "name": .string(record.name),
-                "trigger": .string(record.trigger),
-            ],
-            result: record.isComplete ? record.output : nil,
-            isError: record.isError
-        )
         var result = messages
-        result.append(ChatMessage(
-            id: UUID(),
-            role: .assistant,
-            blocks: [.toolCall(toolCall)],
-            isResponseComplete: record.isComplete,
-            timestamp: record.updatedAt
-        ))
+        for record in records {
+            let alreadyPresent = result.contains { message in
+                message.blocks.contains { $0.toolCall?.id == record.toolId }
+            }
+            guard !alreadyPresent else { continue }
+
+            // A still-running record (e.g. a code review in flight) rebuilds as a
+            // spinner: `result == nil` drives the "running" hook card in
+            // `ToolResultView`. It's finalized live by `completeCard` (matched on
+            // tool id) or swept to "interrupted" on the next launch.
+            let input = (try? JSONDecoder().decode([String: JSONValue].self, from: record.inputData)) ?? [:]
+            let toolCall = ToolCall(
+                id: record.toolId,
+                name: record.toolName,
+                input: input,
+                result: record.isComplete ? record.result : nil,
+                isError: record.isError
+            )
+            let card = ChatMessage(
+                id: UUID(),
+                role: .assistant,
+                blocks: [.toolCall(toolCall)],
+                isResponseComplete: record.isComplete,
+                timestamp: record.createdAt
+            )
+            // Insert after the last message at or before the card's insertion
+            // time. Already-placed earlier cards (smaller `createdAt`) sort ahead
+            // of this one, so same-gap cards stay in insertion order.
+            let insertionIndex = result.firstIndex { $0.timestamp > record.createdAt } ?? result.endIndex
+            result.insert(card, at: insertionIndex)
+        }
         return result
     }
 
@@ -135,13 +152,15 @@ extension AppState {
         // `isAutoContinueTool`) rather than a user bubble, so it reads as a
         // system action instead of something the user typed. The full prompt is
         // kept as the card's result so it stays inspectable.
+        let toolId = UUID().uuidString
+        let summary: [String: JSONValue] = [
+            "summary": .string("Before Session Stop hook failed — continuing (attempt \(attempt) of \(Self.maxStopHookReprompts)).")
+        ]
         updateState(sessionKey) { state in
             let toolCall = ToolCall(
-                id: UUID().uuidString,
+                id: toolId,
                 name: ToolCall.autoContinueToolName,
-                input: [
-                    "summary": .string("Before Session Stop hook failed — continuing (attempt \(attempt) of \(Self.maxStopHookReprompts)).")
-                ],
+                input: summary,
                 result: detail,
                 isError: false
             )
@@ -152,6 +171,17 @@ extension AppState {
                 isResponseComplete: true
             ))
         }
+        // Persist so the auto-continue card survives an app reload (it's
+        // synthetic and never reaches the CLI transcript).
+        threadStore.upsertHookCard(
+            sessionId: sessionKey,
+            toolId: toolId,
+            toolName: ToolCall.autoContinueToolName,
+            input: summary,
+            result: detail,
+            isError: false,
+            isComplete: true
+        )
 
         let window = WindowState()
         window.selectedProject = project
@@ -204,13 +234,15 @@ extension AppState {
         // Render the auto-continue as its own card (see `ToolResultView`'s
         // `isAutoContinueTool`) rather than a user bubble, so it reads as a
         // system action instead of something the user typed.
+        let toolId = UUID().uuidString
+        let summary: [String: JSONValue] = [
+            "summary": .string("Code review requested changes — continuing (attempt \(attempt) of \(Self.maxReviewFixReprompts)).")
+        ]
         updateState(sessionKey) { state in
             let toolCall = ToolCall(
-                id: UUID().uuidString,
+                id: toolId,
                 name: ToolCall.autoContinueToolName,
-                input: [
-                    "summary": .string("Code review requested changes — continuing (attempt \(attempt) of \(Self.maxReviewFixReprompts)).")
-                ],
+                input: summary,
                 result: detail,
                 isError: false
             )
@@ -221,6 +253,17 @@ extension AppState {
                 isResponseComplete: true
             ))
         }
+        // Persist so the auto-continue card survives an app reload (it's
+        // synthetic and never reaches the CLI transcript).
+        threadStore.upsertHookCard(
+            sessionId: sessionKey,
+            toolId: toolId,
+            toolName: ToolCall.autoContinueToolName,
+            input: summary,
+            result: detail,
+            isError: false,
+            isComplete: true
+        )
 
         let window = WindowState()
         window.selectedProject = project

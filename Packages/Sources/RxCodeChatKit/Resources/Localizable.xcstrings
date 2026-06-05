@@ -1174,6 +1174,18 @@
             "state" : "new",
             "value" : "Code review will start in %1$lld %2$@"
           }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "코드 리뷰가 %lld %@ 후에 시작됩니다"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "代码审查将在 %lld %@ 后开始"
+          }
         }
       }
     },
@@ -4628,10 +4640,36 @@
       }
     },
     "Review cancelled" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "리뷰 취소됨"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "审查已取消"
+          }
+        }
+      }
     },
     "Review started" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "리뷰 시작됨"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "审查已开始"
+          }
+        }
+      }
     },
     "Rewind to a previous point" : {
       "localizations" : {
@@ -5402,10 +5440,36 @@
       }
     },
     "Start it now" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "지금 시작"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "立即开始"
+          }
+        }
+      }
     },
     "Stop Review" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "리뷰 중지"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止审查"
+          }
+        }
+      }
     },
     "Subagent" : {
       "localizations" : {
@@ -6114,7 +6178,20 @@
       }
     },
     "Waiting to start review" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "리뷰 시작 대기 중"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等待开始审查"
+          }
+        }
+      }
     },
     "What should we build in %@?" : {
       "localizations" : {

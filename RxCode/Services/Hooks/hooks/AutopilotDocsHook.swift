@@ -22,14 +22,14 @@ final class AutopilotDocsHook: Hook {
     }
 
     func onThreadContextMenu(_ payload: ThreadContextMenuPayload, controller: any HookController) -> [MenuItem] {
-        menuItems(for: payload.project, controller: controller)
+        menuItems(for: payload.project, locale: payload.locale, controller: controller)
     }
 
     func onProjectContextMenu(_ payload: ProjectContextMenuPayload, controller: any HookController) -> [MenuItem] {
-        menuItems(for: payload.project, controller: controller)
+        menuItems(for: payload.project, locale: payload.locale, controller: controller)
     }
 
-    private func menuItems(for project: Project, controller: any HookController) -> [MenuItem] {
+    private func menuItems(for project: Project, locale: String?, controller: any HookController) -> [MenuItem] {
         guard project.gitHubRepo != nil else { return [] }
         // Docs search was removed from the menu. Once a repo's docs are indexed
         // there's nothing to do here; otherwise offer to set them up.
@@ -37,7 +37,7 @@ final class AutopilotDocsHook: Hook {
         return [
             MenuItem(
                 id: "\(hookID).setup.\(project.id.uuidString)",
-                title: String(localized: "Set Up Docs"),
+                title: MenuLocalizer.string("Set Up Docs", locale: locale),
                 systemImage: "books.vertical.fill",
                 action: .deepLink(MenuDeepLink.url(action: MenuDeepLink.docsSetup, projectId: project.id))
             )

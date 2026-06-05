@@ -8,12 +8,20 @@ enum MenuDispatchError: LocalizedError {
     case unknownProject
     case unknownThread
     case unresolvedBranch
+    case invalidCustomCommand
+    case invalidCustomURL
+    case apiStatus(Int)
+    case customActionFailed(String)
 
     var errorDescription: String? {
         switch self {
         case .unknownProject: return "Couldn't find the project for this menu action."
         case .unknownThread: return "Couldn't find the thread for this menu action."
         case .unresolvedBranch: return "Couldn't determine the current branch."
+        case .invalidCustomCommand: return "This custom menu item is missing its action configuration."
+        case .invalidCustomURL: return "This custom menu item has an invalid URL."
+        case .apiStatus(let code): return "The request failed with HTTP status \(code)."
+        case .customActionFailed(let message): return message
         }
     }
 }
@@ -82,6 +90,66 @@ extension AppState {
             // Cancel the pending countdown and/or stop the running review thread.
             reviewScheduler.cancel(parentSessionKey: sessionId, reason: .contextMenu)
             return MenuCommandResult()
+
+        case .custom:
+            return try await dispatchCustomCommand(command)
+        }
+    }
+
+    /// Run a user-defined custom menu command. The config arrives fully resolved
+    /// (placeholders already substituted by `CustomMenuHook`), so this just
+    /// performs the work: an HTTP request, or seeding a new / existing thread.
+    private func dispatchCustomCommand(_ command: MenuActionCommand) async throws -> MenuCommandResult {
+        guard let config = command.custom else { throw MenuDispatchError.invalidCustomCommand }
+        switch config.kind {
+        case .callAPI:
+            try await performCustomAPICall(config)
+            return MenuCommandResult()
+
+        case .createThread:
+            let project = try requireProject(command.projectId)
+            let result = try await sendCrossProject(
+                projectId: project.id,
+                threadId: nil,
+                prompt: config.message ?? "",
+                waitForResponse: false
+            )
+            if let error = result.error { throw MenuDispatchError.customActionFailed(error) }
+            return MenuCommandResult(threadId: result.threadId)
+
+        case .continueThread:
+            guard let sessionId = config.targetSessionId, !sessionId.isEmpty else {
+                throw MenuDispatchError.unknownThread
+            }
+            let result = try await sendCrossProject(
+                projectId: command.projectId,
+                threadId: sessionId,
+                prompt: config.message ?? "",
+                waitForResponse: false
+            )
+            if let error = result.error { throw MenuDispatchError.customActionFailed(error) }
+            return MenuCommandResult(threadId: result.threadId)
+        }
+    }
+
+    /// Perform the configured HTTP request, throwing on a transport error or a
+    /// non-2xx status so the failure surfaces in the menu error alert.
+    private func performCustomAPICall(_ config: CustomMenuActionConfig) async throws {
+        guard let urlString = config.url?.trimmingCharacters(in: .whitespacesAndNewlines),
+              let url = URL(string: urlString) else {
+            throw MenuDispatchError.invalidCustomURL
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = (config.httpMethod ?? "GET").uppercased()
+        for (name, value) in config.headers ?? [:] {
+            request.setValue(value, forHTTPHeaderField: name)
+        }
+        if let body = config.body, !body.isEmpty {
+            request.httpBody = body.data(using: .utf8)
+        }
+        let (_, response) = try await URLSession.shared.data(for: request)
+        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+            throw MenuDispatchError.apiStatus(http.statusCode)
         }
     }
 

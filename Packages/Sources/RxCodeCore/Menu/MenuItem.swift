@@ -98,12 +98,20 @@ public struct MenuActionCommand: Codable, Sendable, Hashable {
         case threadCodeReview           // review one thread's changes
         case threadCommitFiles          // commit only this thread's files
         case threadStopCodeReview       // stop an in-flight code review for the thread
+
+        // User-defined custom menu items (configured in Settings). The work to
+        // perform is carried by `custom`; the desktop dispatches it.
+        case custom
     }
 
     public let kind: Kind
     public let projectId: UUID?
     public let sessionId: String?
     public let branch: String?
+    /// Payload for `.custom` commands. The desktop builds the menu item (and
+    /// substitutes context placeholders) so this carries a fully-resolved request
+    /// the dispatcher can perform directly. `nil` for every built-in `kind`.
+    public let custom: CustomMenuActionConfig?
     /// Whether dispatching this command performs long-running asynchronous work
     /// (e.g. pushing a branch and opening a pull request). When `true`, the side
     /// that runs the command shows a blocking loading dialog and waits for it to
@@ -117,19 +125,22 @@ public struct MenuActionCommand: Codable, Sendable, Hashable {
         projectId: UUID? = nil,
         sessionId: String? = nil,
         branch: String? = nil,
-        isAsync: Bool = false
+        isAsync: Bool = false,
+        custom: CustomMenuActionConfig? = nil
     ) {
         self.kind = kind
         self.projectId = projectId
         self.sessionId = sessionId
         self.branch = branch
         self.isAsync = isAsync
+        self.custom = custom
     }
 
     /// Status line shown in the loading dialog while an `isAsync` command runs.
     public var progressStatus: LocalizedStringKey {
         switch kind {
         case .projectCreatePullRequest: return "Creating pull request…"
+        case .custom where custom?.kind == .callAPI: return "Calling…"
         default: return "Working…"
         }
     }
@@ -144,6 +155,50 @@ public struct MenuActionCommand: Codable, Sendable, Hashable {
         sessionId = try container.decodeIfPresent(String.self, forKey: .sessionId)
         branch = try container.decodeIfPresent(String.self, forKey: .branch)
         isAsync = try container.decodeIfPresent(Bool.self, forKey: .isAsync) ?? false
+        custom = try container.decodeIfPresent(CustomMenuActionConfig.self, forKey: .custom)
+    }
+}
+
+/// A serializable, fully-resolved description of a user-defined custom menu
+/// action. The desktop builds the menu item from the user's `CustomMenuItemRecord`
+/// (substituting context placeholders such as `{{branch}}`), so by the time this
+/// crosses the relay or reaches the dispatcher every field is concrete. The
+/// dispatcher (`AppState.dispatchMenuCommand`) performs the work on the desktop.
+public struct CustomMenuActionConfig: Codable, Sendable, Hashable {
+    public enum Kind: String, Codable, Sendable {
+        case callAPI         // perform an HTTP request
+        case createThread    // start a new thread seeded with `message`
+        case continueThread  // send `message` to `targetSessionId`
+    }
+
+    public let kind: Kind
+
+    // callAPI
+    public let httpMethod: String?         // "GET" / "POST" / …
+    public let url: String?
+    public let headers: [String: String]?
+    public let body: String?
+
+    // createThread / continueThread
+    public let message: String?
+    public let targetSessionId: String?    // continueThread only
+
+    public init(
+        kind: Kind,
+        httpMethod: String? = nil,
+        url: String? = nil,
+        headers: [String: String]? = nil,
+        body: String? = nil,
+        message: String? = nil,
+        targetSessionId: String? = nil
+    ) {
+        self.kind = kind
+        self.httpMethod = httpMethod
+        self.url = url
+        self.headers = headers
+        self.body = body
+        self.message = message
+        self.targetSessionId = targetSessionId
     }
 }
 

@@ -22,20 +22,20 @@ final class AutopilotSecretsHook: Hook {
     }
 
     func onThreadContextMenu(_ payload: ThreadContextMenuPayload, controller: any HookController) -> [MenuItem] {
-        menuItems(for: payload.project, controller: controller)
+        menuItems(for: payload.project, locale: payload.locale, controller: controller)
     }
 
     func onProjectContextMenu(_ payload: ProjectContextMenuPayload, controller: any HookController) -> [MenuItem] {
-        menuItems(for: payload.project, controller: controller)
+        menuItems(for: payload.project, locale: payload.locale, controller: controller)
     }
 
-    private func menuItems(for project: Project, controller: any HookController) -> [MenuItem] {
+    private func menuItems(for project: Project, locale: String?, controller: any HookController) -> [MenuItem] {
         guard project.gitHubRepo != nil else { return [] }
         if controller.projectHasSecrets(project) {
             return [
                 MenuItem(
                     id: "\(hookID).download.\(project.id.uuidString)",
-                    title: String(localized: "Download Secret"),
+                    title: MenuLocalizer.string("Download Secret", locale: locale),
                     systemImage: "key.fill",
                     action: .deepLink(MenuDeepLink.url(action: MenuDeepLink.secretsDownload, projectId: project.id))
                 )
@@ -45,7 +45,7 @@ final class AutopilotSecretsHook: Hook {
         return [
             MenuItem(
                 id: "\(hookID).setup.\(project.id.uuidString)",
-                title: String(localized: "Set Up Secrets"),
+                title: MenuLocalizer.string("Set Up Secrets", locale: locale),
                 systemImage: "key.fill",
                 action: .deepLink(MenuDeepLink.url(action: MenuDeepLink.secretsSetup, projectId: project.id))
             )

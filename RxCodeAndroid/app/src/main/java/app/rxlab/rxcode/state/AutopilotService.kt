@@ -575,7 +575,7 @@ class AutopilotService(
         decodeResult<AutopilotMenuResult>(
             rawCall(
                 AutopilotDomain.PROJECT, AutopilotOp.MENU_FOR_PROJECT,
-                encodeBody(AutopilotProjectMenuBody(projectId, branch)),
+                encodeBody(AutopilotProjectMenuBody(projectId, branch, currentLocaleCode())),
             )
         ).items
 
@@ -584,9 +584,16 @@ class AutopilotService(
         decodeResult<AutopilotMenuResult>(
             rawCall(
                 AutopilotDomain.PROJECT, AutopilotOp.MENU_FOR_THREAD,
-                encodeBody(AutopilotThreadBody(sessionId)),
+                encodeBody(AutopilotThreadBody(sessionId, currentLocaleCode())),
             )
         ).items
+
+    /**
+     * The device's current language code (e.g. "ko", "zh-Hans-CN"), sent with menu
+     * requests so the desktop returns built-in titles translated for the device.
+     */
+    private fun currentLocaleCode(): String =
+        java.util.Locale.getDefault().toLanguageTag()
 
     /**
      * Run a tapped [MenuActionCommand] on the Mac through its shared dispatcher,

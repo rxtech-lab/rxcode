@@ -252,9 +252,13 @@ data class AutopilotProjectBranchBody(
     val branch: String,
 )
 
-/** Addresses a single thread by id. Used by `threadCreateCodeReview`. */
+/**
+ * Addresses a single thread by id. Used by `threadCreateCodeReview` and
+ * `menuForThread`. `locale` (the phone's language code) makes the desktop return
+ * built-in menu titles translated for the device; ignored by code review.
+ */
 @Serializable
-data class AutopilotThreadBody(val sessionId: String)
+data class AutopilotThreadBody(val sessionId: String, val locale: String? = null)
 
 /**
  * Already-decrypted secret files for `projectSecretsWrite`: the phone decrypts
@@ -282,6 +286,8 @@ data class AutopilotProjectSecretsWriteBody(
 data class AutopilotProjectMenuBody(
     @Serializable(with = UuidSerializer::class) val projectId: UUID,
     val branch: String? = null,
+    /** The phone's locale (language code) so built-in titles come back translated. */
+    val locale: String? = null,
 )
 
 /**

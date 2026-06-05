@@ -54,6 +54,32 @@ final class MenuItemTests: XCTestCase {
         XCTAssertFalse(decoded.isAsync)
     }
 
+    func testCustomCommandRoundTripsAndDefaultsWhenAbsent() throws {
+        // A fully-resolved custom API command survives a JSON round trip, config
+        // and all, and is marked async so both platforms show the loading dialog.
+        let config = CustomMenuActionConfig(
+            kind: .callAPI,
+            httpMethod: "POST",
+            url: "https://api.example.com/notify",
+            headers: ["Authorization": "Bearer x"],
+            body: #"{"branch":"main"}"#
+        )
+        let command = MenuActionCommand(kind: .custom, projectId: UUID(), isAsync: true, custom: config)
+        let data = try JSONEncoder().encode(command)
+        let decoded = try JSONDecoder().decode(MenuActionCommand.self, from: data)
+        XCTAssertEqual(decoded, command)
+        XCTAssertEqual(decoded.custom?.kind, .callAPI)
+        XCTAssertEqual(decoded.custom?.headers?["Authorization"], "Bearer x")
+        XCTAssertTrue(decoded.isAsync)
+
+        // A built-in command serialized by a peer that predates `custom` still
+        // decodes, with `custom` defaulting to nil.
+        let legacy = Data(#"{"kind":"projectCommitAll"}"#.utf8)
+        let legacyDecoded = try JSONDecoder().decode(MenuActionCommand.self, from: legacy)
+        XCTAssertEqual(legacyDecoded.kind, .projectCommitAll)
+        XCTAssertNil(legacyDecoded.custom)
+    }
+
     func testDeepLinkBuildAndParse() throws {
         let projectId = UUID()
         let url = MenuDeepLink.url(action: MenuDeepLink.releaseCreate, projectId: projectId, sessionId: "s1")

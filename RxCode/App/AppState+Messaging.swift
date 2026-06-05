@@ -268,6 +268,10 @@ extension AppState {
         if !isStopHookReprompt {
             stopHookRepromptCounts[sessionKey] = nil
             reviewRoundBySession[sessionKey] = nil
+            // Drop the carried-over review feedback too: a fresh user turn is a
+            // new change, so the next review should start from scratch rather
+            // than chasing the last turn's findings.
+            lastReviewFeedbackBySession[sessionKey] = nil
             // A new follow-up message supersedes any pending/in-flight automatic
             // code review for this thread: cancel the countdown and stop the
             // review thread if it's already running. Auto-fix reprompts (sent

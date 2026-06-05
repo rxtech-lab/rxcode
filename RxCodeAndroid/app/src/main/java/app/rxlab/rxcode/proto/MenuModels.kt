@@ -53,7 +53,33 @@ enum class MenuCommandKind {
     @SerialName("threadCodeReview") THREAD_CODE_REVIEW,
     @SerialName("threadCommitFiles") THREAD_COMMIT_FILES,
     @SerialName("threadStopCodeReview") THREAD_STOP_CODE_REVIEW,
+    @SerialName("custom") CUSTOM,
 }
+
+/** Selects which kind of work a user-defined custom menu item performs. */
+@Serializable
+enum class CustomMenuActionKind {
+    @SerialName("callAPI") CALL_API,
+    @SerialName("createThread") CREATE_THREAD,
+    @SerialName("continueThread") CONTINUE_THREAD,
+}
+
+/**
+ * Mirror of Swift's `CustomMenuActionConfig`: a fully-resolved description of a
+ * user-defined menu action (placeholders already substituted by the desktop).
+ * Android only carries it so a `.custom` command round-trips back to the Mac via
+ * `menuExecuteCommand`; the desktop performs the work.
+ */
+@Serializable
+data class CustomMenuActionConfig(
+    val kind: CustomMenuActionKind,
+    val httpMethod: String? = null,
+    val url: String? = null,
+    val headers: Map<String, String>? = null,
+    val body: String? = null,
+    val message: String? = null,
+    val targetSessionId: String? = null,
+)
 
 /**
  * A serializable description of work for the desktop to perform. `isAsync` marks
@@ -68,6 +94,7 @@ data class MenuActionCommand(
     val sessionId: String? = null,
     val branch: String? = null,
     val isAsync: Boolean = false,
+    val custom: CustomMenuActionConfig? = null,
 )
 
 /**

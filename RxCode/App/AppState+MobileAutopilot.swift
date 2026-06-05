@@ -428,7 +428,7 @@ extension AppState {
             guard let project = projects.first(where: { $0.id == body.projectId }) else {
                 throw MobileRemoteConfigError.invalidRequest("No project found for the requested id.")
             }
-            return try encoder.encode(AutopilotMenuResult(items: projectContextMenuItems(for: project, branch: body.branch)))
+            return try encoder.encode(AutopilotMenuResult(items: projectContextMenuItems(for: project, branch: body.branch, locale: body.locale)))
 
         case .menuForThread:
             let body = try decodeAutopilotBody(request, as: AutopilotThreadBody.self)
@@ -436,7 +436,7 @@ extension AppState {
                 ?? threadStore.fetch(id: body.sessionId)?.toSummary() else {
                 throw MobileRemoteConfigError.invalidRequest("No thread found for the requested id.")
             }
-            return try encoder.encode(AutopilotMenuResult(items: threadContextMenuItems(for: summary)))
+            return try encoder.encode(AutopilotMenuResult(items: threadContextMenuItems(for: summary, locale: body.locale)))
 
         case .menuExecuteCommand:
             // Run a tapped command through the same dispatcher the desktop uses,

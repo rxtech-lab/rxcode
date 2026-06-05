@@ -53,10 +53,15 @@ public struct NewChatStartPayload: Codable, Sendable {
 public struct ThreadContextMenuPayload: Codable, Sendable {
     public let project: Project
     public let session: ChatSession.Summary
+    /// Locale (language code, e.g. "ko", "zh-Hans") to render built-in item titles
+    /// in. `nil` => the desktop's own system locale (native menus). A mobile relay
+    /// request passes the phone's locale so titles come back translated.
+    public let locale: String?
 
-    public init(project: Project, session: ChatSession.Summary) {
+    public init(project: Project, session: ChatSession.Summary, locale: String? = nil) {
         self.project = project
         self.session = session
+        self.locale = locale
     }
 }
 
@@ -67,10 +72,13 @@ public struct ProjectContextMenuPayload: Codable, Sendable {
     /// Pull Request — target this branch instead of the project's current branch.
     /// `nil` for the project list / sidebar, which act on the current branch.
     public let branch: String?
+    /// Locale to render built-in item titles in (see `ThreadContextMenuPayload`).
+    public let locale: String?
 
-    public init(project: Project, branch: String? = nil) {
+    public init(project: Project, branch: String? = nil, locale: String? = nil) {
         self.project = project
         self.branch = branch
+        self.locale = locale
     }
 }
 

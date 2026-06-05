@@ -20,10 +20,10 @@ final class ActionsMenuHook: Hook {
     // MARK: - Project menu
 
     func onProjectContextMenu(_ payload: ProjectContextMenuPayload, controller: any HookController) -> [MenuItem] {
-        projectItems(for: payload.project, branch: payload.branch, controller: controller)
+        projectItems(for: payload.project, branch: payload.branch, locale: payload.locale, controller: controller)
     }
 
-    private func projectItems(for project: Project, branch: String?, controller: any HookController) -> [MenuItem] {
+    private func projectItems(for project: Project, branch: String?, locale: String?, controller: any HookController) -> [MenuItem] {
         var items: [MenuItem] = []
         // A branch-scoped menu (e.g. a briefing card) addresses `branch`; a
         // generic project menu addresses the current branch (carried as nil so
@@ -33,8 +33,8 @@ final class ActionsMenuHook: Hook {
         // Code review for the branch (or the current branch when unscoped).
         items.append(MenuItem(
             id: "\(hookID).project.codeReview.\(project.id.uuidString)\(branchSuffix)",
-            title: branch.map { String(localized: "Code Review for \($0)") }
-                ?? String(localized: "Code Review for Current Branch"),
+            title: branch.map { MenuLocalizer.format("Code Review for %@", locale: locale, $0) }
+                ?? MenuLocalizer.string("Code Review for Current Branch", locale: locale),
             systemImage: "checklist",
             action: .command(MenuActionCommand(kind: .projectCodeReview, projectId: project.id, branch: branch))
         ))
@@ -43,7 +43,7 @@ final class ActionsMenuHook: Hook {
         if controller.projectHasUncommittedChanges(project) {
             items.append(MenuItem(
                 id: "\(hookID).project.commitAll.\(project.id.uuidString)",
-                title: String(localized: "Commit All Changes"),
+                title: MenuLocalizer.string("Commit All Changes", locale: locale),
                 systemImage: "checkmark.circle",
                 action: .command(MenuActionCommand(kind: .projectCommitAll, projectId: project.id))
             ))
@@ -55,7 +55,7 @@ final class ActionsMenuHook: Hook {
         if project.gitHubRepo != nil, !controller.projectHasOpenPullRequest(project, branch: branch) {
             items.append(MenuItem(
                 id: "\(hookID).project.createPR.\(project.id.uuidString)\(branchSuffix)",
-                title: String(localized: "Create Pull Request"),
+                title: MenuLocalizer.string("Create Pull Request", locale: locale),
                 systemImage: "arrow.triangle.pull",
                 action: .command(MenuActionCommand(kind: .projectCreatePullRequest, projectId: project.id, branch: branch, isAsync: true))
             ))
@@ -66,7 +66,7 @@ final class ActionsMenuHook: Hook {
         if controller.projectCIIsFailing(project, branch: branch) {
             items.append(MenuItem(
                 id: "\(hookID).project.fixCI.\(project.id.uuidString)\(branchSuffix)",
-                title: String(localized: "Fix Failing CI"),
+                title: MenuLocalizer.string("Fix Failing CI", locale: locale),
                 systemImage: "wrench.and.screwdriver",
                 action: .command(MenuActionCommand(kind: .projectFixCI, projectId: project.id, branch: branch))
             ))
@@ -81,6 +81,7 @@ final class ActionsMenuHook: Hook {
         // A `[Code Review]` thread doesn't review or commit itself.
         if payload.session.threadLabel == AppState.manualCodeReviewLabel { return [] }
 
+        let locale = payload.locale
         var items: [MenuItem] = []
 
         // Stop an in-flight automatic review (countdown or running review thread).
@@ -88,7 +89,7 @@ final class ActionsMenuHook: Hook {
         if controller.threadHasOngoingReview(sessionId: payload.session.id) {
             items.append(MenuItem(
                 id: "\(hookID).thread.stopCodeReview.\(payload.session.id)",
-                title: String(localized: "Stop Code Review"),
+                title: MenuLocalizer.string("Stop Code Review", locale: locale),
                 systemImage: "stop.circle",
                 role: .destructive,
                 action: .command(MenuActionCommand(kind: .threadStopCodeReview, sessionId: payload.session.id))
@@ -97,7 +98,7 @@ final class ActionsMenuHook: Hook {
 
         items.append(MenuItem(
             id: "\(hookID).thread.codeReview.\(payload.session.id)",
-            title: String(localized: "Code Review for this thread"),
+            title: MenuLocalizer.string("Code Review for this thread", locale: locale),
             systemImage: "checklist",
             action: .command(MenuActionCommand(kind: .threadCodeReview, sessionId: payload.session.id))
         ))
@@ -106,7 +107,7 @@ final class ActionsMenuHook: Hook {
         if controller.threadHasFileChanges(sessionId: payload.session.id) {
             items.append(MenuItem(
                 id: "\(hookID).thread.commitFiles.\(payload.session.id)",
-                title: String(localized: "Commit Files"),
+                title: MenuLocalizer.string("Commit Files", locale: locale),
                 systemImage: "checkmark.circle",
                 action: .command(MenuActionCommand(kind: .threadCommitFiles, sessionId: payload.session.id))
             ))

@@ -1133,6 +1133,13 @@ final class AppState {
     /// review→fix→review loop (see `CodeReviewHook`). Keyed by session id.
     var reviewRoundBySession: [String: Int] = [:]
 
+    /// The most recent failing review's feedback per session. Carried into the
+    /// next review turn (after an auto-fix) so the reviewer can focus on whether
+    /// the previously-flagged issues were addressed instead of reviewing from
+    /// scratch — making the re-review faster. Cleared when review passes or the
+    /// user sends a real message. Keyed by session id.
+    var lastReviewFeedbackBySession: [String: String] = [:]
+
     func runProfiles(for projectId: UUID) -> [RunProfile] {
         runProfilesByProject[projectId] ?? []
     }
@@ -1268,6 +1275,7 @@ final class AppState {
         // commit, create PR) lead the context menu, followed by the autopilot
         // setup items (secrets, docs, release, CI).
         hookManager.register(ActionsMenuHook())
+        hookManager.register(CustomMenuHook())
         hookManager.register(AutopilotSecretsHook())
         hookManager.register(AutopilotDocsHook())
         hookManager.register(AutopilotReleaseHook())

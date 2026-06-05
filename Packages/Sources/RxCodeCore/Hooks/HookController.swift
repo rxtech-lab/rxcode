@@ -118,6 +118,13 @@ public protocol HookController: AnyObject {
     func reviewRound(sessionId: String) -> Int
     /// Set the failed-review round counter for a session.
     func setReviewRound(_ round: Int, sessionId: String)
+    /// The previous failing review's feedback for a session, carried into the
+    /// next review so it can focus on whether those issues were fixed instead of
+    /// reviewing from scratch. `nil` when the next review should start fresh.
+    func lastReviewFeedback(sessionId: String) -> String?
+    /// Store (or clear, with `nil`) the failing review feedback to carry into the
+    /// session's next review turn.
+    func setLastReviewFeedback(_ feedback: String?, sessionId: String)
     /// Feed a failing code review's feedback back into the reviewed thread as a
     /// bounded auto-continue fix turn (rendered as an auto-continue card, not a
     /// user message). The thread runs the Code Review hook again when the fix
@@ -266,6 +273,10 @@ public protocol HookController: AnyObject {
     func projectCIIsFailing(_ project: Project, branch: String?) -> Bool
     /// Whether the thread recorded any file edits (gates "Commit Files").
     func threadHasFileChanges(sessionId: String) -> Bool
+
+    /// Enabled user-defined custom menu items for `surface`, scoped to `projectId`
+    /// (plus the "all projects" items). Backs the `CustomMenuHook`.
+    func customMenuItems(projectId: UUID?, surface: CustomMenuItemRecord.Surface) -> [CustomMenuItemRecord]
 
     /// Centralized presentation actions used by hook-supplied context menus.
     func requestSecretsSetup(project: Project)

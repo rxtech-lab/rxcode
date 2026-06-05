@@ -117,11 +117,15 @@ final class CodeReviewHook: Hook {
         }
 
         let verdict = parseVerdict(result.assistantText)
-        // Fold the reviewer's prose (text only — no tool-call names) into the card
-        // so it can be expanded inline on the parent thread (and on paired mobile
-        // devices, since hook cards sync automatically).
-        let transcript = controller.threadTranscript(sessionId: result.threadId)
-        let body = transcript.isEmpty ? result.assistantText : transcript
+        // Fold the reviewer's *final* message into the card so it can be expanded
+        // inline on the parent thread (and on paired mobile devices, since hook
+        // cards sync automatically). Use the final assistant text — the same
+        // self-contained verdict that's fed into any auto-fix turn — rather than
+        // the whole thread transcript, so the card and the fix turn show exactly
+        // the same prose (no intermediate review chatter, no tool-call names).
+        let body = result.assistantText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? controller.threadTranscript(sessionId: result.threadId)
+            : result.assistantText
         let reviewLink = "Review thread: \(result.threadId)"
 
         switch verdict {

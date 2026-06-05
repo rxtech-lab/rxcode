@@ -58,10 +58,14 @@ struct ReviewCountdownCardView: View {
                 statusBadge
             }
 
-            if isCounting, let handler = windowState.reviewCountdownHandler {
+            // Buttons are desktop-only (mobile renders the countdown read-only).
+            // Gated at compile time, not on the handler being non-nil, so they
+            // reliably appear during the countdown regardless of wiring timing.
+            #if os(macOS)
+            if isCounting {
                 HStack(spacing: 8) {
                     Button {
-                        handler(parentSessionKey, .stop)
+                        windowState.reviewCountdownHandler?(parentSessionKey, .stop)
                     } label: {
                         Text("Stop Review")
                             .font(.system(size: ClaudeTheme.messageSize(12), weight: .medium))
@@ -69,7 +73,7 @@ struct ReviewCountdownCardView: View {
                     .buttonStyle(.bordered)
 
                     Button {
-                        handler(parentSessionKey, .startNow)
+                        windowState.reviewCountdownHandler?(parentSessionKey, .startNow)
                     } label: {
                         Text("Start it now")
                             .font(.system(size: ClaudeTheme.messageSize(12), weight: .medium))
@@ -77,6 +81,7 @@ struct ReviewCountdownCardView: View {
                     .buttonStyle(.borderedProminent)
                 }
             }
+            #endif
         }
         .bubbleStyle(.tool)
         .padding(.vertical, 6)

@@ -202,9 +202,12 @@ struct SessionsList: View {
 
     private func runMenuCommand(_ command: MenuActionCommand) {
         guard !isRunningMenuCommand else { return }
-        isRunningMenuCommand = true
+        // Only block behind the loading dialog for async commands; instant
+        // commands (e.g. stop review) skip the scrim.
+        let showsLoading = command.isAsync
+        if showsLoading { isRunningMenuCommand = true }
         Task {
-            defer { isRunningMenuCommand = false }
+            defer { if showsLoading { isRunningMenuCommand = false } }
             do {
                 let result = try await state.executeMenuCommand(command)
                 await state.refreshSnapshot()

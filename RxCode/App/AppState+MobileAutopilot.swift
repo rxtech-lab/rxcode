@@ -366,6 +366,17 @@ extension AppState {
             let threadId = try await commitAllChangesForProject(project: project)
             return try encoder.encode(AutopilotCodeReviewResult(threadId: threadId))
 
+        case .projectFixCI:
+            // Same as the desktop briefing/project "Fix Failing CI" action: spawn
+            // a thread seeded with the failing run(s) for the branch. Returns the
+            // new thread id so the phone can navigate to it.
+            let body = try decodeAutopilotBody(request, as: AutopilotProjectBranchBody.self)
+            guard let project = projects.first(where: { $0.id == body.projectId }) else {
+                throw MobileRemoteConfigError.invalidRequest("No project found for the requested id.")
+            }
+            let threadId = try await createCIFixForBranch(project: project, branch: body.branch)
+            return try encoder.encode(AutopilotCodeReviewResult(threadId: threadId))
+
         case .threadCommitFiles:
             // Commit only the files recorded for one thread.
             let body = try decodeAutopilotBody(request, as: AutopilotThreadBody.self)

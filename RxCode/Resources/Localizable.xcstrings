@@ -3359,6 +3359,9 @@
         }
       }
     },
+    "Command Failed" : {
+
+    },
     "Commands" : {
       "localizations" : {
         "ko" : {
@@ -6108,6 +6111,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "第一个 MCP 服务器"
+          }
+        }
+      }
+    },
+    "Fix Failing CI" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실패한 CI 수정"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "修复失败的 CI"
           }
         }
       }

@@ -683,6 +683,16 @@ final class AppStateHookController: HookController {
         return status?.pullRequestState == .open
     }
 
+    func projectCIIsFailing(_ project: Project, branch: String?) -> Bool {
+        guard let app, project.gitHubRepo != nil else { return false }
+        // Branch-scoped menu (e.g. a briefing card) checks that branch's CI from
+        // the branch-keyed map; a generic project menu uses the current-branch
+        // status. Only an outright failure offers the fix item.
+        let status = branch.map { app.ciStatus(forProjectId: project.id, branch: $0) }
+            ?? app.ciStatusByProject[project.id]
+        return status?.overallState == .failure
+    }
+
     func threadHasFileChanges(sessionId: String) -> Bool {
         app?.threadHasFileChanges(sessionId: sessionId) ?? false
     }

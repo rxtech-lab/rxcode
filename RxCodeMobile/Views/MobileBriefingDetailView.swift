@@ -155,9 +155,12 @@ struct MobileBriefingDetailView: View {
 
     private func runMenuCommand(_ command: MenuActionCommand) {
         guard !isRunningMenuCommand else { return }
-        isRunningMenuCommand = true
+        // Only block behind the loading dialog for async commands (push + open PR,
+        // code review, …); instant commands skip the scrim.
+        let showsLoading = command.isAsync
+        if showsLoading { isRunningMenuCommand = true }
         Task {
-            defer { isRunningMenuCommand = false }
+            defer { if showsLoading { isRunningMenuCommand = false } }
             do {
                 let result = try await state.executeMenuCommand(command)
                 await state.refreshSnapshot()
@@ -493,13 +496,13 @@ struct MobileBriefingThreadCard: View {
                     .multilineTextAlignment(.leading)
                 
                 if !thread.summary.isEmpty {
-                    // Render the thread description as block markdown (bullets /
-                    // emphasis) instead of inline-only text with raw markers.
-                    MarkdownContentView(text: thread.summary)
+                    // Show only the first few lines of the summary to keep cards compact.
+                    Text(thread.summary)
                         .font(.system(size: 13))
                         .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                        .multilineTextAlignment(.leading)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
                 
                 if isStreaming {

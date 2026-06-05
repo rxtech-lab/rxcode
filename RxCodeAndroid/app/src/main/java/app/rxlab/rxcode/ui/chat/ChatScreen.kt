@@ -37,7 +37,6 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.automirrored.outlined.ViewSidebar
 import androidx.compose.material.icons.outlined.Build
-import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Difference
 import androidx.compose.material.icons.outlined.Edit
@@ -46,7 +45,6 @@ import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.PlayArrow
-import androidx.compose.material.icons.outlined.RateReview
 import androidx.compose.material.icons.outlined.QuestionAnswer
 import androidx.compose.material.icons.outlined.QueuePlayNext
 import androidx.compose.material3.AssistChip
@@ -83,6 +81,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.rxlab.rxcode.proto.ChatMessage
+import app.rxlab.rxcode.proto.MenuAction
+import app.rxlab.rxcode.proto.MenuItem
 import app.rxlab.rxcode.proto.MessageBlock
 import app.rxlab.rxcode.proto.PendingQuestionPayload
 import app.rxlab.rxcode.proto.Role
@@ -93,6 +93,7 @@ import app.rxlab.rxcode.state.isDraftSessionId
 import app.rxlab.rxcode.state.resolveSessionId
 import app.rxlab.rxcode.state.runProfilesFor
 import app.rxlab.rxcode.state.runTasksFor
+import app.rxlab.rxcode.ui.autopilot.SerializedMenuItems
 import app.rxlab.rxcode.ui.browser.BrowserUrlDetector
 import app.rxlab.rxcode.ui.browser.InAppBrowserScreen
 import app.rxlab.rxcode.proto.RunProfile
@@ -144,6 +145,25 @@ fun ChatScreen(
     var openEditPreview by remember { mutableStateOf<EditPreviewData?>(null) }
     var menuExpanded by remember { mutableStateOf(false) }
     val menuScope = rememberCoroutineScope()
+    // Desktop-mediated thread actions (Code Review / Commit Files / Stop) come from
+    // the Mac as its serialized thread menu — fetched lazily, re-keyed on the
+    // gating state — so they match the desktop's items exactly.
+    var threadMenu by remember(resolvedId) { mutableStateOf<List<MenuItem>?>(null) }
+    LaunchedEffect(resolvedId, session?.hasRecordedFileChanges, session?.isStreaming) {
+        threadMenu = if (isDraftSessionId(resolvedId)) null
+        else runCatching { viewModel.fetchThreadMenu(resolvedId) }.getOrNull()
+    }
+    fun runThreadAction(action: MenuAction?) {
+        val command = (action as? MenuAction.Command)?.command ?: return
+        menuExpanded = false
+        menuScope.launch {
+            runCatching {
+                val result = viewModel.executeMenuCommand(command)
+                viewModel.requestSnapshot("menu_command")
+                result.threadId?.let { viewModel.selectSession(it) }
+            }
+        }
+    }
     var showRunProfiles by remember { mutableStateOf(false) }
     var editingProfile by remember { mutableStateOf<RunProfile?>(null) }
     var showBrowser by remember { mutableStateOf(false) }
@@ -283,37 +303,11 @@ fun ChatScreen(
                             },
                             leadingIcon = { Icon(Icons.Outlined.Difference, contentDescription = null) },
                         )
-                        if (session?.isCodeReviewThread != true) {
-                            androidx.compose.material3.DropdownMenuItem(
-                                text = { Text("Code Review") },
-                                onClick = {
-                                    menuExpanded = false
-                                    menuScope.launch {
-                                        runCatching {
-                                            val threadId = viewModel.requestThreadCreateCodeReview(resolvedId)
-                                            viewModel.requestSnapshot("code_review_started")
-                                            viewModel.selectSession(threadId)
-                                        }
-                                    }
-                                },
-                                leadingIcon = { Icon(Icons.Outlined.RateReview, contentDescription = null) },
-                            )
-                            if (session?.hasRecordedFileChanges != false) {
-                                androidx.compose.material3.DropdownMenuItem(
-                                    text = { Text("Commit Files") },
-                                    onClick = {
-                                        menuExpanded = false
-                                        menuScope.launch {
-                                            runCatching {
-                                                val threadId = viewModel.requestThreadCommitFiles(resolvedId)
-                                                viewModel.requestSnapshot("commit_started")
-                                                viewModel.selectSession(threadId)
-                                            }
-                                        }
-                                    },
-                                    leadingIcon = { Icon(Icons.Outlined.CheckCircle, contentDescription = null) },
-                                )
-                            }
+                        // Desktop-built thread actions (Code Review / Commit Files /
+                        // Stop Code Review), gated by the Mac — the single source of
+                        // truth, matching iOS.
+                        threadMenu?.takeIf { it.isNotEmpty() }?.let { items ->
+                            SerializedMenuItems(items, onAction = ::runThreadAction)
                         }
                         androidx.compose.material3.DropdownMenuItem(
                             text = { Text("Open in Browser") },

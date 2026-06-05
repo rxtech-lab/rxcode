@@ -260,6 +260,10 @@ public protocol HookController: AnyObject {
     /// project's current branch when `branch` is nil). Hides "Create Pull Request"
     /// when one exists; also false when the project has no GitHub repo.
     func projectHasOpenPullRequest(_ project: Project, branch: String?) -> Bool
+    /// Whether CI is currently failing for `branch` (or the project's current
+    /// branch when `branch` is nil). Gates the "Fix Failing CI" item; false when
+    /// the project has no GitHub repo or no CI status is known yet.
+    func projectCIIsFailing(_ project: Project, branch: String?) -> Bool
     /// Whether the thread recorded any file edits (gates "Commit Files").
     func threadHasFileChanges(sessionId: String) -> Bool
 

@@ -124,6 +124,9 @@ public enum AutopilotOp: String, Codable, Sendable {
     // all uncommitted files, thread commits only that thread's recorded files.
     case projectCommitAll
     case threadCommitFiles
+    // Fix failing CI (desktop-mediated): spawn a thread seeded with the failing
+    // GitHub Actions run(s) for the branch and ask the agent to fix it.
+    case projectFixCI
 
     // Serializable context menus. The desktop builds the same `[MenuItem]` its
     // own context menus render (from hooks) and ships it as JSON; mobile renders

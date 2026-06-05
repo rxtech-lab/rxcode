@@ -92,6 +92,7 @@ public struct MenuActionCommand: Codable, Sendable, Hashable {
         case projectCodeReview          // review the project's current branch
         case projectCommitAll           // commit all uncommitted changes
         case projectCreatePullRequest   // push branch + open a PR
+        case projectFixCI               // spawn a thread to fix failing CI
 
         // Thread-scoped.
         case threadCodeReview           // review one thread's changes
@@ -103,17 +104,46 @@ public struct MenuActionCommand: Codable, Sendable, Hashable {
     public let projectId: UUID?
     public let sessionId: String?
     public let branch: String?
+    /// Whether dispatching this command performs long-running asynchronous work
+    /// (e.g. pushing a branch and opening a pull request). When `true`, the side
+    /// that runs the command shows a blocking loading dialog and waits for it to
+    /// finish before dismissing — desktop drives `HookController.beginProgress`,
+    /// mobile shows its action loading dialog. Serialized so the desktop's hook
+    /// can declare the flag once and both platforms honor it.
+    public let isAsync: Bool
 
     public init(
         kind: Kind,
         projectId: UUID? = nil,
         sessionId: String? = nil,
-        branch: String? = nil
+        branch: String? = nil,
+        isAsync: Bool = false
     ) {
         self.kind = kind
         self.projectId = projectId
         self.sessionId = sessionId
         self.branch = branch
+        self.isAsync = isAsync
+    }
+
+    /// Status line shown in the loading dialog while an `isAsync` command runs.
+    public var progressStatus: LocalizedStringKey {
+        switch kind {
+        case .projectCreatePullRequest: return "Creating pull request…"
+        default: return "Working…"
+        }
+    }
+
+    // Custom decoding so a menu serialized by a peer that predates `isAsync`
+    // (version skew between desktop and mobile) still decodes, defaulting to a
+    // synchronous command. Encoding stays synthesized.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        kind = try container.decode(Kind.self, forKey: .kind)
+        projectId = try container.decodeIfPresent(UUID.self, forKey: .projectId)
+        sessionId = try container.decodeIfPresent(String.self, forKey: .sessionId)
+        branch = try container.decodeIfPresent(String.self, forKey: .branch)
+        isAsync = try container.decodeIfPresent(Bool.self, forKey: .isAsync) ?? false
     }
 }
 

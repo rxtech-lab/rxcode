@@ -130,9 +130,12 @@ private struct ProjectRemoteMenuModifier: ViewModifier {
 
     private func run(_ command: MenuActionCommand) {
         guard !isRunning else { return }
-        isRunning = true
+        // Only block behind the loading dialog for async commands; instant
+        // commands (e.g. stop review) skip the scrim.
+        let showsLoading = command.isAsync
+        if showsLoading { isRunning = true }
         Task {
-            defer { isRunning = false }
+            defer { if showsLoading { isRunning = false } }
             do {
                 let result = try await state.executeMenuCommand(command)
                 await state.refreshSnapshot()

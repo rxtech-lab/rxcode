@@ -985,6 +985,10 @@ final class AppState {
     var hookChoiceRequest: HookChoiceRequest?
     /// Non-nil while a hook is awaiting a confirm/cancel decision.
     var hookConfirmRequest: HookConfirmRequest?
+    /// Non-nil to surface a failed menu/hook command as an alert (e.g. a desktop
+    /// context-menu command like Create Pull Request that threw). Rendered by
+    /// `HookUIModifier`, so every desktop context-menu surface is covered.
+    var hookErrorMessage: String?
     /// Hook-supplied banners, keyed by surface. Each surface renders its items
     /// at their requested position (see `HookBannerHost`).
     var hookBanners: [HookBannerSurface: [HookBannerItem]] = [:]

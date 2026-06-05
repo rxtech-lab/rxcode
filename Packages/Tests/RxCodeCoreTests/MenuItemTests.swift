@@ -40,6 +40,20 @@ final class MenuItemTests: XCTestCase {
         XCTAssertEqual(decoded, items)
     }
 
+    func testAsyncCommandRoundTripsAndDefaultsWhenAbsent() throws {
+        // The flag survives a JSON round trip…
+        let async = MenuActionCommand(kind: .projectCreatePullRequest, projectId: UUID(), isAsync: true)
+        let data = try JSONEncoder().encode(async)
+        XCTAssertTrue(try JSONDecoder().decode(MenuActionCommand.self, from: data).isAsync)
+
+        // …and decoding a payload from a peer that predates the field (no
+        // `isAsync` key) defaults to a synchronous command rather than failing.
+        let legacy = Data(#"{"kind":"projectCreatePullRequest"}"#.utf8)
+        let decoded = try JSONDecoder().decode(MenuActionCommand.self, from: legacy)
+        XCTAssertEqual(decoded.kind, .projectCreatePullRequest)
+        XCTAssertFalse(decoded.isAsync)
+    }
+
     func testDeepLinkBuildAndParse() throws {
         let projectId = UUID()
         let url = MenuDeepLink.url(action: MenuDeepLink.releaseCreate, projectId: projectId, sessionId: "s1")

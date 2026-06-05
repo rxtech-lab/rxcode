@@ -57,7 +57,18 @@ final class ActionsMenuHook: Hook {
                 id: "\(hookID).project.createPR.\(project.id.uuidString)\(branchSuffix)",
                 title: String(localized: "Create Pull Request"),
                 systemImage: "arrow.triangle.pull",
-                action: .command(MenuActionCommand(kind: .projectCreatePullRequest, projectId: project.id, branch: branch))
+                action: .command(MenuActionCommand(kind: .projectCreatePullRequest, projectId: project.id, branch: branch, isAsync: true))
+            ))
+        }
+
+        // Fix CI — only when GitHub Actions is failing for the branch (or current
+        // branch when unscoped). Spawns a thread seeded with the failing run(s).
+        if controller.projectCIIsFailing(project, branch: branch) {
+            items.append(MenuItem(
+                id: "\(hookID).project.fixCI.\(project.id.uuidString)\(branchSuffix)",
+                title: String(localized: "Fix Failing CI"),
+                systemImage: "wrench.and.screwdriver",
+                action: .command(MenuActionCommand(kind: .projectFixCI, projectId: project.id, branch: branch))
             ))
         }
 

@@ -62,6 +62,13 @@ extension AppState {
             }
             return MenuCommandResult(threadId: try await createCodeReviewForBranch(project: project, branch: branch))
 
+        case .projectFixCI:
+            let project = try requireProject(command.projectId)
+            // Honor an explicit branch (briefing cards are per-branch); a generic
+            // project menu passes nil and the fix resolves the current branch.
+            let branch = command.branch.flatMap { $0.isEmpty ? nil : $0 }
+            return MenuCommandResult(threadId: try await createCIFixForBranch(project: project, branch: branch))
+
         case .threadCodeReview:
             let sessionId = try requireSession(command.sessionId)
             return MenuCommandResult(threadId: try await createCodeReviewForThread(sessionId: sessionId))
@@ -144,12 +151,21 @@ extension AppState {
             switch action {
             case .command(let command):
                 Task { @MainActor in
+                    // Async commands (push + open PR, code review, …) block on real
+                    // work, so show the hook loading dialog and keep it up until the
+                    // operation finishes — mirroring mobile's action dialog.
+                    if command.isAsync { self.hookProgressStatus = command.progressStatus }
+                    defer { if command.isAsync { self.hookProgressStatus = nil } }
                     do {
                         let result = try await self.dispatchMenuCommand(command)
                         if let url = result.openURL { NSWorkspace.shared.open(url) }
                         if let threadId = result.threadId { onThread(threadId) }
                     } catch {
+                        // Surface the failure to the user — not just the log — so a
+                        // failed command (e.g. Create Pull Request) doesn't silently
+                        // vanish with the loading dialog. Rendered by `HookUIModifier`.
                         self.logger.error("Menu command failed: \(error.localizedDescription, privacy: .public)")
+                        self.hookErrorMessage = error.localizedDescription
                     }
                 }
             case .deepLink(let url):

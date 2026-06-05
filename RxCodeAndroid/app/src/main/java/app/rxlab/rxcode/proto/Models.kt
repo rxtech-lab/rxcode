@@ -184,7 +184,8 @@ data class ProjectBranchInfo(
 
 /**
  * Per-repo CI / pull-request status mirrored from the desktop, used to gate the
- * "Create Pull Request" menu item (only offered when a branch has no PR yet).
+ * "Create Pull Request" menu item (only offered when a branch has no PR yet) and
+ * the "Fix Failing CI" item (only offered when [overallState] is `"failure"`).
  * Mirrors a subset of Swift `ProjectCIStatus`; unknown keys (workflows, failing,
  * etc.) are ignored by [RxJson].
  */
@@ -194,6 +195,7 @@ data class ProjectCIStatus(
     val repo: String = "",
     val branch: String? = null,
     val found: Boolean = false,
+    val overallState: String? = null,
     val prNumber: Int? = null,
     val prState: String? = null,
     val prUrl: String? = null,

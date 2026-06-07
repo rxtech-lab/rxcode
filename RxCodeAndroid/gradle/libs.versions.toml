@@ -22,6 +22,8 @@ mlkitBarcode = "17.3.0"
 accompanistPermissions = "0.34.0"
 coil = "2.7.0"
 composeMarkdown = "0.5.4"
+treesitter = "4.3.2"
+desugarJdkLibs = "2.1.4"
 androidxWebkit = "1.12.1"
 firebaseBom = "33.5.1"
 googleServices = "4.4.2"
@@ -79,6 +81,19 @@ accompanist-permissions = { group = "com.google.accompanist", name = "accompanis
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 coil-svg = { group = "io.coil-kt", name = "coil-svg", version.ref = "coil" }
 compose-markdown = { group = "com.github.jeziellago", name = "compose-markdown", version.ref = "composeMarkdown" }
+
+# Tree-sitter syntax highlighting. android-tree-sitter ships a real Android AAR
+# (all four ABIs); highlights.scm queries are shipped as app assets since the
+# grammar artifacts do not bundle them.
+treesitter-core = { group = "com.itsaky.androidide.treesitter", name = "android-tree-sitter", version.ref = "treesitter" }
+treesitter-java = { group = "com.itsaky.androidide.treesitter", name = "tree-sitter-java", version.ref = "treesitter" }
+treesitter-kotlin = { group = "com.itsaky.androidide.treesitter", name = "tree-sitter-kotlin", version.ref = "treesitter" }
+treesitter-python = { group = "com.itsaky.androidide.treesitter", name = "tree-sitter-python", version.ref = "treesitter" }
+treesitter-json = { group = "com.itsaky.androidide.treesitter", name = "tree-sitter-json", version.ref = "treesitter" }
+treesitter-c = { group = "com.itsaky.androidide.treesitter", name = "tree-sitter-c", version.ref = "treesitter" }
+treesitter-cpp = { group = "com.itsaky.androidide.treesitter", name = "tree-sitter-cpp", version.ref = "treesitter" }
+treesitter-xml = { group = "com.itsaky.androidide.treesitter", name = "tree-sitter-xml", version.ref = "treesitter" }
+desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugarJdkLibs" }
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
 firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging" }
 firebase-analytics = { group = "com.google.firebase", name = "firebase-analytics" }

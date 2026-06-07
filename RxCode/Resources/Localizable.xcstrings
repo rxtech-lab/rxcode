@@ -2780,6 +2780,7 @@
       }
     },
     "Body" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -2791,6 +2792,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正文"
+          }
+        }
+      }
+    },
+    "Body (JSON)" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "본문 (JSON)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正文 (JSON)"
+          }
+        }
+      }
+    },
+    "Body must be valid JSON before it can be formatted." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "JSON 본문이 유효해야 형식을 지정할 수 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "JSON 正文必须有效才能格式化。"
           }
         }
       }
@@ -6843,6 +6876,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "分别调整界面和消息字体大小。"
+          }
+        }
+      }
+    },
+    "Format the JSON body." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "JSON 본문의 형식을 지정합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "格式化 JSON 正文。"
           }
         }
       }
@@ -11363,6 +11412,9 @@
         }
       }
     },
+    "Pick one or more menus this item appears on." : {
+
+    },
     "Pick which model performs the review — defaults to the same model as the thread." : {
       "localizations" : {
         "ko" : {
@@ -11499,6 +11551,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "预设名称"
+          }
+        }
+      }
+    },
+    "Prettify" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "서식 지정"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "格式化"
           }
         }
       }

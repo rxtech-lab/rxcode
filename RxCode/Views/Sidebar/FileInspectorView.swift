@@ -248,10 +248,7 @@ struct FileInspectorView: View {
             }.value
             content = textToSave
             let ext = fileExtension
-            let highlighted = await Task.detached {
-                SyntaxHighlighter.highlightNS(textToSave, language: ext)
-            }.value
-            highlightedContent = highlighted
+            highlightedContent = await SyntaxHighlighter.highlightNSAsync(textToSave, language: ext)
             isEditing = false
         } catch {
             saveError = "Save failed: \(error.localizedDescription)"
@@ -280,11 +277,8 @@ struct FileInspectorView: View {
 
             if let text = String(data: data, encoding: .utf8) {
                 let ext = fileExtension
-                let highlighted = await Task.detached {
-                    SyntaxHighlighter.highlightNS(text, language: ext)
-                }.value
                 content = text
-                highlightedContent = highlighted
+                highlightedContent = await SyntaxHighlighter.highlightNSAsync(text, language: ext)
                 lineCount = text.components(separatedBy: "\n").count
             } else {
                 errorMessage = "Binary file — preview not available"

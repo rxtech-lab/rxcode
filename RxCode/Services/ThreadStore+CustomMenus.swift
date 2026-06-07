@@ -20,16 +20,19 @@ extension ThreadStore {
     /// Enabled items that should appear on `surface` for `projectId` — i.e. items
     /// scoped to that project plus the "all projects" (nil) items.
     func customMenuItems(projectId: UUID?, surface: CustomMenuItemRecord.Surface) -> [CustomMenuItemRecord] {
-        let raw = surface.rawValue
+        // Surface membership lives in the computed `surfaces` list, so it can't be
+        // expressed in a #Predicate — fetch the enabled rows and filter in Swift.
         let descriptor = FetchDescriptor<CustomMenuItemRecord>(
-            predicate: #Predicate { $0.isEnabled && $0.surface == raw },
+            predicate: #Predicate { $0.isEnabled },
             sortBy: [
                 SortDescriptor(\.sortOrder, order: .forward),
                 SortDescriptor(\.createdAt, order: .forward)
             ]
         )
         let rows = (try? context.fetch(descriptor)) ?? []
-        return rows.filter { $0.projectId == nil || $0.projectId == projectId }
+        return rows.filter {
+            ($0.projectId == nil || $0.projectId == projectId) && $0.surfaces.contains(surface)
+        }
     }
 
     func fetchCustomMenuItem(id: String) -> CustomMenuItemRecord? {

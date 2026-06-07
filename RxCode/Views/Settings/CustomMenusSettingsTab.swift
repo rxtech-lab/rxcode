@@ -147,7 +147,7 @@ private struct CustomMenuRow: View {
                 Text(verbatim: record.title)
                     .font(.system(size: ClaudeTheme.size(13), weight: .medium))
                 HStack(spacing: 6) {
-                    badge(surfaceLabel)
+                    ForEach(record.surfaces, id: \.self) { badge(surfaceLabel($0)) }
                     badge(actionLabel)
                     Text(verbatim: projectName)
                         .font(.system(size: ClaudeTheme.size(10)))
@@ -192,8 +192,8 @@ private struct CustomMenuRow: View {
             .clipShape(RoundedRectangle(cornerRadius: 4))
     }
 
-    private var surfaceLabel: String {
-        switch record.surfaceValue {
+    private func surfaceLabel(_ surface: CustomMenuItemRecord.Surface) -> String {
+        switch surface {
         case .project: return "Project"
         case .thread: return "Thread"
         case .briefing: return "Briefing"

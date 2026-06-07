@@ -8,6 +8,17 @@ import UIKit
 // MARK: - Syntax Highlighter
 
 public enum SyntaxHighlighter {
+    /// Async version of `highlightNS` that runs highlighting on a background thread.
+    public static func highlightNSAsync(_ code: String, language: String, fontSize: CGFloat = 12) async -> NSAttributedString {
+        struct SendableWrapper: @unchecked Sendable {
+            let value: NSAttributedString
+        }
+        let wrapped = await Task.detached {
+            SendableWrapper(value: highlightNS(code, language: language, fontSize: fontSize))
+        }.value
+        return wrapped.value
+    }
+
     public static func highlightNS(_ code: String, language: String, fontSize: CGFloat = 12) -> NSAttributedString {
         let normalized = normalizeLanguage(language)
         let tokens = tokenize(code, language: normalized)

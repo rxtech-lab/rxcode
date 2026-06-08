@@ -38,8 +38,8 @@ actor PersistenceService: AppStatePersistenceService {
     private let cliStore: CLISessionStore
     private let logger = Logger(subsystem: "com.claudework", category: "PersistenceService")
 
-    init(metaStore: SessionMetaStore, cliStore: CLISessionStore) {
-        self.baseURL = AppSupport.bundleScopedURL
+    init(metaStore: SessionMetaStore, cliStore: CLISessionStore, baseURL: URL = AppSupport.bundleScopedURL) {
+        self.baseURL = baseURL
         self.metaStore = metaStore
         self.cliStore = cliStore
     }
@@ -283,7 +283,7 @@ actor PersistenceService: AppStatePersistenceService {
     /// Returns the on-disk URL for the cached ACP registry snapshot. The
     /// `ACPRegistryService` reads/writes this file directly.
     nonisolated func acpRegistrySnapshotURL() -> URL {
-        AppSupport.bundleScopedURL.appendingPathComponent("acp_registry.json")
+        baseURL.appendingPathComponent("acp_registry.json")
     }
 
     // MARK: - Private Helpers

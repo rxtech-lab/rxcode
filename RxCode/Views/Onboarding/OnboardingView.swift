@@ -360,7 +360,7 @@ struct OnboardingView: View {
             appState.openAISummarizationAPIKey = summarizationAPIKeyDraft
         }
         appState.onboardingCompleted = true
-        UserDefaults.standard.set(true, forKey: "onboardingCompleted")
+        appState.workspaceDefaults.set(true, for: "onboardingCompleted")
         onCompletion?()
     }
 

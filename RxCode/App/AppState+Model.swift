@@ -11,8 +11,8 @@ extension AppState {
     static let availableModels = ["default", "best", "opus", "opus[1m]", "opusplan", "sonnet", "sonnet[1m]", "haiku"]
     static let fallbackCodexModels = ["gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex"]
     nonisolated static let defaultOpenAISummarizationEndpoint = "https://api.openai.com/v1"
-    static let openAISummarizationKeychainService = "com.idealapp.RxCode.openai-summarization"
-    static let openAISummarizationKeychainAccount = "apiKey"
+    nonisolated static let openAISummarizationKeychainService = "com.idealapp.RxCode.openai-summarization"
+    nonisolated static let openAISummarizationKeychainAccount = "apiKey"
 
     static var availableClaudeModels: [AgentModel] {
         availableModels.map {

@@ -9,9 +9,15 @@ extension AppState {
     // MARK: - Marketplace
 
     func loadMarketplace(forceRefresh: Bool = false) async {
+        let revision = marketplaceStateRevision
+        let marketplace = marketplace
         marketplaceLoading = true
         marketplaceSourceError = nil
-        defer { marketplaceLoading = false }
+        defer {
+            if revision == marketplaceStateRevision {
+                marketplaceLoading = false
+            }
+        }
 
         async let catalog = marketplace.fetchCatalog(forceRefresh: forceRefresh)
         async let installed = marketplace.installedPluginNames()
@@ -20,9 +26,11 @@ extension AppState {
         let installedNames = await installed
         await marketplace.importInstalledPlugins(catalog: fetchedCatalog, installedNames: installedNames)
 
+        let customSources = await marketplace.customSources()
+        guard revision == marketplaceStateRevision else { return }
         marketplaceCatalog = fetchedCatalog
         marketplaceInstalledNames = installedNames
-        marketplaceCustomSources = await marketplace.customSources()
+        marketplaceCustomSources = customSources
     }
 
     func installMarketplacePlugin(_ plugin: MarketplacePlugin) async {

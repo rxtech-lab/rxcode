@@ -86,7 +86,7 @@ extension AppState {
 
         activeProjectPath = project.path
         Task { await refreshMCPServers() }
-        UserDefaults.standard.set(project.id.uuidString, forKey: "selectedProjectId")
+        workspaceDefaults.set(project.id.uuidString, for: "selectedProjectId")
     }
 
     func addProjectFromFolder(_ url: URL, in window: WindowState) async {
@@ -250,7 +250,7 @@ extension AppState {
     /// complete, kick off a background repo fetch).
     func onRxAuthSignedIn() {
         onboardingCompleted = true
-        UserDefaults.standard.set(true, forKey: "onboardingCompleted")
+        workspaceDefaults.set(true, for: "onboardingCompleted")
         startAutopilotWarmup()
     }
 

@@ -121,6 +121,11 @@ final class AppStateHookController: HookController {
         return app.threadStore.fetch(id: sessionId)?.skipHooks ?? false
     }
 
+    func sessionEndHooksSuppressed(sessionKey: String, sessionId: String) -> Bool {
+        guard let app else { return false }
+        return app.sessionEndHooksSuppressed(sessionKey: sessionKey, sessionId: sessionId)
+    }
+
     func resolveAgentModelSelection(storedModel: String?, fallbackSessionId: String) -> (provider: AgentProvider, model: String)? {
         guard let app else { return nil }
 

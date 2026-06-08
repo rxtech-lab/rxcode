@@ -419,9 +419,15 @@ extension AppState {
     // MARK: - MCP Actions
 
     func refreshMCPServers() async {
+        let revision = mcpStateRevision
+        let mcp = mcp
         mcpIsLoading = true
         mcpListError = nil
-        defer { mcpIsLoading = false }
+        defer {
+            if revision == mcpStateRevision {
+                mcpIsLoading = false
+            }
+        }
         do {
             // Pass the active project so Settings can show global defaults plus
             // the effective per-project override state.
@@ -447,8 +453,10 @@ extension AppState {
                     merged.append(info)
                 }
             }
+            guard revision == mcpStateRevision else { return }
             mcpServers = merged
         } catch {
+            guard revision == mcpStateRevision else { return }
             mcpListError = error.localizedDescription
             logger.error("MCP list failed: \(error.localizedDescription, privacy: .public)")
         }
@@ -457,7 +465,9 @@ extension AppState {
     func probeMCPServer(name: String) async {
         guard let info = mcpServers.first(where: { $0.name == name }) else {
             // Fall back to a name-only probe if the row hasn't loaded yet.
-            await probeMCPServer(id: name, name: name, lookup: { await self.mcp.probe(name: name, projectPath: self.activeProjectPath) })
+            let mcp = mcp
+            let activeProjectPath = activeProjectPath
+            await probeMCPServer(id: name, name: name, lookup: { await mcp.probe(name: name, projectPath: activeProjectPath) })
             return
         }
         await probeMCPServer(info: info)
@@ -467,16 +477,23 @@ extension AppState {
     /// multiple scopes/projects (aggregated Settings list) so the right
     /// configuration is resolved.
     func probeMCPServer(info: MCPServerInfo) async {
-        await probeMCPServer(id: info.id, name: info.name, lookup: { await self.mcp.probe(info: info) })
+        let mcp = mcp
+        await probeMCPServer(id: info.id, name: info.name, lookup: { await mcp.probe(info: info) })
     }
 
     func probeMCPServer(id: String, name: String, lookup: @escaping () async -> MCPProbeResult) async {
+        let revision = mcpStateRevision
         guard !mcpInFlightProbes.contains(id) else { return }
         mcpInFlightProbes.insert(id)
-        defer { mcpInFlightProbes.remove(id) }
+        defer {
+            if revision == mcpStateRevision {
+                mcpInFlightProbes.remove(id)
+            }
+        }
 
         let previousStatus: MCPStatus? = mcpServers.first(where: { $0.id == id })?.status
         let result = await lookup()
+        guard revision == mcpStateRevision else { return }
         mcpProbeResults[id] = result
 
         let newStatus: MCPStatus = result.ok

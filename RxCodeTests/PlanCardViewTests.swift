@@ -11,6 +11,23 @@ extension PlanSheetInspection: InspectionEmissary {}
 @MainActor
 final class PlanCardViewTests: XCTestCase {
 
+    /// `ViewHosting.expel()` removes the host view but AppKit tears the backing
+    /// `NSHostingView` down asynchronously. `PlanSheetView`'s `PlanSheetInspection`
+    /// has a main-actor back-deployed `deinit`, so a deferred teardown can hop onto
+    /// the main actor *during an unrelated later test* and double-free on the Swift
+    /// concurrency runtime (`POINTER_BEING_FREED_WAS_NOT_ALLOCATED`), crashing the
+    /// whole test process. Pump the main run loop here so every hosted view this
+    /// test mounted is fully deallocated within this test's own context, never
+    /// leaking into a sibling suite.
+    override func tearDown() {
+        // Pump the main run loop so AppKit flushes every pending `NSHostingView`
+        // teardown (and its main-actor deinit) before the next test starts.
+        for _ in 0..<5 {
+            _ = CFRunLoopRunInMode(.defaultMode, 0.02, false)
+        }
+        super.tearDown()
+    }
+
     // MARK: - PlanCardView chip: tapping "Review" calls onOpen with tool call id
 
     func testChip_tappingReview_callsOnOpenWithToolCallId() throws {

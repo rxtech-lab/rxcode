@@ -16,11 +16,24 @@ extension FocusedValues {
     }
 }
 
+// MARK: - WorkspaceWindowValue
+
+/// Identifies which workspace a main window is bound to. The primary
+/// `WindowGroup` is keyed by this value so each workspace gets its own window
+/// (and its own `AppState`), and reopening the same workspace refocuses its
+/// existing window rather than spawning a duplicate.
+struct WorkspaceWindowValue: Codable, Hashable {
+    let workspaceID: String
+}
+
 // MARK: - ProjectWindowValue
 
 struct ProjectWindowValue: Codable, Hashable {
     let projectId: UUID
     let instanceId: UUID
+    /// Workspace that owns this project, so a detached project window resolves
+    /// the correct per-workspace `AppState`.
+    var workspaceID: String?
 }
 
 // MARK: - TerminalWindowValue
@@ -33,7 +46,7 @@ struct TerminalWindowValue: Codable, Hashable {
 
 @main
 struct RxCodeApp: App {
-    @State private var appState = AppState()
+    @State private var workspaceManager = WorkspaceManager()
     @FocusedValue(\.startNewChat) private var startNewChat
     @AppStorage("showMenuBarExtra") private var showMenuBarExtra: Bool = true
     private let updateService = UpdateService.shared
@@ -46,10 +59,19 @@ struct RxCodeApp: App {
         ])
     }
 
+    /// AppState for the frontmost workspace window. Global scenes (Settings,
+    /// menu bar, the Theme command) act on whichever workspace is currently key.
+    private var appState: AppState { workspaceManager.frontmostAppState }
+
     var body: some Scene {
-        WindowGroup {
-            MainWindowRoot(appState: appState)
-                .focusable(false)
+        WindowGroup(id: "workspace-window", for: WorkspaceWindowValue.self) { $value in
+            MainWindowRoot(
+                workspaceManager: workspaceManager,
+                workspaceID: value.workspaceID
+            )
+            .focusable(false)
+        } defaultValue: {
+            WorkspaceWindowValue(workspaceID: workspaceManager.frontmostWorkspaceID)
         }
         .defaultSize(width: 1000, height: 700)
         .defaultLaunchBehavior(.presented)
@@ -75,13 +97,18 @@ struct RxCodeApp: App {
                     .disabled(appState.selectedTheme == theme)
                 }
             }
+            AutomationCommands()
         }
 
         // Dedicated project window — opened on double-click
         WindowGroup(id: "project-window", for: ProjectWindowValue.self) { $value in
             if let id = value?.projectId {
-                ProjectWindowRoot(appState: appState, projectId: id)
-                    .focusable(false)
+                ProjectWindowRoot(
+                    workspaceManager: workspaceManager,
+                    workspaceID: value?.workspaceID ?? workspaceManager.frontmostWorkspaceID,
+                    projectId: id
+                )
+                .focusable(false)
             }
         }
         .defaultSize(width: 1000, height: 700)
@@ -96,9 +123,26 @@ struct RxCodeApp: App {
             SettingsWindowRoot(appState: appState)
         }
 
+        // Standalone Automation windows, opened from the "Automation" menu.
+        Window("Autopilot", id: "autopilot-window") {
+            AutopilotWindowRoot(appState: appState)
+        }
+        .defaultSize(width: 720, height: 640)
+
+        Window("Hooks", id: "hooks-window") {
+            HooksWindowRoot(appState: appState)
+        }
+        .defaultSize(width: 760, height: 620)
+
+        Window("Custom Context Menus", id: "custom-menus-window") {
+            CustomMenusWindowRoot(appState: appState)
+        }
+        .defaultSize(width: 720, height: 620)
+
         MenuBarExtra(isInserted: $showMenuBarExtra) {
             MenuBarContentView()
                 .environment(appState)
+                .environment(workspaceManager)
         } label: {
             MenuBarLabel()
                 .environment(appState)
@@ -222,6 +266,8 @@ private struct MenuBarLabelContent: View {
 private struct MenuBarContentView: View {
     @Environment(AppState.self) private var appState
     @State private var isRefreshing = false
+    @State private var showCreateWorkspaceSheet = false
+    @State private var showManageWorkspaceSheet = false
 
     private var selectedUsage: RateLimitUsage? {
         switch appState.selectedAgentProvider {
@@ -257,6 +303,10 @@ private struct MenuBarContentView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
+            WorkspaceSwitcher(
+                showingCreateSheet: $showCreateWorkspaceSheet,
+                showingManageSheet: $showManageWorkspaceSheet
+            )
             header
             agentPicker
 
@@ -291,6 +341,14 @@ private struct MenuBarContentView: View {
         }
         .padding(14)
         .frame(width: 280)
+        .sheet(isPresented: $showCreateWorkspaceSheet) {
+            CreateWorkspaceSheet()
+                .environment(appState)
+        }
+        .sheet(isPresented: $showManageWorkspaceSheet) {
+            ManageWorkspacesSheet()
+                .environment(appState)
+        }
         .task {
             await appState.refreshSelectedAgentRateLimitUsage()
         }
@@ -592,15 +650,20 @@ private struct MenuBarUsageBar: View {
 // MARK: - Main Window Root
 
 struct MainWindowRoot: View {
-    let appState: AppState
+    let workspaceManager: WorkspaceManager
+    let workspaceID: String
+    @Environment(\.controlActiveState) private var controlActiveState
     @State private var windowState = WindowState()
     @State private var chatBridge = ChatBridge()
+
+    private var appState: AppState { workspaceManager.appState(for: workspaceID) }
 
     var body: some View {
         ZStack {
             if appState.isInitialized {
                 MainView()
                     .environment(appState)
+                    .environment(workspaceManager)
                     .environment(windowState)
                     .environment(chatBridge)
                     .environment(\.openURL, OpenURLAction { url in
@@ -640,6 +703,10 @@ struct MainWindowRoot: View {
             }
         }
         .animation(.easeInOut(duration: 0.3), value: appState.isInitialized)
+        .onAppear { workspaceManager.markFrontmost(workspaceID) }
+        .onChange(of: controlActiveState) { _, state in
+            if state == .key { workspaceManager.markFrontmost(workspaceID) }
+        }
         .task {
             await appState.initialize()
             appState.setupChatBridge(chatBridge, for: windowState)
@@ -648,7 +715,6 @@ struct MainWindowRoot: View {
             NotificationService.shared.onNotificationTapped = { projectId, sessionId in
                 appState.handleNotificationTap(projectId: projectId, sessionId: sessionId, mainWindow: windowState)
             }
-            MobileSyncService.shared.start()
         }
     }
 }
@@ -685,19 +751,80 @@ struct SettingsWindowRoot: View {
     }
 }
 
+// MARK: - Automation Commands
+
+/// "Automation" menu in the top menu bar, opening the Autopilot, Hooks, and
+/// Custom Context Menu management UIs as standalone windows.
+struct AutomationCommands: Commands {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some Commands {
+        CommandMenu("Automation") {
+            Button("Autopilot") { openWindow(id: "autopilot-window") }
+            Button("Hooks") { openWindow(id: "hooks-window") }
+            Button("Custom Context Menus") { openWindow(id: "custom-menus-window") }
+        }
+    }
+}
+
+// MARK: - Automation Window Roots
+
+struct AutopilotWindowRoot: View {
+    let appState: AppState
+
+    var body: some View {
+        AutopilotSettingsTab()
+            .environment(appState)
+            .frame(minWidth: 560, minHeight: 480)
+    }
+}
+
+struct HooksWindowRoot: View {
+    let appState: AppState
+
+    var body: some View {
+        ScrollView {
+            HooksSettingsSection()
+                .environment(appState)
+                .padding(24)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(minWidth: 560, minHeight: 360)
+    }
+}
+
+struct CustomMenusWindowRoot: View {
+    let appState: AppState
+
+    var body: some View {
+        ScrollView {
+            CustomMenusSettingsSection()
+                .environment(appState)
+                .padding(24)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(minWidth: 560, minHeight: 420)
+    }
+}
+
 // MARK: - Project Window Root
 
 struct ProjectWindowRoot: View {
-    let appState: AppState
+    let workspaceManager: WorkspaceManager
+    let workspaceID: String
     let projectId: UUID
+    @Environment(\.controlActiveState) private var controlActiveState
     @State private var windowState = WindowState()
     @State private var chatBridge = ChatBridge()
+
+    private var appState: AppState { workspaceManager.appState(for: workspaceID) }
 
     var body: some View {
         ZStack {
             if appState.isInitialized {
                 MainView()
                     .environment(appState)
+                    .environment(workspaceManager)
                     .environment(windowState)
                     .environment(chatBridge)
                     .environment(\.openURL, OpenURLAction { url in
@@ -728,7 +855,11 @@ struct ProjectWindowRoot: View {
         .animation(.easeInOut(duration: 0.3), value: appState.isInitialized)
         .onAppear {
             windowState.isProjectWindow = true
+            workspaceManager.markFrontmost(workspaceID)
             appState.registerOpenProjectWindow(projectId)
+        }
+        .onChange(of: controlActiveState) { _, state in
+            if state == .key { workspaceManager.markFrontmost(workspaceID) }
         }
         .onDisappear { appState.unregisterOpenProjectWindow(projectId) }
         .task {

@@ -11,10 +11,12 @@ import os
 /// native config as authoritative.
 actor MCPService {
 
+    private let baseURL: URL
     private let claudeService: ClaudeService
     private let logger = Logger(subsystem: "com.claudework", category: "MCPService")
 
-    init(claudeService: ClaudeService) {
+    init(baseURL: URL = AppSupport.bundleScopedURL, claudeService: ClaudeService) {
+        self.baseURL = baseURL
         self.claudeService = claudeService
     }
 
@@ -342,11 +344,11 @@ actor MCPService {
     // MARK: - RxCode Config
 
     private func configURL() -> URL {
-        AppSupport.bundleScopedURL.appendingPathComponent("mcp.json")
+        baseURL.appendingPathComponent("mcp.json")
     }
 
     private func generatedConfigDirectory() -> URL {
-        AppSupport.bundleScopedURL.appendingPathComponent("GeneratedMCP", isDirectory: true)
+        baseURL.appendingPathComponent("GeneratedMCP", isDirectory: true)
     }
 
     private func loadConfig() throws -> MCPConfiguration {

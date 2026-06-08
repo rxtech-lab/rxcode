@@ -183,6 +183,14 @@ final class AppState {
 
     // MARK: - Projects (shared)
 
+    /// Process-global services shared across all workspace windows.
+    let core: AppCore
+    var workspaceRegistry: WorkspaceRegistry { core.workspaceRegistry }
+
+    var workspaces: [AppWorkspace] = [.personal]
+    var activeWorkspace: AppWorkspace = .personal
+    var workspaceDefaults = WorkspaceDefaults(workspaceID: AppWorkspace.personalID)
+
     var projects: [Project] = []
 
     // MARK: - Per-Session State (shared — managed independently by session ID regardless of window)
@@ -252,9 +260,9 @@ final class AppState {
 
     // MARK: - Theme
 
-    var selectedTheme: AppTheme = .init(rawValue: UserDefaults.standard.string(forKey: "selectedTheme") ?? "") ?? .claude {
+    var selectedTheme: AppTheme = .claude {
         didSet {
-            UserDefaults.standard.set(selectedTheme.rawValue, forKey: "selectedTheme")
+            workspaceDefaults.set(selectedTheme.rawValue, for: "selectedTheme")
             ThemeStore.shared.current = selectedTheme
             themeRevision += 1
         }
@@ -265,9 +273,9 @@ final class AppState {
 
     // MARK: - Font Size
 
-    var fontSizeAdjustment: Int = (UserDefaults.standard.object(forKey: "fontSizeAdjustment") as? Int) ?? 0 {
+    var fontSizeAdjustment: Int = 0 {
         didSet {
-            UserDefaults.standard.set(fontSizeAdjustment, forKey: "fontSizeAdjustment")
+            workspaceDefaults.set(fontSizeAdjustment, for: "fontSizeAdjustment")
             ThemeStore.shared.fontSizeAdjustment = fontSizeAdjustment
             themeRevision += 1
         }
@@ -283,9 +291,9 @@ final class AppState {
         fontSizeAdjustment -= 1
     }
 
-    var messageFontSizeAdjustment: Int = (UserDefaults.standard.object(forKey: "messageFontSizeAdjustment") as? Int) ?? 0 {
+    var messageFontSizeAdjustment: Int = 0 {
         didSet {
-            UserDefaults.standard.set(messageFontSizeAdjustment, forKey: "messageFontSizeAdjustment")
+            workspaceDefaults.set(messageFontSizeAdjustment, for: "messageFontSizeAdjustment")
             ThemeStore.shared.messageFontSizeAdjustment = messageFontSizeAdjustment
             themeRevision += 1
         }
@@ -302,12 +310,12 @@ final class AppState {
     }
 
 
-    var selectedModel: String = UserDefaults.standard.string(forKey: "selectedModel") ?? "opus" {
-        didSet { UserDefaults.standard.set(selectedModel, forKey: "selectedModel") }
+    var selectedModel: String = "opus" {
+        didSet { workspaceDefaults.set(selectedModel, for: "selectedModel") }
     }
 
-    var selectedAgentProvider: AgentProvider = .init(rawValue: UserDefaults.standard.string(forKey: "selectedAgentProvider") ?? "") ?? .claudeCode {
-        didSet { UserDefaults.standard.set(selectedAgentProvider.rawValue, forKey: "selectedAgentProvider") }
+    var selectedAgentProvider: AgentProvider = .claudeCode {
+        didSet { workspaceDefaults.set(selectedAgentProvider.rawValue, for: "selectedAgentProvider") }
     }
 
     var codexModels: [AgentModel] = []
@@ -321,47 +329,38 @@ final class AppState {
     var acpRegistryLoading: Bool = false
 
     /// Selected default ACP client id (when `selectedAgentProvider == .acp`).
-    var selectedACPClientId: String = UserDefaults.standard.string(forKey: "selectedACPClientId") ?? "" {
-        didSet { UserDefaults.standard.set(selectedACPClientId, forKey: "selectedACPClientId") }
+    var selectedACPClientId: String = "" {
+        didSet { workspaceDefaults.set(selectedACPClientId, for: "selectedACPClientId") }
     }
 
-    var selectedEffort: String = UserDefaults.standard.string(forKey: "selectedEffort") ?? "auto" {
-        didSet { UserDefaults.standard.set(selectedEffort, forKey: "selectedEffort") }
+    var selectedEffort: String = "auto" {
+        didSet { workspaceDefaults.set(selectedEffort, for: "selectedEffort") }
     }
 
     // MARK: - Summarization
 
-    var summarizationProvider: SummarizationProvider = {
-        let stored = SummarizationProvider(rawValue: UserDefaults.standard.string(forKey: "summarizationProvider") ?? "") ?? .selectedClient
-        if stored == .appleFoundationModel, !FoundationModelSummarizationService.isAvailable {
-            return .selectedClient
-        }
-        return stored
-    }() {
-        didSet { UserDefaults.standard.set(summarizationProvider.rawValue, forKey: "summarizationProvider") }
+    var summarizationProvider: SummarizationProvider = .selectedClient {
+        didSet { workspaceDefaults.set(summarizationProvider.rawValue, for: "summarizationProvider") }
     }
 
-    var openAISummarizationEndpoint: String = UserDefaults.standard.string(forKey: "openAISummarizationEndpoint") ?? AppState.defaultOpenAISummarizationEndpoint {
-        didSet { UserDefaults.standard.set(openAISummarizationEndpoint, forKey: "openAISummarizationEndpoint") }
+    var openAISummarizationEndpoint: String = AppState.defaultOpenAISummarizationEndpoint {
+        didSet { workspaceDefaults.set(openAISummarizationEndpoint, for: "openAISummarizationEndpoint") }
     }
 
-    var openAISummarizationAPIKey: String = KeychainHelper.readString(
-        service: AppState.openAISummarizationKeychainService,
-        account: AppState.openAISummarizationKeychainAccount
-    ) ?? "" {
+    var openAISummarizationAPIKey: String = "" {
         didSet {
             let trimmed = openAISummarizationAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
             do {
                 if trimmed.isEmpty {
                     try KeychainHelper.delete(
                         service: AppState.openAISummarizationKeychainService,
-                        account: AppState.openAISummarizationKeychainAccount
+                        account: activeWorkspace.openAISummarizationKeychainAccount
                     )
                 } else if let data = trimmed.data(using: .utf8) {
                     try KeychainHelper.save(
                         data,
                         service: AppState.openAISummarizationKeychainService,
-                        account: AppState.openAISummarizationKeychainAccount
+                        account: activeWorkspace.openAISummarizationKeychainAccount
                     )
                 }
             } catch {
@@ -370,8 +369,8 @@ final class AppState {
         }
     }
 
-    var openAISummarizationModel: String = UserDefaults.standard.string(forKey: "openAISummarizationModel") ?? "" {
-        didSet { UserDefaults.standard.set(openAISummarizationModel, forKey: "openAISummarizationModel") }
+    var openAISummarizationModel: String = "" {
+        didSet { workspaceDefaults.set(openAISummarizationModel, for: "openAISummarizationModel") }
     }
 
     var openAISummarizationModels: [String] = []
@@ -382,36 +381,34 @@ final class AppState {
 
     // MARK: - Memory
 
-    var memoryEnabled: Bool = (UserDefaults.standard.object(forKey: "memoryEnabled") as? Bool) ?? true {
-        didSet { UserDefaults.standard.set(memoryEnabled, forKey: "memoryEnabled") }
+    var memoryEnabled: Bool = true {
+        didSet { workspaceDefaults.set(memoryEnabled, for: "memoryEnabled") }
     }
 
-    var memoryAutoCreateEnabled: Bool = (UserDefaults.standard.object(forKey: "memoryAutoCreateEnabled") as? Bool) ?? true {
-        didSet { UserDefaults.standard.set(memoryAutoCreateEnabled, forKey: "memoryAutoCreateEnabled") }
+    var memoryAutoCreateEnabled: Bool = true {
+        didSet { workspaceDefaults.set(memoryAutoCreateEnabled, for: "memoryAutoCreateEnabled") }
     }
 
-    var memoryInjectEnabled: Bool = (UserDefaults.standard.object(forKey: "memoryInjectEnabled") as? Bool) ?? true {
-        didSet { UserDefaults.standard.set(memoryInjectEnabled, forKey: "memoryInjectEnabled") }
+    var memoryInjectEnabled: Bool = true {
+        didSet { workspaceDefaults.set(memoryInjectEnabled, for: "memoryInjectEnabled") }
     }
 
-    var memoryRetrievalMode: MemoryRetrievalMode = {
-        MemoryRetrievalMode(rawValue: UserDefaults.standard.string(forKey: "memoryRetrievalMode") ?? "") ?? .balanced
-    }() {
-        didSet { UserDefaults.standard.set(memoryRetrievalMode.rawValue, forKey: "memoryRetrievalMode") }
+    var memoryRetrievalMode: MemoryRetrievalMode = .balanced {
+        didSet { workspaceDefaults.set(memoryRetrievalMode.rawValue, for: "memoryRetrievalMode") }
     }
 
     var memoryInjectionScoreThreshold: Float {
         memoryRetrievalMode.scoreThreshold
     }
 
-    var memoryMaxContextItems: Int = (UserDefaults.standard.object(forKey: "memoryMaxContextItems") as? Int) ?? 5 {
+    var memoryMaxContextItems: Int = 5 {
         didSet {
             let clamped = max(1, min(12, memoryMaxContextItems))
             if clamped != memoryMaxContextItems {
                 memoryMaxContextItems = clamped
                 return
             }
-            UserDefaults.standard.set(memoryMaxContextItems, forKey: "memoryMaxContextItems")
+            workspaceDefaults.set(memoryMaxContextItems, for: "memoryMaxContextItems")
         }
     }
 
@@ -419,8 +416,8 @@ final class AppState {
 
     // MARK: - Notifications
 
-    var notificationsEnabled: Bool = (UserDefaults.standard.object(forKey: "notificationsEnabled") as? Bool) ?? true {
-        didSet { UserDefaults.standard.set(notificationsEnabled, forKey: "notificationsEnabled") }
+    var notificationsEnabled: Bool = true {
+        didSet { workspaceDefaults.set(notificationsEnabled, for: "notificationsEnabled") }
     }
 
     // MARK: - GitHub Actions CI
@@ -430,8 +427,8 @@ final class AppState {
     /// it on the user's behalf. The failure notification fires regardless of this
     /// toggle — only the auto-fix behavior is gated. Off by default (spends tokens
     /// unprompted).
-    var enableAutoCIFix: Bool = (UserDefaults.standard.object(forKey: "enableAutoCIFix") as? Bool) ?? false {
-        didSet { UserDefaults.standard.set(enableAutoCIFix, forKey: "enableAutoCIFix") }
+    var enableAutoCIFix: Bool = false {
+        didSet { workspaceDefaults.set(enableAutoCIFix, for: "enableAutoCIFix") }
     }
 
     /// Per-project working-tree dirty flag (`git status` non-empty), refreshed by
@@ -485,8 +482,8 @@ final class AppState {
 
     // MARK: - Focus Mode
 
-    var focusMode: Bool = (UserDefaults.standard.object(forKey: "focusMode") as? Bool) ?? false {
-        didSet { UserDefaults.standard.set(focusMode, forKey: "focusMode") }
+    var focusMode: Bool = false {
+        didSet { workspaceDefaults.set(focusMode, for: "focusMode") }
     }
 
     // MARK: - Archive
@@ -496,18 +493,18 @@ final class AppState {
     /// chats alone — the toggle is authoritative.
     static let defaultArchiveRetentionDays = 7
 
-    var autoArchiveEnabled: Bool = (UserDefaults.standard.object(forKey: "autoArchiveEnabled") as? Bool) ?? true {
-        didSet { UserDefaults.standard.set(autoArchiveEnabled, forKey: "autoArchiveEnabled") }
+    var autoArchiveEnabled: Bool = true {
+        didSet { workspaceDefaults.set(autoArchiveEnabled, for: "autoArchiveEnabled") }
     }
 
-    var archiveRetentionDays: Int = (UserDefaults.standard.object(forKey: "archiveRetentionDays") as? Int) ?? AppState.defaultArchiveRetentionDays {
+    var archiveRetentionDays: Int = AppState.defaultArchiveRetentionDays {
         didSet {
             let clamped = max(1, min(365, archiveRetentionDays))
             if clamped != archiveRetentionDays {
                 archiveRetentionDays = clamped
                 return
             }
-            UserDefaults.standard.set(archiveRetentionDays, forKey: "archiveRetentionDays")
+            workspaceDefaults.set(archiveRetentionDays, for: "archiveRetentionDays")
         }
     }
 
@@ -515,18 +512,18 @@ final class AppState {
     /// Pinned chats are never auto-deleted. Disabled by default — destructive.
     static let defaultDeleteRetentionDays = 30
 
-    var autoDeleteEnabled: Bool = (UserDefaults.standard.object(forKey: "autoDeleteEnabled") as? Bool) ?? false {
-        didSet { UserDefaults.standard.set(autoDeleteEnabled, forKey: "autoDeleteEnabled") }
+    var autoDeleteEnabled: Bool = false {
+        didSet { workspaceDefaults.set(autoDeleteEnabled, for: "autoDeleteEnabled") }
     }
 
-    var deleteRetentionDays: Int = (UserDefaults.standard.object(forKey: "deleteRetentionDays") as? Int) ?? AppState.defaultDeleteRetentionDays {
+    var deleteRetentionDays: Int = AppState.defaultDeleteRetentionDays {
         didSet {
             let clamped = max(1, min(365, deleteRetentionDays))
             if clamped != deleteRetentionDays {
                 deleteRetentionDays = clamped
                 return
             }
-            UserDefaults.standard.set(deleteRetentionDays, forKey: "deleteRetentionDays")
+            workspaceDefaults.set(deleteRetentionDays, for: "deleteRetentionDays")
         }
     }
 
@@ -535,16 +532,14 @@ final class AppState {
     static let autoPreviewSettingsKey = "attachmentAutoPreviewSettings"
 
     var autoPreviewSettings: AttachmentAutoPreviewSettings = {
-        guard let data = UserDefaults.standard.data(forKey: AppState.autoPreviewSettingsKey),
+        guard let data = WorkspaceDefaults(workspaceID: AppWorkspace.personalID).data(for: AppState.autoPreviewSettingsKey),
               let settings = try? JSONDecoder().decode(AttachmentAutoPreviewSettings.self, from: data)
-        else {
-            return AttachmentAutoPreviewSettings()
-        }
+        else { return AttachmentAutoPreviewSettings() }
         return settings
     }() {
         didSet {
             if let data = try? JSONEncoder().encode(autoPreviewSettings) {
-                UserDefaults.standard.set(data, forKey: AppState.autoPreviewSettingsKey)
+                workspaceDefaults.set(data, for: AppState.autoPreviewSettingsKey)
             }
         }
     }
@@ -571,84 +566,6 @@ final class AppState {
     /// on session select via `hasUncheckedCompletion`.
     var uncheckedFinishedSessionCount: Int {
         sessionStates.values.reduce(0) { $0 + ($1.hasUncheckedCompletion ? 1 : 0) }
-    }
-
-    func cachedRateLimitUsage(for provider: AgentProvider) -> RateLimitUsage? {
-        switch provider {
-        case .claudeCode:
-            return latestRateLimitUsage
-        case .codex:
-            return latestCodexRateLimitUsage
-        case .acp:
-            return nil
-        }
-    }
-
-    func rateLimitUsage(for provider: AgentProvider, forceRefresh: Bool = false) async -> RateLimitUsage? {
-        if !forceRefresh, let cached = cachedRateLimitUsage(for: provider) {
-            return cached
-        }
-
-        if let task = rateLimitUsageRefreshTasks[provider] {
-            return await task.value ?? cachedRateLimitUsage(for: provider)
-        }
-
-        let task = Task<RateLimitUsage?, Never> { [weak self] in
-            guard let self else { return nil }
-            switch provider {
-            case .claudeCode:
-                return await RateLimitService.shared.fetchUsage(forceRefresh: forceRefresh)
-            case .codex:
-                guard self.codexInstalled else { return nil }
-                return await self.codex.fetchRateLimits(forceRefresh: forceRefresh)
-            case .acp:
-                return nil
-            }
-        }
-        rateLimitUsageRefreshTasks[provider] = task
-
-        let usage = await task.value
-        rateLimitUsageRefreshTasks[provider] = nil
-
-        if let usage {
-            storeRateLimitUsage(usage, for: provider)
-            return usage
-        }
-        return cachedRateLimitUsage(for: provider)
-    }
-
-    func storeRateLimitUsage(_ usage: RateLimitUsage, for provider: AgentProvider) {
-        switch provider {
-        case .claudeCode:
-            latestRateLimitUsage = usage
-        case .codex:
-            latestCodexRateLimitUsage = usage
-        case .acp:
-            break
-        }
-        // Refresh the mobile home-screen widget's usage figures.
-        MobileSyncService.shared.pushWidgetUpdate()
-    }
-
-    /// Force-refresh the shared Claude rate-limit usage.
-    func refreshRateLimitUsage(forceRefresh: Bool = false) async {
-        _ = await rateLimitUsage(for: .claudeCode, forceRefresh: forceRefresh)
-    }
-
-    /// Warm Codex usage early so the status bar can render Codex limits from cache.
-    func refreshCodexRateLimitUsage(forceRefresh: Bool = false) async {
-        _ = await rateLimitUsage(for: .codex, forceRefresh: forceRefresh)
-    }
-
-    func refreshSelectedAgentRateLimitUsage(forceRefresh: Bool = false) async {
-        switch selectedAgentProvider {
-        case .claudeCode:
-            await refreshRateLimitUsage(forceRefresh: forceRefresh)
-        case .codex:
-            await refreshCodexRateLimitUsage(forceRefresh: forceRefresh)
-        case .acp:
-            break
-        }
     }
 
     func setDefaultAgentProvider(_ provider: AgentProvider) {
@@ -869,7 +786,7 @@ final class AppState {
     // MARK: - Permissions
 
     var permissionMode: PermissionMode = .default {
-        didSet { UserDefaults.standard.set(permissionMode.rawValue, forKey: "selectedPermissionMode") }
+        didSet { workspaceDefaults.set(permissionMode.rawValue, for: "selectedPermissionMode") }
     }
 
     // MARK: - rxauth + autopilot
@@ -929,20 +846,19 @@ final class AppState {
 
     var claudeInstalled = false
     var codexInstalled = false
-    var onboardingCompleted = UserDefaults.standard.bool(forKey: "onboardingCompleted")
+    var onboardingCompleted = false
 
     // MARK: - What's New
 
-    private static let seenWhatsNewKey = "seenWhatsNewSlugs"
+    static let seenWhatsNewKey = "seenWhatsNewSlugs"
 
     /// Whether onboarding had already been completed when this launch started.
     /// Distinguishes an existing user (who should see "What's New" for newly
     /// added features) from a brand-new install (for whom nothing is "new").
-    let wasOnboardedAtLaunch = UserDefaults.standard.bool(forKey: "onboardingCompleted")
+    var wasOnboardedAtLaunch = false
 
     /// Slugs of "What's New" feature cards the user has already seen.
-    private(set) var seenWhatsNewSlugs: Set<String> =
-        Set(UserDefaults.standard.stringArray(forKey: AppState.seenWhatsNewKey) ?? [])
+    var seenWhatsNewSlugs: Set<String> = []
 
     /// Controls presentation of the What's New sheet.
     var showWhatsNewSheet = false
@@ -967,7 +883,7 @@ final class AppState {
             changed = true
         }
         guard changed else { return }
-        UserDefaults.standard.set(Array(seenWhatsNewSlugs), forKey: Self.seenWhatsNewKey)
+        workspaceDefaults.set(Array(seenWhatsNewSlugs), for: Self.seenWhatsNewKey)
     }
 
     /// Marks every shipped feature as seen. Used for brand-new installs so the
@@ -1038,22 +954,22 @@ final class AppState {
 
     // MARK: - Services
 
-    let rxAuth = RxAuthService.shared
-    let autopilot: AutopilotService
-    let secrets: SecretsService
-    let ciUpdates: CIUpdateService
+    var rxAuth: RxAuthService
+    var autopilot: AutopilotService
+    var secrets: SecretsService
+    var ciUpdates: CIUpdateService
     /// Talks to github-pm's docs API (search, repos, documents, upload tokens).
-    let docs: DocsService
+    var docs: DocsService
     /// Talks to github-pm's release API (repos, workflows, dispatch, secret).
-    let release: ReleaseService
+    var release: ReleaseService
     /// Passkey-derived KEK cache for the secrets feature (macOS only).
     let secretsKeyVault = SecretsKeyVault()
     /// Cached enrollment status for the secrets feature: `nil` = unknown.
     var secretsEnrolled: Bool?
     let permission = PermissionServer()
-    let metaStore = SessionMetaStore()
-    let cliStore: CLISessionStore
-    let claude: ClaudeService
+    var metaStore: SessionMetaStore { core.metaStore }
+    var cliStore: CLISessionStore { core.cliStore }
+    var claude: ClaudeService { core.claude }
     let codex: CodexAppServer
     let acp: ACPService
 
@@ -1065,12 +981,13 @@ final class AppState {
     let acpRegistryService = ACPRegistryService()
     let openAISummarization = OpenAISummarizationService()
     let foundationModelSummarization = FoundationModelSummarizationService()
-    let persistence: any AppStatePersistenceService
-    let marketplace = MarketplaceService()
-    let mcp: MCPService
-    let threadStore: ThreadStore
-    let searchService = ThreadSearchService()
-    let memoryService = MemoryService()
+    var persistence: any AppStatePersistenceService
+    var marketplace: MarketplaceService
+    var marketplaceStateRevision = 0
+    var mcp: MCPService
+    var threadStore: ThreadStore
+    var searchService = ThreadSearchService()
+    var memoryService = MemoryService()
     /// Live progress for a user-triggered full reindex. `nil` when idle.
     var reindexProgress: (done: Int, total: Int)? = nil
     let runService = RunService()
@@ -1189,6 +1106,7 @@ final class AppState {
     var mcpIsLoading: Bool = false
     var mcpListError: String?
     var mcpPeriodicProbeTask: Task<Void, Never>?
+    var mcpStateRevision = 0
     /// 5 minutes — balances disconnect-detection latency against probe cost
     /// (each tick spawns one stdio subprocess per stdio server).
     static let mcpPeriodicProbeInterval: UInt64 = 300 * 1_000_000_000
@@ -1197,26 +1115,52 @@ final class AppState {
     /// in the (window-less) Settings sheet.
     var activeProjectPath: String?
 
-    init(
+    /// Convenience init that creates a fresh, unshared `AppCore`. Used by the
+    /// menu-bar / tests / any call site that doesn't yet thread a shared core.
+    convenience init(
         persistence injectedPersistence: (any AppStatePersistenceService)? = nil,
         startBackgroundServices: Bool = true
     ) {
-        let metaStore = self.metaStore
-        let cliStore = CLISessionStore(metaStore: metaStore)
-        self.cliStore = cliStore
-        let claude = ClaudeService(cliStore: cliStore)
-        self.claude = claude
+        self.init(
+            core: AppCore(),
+            persistence: injectedPersistence,
+            startBackgroundServices: startBackgroundServices
+        )
+    }
+
+    init(
+        core: AppCore,
+        workspace: AppWorkspace? = nil,
+        persistence injectedPersistence: (any AppStatePersistenceService)? = nil,
+        startBackgroundServices: Bool = true
+    ) {
+        self.core = core
+        let workspaceSnapshot = core.workspaceRegistry.load()
+        // Bind this AppState to a specific workspace when one is supplied
+        // (multi-window); otherwise fall back to the registry's active workspace.
+        let active = workspace ?? workspaceSnapshot.active
+        self.activeWorkspace = active
+        self.workspaces = workspaceSnapshot.all
+        self.workspaceDefaults = WorkspaceDefaults(workspaceID: active.id)
+
+        let metaStore = core.metaStore
+        let cliStore = core.cliStore
+        let claude = core.claude
         self.codex = CodexAppServer()
         let acp = ACPService()
         self.acp = acp
-        self.persistence = injectedPersistence ?? PersistenceService(metaStore: metaStore, cliStore: cliStore)
-        self.mcp = MCPService(claudeService: claude)
-        self.threadStore = ThreadStore.make()
-        self.autopilot = AutopilotService(rxAuth: RxAuthService.shared)
-        self.secrets = SecretsService(rxAuth: RxAuthService.shared)
-        self.ciUpdates = CIUpdateService(rxAuth: RxAuthService.shared)
-        self.docs = DocsService(rxAuth: RxAuthService.shared)
-        self.release = ReleaseService(rxAuth: RxAuthService.shared)
+        self.persistence = injectedPersistence ?? PersistenceService(metaStore: metaStore, cliStore: cliStore, baseURL: active.storageURL)
+        self.marketplace = MarketplaceService(baseURL: active.storageURL)
+        self.mcp = MCPService(baseURL: active.storageURL, claudeService: claude)
+        self.threadStore = ThreadStore.make(baseURL: active.storageURL)
+        let rxAuth = RxAuthService(keychainService: active.rxAuthKeychainService)
+        self.rxAuth = rxAuth
+        self.autopilot = AutopilotService(rxAuth: rxAuth)
+        self.secrets = SecretsService(rxAuth: rxAuth)
+        self.ciUpdates = CIUpdateService(rxAuth: rxAuth)
+        self.docs = DocsService(rxAuth: rxAuth)
+        self.release = ReleaseService(rxAuth: rxAuth)
+        loadWorkspaceSettings()
         self.runService.onTasksChanged = { [weak self] in
             Task { @MainActor [weak self] in
                 self?.broadcastMobileRunTasks()
@@ -1242,7 +1186,9 @@ final class AppState {
             let memoryService = self.memoryService
             let threadStore = self.threadStore
             let persistence = self.persistence
+            let workspaceDefaults = self.workspaceDefaults
             Task.detached(priority: .utility) { [weak self] in
+                await searchService.setWorkspaceDefaults(workspaceDefaults)
                 await searchService.start(threadStore: threadStore)
                 await memoryService.start(threadStore: threadStore)
                 await searchService.backfillIfNeeded(
@@ -1253,9 +1199,10 @@ final class AppState {
                     }
                 )
             }
-
-            setupMobileSyncBridge()
         }
+        // Mobile sync is owned by a single (frontmost) workspace — bound by
+        // WorkspaceManager, not here, so multiple workspace windows don't all
+        // respond to the same mobile request.
 
         // Build the hook controller/manager last — the controller captures
         // `self` (weakly) and every other service it forwards to is now ready.

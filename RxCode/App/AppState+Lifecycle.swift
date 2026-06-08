@@ -133,20 +133,6 @@ extension AppState {
         ThemeStore.shared.fontSizeAdjustment = fontSizeAdjustment
         ThemeStore.shared.messageFontSizeAdjustment = messageFontSizeAdjustment
 
-        // Supply MobileSyncService with desktop-side context for the mobile
-        // job Live Activity and home-screen widget pushes.
-        MobileSyncService.shared.projectNameResolver = { [weak self] id in
-            self?.projects.first { $0.id == id }?.name
-        }
-        MobileSyncService.shared.usageSnapshotProvider = { [weak self] in
-            (
-                cc: self?.latestRateLimitUsage?.fiveHourPercent,
-                ccWeekly: self?.latestRateLimitUsage?.sevenDayPercent,
-                codex: self?.latestCodexRateLimitUsage?.fiveHourPercent,
-                codexWeekly: self?.latestCodexRateLimitUsage?.sevenDayPercent
-            )
-        }
-
         await refreshAgentInstallations()
 
         // Prewarm each backend's shell PATH cache in parallel so the first
@@ -247,7 +233,7 @@ extension AppState {
         await loadACPClientsFromDisk()
         Task { await self.refreshACPRegistry(forceRefresh: false) }
 
-        permissionMode = Self.readPermissionModeFromSettings()
+        permissionMode = PermissionMode(rawValue: workspaceDefaults.string(for: "selectedPermissionMode") ?? "") ?? .default
 
         do {
             try await permission.start()
@@ -430,7 +416,7 @@ extension AppState {
            let project = projects.first(where: { $0.id == projectId })
         {
             selectProject(project, in: window)
-        } else if let savedId = UserDefaults.standard.string(forKey: "selectedProjectId"),
+        } else if let savedId = workspaceDefaults.string(for: "selectedProjectId"),
                   let uuid = UUID(uuidString: savedId),
                   let project = projects.first(where: { $0.id == uuid })
         {

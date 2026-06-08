@@ -25,7 +25,11 @@ actor MarketplaceService {
     private var cachedCatalog: [MarketplacePlugin] = []
     private var cacheDate: Date?
     private let cacheTTL: TimeInterval = 300 // 5 minutes
-    private let configURL = AppSupport.bundleScopedURL.appendingPathComponent("skills.json")
+    private let configURL: URL
+
+    init(baseURL: URL = AppSupport.bundleScopedURL) {
+        self.configURL = baseURL.appendingPathComponent("skills.json")
+    }
 
     /// Source repositories to scan.
     private static let sourceRepos: [(owner: String, repo: String, defaultCategory: String)] = [

@@ -66,6 +66,7 @@ final class HookManager {
 
     func dispatchBeforeSessionEnd(_ payload: SessionEndPayload) async -> HookAggregateResult {
         guard !threadSkipsHooks(payload.sessionKey, payload.sessionId) else { return HookAggregateResult.fold([]) }
+        guard !sessionEndHooksSuppressed(payload) else { return HookAggregateResult.fold([]) }
         var outcomes: [HookOutcome] = []
         for hook in enabledHooks {
             outcomes.append(await hook.beforeSessionEnd(payload, controller: controller))
@@ -75,11 +76,26 @@ final class HookManager {
 
     func dispatchAfterSessionEnd(_ payload: SessionEndPayload) async -> HookAggregateResult {
         guard !threadSkipsHooks(payload.sessionKey, payload.sessionId) else { return HookAggregateResult.fold([]) }
+        guard !sessionEndHooksSuppressed(payload) else { return HookAggregateResult.fold([]) }
         var outcomes: [HookOutcome] = []
         for hook in enabledHooks {
             outcomes.append(await hook.afterSessionEnd(payload, controller: controller))
         }
         return HookAggregateResult.fold(outcomes)
+    }
+
+    /// Centrally suppress *all* session-end hooks (code review, commit/push, send
+    /// message, user stop hooks) for a planning turn — plan mode or an undecided
+    /// `ExitPlanMode` plan. Sits beside `threadSkipsHooks` so both completion and
+    /// cancellation dispatch paths are covered without each call site repeating
+    /// the check. Callers still mark `stopHooksHandledStreamIds` around the
+    /// dispatch, so a skipped turn can't be re-fired by a later result/cancel.
+    private func sessionEndHooksSuppressed(_ payload: SessionEndPayload) -> Bool {
+        guard controller.sessionEndHooksSuppressed(sessionKey: payload.sessionKey, sessionId: payload.sessionId) else {
+            return false
+        }
+        logger.debug("[Hook] session-end hooks suppressed (plan mode / pending plan): sessionKey=\(payload.sessionKey, privacy: .public)")
+        return true
     }
 
     // MARK: - Repository

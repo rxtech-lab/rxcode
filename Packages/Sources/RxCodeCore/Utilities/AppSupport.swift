@@ -19,6 +19,17 @@ public enum AppSupport {
         return target
     }()
 
+    public static let personalWorkspaceID = "personal"
+
+    public static func workspaceScopedURL(id: String) -> URL {
+        if id == personalWorkspaceID {
+            return bundleScopedURL
+        }
+        return bundleScopedURL
+            .appendingPathComponent("workspaces", isDirectory: true)
+            .appendingPathComponent(id, isDirectory: true)
+    }
+
     private static var directoryName: String {
         let bundleID = Bundle.main.bundleIdentifier ?? "com.idealapp.RxCode"
         if bundleID == "com.idealapp.RxCode" { return "RxCode" }

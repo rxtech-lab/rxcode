@@ -8,6 +8,37 @@ import SwiftUI
 // MARK: - Mobile Sync Bridge
 
 extension AppState {
+    /// Make this workspace the single owner of mobile sync: register the inbound
+    /// request observers and supply the desktop-side resolvers. Called by
+    /// `WorkspaceManager` when this workspace becomes frontmost. Idempotent.
+    func bindMobileSyncOwnership() {
+        guard mobileSyncObservers.isEmpty else { return }
+        setupMobileSyncBridge()
+
+        // Supply MobileSyncService with desktop-side context for the mobile
+        // job Live Activity and home-screen widget pushes.
+        MobileSyncService.shared.projectNameResolver = { [weak self] id in
+            self?.projects.first { $0.id == id }?.name
+        }
+        MobileSyncService.shared.usageSnapshotProvider = { [weak self] in
+            (
+                cc: self?.latestRateLimitUsage?.fiveHourPercent,
+                ccWeekly: self?.latestRateLimitUsage?.sevenDayPercent,
+                codex: self?.latestCodexRateLimitUsage?.fiveHourPercent,
+                codexWeekly: self?.latestCodexRateLimitUsage?.sevenDayPercent
+            )
+        }
+    }
+
+    /// Relinquish mobile-sync ownership: remove this workspace's inbound request
+    /// observers so it stops responding to mobile requests once another
+    /// workspace becomes frontmost.
+    func unbindMobileSyncOwnership() {
+        let center = NotificationCenter.default
+        mobileSyncObservers.forEach { center.removeObserver($0) }
+        mobileSyncObservers.removeAll()
+    }
+
     func setupMobileSyncBridge() {
         let center = NotificationCenter.default
         let snapshotObserver = center.addObserver(

@@ -42,9 +42,9 @@ final class ThreadStore {
 
     /// Convenience initializer creating its own `ModelContainer` rooted at the
     /// app's Application Support directory.
-    static func make() -> ThreadStore {
+    static func make(baseURL: URL = AppSupport.bundleScopedURL) -> ThreadStore {
         let schema = Self.schema
-        let url = Self.storeURL()
+        let url = Self.storeURL(baseURL: baseURL)
         let config = ModelConfiguration(schema: schema, url: url)
         do {
             let container = try ModelContainer(for: schema, configurations: [config])
@@ -64,9 +64,9 @@ final class ThreadStore {
         }
     }
 
-    private static func storeURL() -> URL {
+    private static func storeURL(baseURL: URL) -> URL {
         let fm = FileManager.default
-        let dir = AppSupport.bundleScopedURL
+        let dir = baseURL
         try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("threads.store")
     }

@@ -10,6 +10,8 @@ struct MainView: View {
     @Environment(WindowState.self) private var windowState
     @State private var showGitHubSheet = false
     @State private var showFilePicker = false
+    @State private var showCreateWorkspaceSheet = false
+    @State private var showManageWorkspaceSheet = false
     @Environment(\.openSettings) private var openSettings
     @State private var sidebarTab: SidebarTab = .history
     @State private var fileSearchTrigger = false
@@ -264,6 +266,22 @@ struct MainView: View {
         }
         .background(ClaudeTheme.sidebarBackground.ignoresSafeArea())
         .navigationSplitViewColumnWidth(min: 250, ideal: 250, max: 500)
+        .toolbar {
+            ToolbarItem(placement: .automatic) {
+                WorkspaceSwitcher(
+                    showingCreateSheet: $showCreateWorkspaceSheet,
+                    showingManageSheet: $showManageWorkspaceSheet
+                )
+            }
+        }
+        .sheet(isPresented: $showCreateWorkspaceSheet) {
+            CreateWorkspaceSheet()
+                .environment(appState)
+        }
+        .sheet(isPresented: $showManageWorkspaceSheet) {
+            ManageWorkspacesSheet()
+                .environment(appState)
+        }
         .sheet(isPresented: $showGitHubSheet) {
             AutopilotRepoSheet()
         }
@@ -498,7 +516,7 @@ struct ProjectTabButton: View {
         }
         .buttonStyle(.plain)
         .onTapGesture(count: 2) {
-            openWindow(id: "project-window", value: ProjectWindowValue(projectId: project.id, instanceId: UUID()))
+            openWindow(id: "project-window", value: ProjectWindowValue(projectId: project.id, instanceId: UUID(), workspaceID: appState.activeWorkspace.id))
         }
         .contextMenu {
             let hookItems = appState.projectContextMenuItems(for: project)

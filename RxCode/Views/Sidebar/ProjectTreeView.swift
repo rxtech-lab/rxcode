@@ -274,10 +274,9 @@ struct ProjectTreeView: View {
                             }
                         ),
                         isSelected: windowState.selectedProject?.id == project.id,
-                        onSelectProject: { appState.selectProject(project, in: windowState) },
                         onOpenInNewWindow: {
                             openWindow(id: "project-window",
-                                       value: ProjectWindowValue(projectId: project.id, instanceId: UUID()))
+                                       value: ProjectWindowValue(projectId: project.id, instanceId: UUID(), workspaceID: appState.activeWorkspace.id))
                         },
                         onRename: {
                             renameProjectText = project.name
@@ -340,7 +339,6 @@ private struct ProjectTreeRow: View {
     let project: Project
     @Binding var isExpanded: Bool
     let isSelected: Bool
-    let onSelectProject: () -> Void
     let onOpenInNewWindow: () -> Void
     let onRename: () -> Void
     let onDelete: () -> Void
@@ -464,8 +462,9 @@ private struct ProjectTreeRow: View {
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
         .onTapGesture {
-            onSelectProject()
-            if !isExpanded { isExpanded = true }
+            withAnimation(.easeInOut(duration: 0.18)) {
+                isExpanded.toggle()
+            }
         }
         .onTapGesture(count: 2) {
             onOpenInNewWindow()

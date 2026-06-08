@@ -21,9 +21,10 @@ final class RxAuthService {
     /// Keychain service shared with RxAuthSwift's `KeychainTokenStorage`. The
     /// SDK stores `access_token`, `refresh_token`, and `expires_at` under this
     /// service; we read those items directly for the fast-path token check.
-    static let keychainService = "com.rxtech.rxcode.rxauth"
+    nonisolated static let defaultKeychainService = "com.rxtech.rxcode.rxauth"
 
     let manager: OAuthManager
+    let keychainService: String
     private let logger = Logger(subsystem: "com.claudework", category: "RxAuthService")
 
     /// In-flight token refresh shared by every concurrent `accessToken()`
@@ -48,7 +49,8 @@ final class RxAuthService {
     /// read after a refresh no longer prompts either.
     private var cachedToken: (value: String, expiresAt: Date)?
 
-    init() {
+    init(keychainService: String = RxAuthService.defaultKeychainService) {
+        self.keychainService = keychainService
         let configuration = RxAuthConfiguration(
             issuer: Self.issuer,
             clientID: Self.clientID,
@@ -67,7 +69,7 @@ final class RxAuthService {
             // Must match the `webcredentials:rxlab.app` entitlement and the
             // AASA file served at https://rxlab.app/.well-known/apple-app-site-association.
             passkeyRelyingPartyIdentifier: "rxlab.app",
-            keychainServiceName: Self.keychainService
+            keychainServiceName: keychainService
         )
         self.manager = OAuthManager(configuration: configuration)
     }
@@ -103,8 +105,8 @@ final class RxAuthService {
         // stored item was written by a build with a different signature; we seed
         // the in-memory cache from it so the next caller skips the keychain.
         if !forceRefresh,
-           let token = KeychainBackedTokenReader.readAccessToken(service: Self.keychainService),
-           let expiresAt = Self.readExpiry(service: Self.keychainService),
+           let token = KeychainBackedTokenReader.readAccessToken(service: keychainService),
+           let expiresAt = Self.readExpiry(service: keychainService),
            !Self.isExpiring(expiresAt) {
             cachedToken = (token, expiresAt)
             return token
@@ -124,11 +126,11 @@ final class RxAuthService {
     /// the keychain items under the current binary's signature — so this read
     /// matches the ACL and does not prompt.
     private func seedCacheFromKeychain() -> String? {
-        guard let token = KeychainBackedTokenReader.readAccessToken(service: Self.keychainService) else {
+        guard let token = KeychainBackedTokenReader.readAccessToken(service: keychainService) else {
             cachedToken = nil
             return nil
         }
-        cachedToken = (token, Self.readExpiry(service: Self.keychainService) ?? .distantPast)
+        cachedToken = (token, Self.readExpiry(service: keychainService) ?? .distantPast)
         return token
     }
 

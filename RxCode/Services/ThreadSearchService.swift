@@ -63,8 +63,13 @@ actor ThreadSearchService {
     /// Backfill version sentinel. Bump when chunking or embedding model changes.
     private let backfillVersion = 2
     private let backfillKey = "com.idealapp.RxCode.searchIndex.backfillVersion"
+    private var workspaceDefaults = WorkspaceDefaults(workspaceID: AppWorkspace.personalID)
 
     init() {}
+
+    func setWorkspaceDefaults(_ defaults: WorkspaceDefaults) async {
+        workspaceDefaults = defaults
+    }
 
     // MARK: - Lifecycle
 
@@ -97,6 +102,13 @@ actor ThreadSearchService {
             index[key]?.sort { $0.index < $1.index }
         }
         logger.info("Loaded \(rows.count) embedding chunks across \(self.index.count) threads")
+    }
+
+    func restart(threadStore: ThreadStore) async {
+        index.removeAll()
+        didStart = false
+        self.threadStore = nil
+        await start(threadStore: threadStore)
     }
 
     // MARK: - Indexing
@@ -171,7 +183,7 @@ actor ThreadSearchService {
         logger.info("Reindex starting: clearing index and embedding chunk store")
         index.removeAll()
         await MainActor.run { store.deleteAllEmbeddingChunks() }
-        UserDefaults.standard.removeObject(forKey: backfillKey)
+        workspaceDefaults.set(nil as String?, for: backfillKey)
 
         let summaries = await MainActor.run { loadAll() }
         let total = summaries.count
@@ -189,7 +201,7 @@ actor ThreadSearchService {
             progress?(done, total)
             if done % 8 == 0 { await Task.yield() }
         }
-        UserDefaults.standard.set(backfillVersion, forKey: backfillKey)
+        workspaceDefaults.set(backfillVersion, for: backfillKey)
         logger.info("Reindex complete: processed=\(done), loadFailed=\(loadFailed), total=\(total)")
     }
 
@@ -285,7 +297,7 @@ actor ThreadSearchService {
             logger.info("Backfill skipped: threadStore not set")
             return
         }
-        let stored = UserDefaults.standard.integer(forKey: backfillKey)
+        let stored = workspaceDefaults.int(for: backfillKey, default: 0)
         guard stored < backfillVersion else {
             logger.info("Backfill skipped: already ran at version \(stored) (current=\(self.backfillVersion))")
             return
@@ -311,7 +323,7 @@ actor ThreadSearchService {
             // Yield occasionally so we don't starve the cooperative pool.
             if done % 8 == 0 { await Task.yield() }
         }
-        UserDefaults.standard.set(backfillVersion, forKey: backfillKey)
+        workspaceDefaults.set(backfillVersion, for: backfillKey)
         logger.info("Search backfill complete: indexed=\(done), alreadyIndexed=\(alreadyIndexed), loadFailed=\(loadFailed), total=\(summaries.count)")
     }
 

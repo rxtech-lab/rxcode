@@ -39,6 +39,13 @@ actor MemoryService {
         logger.info("Loaded \(rows.count) memory rows, indexed=\(self.entries.count)")
     }
 
+    func restart(threadStore: ThreadStore) async {
+        entries.removeAll()
+        didStart = false
+        self.threadStore = nil
+        await start(threadStore: threadStore)
+    }
+
     func allMemories() async -> [MemoryItem] {
         entries.values
             .map(\.item)

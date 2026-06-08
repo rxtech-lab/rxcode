@@ -44,6 +44,14 @@ public protocol HookController: AnyObject {
 
     /// Whether the thread should skip all lifecycle hooks (e.g. a review thread).
     func threadSkipsHooks(sessionId: String) -> Bool
+    /// Whether session-end lifecycle hooks must be skipped for the current turn
+    /// because it is a *planning* turn — the session is in plan mode, or the
+    /// agent emitted an `ExitPlanMode` plan the user hasn't decided yet. Code
+    /// review, commit/push, and every other stop hook must not run on a plan
+    /// (reviewing/committing an unaccepted plan is always wrong). Enforced
+    /// centrally in `HookManager` ahead of both the completion and cancellation
+    /// session-end dispatch paths.
+    func sessionEndHooksSuppressed(sessionKey: String, sessionId: String) -> Bool
     /// Resolve a stored hook model selection into the provider/model pair used
     /// for a spawned agent thread. Empty selections inherit the reviewed thread.
     func resolveAgentModelSelection(storedModel: String?, fallbackSessionId: String) -> (provider: AgentProvider, model: String)?

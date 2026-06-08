@@ -1014,6 +1014,9 @@
         }
       }
     },
+    "Active" : {
+
+    },
     "Add" : {
       "localizations" : {
         "en" : {
@@ -4648,6 +4651,12 @@
         }
       }
     },
+    "Create Workspace" : {
+
+    },
+    "Create Workspace..." : {
+
+    },
     "Create worktree" : {
       "localizations" : {
         "ko" : {
@@ -5379,6 +5388,9 @@
           }
         }
       }
+    },
+    "Delete Workspace" : {
+
     },
     "Deleting \"%@\"…" : {
       "localizations" : {
@@ -6880,22 +6892,6 @@
         }
       }
     },
-    "Format the JSON body." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "JSON 본문의 형식을 지정합니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "格式化 JSON 正文。"
-          }
-        }
-      }
-    },
     "Force off" : {
       "localizations" : {
         "ko" : {
@@ -6924,6 +6920,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "强制开启"
+          }
+        }
+      }
+    },
+    "Format the JSON body." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "JSON 본문의 형식을 지정합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "格式化 JSON 正文。"
           }
         }
       }
@@ -8775,6 +8787,12 @@
           }
         }
       }
+    },
+    "Manage Workspaces" : {
+
+    },
+    "Manage Workspaces..." : {
+
     },
     "Manage your repositories, environments, and secrets." : {
       "localizations" : {
@@ -11555,22 +11573,6 @@
         }
       }
     },
-    "Prettify" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "서식 지정"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "格式化"
-          }
-        }
-      }
-    },
     "Press Command-K or use the toolbar search button to find past work across projects." : {
       "localizations" : {
         "ko" : {
@@ -11583,6 +11585,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "按 Command-K 或使用工具栏搜索按钮，在各项目中查找过去的工作。"
+          }
+        }
+      }
+    },
+    "Prettify" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "서식 지정"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "格式化"
           }
         }
       }
@@ -12579,6 +12597,9 @@
           }
         }
       }
+    },
+    "Rename Workspace" : {
+
     },
     "Rename…" : {
       "localizations" : {
@@ -15397,6 +15418,9 @@
         }
       }
     },
+    "Switch Workspace" : {
+
+    },
     "Tap to answer" : {
       "comment" : "Notification body when Claude invokes AskUserQuestion.",
       "localizations" : {
@@ -15739,6 +15763,9 @@
           }
         }
       }
+    },
+    "This removes the workspace and its settings. Files on disk are not deleted." : {
+
     },
     "This session will be deleted. This action cannot be undone." : {
       "localizations" : {
@@ -16885,6 +16912,9 @@
           }
         }
       }
+    },
+    "Workspace name" : {
+
     },
     "Wrote %@ to the project." : {
       "localizations" : {

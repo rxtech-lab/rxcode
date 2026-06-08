@@ -20,10 +20,33 @@ codesign --force --options runtime --timestamp --sign "${SIGNING_CERTIFICATE_NAM
 # Sign the Sparkle framework as a whole
 codesign --force --options runtime --timestamp --sign "${SIGNING_CERTIFICATE_NAME}" "$APP_PATH/Contents/Frameworks/Sparkle.framework"
 
-# Re-sign the main app binary
-codesign --force --options runtime --timestamp --sign "${SIGNING_CERTIFICATE_NAME}" "$APP_PATH/Contents/MacOS/RxCode"
+# Capture the entitlements xcodebuild embedded in the archive BEFORE re-signing
+# the main app. `codesign --force` without --entitlements drops them, which
+# strips com.apple.developer.associated-domains and breaks passkeys/webcredentials
+# (app reported as "not associated with domain rxlab.app"). We re-apply the exact
+# archived entitlements (which also carry the profile-injected application-identifier
+# and team-identifier) so the resealed binary keeps them.
+ENTITLEMENTS_PLIST="${RUNNER_TEMP:-/tmp}/RxCode-app.entitlements.plist"
+codesign -d --entitlements "$ENTITLEMENTS_PLIST" --xml "$APP_PATH" 2>/dev/null
 
-# Re-sign the main app to ensure everything is properly signed
-codesign --force --options runtime --timestamp --sign "${SIGNING_CERTIFICATE_NAME}" "$APP_PATH"
+if [ ! -s "$ENTITLEMENTS_PLIST" ]; then
+  echo "Error: failed to extract entitlements from archived app; aborting to avoid shipping an app without associated-domains"
+  exit 1
+fi
+
+echo "Preserving archived entitlements:"
+/usr/bin/plutil -p "$ENTITLEMENTS_PLIST" || true
+
+# Re-sign the main app binary, re-applying the archived entitlements
+codesign --force --options runtime --timestamp --entitlements "$ENTITLEMENTS_PLIST" --sign "${SIGNING_CERTIFICATE_NAME}" "$APP_PATH/Contents/MacOS/RxCode"
+
+# Re-sign the main app to ensure everything is properly signed, keeping entitlements
+codesign --force --options runtime --timestamp --entitlements "$ENTITLEMENTS_PLIST" --sign "${SIGNING_CERTIFICATE_NAME}" "$APP_PATH"
+
+# Verify the resealed app still declares associated-domains
+if ! codesign -d --entitlements - --xml "$APP_PATH" 2>/dev/null | grep -q "com.apple.developer.associated-domains"; then
+  echo "Error: associated-domains entitlement missing after re-signing"
+  exit 1
+fi
 
 echo "Signing completed successfully"

@@ -564,6 +564,53 @@ final class AppStateTests: XCTestCase {
         XCTAssertFalse(AppState.isConventionalCommitTitle(""))
     }
 
+    func testParsePullRequestContentTruncatesTitleToTwentyWords() {
+        let raw = """
+        feat: add one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty
+
+        Body text.
+        """
+
+        let result = AppState.parsePullRequestContent(raw, branch: "context-menu")
+
+        let wordCount = result.title.split(whereSeparator: { $0.isWhitespace }).count
+        XCTAssertEqual(wordCount, AppState.maxPullRequestTitleWords)
+        XCTAssertEqual(
+            result.title,
+            "feat: add one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen"
+        )
+        XCTAssertEqual(result.body, "Body text.")
+    }
+
+    func testParsePullRequestContentKeepsShortTitleUnchanged() {
+        let raw = """
+        fix: correct the crash on launch
+
+        Body text.
+        """
+
+        let result = AppState.parsePullRequestContent(raw, branch: "context-menu")
+
+        XCTAssertEqual(result.title, "fix: correct the crash on launch")
+    }
+
+    func testTruncatePullRequestTitleWordsStripsDanglingPunctuation() {
+        // 21 words where the 20th word ends in a period; truncation must drop the
+        // trailing punctuation left dangling at the cut.
+        let title = "feat: add one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen. nineteen"
+
+        let truncated = AppState.truncatePullRequestTitleWords(title)
+
+        XCTAssertEqual(
+            truncated,
+            "feat: add one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen"
+        )
+        XCTAssertEqual(
+            truncated.split(whereSeparator: { $0.isWhitespace }).count,
+            AppState.maxPullRequestTitleWords
+        )
+    }
+
     // MARK: - Helpers
 
     private func makeProject(_ name: String) -> Project {

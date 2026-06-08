@@ -25,7 +25,7 @@ final class CustomMenuHook: Hook {
         let surface: CustomMenuItemRecord.Surface = payload.branch != nil ? .briefing : .project
         let context = PlaceholderContext(project: payload.project, branch: payload.branch, sessionId: nil)
         return controller.customMenuItems(projectId: payload.project.id, surface: surface)
-            .map { item($0, context: context, projectId: payload.project.id) }
+            .map { item($0, surface: surface, context: context, projectId: payload.project.id) }
     }
 
     // MARK: - Thread menu
@@ -33,13 +33,14 @@ final class CustomMenuHook: Hook {
     func onThreadContextMenu(_ payload: ThreadContextMenuPayload, controller: any HookController) -> [MenuItem] {
         let context = PlaceholderContext(project: payload.project, branch: nil, sessionId: payload.session.id)
         return controller.customMenuItems(projectId: payload.project.id, surface: .thread)
-            .map { item($0, context: context, projectId: payload.project.id, sessionId: payload.session.id) }
+            .map { item($0, surface: .thread, context: context, projectId: payload.project.id, sessionId: payload.session.id) }
     }
 
     // MARK: - Build one item
 
     private func item(
         _ record: CustomMenuItemRecord,
+        surface: CustomMenuItemRecord.Surface,
         context: PlaceholderContext,
         projectId: UUID,
         sessionId: String? = nil
@@ -47,7 +48,7 @@ final class CustomMenuHook: Hook {
         let config = resolvedConfig(record, context: context, sessionId: sessionId)
         let isAPI = record.actionKindValue == .callAPI
         return MenuItem(
-            id: "\(hookID).\(record.surface).\(record.id)",
+            id: "\(hookID).\(surface.rawValue).\(record.id)",
             title: record.title,
             systemImage: record.systemImage,
             action: .command(MenuActionCommand(

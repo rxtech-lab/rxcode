@@ -65,6 +65,8 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // Required by the android-tree-sitter AARs.
+        isCoreLibraryDesugaringEnabled = true
     }
     kotlinOptions {
         jvmTarget = "17"
@@ -126,6 +128,17 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.svg)
     implementation(libs.compose.markdown)
+
+    // Tree-sitter syntax highlighting (core + bundled grammars).
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
+    implementation(libs.treesitter.core)
+    implementation(libs.treesitter.java)
+    implementation(libs.treesitter.kotlin)
+    implementation(libs.treesitter.python)
+    implementation(libs.treesitter.json)
+    implementation(libs.treesitter.c)
+    implementation(libs.treesitter.cpp)
+    implementation(libs.treesitter.xml)
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)
     implementation(libs.firebase.analytics)

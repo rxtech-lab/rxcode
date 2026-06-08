@@ -114,6 +114,7 @@ import app.rxlab.rxcode.proto.TodoExtractor
 import app.rxlab.rxcode.proto.TodoItem
 import app.rxlab.rxcode.ui.sheets.newBashRunProfile
 import app.rxlab.rxcode.ui.util.HapticEvent
+import app.rxlab.rxcode.ui.util.MarkdownWithCode
 import app.rxlab.rxcode.ui.util.RxMarkdownText
 import app.rxlab.rxcode.ui.util.rememberHaptics
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -620,7 +621,7 @@ private fun MessageBubble(
             assistantRenderBlocks(msg).forEach { block ->
                 when (block) {
                     is AssistantRenderBlock.Text -> {
-                        RxMarkdownText(
+                        MarkdownWithCode(
                             markdown = block.text,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurface,

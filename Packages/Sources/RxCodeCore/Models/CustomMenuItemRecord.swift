@@ -7,8 +7,9 @@ import SwiftData
 /// surface; mobile fetches the same items over the relay and renders them
 /// identically, so no separate sync channel is needed.
 ///
-/// `surface` selects where the item appears (project / thread / briefing-card menu),
-/// `projectId == nil` means "all projects", and `actionKind` + the action fields
+/// `surface` selects where the item appears (any combination of project / thread /
+/// briefing-card menus, stored comma-separated), `projectId == nil` means
+/// "all projects", and `actionKind` + the action fields
 /// describe the work the desktop performs when the item is tapped. Template fields
 /// (`urlString`, `bodyTemplate`, `messageTemplate`, header values) may contain
 /// context placeholders such as `{{projectName}}`, `{{projectPath}}`,
@@ -36,7 +37,8 @@ public final class CustomMenuItemRecord {
     public var systemImage: String?
     /// `nil` => available in every project; otherwise scoped to this project.
     public var projectId: UUID?
-    /// Raw `Surface` value.
+    /// Comma-separated raw `Surface` values (e.g. `"project,thread"`). A single
+    /// legacy value (`"project"`) parses identically, so old records keep working.
     public var surface: String
     /// Raw `ActionKind` value.
     public var actionKind: String
@@ -63,7 +65,7 @@ public final class CustomMenuItemRecord {
         title: String,
         systemImage: String? = nil,
         projectId: UUID? = nil,
-        surface: Surface,
+        surfaces: [Surface],
         actionKind: ActionKind,
         httpMethod: String? = nil,
         urlString: String? = nil,
@@ -80,7 +82,7 @@ public final class CustomMenuItemRecord {
         self.title = title
         self.systemImage = systemImage
         self.projectId = projectId
-        self.surface = surface.rawValue
+        self.surface = CustomMenuItemRecord.encodeSurfaces(surfaces)
         self.actionKind = actionKind.rawValue
         self.httpMethod = httpMethod
         self.urlString = urlString
@@ -94,8 +96,25 @@ public final class CustomMenuItemRecord {
         self.updatedAt = updatedAt
     }
 
-    public var surfaceValue: Surface { Surface(rawValue: surface) ?? .project }
+    /// All surfaces this item attaches to, in the stored order. Falls back to
+    /// `[.project]` for an empty/unparseable value so the item never disappears.
+    public var surfaces: [Surface] {
+        let parsed = surface
+            .split(separator: ",")
+            .compactMap { Surface(rawValue: $0.trimmingCharacters(in: .whitespaces)) }
+        return parsed.isEmpty ? [.project] : parsed
+    }
+
+    /// First surface — kept for callers that only need a single representative value.
+    public var surfaceValue: Surface { surfaces.first ?? .project }
     public var actionKindValue: ActionKind { ActionKind(rawValue: actionKind) ?? .createThread }
+
+    /// Encode a surface list to the stored comma-separated representation. Falls
+    /// back to `project` when empty so a record always has a home.
+    public static func encodeSurfaces(_ surfaces: [Surface]) -> String {
+        let list = surfaces.isEmpty ? [Surface.project] : surfaces
+        return list.map(\.rawValue).joined(separator: ",")
+    }
 
     /// Decoded header map (empty when unset or malformed).
     public var headers: [String: String] {

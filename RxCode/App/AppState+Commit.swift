@@ -109,6 +109,7 @@ extension AppState {
             waitForResponse: false,
             timeoutSeconds: 600,
             threadLabel: Self.manualCommitLabel,
+            skipHooks: true,
             setupKind: HookSetupKind.commitPush
         )
         if let error = result.error { throw CommitFilesError.sendFailed(error) }

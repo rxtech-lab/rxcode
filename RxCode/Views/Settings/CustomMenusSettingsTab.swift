@@ -24,6 +24,7 @@ struct CustomMenusSettingsSection: View {
         .sheet(item: $editing) { draft in
             CustomMenuEditorSheet(draft: draft, projects: appState.projects) { result in
                 appState.threadStore.upsertCustomMenuItem(result.toRecord())
+                appState.customMenuItemsRevision += 1
                 reload()
             }
         }
@@ -33,6 +34,7 @@ struct CustomMenusSettingsSection: View {
                 let id = record.id
                 pendingRemoval = nil
                 appState.threadStore.deleteCustomMenuItem(id: id)
+                appState.customMenuItemsRevision += 1
                 reload()
             }
         } message: { record in
@@ -105,6 +107,7 @@ struct CustomMenusSettingsSection: View {
                             onToggle: { enabled in
                                 record.isEnabled = enabled
                                 appState.threadStore.upsertCustomMenuItem(record)
+                                appState.customMenuItemsRevision += 1
                                 reload()
                             },
                             onRemove: { pendingRemoval = record }
@@ -144,7 +147,7 @@ private struct CustomMenuRow: View {
                 Text(verbatim: record.title)
                     .font(.system(size: ClaudeTheme.size(13), weight: .medium))
                 HStack(spacing: 6) {
-                    badge(surfaceLabel)
+                    ForEach(record.surfaces, id: \.self) { badge(surfaceLabel($0)) }
                     badge(actionLabel)
                     Text(verbatim: projectName)
                         .font(.system(size: ClaudeTheme.size(10)))
@@ -189,8 +192,8 @@ private struct CustomMenuRow: View {
             .clipShape(RoundedRectangle(cornerRadius: 4))
     }
 
-    private var surfaceLabel: String {
-        switch record.surfaceValue {
+    private func surfaceLabel(_ surface: CustomMenuItemRecord.Surface) -> String {
+        switch surface {
         case .project: return "Project"
         case .thread: return "Thread"
         case .briefing: return "Briefing"

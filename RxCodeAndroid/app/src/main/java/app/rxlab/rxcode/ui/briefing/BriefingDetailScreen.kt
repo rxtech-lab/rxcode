@@ -56,6 +56,7 @@ import app.rxlab.rxcode.state.MobileState
 import app.rxlab.rxcode.ui.autopilot.ProjectActionsMenu
 import app.rxlab.rxcode.ui.sheets.NewThreadSheet
 import app.rxlab.rxcode.ui.util.HapticEvent
+import app.rxlab.rxcode.ui.util.MarkdownWithCode
 import app.rxlab.rxcode.ui.util.RxMarkdownText
 import app.rxlab.rxcode.ui.util.rememberHaptics
 import app.rxlab.rxcode.ui.util.relativeTime
@@ -346,7 +347,7 @@ private fun SummaryCard(text: String) {
                 )
             }
             if (text.isNotEmpty()) {
-                RxMarkdownText(
+                MarkdownWithCode(
                     markdown = text,
                     style = MaterialTheme.typography.bodyMedium,
                 )

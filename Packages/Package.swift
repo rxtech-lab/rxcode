@@ -9,6 +9,7 @@ let package = Package(
         .library(name: "MessageList", targets: ["MessageList"]),
         .library(name: "RxCodeCore", targets: ["RxCodeCore"]),
         .library(name: "RxCodeChatKit", targets: ["RxCodeChatKit"]),
+        .library(name: "RxCodeEditor", targets: ["RxCodeEditor"]),
         .library(name: "RxCodeMarkdown", targets: ["RxCodeMarkdown"]),
         .library(name: "RxCodeSync", targets: ["RxCodeSync"]),
         .library(name: "DiffView", targets: ["DiffView"]),
@@ -30,6 +31,7 @@ let package = Package(
         ),
         .target(
             name: "RxCodeMarkdown",
+            dependencies: ["RxCodeCore"],
             path: "Sources/RxCodeMarkdown"
         ),
         .target(
@@ -52,6 +54,11 @@ let package = Package(
             name: "RxCodeSync",
             dependencies: ["RxCodeCore"],
             path: "Sources/RxCodeSync"
+        ),
+        .target(
+            name: "RxCodeEditor",
+            dependencies: ["RxCodeCore"],
+            path: "Sources/RxCodeEditor"
         ),
         .target(
             name: "DiffView",
@@ -87,6 +94,11 @@ let package = Package(
                 .product(name: "ViewInspector", package: "ViewInspector"),
             ],
             path: "Tests/RxCodeChatKitTests"
+        ),
+        .testTarget(
+            name: "RxCodeEditorTests",
+            dependencies: ["RxCodeEditor"],
+            path: "Tests/RxCodeEditorTests"
         ),
         .testTarget(
             name: "RxCodeMarkdownTests",

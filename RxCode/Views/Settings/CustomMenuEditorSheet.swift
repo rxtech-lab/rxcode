@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 import RxCodeCore
 
@@ -9,7 +10,7 @@ struct CustomMenuDraft: Identifiable {
     var title: String
     var systemImage: String
     var projectId: UUID?            // nil = all projects
-    var surface: CustomMenuItemRecord.Surface
+    var surfaces: Set<CustomMenuItemRecord.Surface>
     var actionKind: CustomMenuItemRecord.ActionKind
 
     // callAPI
@@ -38,7 +39,7 @@ struct CustomMenuDraft: Identifiable {
         title = ""
         systemImage = "bolt"
         projectId = nil
-        surface = .project
+        surfaces = [.project]
         actionKind = .callAPI
         httpMethod = "POST"
         urlString = ""
@@ -57,7 +58,7 @@ struct CustomMenuDraft: Identifiable {
         title = record.title
         systemImage = record.systemImage ?? "bolt"
         projectId = record.projectId
-        surface = record.surfaceValue
+        surfaces = Set(record.surfaces)
         actionKind = record.actionKindValue
         httpMethod = record.httpMethod ?? "POST"
         urlString = record.urlString ?? ""
@@ -72,15 +73,16 @@ struct CustomMenuDraft: Identifiable {
     var trimmedTitle: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     var isValid: Bool {
-        guard !trimmedTitle.isEmpty else { return false }
+        guard !trimmedTitle.isEmpty, !surfaces.isEmpty else { return false }
         switch actionKind {
         case .callAPI: return !urlString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         case .createThread: return !messageTemplate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         case .continueThread:
             guard !messageTemplate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
-            // A thread-menu item continues the tapped thread, so no explicit target
-            // is needed; project/briefing items must name the thread to continue.
-            if surface == .thread { return true }
+            // A thread-only menu item continues the tapped thread, so no explicit
+            // target is needed; if it also appears on a project/briefing surface it
+            // must name the thread to continue.
+            if surfaces == [.thread] { return true }
             return !targetSessionId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
     }
@@ -96,7 +98,7 @@ struct CustomMenuDraft: Identifiable {
             title: trimmedTitle,
             systemImage: systemImage.isEmpty ? nil : systemImage,
             projectId: projectId,
-            surface: surface,
+            surfaces: CustomMenuItemRecord.Surface.allCases.filter { surfaces.contains($0) },
             actionKind: actionKind,
             httpMethod: actionKind == .callAPI ? httpMethod : nil,
             urlString: actionKind == .callAPI ? urlString.trimmingCharacters(in: .whitespacesAndNewlines) : nil,
@@ -115,6 +117,7 @@ struct CustomMenuEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State var draft: CustomMenuDraft
+    @State private var bodyJSONFormatError: String?
     let projects: [Project]
     var onSave: (CustomMenuDraft) -> Void
 
@@ -141,7 +144,17 @@ struct CustomMenuEditorSheet: View {
 
             footer
         }
-        .frame(width: 540, height: 600)
+        .frame(width: 540, height: 700)
+    }
+
+    /// Toggles membership of `surface` in the draft's surface set.
+    private func surfaceBinding(_ surface: CustomMenuItemRecord.Surface) -> Binding<Bool> {
+        Binding(
+            get: { draft.surfaces.contains(surface) },
+            set: { isOn in
+                if isOn { draft.surfaces.insert(surface) } else { draft.surfaces.remove(surface) }
+            }
+        )
     }
 
     // MARK: - Sections
@@ -153,11 +166,15 @@ struct CustomMenuEditorSheet: View {
                 SFSymbolPicker(symbol: $draft.systemImage)
             }
             .help("An SF Symbol shown beside the title, e.g. \"bolt\".")
-            Picker("Show in", selection: $draft.surface) {
-                Text("Project menu").tag(CustomMenuItemRecord.Surface.project)
-                Text("Thread menu").tag(CustomMenuItemRecord.Surface.thread)
-                Text("Briefing card menu").tag(CustomMenuItemRecord.Surface.briefing)
+            LabeledContent("Show in") {
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("Project menu", isOn: surfaceBinding(.project))
+                    Toggle("Thread menu", isOn: surfaceBinding(.thread))
+                    Toggle("Briefing card menu", isOn: surfaceBinding(.briefing))
+                }
+                .toggleStyle(.checkbox)
             }
+            .help("Pick one or more menus this item appears on.")
             Picker("Scope", selection: $draft.projectId) {
                 Text("All projects").tag(UUID?.none)
                 ForEach(projects) { project in
@@ -190,13 +207,33 @@ struct CustomMenuEditorSheet: View {
             headersEditor
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("Body")
-                    .font(.system(size: ClaudeTheme.size(11)))
-                    .foregroundStyle(.secondary)
-                TextEditor(text: $draft.bodyTemplate)
-                    .font(.system(size: ClaudeTheme.size(12), design: .monospaced))
-                    .frame(minHeight: 90)
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Body (JSON)")
+                        .font(.system(size: ClaudeTheme.size(11)))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button {
+                        prettifyBodyJSON()
+                    } label: {
+                        Label("Prettify", systemImage: "wand.and.stars")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(draft.bodyTemplate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .help("Format the JSON body.")
+                }
+                JSONCodeEditor(text: $draft.bodyTemplate, fontSize: ClaudeTheme.size(12), minHeight: 200)
+                    .frame(minHeight: 200)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
                     .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color(NSColor.separatorColor)))
+                    .onChange(of: draft.bodyTemplate) { _, _ in
+                        bodyJSONFormatError = nil
+                    }
+                if let bodyJSONFormatError {
+                    Text(bodyJSONFormatError)
+                        .font(.system(size: ClaudeTheme.size(11)))
+                        .foregroundStyle(ClaudeTheme.statusError)
+                }
             }
         }
     }
@@ -267,5 +304,23 @@ struct CustomMenuEditorSheet: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
+    }
+
+    private func prettifyBodyJSON() {
+        let trimmed = draft.bodyTemplate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let data = trimmed.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]),
+              let formatted = try? JSONSerialization.data(
+                withJSONObject: object,
+                options: [.prettyPrinted, .withoutEscapingSlashes, .fragmentsAllowed]
+              ),
+              let string = String(data: formatted, encoding: .utf8)
+        else {
+            bodyJSONFormatError = String(localized: "Body must be valid JSON before it can be formatted.")
+            return
+        }
+
+        draft.bodyTemplate = string
+        bodyJSONFormatError = nil
     }
 }

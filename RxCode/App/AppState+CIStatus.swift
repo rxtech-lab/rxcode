@@ -181,7 +181,8 @@ extension AppState {
                 projectId: project.id,
                 threadId: nil,
                 prompt: prompt,
-                waitForResponse: false
+                waitForResponse: false,
+                skipHooks: true
             )
             logger.info("Started auto CI-fix thread for project \(project.name, privacy: .public)")
         } catch {
@@ -208,7 +209,8 @@ extension AppState {
             projectId: project.id,
             threadId: nil,
             prompt: prompt,
-            waitForResponse: false
+            waitForResponse: false,
+            skipHooks: true
         )
         if let error = result.error { throw CodeReviewError.sendFailed(error) }
         return result.threadId

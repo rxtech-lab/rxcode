@@ -147,9 +147,12 @@ struct MobileBriefingView: View {
         return counts
     }
 
-    /// Every briefing group before the project/branch filters are applied.
+    /// Every briefing group before the project/branch filters are applied,
+    /// ordered to follow the sidebar project order (then most-recent first
+    /// within a project) so cards line up with the project list.
     private var allGroups: [GroupedBriefing] {
         groupBriefings(briefings: state.branchBriefings, threads: state.threadSummaries)
+            .sortedByProjectOrder(state.projects)
     }
 
     /// Briefing groups after applying the active project and branch filters.
@@ -355,6 +358,7 @@ struct BriefingListView: View {
 
     private var allGroups: [GroupedBriefing] {
         groupBriefings(briefings: state.branchBriefings, threads: state.threadSummaries)
+            .sortedByProjectOrder(state.projects)
     }
 
     private var groups: [GroupedBriefing] {
@@ -821,4 +825,23 @@ func groupBriefings(
     }
 
     return buckets.values.sorted { $0.updatedAt > $1.updatedAt }
+}
+
+extension Array where Element == GroupedBriefing {
+    /// Reorder briefing groups to follow the given project order. Groups whose
+    /// project isn't in the list sort last; within the same project the most
+    /// recently updated comes first. Mirrors the desktop `BriefingView` sort.
+    func sortedByProjectOrder(_ projects: [Project]) -> [GroupedBriefing] {
+        let order: [UUID: Int] = Dictionary(
+            uniqueKeysWithValues: projects.enumerated().map { ($0.element.id, $0.offset) }
+        )
+        return sorted { lhs, rhs in
+            let lhsOrder = order[lhs.projectId] ?? Int.max
+            let rhsOrder = order[rhs.projectId] ?? Int.max
+            if lhsOrder != rhsOrder {
+                return lhsOrder < rhsOrder
+            }
+            return lhs.updatedAt > rhs.updatedAt
+        }
+    }
 }

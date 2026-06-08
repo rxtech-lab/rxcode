@@ -162,6 +162,22 @@ extension AppState {
         "test", "build", "ci", "chore", "revert"
     ]
 
+    /// Maximum number of whitespace-separated words allowed in a generated PR
+    /// title (including the Conventional-Commit `<type>:` prefix). Keeps titles
+    /// short and scannable even when the model ignores the prompt's length hint.
+    static let maxPullRequestTitleWords = 20
+
+    /// Truncate `title` to at most ``maxPullRequestTitleWords`` whitespace-
+    /// separated words. Returns the title unchanged when already within the
+    /// limit; otherwise keeps the leading words and strips any trailing
+    /// punctuation left dangling by the cut.
+    static func truncatePullRequestTitleWords(_ title: String) -> String {
+        let words = title.split(whereSeparator: { $0.isWhitespace })
+        guard words.count > maxPullRequestTitleWords else { return title }
+        let kept = words.prefix(maxPullRequestTitleWords).joined(separator: " ")
+        return stripTrailingPullRequestTitlePunctuation(kept)
+    }
+
     /// True when `title` matches `<type>(<optional-scope>)<!>: <description>` and
     /// `<type>` is one of ``conventionalCommitTypes``. Used to gate generated PR
     /// titles so a non-conforming title triggers a model retry.
@@ -217,6 +233,7 @@ extension AppState {
             .trimmingCharacters(in: CharacterSet(charactersIn: "\"'`"))
             .trimmingCharacters(in: .whitespaces)
         title = normalizePullRequestTitle(title, fallbackTitle: fallbackTitle)
+        title = truncatePullRequestTitleWords(title)
         if title.isEmpty { title = fallbackTitle }
 
         let body = lines[(firstIdx + 1)...]

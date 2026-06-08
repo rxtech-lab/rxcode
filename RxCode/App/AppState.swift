@@ -239,6 +239,13 @@ final class AppState {
     /// changes without an accompanying observable property mutation.
     var todoSnapshotsRevision: Int = 0
 
+    /// Bumped each time a custom context-menu item is created, edited, toggled,
+    /// or removed (`CustomMenuItemRecord` in SwiftData). The sidebar's project /
+    /// thread context menus read this when building `hookMenuItems` so SwiftUI
+    /// re-runs the `customMenuItems(...)` fetch and the new item appears without
+    /// an app restart.
+    var customMenuItemsRevision: Int = 0
+
     /// Pending permission/question prompts keyed by hook id. This mirrors the
     /// per-window queues so mobile thread rows can show the same attention state.
     var mobilePendingRequests: [String: PermissionRequest] = [:]

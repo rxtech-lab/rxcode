@@ -1,4 +1,5 @@
 import SwiftUI
+import RxCodeCore
 #if canImport(AppKit)
 import AppKit
 #elseif canImport(UIKit)
@@ -587,9 +588,7 @@ private struct MarkdownCodeBlockView: View {
                 .frame(height: 0.5)
 
             ScrollView(.horizontal, showsIndicators: false) {
-                Text(content)
-                    .font(.system(size: style.bodyFontSize * 0.88, design: .monospaced))
-                    .foregroundStyle(style.codeTextColor)
+                codeText
                     .lineSpacing(style.lineSpacing)
                     .fixedSize()
                     .padding(12)
@@ -602,6 +601,18 @@ private struct MarkdownCodeBlockView: View {
             RoundedRectangle(cornerRadius: style.cornerRadius)
                 .strokeBorder(style.borderColor, lineWidth: 0.5)
         )
+    }
+
+    /// Syntax-highlighted code when a language is specified,
+    /// otherwise plain monospaced text in the theme's code color.
+    private var codeText: Text {
+        let fontSize = style.bodyFontSize * 0.88
+        if let language, !language.isEmpty {
+            return Text(SyntaxHighlighter.highlight(content, language: language, fontSize: fontSize))
+        }
+        return Text(content)
+            .font(.system(size: fontSize, design: .monospaced))
+            .foregroundColor(style.codeTextColor)
     }
 }
 

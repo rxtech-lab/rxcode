@@ -58,6 +58,7 @@
 		E6C001022F9B000100000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = E6C001012F9B000100000001 /* Sparkle */; };
 		E6D001032FA0000100000001 /* RxCodeCore in Frameworks */ = {isa = PBXBuildFile; productRef = E6D001012FA0000100000001 /* RxCodeCore */; };
 		E6D001042FA0000100000001 /* RxCodeChatKit in Frameworks */ = {isa = PBXBuildFile; productRef = E6D001022FA0000100000001 /* RxCodeChatKit */; };
+		E6D001052FA0000100000001 /* RxCodeEditor in Frameworks */ = {isa = PBXBuildFile; productRef = E6D001082FA0000100000001 /* RxCodeEditor */; };
 		E6D001072FA0000100000001 /* RxCodeSync in Frameworks */ = {isa = PBXBuildFile; productRef = E6D001062FA0000100000001 /* RxCodeSync */; };
 		FB0000030000000000000001 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = FB0000010000000000000001 /* FirebaseAnalytics */; };
 		FB0000040000000000000001 /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = FB0000020000000000000001 /* FirebaseCrashlytics */; };
@@ -315,10 +316,11 @@
 				DF46526A2FCD34B3002D9562 /* JSONSchemaValidator in Frameworks */,
 				DFAA00012FCD34B3002D9562 /* JSONSchema in Frameworks */,
 				DF462A622FC6EDCE002D9562 /* RxAuthSwiftUI in Frameworks */,
-				DF4652682FCD34B3002D9562 /* JSONSchemaForm in Frameworks */,
-				E6D001042FA0000100000001 /* RxCodeChatKit in Frameworks */,
-				DF462DCB2FC73FA8002D9562 /* RxAuthSwiftUI in Frameworks */,
-				E6D001072FA0000100000001 /* RxCodeSync in Frameworks */,
+					DF4652682FCD34B3002D9562 /* JSONSchemaForm in Frameworks */,
+					E6D001042FA0000100000001 /* RxCodeChatKit in Frameworks */,
+					E6D001052FA0000100000001 /* RxCodeEditor in Frameworks */,
+					DF462DCB2FC73FA8002D9562 /* RxAuthSwiftUI in Frameworks */,
+					E6D001072FA0000100000001 /* RxCodeSync in Frameworks */,
 				DF462A602FC6EDCE002D9562 /* RxAuthSwift in Frameworks */,
 				DF23FF1D2FBB42F7008929A6 /* WaterfallGrid in Frameworks */,
 				FB0000030000000000000001 /* FirebaseAnalytics in Frameworks */,
@@ -616,10 +618,11 @@
 			packageProductDependencies = (
 				E6A001012F8A000100000001 /* SwiftTerm */,
 				E6C001012F9B000100000001 /* Sparkle */,
-				E6D001012FA0000100000001 /* RxCodeCore */,
-				E6D001022FA0000100000001 /* RxCodeChatKit */,
-				E6D001062FA0000100000001 /* RxCodeSync */,
-				DF23FF1C2FBB42F7008929A6 /* WaterfallGrid */,
+					E6D001012FA0000100000001 /* RxCodeCore */,
+					E6D001022FA0000100000001 /* RxCodeChatKit */,
+					E6D001082FA0000100000001 /* RxCodeEditor */,
+					E6D001062FA0000100000001 /* RxCodeSync */,
+					DF23FF1C2FBB42F7008929A6 /* WaterfallGrid */,
 				FB0000010000000000000001 /* FirebaseAnalytics */,
 				FB0000020000000000000001 /* FirebaseCrashlytics */,
 				DF4628912FC611E6002D9562 /* RxAuthSwift */,
@@ -1739,6 +1742,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = E6D001002FA0000100000001 /* XCLocalSwiftPackageReference "Packages" */;
 			productName = RxCodeSync;
+		};
+		E6D001082FA0000100000001 /* RxCodeEditor */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E6D001002FA0000100000001 /* XCLocalSwiftPackageReference "Packages" */;
+			productName = RxCodeEditor;
 		};
 		FB0000010000000000000001 /* FirebaseAnalytics */ = {
 			isa = XCSwiftPackageProductDependency;

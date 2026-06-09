@@ -286,6 +286,17 @@ public protocol HookController: AnyObject {
     /// (plus the "all projects" items). Backs the `CustomMenuHook`.
     func customMenuItems(projectId: UUID?, surface: CustomMenuItemRecord.Surface) -> [CustomMenuItemRecord]
 
+    /// Whether a custom menu item passes its show condition in this context.
+    /// `always` items always pass; a `swiftScript` item is gated on its compiled
+    /// script (evaluated asynchronously and cached — a cache miss shows the item,
+    /// failing open). Synchronous so it fits the context-menu build path.
+    func shouldShowConditionalMenuItem(
+        _ record: CustomMenuItemRecord,
+        project: Project,
+        branch: String?,
+        sessionId: String?
+    ) -> Bool
+
     /// Centralized presentation actions used by hook-supplied context menus.
     func requestSecretsSetup(project: Project)
     func requestSecretsDownload(project: Project)

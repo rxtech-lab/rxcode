@@ -23,6 +23,14 @@ struct CustomMenuDraft: Identifiable {
     var messageTemplate: String
     var targetSessionId: String
 
+    // show condition
+    var conditionType: CustomMenuItemRecord.ConditionType
+    var conditionScript: String
+    /// The exact script source that last compiled successfully. The item counts as
+    /// "compiled" only while this still equals `conditionScript`, so any edit
+    /// (manual or AI) transparently invalidates it without an `onChange` race.
+    var conditionCompiledScript: String?
+
     var isEnabled: Bool
     var sortOrder: Int
 
@@ -47,6 +55,9 @@ struct CustomMenuDraft: Identifiable {
         bodyTemplate = ""
         messageTemplate = ""
         targetSessionId = ""
+        conditionType = .always
+        conditionScript = ""
+        conditionCompiledScript = nil
         isEnabled = true
         sortOrder = 0
     }
@@ -66,24 +77,35 @@ struct CustomMenuDraft: Identifiable {
         bodyTemplate = record.bodyTemplate ?? ""
         messageTemplate = record.messageTemplate ?? ""
         targetSessionId = record.targetSessionId ?? ""
+        conditionType = record.conditionTypeValue
+        conditionScript = record.conditionScript ?? ""
+        // A saved record with a script is known-compiled, so seed the marker to the
+        // stored source — it stays "compiled" until the user edits it.
+        conditionCompiledScript = record.conditionCompiled ? record.conditionScript : nil
         isEnabled = record.isEnabled
         sortOrder = record.sortOrder
     }
 
     var trimmedTitle: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
 
+    /// Whether the show condition is satisfied for saving. `always` is always fine;
+    /// a `swiftScript` needs a non-empty script that currently matches the last
+    /// successful compile.
+    var isConditionCompiled: Bool {
+        guard conditionType == .swiftScript else { return true }
+        let trimmed = conditionScript.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !trimmed.isEmpty && conditionCompiledScript == conditionScript
+    }
+
     var isValid: Bool {
-        guard !trimmedTitle.isEmpty, !surfaces.isEmpty else { return false }
+        guard !trimmedTitle.isEmpty, !surfaces.isEmpty, isConditionCompiled else { return false }
         switch actionKind {
         case .callAPI: return !urlString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         case .createThread: return !messageTemplate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         case .continueThread:
-            guard !messageTemplate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
-            // A thread-only menu item continues the tapped thread, so no explicit
-            // target is needed; if it also appears on a project/briefing surface it
-            // must name the thread to continue.
-            if surfaces == [.thread] { return true }
-            return !targetSessionId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            // Always continues the tapped thread (its session id is auto-filled at
+            // dispatch time), so only the message is required — never a target id.
+            return !messageTemplate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
     }
 
@@ -105,7 +127,12 @@ struct CustomMenuDraft: Identifiable {
             headersJSON: actionKind == .callAPI ? CustomMenuItemRecord.encodeHeaders(headerMap) : nil,
             bodyTemplate: actionKind == .callAPI ? bodyTemplate : nil,
             messageTemplate: actionKind == .callAPI ? nil : messageTemplate,
-            targetSessionId: actionKind == .continueThread ? targetSessionId.trimmingCharacters(in: .whitespacesAndNewlines) : nil,
+            // continueThread always targets the tapped thread, resolved at dispatch
+            // time, so no explicit target is stored.
+            targetSessionId: nil,
+            conditionType: conditionType,
+            conditionScript: conditionType == .swiftScript && !conditionScript.isEmpty ? conditionScript : nil,
+            conditionCompiled: conditionType == .swiftScript && isConditionCompiled,
             isEnabled: isEnabled,
             sortOrder: sortOrder
         )
@@ -116,8 +143,13 @@ struct CustomMenuDraft: Identifiable {
 struct CustomMenuEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
 
+    @Environment(AppState.self) private var appState
+
     @State var draft: CustomMenuDraft
     @State private var bodyJSONFormatError: String?
+    @State private var isCompilingCondition = false
+    @State private var conditionDiagnostics: String?
+    @State private var showingGeneratePopover = false
     let projects: [Project]
     var onSave: (CustomMenuDraft) -> Void
 
@@ -134,6 +166,7 @@ struct CustomMenuEditorSheet: View {
 
             Form {
                 generalSection
+                conditionSection
                 actionSection
                 switch draft.actionKind {
                 case .callAPI: apiSection
@@ -181,6 +214,117 @@ struct CustomMenuEditorSheet: View {
                     Text(verbatim: project.name).tag(UUID?.some(project.id))
                 }
             }
+        }
+    }
+
+    private var conditionSection: some View {
+        Section("Show condition") {
+            Picker("Show this item", selection: $draft.conditionType) {
+                Text("Always").tag(CustomMenuItemRecord.ConditionType.always)
+                Text("When a Swift script returns true").tag(CustomMenuItemRecord.ConditionType.swiftScript)
+            }
+            .pickerStyle(.menu)
+            .onChange(of: draft.conditionType) { _, newValue in
+                conditionDiagnostics = nil
+                // Seed the starter template the first time a user picks Swift script.
+                if newValue == .swiftScript, draft.conditionScript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    draft.conditionScript = CustomMenuConditionEvaluator.starterScript
+                }
+            }
+
+            if draft.conditionType == .swiftScript {
+                conditionEditor
+            }
+        }
+    }
+
+    private var conditionEditor: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("func checkShowMenu(context: Context) async throws -> Bool")
+                    .font(.system(size: ClaudeTheme.size(10), design: .monospaced))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button {
+                    showingGeneratePopover = true
+                } label: {
+                    Label("AI generate", systemImage: "sparkles")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .popover(isPresented: $showingGeneratePopover, arrowEdge: .bottom) {
+                    SwiftConditionGeneratePopover(
+                        projectId: draft.projectId,
+                        isPresented: $showingGeneratePopover
+                    ) { script, compiled in
+                        draft.conditionScript = script
+                        draft.conditionCompiledScript = compiled ? script : nil
+                        conditionDiagnostics = compiled ? nil : conditionDiagnostics
+                    }
+                    .environment(appState)
+                }
+            }
+
+            SwiftConditionEditor(text: $draft.conditionScript, fontSize: ClaudeTheme.size(12), minHeight: 200)
+                .frame(minHeight: 200)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color(NSColor.separatorColor)))
+
+            Text("`context` exposes projectName, projectPath, gitHubRepo, branch, sessionId, and async `shell(_:)` / `git(_:)` helpers that run in the project directory. Return true to show the item.")
+                .font(.system(size: ClaudeTheme.size(10)))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 10) {
+                Button {
+                    Task { await compileCondition() }
+                } label: {
+                    if isCompilingCondition {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Label("Compile", systemImage: "hammer")
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(isCompilingCondition || draft.conditionScript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                if draft.isConditionCompiled {
+                    Label("Compiled", systemImage: "checkmark.circle.fill")
+                        .font(.system(size: ClaudeTheme.size(11)))
+                        .foregroundStyle(ClaudeTheme.statusSuccess)
+                } else {
+                    Label("Not compiled", systemImage: "exclamationmark.triangle.fill")
+                        .font(.system(size: ClaudeTheme.size(11)))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+
+            if let conditionDiagnostics {
+                ScrollView {
+                    Text(verbatim: conditionDiagnostics)
+                        .font(.system(size: ClaudeTheme.size(10), design: .monospaced))
+                        .foregroundStyle(ClaudeTheme.statusError)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                }
+                .frame(maxHeight: 120)
+            }
+        }
+    }
+
+    private func compileCondition() async {
+        isCompilingCondition = true
+        conditionDiagnostics = nil
+        defer { isCompilingCondition = false }
+        let script = draft.conditionScript
+        let result = await appState.compileMenuConditionScript(script)
+        if result.success {
+            draft.conditionCompiledScript = script
+        } else {
+            draft.conditionCompiledScript = nil
+            conditionDiagnostics = result.diagnostics.isEmpty ? "Compilation failed." : result.diagnostics
         }
     }
 
@@ -273,9 +417,10 @@ struct CustomMenuEditorSheet: View {
     private var threadSection: some View {
         Section(draft.actionKind == .continueThread ? "Continue thread" : "New thread") {
             if draft.actionKind == .continueThread {
-                TextField("Target thread id", text: $draft.targetSessionId)
-                    .font(.system(size: ClaudeTheme.size(12), design: .monospaced))
-                    .help("The session id of the thread to continue. Leave a {{sessionId}} placeholder to target the tapped thread.")
+                Text("Continues the thread this menu is opened from — its session id is filled in automatically.")
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             VStack(alignment: .leading, spacing: 4) {
                 Text("Message")

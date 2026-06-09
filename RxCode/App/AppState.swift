@@ -254,6 +254,17 @@ final class AppState {
     /// an app restart.
     var customMenuItemsRevision: Int = 0
 
+    /// Compiles + runs user-authored Swift "show condition" scripts for custom
+    /// menu items. Shared across windows; results land in `menuConditionResults`.
+    let menuConditionEvaluator = CustomMenuConditionEvaluator()
+    /// Cached condition results keyed by `menuConditionKey(...)`. The synchronous
+    /// menu builder reads this; a cache miss shows the item and kicks off an async
+    /// evaluation that fills the cache and bumps `customMenuItemsRevision`.
+    var menuConditionResults: [String: Bool] = [:]
+    /// Keys with an evaluation currently in flight, so repeated menu opens don't
+    /// spawn duplicate evaluators before the first result lands.
+    var menuConditionInFlight: Set<String> = []
+
     /// Pending permission/question prompts keyed by hook id. This mirrors the
     /// per-window queues so mobile thread rows can show the same attention state.
     var mobilePendingRequests: [String: PermissionRequest] = [:]

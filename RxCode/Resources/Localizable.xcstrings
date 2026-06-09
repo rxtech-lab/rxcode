@@ -767,6 +767,22 @@
         }
       }
     },
+    "`context` exposes projectName, projectPath, gitHubRepo, branch, sessionId, and async `shell(_:)` / `git(_:)` helpers that run in the project directory. Return true to show the item." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "`context`는 projectName, projectPath, gitHubRepo, branch, sessionId와 프로젝트 디렉터리에서 실행되는 async `shell(_:)` / `git(_:)` 헬퍼를 제공합니다. 항목을 표시하려면 true를 반환하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "`context` 提供 projectName、projectPath、gitHubRepo、branch、sessionId，以及在项目目录中运行的异步 `shell(_:)` / `git(_:)` 辅助函数。返回 true 以显示该项。"
+          }
+        }
+      }
+    },
     "^[%lld hook](inflect: true)" : {
       "localizations" : {
         "ko" : {
@@ -1015,7 +1031,20 @@
       }
     },
     "Active" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "활성"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "活跃"
+          }
+        }
+      }
     },
     "Add" : {
       "localizations" : {
@@ -1770,6 +1799,22 @@
         }
       }
     },
+    "AI generate" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI 생성"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI 生成"
+          }
+        }
+      }
+    },
     "All archived chats in the current project will be deleted. This action cannot be undone." : {
       "localizations" : {
         "ko" : {
@@ -1986,6 +2031,22 @@
         }
       }
     },
+    "Always" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "항상"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "始终"
+          }
+        }
+      }
+    },
     "Always allow this command" : {
       "localizations" : {
         "en" : {
@@ -2026,7 +2087,20 @@
       }
     },
     "An SF Symbol shown beside the title, e.g. \"bolt\"." : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "제목 옆에 표시되는 SF Symbol입니다. 예: \"bolt\"."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示在标题旁边的 SF Symbol，例如 “bolt”。"
+          }
+        }
+      }
     },
     "API Key" : {
       "localizations" : {
@@ -3858,6 +3932,38 @@
         }
       }
     },
+    "Compile" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "컴파일"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编译"
+          }
+        }
+      }
+    },
+    "Compiled" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "컴파일됨"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已编译"
+          }
+        }
+      }
+    },
     "Condition" : {
       "localizations" : {
         "ko" : {
@@ -4278,6 +4384,22 @@
         }
       }
     },
+    "Continues the thread this menu is opened from — its session id is filled in automatically." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 메뉴를 연 스레드를 계속합니다 — 세션 ID가 자동으로 채워집니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "继续打开此菜单的对话——其会话 ID 会自动填入。"
+          }
+        }
+      }
+    },
     "Control what autopilot does automatically — issue labeling, PR validation and linking, project field population, and more." : {
       "localizations" : {
         "ko" : {
@@ -4652,10 +4774,36 @@
       }
     },
     "Create Workspace" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "작업 공간 생성"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建工作区"
+          }
+        }
+      }
     },
     "Create Workspace..." : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "작업 공간 생성..."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建工作区..."
+          }
+        }
+      }
     },
     "Create worktree" : {
       "localizations" : {
@@ -5390,7 +5538,20 @@
       }
     },
     "Delete Workspace" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "작업 공간 삭제"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除工作区"
+          }
+        }
+      }
     },
     "Deleting \"%@\"…" : {
       "localizations" : {
@@ -5426,6 +5587,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "拒绝"
+          }
+        }
+      }
+    },
+    "Describe when this menu item should appear. The default model writes the Swift condition and it's compiled before use." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 메뉴 항목이 언제 표시되어야 하는지 설명하세요. 기본 모델이 Swift 조건을 작성하고 사용 전에 컴파일됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "描述此菜单项应在何时出现。默认模型会编写 Swift 条件，并在使用前进行编译。"
           }
         }
       }
@@ -6956,6 +7133,22 @@
         }
       }
     },
+    "func checkShowMenu(context: Context) async throws -> Bool" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "func checkShowMenu(context: Context) async throws -> Bool"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "func checkShowMenu(context: Context) async throws -> Bool"
+          }
+        }
+      }
+    },
     "General" : {
       "localizations" : {
         "en" : {
@@ -7006,6 +7199,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "根据已暂存差异生成提交消息"
+          }
+        }
+      }
+    },
+    "Generate condition with AI" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI로 조건 생성"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用 AI 生成条件"
           }
         }
       }
@@ -7582,7 +7791,20 @@
       }
     },
     "Icon" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "아이콘"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "图标"
+          }
+        }
+      }
     },
     "Images" : {
       "localizations" : {
@@ -8789,10 +9011,36 @@
       }
     },
     "Manage Workspaces" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "작업 공간 관리"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "管理工作区"
+          }
+        }
+      }
     },
     "Manage Workspaces..." : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "작업 공간 관리..."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "管理工作区..."
+          }
+        }
+      }
     },
     "Manage your repositories, environments, and secrets." : {
       "localizations" : {
@@ -9911,7 +10159,20 @@
       }
     },
     "No matches." : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "일치 항목 없음."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无匹配项。"
+          }
+        }
+      }
     },
     "No matching memories" : {
       "localizations" : {
@@ -10452,6 +10713,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "不是 Git 仓库"
+          }
+        }
+      }
+    },
+    "Not compiled" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "컴파일되지 않음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未编译"
           }
         }
       }
@@ -11431,7 +11708,20 @@
       }
     },
     "Pick one or more menus this item appears on." : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 항목이 표시될 메뉴를 하나 이상 선택하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择此项出现的一个或多个菜单。"
+          }
+        }
+      }
     },
     "Pick which model performs the review — defaults to the same model as the thread." : {
       "localizations" : {
@@ -12599,7 +12889,20 @@
       }
     },
     "Rename Workspace" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "작업 공간 이름 변경"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重命名工作区"
+          }
+        }
+      }
     },
     "Rename…" : {
       "localizations" : {
@@ -13767,7 +14070,20 @@
       }
     },
     "Search symbols" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "심볼 검색"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索符号"
+          }
+        }
+      }
     },
     "Search Threads (⌘K)" : {
       "extractionState" : "stale",
@@ -14593,6 +14909,22 @@
         }
       }
     },
+    "Show condition" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "표시 조건"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示条件"
+          }
+        }
+      }
+    },
     "Show current project only" : {
       "localizations" : {
         "en" : {
@@ -14745,6 +15077,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "仅显示前五个对话"
+          }
+        }
+      }
+    },
+    "Show this item" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 항목 표시"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示此项"
           }
         }
       }
@@ -15419,7 +15767,20 @@
       }
     },
     "Switch Workspace" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "작업 공간 전환"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换工作区"
+          }
+        }
+      }
     },
     "Tap to answer" : {
       "comment" : "Notification body when Claude invokes AskUserQuestion.",
@@ -15455,6 +15816,7 @@
       }
     },
     "Target thread id" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -15599,6 +15961,7 @@
       }
     },
     "The session id of the thread to continue. Leave a {{sessionId}} placeholder to target the tapped thread." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -15765,7 +16128,20 @@
       }
     },
     "This removes the workspace and its settings. Files on disk are not deleted." : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "작업 공간과 해당 설정이 제거됩니다. 디스크의 파일은 삭제되지 않습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这将移除该工作区及其设置。磁盘上的文件不会被删除。"
+          }
+        }
+      }
     },
     "This session will be deleted. This action cannot be undone." : {
       "localizations" : {
@@ -16752,6 +17128,22 @@
         }
       }
     },
+    "When a Swift script returns true" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Swift 스크립트가 true를 반환할 때"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当 Swift 脚本返回 true 时"
+          }
+        }
+      }
+    },
     "When CI fails on a project's current branch, automatically start a thread so an agent can fix it. CI failures are always notified; this only controls the automatic fix." : {
       "localizations" : {
         "ko" : {
@@ -16914,7 +17306,20 @@
       }
     },
     "Workspace name" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "작업 공간 이름"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作区名称"
+          }
+        }
+      }
     },
     "Wrote %@ to the project." : {
       "localizations" : {

@@ -741,6 +741,15 @@ final class AppStateHookController: HookController {
         app?.threadStore.customMenuItems(projectId: projectId, surface: surface) ?? []
     }
 
+    func shouldShowConditionalMenuItem(
+        _ record: CustomMenuItemRecord,
+        project: Project,
+        branch: String?,
+        sessionId: String?
+    ) -> Bool {
+        app?.shouldShowConditionalMenuItem(record, project: project, branch: branch, sessionId: sessionId) ?? true
+    }
+
     func requestSecretsSetup(project: Project) {
         app?.secretsSetupRequest = SecretsSetupRequest(
             repoFullName: project.gitHubRepo,

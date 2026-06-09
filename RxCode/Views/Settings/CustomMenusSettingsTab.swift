@@ -149,6 +149,9 @@ private struct CustomMenuRow: View {
                 HStack(spacing: 6) {
                     ForEach(record.surfaces, id: \.self) { badge(surfaceLabel($0)) }
                     badge(actionLabel)
+                    if record.conditionTypeValue == .swiftScript {
+                        badge("Conditional")
+                    }
                     Text(verbatim: projectName)
                         .font(.system(size: ClaudeTheme.size(10)))
                         .foregroundStyle(.tertiary)

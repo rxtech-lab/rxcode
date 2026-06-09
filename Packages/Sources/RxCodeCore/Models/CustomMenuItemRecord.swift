@@ -30,6 +30,16 @@ public final class CustomMenuItemRecord {
         case continueThread
     }
 
+    /// How the item's visibility is decided.
+    public enum ConditionType: String, Codable, Sendable, CaseIterable {
+        /// No condition — the item is always shown (the default).
+        case always
+        /// A user-authored Swift script with a
+        /// `func checkShowMenu(context: Context) async throws -> Bool` that returns
+        /// `true` to show the item. Evaluated on the desktop at menu-build time.
+        case swiftScript
+    }
+
     @Attribute(.unique) public var id: String
     /// User-entered display title (plain text — not localized).
     public var title: String
@@ -55,6 +65,25 @@ public final class CustomMenuItemRecord {
     /// Target thread id for `continueThread`.
     public var targetSessionId: String?
 
+    // Show condition
+    /// Raw `ConditionType` value. Defaults to `always` so existing records — and
+    /// any new item without a condition — are simply always shown.
+    ///
+    /// The `= always` default is also load-bearing for SwiftData lightweight
+    /// migration: adding a non-optional attribute to an existing entity requires a
+    /// default, otherwise the store fails to open and the whole container (which
+    /// also holds `ChatThread`) falls back to an empty in-memory store — wiping
+    /// all chat history on the next launch.
+    public var conditionType: String = ConditionType.always.rawValue
+    /// The Swift source for a `swiftScript` condition (the user's
+    /// `checkShowMenu(context:)` function). `nil` for `always`.
+    public var conditionScript: String?
+    /// Whether `conditionScript` last compiled successfully. The editor refuses to
+    /// save a `swiftScript` item until this is `true`, so a record on disk with a
+    /// script is always known-compiled. Defaulted for lightweight migration (see
+    /// `conditionType`).
+    public var conditionCompiled: Bool = false
+
     public var isEnabled: Bool
     public var sortOrder: Int
     public var createdAt: Date
@@ -73,6 +102,9 @@ public final class CustomMenuItemRecord {
         bodyTemplate: String? = nil,
         messageTemplate: String? = nil,
         targetSessionId: String? = nil,
+        conditionType: ConditionType = .always,
+        conditionScript: String? = nil,
+        conditionCompiled: Bool = false,
         isEnabled: Bool = true,
         sortOrder: Int = 0,
         createdAt: Date = .now,
@@ -90,6 +122,9 @@ public final class CustomMenuItemRecord {
         self.bodyTemplate = bodyTemplate
         self.messageTemplate = messageTemplate
         self.targetSessionId = targetSessionId
+        self.conditionType = conditionType.rawValue
+        self.conditionScript = conditionScript
+        self.conditionCompiled = conditionCompiled
         self.isEnabled = isEnabled
         self.sortOrder = sortOrder
         self.createdAt = createdAt
@@ -108,6 +143,9 @@ public final class CustomMenuItemRecord {
     /// First surface — kept for callers that only need a single representative value.
     public var surfaceValue: Surface { surfaces.first ?? .project }
     public var actionKindValue: ActionKind { ActionKind(rawValue: actionKind) ?? .createThread }
+    /// Decoded condition type. Falls back to `always` for empty/legacy values so an
+    /// item without a stored condition is always shown.
+    public var conditionTypeValue: ConditionType { ConditionType(rawValue: conditionType) ?? .always }
 
     /// Encode a surface list to the stored comma-separated representation. Falls
     /// back to `project` when empty so a record always has a home.

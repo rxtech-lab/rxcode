@@ -170,6 +170,75 @@ extension ClaudeCodeServer {
         return await generatePlainSummary(prompt: prompt, model: model, limit: 4000)
     }
 
+    /// Generate a Swift "show condition" for a custom menu item from a natural
+    /// language requirement. Returns *only* the `checkShowMenu(context:)` function
+    /// body (markdown fences stripped) — the caller compiles it before accepting.
+    /// Unlike `generatePlainSummary`, the output is preserved verbatim (no summary
+    /// sanitizer) so code formatting/newlines survive.
+    func generateConditionScript(requirement: String, model: String) async -> String? {
+        guard let binary = await findClaudeBinary() else { return nil }
+        let emptyMCPConfigPath = writeEmptyMCPConfig()
+        let prompt = """
+        You are writing a Swift "show condition" for a custom context-menu item in a macOS app.
+        Output ONLY a single Swift function — no prose, no markdown, no extra declarations:
+
+            func checkShowMenu(context: Context) async throws -> Bool { ... }
+
+        Return true to SHOW the menu item, false to HIDE it.
+
+        The `Context` type is already defined elsewhere — do NOT redeclare it. Its API:
+            struct Context {
+                let projectName: String
+                let projectPath: String
+                let gitHubRepo: String   // "owner/repo", or empty
+                let branch: String       // current branch, or empty
+                let sessionId: String    // thread id, or empty
+                // runs in the project directory, returns trimmed combined output:
+                func shell(_ command: String) async throws -> String
+                func git(_ args: String...) async throws -> String
+            }
+
+        Foundation is available. Keep the check read-only (no mutations). Use `try await`
+        for context.shell/context.git. Return only the function.
+
+        Requirement: \(requirement)
+        """
+        var args: [String] = ["-p", prompt, "--output-format", "text", "--model", model]
+        if let emptyMCPConfigPath {
+            args.append(contentsOf: ["--strict-mcp-config", "--mcp-config", emptyMCPConfigPath])
+        }
+        do {
+            let output = try await runShellCommand(binary, arguments: args)
+            return Self.extractGeneratedSwift(from: output)
+        } catch {
+            logger.warning("Condition script generation failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    /// Pull the Swift source out of a model reply, stripping a single ```/```swift
+    /// fenced block if present. Returns nil for empty output.
+    static func extractGeneratedSwift(from raw: String) -> String? {
+        var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return nil }
+
+        if let fenceStart = text.range(of: "```") {
+            var rest = String(text[fenceStart.upperBound...])
+            // Drop an optional language tag (e.g. "swift") on the opening fence line.
+            if let newline = rest.firstIndex(of: "\n") {
+                let firstLine = rest[..<newline].trimmingCharacters(in: .whitespaces)
+                if firstLine.isEmpty || firstLine.lowercased() == "swift" {
+                    rest = String(rest[rest.index(after: newline)...])
+                }
+            }
+            if let fenceEnd = rest.range(of: "```") {
+                rest = String(rest[..<fenceEnd.lowerBound])
+            }
+            text = rest.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return text.isEmpty ? nil : text
+    }
+
     func generatePlainSummary(prompt: String, model: String, limit: Int) async -> String? {
         guard let binary = await findClaudeBinary() else { return nil }
         let emptyMCPConfigPath = writeEmptyMCPConfig()

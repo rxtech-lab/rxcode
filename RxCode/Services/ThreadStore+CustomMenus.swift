@@ -56,6 +56,9 @@ extension ThreadStore {
             existing.bodyTemplate = record.bodyTemplate
             existing.messageTemplate = record.messageTemplate
             existing.targetSessionId = record.targetSessionId
+            existing.conditionType = record.conditionType
+            existing.conditionScript = record.conditionScript
+            existing.conditionCompiled = record.conditionCompiled
             existing.isEnabled = record.isEnabled
             existing.sortOrder = record.sortOrder
             existing.updatedAt = .now

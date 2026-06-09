@@ -428,6 +428,9 @@ extension AppState {
             guard let project = projects.first(where: { $0.id == body.projectId }) else {
                 throw MobileRemoteConfigError.invalidRequest("No project found for the requested id.")
             }
+            // Evaluate Swift-script show conditions up front so the phone's first
+            // fetch already reflects them (the menu build itself is synchronous).
+            await warmMenuConditions(for: project, branch: body.branch, sessionId: nil)
             return try encoder.encode(AutopilotMenuResult(items: projectContextMenuItems(for: project, branch: body.branch, locale: body.locale)))
 
         case .menuForThread:
@@ -435,6 +438,9 @@ extension AppState {
             guard let summary = allSessionSummaries.first(where: { $0.id == body.sessionId })
                 ?? threadStore.fetch(id: body.sessionId)?.toSummary() else {
                 throw MobileRemoteConfigError.invalidRequest("No thread found for the requested id.")
+            }
+            if let project = projects.first(where: { $0.id == summary.projectId }) {
+                await warmMenuConditions(for: project, branch: nil, sessionId: summary.id)
             }
             return try encoder.encode(AutopilotMenuResult(items: threadContextMenuItems(for: summary, locale: body.locale)))
 

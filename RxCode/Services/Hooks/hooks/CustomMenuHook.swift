@@ -25,6 +25,7 @@ final class CustomMenuHook: Hook {
         let surface: CustomMenuItemRecord.Surface = payload.branch != nil ? .briefing : .project
         let context = PlaceholderContext(project: payload.project, branch: payload.branch, sessionId: nil)
         return controller.customMenuItems(projectId: payload.project.id, surface: surface)
+            .filter { controller.shouldShowConditionalMenuItem($0, project: payload.project, branch: payload.branch, sessionId: nil) }
             .map { item($0, surface: surface, context: context, projectId: payload.project.id) }
     }
 
@@ -33,6 +34,7 @@ final class CustomMenuHook: Hook {
     func onThreadContextMenu(_ payload: ThreadContextMenuPayload, controller: any HookController) -> [MenuItem] {
         let context = PlaceholderContext(project: payload.project, branch: nil, sessionId: payload.session.id)
         return controller.customMenuItems(projectId: payload.project.id, surface: .thread)
+            .filter { controller.shouldShowConditionalMenuItem($0, project: payload.project, branch: nil, sessionId: payload.session.id) }
             .map { item($0, surface: .thread, context: context, projectId: payload.project.id, sessionId: payload.session.id) }
     }
 

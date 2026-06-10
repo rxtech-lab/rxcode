@@ -2,13 +2,23 @@ import RxCodeChatKit
 import RxCodeCore
 import SwiftUI
 
+/// One-shot request to present the bundled User Guide, optionally at a given
+/// section (a `UserManualMenu` raw value). Identifiable so it drives a `.sheet`.
+struct UserGuideRequest: Identifiable, Hashable {
+    let id = UUID()
+    var section: String?
+}
+
 struct UserManualView: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var selectedMenu: UserManualMenu? = .overview
+    @State private var selectedMenu: UserManualMenu?
 
     private let documents: [UserManualMenu: BundledMarkdownDocument]
 
-    init() {
+    /// `initialSection` is a `UserManualMenu` raw value (e.g.
+    /// `"custom_context_menus"`); unknown/nil values open the overview.
+    init(initialSection: String? = nil) {
+        _selectedMenu = State(initialValue: UserManualMenu(rawValue: initialSection ?? "") ?? .overview)
         self.documents = Dictionary(uniqueKeysWithValues: UserManualMenu.allCases.map { menu in
             (
                 menu,
@@ -125,6 +135,7 @@ private enum UserManualMenu: String, CaseIterable, Identifiable {
     case integrations
     case worktrees
     case hooks
+    case customContextMenus = "custom_context_menus"
 
     var id: String { rawValue }
 
@@ -143,6 +154,7 @@ private enum UserManualMenu: String, CaseIterable, Identifiable {
         case .integrations: "MCP and ACP Clients"
         case .worktrees: "Git Worktrees"
         case .hooks: "Project Hooks"
+        case .customContextMenus: "Custom Context Menus"
         }
     }
 
@@ -157,6 +169,7 @@ private enum UserManualMenu: String, CaseIterable, Identifiable {
         case .integrations: "puzzlepiece.extension"
         case .worktrees: "arrow.triangle.branch"
         case .hooks: "bolt.horizontal.circle"
+        case .customContextMenus: "filemenu.and.cursorarrow"
         }
     }
 }

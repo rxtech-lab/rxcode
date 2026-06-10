@@ -98,6 +98,7 @@ struct RxCodeApp: App {
                 }
             }
             AutomationCommands()
+            DocumentationCommands(appState: appState)
         }
 
         // Dedicated project window — opened on double-click

@@ -942,6 +942,10 @@ final class AppState {
     /// Set when a hook/context-menu action wants to open the global docs-capable
     /// search overlay in the current window.
     var docsSearchRequest: UUID?
+    /// Non-nil while the bundled User Guide should be presented, optionally at a
+    /// specific section. Set from the Help menu; `MainView` consumes it to show
+    /// `UserManualView`.
+    var userGuideRequest: UserGuideRequest?
     /// One-shot: when a docs-setup chat is kicked off, this holds the project so
     /// `DocsHook.onSessionStart` injects the docs skill into exactly that chat's
     /// system prompt, then clears it.

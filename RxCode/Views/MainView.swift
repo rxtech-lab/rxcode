@@ -351,6 +351,9 @@ struct MainView: View {
             )
             .environment(appState)
         }
+        .sheet(item: Bindable(appState).userGuideRequest) { request in
+            UserManualView(initialSection: request.section)
+        }
         .onChange(of: appState.docsSearchRequest) { _, request in
             guard request != nil else { return }
             windowState.showGlobalSearch = true

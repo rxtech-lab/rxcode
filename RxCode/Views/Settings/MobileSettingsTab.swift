@@ -12,6 +12,7 @@ struct MobileSettingsTab: View {
     @State private var showPairingSheet = false
     @State private var showAddRelaySheet = false
     @State private var testNotificationDeviceID: String?
+    @State private var copiedTokenDeviceID: String?
     @State private var testNotificationAlert: TestNotificationAlert?
     @State private var deviceBeingRenamed: PairedDevice?
     @State private var renameText: String = ""
@@ -294,6 +295,7 @@ struct MobileSettingsTab: View {
                 }
             }
             Spacer()
+            copyTokenButton(for: device)
             testNotificationButton(for: device)
             Button {
                 renameText = device.displayName
@@ -330,6 +332,25 @@ struct MobileSettingsTab: View {
         case .unknown:
             EmptyView()
         }
+    }
+
+    @ViewBuilder
+    private func copyTokenButton(for device: PairedDevice) -> some View {
+        let token = MobileSyncService.pushToken(for: device)
+        let copied = copiedTokenDeviceID == device.id
+        Button {
+            guard let token, !token.isEmpty else { return }
+            copyToClipboard(token, feedback: Binding(
+                get: { copiedTokenDeviceID == device.id },
+                set: { copiedTokenDeviceID = $0 ? device.id : nil }
+            ))
+        } label: {
+            Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                .foregroundStyle(copied ? Color.green : Color.secondary)
+        }
+        .buttonStyle(.borderless)
+        .disabled(token?.isEmpty ?? true)
+        .help(copied ? "Copied" : "Copy device token")
     }
 
     @ViewBuilder

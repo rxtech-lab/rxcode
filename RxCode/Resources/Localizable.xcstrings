@@ -4499,6 +4499,9 @@
         }
       }
     },
+    "Copy device token" : {
+
+    },
     "Copy install command" : {
       "localizations" : {
         "ko" : {
@@ -4979,6 +4982,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "自定义上下文菜单"
+          }
+        }
+      }
+    },
+    "Custom Context Menus Guide" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "사용자 지정 컨텍스트 메뉴 가이드"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自定义上下文菜单指南"
           }
         }
       }
@@ -13543,6 +13562,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "RxCode 在本地运行 Claude Code 或 Codex，安装其一即可开始第一个项目。"
+          }
+        }
+      }
+    },
+    "RxCode User Guide" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RxCode 사용 가이드"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RxCode 用户指南"
           }
         }
       }

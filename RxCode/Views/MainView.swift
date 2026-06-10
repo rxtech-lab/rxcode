@@ -468,19 +468,27 @@ struct DetailToolbar: View {
 struct UnifiedTitleBarAccessor: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
-        DispatchQueue.main.async { [weak view] in
-            guard let window = view?.window else { return }
-            window.styleMask.insert(.fullSizeContentView)
-            window.titlebarAppearsTransparent = true
-        }
+        configure(from: view)
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        DispatchQueue.main.async { [weak nsView] in
-            guard let window = nsView?.window else { return }
+        configure(from: nsView)
+    }
+
+    private func configure(from view: NSView?) {
+        DispatchQueue.main.async { [weak view] in
+            guard let window = view?.window else { return }
             window.styleMask.insert(.fullSizeContentView)
             window.titlebarAppearsTransparent = true
+            // Group windows into native macOS tabs. The default `.automatic`
+            // mode only tabs in full screen (it honours the system "Prefer tabs
+            // when opening documents" setting), so opening a second window just
+            // floats free. `.preferred` always merges new windows into a tab
+            // bar; the shared identifier keeps every main/project window in one
+            // tab group so they can be merged together.
+            window.tabbingMode = .preferred
+            window.tabbingIdentifier = "rxcode.main"
         }
     }
 }
@@ -490,7 +498,6 @@ struct UnifiedTitleBarAccessor: NSViewRepresentable {
 struct ProjectTabButton: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
-    @Environment(\.openWindow) private var openWindow
 
     let project: Project
     let isSelected: Bool
@@ -518,9 +525,6 @@ struct ProjectTabButton: View {
             )
         }
         .buttonStyle(.plain)
-        .onTapGesture(count: 2) {
-            openWindow(id: "project-window", value: ProjectWindowValue(projectId: project.id, instanceId: UUID(), workspaceID: appState.activeWorkspace.id))
-        }
         .contextMenu {
             let hookItems = appState.projectContextMenuItems(for: project)
             if !hookItems.isEmpty {

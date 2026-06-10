@@ -466,9 +466,6 @@ private struct ProjectTreeRow: View {
                 isExpanded.toggle()
             }
         }
-        .onTapGesture(count: 2) {
-            onOpenInNewWindow()
-        }
         .contextMenu {
             projectMenuItems
         }

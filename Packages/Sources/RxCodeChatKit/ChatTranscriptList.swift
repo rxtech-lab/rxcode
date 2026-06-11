@@ -72,6 +72,7 @@ public struct ChatTranscriptList<AccessoryContent: View>: View {
     private let items: [ChatTranscriptListItem]
     private let isStreaming: Bool
     private let shouldScrollToBottom: Bool
+    private let scrollToBottomAnimated: Bool
     @Binding private var isAtBottom: Bool
     private let hasMorePrevious: () -> Bool
     private let loadMorePrevious: (() async throws -> Void)?
@@ -84,6 +85,7 @@ public struct ChatTranscriptList<AccessoryContent: View>: View {
         items: [ChatTranscriptListItem],
         isStreaming: Bool = false,
         shouldScrollToBottom: Bool = false,
+        scrollToBottomAnimated: Bool = true,
         isAtBottom: Binding<Bool> = .constant(true),
         hasMorePrevious: @escaping () -> Bool = { false },
         loadMorePrevious: (() async throws -> Void)? = nil,
@@ -95,6 +97,7 @@ public struct ChatTranscriptList<AccessoryContent: View>: View {
         self.items = items
         self.isStreaming = isStreaming
         self.shouldScrollToBottom = shouldScrollToBottom
+        self.scrollToBottomAnimated = scrollToBottomAnimated
         self._isAtBottom = isAtBottom
         self.hasMorePrevious = hasMorePrevious
         self.loadMorePrevious = loadMorePrevious
@@ -109,6 +112,7 @@ public struct ChatTranscriptList<AccessoryContent: View>: View {
             messages: items,
             isStreaming: isStreaming,
             shouldScrollToBottom: shouldScrollToBottom,
+            scrollToBottomAnimated: scrollToBottomAnimated,
             isAtBottom: $isAtBottom,
             hasMorePrevious: hasMorePrevious,
             loadMorePrevious: loadMorePrevious,
@@ -137,7 +141,11 @@ public struct ChatTranscriptList<AccessoryContent: View>: View {
 
     private func messageFadeTransition(role: Role) -> AnyTransition {
         let anchor: UnitPoint = role == .user ? .bottomTrailing : .bottomLeading
-        return .opacity.combined(with: .scale(scale: 0.97, anchor: anchor))
+        return .asymmetric(
+            insertion: .opacity.combined(with: .scale(scale: 0.98, anchor: anchor))
+                .animation(.spring(duration: 0.25, bounce: 0.1)),
+            removal: .opacity.animation(.easeOut(duration: 0.15))
+        )
     }
 
     private static var defaultRowPadding: EdgeInsets {

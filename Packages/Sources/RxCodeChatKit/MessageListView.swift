@@ -50,6 +50,11 @@ struct MessageListView: View {
     @State private var activeTurnMaxMeasuredHeight: CGFloat = 0
     @State private var lastBottomScrollDate = Date.distantPast
     @State private var shouldScrollToBottom = false
+    /// Whether the next `shouldScrollToBottom` request should animate. The
+    /// stream-end re-assertion sets this false: the streaming→settled row handoff
+    /// reflows the lazy list and snaps the offset, and an animated correction on
+    /// top of that reads as a visible "scroll up, then glide to the end" jump.
+    @State private var scrollToBottomAnimated = true
     @State private var isAtBottom = true
     @State private var scrollRequestTask: Task<Void, Never>?
 
@@ -139,6 +144,7 @@ struct MessageListView: View {
             items: transcriptItems,
             isStreaming: chatBridge.isStreaming,
             shouldScrollToBottom: shouldScrollToBottom,
+            scrollToBottomAnimated: scrollToBottomAnimated,
             isAtBottom: $isAtBottom
         ) { accessory in
             transcriptAccessory(accessory)
@@ -276,7 +282,11 @@ struct MessageListView: View {
         // still following the bottom before the handoff.
         if wasAtBottom {
             anchor.resetToBottom()
-            requestScrollToBottom()
+            // Non-animated: the row handoff above already reflowed the list and
+            // snapped the offset. An animated correction on top of that reads as a
+            // visible "scroll up, then glide back to the end" jump; snapping puts
+            // the bottom back in the same beat as the reflow.
+            requestScrollToBottom(animated: false)
         }
     }
 
@@ -370,9 +380,10 @@ struct MessageListView: View {
         activeTurnMaxMeasuredHeight = 0
     }
 
-    private func requestScrollToBottom() {
+    private func requestScrollToBottom(animated: Bool = true) {
         scrollRequestTask?.cancel()
         shouldScrollToBottom = false
+        scrollToBottomAnimated = animated
         scrollRequestTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(10))
             guard !Task.isCancelled else { return }
@@ -380,13 +391,13 @@ struct MessageListView: View {
         }
     }
 
-    private func requestScrollToBottomIfAtBottom(_ atBottom: Bool? = nil) {
+    private func requestScrollToBottomIfAtBottom(_ atBottom: Bool? = nil, animated: Bool = true) {
         let shouldFollowBottom = atBottom ?? isAtBottom
         guard MessageListViewScrollPolicy.shouldRequestLiveBottomScroll(wasAtBottom: shouldFollowBottom) else {
             logScrollState("scrollToBottom.skippedNotAtBottom")
             return
         }
-        requestScrollToBottom()
+        requestScrollToBottom(animated: animated)
     }
 
     /// Returns the last consecutive assistant sequence (including streaming turn) while streaming.

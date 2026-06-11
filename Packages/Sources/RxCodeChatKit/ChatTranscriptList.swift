@@ -72,6 +72,7 @@ public struct ChatTranscriptList<AccessoryContent: View>: View {
     private let items: [ChatTranscriptListItem]
     private let isStreaming: Bool
     private let shouldScrollToBottom: Bool
+    private let scrollToBottomAnimated: Bool
     @Binding private var isAtBottom: Bool
     private let hasMorePrevious: () -> Bool
     private let loadMorePrevious: (() async throws -> Void)?
@@ -84,6 +85,7 @@ public struct ChatTranscriptList<AccessoryContent: View>: View {
         items: [ChatTranscriptListItem],
         isStreaming: Bool = false,
         shouldScrollToBottom: Bool = false,
+        scrollToBottomAnimated: Bool = true,
         isAtBottom: Binding<Bool> = .constant(true),
         hasMorePrevious: @escaping () -> Bool = { false },
         loadMorePrevious: (() async throws -> Void)? = nil,
@@ -95,6 +97,7 @@ public struct ChatTranscriptList<AccessoryContent: View>: View {
         self.items = items
         self.isStreaming = isStreaming
         self.shouldScrollToBottom = shouldScrollToBottom
+        self.scrollToBottomAnimated = scrollToBottomAnimated
         self._isAtBottom = isAtBottom
         self.hasMorePrevious = hasMorePrevious
         self.loadMorePrevious = loadMorePrevious
@@ -109,6 +112,7 @@ public struct ChatTranscriptList<AccessoryContent: View>: View {
             messages: items,
             isStreaming: isStreaming,
             shouldScrollToBottom: shouldScrollToBottom,
+            scrollToBottomAnimated: scrollToBottomAnimated,
             isAtBottom: $isAtBottom,
             hasMorePrevious: hasMorePrevious,
             loadMorePrevious: loadMorePrevious,

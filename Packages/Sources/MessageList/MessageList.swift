@@ -19,6 +19,7 @@ public struct MessageList<Message: MessageListItem, RowContent: View>: View {
     private let messages: [Message]
     private let isStreaming: Bool
     private let shouldScrollToBottom: Bool
+    private let scrollToBottomAnimated: Bool
     @Binding private var isAtBottom: Bool
     private let hasMorePrevious: () -> Bool
     private let hasMore: () -> Bool
@@ -49,6 +50,7 @@ public struct MessageList<Message: MessageListItem, RowContent: View>: View {
         messages: [Message],
         isStreaming: Bool = false,
         shouldScrollToBottom: Bool = false,
+        scrollToBottomAnimated: Bool = true,
         isAtBottom: Binding<Bool> = .constant(true),
         hasMorePrevious: @escaping () -> Bool = { false },
         hasMore: @escaping () -> Bool = { false },
@@ -60,6 +62,7 @@ public struct MessageList<Message: MessageListItem, RowContent: View>: View {
         self.messages = messages
         self.isStreaming = isStreaming
         self.shouldScrollToBottom = shouldScrollToBottom
+        self.scrollToBottomAnimated = scrollToBottomAnimated
         self._isAtBottom = isAtBottom
         self.hasMorePrevious = hasMorePrevious
         self.hasMore = hasMore
@@ -138,7 +141,7 @@ public struct MessageList<Message: MessageListItem, RowContent: View>: View {
                 guard shouldScroll else { return }
                 guard !pinning.isPinningUserMessage else { return }
                 anchor.resetToBottom()
-                scrollToBottom(proxy: proxy, animated: true)
+                scrollToBottom(proxy: proxy, animated: scrollToBottomAnimated)
             }
             .onChange(of: isStreaming) { oldValue, newValue in
                 if !newValue {

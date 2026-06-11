@@ -59,6 +59,18 @@ struct MessageListView: View {
     @State private var scrollRequestTask: Task<Void, Never>?
 
     private static let log = Logger(subsystem: "com.claudework", category: "MessageListView")
+    /// Temporary diagnostics: counts scroll-to-bottom *requests* (pre-coalesce)
+    /// so we can correlate per-token request churn with the actual scrollTo calls
+    /// logged in MessageList. Remove once scroll-churn is understood.
+    private static var scrollRequestCount = 0
+    private static let diagTimestampFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss.SSS"
+        return f
+    }()
+    private static func diagTimestamp() -> String {
+        diagTimestampFormatter.string(from: Date())
+    }
     private static let bottomAnchorID = "message-list-bottom-anchor"
     private static let endOfScreenAnchorID = "message-list-end-of-screen"
     private static let userScrollDownDelta: CGFloat = 4
@@ -217,7 +229,7 @@ struct MessageListView: View {
         settleScrollTask?.cancel()
         readyTask?.cancel()
         pinToTopTask?.cancel()
-        scrollRequestTask?.cancel()
+        cancelScrollRequest()
         activeTurnUserMessageID = nil
         isPinningLatestTurnToTop = false
         canReleasePinnedTurnByScroll = false
@@ -372,7 +384,7 @@ struct MessageListView: View {
         scrollTask = nil
         settleScrollTask?.cancel()
         pinToTopTask?.cancel()
-        scrollRequestTask?.cancel()
+        cancelScrollRequest()
         activeTurnUserMessageID = nil
         isPinningLatestTurnToTop = false
         canReleasePinnedTurnByScroll = false
@@ -381,14 +393,35 @@ struct MessageListView: View {
     }
 
     private func requestScrollToBottom(animated: Bool = true) {
-        scrollRequestTask?.cancel()
+        // Coalesce: streaming fires this once per token via the `content`
+        // onChange. Cancelling and reallocating the task — plus toggling
+        // `shouldScrollToBottom` false→true — on every token is pure per-token
+        // churn. If a request with the same animation intent is already in
+        // flight, let it land instead of rebuilding it; only a differing intent
+        // (e.g. the non-animated stream-end re-assert) supersedes it.
+        Self.scrollRequestCount += 1
+        let coalesced = scrollRequestTask != nil && scrollToBottomAnimated == animated
+        Self.log.info("[ScrollRequest] #\(Self.scrollRequestCount, privacy: .public) \(Self.diagTimestamp(), privacy: .public) animated=\(animated, privacy: .public) coalesced=\(coalesced, privacy: .public) streaming=\(chatBridge.isStreaming, privacy: .public)")
+        if scrollRequestTask != nil, scrollToBottomAnimated == animated {
+            return
+        }
+        cancelScrollRequest()
         shouldScrollToBottom = false
         scrollToBottomAnimated = animated
         scrollRequestTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(10))
             guard !Task.isCancelled else { return }
+            scrollRequestTask = nil
             shouldScrollToBottom = true
         }
+    }
+
+    /// Cancels any in-flight scroll request and clears the handle so the
+    /// coalescing guard in `requestScrollToBottom` doesn't see a dead task as
+    /// "still pending" and block future requests.
+    private func cancelScrollRequest() {
+        scrollRequestTask?.cancel()
+        scrollRequestTask = nil
     }
 
     private func requestScrollToBottomIfAtBottom(_ atBottom: Bool? = nil, animated: Bool = true) {
@@ -676,7 +709,7 @@ struct StreamingMessageView: View {
                 }
             }
         }
-        .animation(.easeOut(duration: 0.28), value: activeMessages.map(\.id))
+        .animation(.spring(duration: 0.22, bounce: 0.05), value: activeMessages.map(\.id))
         .onChange(of: messages.count) { _, _ in
             onStructureChanged()
         }
@@ -684,7 +717,8 @@ struct StreamingMessageView: View {
 
     private func streamFadeTransition(role: Role) -> AnyTransition {
         let anchor: UnitPoint = role == .user ? .bottomTrailing : .bottomLeading
-        let insertion: AnyTransition = .opacity.combined(with: .scale(scale: 0.97, anchor: anchor))
+        let insertion: AnyTransition = .opacity.combined(with: .scale(scale: 0.98, anchor: anchor))
+            .animation(.spring(duration: 0.22, bounce: 0.08))
         return .asymmetric(insertion: insertion, removal: .identity)
     }
 
@@ -823,7 +857,7 @@ private struct InlineElapsedTimeView: View {
 /// Replaces the previous card with "Thinking..." / "Generating response..." text.
 struct AnimatedDotsView: View {
     @State private var phase: Int = 0
-    private let timer = Timer.publish(every: 0.18, on: .main, in: .common).autoconnect()
+    private let timer = Timer.publish(every: 0.22, on: .main, in: .common).autoconnect()
 
     var body: some View {
         HStack(spacing: 4) {
@@ -831,9 +865,9 @@ struct AnimatedDotsView: View {
                 Circle()
                     .fill(ClaudeTheme.textTertiary)
                     .frame(width: 6, height: 6)
-                    .opacity(phase == i ? 1.0 : 0.3)
-                    .scaleEffect(phase == i ? 1.0 : 0.85)
-                    .animation(.easeInOut(duration: 0.25), value: phase)
+                    .opacity(phase == i ? 1.0 : 0.35)
+                    .scaleEffect(phase == i ? 1.0 : 0.8)
+                    .animation(.spring(duration: 0.3, bounce: 0.2), value: phase)
             }
         }
         .onReceive(timer) { _ in

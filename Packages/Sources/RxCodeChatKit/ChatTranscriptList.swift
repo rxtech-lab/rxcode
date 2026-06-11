@@ -141,7 +141,11 @@ public struct ChatTranscriptList<AccessoryContent: View>: View {
 
     private func messageFadeTransition(role: Role) -> AnyTransition {
         let anchor: UnitPoint = role == .user ? .bottomTrailing : .bottomLeading
-        return .opacity.combined(with: .scale(scale: 0.97, anchor: anchor))
+        return .asymmetric(
+            insertion: .opacity.combined(with: .scale(scale: 0.98, anchor: anchor))
+                .animation(.spring(duration: 0.25, bounce: 0.1)),
+            removal: .opacity.animation(.easeOut(duration: 0.15))
+        )
     }
 
     private static var defaultRowPadding: EdgeInsets {

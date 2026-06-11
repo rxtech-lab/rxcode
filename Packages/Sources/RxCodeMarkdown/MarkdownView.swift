@@ -70,10 +70,67 @@ public final class MarkdownImageCache: @unchecked Sendable {
     public init() {}
 }
 
+/// Memoization cache for parsed markdown documents of *settled* messages.
+///
+/// `MarkdownDocumentParser.parse` is a pure function of its input but is
+/// comparatively expensive (full block tree + inline `AttributedString`
+/// construction). SwiftUI re-evaluates a view's `body` far more often than the
+/// underlying text changes — every sibling-row update, scroll tick, or window
+/// resize re-runs it — so an unguarded parse in `body` re-does that work for
+/// settled messages that haven't changed at all. Keying on the exact string
+/// makes those re-renders cost a lookup instead of a re-parse.
+///
+/// Streaming/coalesced text is deliberately **never** cached: it is a sequence
+/// of unique, growing full-message snapshots, so caching it would retain dozens
+/// of near-full copies of the response (plus their parsed trees) for the app's
+/// lifetime — memory that reads as a leak after a long stream. Live text is
+/// parsed directly via `cacheable: false`. Settled documents above
+/// `maxCacheableTextBytes` are also parsed on demand rather than retained, and
+/// the underlying `NSCache` is cost-limited so it evicts under memory pressure.
+final class MarkdownParseCache: @unchecked Sendable {
+    static let shared = MarkdownParseCache()
+
+    private final class Box {
+        let document: MarkdownDocument
+        init(_ document: MarkdownDocument) { self.document = document }
+    }
+
+    private let cache = NSCache<NSString, Box>()
+    /// Settled documents whose source exceeds this size are parsed on demand
+    /// rather than cached — avoids holding near-full copies of very large
+    /// outputs or logs indefinitely.
+    private let maxCacheableTextBytes = 16 * 1024
+
+    private init() {
+        cache.totalCostLimit = 4 * 1024 * 1024  // ~4MB of source text
+    }
+
+    /// Returns the parsed document for `text`. The cache is consulted and
+    /// populated only when `cacheable` is true (settled, reasonably-sized
+    /// messages); live/streaming text is always parsed directly and never
+    /// stored.
+    func document(for text: String, cacheable: Bool) -> MarkdownDocument {
+        let cost = text.utf8.count
+        guard cacheable, cost <= maxCacheableTextBytes else {
+            return MarkdownDocumentParser.parse(text)
+        }
+        let key = text as NSString
+        if let box = cache.object(forKey: key) {
+            return box.document
+        }
+        let parsed = MarkdownDocumentParser.parse(text)
+        cache.setObject(Box(parsed), forKey: key, cost: cost)
+        return parsed
+    }
+}
+
 public struct MarkdownView: View {
     public typealias LinkHandler = (URL) -> OpenURLAction.Result
 
-    private static let newTextFadeDuration: Duration = .milliseconds(650)
+    private static let newTextFadeDuration: Duration = .milliseconds(800)
+    /// Maximum cadence at which streaming text is handed to the (expensive)
+    /// markdown parse. Caps re-parsing at ~60fps instead of once per token.
+    private static let streamCoalesceInterval: Duration = .milliseconds(16)
 
     private let text: String
     private let showsTrailingCursor: Bool
@@ -88,6 +145,13 @@ public struct MarkdownView: View {
     @State private var observedText: String
     @State private var fadeSegments: [MarkdownFadeSegment] = []
     @State private var fadeTasks: [UUID: Task<Void, Never>] = [:]
+    /// The text actually fed to the parser. Lags `text` by at most
+    /// `streamCoalesceInterval` so a burst of streaming token deltas collapses
+    /// into a single re-parse per frame instead of one per token.
+    @State private var displayedText: String
+    /// Latest text seen during an active coalescing window, applied when it ends.
+    @State private var pendingText: String?
+    @State private var coalesceTask: Task<Void, Never>?
 
     public init(
         text: String,
@@ -110,6 +174,7 @@ public struct MarkdownView: View {
         self.imageCache = imageCache
         self.onOpenLink = onOpenLink
         _observedText = State(initialValue: text)
+        _displayedText = State(initialValue: text)
     }
 
     public var body: some View {
@@ -118,8 +183,12 @@ public struct MarkdownView: View {
 
     @ViewBuilder
     private var content: some View {
+        // A live message (streaming cursor and/or fade-in) produces unique,
+        // growing snapshots — never cache those, or the cache fills with
+        // near-full copies of the response. Only settled text is memoized.
+        let isLiveMessage = showsTrailingCursor || fadeNewText
         let view = MarkdownDocumentView(
-            document: MarkdownDocumentParser.parse(renderedText),
+            document: MarkdownParseCache.shared.document(for: renderedText, cacheable: !isLiveMessage),
             baseURL: baseURL,
             style: style,
             imageCache: imageCache,
@@ -128,9 +197,10 @@ public struct MarkdownView: View {
         .textSelection(.enabled)
         .frame(maxWidth: expandsHorizontally ? .infinity : nil, alignment: .leading)
         .onChange(of: text) { _, newText in
-            updateFadeState(for: newText)
+            coalesceDisplayUpdate(to: newText)
         }
         .onDisappear {
+            coalesceTask?.cancel()
             cancelFadeTasks()
         }
 
@@ -144,11 +214,36 @@ public struct MarkdownView: View {
     }
 
     private var renderedText: String {
-        if showsTrailingCursor && isCursorVisible {
-            text + "\u{2009}\u{25CF}"
-        } else {
-            text
+        displayedText
+    }
+
+    /// Leading-edge throttle for streaming text.
+    ///
+    /// The first change renders immediately, so a settled message (a single
+    /// update) has no added latency. Subsequent changes inside the cooldown
+    /// window are collapsed to the latest value and flushed once when the
+    /// window ends. Without this, `MarkdownDocumentParser.parse` runs on every
+    /// streamed token — O(n) work per token, O(n²) over a message — which
+    /// dominates allocation churn and stalls the main thread mid-stream.
+    private func coalesceDisplayUpdate(to newText: String) {
+        guard coalesceTask == nil else {
+            pendingText = newText
+            return
         }
+        applyDisplayedText(newText)
+        coalesceTask = Task { @MainActor in
+            try? await Task.sleep(for: Self.streamCoalesceInterval)
+            coalesceTask = nil
+            if let pending = pendingText {
+                pendingText = nil
+                coalesceDisplayUpdate(to: pending)
+            }
+        }
+    }
+
+    private func applyDisplayedText(_ newText: String) {
+        displayedText = newText
+        updateFadeState(for: newText)
     }
 
     private func updateFadeState(for newText: String) {
@@ -170,7 +265,7 @@ public struct MarkdownView: View {
         let segment = MarkdownFadeSegment(range: insertedRange, opacity: 0)
         fadeSegments.append(segment)
         fadeTasks[segment.id] = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(16))
+            try? await Task.sleep(for: .milliseconds(8))
             guard !Task.isCancelled else { return }
             withAnimation(.easeOut(duration: Self.newTextFadeDuration.timeInterval)) {
                 setFadeSegmentOpacity(id: segment.id, opacity: 1)

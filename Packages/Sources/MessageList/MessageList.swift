@@ -1,5 +1,42 @@
 import Foundation
 import SwiftUI
+import os
+
+/// Temporary diagnostics for the "list scrolls a lot when streaming finishes"
+/// report. Counts every real `proxy.scrollTo(bottomAnchor)` call and logs it
+/// with a millisecond timestamp + reason so we can see how many fire and from
+/// which trigger. Remove once the scroll-churn is understood.
+@MainActor
+enum ScrollToBottomDiag {
+    /// Counts only real `proxy.scrollTo(bottomAnchor)` calls — the answer to
+    /// "how many scroll-to-bottom API calls were triggered".
+    private static var count = 0
+    /// Counts requests that were *asked for* but bailed before any scroll API
+    /// call (spacer absorbed the growth, or a pin owns the position). Kept on a
+    /// separate counter/label so it never inflates the actual-call count above.
+    private static var skippedCount = 0
+    private static let log = Logger(subsystem: "com.claudework", category: "ScrollToBottomDiag")
+    private static let formatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss.SSS"
+        return f
+    }()
+
+    /// Log an actual `proxy.scrollTo` call. Invoke immediately before the real
+    /// scroll so the count stays an accurate tally of scroll API invocations.
+    static func record(_ reason: String, animated: Bool, streaming: Bool) {
+        count += 1
+        let ts = formatter.string(from: Date())
+        log.info("[ScrollToBottom] #\(count, privacy: .public) \(ts, privacy: .public) reason=\(reason, privacy: .public) animated=\(animated, privacy: .public) streaming=\(streaming, privacy: .public)")
+    }
+
+    /// Log a scroll request that was requested but skipped (no scroll API call).
+    static func recordSkipped(_ reason: String, animated: Bool, streaming: Bool) {
+        skippedCount += 1
+        let ts = formatter.string(from: Date())
+        log.info("[ScrollToBottomSkipped] #\(skippedCount, privacy: .public) \(ts, privacy: .public) reason=\(reason, privacy: .public) animated=\(animated, privacy: .public) streaming=\(streaming, privacy: .public)")
+    }
+}
 
 public protocol MessageListItem: Identifiable, Sendable where ID: Hashable & Sendable {
     var isUserMessage: Bool { get }
@@ -134,14 +171,31 @@ public struct MessageList<Message: MessageListItem, RowContent: View>: View {
             }
             .task {
                 if shouldScrollToBottom {
-                    scrollToBottom(proxy: proxy, animated: false)
+                    scrollToBottom(proxy: proxy, animated: false, reason: "task.initial")
                 }
             }
             .onChange(of: shouldScrollToBottom) { _, shouldScroll in
                 guard shouldScroll else { return }
-                guard !pinning.isPinningUserMessage else { return }
+                guard !pinning.isPinningUserMessage else {
+                    ScrollToBottomDiag.recordSkipped("onChangeShouldScroll.skippedPinning", animated: scrollToBottomAnimated, streaming: isStreaming)
+                    return
+                }
+                // While streaming, the content `onChange` toggles this once per
+                // token (≈4/sec). Scrolling immediately on each toggle stacks a
+                // fresh spring animation per token — the visible "scrolls a lot"
+                // churn. Funnel the streaming follow through the same throttle the
+                // message-change path uses (`scheduleScrollToBottom`, gated to one
+                // pending task and rate-limited to `streamingBottomScrollInterval`)
+                // so it collapses to ≈1 scroll per interval. The animation is
+                // preserved; only the cadence changes. Non-streaming toggles
+                // (session open, new send, the non-animated stream-end re-assert)
+                // keep the immediate path so they stay snappy and exact.
+                if isStreaming {
+                    scheduleScrollToBottom(proxy: proxy)
+                    return
+                }
                 anchor.resetToBottom()
-                scrollToBottom(proxy: proxy, animated: scrollToBottomAnimated)
+                scrollToBottom(proxy: proxy, animated: scrollToBottomAnimated, reason: "onChangeShouldScroll")
             }
             .onChange(of: isStreaming) { oldValue, newValue in
                 if !newValue {
@@ -362,16 +416,20 @@ public struct MessageList<Message: MessageListItem, RowContent: View>: View {
         isAtBottom = value
     }
 
-    private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool) {
+    private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool, reason: String = "scrollToBottom") {
         // While reserved spacing exists below the latest turn, the content already fits
         // in the viewport — a follow/auto scroll would only pull the empty reserved
         // space into view and shove the turn around. Only scroll once the turn has
         // outgrown the viewport (no spacing left). The one scroll that is allowed to
         // move into the reserved area is the initial turn placement, which goes through
         // `scrollLatestTurnIntoView` (a direct `proxy.scrollTo`), not this path.
-        guard pinTailSpacerHeight <= 0 else { return }
+        guard pinTailSpacerHeight <= 0 else {
+            ScrollToBottomDiag.recordSkipped("\(reason).skippedSpacer", animated: animated, streaming: isStreaming)
+            return
+        }
+        ScrollToBottomDiag.record(reason, animated: animated, streaming: isStreaming)
         if animated {
-            withAnimation(.easeInOut(duration: MessageListConstants.scrollAnimationSeconds)) {
+            withAnimation(.spring(duration: MessageListConstants.scrollAnimationSeconds, bounce: 0)) {
                 proxy.scrollTo(MessageListConstants.bottomAnchorID, anchor: .bottom)
             }
         } else {
@@ -392,7 +450,7 @@ public struct MessageList<Message: MessageListItem, RowContent: View>: View {
             if isStreaming {
                 lastStreamingBottomScrollDate = Date()
             }
-            scrollToBottom(proxy: proxy, animated: true)
+            scrollToBottom(proxy: proxy, animated: true, reason: "scheduled")
         }
     }
 
@@ -424,7 +482,8 @@ public struct MessageList<Message: MessageListItem, RowContent: View>: View {
             guard !Task.isCancelled else { return }
 
             if animated {
-                withAnimation(.easeInOut(duration: MessageListConstants.pinAnimationSeconds)) {
+                ScrollToBottomDiag.record("scrollLatestTurnIntoView.animated", animated: true, streaming: isStreaming)
+                withAnimation(.spring(duration: MessageListConstants.pinAnimationSeconds, bounce: 0.05)) {
                     proxy.scrollTo(MessageListConstants.bottomAnchorID, anchor: .bottom)
                 }
                 try? await Task.sleep(for: MessageListConstants.pinAnimationDuration)
@@ -433,8 +492,9 @@ public struct MessageList<Message: MessageListItem, RowContent: View>: View {
             // Re-assert across several frames so the position tracks the tail spacer
             // as it settles to its final size (the turn height is measured a frame or
             // two after the freshly-added content lays out).
-            for _ in 0..<8 {
+            for attempt in 0..<8 {
                 guard !Task.isCancelled else { return }
+                ScrollToBottomDiag.record("scrollLatestTurnIntoView.settle[\(attempt)]", animated: false, streaming: isStreaming)
                 var transaction = Transaction()
                 transaction.animation = nil
                 withTransaction(transaction) {
@@ -596,10 +656,10 @@ private nonisolated enum MessageListConstants {
     static let loadThreshold: CGFloat = 96
     static let minimumPinnedTailSpacing: CGFloat = 16
     static let userScrollDownDelta: CGFloat = 4
-    static let layoutSettleDelayNanoseconds: UInt64 = 16_000_000
-    static let streamingBottomScrollInterval: TimeInterval = 2
+    static let layoutSettleDelayNanoseconds: UInt64 = 8_000_000
+    static let streamingBottomScrollInterval: TimeInterval = 1.5
     static let loadMoreCooldownSeconds: TimeInterval = 1
-    static let scrollAnimationSeconds: Double = 0.24
-    static let pinAnimationDuration: Duration = .milliseconds(320)
-    static let pinAnimationSeconds: Double = 0.32
+    static let scrollAnimationSeconds: Double = 0.18
+    static let pinAnimationDuration: Duration = .milliseconds(250)
+    static let pinAnimationSeconds: Double = 0.25
 }

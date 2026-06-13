@@ -128,7 +128,7 @@ struct FileInspectorView: View {
             }
 
             Menu {
-                let editors = ExternalEditorService.shared.detectedEditors()
+                let editors = ExternalEditorService.shared.detectedEditors
                 if editors.isEmpty {
                     Text("No editors detected")
                 } else {
@@ -153,6 +153,7 @@ struct FileInspectorView: View {
             }
             .menuStyle(.borderlessButton)
             .help("Open in Editor")
+            .task { ExternalEditorService.shared.detectIfNeeded() }
 
             Button { windowState.inspectorFile = nil } label: {
                 Image(systemName: "xmark")

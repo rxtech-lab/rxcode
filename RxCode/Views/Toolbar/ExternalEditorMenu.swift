@@ -41,16 +41,33 @@ struct ExternalEditor: Identifiable, Hashable {
 // MARK: - ExternalEditorService
 
 @MainActor
+@Observable
 final class ExternalEditorService {
     static let shared = ExternalEditorService()
 
     private init() {}
 
-    func detectedEditors() -> [ExternalEditor] {
-        ExternalEditor.all.filter { isInstalled($0) }
+    /// Editors detected as installed. Read this from SwiftUI bodies — it is
+    /// populated asynchronously by `detectIfNeeded()`. Never compute detection
+    /// inline in a view body: `isInstalled` can spawn a `which` subprocess and
+    /// block the main thread with `waitUntilExit`, which spins a nested run loop
+    /// and lets queued work (e.g. a scroll Task) reenter SwiftUI mid-update —
+    /// previously crashing in `ScrollViewProxy.scrollTo`.
+    private(set) var detectedEditors: [ExternalEditor] = []
+    private var hasDetected = false
+
+    /// Detects installed editors off the main thread, once per launch. Safe to
+    /// call repeatedly (e.g. from `.task`); only the first call does the work.
+    func detectIfNeeded() {
+        guard !hasDetected else { return }
+        hasDetected = true
+        Task.detached(priority: .utility) {
+            let detected = ExternalEditor.all.filter { Self.isInstalled($0) }
+            await MainActor.run { self.detectedEditors = detected }
+        }
     }
 
-    func isInstalled(_ editor: ExternalEditor) -> Bool {
+    nonisolated static func isInstalled(_ editor: ExternalEditor) -> Bool {
         if let bundleId = editor.bundleId,
            NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId) != nil {
             return true
@@ -63,7 +80,7 @@ final class ExternalEditorService {
 
     func open(_ editor: ExternalEditor, path: String) {
         // Prefer CLI when present — better project-mode handling for code/cursor/zed
-        if let cli = editor.cliCommand, let cliPath = which(cli) {
+        if let cli = editor.cliCommand, let cliPath = Self.which(cli) {
             let process = Process()
             process.executableURL = URL(fileURLWithPath: cliPath)
             process.arguments = [path]
@@ -84,13 +101,42 @@ final class ExternalEditorService {
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
     }
 
+    /// Cached GitHub web URLs for projects whose remote had to be detected via
+    /// `git` (keyed by project path). Populated off the main thread by
+    /// `detectRepoURLIfNeeded(for:)`.
+    private(set) var detectedRepoURLs: [String: URL] = [:]
+    private var repoDetectionInFlight: Set<String> = []
+
+    /// GitHub web URL for a project. Read this from SwiftUI bodies — it never
+    /// blocks: it uses the already-known `project.gitHubRepo`, falling back to
+    /// the async-detected cache. Detecting an unknown remote runs `git` and
+    /// blocks with `waitUntilExit`, so that work lives in
+    /// `detectRepoURLIfNeeded(for:)`, never in a view body.
     func gitHubURL(for project: Project) -> URL? {
-        let ownerRepo = project.gitHubRepo ?? detectGitHubOwnerRepo(at: project.path)
-        guard let ownerRepo else { return nil }
-        return gitHubWebURL(forOwnerRepo: ownerRepo)
+        if let ownerRepo = project.gitHubRepo {
+            return gitHubWebURL(forOwnerRepo: ownerRepo)
+        }
+        return detectedRepoURLs[project.path]
     }
 
-    private func which(_ command: String) -> String? {
+    /// Detects a project's GitHub remote off the main thread, once per path.
+    /// No-op when the remote is already known or in flight. Safe to call from
+    /// `.task`.
+    func detectRepoURLIfNeeded(for project: Project) {
+        guard project.gitHubRepo == nil else { return }
+        let path = project.path
+        guard detectedRepoURLs[path] == nil, !repoDetectionInFlight.contains(path) else { return }
+        repoDetectionInFlight.insert(path)
+        Task.detached(priority: .utility) {
+            let url = detectGitHubOwnerRepo(at: path).flatMap { gitHubWebURL(forOwnerRepo: $0) }
+            await MainActor.run {
+                if let url { self.detectedRepoURLs[path] = url }
+                self.repoDetectionInFlight.remove(path)
+            }
+        }
+    }
+
+    nonisolated private static func which(_ command: String) -> String? {
         let candidates = [
             "/opt/homebrew/bin/\(command)",
             "/usr/local/bin/\(command)",
@@ -141,7 +187,7 @@ struct ExternalEditorMenu: View {
 
     var body: some View {
         Menu {
-            let editors = ExternalEditorService.shared.detectedEditors()
+            let editors = ExternalEditorService.shared.detectedEditors
             if editors.isEmpty {
                 Text("No editors detected")
             } else {
@@ -184,5 +230,11 @@ struct ExternalEditorMenu: View {
         }
         .help("Open in External Editor")
         .disabled(windowState.selectedProject == nil)
+        .task(id: windowState.selectedProject?.id) {
+            ExternalEditorService.shared.detectIfNeeded()
+            if let project = windowState.selectedProject {
+                ExternalEditorService.shared.detectRepoURLIfNeeded(for: project)
+            }
+        }
     }
 }

@@ -1,4 +1,5 @@
 import Foundation
+import os
 import RxCodeCore
 
 // MARK: - IDEToolHandling Conformance
@@ -333,8 +334,9 @@ extension AppState: IDEToolHandling {
         let permissionMode: PermissionMode? = arguments["permission_mode"]?.stringValue
             .flatMap(PermissionMode.init(rawValue:))
         let waitForResponse = arguments["wait_for_response"]?.boolValue ?? true
-        let requestedTimeout = arguments["timeout_seconds"]?.numberValue ?? 120
-        let timeoutSeconds = max(1, min(requestedTimeout, 600))
+        let requestedTimeout = arguments["timeout_seconds"]?.numberValue ?? 20
+        let timeoutSeconds = max(1, min(requestedTimeout, 20))
+        logger.info("[IDE_SEND_THREAD] ide__send_to_thread start projectId=\(projectId?.uuidString ?? "<nil>", privacy: .public) threadId=\(threadId ?? "<nil>", privacy: .public) wait=\(waitForResponse, privacy: .public) requestedTimeout=\(String(format: "%.1f", requestedTimeout), privacy: .public)s effectiveTimeout=\(String(format: "%.1f", timeoutSeconds), privacy: .public)s provider=\(agentProvider?.rawValue ?? "<default>", privacy: .public) model=\(model ?? "<default>", privacy: .public) promptChars=\(prompt.count, privacy: .public)")
 
         do {
             let result = try await sendCrossProject(
@@ -346,8 +348,10 @@ extension AppState: IDEToolHandling {
                 effort: effort,
                 permissionMode: permissionMode,
                 waitForResponse: waitForResponse,
-                timeoutSeconds: timeoutSeconds
+                timeoutSeconds: timeoutSeconds,
+                includeIDEMCP: false
             )
+            logger.info("[IDE_SEND_THREAD] ide__send_to_thread result thread=\(result.threadId, privacy: .public) project=\(result.projectId.uuidString, privacy: .public) done=\(result.done, privacy: .public) error=\(result.error ?? "<nil>", privacy: .public) assistantChars=\(result.assistantText.count, privacy: .public)")
             var obj: [String: JSONValue] = [
                 "thread_id": .string(result.threadId),
                 "project_id": .string(result.projectId.uuidString),
@@ -359,7 +363,11 @@ extension AppState: IDEToolHandling {
             }
             return jsonTextResult(.object(obj))
         } catch let error as CrossProjectSendError {
+            logger.error("[IDE_SEND_THREAD] ide__send_to_thread failed: \(error.localizedDescription, privacy: .public)")
             throw IDEToolError.handlerFailed(error.localizedDescription)
+        } catch {
+            logger.error("[IDE_SEND_THREAD] ide__send_to_thread failed: \(error.localizedDescription, privacy: .public)")
+            throw error
         }
     }
 

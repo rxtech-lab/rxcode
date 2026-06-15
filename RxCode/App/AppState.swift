@@ -219,17 +219,33 @@ final class AppState {
         let sessionId: String
         let assistantText: String
         let error: String?
+        let isFinal: Bool
     }
 
     /// Completed streams whose owners (callers of `awaitStreamCompletion`)
     /// have not yet picked up the result. Keyed by `streamId`.
     var pendingStreamCompletions: [UUID: StreamCompletion] = [:]
 
+    /// Streams that have already recorded a completion. This makes completion
+    /// handoff genuinely idempotent even when the first record resumed a waiter
+    /// immediately and therefore left no entry in `pendingStreamCompletions`.
+    var recordedStreamCompletionIds: Set<UUID> = []
+
+    /// Streams whose `ide__send_to_thread` waiter was already resumed with
+    /// first assistant text. Their eventual final completion should not be
+    /// parked because the MCP caller has already returned.
+    var streamPartialResponseDeliveredIds: Set<UUID> = []
+
     /// Active callers waiting for a stream's completion. Resumed directly by
     /// `recordStreamCompletion` so the cross-project MCP handler doesn't sit
     /// in a polling loop on MainActor (which starves the target project's
     /// `processStream` and freezes its thread until the sender is cancelled).
     var streamCompletionWaiters: [UUID: StreamCompletionWaiter] = [:]
+
+    /// Optional per-stream log prefix for diagnostic flows. Used by
+    /// `ide__send_to_thread` so target-stream phase logs can be captured with
+    /// the same predicate as the MCP handoff logs.
+    var streamDebugLogPrefixes: [UUID: String] = [:]
 
     // MARK: - Session Summaries (shared — lightweight metadata for all projects)
 

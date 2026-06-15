@@ -3,7 +3,7 @@ import RxCodeCore
 import os
 
 extension CodexAppServer {
-    func initializeParams() -> [String: JSONValue] {
+    nonisolated func initializeParams() -> [String: JSONValue] {
         [
             "clientInfo": .object([
                 "name": .string("RxCode"),
@@ -14,13 +14,13 @@ extension CodexAppServer {
         ]
     }
 
-    func threadParams(threadId: String?, cwd: String) -> [String: JSONValue] {
+    nonisolated func threadParams(threadId: String?, cwd: String) -> [String: JSONValue] {
         var params: [String: JSONValue] = ["cwd": .string(cwd)]
         if let threadId { params["threadId"] = .string(threadId) }
         return params
     }
 
-    func threadStartParams(threadId: String?, cwd: String, permissionMode: PermissionMode, planMode: Bool, ideInstructions: String?) -> [String: JSONValue] {
+    nonisolated func threadStartParams(threadId: String?, cwd: String, permissionMode: PermissionMode, planMode: Bool, ideInstructions: String?) -> [String: JSONValue] {
         var params: [String: JSONValue] = ["cwd": .string(cwd)]
         if let threadId { params["threadId"] = .string(threadId) }
         params["approvalPolicy"] = .string(Self.codexApprovalPolicy(permissionMode: permissionMode, planMode: planMode))
@@ -34,7 +34,7 @@ extension CodexAppServer {
         return params
     }
 
-    func turnParams(threadId: String, prompt: String, cwd: String, model: String?, permissionMode: PermissionMode, planMode: Bool) -> [String: JSONValue] {
+    nonisolated func turnParams(threadId: String, prompt: String, cwd: String, model: String?, permissionMode: PermissionMode, planMode: Bool) -> [String: JSONValue] {
         var params: [String: JSONValue] = [
             "threadId": .string(threadId),
             "cwd": .string(cwd),

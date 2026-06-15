@@ -265,7 +265,8 @@ actor MCPService {
     /// usage, durable memory).
     func codexConfigOverrides(
         projectPath: String?,
-        bridgeCommand: (command: String, args: [String])? = nil
+        bridgeCommand: (command: String, args: [String])? = nil,
+        disableAllServers: Bool = false
     ) async -> [String] {
         do {
             let config = try loadConfig()
@@ -282,7 +283,7 @@ actor MCPService {
                 // override fails codex's validation ("invalid transport") when
                 // the server isn't already defined in ~/.codex/config.toml.
                 let key = "mcp_servers.\(tomlKey(record.name))"
-                let enabled = record.isEnabled(for: projectPath)
+                let enabled = disableAllServers ? false : record.isEnabled(for: projectPath)
                 pairs += ["-c", "\(key)=\(tomlInlineTable(for: record, enabled: enabled))"]
             }
             return pairs

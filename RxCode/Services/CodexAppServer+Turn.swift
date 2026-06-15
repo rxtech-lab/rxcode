@@ -3,7 +3,7 @@ import RxCodeCore
 import os
 
 extension CodexAppServer {
-    func runTurn(
+    nonisolated func runTurn(
         streamId: UUID,
         prompt: String,
         cwd: String,
@@ -104,7 +104,7 @@ extension CodexAppServer {
                         default:
                             break
                         }
-                        handleNotification(method: method, object: object, activeThreadId: activeThreadId, continuation: continuation)
+                        await handleNotification(method: method, object: object, activeThreadId: activeThreadId, continuation: continuation)
                         if method == "turn/completed" || method == "turn/failed" {
                             finalUsage = Self.usageInfo(from: object) ?? finalUsage
                             turnCompleted = method == "turn/completed"
@@ -133,7 +133,7 @@ extension CodexAppServer {
                 contextWindow: nil
             )))
         } catch {
-            stderrBuffers[streamId, default: ""] += "\n\(error.localizedDescription)"
+            await appendStderr("\n\(error.localizedDescription)", streamId: streamId)
             let sid = threadId ?? "codex-\(streamId.uuidString)"
             continuation.yield(.result(ResultEvent(
                 durationMs: nil,
@@ -145,7 +145,7 @@ extension CodexAppServer {
                 contextWindow: nil
             )))
         }
-        finalize(streamId: streamId)
+        await finalize(streamId: streamId)
         continuation.finish()
     }
 
@@ -237,7 +237,7 @@ extension CodexAppServer {
     /// an interactive accept/reject card at the end of a Codex plan-mode turn. Plan body
     /// is rendered from the latest `update_plan` steps; falls back to the assistant's
     /// final summary text if no plan steps were emitted.
-    func emitSynthesizedExitPlanMode(
+    nonisolated func emitSynthesizedExitPlanMode(
         planItems: [TodoItem],
         assistantText: String,
         continuation: AsyncStream<StreamEvent>.Continuation
@@ -271,7 +271,7 @@ extension CodexAppServer {
         }.joined(separator: "\n")
     }
 
-    func handleServerRequest(
+    nonisolated func handleServerRequest(
         requestId: String,
         method: String,
         object: [String: JSONValue],

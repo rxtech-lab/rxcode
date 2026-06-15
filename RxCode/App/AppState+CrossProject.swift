@@ -71,6 +71,7 @@ extension AppState {
         permissionMode: PermissionMode = .default,
         hookSessionMode: PermissionMode? = nil,
         projectId: UUID,
+        includeIDEMCP: Bool = true,
         window: WindowState
     ) async {
         // Mode used when registering a session with PermissionServer for hook auto-approve.
@@ -78,7 +79,11 @@ extension AppState {
         // user's dropdown choice (e.g. `.auto`) should still drive the hook policy.
         let registerMode = hookSessionMode ?? permissionMode
         let streamStart = Date()
+        let debugLogPrefix = streamDebugLogPrefixes[streamId]
         logger.info("[Stream:UI] starting processStream provider=\(agentProvider.rawValue, privacy: .public) stream=\(streamId) cli=\(cliSessionId ?? "new", privacy: .public) key=\(internalSessionKey, privacy: .public)")
+        if let debugLogPrefix {
+            logger.info("\(debugLogPrefix, privacy: .public) phase=processStreamStart stream=\(streamId) provider=\(agentProvider.rawValue, privacy: .public) cli=\(cliSessionId ?? "new", privacy: .public) key=\(internalSessionKey, privacy: .public)")
+        }
 
         var sessionKey = internalSessionKey
 
@@ -124,6 +129,7 @@ extension AppState {
         let memoryService = self.memoryService
         let marketplace = self.marketplace
         let ideMCPServer = self.ideMCPServer
+        let shouldIncludeIDEMCP = includeIDEMCP
 
         func logPreflight(_ label: String, detail: String = "") {
             let elapsed = Date().timeIntervalSince(streamStart)
@@ -143,12 +149,14 @@ extension AppState {
             )
             : []
         async let currentBranchAsync = GitHelper.currentBranch(at: cwd)
-        async let idePortAsync = ideMCPServer.allocate(
-            sessionKey: capturedSessionKey,
-            capabilities: agentProvider.staticCapabilities
-        )
+        async let idePortAsync: UInt16? = shouldIncludeIDEMCP
+            ? ideMCPServer.allocate(
+                sessionKey: capturedSessionKey,
+                capabilities: agentProvider.staticCapabilities
+            )
+            : nil
         async let skillContextAsync: String? = marketplace.promptContext(for: agentProvider)
-        async let codexSkillOverridesAsync: [String] = agentProvider == .codex
+        async let codexSkillOverridesAsync: [String] = shouldIncludeIDEMCP && agentProvider == .codex
             ? await marketplace.codexConfigOverrides()
             : []
 
@@ -186,7 +194,10 @@ extension AppState {
         // bridge, but they no longer block memory/git/skill resolution.
         let idePort = await idePortAsync
         let bridge = idePort.map { IDEMCPServer.bridgeCommand(forPort: $0) }
-        logPreflight("ideMCP", detail: "port=\(idePort.map(String.init) ?? "<nil>")")
+        logPreflight(
+            "ideMCP",
+            detail: "enabled=\(shouldIncludeIDEMCP) port=\(idePort.map(String.init) ?? "<nil>")"
+        )
 
         // Session-start hooks fire once, only for a brand-new thread (no resumed
         // CLI session). Their stdout is injected into this turn's agent context
@@ -219,8 +230,18 @@ extension AppState {
                 logPreflight("skillContext", detail: "chars=0")
             }
         case .codex:
-            mcpCodexOverrides = await mcp.codexConfigOverrides(projectPath: cwd, bridgeCommand: bridge)
-            logPreflight("codexMCP", detail: "args=\(mcpCodexOverrides.count)")
+            mcpCodexOverrides = await mcp.codexConfigOverrides(
+                projectPath: cwd,
+                bridgeCommand: bridge,
+                disableAllServers: !shouldIncludeIDEMCP
+            )
+            if !shouldIncludeIDEMCP {
+                mcpCodexOverrides += ["--disable", "plugins"]
+            }
+            logPreflight(
+                "codexMCP",
+                detail: "args=\(mcpCodexOverrides.count) disabledAll=\(!shouldIncludeIDEMCP)"
+            )
             let codexSkillOverrides = await codexSkillOverridesAsync
             logPreflight("codexSkillOverrides", detail: "args=\(codexSkillOverrides.count)")
             mcpCodexOverrides += codexSkillOverrides
@@ -285,6 +306,9 @@ extension AppState {
         } else {
             let preflightElapsed = Date().timeIntervalSince(streamStart)
             logger.info("[Stream:UI] backend send starting provider=\(agentProvider.rawValue, privacy: .public) stream=\(streamId) after=\(String(format: "%.2f", preflightElapsed), privacy: .public)s cwd=\(cwd, privacy: .public)")
+            if let debugLogPrefix {
+                logger.info("\(debugLogPrefix, privacy: .public) phase=backendSendStart stream=\(streamId) after=\(String(format: "%.2f", preflightElapsed), privacy: .public)s provider=\(agentProvider.rawValue, privacy: .public) cwd=\(cwd, privacy: .public)")
+            }
             let request = BackendSendRequest(
                 streamId: streamId,
                 prompt: resolvedPrompt,
@@ -305,6 +329,9 @@ extension AppState {
             stream = await backend(for: agentProvider).send(request)
             let backendReturnedElapsed = Date().timeIntervalSince(streamStart)
             logger.info("[Stream:UI] backend send returned provider=\(agentProvider.rawValue, privacy: .public) stream=\(streamId) after=\(String(format: "%.2f", backendReturnedElapsed), privacy: .public)s")
+            if let debugLogPrefix {
+                logger.info("\(debugLogPrefix, privacy: .public) phase=backendSendReturned stream=\(streamId) after=\(String(format: "%.2f", backendReturnedElapsed), privacy: .public)s provider=\(agentProvider.rawValue, privacy: .public)")
+            }
         }
 
         startFlushTimer(for: sessionKey)
@@ -332,6 +359,9 @@ extension AppState {
                 if eventCount == 1 {
                     let totalElapsed = Date().timeIntervalSince(streamStart)
                     logger.info("[Stream:UI] first event arrived provider=\(agentProvider.rawValue, privacy: .public) session=\(sessionKey, privacy: .public) stream=\(streamId) total=\(String(format: "%.2f", totalElapsed), privacy: .public)s awaitGap=\(String(format: "%.2f", gap), privacy: .public)s event=\(Self.streamEventLogName(event), privacy: .public)")
+                    if let debugLogPrefix {
+                        logger.info("\(debugLogPrefix, privacy: .public) phase=firstEvent stream=\(streamId) total=\(String(format: "%.2f", totalElapsed), privacy: .public)s awaitGap=\(String(format: "%.2f", gap), privacy: .public)s event=\(Self.streamEventLogName(event), privacy: .public)")
+                    }
                 }
                 lastEventTime = Date()
                 updateState(sessionKey) { $0.lastStreamEventDate = lastEventTime }
@@ -625,6 +655,7 @@ extension AppState {
                             }
                         }
                     }
+                    recordStreamPartialResponseIfNeeded(streamId: streamId, sessionId: sessionKey)
 
                 case .user(let userMessage):
                     logger.debug("[Stream:UI] event #\(eventCount) .user (gap=\(String(format: "%.1f", gap))s, toolUseId=\(userMessage.toolUseId ?? "none"))")
@@ -636,6 +667,10 @@ extension AppState {
 
                 case .result(let resultEvent):
                     logger.info("[Stream:UI] event #\(eventCount) .result (gap=\(String(format: "%.1f", gap))s, isError=\(resultEvent.isError), session=\(resultEvent.sessionId))")
+                    if let debugLogPrefix {
+                        let totalElapsed = Date().timeIntervalSince(streamStart)
+                        logger.info("\(debugLogPrefix, privacy: .public) phase=resultEvent stream=\(streamId) eventCount=\(eventCount, privacy: .public) total=\(String(format: "%.2f", totalElapsed), privacy: .public)s gap=\(String(format: "%.1f", gap), privacy: .public)s isError=\(resultEvent.isError, privacy: .public) session=\(resultEvent.sessionId, privacy: .public)")
+                    }
 
                     // With `--input-format stream-json` the CLI stays alive waiting for more
                     // input. Close stdin on `result` so it exits cleanly, then finalize so
@@ -716,6 +751,18 @@ extension AppState {
                         }
                         if markUnread { state.hasUncheckedCompletion = true }
                     }
+                    let finalAssistantText = lastAssistantResponseText(in: stateForSession(sessionKey).messages)
+
+                    // Release cross-thread MCP callers as soon as the model turn
+                    // is finalized. Session-end hooks can run follow-up work and
+                    // persist cards afterward, but they must not delay the
+                    // `ide__send_to_thread` JSON-RPC response.
+                    recordStreamCompletion(
+                        streamId: streamId,
+                        sessionId: resultEvent.sessionId,
+                        assistantText: finalAssistantText,
+                        error: resultEvent.isError ? "Agent reported an error result." : nil
+                    )
 
                     // Session-stop hooks fire when streaming stops. Before-stop
                     // runs *after* `finalizeStreamSession` so its status card lands
@@ -731,7 +778,7 @@ extension AppState {
                             sessionId: resultEvent.sessionId,
                             reason: .completed,
                             turnDidError: resultEvent.isError,
-                            lastAssistantText: lastAssistantResponseText(in: stateForSession(sessionKey).messages),
+                            lastAssistantText: finalAssistantText,
                             hasQueuedFollowups: hasQueuedFollowups
                         ))
                         if stopResult.hasError {
@@ -741,13 +788,6 @@ extension AppState {
                             stopHookRepromptCounts[sessionKey] = nil
                         }
                     }
-
-                    recordStreamCompletion(
-                        streamId: streamId,
-                        sessionId: resultEvent.sessionId,
-                        assistantText: lastAssistantResponseText(in: stateForSession(sessionKey).messages),
-                        error: resultEvent.isError ? "Agent reported an error result." : nil
-                    )
 
                     if isFg {
                         window.currentSessionId = resultEvent.sessionId
@@ -876,11 +916,15 @@ extension AppState {
                         logger.debug("[Stream:UI] event #\(eventCount) .unknown (gap=\(String(format: "%.1f", gap))s, len=\(raw.count))")
                     }
                     handlePartialEvent(raw, for: sessionKey)
+                    recordStreamPartialResponseIfNeeded(streamId: streamId, sessionId: sessionKey)
                 }
             }
 
             let elapsed = Date().timeIntervalSince(streamStart)
             logger.info("[Stream:UI] stream ended after \(eventCount) events, \(String(format: "%.1f", elapsed))s total")
+            if let debugLogPrefix {
+                logger.info("\(debugLogPrefix, privacy: .public) phase=streamEnded stream=\(streamId) eventCount=\(eventCount, privacy: .public) total=\(String(format: "%.2f", elapsed), privacy: .public)s")
+            }
 
             // Consume any remaining stderr — used as error message content below.
             // If already consumed at result.isError time, this returns nil.
@@ -942,7 +986,7 @@ extension AppState {
             // already records a completion before reaching here — recordStreamCompletion
             // is idempotent (it overwrites with the latest), but if a prior call set a
             // successful completion we don't want to clobber it with an error.
-            if pendingStreamCompletions[streamId] == nil {
+            if !recordedStreamCompletionIds.contains(streamId) {
                 let assistantText = lastAssistantResponseText(in: stateForSession(sessionKey).messages)
                 let errorMsg: String? = eventCount == 0
                     ? (stderrOutput ?? "Stream ended with no events.")
@@ -954,6 +998,9 @@ extension AppState {
                     error: errorMsg
                 )
             }
+            recordedStreamCompletionIds.remove(streamId)
+            streamPartialResponseDeliveredIds.remove(streamId)
+            streamDebugLogPrefixes.removeValue(forKey: streamId)
         }
     }
 

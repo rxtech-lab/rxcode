@@ -298,7 +298,7 @@ public enum IDEToolRegistry {
                     ]),
                     "timeout_seconds": .object([
                         "type": .string("number"),
-                        "description": .string("How long to wait for the assistant's reply. Default 120, capped at 600. On timeout the call returns the partial text with `done: false` — the caller can poll via ide__get_thread_messages."),
+                        "description": .string("How long to wait for the assistant's reply. Default 20, capped at 20. On timeout the call returns the partial text with `done: false` — the caller can poll via ide__get_thread_messages."),
                     ]),
                 ]),
                 "required": .array([.string("prompt")]),

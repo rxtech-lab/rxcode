@@ -16,7 +16,6 @@ struct MainView: View {
     @State private var sidebarTab: SidebarTab = .history
     @State private var fileSearchTrigger = false
     @State private var inspectorStarted = false
-    @AppStorage(AppStorageKeys.showRightSidebar) private var showRightSidebar = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var projectToDelete: Project? = nil
     @State private var projectToRename: Project? = nil
@@ -70,6 +69,10 @@ struct MainView: View {
             return title
         }
         return windowState.selectedProject?.name ?? ""
+    }
+
+    private var showRightSidebar: Bool {
+        appState.showRightSidebar
     }
 
     var body: some View {

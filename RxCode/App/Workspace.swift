@@ -188,6 +188,16 @@ struct WorkspaceDefaults: Sendable {
         UserDefaults.standard.set(value, forKey: key(raw))
     }
 
+    nonisolated func double(for raw: String, default defaultValue: Double) -> Double {
+        let key = key(raw)
+        if UserDefaults.standard.object(forKey: key) == nil { return defaultValue }
+        return UserDefaults.standard.double(forKey: key)
+    }
+
+    nonisolated func set(_ value: Double, for raw: String) {
+        UserDefaults.standard.set(value, forKey: key(raw))
+    }
+
     nonisolated func data(for raw: String) -> Data? {
         UserDefaults.standard.data(forKey: key(raw))
     }

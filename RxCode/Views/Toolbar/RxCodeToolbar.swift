@@ -14,7 +14,6 @@ struct RxCodeToolbarContent: ToolbarContent {
     @Environment(WindowState.self) private var windowState
     @Environment(\.openSettings) private var openSettings
     @Environment(\.openWindow) private var openWindow
-    @AppStorage(AppStorageKeys.showRightSidebar) private var showRightSidebar = false
 
     private var fileEditCount: Int {
         _ = appState.threadFileEditsRevision
@@ -48,7 +47,7 @@ struct RxCodeToolbarContent: ToolbarContent {
                 } else {
                     windowState.inspectorMode = .inspector
                     windowState.inspectorTab = .terminal
-                    showRightSidebar = true
+                    appState.showRightSidebar = true
                 }
             } label: {
                 Image(systemName: "apple.terminal")
@@ -58,14 +57,14 @@ struct RxCodeToolbarContent: ToolbarContent {
             Button {
                 windowState.inspectorMode = .inspector
                 windowState.inspectorTab = .memo
-                showRightSidebar = true
+                appState.showRightSidebar = true
             } label: {
                 Image(systemName: "note.text")
             }
             .help("Memo")
 
             Button {
-                showRightSidebar.toggle()
+                appState.showRightSidebar.toggle()
             } label: {
                 Image(systemName: "sidebar.trailing")
                     .overlay(alignment: .topTrailing) {

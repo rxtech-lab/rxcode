@@ -8,7 +8,6 @@ struct ProjectWindowView: View {
     @Environment(WindowState.self) private var windowState
     @State private var inspectorStarted = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
-    @AppStorage(AppStorageKeys.showRightSidebar) private var showRightSidebar = false
 
     /// Re-runs the new-chat hooks (e.g. the Autopilot `.env` banner) whenever the
     /// open project or the active session changes — so the banner appears on
@@ -27,6 +26,10 @@ struct ProjectWindowView: View {
             return title
         }
         return windowState.selectedProject?.name ?? ""
+    }
+
+    private var showRightSidebar: Bool {
+        appState.showRightSidebar
     }
 
     var body: some View {

@@ -129,15 +129,11 @@ extension AppState {
     }
 
     func openTerminal(in window: WindowState) async {
-        // Right sidebar visibility lives in UserDefaults (read via @AppStorage
-        // in views). Writing here triggers those views to update.
-        let defaults = UserDefaults.standard
-        let key = AppStorageKeys.showRightSidebar
-        if defaults.bool(forKey: key), window.inspectorTab == .terminal {
-            defaults.set(false, forKey: key)
+        if showRightSidebar, window.inspectorTab == .terminal {
+            showRightSidebar = false
         } else {
             window.inspectorTab = .terminal
-            defaults.set(true, forKey: key)
+            showRightSidebar = true
         }
     }
 
@@ -215,6 +211,8 @@ extension AppState {
         initialMessages: [ChatMessage]? = nil,
         tempFilePaths: [String] = [],
         isStopHookReprompt: Bool = false,
+        debugLogPrefix: String? = nil,
+        includeIDEMCP: Bool = true,
         in window: WindowState
     ) async -> UUID? {
         guard let project = window.selectedProject else {
@@ -229,9 +227,15 @@ extension AppState {
         }
 
         let streamId = UUID()
+        if let debugLogPrefix {
+            streamDebugLogPrefixes[streamId] = debugLogPrefix
+        }
         let isNewSession = window.currentSessionId == nil
         let isPending = window.currentSessionId.map { window.pendingPlaceholderIds.contains($0) } ?? false
         let cliSessionId: String? = (isNewSession || isPending) ? nil : window.currentSessionId
+        if let debugLogPrefix {
+            logger.info("\(debugLogPrefix, privacy: .public) phase=sendPrompt stream=\(streamId) isNewSession=\(isNewSession, privacy: .public) isPending=\(isPending, privacy: .public) cliSession=\(cliSessionId ?? "<new>", privacy: .public)")
+        }
 
         if isNewSession {
             let tempId = "pending-\(streamId.uuidString)"
@@ -394,6 +398,9 @@ extension AppState {
         let selection = effectiveModelSelection(in: window)
         let effectiveProvider = sessionStates[sessionKey]?.agentProvider ?? selection.provider
         let effectiveModel = sessionStates[sessionKey]?.model ?? selection.model
+        if let debugLogPrefix {
+            logger.info("\(debugLogPrefix, privacy: .public) phase=sendPromptReady stream=\(streamId) sessionKey=\(sessionKey, privacy: .public) provider=\(effectiveProvider.rawValue, privacy: .public) model=\(effectiveModel ?? "<default>", privacy: .public) cwd=\(effectiveCwd, privacy: .public)")
+        }
 
         let task = Task { [weak self, window] in
             guard let self else { return }
@@ -410,6 +417,7 @@ extension AppState {
                 permissionMode: cliPermissionMode,
                 hookSessionMode: hookSessionMode,
                 projectId: project.id,
+                includeIDEMCP: includeIDEMCP,
                 window: window
             )
             for path in tempFilePaths {
@@ -510,16 +518,64 @@ extension AppState {
         assistantText: String,
         error: String?
     ) {
+        guard recordedStreamCompletionIds.insert(streamId).inserted else {
+            logger.info("[IDE_SEND_THREAD] ignoring duplicate stream completion stream=\(streamId) session=\(sessionId, privacy: .public)")
+            return
+        }
+        logger.info("[IDE_SEND_THREAD] record stream completion stream=\(streamId) session=\(sessionId, privacy: .public) error=\(error ?? "<nil>", privacy: .public) assistantChars=\(assistantText.count, privacy: .public)")
         let completion = StreamCompletion(
             sessionId: sessionId,
             assistantText: assistantText,
-            error: error
+            error: error,
+            isFinal: true
         )
         if let waiter = streamCompletionWaiters.removeValue(forKey: streamId) {
+            logger.info("[IDE_SEND_THREAD] resuming stream completion waiter stream=\(streamId) session=\(sessionId, privacy: .public)")
             waiter.resume(with: completion)
             return
         }
+        if streamPartialResponseDeliveredIds.contains(streamId) {
+            logger.info("[IDE_SEND_THREAD] final stream completion already delivered partially stream=\(streamId) session=\(sessionId, privacy: .public)")
+            return
+        }
+        logger.info("[IDE_SEND_THREAD] parking stream completion stream=\(streamId) session=\(sessionId, privacy: .public)")
         pendingStreamCompletions[streamId] = completion
+    }
+
+    /// Resume an inline `ide__send_to_thread` waiter with the first visible
+    /// assistant text without marking the target stream finished. The normal
+    /// `.result` path still runs and records final cleanup later.
+    func recordStreamPartialResponse(
+        streamId: UUID,
+        sessionId: String,
+        assistantText: String
+    ) {
+        let trimmed = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        guard let waiter = streamCompletionWaiters[streamId], waiter.acceptsPartial else { return }
+        streamCompletionWaiters.removeValue(forKey: streamId)
+        streamPartialResponseDeliveredIds.insert(streamId)
+        logger.info("[IDE_SEND_THREAD] resuming stream waiter with partial assistant text stream=\(streamId) session=\(sessionId, privacy: .public) assistantChars=\(assistantText.count, privacy: .public)")
+        waiter.resume(with: StreamCompletion(
+            sessionId: sessionId,
+            assistantText: assistantText,
+            error: nil,
+            isFinal: false
+        ))
+    }
+
+    func recordStreamPartialResponseIfNeeded(streamId: UUID, sessionId: String) {
+        guard let waiter = streamCompletionWaiters[streamId], waiter.acceptsPartial else { return }
+        guard let state = sessionStates[sessionId],
+              !state.textDeltaBuffer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return }
+        flushPendingUpdates(for: sessionId, forceText: true)
+        let assistantText = lastAssistantResponseText(in: stateForSession(sessionId).messages)
+        recordStreamPartialResponse(
+            streamId: streamId,
+            sessionId: sessionId,
+            assistantText: assistantText
+        )
     }
 
     /// Wait up to `timeout` seconds for the stream identified by `streamId`
@@ -527,28 +583,36 @@ extension AppState {
     /// the continuation as soon as the result lands, with a parallel
     /// `Task.sleep(timeout)` to surface `nil` if the deadline passes first.
     /// Returns the completion if one arrived in time, otherwise `nil`.
-    func awaitStreamCompletion(streamId: UUID, timeout: TimeInterval) async -> StreamCompletion? {
+    func awaitStreamCompletion(
+        streamId: UUID,
+        timeout: TimeInterval,
+        acceptsPartial: Bool = true
+    ) async -> StreamCompletion? {
         // Fast path — completion already landed before we registered.
         if let completion = pendingStreamCompletions.removeValue(forKey: streamId) {
+            logger.info("[IDE_SEND_THREAD] consumed parked stream completion stream=\(streamId) session=\(completion.sessionId, privacy: .public)")
             return completion
         }
 
+        logger.info("[IDE_SEND_THREAD] registering stream completion waiter stream=\(streamId) timeout=\(String(format: "%.1f", timeout), privacy: .public)s")
         let timeoutTask = Task { [weak self] in
             let nanos = UInt64(max(0, timeout) * 1_000_000_000)
             try? await Task.sleep(nanoseconds: nanos)
             guard let self else { return }
             await MainActor.run {
                 if let waiter = self.streamCompletionWaiters.removeValue(forKey: streamId) {
+                    self.logger.warning("[IDE_SEND_THREAD] stream completion waiter timed out stream=\(streamId)")
                     waiter.resume(with: nil)
                 }
             }
         }
 
         let result: StreamCompletion? = await withCheckedContinuation { cont in
-            let waiter = StreamCompletionWaiter(continuation: cont)
+            let waiter = StreamCompletionWaiter(continuation: cont, acceptsPartial: acceptsPartial)
             // Re-check between the fast-path read and continuation install — the
             // recorder may have fired in between if any MainActor work yielded.
             if let completion = pendingStreamCompletions.removeValue(forKey: streamId) {
+                logger.info("[IDE_SEND_THREAD] consumed stream completion during waiter install stream=\(streamId) session=\(completion.sessionId, privacy: .public)")
                 waiter.resume(with: completion)
             } else {
                 streamCompletionWaiters[streamId] = waiter
@@ -556,13 +620,17 @@ extension AppState {
         }
 
         timeoutTask.cancel()
+        logger.info("[IDE_SEND_THREAD] stream completion wait finished stream=\(streamId) resultSession=\(result?.sessionId ?? "<timeout>", privacy: .public)")
         return result
     }
 
     /// Discard a recorded completion. Called by long-running `wait_for_response=false`
     /// MCP sends so the dictionary doesn't grow unbounded with abandoned results.
     func discardStreamCompletion(streamId: UUID) {
+        logger.info("[IDE_SEND_THREAD] discarding stream completion stream=\(streamId)")
         pendingStreamCompletions.removeValue(forKey: streamId)
+        recordedStreamCompletionIds.remove(streamId)
+        streamPartialResponseDeliveredIds.remove(streamId)
         if let waiter = streamCompletionWaiters.removeValue(forKey: streamId) {
             waiter.resume(with: nil)
         }
@@ -575,8 +643,10 @@ extension AppState {
     /// resumes any `awaitSessionRename` caller so the cross-project send can
     /// return the real thread id instead of `pending-…`.
     func applySessionIdRedirect(from pendingKey: String, to realSessionId: String) {
+        logger.info("[IDE_SEND_THREAD] session id redirect pendingKey=\(pendingKey, privacy: .public) realSession=\(realSessionId, privacy: .public)")
         sessionIdRedirect[pendingKey] = realSessionId
         if let waiter = sessionIdRenameWaiters.removeValue(forKey: pendingKey) {
+            logger.info("[IDE_SEND_THREAD] resuming session rename waiter pendingKey=\(pendingKey, privacy: .public) realSession=\(realSessionId, privacy: .public)")
             waiter.resume(with: realSessionId)
         }
     }
@@ -586,15 +656,18 @@ extension AppState {
     /// landed. Returns `nil` on timeout.
     func awaitSessionRename(pendingKey: String, timeout: TimeInterval) async -> String? {
         if let real = sessionIdRedirect[pendingKey] {
+            logger.info("[IDE_SEND_THREAD] consumed existing session redirect pendingKey=\(pendingKey, privacy: .public) realSession=\(real, privacy: .public)")
             return real
         }
 
+        logger.info("[IDE_SEND_THREAD] registering session rename waiter pendingKey=\(pendingKey, privacy: .public) timeout=\(String(format: "%.1f", timeout), privacy: .public)s")
         let timeoutTask = Task { [weak self] in
             let nanos = UInt64(max(0, timeout) * 1_000_000_000)
             try? await Task.sleep(nanoseconds: nanos)
             guard let self else { return }
             await MainActor.run {
                 if let waiter = self.sessionIdRenameWaiters.removeValue(forKey: pendingKey) {
+                    self.logger.warning("[IDE_SEND_THREAD] session rename waiter timed out pendingKey=\(pendingKey, privacy: .public)")
                     waiter.resume(with: nil)
                 }
             }
@@ -603,6 +676,7 @@ extension AppState {
         let result: String? = await withCheckedContinuation { cont in
             let waiter = SessionRenameWaiter(continuation: cont)
             if let real = sessionIdRedirect[pendingKey] {
+                logger.info("[IDE_SEND_THREAD] consumed session redirect during waiter install pendingKey=\(pendingKey, privacy: .public) realSession=\(real, privacy: .public)")
                 waiter.resume(with: real)
             } else {
                 sessionIdRenameWaiters[pendingKey] = waiter
@@ -610,6 +684,7 @@ extension AppState {
         }
 
         timeoutTask.cancel()
+        logger.info("[IDE_SEND_THREAD] session rename wait finished pendingKey=\(pendingKey, privacy: .public) realSession=\(result ?? "<timeout>", privacy: .public)")
         return result
     }
 
@@ -640,9 +715,14 @@ final class SessionRenameWaiter {
 @MainActor
 final class StreamCompletionWaiter {
     private var continuation: CheckedContinuation<AppState.StreamCompletion?, Never>?
+    let acceptsPartial: Bool
 
-    init(continuation: CheckedContinuation<AppState.StreamCompletion?, Never>) {
+    init(
+        continuation: CheckedContinuation<AppState.StreamCompletion?, Never>,
+        acceptsPartial: Bool
+    ) {
         self.continuation = continuation
+        self.acceptsPartial = acceptsPartial
     }
 
     func resume(with value: AppState.StreamCompletion?) {

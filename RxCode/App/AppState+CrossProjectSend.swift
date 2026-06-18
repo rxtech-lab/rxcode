@@ -1,4 +1,5 @@
 import Foundation
+import os
 import RxCodeCore
 
 extension AppState {
@@ -42,8 +43,11 @@ extension AppState {
         parentThreadId: String? = nil,
         threadLabel: String? = nil,
         skipHooks: Bool = false,
-        setupKind: String? = nil
+        setupKind: String? = nil,
+        includeIDEMCP: Bool = true
     ) async throws -> CrossProjectSendResult {
+        logger.info("[IDE_SEND_THREAD] requested projectId=\(projectId?.uuidString ?? "<nil>", privacy: .public) threadId=\(threadId ?? "<nil>", privacy: .public) wait=\(waitForResponse, privacy: .public) timeout=\(String(format: "%.1f", timeoutSeconds), privacy: .public)s provider=\(agentProvider?.rawValue ?? "<default>", privacy: .public) includeIDEMCP=\(includeIDEMCP, privacy: .public) promptChars=\(prompt.count, privacy: .public)")
+
         // Resolve target project + thread.
         let resolvedProject: Project
         let resolvedThreadId: String?
@@ -68,6 +72,7 @@ extension AppState {
         } else {
             throw CrossProjectSendError.unknownProject(UUID())
         }
+        logger.info("[IDE_SEND_THREAD] target resolved project=\(resolvedProject.id.uuidString, privacy: .public) path=\(resolvedProject.path, privacy: .public) thread=\(resolvedThreadId ?? "<new>", privacy: .public)")
 
         // Build a synthetic WindowState. AppState.sessionStates is shared across
         // windows, so the message + stream are visible to any real window that
@@ -94,7 +99,14 @@ extension AppState {
             }
         }
 
-        guard let streamId = await sendPrompt(prompt, displayText: prompt, in: window) else {
+        guard let streamId = await sendPrompt(
+            prompt,
+            displayText: prompt,
+            debugLogPrefix: "[IDE_SEND_THREAD]",
+            includeIDEMCP: includeIDEMCP,
+            in: window
+        ) else {
+            logger.error("[IDE_SEND_THREAD] sendPrompt failed project=\(resolvedProject.id.uuidString, privacy: .public) requestedThread=\(resolvedThreadId ?? "<new>", privacy: .public)")
             return CrossProjectSendResult(
                 threadId: resolvedThreadId ?? "",
                 projectId: resolvedProject.id,
@@ -103,6 +115,7 @@ extension AppState {
                 error: "Send failed: no session could be allocated."
             )
         }
+        logger.info("[IDE_SEND_THREAD] stream allocated stream=\(streamId) project=\(resolvedProject.id.uuidString, privacy: .public) initialKey=\(window.currentSessionId ?? "<nil>", privacy: .public) requestedThread=\(resolvedThreadId ?? "<new>", privacy: .public)")
 
         // After sendPrompt returns, window.currentSessionId is the (possibly
         // pending-) key the stream is bound to. Resolve the real CLI session
@@ -118,12 +131,19 @@ extension AppState {
             // the caller's deadline; 60s upper bound matches typical first-token
             // latency under healthy conditions.
             let renameTimeout = min(max(timeoutSeconds, 1), 60)
+            logger.info("[IDE_SEND_THREAD] waiting for session rename pendingKey=\(postSendKey, privacy: .public) stream=\(streamId) timeout=\(String(format: "%.1f", renameTimeout), privacy: .public)s")
             resolvedThreadIdForReturn = await awaitSessionRename(
                 pendingKey: postSendKey,
                 timeout: renameTimeout
             ) ?? postSendKey
+            if resolvedThreadIdForReturn == postSendKey {
+                logger.warning("[IDE_SEND_THREAD] session rename timed out pendingKey=\(postSendKey, privacy: .public) stream=\(streamId)")
+            } else {
+                logger.info("[IDE_SEND_THREAD] session rename resolved pendingKey=\(postSendKey, privacy: .public) realThread=\(resolvedThreadIdForReturn, privacy: .public) stream=\(streamId)")
+            }
         } else {
             resolvedThreadIdForReturn = postSendKey
+            logger.info("[IDE_SEND_THREAD] using existing session key thread=\(resolvedThreadIdForReturn, privacy: .public) stream=\(streamId)")
         }
         if let setupKind, resolvedThreadIdForReturn != postSendKey {
             setupSessionKeys[setupKind, default: []].insert(resolvedThreadIdForReturn)
@@ -159,8 +179,13 @@ extension AppState {
         if !waitForResponse {
             // Don't leak the result in the dictionary; the caller is
             // fire-and-forget. Drop it once it lands.
+            logger.info("[IDE_SEND_THREAD] returning without waiting stream=\(streamId) thread=\(resolvedThreadIdForReturn, privacy: .public)")
             Task { [weak self] in
-                _ = await self?.awaitStreamCompletion(streamId: streamId, timeout: timeoutSeconds)
+                _ = await self?.awaitStreamCompletion(
+                    streamId: streamId,
+                    timeout: timeoutSeconds,
+                    acceptsPartial: false
+                )
             }
             return CrossProjectSendResult(
                 threadId: resolvedThreadIdForReturn,
@@ -171,12 +196,18 @@ extension AppState {
             )
         }
 
-        let completion = await awaitStreamCompletion(streamId: streamId, timeout: timeoutSeconds)
+        logger.info("[IDE_SEND_THREAD] waiting for stream completion stream=\(streamId) thread=\(resolvedThreadIdForReturn, privacy: .public) timeout=\(String(format: "%.1f", timeoutSeconds), privacy: .public)s")
+        let completion = await awaitStreamCompletion(
+            streamId: streamId,
+            timeout: timeoutSeconds,
+            acceptsPartial: false
+        )
         if let completion {
+            logger.info("[IDE_SEND_THREAD] stream completion received stream=\(streamId) session=\(completion.sessionId, privacy: .public) error=\(completion.error ?? "<nil>", privacy: .public) assistantChars=\(completion.assistantText.count, privacy: .public)")
             return CrossProjectSendResult(
                 threadId: completion.sessionId,
                 projectId: resolvedProject.id,
-                done: completion.error == nil,
+                done: completion.isFinal && completion.error == nil,
                 assistantText: completion.assistantText,
                 error: completion.error
             )
@@ -184,6 +215,7 @@ extension AppState {
             // Timed out. Surface the partial assistant text we have so far so
             // the caller can decide whether to poll back via get_thread_messages.
             let partial = lastAssistantResponseText(in: stateForSession(window.currentSessionId ?? "").messages)
+            logger.warning("[IDE_SEND_THREAD] stream completion timed out stream=\(streamId) thread=\(resolvedThreadIdForReturn, privacy: .public) currentKey=\(window.currentSessionId ?? "<nil>", privacy: .public) partialChars=\(partial.count, privacy: .public)")
             return CrossProjectSendResult(
                 threadId: resolvedThreadIdForReturn,
                 projectId: resolvedProject.id,

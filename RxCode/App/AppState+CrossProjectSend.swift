@@ -197,7 +197,11 @@ extension AppState {
         }
 
         logger.info("[IDE_SEND_THREAD] waiting for stream completion stream=\(streamId) thread=\(resolvedThreadIdForReturn, privacy: .public) timeout=\(String(format: "%.1f", timeoutSeconds), privacy: .public)s")
-        let completion = await awaitStreamCompletion(streamId: streamId, timeout: timeoutSeconds)
+        let completion = await awaitStreamCompletion(
+            streamId: streamId,
+            timeout: timeoutSeconds,
+            acceptsPartial: false
+        )
         if let completion {
             logger.info("[IDE_SEND_THREAD] stream completion received stream=\(streamId) session=\(completion.sessionId, privacy: .public) error=\(completion.error ?? "<nil>", privacy: .public) assistantChars=\(completion.assistantText.count, privacy: .public)")
             return CrossProjectSendResult(

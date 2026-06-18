@@ -513,6 +513,16 @@ final class AppState {
         didSet { workspaceDefaults.set(focusMode, for: "focusMode") }
     }
 
+    // MARK: - Inspector Sidebar
+
+    var showRightSidebar: Bool = false {
+        didSet { workspaceDefaults.set(showRightSidebar, for: AppStorageKeys.showRightSidebar) }
+    }
+
+    var rightInspectorWidth: Double = RightInspectorPanelLayout.defaultWidth {
+        didSet { workspaceDefaults.set(rightInspectorWidth, for: AppStorageKeys.rightInspectorWidth) }
+    }
+
     // MARK: - Archive
 
     /// Auto-archive chats whose `updatedAt` is older than this many days. Pinned

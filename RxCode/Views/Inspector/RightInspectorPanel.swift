@@ -19,9 +19,8 @@ struct InspectorTerminal: Identifiable {
 struct RightInspectorPanel: View {
     let maxAllowedWidth: CGFloat
 
+    @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
-    @AppStorage(AppStorageKeys.showRightSidebar) private var showRightSidebar = false
-    @AppStorage(AppStorageKeys.rightInspectorWidth) private var rightInspectorWidth = RightInspectorPanelLayout.defaultWidth
 
     // Per-thread terminal storage. Each session/thread can have multiple
     // terminals; all stay alive across thread switches.
@@ -38,9 +37,13 @@ struct RightInspectorPanel: View {
 
     private var visibleWidth: CGFloat {
         RightInspectorPanelLayout.restoredWidth(
-            from: rightInspectorWidth,
+            from: appState.rightInspectorWidth,
             maxAllowedWidth: maxAllowedWidth
         )
+    }
+
+    private var showRightSidebar: Bool {
+        appState.showRightSidebar
     }
 
     private var currentTerminals: [InspectorTerminal] {
@@ -177,7 +180,7 @@ struct RightInspectorPanel: View {
         .background(terminalShortcuts)
         .task(id: currentSessionKey) {
             // Ensure the terminal process exists for this session. The panel's
-            // visibility is owned by `showRightSidebar` (@AppStorage) — do not
+            // visibility is owned by the workspace-level AppState — do not
             // force it open here, or the user could never close it.
             ensureTerminal(for: currentSessionKey)
         }
@@ -257,7 +260,7 @@ struct RightInspectorPanel: View {
             }
 
             HeaderIconButton(systemImage: "xmark", help: "Close") {
-                showRightSidebar = false
+                appState.showRightSidebar = false
             }
             .keyboardShortcut("w", modifiers: .command)
         }
@@ -295,7 +298,7 @@ struct RightInspectorPanel: View {
                     .onChanged { value in
                         let startWidth = resizeStartWidth ?? Double(visibleWidth)
                         resizeStartWidth = startWidth
-                        rightInspectorWidth = RightInspectorPanelLayout.resizedWidth(
+                        appState.rightInspectorWidth = RightInspectorPanelLayout.resizedWidth(
                             startWidth: startWidth,
                             leadingEdgeTranslation: value.translation.width,
                             maxAllowedWidth: maxAllowedWidth

@@ -129,15 +129,11 @@ extension AppState {
     }
 
     func openTerminal(in window: WindowState) async {
-        // Right sidebar visibility lives in UserDefaults (read via @AppStorage
-        // in views). Writing here triggers those views to update.
-        let defaults = UserDefaults.standard
-        let key = AppStorageKeys.showRightSidebar
-        if defaults.bool(forKey: key), window.inspectorTab == .terminal {
-            defaults.set(false, forKey: key)
+        if showRightSidebar, window.inspectorTab == .terminal {
+            showRightSidebar = false
         } else {
             window.inspectorTab = .terminal
-            defaults.set(true, forKey: key)
+            showRightSidebar = true
         }
     }
 

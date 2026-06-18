@@ -3,13 +3,11 @@ import SwiftUI
 
 // MARK: - AppStorageKeys
 
-/// Keys for app-wide UserDefaults state read directly via `@AppStorage` in views.
+/// Raw UserDefaults keys used for persisted UI state.
 public enum AppStorageKeys {
-    /// Persisted visibility of the right inspector sidebar. Views read this
-    /// directly with `@AppStorage` so the panel can be reliably toggled.
+    /// Persisted visibility of the right inspector sidebar.
     public static let showRightSidebar = "showRightSidebar"
-    /// Last visible width of the right inspector sidebar. The panel reads this
-    /// as its split-view ideal width on the next launch.
+    /// Last visible width of the right inspector sidebar.
     public static let rightInspectorWidth = "rightInspectorWidth"
 }
 

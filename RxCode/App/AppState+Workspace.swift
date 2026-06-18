@@ -68,6 +68,11 @@ extension AppState {
         notificationsEnabled = workspaceDefaults.bool(for: "notificationsEnabled", default: true)
         enableAutoCIFix = workspaceDefaults.bool(for: "enableAutoCIFix", default: false)
         focusMode = workspaceDefaults.bool(for: "focusMode", default: false)
+        showRightSidebar = workspaceDefaults.bool(for: AppStorageKeys.showRightSidebar, default: false)
+        rightInspectorWidth = workspaceDefaults.double(
+            for: AppStorageKeys.rightInspectorWidth,
+            default: RightInspectorPanelLayout.defaultWidth
+        )
         autoArchiveEnabled = workspaceDefaults.bool(for: "autoArchiveEnabled", default: true)
         archiveRetentionDays = workspaceDefaults.int(for: "archiveRetentionDays", default: AppState.defaultArchiveRetentionDays)
         autoDeleteEnabled = workspaceDefaults.bool(for: "autoDeleteEnabled", default: false)

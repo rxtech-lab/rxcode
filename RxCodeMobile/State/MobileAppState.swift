@@ -270,6 +270,10 @@ final class MobileAppState: ObservableObject {
     var client: SyncClient
     let logger = Logger(subsystem: "com.idealapp.RxCodeMobile", category: "MobileAppState")
     var eventTask: Task<Void, Never>?
+    /// Serializes background/foreground relay transitions so a delayed
+    /// `stop()` can never land after a later `start()` and leave the relay
+    /// permanently disconnected.
+    var lifecycleTask: Task<Void, Never>?
     var pairingTimeoutTask: Task<Void, Never>?
     var apnsTokenHex: String?
     var apnsEnvironment: String?
@@ -394,18 +398,36 @@ final class MobileAppState: ObservableObject {
     /// relay's registration table in sync with reality and gives a clean,
     /// single re-register on the next foreground.
     func handleScenePhase(_ phase: ScenePhase) {
-        guard clientStarted else { return }
+        guard clientStarted else {
+            logger.info("[Lifecycle] handleScenePhase \(String(describing: phase), privacy: .public) ignored — clientStarted=false")
+            return
+        }
         switch phase {
         case .background:
             logger.info("[Lifecycle] entering background — disconnecting relay")
-            Task { await client.stop() }
+            enqueueLifecycle(label: "background/stop") { [client] in await client.stop() }
         case .active:
             logger.info("[Lifecycle] entering foreground — reconnecting relay")
-            Task { await client.start() }
+            enqueueLifecycle(label: "foreground/start") { [client] in await client.start() }
         case .inactive:
             break
         @unknown default:
             break
+        }
+    }
+
+    /// Chain a relay lifecycle transition after any in-flight one so they run
+    /// strictly in the order the scene phases arrived. Two bare `Task {}`s race:
+    /// a background `stop()` could otherwise complete after a foreground
+    /// `start()` and disable the relay for good.
+    private func enqueueLifecycle(label: String, _ work: @escaping @Sendable () async -> Void) {
+        let previous = lifecycleTask
+        lifecycleTask = Task { [logger] in
+            logger.info("[Lifecycle] \(label, privacy: .public) queued — awaiting previous transition")
+            await previous?.value
+            logger.info("[Lifecycle] \(label, privacy: .public) running")
+            await work()
+            logger.info("[Lifecycle] \(label, privacy: .public) done")
         }
     }
 

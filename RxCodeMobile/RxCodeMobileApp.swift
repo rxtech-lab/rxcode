@@ -41,7 +41,8 @@ struct RxCodeMobileApp: App {
                     handlePairingURL(url)
                 }
         }
-        .onChange(of: scenePhase) { _, newPhase in
+        .onChange(of: scenePhase) { oldPhase, newPhase in
+            NSLog("[Lifecycle] scenePhase \(String(describing: oldPhase)) -> \(String(describing: newPhase))")
             state.handleScenePhase(newPhase)
         }
     }

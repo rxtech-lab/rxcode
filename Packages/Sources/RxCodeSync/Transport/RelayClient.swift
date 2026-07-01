@@ -56,9 +56,27 @@ public actor RelayClient: Transport {
     }
 
     public func connect() {
-        guard task == nil else { return }
+        guard task == nil else {
+            logger.info("[Relay] connect skipped — socket already assigned relay=\(self.relayURL.absoluteString, privacy: .public) state=\(String(describing: self.state), privacy: .public)")
+            return
+        }
         shouldReconnect = true
         logger.info("[Relay] connect requested relay=\(self.relayURL.absoluteString, privacy: .public) localKey=\(String(self.identity.publicKeyHex.prefix(12)), privacy: .public)")
+        openSocket()
+    }
+
+    /// Force a clean reconnect. Unlike `connect()`, this does not bail when a
+    /// socket is still assigned — it tears down any existing (possibly stale)
+    /// socket first, then reopens. This is the correct entry point on app
+    /// foreground: iOS suspends the process in the background, so the socket can
+    /// die without `receiveOne`/`sendPing` ever firing the failure callback that
+    /// would clear `task`. On resume `task` may still reference a dead socket,
+    /// which would make a plain `connect()` no-op forever.
+    public func reconnect() {
+        shouldReconnect = true
+        logger.info("[Relay] reconnect requested relay=\(self.relayURL.absoluteString, privacy: .public) localKey=\(String(self.identity.publicKeyHex.prefix(12)), privacy: .public)")
+        closeSocketLocally()
+        reconnectAttempt = 0
         openSocket()
     }
 
@@ -105,10 +123,16 @@ public actor RelayClient: Transport {
         // the race. Opening another would register a second connection for the
         // same pubkey on the relay — the cause of duplicate registrations when
         // resuming from background. Never stack sockets.
-        guard task == nil else { return }
+        guard task == nil else {
+            logger.info("[Relay] openSocket skipped — socket already assigned relay=\(self.relayURL.absoluteString, privacy: .public) state=\(String(describing: self.state), privacy: .public)")
+            return
+        }
         // A disconnect() may have landed while a scheduled reconnect was still
         // sleeping; honour it instead of reopening.
-        guard shouldReconnect else { return }
+        guard shouldReconnect else {
+            logger.info("[Relay] openSocket skipped — shouldReconnect=false relay=\(self.relayURL.absoluteString, privacy: .public)")
+            return
+        }
 
         updateState(.connecting)
 

@@ -46,9 +46,18 @@ public actor SyncClient: PeerManagerHost {
     }
 
     public func start() async {
-        await relay.connect()
+        // `reconnect()` (not `connect()`) so a stale socket left behind by an
+        // OS suspend is torn down and reopened. At initial startup `task` is nil,
+        // so this behaves exactly like a plain connect.
+        await relay.reconnect()
         guard directPathsEnabled else { return }
         startHubIfNeeded()
+        // `stop()` cancelled every per-peer event pump and dropped the managers;
+        // rebuild them from the persisted peer set so direct-path links — and the
+        // inbound data (snapshots, history) they carry — come back after a
+        // background cycle. Without this the LAN link re-promotes but its events
+        // reach no subscriber, and the app appears connected yet loads nothing.
+        for (hex, key) in peers { startManager(forHex: hex, key: key) }
     }
 
     public func stop() async {
@@ -59,6 +68,12 @@ public actor SyncClient: PeerManagerHost {
         pathMonitor?.cancel(); pathMonitor = nil
         await advertiser?.stop()
         await browser?.stop()
+        // Drop the per-peer managers. Their event pumps were just cancelled and
+        // their direct sockets die when the OS suspends us; tearing them down and
+        // rebuilding on `start()` avoids reusing a manager stuck with a dead
+        // `active` transport (which blocks redial and silently swallows data).
+        for manager in managers.values { await manager.teardown() }
+        managers.removeAll()
         hubStarted = false
     }
 
@@ -77,6 +92,13 @@ public actor SyncClient: PeerManagerHost {
         guard let raw = Data(hexString: pubkeyHex) else { throw SyncError.invalidPubkey }
         let key = try Curve25519.KeyAgreement.PublicKey(rawRepresentation: raw)
         peers[pubkeyHex] = key
+        startManager(forHex: pubkeyHex, key: key)
+    }
+
+    /// Create the per-peer manager and its event pump, unless direct paths are
+    /// disabled or one is already running. Idempotent: called both when a peer is
+    /// added and when `start()` rebuilds managers after a background cycle.
+    private func startManager(forHex pubkeyHex: String, key: Curve25519.KeyAgreement.PublicKey) {
         guard directPathsEnabled, managers[pubkeyHex] == nil else { return }
         let manager = PeerConnectionManager(peerHex: pubkeyHex, peerKey: key, identity: identity, relay: relay, host: self)
         managers[pubkeyHex] = manager
@@ -85,8 +107,9 @@ public actor SyncClient: PeerManagerHost {
             for await event in stream { await self?.emitUp(event) }
         }
         // A peer added while the relay is already connected (e.g. right after
-        // pairing) would otherwise miss the `.stateChanged(.connected)` that
-        // triggers the first candidate offer. Offer immediately in that case.
+        // pairing, or on a foreground rebuild) would otherwise miss the
+        // `.stateChanged(.connected)` that triggers the first candidate offer.
+        // Offer immediately in that case.
         track { [weak self, weak manager] in
             guard let self, let manager else { return }
             if await self.relayIsConnected { await manager.offerLocalCandidates() }

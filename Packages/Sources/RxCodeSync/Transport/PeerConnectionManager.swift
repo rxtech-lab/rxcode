@@ -81,6 +81,20 @@ public actor PeerConnectionManager {
 
     public var currentPath: ConnectionPathKind { activePath }
 
+    /// Disconnect every link and clear connection state. Called when the hub
+    /// stops (app backgrounding); the hub then drops this manager and builds a
+    /// fresh one on the next start, so we close sockets cleanly rather than
+    /// leaking dead `NWConnection`s across a suspend.
+    public func teardown() async {
+        retryTask?.cancel(); retryTask = nil
+        for info in probing.values { await info.transport.disconnect() }
+        probing.removeAll()
+        await active?.disconnect()
+        active = nil
+        activePath = .relay
+        knownTargets.removeAll()
+    }
+
     public func events() -> AsyncStream<TransportEvent> {
         AsyncStream { continuation in
             let id = UUID()

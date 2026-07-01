@@ -5706,6 +5706,15 @@
         }
       }
     },
+    "Direct · LAN%@" : {
+
+    },
+    "Direct · WAN%@" : {
+
+    },
+    "Direct peer-to-peer connections" : {
+
+    },
     "Disable globally" : {
       "localizations" : {
         "ko" : {
@@ -17194,6 +17203,9 @@
           }
         }
       }
+    },
+    "When on the same network, sync connects straight to your device over the LAN (end-to-end encrypted) and falls back to the relay automatically. Turn off to always use relay servers." : {
+
     },
     "When tapped" : {
       "localizations" : {

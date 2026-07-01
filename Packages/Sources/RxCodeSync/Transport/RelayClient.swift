@@ -7,25 +7,13 @@ import os
 ///
 /// The relay sees only `Envelope` and `DeliveryFailedNotice` — every other
 /// payload is encrypted before send and decrypted after receive.
-public actor RelayClient {
-    public struct Inbound: Sendable {
-        public let from: Curve25519.KeyAgreement.PublicKey
-        public let fromHex: String
-        public let payload: Payload
-    }
-
-    public enum ConnectionState: Sendable, Equatable {
-        case disconnected
-        case connecting
-        case connected
-        case reconnecting(nextAttemptInSeconds: Int)
-    }
-
-    public enum Event: Sendable {
-        case stateChanged(ConnectionState)
-        case inbound(Inbound)
-        case deliveryFailed(toHex: String)
-    }
+public actor RelayClient: Transport {
+    // The transport event/state types are shared across every `Transport`; keep
+    // the historical `RelayClient.Inbound` / `.ConnectionState` / `.Event`
+    // spellings as typealiases so existing call sites compile unchanged.
+    public typealias Inbound = TransportInbound
+    public typealias ConnectionState = TransportConnectionState
+    public typealias Event = TransportEvent
 
     /// WebSocket frame ceiling. The 1 MiB `URLSessionWebSocketTask` default is
     /// too small for sync payloads; 10 MiB is a comfortable safety margin now
@@ -68,9 +56,27 @@ public actor RelayClient {
     }
 
     public func connect() {
-        guard task == nil else { return }
+        guard task == nil else {
+            logger.info("[Relay] connect skipped — socket already assigned relay=\(self.relayURL.absoluteString, privacy: .public) state=\(String(describing: self.state), privacy: .public)")
+            return
+        }
         shouldReconnect = true
         logger.info("[Relay] connect requested relay=\(self.relayURL.absoluteString, privacy: .public) localKey=\(String(self.identity.publicKeyHex.prefix(12)), privacy: .public)")
+        openSocket()
+    }
+
+    /// Force a clean reconnect. Unlike `connect()`, this does not bail when a
+    /// socket is still assigned — it tears down any existing (possibly stale)
+    /// socket first, then reopens. This is the correct entry point on app
+    /// foreground: iOS suspends the process in the background, so the socket can
+    /// die without `receiveOne`/`sendPing` ever firing the failure callback that
+    /// would clear `task`. On resume `task` may still reference a dead socket,
+    /// which would make a plain `connect()` no-op forever.
+    public func reconnect() {
+        shouldReconnect = true
+        logger.info("[Relay] reconnect requested relay=\(self.relayURL.absoluteString, privacy: .public) localKey=\(String(self.identity.publicKeyHex.prefix(12)), privacy: .public)")
+        closeSocketLocally()
+        reconnectAttempt = 0
         openSocket()
     }
 
@@ -88,23 +94,11 @@ public actor RelayClient {
             logger.error("[Relay] send failed not connected type=\(payload.logName, privacy: .public) to=\(String(recipient.rawRepresentation.hexString.prefix(12)), privacy: .public) relay=\(self.relayURL.absoluteString, privacy: .public)")
             throw RelayError.notConnected
         }
-        let plaintext = try JSONEncoder().encode(payload)
-        let (nonce, ct) = try SessionCrypto.seal(
-            plaintext: plaintext,
-            sender: identity.privateKey,
-            recipient: recipient
-        )
-        let envelope = Envelope(
-            to: recipient.rawRepresentation.hexString,
-            from: identity.publicKeyHex,
-            nonce: nonce,
-            ct: ct
-        )
-        let raw = try JSONEncoder().encode(envelope)
+        let raw = try EnvelopeCodec.encode(payload, from: identity, to: recipient)
         do {
             try await task.send(.data(raw))
         } catch {
-            logger.error("[Relay] send failed type=\(payload.logName, privacy: .public) to=\(String(envelope.to.prefix(12)), privacy: .public) error=\(error.localizedDescription, privacy: .public)")
+            logger.error("[Relay] send failed type=\(payload.logName, privacy: .public) to=\(String(recipient.rawRepresentation.hexString.prefix(12)), privacy: .public) error=\(error.localizedDescription, privacy: .public)")
             throw error
         }
     }
@@ -129,10 +123,16 @@ public actor RelayClient {
         // the race. Opening another would register a second connection for the
         // same pubkey on the relay — the cause of duplicate registrations when
         // resuming from background. Never stack sockets.
-        guard task == nil else { return }
+        guard task == nil else {
+            logger.info("[Relay] openSocket skipped — socket already assigned relay=\(self.relayURL.absoluteString, privacy: .public) state=\(String(describing: self.state), privacy: .public)")
+            return
+        }
         // A disconnect() may have landed while a scheduled reconnect was still
         // sleeping; honour it instead of reopening.
-        guard shouldReconnect else { return }
+        guard shouldReconnect else {
+            logger.info("[Relay] openSocket skipped — shouldReconnect=false relay=\(self.relayURL.absoluteString, privacy: .public)")
+            return
+        }
 
         updateState(.connecting)
 
@@ -232,39 +232,14 @@ public actor RelayClient {
     }
 
     private func handleIncoming(_ raw: Data) {
-        let decoder = JSONDecoder()
-        if let notice = try? decoder.decode(DeliveryFailedNotice.self, from: raw),
-           notice.type == "delivery_failed" {
-            logger.warning("[Relay] delivery failed to=\(String(notice.to.prefix(12)), privacy: .public)")
-            emit(.deliveryFailed(toHex: notice.to))
-            return
-        }
-        guard let env = try? decoder.decode(Envelope.self, from: raw) else {
-            logger.warning("[Relay] dropping non-envelope message bytes=\(raw.count, privacy: .public)")
-            return
-        }
-        guard let nonce = env.nonceData,
-              let ct = env.ciphertextData,
-              let fromRaw = Data(hexString: env.from),
-              let fromKey = try? Curve25519.KeyAgreement.PublicKey(rawRepresentation: fromRaw)
-        else {
-            logger.warning("[Relay] dropping malformed envelope from=\(String(env.from.prefix(12)), privacy: .public)")
-            return
-        }
-        do {
-            let plaintext = try SessionCrypto.open(
-                ciphertext: ct,
-                nonce: nonce,
-                recipient: identity.privateKey,
-                sender: fromKey
-            )
-            let payload = try decoder.decode(Payload.self, from: plaintext)
-            emit(.inbound(Inbound(from: fromKey, fromHex: env.from, payload: payload)))
-        } catch {
-            // Decrypt or decode failure means the sender isn't a paired peer
-            // we know how to talk to, OR the wire format drifted. Drop quietly.
-            logger.warning("[Relay] dropping encrypted payload from=\(String(env.from.prefix(12)), privacy: .public) error=\(error.localizedDescription, privacy: .public)")
-            return
+        switch EnvelopeCodec.decode(raw, localIdentity: identity) {
+        case .deliveryFailed(let toHex):
+            logger.warning("[Relay] delivery failed to=\(String(toHex.prefix(12)), privacy: .public)")
+            emit(.deliveryFailed(toHex: toHex))
+        case .inbound(let inbound):
+            emit(.inbound(inbound))
+        case .drop:
+            break
         }
     }
 

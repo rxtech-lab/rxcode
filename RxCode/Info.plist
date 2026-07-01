@@ -29,6 +29,12 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>RxCode connects directly to your paired iPhone or iPad over the local network for a faster, private peer-to-peer sync.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_rxcode-sync._tcp</string>
+	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

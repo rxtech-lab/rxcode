@@ -70,6 +70,10 @@ public enum Payload: Sendable {
     case autopilotResult(AutopilotResultPayload)
     case ping(PingPayload)
     case pong(PongPayload)
+    // Direct-path (P2P) signaling — exchanged over the relay, consumed inside
+    // `PeerConnectionManager`, never surfaced to the app layer. See ICEPayloads.swift.
+    case iceCandidates(ICECandidatesPayload)
+    case iceSelected(ICESelectedPayload)
     case unknown(type: String)
 }
 
@@ -139,6 +143,8 @@ public extension Payload {
         case .autopilotResult: return "autopilot_result"
         case .ping: return "ping"
         case .pong: return "pong"
+        case .iceCandidates: return "ice_candidates"
+        case .iceSelected: return "ice_selected"
         case .unknown(let type): return type
         }
     }
@@ -786,6 +792,8 @@ extension Payload: Codable {
         case autopilotResult = "autopilot_result"
         case ping
         case pong
+        case iceCandidates = "ice_candidates"
+        case iceSelected = "ice_selected"
     }
 
     public init(from decoder: Decoder) throws {
@@ -859,6 +867,8 @@ extension Payload: Codable {
         case .autopilotResult: self = .autopilotResult(try container.decode(AutopilotResultPayload.self, forKey: .data))
         case .ping: self = .ping(try container.decode(PingPayload.self, forKey: .data))
         case .pong: self = .pong(try container.decode(PongPayload.self, forKey: .data))
+        case .iceCandidates: self = .iceCandidates(try container.decode(ICECandidatesPayload.self, forKey: .data))
+        case .iceSelected: self = .iceSelected(try container.decode(ICESelectedPayload.self, forKey: .data))
         }
     }
 
@@ -928,6 +938,8 @@ extension Payload: Codable {
         case .autopilotResult(let p): try container.encode(TypeKey.autopilotResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .ping(let p): try container.encode(TypeKey.ping.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .pong(let p): try container.encode(TypeKey.pong.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .iceCandidates(let p): try container.encode(TypeKey.iceCandidates.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .iceSelected(let p): try container.encode(TypeKey.iceSelected.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .unknown(let type): try container.encode(type, forKey: .type)
         }
     }

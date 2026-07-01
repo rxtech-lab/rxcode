@@ -138,10 +138,16 @@ struct MobileSettingsView: View {
                 Spacer()
                 connectionLabel
             }
+            Toggle(isOn: Binding(
+                get: { MobileAppState.directPathsEnabledSetting },
+                set: { enabled in Task { await state.setDirectPathsEnabled(enabled) } }
+            )) {
+                Text("Direct connection")
+            }
         } header: {
             Text("Paired Macs")
         } footer: {
-            Text("Select which Mac this device controls. Removing one pairing does not reset this device's identity.")
+            Text("Select which Mac this device controls. When Direct connection is on and you're on the same network, sync connects straight to your Mac (end-to-end encrypted) and falls back to the relay automatically.")
         }
     }
 
@@ -159,7 +165,13 @@ struct MobileSettingsView: View {
                         .foregroundStyle(.primary)
                     HStack(spacing: 6) {
                         Text("Paired \(desktop.pairedAt, format: .relative(presentation: .named))")
-                        if let relay = desktop.relayDisplayName {
+                        if state.activePathByDesktop[desktop.pubkeyHex] == .directLAN {
+                            Text("•")
+                            let rtt = (state.directRTTByDesktop[desktop.pubkeyHex] ?? nil).map { " · \($0)ms" } ?? ""
+                            Label("Direct · LAN\(rtt)", systemImage: "bolt.horizontal.fill")
+                                .labelStyle(.titleAndIcon)
+                                .foregroundStyle(.green)
+                        } else if let relay = desktop.relayDisplayName {
                             Text("•")
                             Label(relay, systemImage: "antenna.radiowaves.left.and.right")
                                 .labelStyle(.titleOnly)

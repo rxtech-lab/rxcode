@@ -83,6 +83,11 @@ final class MobileAppState: ObservableObject {
     @Published var pairedDesktopPubkey: String = ""
     @Published var pairedDesktops: [PairedDesktop] = []
     @Published var connectionState: RelayClient.ConnectionState = .disconnected
+    /// Active transport path per paired desktop (pubkey-hex → path). Runtime-only,
+    /// drives the "Direct · LAN" / "Relay" badge. Absent ⇒ relay.
+    @Published var activePathByDesktop: [String: ConnectionPathKind] = [:]
+    /// Measured direct-path handshake RTT (ms) per paired desktop. Runtime-only.
+    @Published var directRTTByDesktop: [String: Int?] = [:]
     @Published var relayURL: URL
     @Published var pairingStatus: PairingStatus = .idle
 
@@ -265,6 +270,10 @@ final class MobileAppState: ObservableObject {
     var client: SyncClient
     let logger = Logger(subsystem: "com.idealapp.RxCodeMobile", category: "MobileAppState")
     var eventTask: Task<Void, Never>?
+    /// Serializes background/foreground relay transitions so a delayed
+    /// `stop()` can never land after a later `start()` and leave the relay
+    /// permanently disconnected.
+    var lifecycleTask: Task<Void, Never>?
     var pairingTimeoutTask: Task<Void, Never>?
     var apnsTokenHex: String?
     var apnsEnvironment: String?
@@ -314,7 +323,7 @@ final class MobileAppState: ObservableObject {
                 fatalError("Failed to load mobile device identity: \(error)")
             }
         }
-        self.client = SyncClient(identity: identity, relayURL: initial)
+        self.client = SyncClient(identity: identity, relayURL: initial, directPathsEnabled: Self.directPathsEnabledSetting)
         logger.info("[MobileIdentity] loaded publicKey=\(String(self.identity.publicKeyHex.prefix(12)), privacy: .public) accessGroup=\(Self.keychainAccessGroup, privacy: .public)")
         loadPairedDesktops()
         #if DEBUG
@@ -331,6 +340,27 @@ final class MobileAppState: ObservableObject {
     /// form when calling `SecItem*`.
     static var keychainAccessGroup: String {
         DeviceIdentity.resolveAccessGroup(suffix: keychainAccessGroupSuffix)
+    }
+
+    /// User preference for peer-to-peer direct paths. Defaults to on.
+    static var directPathsEnabledSetting: Bool {
+        if UserDefaults.standard.object(forKey: "mobileSync.directPathsEnabled") == nil { return true }
+        return UserDefaults.standard.bool(forKey: "mobileSync.directPathsEnabled")
+    }
+
+    /// Toggle peer-to-peer direct paths, persist the choice, and rebuild the
+    /// client so it takes effect immediately.
+    func setDirectPathsEnabled(_ enabled: Bool) async {
+        guard enabled != Self.directPathsEnabledSetting else { return }
+        UserDefaults.standard.set(enabled, forKey: "mobileSync.directPathsEnabled")
+        logger.info("[MobileSync] direct paths \(enabled ? "enabled" : "disabled", privacy: .public) — rebuilding client")
+        let wasStarted = clientStarted
+        eventTask?.cancel()
+        eventTask = nil
+        let oldClient = client
+        client = SyncClient(identity: identity, relayURL: relayURL, directPathsEnabled: enabled)
+        await oldClient.stop()
+        if wasStarted { await startClient() }
     }
 
     static var defaultRelayURLString: String {
@@ -368,18 +398,36 @@ final class MobileAppState: ObservableObject {
     /// relay's registration table in sync with reality and gives a clean,
     /// single re-register on the next foreground.
     func handleScenePhase(_ phase: ScenePhase) {
-        guard clientStarted else { return }
+        guard clientStarted else {
+            logger.info("[Lifecycle] handleScenePhase \(String(describing: phase), privacy: .public) ignored — clientStarted=false")
+            return
+        }
         switch phase {
         case .background:
             logger.info("[Lifecycle] entering background — disconnecting relay")
-            Task { await client.stop() }
+            enqueueLifecycle(label: "background/stop") { [client] in await client.stop() }
         case .active:
             logger.info("[Lifecycle] entering foreground — reconnecting relay")
-            Task { await client.start() }
+            enqueueLifecycle(label: "foreground/start") { [client] in await client.start() }
         case .inactive:
             break
         @unknown default:
             break
+        }
+    }
+
+    /// Chain a relay lifecycle transition after any in-flight one so they run
+    /// strictly in the order the scene phases arrived. Two bare `Task {}`s race:
+    /// a background `stop()` could otherwise complete after a foreground
+    /// `start()` and disable the relay for good.
+    private func enqueueLifecycle(label: String, _ work: @escaping @Sendable () async -> Void) {
+        let previous = lifecycleTask
+        lifecycleTask = Task { [logger] in
+            logger.info("[Lifecycle] \(label, privacy: .public) queued — awaiting previous transition")
+            await previous?.value
+            logger.info("[Lifecycle] \(label, privacy: .public) running")
+            await work()
+            logger.info("[Lifecycle] \(label, privacy: .public) done")
         }
     }
 

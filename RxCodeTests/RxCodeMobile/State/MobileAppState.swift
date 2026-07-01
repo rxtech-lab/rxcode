@@ -155,8 +155,11 @@ final class MobileAppState: ObservableObject {
             break
         case .inbound(let inbound):
             handleInbound(inbound)
+        case .pathChanged:
+            break
         }
     }
+    // (P2P path changes are exercised in the app target, not this test double.)
 
     private func handleInbound(_ inbound: RelayClient.Inbound) {
         switch inbound.payload {

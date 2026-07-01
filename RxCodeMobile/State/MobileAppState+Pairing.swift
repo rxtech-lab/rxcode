@@ -72,7 +72,7 @@ extension MobileAppState {
         let oldClient = client
         eventTask?.cancel()
         eventTask = nil
-        client = SyncClient(identity: identity, relayURL: url)
+        client = SyncClient(identity: identity, relayURL: url, directPathsEnabled: MobileAppState.directPathsEnabledSetting)
         relayURL = url
         connectionState = .disconnected
         await oldClient.stop()

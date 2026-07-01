@@ -48,6 +48,11 @@ struct PairedDevice: Codable, Identifiable, Sendable, Hashable {
     var onlineState: OnlineState = .unknown
     /// Wall-clock of the last `onlineState` change. Not persisted.
     var lastOnlineTransitionAt: Date? = nil
+    /// Active transport path — not persisted. `.relay` until a direct link is
+    /// promoted; drives the "Direct · LAN" / "Relay" badge.
+    var activePath: ConnectionPathKind = .relay
+    /// Measured direct-path handshake RTT in milliseconds — not persisted.
+    var directRTTMillis: Int? = nil
 
     var id: String { pubkeyHex }
 
@@ -240,7 +245,7 @@ final class MobileSyncService: ObservableObject {
             Self.logFatalKeychain(error)
             fatalError("Failed to load device identity: \(error)")
         }
-        self.client = SyncClient(identity: identity, relayURL: initial)
+        self.client = SyncClient(identity: identity, relayURL: initial, directPathsEnabled: Self.directPathsEnabledSetting)
         loadPairedDevices()
         loadSavedRelayServers()
     }
@@ -286,7 +291,7 @@ final class MobileSyncService: ObservableObject {
 
         logger.info("[MobileSync] starting relay server=\(server.name, privacy: .public) url=\(server.url, privacy: .public) desktopKey=\(String(self.identity.publicKeyHex.prefix(12)), privacy: .public)")
 
-        let newClient = SyncClient(identity: identity, relayURL: url)
+        let newClient = SyncClient(identity: identity, relayURL: url, directPathsEnabled: Self.directPathsEnabledSetting)
         additionalClients[server.id] = newClient
 
         // Add all paired devices that use this relay
@@ -379,6 +384,29 @@ final class MobileSyncService: ObservableObject {
         relayConnectionStates.removeAll()
     }
 
+    /// User preference for peer-to-peer direct paths. Defaults to on.
+    static var directPathsEnabledSetting: Bool {
+        if UserDefaults.standard.object(forKey: "mobileSync.directPathsEnabled") == nil { return true }
+        return UserDefaults.standard.bool(forKey: "mobileSync.directPathsEnabled")
+    }
+
+    /// Toggle peer-to-peer direct paths, persist the choice, and rebuild every
+    /// per-relay client (the ones that actually route paired devices) so the new
+    /// setting takes effect immediately. Each rebuild re-adds the relay's peers
+    /// and restarts its event task via `startRelayServer`.
+    func setDirectPathsEnabled(_ enabled: Bool) {
+        guard enabled != Self.directPathsEnabledSetting else { return }
+        UserDefaults.standard.set(enabled, forKey: "mobileSync.directPathsEnabled")
+        logger.info("[MobileSync] direct paths \(enabled ? "enabled" : "disabled", privacy: .public) — rebuilding relay clients")
+        let servers = savedRelayServers.filter { $0.isEnabled }
+        Task { @MainActor in
+            for server in servers {
+                await stopRelayServer(server)
+                await startRelayServer(server)
+            }
+        }
+    }
+
     /// Update the configured relay URL, persist it, and reconnect.
     func updateRelay(url: URL) {
         guard url != relayURL else { return }
@@ -388,7 +416,7 @@ final class MobileSyncService: ObservableObject {
         eventTask?.cancel()
         eventTask = nil
         let oldClient = client
-        client = SyncClient(identity: identity, relayURL: url)
+        client = SyncClient(identity: identity, relayURL: url, directPathsEnabled: Self.directPathsEnabledSetting)
         connectionState = .disconnected
         Task { await oldClient.stop() }
         start()

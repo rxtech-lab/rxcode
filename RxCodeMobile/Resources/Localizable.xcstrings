@@ -3384,6 +3384,12 @@
         }
       }
     },
+    "Direct · LAN%@" : {
+
+    },
+    "Direct connection" : {
+
+    },
     "Disabled" : {
       "localizations" : {
         "ko" : {
@@ -8644,6 +8650,7 @@
       }
     },
     "Select which Mac this device controls. Removing one pairing does not reset this device's identity." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -8664,6 +8671,9 @@
           }
         }
       }
+    },
+    "Select which Mac this device controls. When Direct connection is on and you're on the same network, sync connects straight to your Mac (end-to-end encrypted) and falls back to the relay automatically." : {
+
     },
     "Serious" : {
       "localizations" : {

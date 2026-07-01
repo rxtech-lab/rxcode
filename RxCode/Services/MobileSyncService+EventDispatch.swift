@@ -26,6 +26,8 @@ extension MobileSyncService {
             }
         case .inbound(let inbound):
             handleInbound(inbound)
+        case .pathChanged(let peerHex, let path, let rttMillis):
+            updateActivePath(peerHex: peerHex, path: path, rttMillis: rttMillis)
         }
     }
 
@@ -45,7 +47,18 @@ extension MobileSyncService {
             }
         case .inbound(let inbound):
             handleInbound(inbound, fromServer: server)
+        case .pathChanged(let peerHex, let path, let rttMillis):
+            updateActivePath(peerHex: peerHex, path: path, rttMillis: rttMillis)
         }
+    }
+
+    /// Record the active transport path for a peer (drives the settings badge).
+    private func updateActivePath(peerHex: String, path: ConnectionPathKind, rttMillis: Int?) {
+        guard let idx = pairedDevices.firstIndex(where: { $0.pubkeyHex == peerHex }) else { return }
+        guard pairedDevices[idx].activePath != path || pairedDevices[idx].directRTTMillis != rttMillis else { return }
+        pairedDevices[idx].activePath = path
+        pairedDevices[idx].directRTTMillis = rttMillis
+        logger.info("[MobileSync] direct path for mobileKey=\(String(peerHex.prefix(12)), privacy: .public) is now \(String(describing: path), privacy: .public)")
     }
 
     /// Update aggregate connection state based on all relay states.

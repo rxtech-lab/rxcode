@@ -83,6 +83,11 @@ final class MobileAppState: ObservableObject {
     @Published var pairedDesktopPubkey: String = ""
     @Published var pairedDesktops: [PairedDesktop] = []
     @Published var connectionState: RelayClient.ConnectionState = .disconnected
+    /// Active transport path per paired desktop (pubkey-hex → path). Runtime-only,
+    /// drives the "Direct · LAN" / "Relay" badge. Absent ⇒ relay.
+    @Published var activePathByDesktop: [String: ConnectionPathKind] = [:]
+    /// Measured direct-path handshake RTT (ms) per paired desktop. Runtime-only.
+    @Published var directRTTByDesktop: [String: Int?] = [:]
     @Published var relayURL: URL
     @Published var pairingStatus: PairingStatus = .idle
 
@@ -314,7 +319,7 @@ final class MobileAppState: ObservableObject {
                 fatalError("Failed to load mobile device identity: \(error)")
             }
         }
-        self.client = SyncClient(identity: identity, relayURL: initial)
+        self.client = SyncClient(identity: identity, relayURL: initial, directPathsEnabled: Self.directPathsEnabledSetting)
         logger.info("[MobileIdentity] loaded publicKey=\(String(self.identity.publicKeyHex.prefix(12)), privacy: .public) accessGroup=\(Self.keychainAccessGroup, privacy: .public)")
         loadPairedDesktops()
         #if DEBUG
@@ -331,6 +336,27 @@ final class MobileAppState: ObservableObject {
     /// form when calling `SecItem*`.
     static var keychainAccessGroup: String {
         DeviceIdentity.resolveAccessGroup(suffix: keychainAccessGroupSuffix)
+    }
+
+    /// User preference for peer-to-peer direct paths. Defaults to on.
+    static var directPathsEnabledSetting: Bool {
+        if UserDefaults.standard.object(forKey: "mobileSync.directPathsEnabled") == nil { return true }
+        return UserDefaults.standard.bool(forKey: "mobileSync.directPathsEnabled")
+    }
+
+    /// Toggle peer-to-peer direct paths, persist the choice, and rebuild the
+    /// client so it takes effect immediately.
+    func setDirectPathsEnabled(_ enabled: Bool) async {
+        guard enabled != Self.directPathsEnabledSetting else { return }
+        UserDefaults.standard.set(enabled, forKey: "mobileSync.directPathsEnabled")
+        logger.info("[MobileSync] direct paths \(enabled ? "enabled" : "disabled", privacy: .public) — rebuilding client")
+        let wasStarted = clientStarted
+        eventTask?.cancel()
+        eventTask = nil
+        let oldClient = client
+        client = SyncClient(identity: identity, relayURL: relayURL, directPathsEnabled: enabled)
+        await oldClient.stop()
+        if wasStarted { await startClient() }
     }
 
     static var defaultRelayURLString: String {

@@ -11,7 +11,11 @@
     <key>NSCameraUsageDescription</key>
     <string>Scan a QR code shown by RxCode on your Mac to pair this device.</string>
     <key>NSLocalNetworkUsageDescription</key>
-    <string>RxCode connects to a relay running on your local network to sync with your Mac.</string>
+    <string>RxCode connects directly to your Mac over the local network for a faster, private peer-to-peer sync.</string>
+    <key>NSBonjourServices</key>
+    <array>
+        <string>_rxcode-sync._tcp</string>
+    </array>
     <key>NSAppTransportSecurity</key>
     <dict>
         <key>NSAllowsLocalNetworking</key>

@@ -24,6 +24,10 @@ extension MobileAppState {
             logger.warning("[Relay] delivery failed to desktopKey=\(String(toHex.prefix(12)), privacy: .public)")
         case .inbound(let inbound):
             handleInbound(inbound)
+        case .pathChanged(let peerHex, let path, let rttMillis):
+            logger.info("[Direct] active path for desktopKey=\(String(peerHex.prefix(12)), privacy: .public) is now \(String(describing: path), privacy: .public)")
+            activePathByDesktop[peerHex] = path
+            directRTTByDesktop[peerHex] = rttMillis
         }
     }
 

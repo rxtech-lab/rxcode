@@ -23,6 +23,7 @@ struct MobileSettingsTab: View {
             VStack(alignment: .leading, spacing: 20) {
                 headerSection
                 relaySection
+                directConnectionsSection
                 Divider()
                 pairedSection
             }
@@ -263,6 +264,7 @@ struct MobileSettingsTab: View {
                     Text(device.displayName)
                         .fontWeight(.medium)
                     onlineStatePill(for: device)
+                    pathPill(for: device)
                 }
                 HStack(spacing: 6) {
                     if let token = MobileSyncService.pushToken(for: device), !token.isEmpty {
@@ -330,6 +332,42 @@ struct MobileSettingsTab: View {
                 .foregroundStyle(.secondary)
                 .labelStyle(.titleAndIcon)
         case .unknown:
+            EmptyView()
+        }
+    }
+
+    /// Shows how sync traffic reaches this device: a green "Direct · LAN" chip
+    /// when a peer-to-peer link is active, otherwise nothing (relay is implied
+    /// by the existing online pill).
+    private var directConnectionsSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Toggle(isOn: Binding(
+                get: { MobileSyncService.directPathsEnabledSetting },
+                set: { sync.setDirectPathsEnabled($0) }
+            )) {
+                Text("Direct peer-to-peer connections")
+            }
+            Text("When on the same network, sync connects straight to your device over the LAN (end-to-end encrypted) and falls back to the relay automatically. Turn off to always use relay servers.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private func pathPill(for device: PairedDevice) -> some View {
+        let rtt = device.directRTTMillis.map { " · \($0)ms" } ?? ""
+        switch device.activePath {
+        case .directLAN:
+            Label("Direct · LAN\(rtt)", systemImage: "bolt.horizontal.fill")
+                .font(.caption2)
+                .foregroundStyle(.green)
+                .labelStyle(.titleAndIcon)
+        case .directWAN:
+            Label("Direct · WAN\(rtt)", systemImage: "bolt.horizontal.fill")
+                .font(.caption2)
+                .foregroundStyle(.blue)
+                .labelStyle(.titleAndIcon)
+        case .relay:
             EmptyView()
         }
     }

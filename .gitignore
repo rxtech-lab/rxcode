@@ -47,3 +47,4 @@ RxCodeMobile/GoogleService-Info.plist
 RxCodeAndroid/app/google-services.json
 .env
 *.log
+android/.idea

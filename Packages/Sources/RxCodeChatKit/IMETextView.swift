@@ -73,6 +73,18 @@ struct IMETextView: NSViewRepresentable {
         return scrollView
     }
 
+    static func dismantleNSView(_ nsView: NSScrollView, coordinator: Coordinator) {
+        guard let textView = nsView.documentView as? _IMETextView else { return }
+        if textView.window?.firstResponder === textView {
+            textView.window?.makeFirstResponder(nil)
+        }
+        textView.delegate = nil
+        textView.clearCallbacks()
+        textView.undoManager?.removeAllActions(withTarget: textView)
+        textView.allowsUndo = false
+        nsView.documentView = nil
+    }
+
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? _IMETextView else { return }
         applyCallbacks(to: textView)
@@ -224,6 +236,19 @@ fileprivate final class _IMETextView: NSTextView {
     var onImageChipTap: ((Int) -> Void)?
     var onMarkedTextChange: (Bool) -> Void = { _ in }
     var onFocusChange: (Bool) -> Void = { _ in }
+
+    func clearCallbacks() {
+        onReturn = {}
+        onUpArrow = { false }
+        onDownArrow = { false }
+        onTab = { false }
+        onShiftTab = {}
+        onEscape = { false }
+        onPasteCommandV = { false }
+        onImageChipTap = nil
+        onMarkedTextChange = { _ in }
+        onFocusChange = { _ in }
+    }
 
     override func becomeFirstResponder() -> Bool {
         let result = super.becomeFirstResponder()

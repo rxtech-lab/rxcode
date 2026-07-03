@@ -232,7 +232,17 @@ extension AppState {
         }
         let isNewSession = window.currentSessionId == nil
         let isPending = window.currentSessionId.map { window.pendingPlaceholderIds.contains($0) } ?? false
-        let cliSessionId: String? = (isNewSession || isPending) ? nil : window.currentSessionId
+        // Resolve the resume id per provider: a thread that ran under Claude and
+        // is now switched to Codex must NOT hand Codex the Claude session id.
+        // The switched provider resumes its own recorded native id, or starts a
+        // fresh native session when it has never run on this thread.
+        let cliSessionId: String?
+        if isNewSession || isPending {
+            cliSessionId = nil
+        } else {
+            let resumeProvider = effectiveModelSelection(in: window).provider
+            cliSessionId = resumeSessionId(for: resumeProvider, threadId: window.currentSessionId!)
+        }
         if let debugLogPrefix {
             logger.info("\(debugLogPrefix, privacy: .public) phase=sendPrompt stream=\(streamId) isNewSession=\(isNewSession, privacy: .public) isPending=\(isPending, privacy: .public) cliSession=\(cliSessionId ?? "<new>", privacy: .public)")
         }
@@ -642,6 +652,57 @@ extension AppState {
     /// `session_id`). Mirror writes to `sessionIdRedirect` already; this also
     /// resumes any `awaitSessionRename` caller so the cross-project send can
     /// return the real thread id instead of `pending-…`.
+    // MARK: - Per-provider native session ids
+
+    /// Record a backend-reported native session id for `provider` on `threadId`,
+    /// updating both the in-memory session state and the persisted thread row so
+    /// a later provider switch can resume the correct native session (or, for a
+    /// provider that has never run on this thread, start a fresh one).
+    func recordProviderSessionId(_ provider: AgentProvider, nativeId: String, threadId: String) {
+        guard !nativeId.isEmpty else { return }
+        updateState(threadId) { state in
+            state.providerSessionIds[provider.rawValue] = nativeId
+        }
+        threadStore.setProviderSessionId(
+            localId: threadId,
+            providerRaw: provider.rawValue,
+            nativeId: nativeId
+        )
+    }
+
+    /// The per-provider native-id map for a thread, preferring in-memory session
+    /// state and falling back to the persisted row.
+    func providerSessionIdMap(for threadId: String) -> [String: String] {
+        let inMemory = sessionStates[threadId]?.providerSessionIds ?? [:]
+        if !inMemory.isEmpty { return inMemory }
+        return threadStore.providerSessionIds(forLocalId: threadId)
+    }
+
+    /// Whether `provider` owns `threadId`'s identity — i.e. the thread id is that
+    /// provider's own native session id. True for the provider that first created
+    /// the thread (and for brand-new threads with no map yet); false for a
+    /// provider the user switched to mid-thread. Decides whether a
+    /// backend-reported id should rename the thread (owner) or just be recorded
+    /// as an alternate native id (switched provider).
+    func providerOwnsThreadId(_ provider: AgentProvider, threadId: String) -> Bool {
+        let map = providerSessionIdMap(for: threadId)
+        if map.isEmpty { return true }
+        return map[provider.rawValue] == threadId
+    }
+
+    /// The native session id to resume for `provider` on `threadId`, or `nil` to
+    /// start a fresh native session. A provider that has run here resumes its own
+    /// recorded id; a provider new to the thread starts fresh; a legacy thread
+    /// with no map at all resumes on its own id (preserving prior behavior).
+    func resumeSessionId(for provider: AgentProvider, threadId: String) -> String? {
+        let map = providerSessionIdMap(for: threadId)
+        if let id = map[provider.rawValue] { return id }
+        // No native id recorded for this provider. If the thread has no map at
+        // all it predates per-provider ids and resumes on its own id; otherwise
+        // this provider has never run here and must start a fresh session.
+        return map.isEmpty ? threadId : nil
+    }
+
     func applySessionIdRedirect(from pendingKey: String, to realSessionId: String) {
         logger.info("[IDE_SEND_THREAD] session id redirect pendingKey=\(pendingKey, privacy: .public) realSession=\(realSessionId, privacy: .public)")
         sessionIdRedirect[pendingKey] = realSessionId

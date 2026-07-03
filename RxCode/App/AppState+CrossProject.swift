@@ -151,11 +151,12 @@ extension AppState {
         // CLI session). Their stdout is injected into this turn's agent context
         // the same way the branch briefing / memory context is, and the status
         // cards inserted by UserAddedHook persist via the `.result` save.
+        //
+        // Project-new-chat hooks update passive banners and are driven by the
+        // visible chat views. Keep them out of this preflight path: awaiting
+        // network-backed banner checks here delays the first backend event.
         var hookStartContext = ""
         if cliSessionId == nil, let project = projects.first(where: { $0.id == projectId }) {
-            await hookManager.dispatchProjectNewChatStart(
-                NewChatStartPayload(projectId: projectId, sessionKey: sessionKey)
-            )
             hookStartContext = await hookManager.dispatchSessionStart(
                 SessionStartPayload(project: project, sessionKey: sessionKey)
             ).combinedOutput
@@ -325,16 +326,18 @@ extension AppState {
                     if case .result(let resultEvent) = event {
                         logger.info("[Stream:UI] event #\(eventCount) .result received after losing ownership — saving to disk")
                         await finalizeAgentStream(agentProvider: agentProvider, streamId: streamId)
-                        if sessionKey != resultEvent.sessionId {
+                        if sessionKey != resultEvent.sessionId,
+                           providerOwnsThreadId(agentProvider, threadId: sessionKey) {
                             if let state = sessionStates.removeValue(forKey: sessionKey) {
                                 sessionStates[resultEvent.sessionId] = state
                             }
                             applySessionIdRedirect(from: sessionKey, to: resultEvent.sessionId)
                             sessionKey = resultEvent.sessionId
                         }
+                        recordProviderSessionId(agentProvider, nativeId: resultEvent.sessionId, threadId: sessionKey)
                         let msgs = stateForSession(sessionKey).messages
                         if !msgs.isEmpty {
-                            await saveSession(sessionId: resultEvent.sessionId, projectId: projectId, messages: msgs)
+                            await saveSession(sessionId: sessionKey, projectId: projectId, messages: msgs)
                         }
                     } else {
                         logger.debug("[Stream:UI] event #\(eventCount) — stream \(streamId) no longer owns session \(sessionKey), skipping")
@@ -354,6 +357,17 @@ extension AppState {
                     let isHookEvent = systemEvent.subtype.hasPrefix("hook_")
                     if let sid = systemEvent.sessionId, !isHookEvent {
                         await permission.registerSession(sid: sid, projectKey: cwd, mode: registerMode)
+                        // Only the provider that owns the thread id may re-home the
+                        // thread when its native `session_id` changes. A provider
+                        // the user switched to mid-thread (e.g. Codex on a Claude
+                        // thread) reports its OWN native id here — that must not
+                        // rename/reconcile the thread; it's just recorded so a
+                        // later switch-back can resume it. `recordProviderSessionId`
+                        // runs in both cases below.
+                        let streamPlaceholder = "pending-\(streamId.uuidString)"
+                        let ownsThreadId = window.pendingPlaceholderIds.contains(streamPlaceholder)
+                            || providerOwnsThreadId(agentProvider, threadId: sessionKey)
+                        if ownsThreadId {
                         // Capture the sessionKey BEFORE the reassignment so the
                         // reconciler can rename the previous row in place when
                         // the CLI advances `session_id` mid-stream.
@@ -490,6 +504,12 @@ extension AppState {
                         if previousSessionKey != sid {
                             broadcastMobileSessionRedirect(from: previousSessionKey, to: sid)
                         }
+                        } // end ownsThreadId
+                        // Record this provider's native session id — for the owner
+                        // on the possibly-renamed thread id, for a switched provider
+                        // on the stable thread id — so each provider can later
+                        // resume its own native session.
+                        recordProviderSessionId(agentProvider, nativeId: sid, threadId: sessionKey)
                     }
 
                     if systemEvent.subtype == "compact_boundary" {
@@ -625,7 +645,12 @@ extension AppState {
                     // any subagent children that survived the parent CLI get reaped.
                     await finalizeAgentStream(agentProvider: agentProvider, streamId: streamId)
 
-                    if sessionKey != resultEvent.sessionId {
+                    // Only the provider that owns the thread id may re-home the
+                    // thread. A switched provider's differing native id is recorded
+                    // (below) but must not rename the thread.
+                    let resultOwnsThreadId = window.pendingPlaceholderIds.contains("pending-\(streamId.uuidString)")
+                        || providerOwnsThreadId(agentProvider, threadId: sessionKey)
+                    if sessionKey != resultEvent.sessionId && resultOwnsThreadId {
                         let previousSessionKey = sessionKey
                         let wasForeground = (window.currentSessionId ?? window.newSessionKey) == previousSessionKey
                         if let state = sessionStates.removeValue(forKey: previousSessionKey) {
@@ -674,6 +699,11 @@ extension AppState {
                         broadcastMobileSessionRedirect(from: previousSessionKey, to: resultEvent.sessionId)
                     }
 
+                    // Record this provider's native session id (owner: on the
+                    // renamed thread id; switched provider: on the stable thread
+                    // id) so each provider can resume its own native session.
+                    recordProviderSessionId(agentProvider, nativeId: resultEvent.sessionId, threadId: sessionKey)
+
                     // A background completion is "finished, unread". Setting the
                     // flag inside finalizeStreamSession means the trailing
                     // `.streamingFinished` broadcast already carries it to mobile.
@@ -707,7 +737,7 @@ extension AppState {
                     // `ide__send_to_thread` JSON-RPC response.
                     recordStreamCompletion(
                         streamId: streamId,
-                        sessionId: resultEvent.sessionId,
+                        sessionId: sessionKey,
                         assistantText: finalAssistantText,
                         error: resultEvent.isError ? "Agent reported an error result." : nil
                     )
@@ -738,7 +768,7 @@ extension AppState {
                     }
 
                     if isFg {
-                        window.currentSessionId = resultEvent.sessionId
+                        window.currentSessionId = sessionKey
                         if resultEvent.isError {
                             let errText = await consumeAgentStderr(agentProvider: agentProvider, streamId: streamId)
                                 ?? "\(agentProvider.displayNameText) returned an error."
@@ -747,7 +777,7 @@ extension AppState {
                     }
 
                     await saveSession(
-                        sessionId: resultEvent.sessionId,
+                        sessionId: sessionKey,
                         projectId: projectId,
                         messages: stateForSession(sessionKey).messages
                     )
@@ -817,13 +847,13 @@ extension AppState {
                         // leak into the thread summary and extracted memories.
                         if !wasHookInjectedTurn {
                             scheduleThreadSummaryUpdate(
-                                sessionId: resultEvent.sessionId,
+                                sessionId: sessionKey,
                                 projectId: projectId,
                                 cwd: cwd,
                                 messages: stateForSession(sessionKey).messages
                             )
                             scheduleMemoryExtraction(
-                                sessionId: resultEvent.sessionId,
+                                sessionId: sessionKey,
                                 projectId: projectId,
                                 messages: stateForSession(sessionKey).messages
                             )

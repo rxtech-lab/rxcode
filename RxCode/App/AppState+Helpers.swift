@@ -254,8 +254,20 @@ extension AppState {
             ?? summary?.effort
         let sessionPermissionMode = sessionStates[sessionId]?.permissionMode
             ?? summary?.permissionMode
-        let origin = summary?.origin
+        var origin = summary?.origin
             ?? sessionAgentProvider.defaultSessionOrigin
+        // A thread that started under Claude (`.cliBacked`, where the CLI's jsonl
+        // owns the message log and RxCode persists no messages of its own) but is
+        // now running a different provider must migrate to RxCode's own message
+        // store — otherwise the non-Claude turns are never persisted and vanish on
+        // reload. The full in-memory history (including the Claude-era turns, which
+        // are loaded before a switch) is written here under the new origin,
+        // preserving continuity. Guarded so a mid-load race can't lock in a
+        // truncated history.
+        let isLoadingFromDisk = sessionStates[sessionId]?.isLoadingFromDisk ?? false
+        if origin == .cliBacked, sessionAgentProvider != .claudeCode, !isLoadingFromDisk {
+            origin = .legacyRxCode
+        }
         let session = ChatSession(
             id: sessionId,
             projectId: projectId,

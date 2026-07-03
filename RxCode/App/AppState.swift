@@ -55,6 +55,12 @@ struct SessionStreamState {
     // Per-session overrides (persisted in memory across session switches)
     var agentProvider: AgentProvider?
     var model: String?
+    /// Per-provider native resume ids for this session, keyed by
+    /// `AgentProvider.rawValue`. Mirrors `ChatThread.providerSessionIds`; seeded
+    /// on session load and refreshed as each backend reports its native session
+    /// id. Lets a switched provider resume its own session (or start fresh)
+    /// instead of resuming another provider's id.
+    var providerSessionIds: [String: String] = [:]
     /// Identifies which `ACPClientSpec` to use when `agentProvider == .acp`.
     var acpClientId: String?
     var effort: String?
@@ -663,12 +669,27 @@ final class AppState {
         projectDefaultModelSelection(for: project) ?? (selectedAgentProvider, selectedModel)
     }
 
+    func fallbackModel(for provider: AgentProvider, project: Project?) -> String {
+        if let projectSelection = projectDefaultModelSelection(for: project),
+           projectSelection.provider == provider {
+            return projectSelection.model
+        }
+        if selectedAgentProvider == provider {
+            return selectedModel
+        }
+        return availableAgentModelSections()
+            .first { $0.provider == provider }?
+            .models
+            .first?
+            .id ?? selectedModel
+    }
+
     func effectiveModelSelection(in window: WindowState) -> (provider: AgentProvider, model: String) {
-        if let provider = window.sessionAgentProvider, let model = window.sessionModel {
-            return (provider, model)
+        if let provider = window.sessionAgentProvider {
+            return (provider, window.sessionModel ?? fallbackModel(for: provider, project: window.selectedProject))
         }
         if let model = window.sessionModel {
-            return (window.sessionAgentProvider ?? selectedAgentProvider, model)
+            return (selectedAgentProvider, model)
         }
         return defaultModelSelection(for: window.selectedProject)
     }

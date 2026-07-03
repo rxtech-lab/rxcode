@@ -302,6 +302,15 @@ private struct RichEditorView: NSViewRepresentable {
     }
 
     static func dismantleNSView(_ nsView: NSScrollView, coordinator: Coordinator) {
+        if let textView = nsView.documentView as? MemoTextView {
+            if textView.window?.firstResponder === textView {
+                textView.window?.makeFirstResponder(nil)
+            }
+            textView.delegate = nil
+            textView.undoManager?.removeAllActions(withTarget: textView)
+            textView.allowsUndo = false
+            nsView.documentView = nil
+        }
         coordinator.removeKeyMonitor()
         coordinator.cancelPendingSave()
     }

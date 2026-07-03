@@ -293,6 +293,17 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(selection.model, "sonnet")
     }
 
+    func testEffectiveModelSelectionHonorsProviderOnlyOverride() {
+        appState.selectedAgentProvider = .claudeCode
+        appState.selectedModel = "sonnet"
+        window.sessionAgentProvider = .codex
+
+        let selection = appState.effectiveModelSelection(in: window)
+
+        XCTAssertEqual(selection.provider, .codex)
+        XCTAssertEqual(selection.model, AppState.fallbackCodexModels.first)
+    }
+
     func testACPModelDisplayResolvesClientAndModelOptionNames() {
         appState.acpClients = [
             ACPClientSpec(

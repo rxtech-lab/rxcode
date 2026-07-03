@@ -96,6 +96,24 @@ final class ThreadStore {
         fetch(id: id)?.cliSessionId
     }
 
+    /// Per-provider native session/resume ids recorded for a thread, keyed by
+    /// `AgentProvider.rawValue`. Empty when the thread has never recorded one.
+    func providerSessionIds(forLocalId id: String) -> [String: String] {
+        fetch(id: id)?.providerSessionIds ?? [:]
+    }
+
+    /// Record a provider's native session id on the thread row, merging into the
+    /// existing per-provider map. Called when a backend reports its native
+    /// session id so a later provider switch can resume the right session.
+    func setProviderSessionId(localId: String, providerRaw: String, nativeId: String) {
+        guard let row = fetch(id: localId) else { return }
+        var map = row.providerSessionIds
+        guard map[providerRaw] != nativeId else { return }
+        map[providerRaw] = nativeId
+        row.providerSessionIds = map
+        save()
+    }
+
     func fetchThreadSummary(sessionId: String) -> ThreadSummaryRecord? {
         var descriptor = FetchDescriptor<ThreadSummaryRecord>(
             predicate: #Predicate { $0.sessionId == sessionId }
@@ -354,6 +372,9 @@ final class ThreadStore {
                 existingAtNew.title = row.title
             }
             if existingAtNew.cliSessionId == nil { existingAtNew.cliSessionId = newId }
+            if existingAtNew.providerSessionIdsJSON == nil {
+                existingAtNew.providerSessionIdsJSON = row.providerSessionIdsJSON
+            }
             context.delete(row)
         } else {
             row.id = newId

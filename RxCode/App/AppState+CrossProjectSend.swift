@@ -51,6 +51,7 @@ extension AppState {
         // Resolve target project + thread.
         let resolvedProject: Project
         let resolvedThreadId: String?
+        let resolvedThreadSummary: ChatSession.Summary?
 
         if let threadId {
             guard let summary = allSessionSummaries.first(where: { $0.id == threadId })
@@ -63,12 +64,14 @@ extension AppState {
             }
             resolvedProject = proj
             resolvedThreadId = threadId
+            resolvedThreadSummary = summary
         } else if let projectId {
             guard let proj = projects.first(where: { $0.id == projectId }) else {
                 throw CrossProjectSendError.unknownProject(projectId)
             }
             resolvedProject = proj
             resolvedThreadId = nil
+            resolvedThreadSummary = nil
         } else {
             throw CrossProjectSendError.unknownProject(UUID())
         }
@@ -81,10 +84,32 @@ extension AppState {
         window.selectedProject = resolvedProject
         window.currentSessionId = resolvedThreadId
 
-        // Carry over per-session overrides for a new thread; for an existing
-        // thread we leave the session's own stored values alone (the resume
-        // path in sendPrompt reads from `sessionStates[sessionKey]`).
-        if resolvedThreadId == nil {
+        if let resolvedThreadId, let summary = resolvedThreadSummary {
+            let existingState = sessionStates[resolvedThreadId]
+            let resolvedProvider = agentProvider
+                ?? existingState?.agentProvider
+                ?? summary.agentProvider
+            let resolvedModel = model
+                ?? existingState?.model
+                ?? summary.model
+            window.sessionAgentProvider = resolvedProvider
+            window.sessionModel = resolvedModel
+            window.sessionEffort = effort ?? existingState?.effort ?? summary.effort
+            window.sessionPermissionMode = permissionMode ?? existingState?.permissionMode ?? summary.permissionMode
+
+            if agentProvider != nil || model != nil || effort != nil || permissionMode != nil || existingState == nil {
+                updateState(resolvedThreadId) { state in
+                    state.agentProvider = resolvedProvider
+                    state.model = resolvedModel
+                    if let effort = window.sessionEffort { state.effort = effort }
+                    if let permissionMode = window.sessionPermissionMode { state.permissionMode = permissionMode }
+                    if state.providerSessionIds.isEmpty {
+                        state.providerSessionIds = threadStore.providerSessionIds(forLocalId: resolvedThreadId)
+                    }
+                }
+            }
+        } else {
+            // Carry over per-session overrides for a new thread.
             if let agentProvider {
                 window.sessionAgentProvider = agentProvider
             }

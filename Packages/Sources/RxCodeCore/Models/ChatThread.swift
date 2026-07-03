@@ -12,6 +12,15 @@ public final class ChatThread {
 
     public var cliSessionId: String?
 
+    /// Per-provider native session/resume ids for this thread, keyed by
+    /// `AgentProvider.rawValue` and JSON-encoded. Lets a single thread carry a
+    /// distinct backend session id per provider it has run under, so switching
+    /// provider (e.g. Claude ↔ Codex) resumes each provider's own native
+    /// session instead of feeding one provider another's id. Defaulted for
+    /// clean SwiftData migration; deliberately kept out of `apply()`/`toSummary`
+    /// (like `cliSessionId`) so summary upserts never wipe it.
+    public var providerSessionIdsJSON: String? = nil
+
     public var agentProviderRaw: String?
     public var originRaw: String?
     public var model: String?
@@ -81,6 +90,22 @@ public final class ChatThread {
 }
 
 extension ChatThread {
+    /// Decoded view of `providerSessionIdsJSON`. Reads/writes the JSON blob so
+    /// callers work with a plain `[providerRawValue: nativeSessionId]` map.
+    public var providerSessionIds: [String: String] {
+        get {
+            guard let json = providerSessionIdsJSON,
+                  let data = json.data(using: .utf8),
+                  let map = try? JSONDecoder().decode([String: String].self, from: data)
+            else { return [:] }
+            return map
+        }
+        set {
+            providerSessionIdsJSON = (try? JSONEncoder().encode(newValue))
+                .flatMap { String(data: $0, encoding: .utf8) }
+        }
+    }
+
     public func toSummary() -> ChatSession.Summary {
         let agentProvider = agentProviderRaw.flatMap(AgentProvider.init(rawValue:)) ?? .claudeCode
         let origin = originRaw.flatMap(SessionOrigin.init(rawValue:))

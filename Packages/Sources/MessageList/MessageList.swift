@@ -1,40 +1,23 @@
 import Foundation
+import RxCodeCore
 import SwiftUI
-import os
 
-/// Temporary diagnostics for the "list scrolls a lot when streaming finishes"
-/// report. Counts every real `proxy.scrollTo(bottomAnchor)` call and logs it
-/// with a millisecond timestamp + reason so we can see how many fire and from
-/// which trigger. Remove once the scroll-churn is understood.
+/// Counts scroll activity without logging on the hot main-actor path. The app
+/// periodically drains these counters into its performance diagnostic file.
 @MainActor
 enum ScrollToBottomDiag {
-    /// Counts only real `proxy.scrollTo(bottomAnchor)` calls — the answer to
-    /// "how many scroll-to-bottom API calls were triggered".
-    private static var count = 0
-    /// Counts requests that were *asked for* but bailed before any scroll API
-    /// call (spacer absorbed the growth, or a pin owns the position). Kept on a
-    /// separate counter/label so it never inflates the actual-call count above.
-    private static var skippedCount = 0
-    private static let log = Logger(subsystem: "com.claudework", category: "ScrollToBottomDiag")
-    private static let formatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm:ss.SSS"
-        return f
-    }()
-
-    /// Log an actual `proxy.scrollTo` call. Invoke immediately before the real
-    /// scroll so the count stays an accurate tally of scroll API invocations.
     static func record(_ reason: String, animated: Bool, streaming: Bool) {
-        count += 1
-        let ts = formatter.string(from: Date())
-        log.info("[ScrollToBottom] #\(count, privacy: .public) \(ts, privacy: .public) reason=\(reason, privacy: .public) animated=\(animated, privacy: .public) streaming=\(streaming, privacy: .public)")
+        PerformanceDiagnostics.increment("scroll.actual.total")
+        PerformanceDiagnostics.increment("scroll.actual.reason.\(reason)")
+        if animated { PerformanceDiagnostics.increment("scroll.actual.animated") }
+        if streaming { PerformanceDiagnostics.increment("scroll.actual.streaming") }
     }
 
-    /// Log a scroll request that was requested but skipped (no scroll API call).
     static func recordSkipped(_ reason: String, animated: Bool, streaming: Bool) {
-        skippedCount += 1
-        let ts = formatter.string(from: Date())
-        log.info("[ScrollToBottomSkipped] #\(skippedCount, privacy: .public) \(ts, privacy: .public) reason=\(reason, privacy: .public) animated=\(animated, privacy: .public) streaming=\(streaming, privacy: .public)")
+        PerformanceDiagnostics.increment("scroll.skipped.total")
+        PerformanceDiagnostics.increment("scroll.skipped.reason.\(reason)")
+        if animated { PerformanceDiagnostics.increment("scroll.skipped.animated") }
+        if streaming { PerformanceDiagnostics.increment("scroll.skipped.streaming") }
     }
 }
 
@@ -438,7 +421,11 @@ public struct MessageList<Message: MessageListItem, RowContent: View>: View {
     }
 
     private func scheduleScrollToBottom(proxy: ScrollViewProxy) {
-        guard bottomScrollTask == nil else { return }
+        guard bottomScrollTask == nil else {
+            PerformanceDiagnostics.increment("scroll.schedule.coalesced")
+            return
+        }
+        PerformanceDiagnostics.increment("scroll.schedule.created")
         let delayNanoseconds = scrollToBottomDelayNanoseconds()
         bottomScrollTask = Task { @MainActor in
             if delayNanoseconds > 0 {

@@ -1,7 +1,6 @@
 import SwiftUI
 import Combine
 import RxCodeCore
-import os
 
 #if os(macOS)
 
@@ -58,19 +57,6 @@ struct MessageListView: View {
     @State private var isAtBottom = true
     @State private var scrollRequestTask: Task<Void, Never>?
 
-    private static let log = Logger(subsystem: "com.claudework", category: "MessageListView")
-    /// Temporary diagnostics: counts scroll-to-bottom *requests* (pre-coalesce)
-    /// so we can correlate per-token request churn with the actual scrollTo calls
-    /// logged in MessageList. Remove once scroll-churn is understood.
-    private static var scrollRequestCount = 0
-    private static let diagTimestampFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm:ss.SSS"
-        return f
-    }()
-    private static func diagTimestamp() -> String {
-        diagTimestampFormatter.string(from: Date())
-    }
     private static let bottomAnchorID = "message-list-bottom-anchor"
     private static let endOfScreenAnchorID = "message-list-end-of-screen"
     private static let userScrollDownDelta: CGFloat = 4
@@ -193,10 +179,10 @@ struct MessageListView: View {
                 requestScrollToBottomIfAtBottom()
             }
             .onChange(of: isSessionReady) { _, new in
-                Self.log.info("[MessageList.ready] isSessionReady=\(new) sid=\(windowState.currentSessionId ?? "<nil>", privacy: .public) settled=\(settledItems.count)")
+                PerformanceDiagnostics.increment(new ? "chat.session_ready.true" : "chat.session_ready.false")
             }
             .onChange(of: settledItems.count) { _, new in
-                Self.log.info("[MessageList.settled] settled=\(new) sid=\(windowState.currentSessionId ?? "<nil>", privacy: .public) isSessionReady=\(isSessionReady) isLoadingFromDisk=\(chatBridge.isLoadingFromDisk)")
+                PerformanceDiagnostics.record("chat.settled_items", value: Double(new))
             }
             .overlay {
                 if settledItems.isEmpty && !chatBridge.isStreaming && windowState.currentSessionId == nil {
@@ -209,8 +195,8 @@ struct MessageListView: View {
     // MARK: - Session lifecycle
 
     private func handleSessionTask() async {
-        let sid = windowState.currentSessionId ?? "<nil>"
-        Self.log.info("[MessageList.task] fired sid=\(sid, privacy: .public) bridgeMessages=\(chatBridge.messages.count) isStreaming=\(chatBridge.isStreaming) isLoadingFromDisk=\(chatBridge.isLoadingFromDisk)")
+        PerformanceDiagnostics.increment("chat.session_task.fired")
+        PerformanceDiagnostics.record("chat.bridge_messages", value: Double(chatBridge.messages.count))
         // When the CLI emits its first `system:init` event mid-stream, AppState
         // swaps currentSessionId from the local "pending-..." placeholder to
         // the real CLI sid. That id change re-fires this task even though the
@@ -220,7 +206,7 @@ struct MessageListView: View {
             rebuildSettledItems()
             if !isSessionReady { isSessionReady = true }
             requestScrollToBottomIfAtBottom()
-            Self.log.info("[MessageList.task] streaming-path settled=\(settledItems.count) sid=\(sid, privacy: .public)")
+            PerformanceDiagnostics.increment("chat.session_task.streaming_path")
             return
         }
         isSessionReady = false
@@ -236,16 +222,12 @@ struct MessageListView: View {
         pendingIndicatorSpacerReduction = 0
         activeTurnMaxMeasuredHeight = 0
         rebuildSettledItems()
-        Self.log.info("[MessageList.task] post-rebuild settled=\(settledItems.count) sid=\(sid, privacy: .public) isLoadingFromDisk=\(chatBridge.isLoadingFromDisk)")
         // Empty sessions appear instantly — unless we're still loading persisted
         // messages from disk, in which case `handleLoadingChange` fades the list
         // in once messages arrive, avoiding the empty → populated "blink".
         guard !settledItems.isEmpty else {
             if !chatBridge.isLoadingFromDisk {
                 isSessionReady = true
-                Self.log.info("[MessageList.task] empty + not-loading → ready sid=\(sid, privacy: .public)")
-            } else {
-                Self.log.info("[MessageList.task] empty + still-loading → waiting for disk sid=\(sid, privacy: .public)")
             }
             return
         }
@@ -259,13 +241,11 @@ struct MessageListView: View {
     }
 
     private func handleLoadingChange(_ isLoading: Bool) {
-        let sid = windowState.currentSessionId ?? "<nil>"
-        Self.log.info("[MessageList.onLoadChange] isLoading=\(isLoading) sid=\(sid, privacy: .public) bridgeMessages=\(chatBridge.messages.count) settled=\(settledItems.count)")
+        PerformanceDiagnostics.increment(isLoading ? "chat.disk_loading.started" : "chat.disk_loading.finished")
         // When a background disk load finishes for a freshly switched session,
         // rebuild the settled list and fade in — same sequence as the .task above.
         guard !isLoading else { return }
         rebuildSettledItems()
-        Self.log.info("[MessageList.onLoadChange] post-rebuild settled=\(settledItems.count) sid=\(sid, privacy: .public)")
         readyTask?.cancel()
         requestScrollToBottom()
         anchor.resetToBottom()
@@ -279,7 +259,7 @@ struct MessageListView: View {
     }
 
     private func handleStreamingChange(old: Bool, new: Bool) {
-        logScrollState("streamingChange", extra: "old=\(old) new=\(new) lastRole=\(chatBridge.messages.last?.role.rawValue ?? "<nil>")")
+        logScrollState("streamingChange")
         let wasAtBottom = isAtBottom
         // Only react when streaming ends — the settled list doesn't change at start.
         guard old && !new else {
@@ -361,6 +341,7 @@ struct MessageListView: View {
     // MARK: - Settled Items
 
     private func rebuildSettledItems() {
+        PerformanceDiagnostics.increment("chat.settled_rebuild.total")
         let messages = settledOnlyMessages(from: chatBridge.messages)
         var t = Transaction()
         t.animation = nil
@@ -372,7 +353,7 @@ struct MessageListView: View {
         let wasAtBottom = isAtBottom
         rebuildSettledItems()
         guard let last = chatBridge.messages.last else { return }
-        logScrollState("lastMessageChange", extra: "lastRole=\(last.role.rawValue) lastID=\(last.id.uuidString)")
+        logScrollState("lastMessageChange")
         if last.role != .user {
             requestScrollToBottomIfAtBottom(wasAtBottom)
         }
@@ -399,9 +380,11 @@ struct MessageListView: View {
         // churn. If a request with the same animation intent is already in
         // flight, let it land instead of rebuilding it; only a differing intent
         // (e.g. the non-animated stream-end re-assert) supersedes it.
-        Self.scrollRequestCount += 1
         let coalesced = scrollRequestTask != nil && scrollToBottomAnimated == animated
-        Self.log.info("[ScrollRequest] #\(Self.scrollRequestCount, privacy: .public) \(Self.diagTimestamp(), privacy: .public) animated=\(animated, privacy: .public) coalesced=\(coalesced, privacy: .public) streaming=\(chatBridge.isStreaming, privacy: .public)")
+        PerformanceDiagnostics.increment("chat.scroll_request.total")
+        if coalesced { PerformanceDiagnostics.increment("chat.scroll_request.coalesced") }
+        if chatBridge.isStreaming { PerformanceDiagnostics.increment("chat.scroll_request.streaming") }
+        if animated { PerformanceDiagnostics.increment("chat.scroll_request.animated") }
         if scrollRequestTask != nil, scrollToBottomAnimated == animated {
             return
         }
@@ -537,7 +520,7 @@ struct MessageListView: View {
     /// drag — our own `.animating` scroll is not user-driven.
     private func settleAtBottom(proxy: ScrollViewProxy, reason: String) {
         settleScrollTask?.cancel()
-        Self.log.info("[ScrollSettle] reason=\(reason, privacy: .public) sid=\(windowState.currentSessionId ?? "<nil>", privacy: .public) settled=\(settledItems.count)")
+        PerformanceDiagnostics.increment("chat.scroll_settle.\(reason)")
         settleScrollTask = Task { @MainActor in
             for _ in 0..<12 {
                 guard !Task.isCancelled, !isUserDrivenScroll else { return }
@@ -554,12 +537,12 @@ struct MessageListView: View {
         settleScrollTask?.cancel()
         pinToTopTask?.cancel()
         canReleasePinnedTurnByScroll = false
-        logScrollState("pinTop.scheduled", extra: "target=\(id.uuidString) animated=\(animated)")
+        logScrollState("pinTop.scheduled")
         pinToTopTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(16))
             if animated {
                 guard !Task.isCancelled else { return }
-                logScrollState("pinTop.animated", extra: "target=\(id.uuidString)")
+                logScrollState("pinTop.animated")
                 withAnimation(.easeInOut(duration: Self.pinToTopAnimationSeconds)) {
                     proxy.scrollTo(id, anchor: .top)
                 }
@@ -568,7 +551,7 @@ struct MessageListView: View {
             for attempt in 0..<8 {
                 guard !Task.isCancelled else { return }
                 if attempt == 0 || attempt == 7 {
-                    logScrollState("pinTop.settle", extra: "target=\(id.uuidString) attempt=\(attempt)")
+                    logScrollState("pinTop.settle")
                 }
                 var transaction = Transaction()
                 transaction.animation = nil
@@ -579,7 +562,7 @@ struct MessageListView: View {
             }
             guard !Task.isCancelled, isPinningLatestTurnToTop else { return }
             canReleasePinnedTurnByScroll = true
-            logScrollState("pinTop.armedRelease", extra: "target=\(id.uuidString)")
+            logScrollState("pinTop.armedRelease")
         }
     }
 
@@ -611,7 +594,7 @@ struct MessageListView: View {
         transaction.animation = nil
         withTransaction(transaction) { latestUserMinY = value }
         updateActiveTurnMaxMeasuredHeight()
-        logScrollState("latestUserMinY.updated", extra: "value=\(value)")
+        logScrollState("latestUserMinY.updated")
     }
 
     /// `minY` of the tail spacer — its distance from the user message is the
@@ -628,7 +611,7 @@ struct MessageListView: View {
             }
         }
         updateActiveTurnMaxMeasuredHeight()
-        logScrollState("tailSpacerMinY.updated", extra: "value=\(value) old=\(oldValue)")
+        logScrollState("tailSpacerMinY.updated")
     }
 
     private var rawActiveTurnMeasuredHeight: CGFloat {
@@ -652,15 +635,8 @@ struct MessageListView: View {
         }
     }
 
-    private func logScrollState(_ label: String, extra: String = "") {
-        let active = activeTurnUserMessageID?.uuidString ?? "<nil>"
-        let rawTurnHeight = rawActiveTurnMeasuredHeight
-        let latestTurnHeight = max(activeTurnMaxMeasuredHeight, rawTurnHeight)
-        let extraSpacer = pinTailSpacerExtraHeight
-        let suffix = extra.isEmpty ? "" : " \(extra)"
-        Self.log.info(
-            "[ScrollPin] \(label, privacy: .public) sid=\(windowState.currentSessionId ?? "<nil>", privacy: .public) active=\(active, privacy: .public) pinning=\(isPinningLatestTurnToTop) releaseArmed=\(canReleasePinnedTurnByScroll) userDriven=\(isUserDrivenScroll) directUser=\(isDirectUserScroll) stream=\(chatBridge.isStreaming) scrollH=\(Double(scrollViewHeight), privacy: .public) userY=\(Double(latestUserMinY), privacy: .public) tailY=\(Double(tailSpacerMinY), privacy: .public) rawTurnH=\(Double(rawTurnHeight), privacy: .public) turnH=\(Double(latestTurnHeight), privacy: .public) minTail=\(Double(minTailSpacer), privacy: .public) extraSpacer=\(Double(extraSpacer), privacy: .public) pendingReduce=\(Double(pendingIndicatorSpacerReduction), privacy: .public)\(suffix, privacy: .public)"
-        )
+    private func logScrollState(_ label: String) {
+        PerformanceDiagnostics.increment("chat.scroll_state.\(label)")
     }
 }
 

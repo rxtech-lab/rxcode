@@ -351,6 +351,28 @@ extension AppState {
                     if let model = systemEvent.model {
                         updateState(sessionKey) { $0.activeModelName = model }
                     }
+
+                    // Track background "backend agent" tasks so a `result` that
+                    // merely yields the turn while such a task is still running
+                    // doesn't tear the turn down (see the `.result` handler).
+                    if let taskId = systemEvent.taskId {
+                        let terminalStatuses: Set<String> = ["completed", "killed", "failed", "stopped", "canceled", "cancelled", "timeout", "error"]
+                        switch systemEvent.subtype {
+                        case "task_started":
+                            updateState(sessionKey) { $0.liveBackgroundTaskIds.insert(taskId) }
+                            logger.info("[Stream:UI] background task started id=\(taskId, privacy: .public) (live=\(self.stateForSession(sessionKey).liveBackgroundTaskIds.count))")
+                        case "task_notification":
+                            // A notification is always the task's terminal wake signal.
+                            updateState(sessionKey) { $0.liveBackgroundTaskIds.remove(taskId) }
+                            logger.info("[Stream:UI] background task notified id=\(taskId, privacy: .public) status=\(systemEvent.taskStatus ?? "?", privacy: .public) (live=\(self.stateForSession(sessionKey).liveBackgroundTaskIds.count))")
+                        case "task_updated":
+                            if let status = systemEvent.taskStatus, terminalStatuses.contains(status) {
+                                updateState(sessionKey) { $0.liveBackgroundTaskIds.remove(taskId) }
+                            }
+                        default:
+                            break
+                        }
+                    }
                     // Hook events (SessionStart, PreToolUse, etc.) carry the parent's session_id,
                     // not this subprocess's. Acting on them flips currentSessionId mid-stream and
                     // triggers MessageListView's fade-out/in — visible as a blink.
@@ -638,6 +660,34 @@ extension AppState {
                     if let debugLogPrefix {
                         let totalElapsed = Date().timeIntervalSince(streamStart)
                         logger.info("\(debugLogPrefix, privacy: .public) phase=resultEvent stream=\(streamId) eventCount=\(eventCount, privacy: .public) total=\(String(format: "%.2f", totalElapsed), privacy: .public)s gap=\(String(format: "%.1f", gap), privacy: .public)s isError=\(resultEvent.isError, privacy: .public) session=\(resultEvent.sessionId, privacy: .public)")
+                    }
+
+                    // Recent Claude Code runs long tasks (background shells, subagents) as
+                    // "backend agents". The turn that spawns one ends with a normal `result`
+                    // (`origin == null`, `stop_reason == end_turn`) WHILE the task is still
+                    // running; when it finishes the CLI autonomously runs a follow-up turn
+                    // (a fresh `init` + a `result` with `origin.kind == "task-notification"`).
+                    // If we tore the turn down on that yield `result` we'd close stdin — which
+                    // kills the still-running CLI/task and loses the follow-up — and flip the
+                    // UI to idle. So while any background task is still live, keep the process
+                    // alive and the UI "in progress"; only fold in this result's (real) cost.
+                    // The follow-up result arrives once tasks drain (set now empty) and takes
+                    // the normal end-of-turn path below.
+                    if !stateForSession(sessionKey).liveBackgroundTaskIds.isEmpty {
+                        let live = stateForSession(sessionKey).liveBackgroundTaskIds.count
+                        logger.info("[Stream:UI] event #\(eventCount) .result yields with \(live) live background task(s); keeping turn in progress (origin=\(resultEvent.originKind ?? "none", privacy: .public))")
+                        updateState(sessionKey) { state in
+                            if let cost = resultEvent.totalCostUsd { state.costUsd = cost }
+                            if let duration = resultEvent.durationMs { state.durationMs += duration }
+                            if let turns = resultEvent.totalTurns { state.turns += turns }
+                            if let usage = resultEvent.usage {
+                                state.inputTokens += usage.inputTokens
+                                state.outputTokens += usage.outputTokens
+                                state.cacheCreationTokens += usage.cacheCreationInputTokens
+                                state.cacheReadTokens += usage.cacheReadInputTokens
+                            }
+                        }
+                        break
                     }
 
                     // With `--input-format stream-json` the CLI stays alive waiting for more

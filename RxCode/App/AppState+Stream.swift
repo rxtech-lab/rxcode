@@ -53,6 +53,13 @@ extension AppState {
                 let state = self.stateForSession(currentKey)
 
                 guard state.isStreaming, state.activeStreamId == streamId else { return }
+
+                // A live "backend agent" background task can legitimately run
+                // silent for far longer than the inactivity timeout while the
+                // turn waits to run its autonomous follow-up. Don't force-clean
+                // (which would SIGKILL the CLI and the task) while one is pending.
+                guard state.liveBackgroundTaskIds.isEmpty else { continue }
+
                 guard let last = state.lastStreamEventDate else { continue }
 
                 let gap = Date().timeIntervalSince(last)
@@ -445,6 +452,7 @@ extension AppState {
             state.textDeltaBuffer = ""
             state.pendingToolResults.removeAll()
             state.lastStreamEventDate = nil
+            state.liveBackgroundTaskIds.removeAll()
             if let idx = state.messages.indices.reversed().first(where: {
                 state.messages[$0].role == .assistant && state.messages[$0].isStreaming
             }) {

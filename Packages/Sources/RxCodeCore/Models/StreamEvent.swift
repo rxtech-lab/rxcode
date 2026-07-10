@@ -36,13 +36,24 @@ public struct SystemEvent: Sendable {
     public let tools: [String]?
     public let model: String?
     public let claudeCodeVersion: String?
+    /// Background-task id for `task_started` / `task_updated` / `task_notification`
+    /// system events. Recent Claude Code runs long tasks (background shells,
+    /// subagents) as "backend agents" that outlive the turn that spawned them.
+    public let taskId: String?
+    /// Normalized status for a background-task event: the top-level `status`
+    /// (task_notification) or `patch.status` (task_updated). Nil for
+    /// `task_started` (which has no status and means "running").
+    public let taskStatus: String?
 
-    public init(subtype: String, sessionId: String?, tools: [String]?, model: String?, claudeCodeVersion: String?) {
+    public init(subtype: String, sessionId: String?, tools: [String]?, model: String?,
+                claudeCodeVersion: String?, taskId: String? = nil, taskStatus: String? = nil) {
         self.subtype = subtype
         self.sessionId = sessionId
         self.tools = tools
         self.model = model
         self.claudeCodeVersion = claudeCodeVersion
+        self.taskId = taskId
+        self.taskStatus = taskStatus
     }
 }
 
@@ -134,9 +145,21 @@ public struct ResultEvent: Sendable {
     public let totalTurns: Int?
     public let usage: UsageInfo?
     public let contextWindow: ContextWindowInfo?
+    /// `origin.kind` from the CLI's `result` message. Recent Claude Code emits
+    /// autonomous follow-up results for background/"backend agent" work tagged
+    /// `origin.kind == "task-notification"`. A user-driven turn's own result has
+    /// no origin (or a non-task-notification kind). See `isTaskNotification`.
+    public let originKind: String?
+
+    /// True when this result is an autonomous background follow-up rather than
+    /// the end of the user's turn. Such results must NOT tear down the turn
+    /// (keep streaming, keep the process alive). Mirrors `claude-agent-acp`'s
+    /// `message.origin?.kind === "task-notification"` gate.
+    public var isTaskNotification: Bool { originKind == "task-notification" }
 
     public init(durationMs: Double?, totalCostUsd: Double?, sessionId: String, isError: Bool,
-                totalTurns: Int?, usage: UsageInfo?, contextWindow: ContextWindowInfo?) {
+                totalTurns: Int?, usage: UsageInfo?, contextWindow: ContextWindowInfo?,
+                originKind: String? = nil) {
         self.durationMs = durationMs
         self.totalCostUsd = totalCostUsd
         self.sessionId = sessionId
@@ -144,6 +167,7 @@ public struct ResultEvent: Sendable {
         self.totalTurns = totalTurns
         self.usage = usage
         self.contextWindow = contextWindow
+        self.originKind = originKind
     }
 }
 

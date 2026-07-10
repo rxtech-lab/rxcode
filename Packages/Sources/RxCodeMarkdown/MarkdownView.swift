@@ -112,14 +112,32 @@ final class MarkdownParseCache: @unchecked Sendable {
     func document(for text: String, cacheable: Bool) -> MarkdownDocument {
         let cost = text.utf8.count
         guard cacheable, cost <= maxCacheableTextBytes else {
-            return MarkdownDocumentParser.parse(text)
+            PerformanceDiagnostics.increment(
+                cacheable ? "markdown.cache.skipped_large" : "markdown.cache.skipped_live"
+            )
+            return parseMeasured(text, cost: cost)
         }
         let key = text as NSString
         if let box = cache.object(forKey: key) {
+            PerformanceDiagnostics.increment("markdown.cache.hit")
             return box.document
         }
-        let parsed = MarkdownDocumentParser.parse(text)
+        PerformanceDiagnostics.increment("markdown.cache.miss")
+        let parsed = parseMeasured(text, cost: cost)
         cache.setObject(Box(parsed), forKey: key, cost: cost)
+        return parsed
+    }
+
+    private func parseMeasured(_ text: String, cost: Int) -> MarkdownDocument {
+        let clock = ContinuousClock()
+        let start = clock.now
+        let parsed = MarkdownDocumentParser.parse(text)
+        let elapsed = start.duration(to: clock.now).components
+        let milliseconds = Double(elapsed.seconds) * 1_000
+            + Double(elapsed.attoseconds) / 1_000_000_000_000_000
+        PerformanceDiagnostics.increment("markdown.parse.total")
+        PerformanceDiagnostics.record("markdown.parse.input_bytes", value: Double(cost))
+        PerformanceDiagnostics.record("markdown.parse.duration_ms", value: milliseconds)
         return parsed
     }
 }

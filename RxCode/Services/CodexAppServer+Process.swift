@@ -64,9 +64,20 @@ extension CodexAppServer {
         logger.info("[CodexAppServer] launch start stream=\(streamId) cwd=\(cwd ?? "<nil>", privacy: .public) overrides=\(configOverrides.count)")
         let process = Process()
         process.executableURL = URL(fileURLWithPath: binary)
-        process.arguments = ["app-server", "--listen", "stdio://"] + configOverrides
+        let env = await resolvedEnvironment()
+        var arguments = ["app-server", "--listen", "stdio://"] + configOverrides
+        // Recent Codex routes tool execution (terminal commands, apply_patch)
+        // through a separate `codex-code-mode-host` sidecar binary. The Homebrew
+        // Cask ships only the main `codex` binary, so the sidecar is missing and
+        // every edit/command fails with "code-mode host ... No such file". When we
+        // can't locate the sidecar, disable the feature so execution runs directly.
+        if !Self.codeModeHostAvailable(binary: binary, path: env["PATH"]) {
+            arguments += ["-c", "features.code_mode_host=false"]
+            logger.warning("[CodexAppServer] codex-code-mode-host sidecar not found; disabling code_mode_host feature so tool execution runs directly")
+        }
+        process.arguments = arguments
         if let cwd { process.currentDirectoryURL = URL(fileURLWithPath: cwd) }
-        process.environment = await resolvedEnvironment()
+        process.environment = env
 
         let stdin = Pipe()
         let stdout = Pipe()
@@ -99,6 +110,39 @@ extension CodexAppServer {
 
     func appendStderr(_ text: String, streamId: UUID) {
         stderrBuffers[streamId, default: ""] += text
+    }
+
+    /// Whether the `codex-code-mode-host` sidecar (spawned by Codex for tool
+    /// execution when the `code_mode_host` feature is on) can be located. Mirrors
+    /// how Codex resolves it: the `CODEX_CODE_MODE_HOST_PATH` env override, a
+    /// sibling of the `codex` binary (and of its symlink target — the Homebrew
+    /// symlink dir differs from the Caskroom target dir), or the shell `PATH`.
+    static func codeModeHostAvailable(binary: String, path: String?) -> Bool {
+        let fm = FileManager.default
+        let hostName = "codex-code-mode-host"
+
+        if let explicit = ProcessInfo.processInfo.environment["CODEX_CODE_MODE_HOST_PATH"],
+           !explicit.isEmpty, fm.isExecutableFile(atPath: explicit) {
+            return true
+        }
+
+        let binaryDir = (binary as NSString).deletingLastPathComponent
+        let resolvedDir = ((binary as NSString).resolvingSymlinksInPath as NSString).deletingLastPathComponent
+        for dir in [binaryDir, resolvedDir] where !dir.isEmpty {
+            if fm.isExecutableFile(atPath: (dir as NSString).appendingPathComponent(hostName)) {
+                return true
+            }
+        }
+
+        if let path, !path.isEmpty {
+            for dir in path.split(separator: ":") where !dir.isEmpty {
+                if fm.isExecutableFile(atPath: (String(dir) as NSString).appendingPathComponent(hostName)) {
+                    return true
+                }
+            }
+        }
+
+        return false
     }
 
     func findNvmCodexBinary(root: String) -> String? {

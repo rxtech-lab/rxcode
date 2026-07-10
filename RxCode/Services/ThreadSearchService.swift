@@ -25,6 +25,11 @@ actor ThreadSearchService {
         let hits: [Hit]
     }
 
+    struct DiagnosticStats: Sendable, Equatable {
+        let threadCount: Int
+        let chunkCount: Int
+    }
+
     /// Literal substring match inside the currently-open thread. Distinct from
     /// `Hit` because we surface the matched message rather than a cosine-ranked
     /// chunk, and we keep the surrounding text window so the overlay can
@@ -66,6 +71,13 @@ actor ThreadSearchService {
     private var workspaceDefaults = WorkspaceDefaults(workspaceID: AppWorkspace.personalID)
 
     init() {}
+
+    func diagnosticStats() -> DiagnosticStats {
+        DiagnosticStats(
+            threadCount: index.count,
+            chunkCount: index.values.reduce(0) { $0 + $1.count }
+        )
+    }
 
     func setWorkspaceDefaults(_ defaults: WorkspaceDefaults) async {
         workspaceDefaults = defaults

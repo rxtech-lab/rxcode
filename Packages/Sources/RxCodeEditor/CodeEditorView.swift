@@ -72,6 +72,20 @@ public struct CodeEditorView: NSViewRepresentable {
         return scrollView
     }
 
+    public static func dismantleNSView(_ nsView: NSScrollView, coordinator: Coordinator) {
+        guard let textView = nsView.documentView as? CompletionTextView else { return }
+        if textView.window?.firstResponder === textView {
+            textView.window?.makeFirstResponder(nil)
+        }
+        textView.delegate = nil
+        textView.completionRangeProvider = nil
+        textView.completionRangeOverride = nil
+        textView.undoManager?.removeAllActions(withTarget: textView)
+        textView.allowsUndo = false
+        coordinator.textView = nil
+        nsView.documentView = nil
+    }
+
     public func updateNSView(_ scrollView: NSScrollView, context: Context) {
         context.coordinator.parent = self
         guard let textView = context.coordinator.textView else { return }

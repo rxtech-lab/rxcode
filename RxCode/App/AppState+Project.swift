@@ -128,6 +128,20 @@ extension AppState {
             state.model = session.model
             state.effort = session.effort
             state.permissionMode = session.permissionMode
+            // Seed the per-provider native-id map. Legacy threads (created before
+            // per-provider ids) have no map: the thread id is the persisted
+            // provider's own native session id, so record and persist that so a
+            // later provider switch can tell which provider owns the thread id.
+            var seededProviderIds = threadStore.providerSessionIds(forLocalId: session.id)
+            if seededProviderIds.isEmpty {
+                seededProviderIds[session.agentProvider.rawValue] = session.id
+                threadStore.setProviderSessionId(
+                    localId: session.id,
+                    providerRaw: session.agentProvider.rawValue,
+                    nativeId: session.id
+                )
+            }
+            state.providerSessionIds = seededProviderIds
             if let msgs = loadedMessages {
                 state.messages = messagesWithPersistedHookCard(cleanLoadedMessages(msgs), sessionId: session.id)
                 state.planDecisionSummaries = threadStore.loadPlanDecisions(sessionId: session.id)

@@ -243,6 +243,108 @@ final class CrossProjectSendConcurrencyTests: XCTestCase {
         XCTAssertLessThan(elapsed, 0.05, "session-rename waiter took \(elapsed)s — should be near-instant")
     }
 
+    // MARK: - Provider-native session ids
+
+    /// When a user switches providers inside an existing thread, the new provider
+    /// reports its own native session id. That id must be recorded for resume, but
+    /// it must not replace the app's local thread id or the foreground window jumps
+    /// to a state bucket with no messages.
+    func testSwitchedProviderNativeSessionIdDoesNotReplaceLocalThreadId() async throws {
+        let project = makeProject("provider-switch")
+        appState.projects = [project]
+
+        let localThreadId = "claude-thread-\(UUID().uuidString)"
+        let codexNativeId = "codex-native-\(UUID().uuidString)"
+        let window = WindowState()
+        window.selectedProject = project
+        window.currentSessionId = localThreadId
+        window.sessionAgentProvider = .codex
+        window.sessionModel = "gpt-5"
+
+        var state = SessionStreamState()
+        state.agentProvider = .codex
+        state.model = "gpt-5"
+        state.providerSessionIds = [AgentProvider.claudeCode.rawValue: localThreadId]
+        state.messages = [ChatMessage(role: .user, content: "previous Claude turn")]
+        appState.sessionStates[localThreadId] = state
+
+        await mockBackend.enqueueScript(
+            [
+                .systemInit(sessionId: codexNativeId, delay: 0.01),
+                .assistantText("Codex reply", delay: 0.01),
+                .result(sessionId: codexNativeId, delay: 0.01),
+            ],
+            forCwd: project.path
+        )
+
+        let maybeStreamId = await appState.sendPrompt("continue with Codex", in: window)
+        let streamId = try XCTUnwrap(maybeStreamId)
+        _ = await appState.awaitStreamCompletion(streamId: streamId, timeout: 5, acceptsPartial: false)
+
+        XCTAssertEqual(window.currentSessionId, localThreadId)
+        XCTAssertFalse(appState.stateForSession(localThreadId).isStreaming)
+        XCTAssertNil(appState.sessionStates[codexNativeId])
+        XCTAssertEqual(
+            appState.stateForSession(localThreadId).providerSessionIds[AgentProvider.codex.rawValue],
+            codexNativeId
+        )
+        XCTAssertTrue(
+            appState.stateForSession(localThreadId).messages.contains { $0.role == .assistant },
+            "Assistant reply should remain attached to the local thread"
+        )
+    }
+
+    func testExistingCrossProjectThreadUsesStoredProviderNativeSessionId() async throws {
+        let project = makeProject("existing-provider-thread")
+        appState.projects = [project]
+
+        let localThreadId = "local-thread-\(UUID().uuidString)"
+        let codexNativeId = "codex-native-\(UUID().uuidString)"
+        let summary = ChatSession.Summary(
+            id: localThreadId,
+            projectId: project.id,
+            title: "Codex thread",
+            createdAt: Date(),
+            updatedAt: Date(),
+            isPinned: false,
+            agentProvider: .codex,
+            model: "gpt-5.4",
+            origin: .codexAppServer
+        )
+        appState.allSessionSummaries = [summary]
+        appState.threadStore.upsert(summary)
+        appState.threadStore.setProviderSessionId(
+            localId: localThreadId,
+            providerRaw: AgentProvider.codex.rawValue,
+            nativeId: codexNativeId
+        )
+
+        await mockBackend.enqueueScript(
+            [
+                .systemInit(sessionId: codexNativeId, delay: 0.01),
+                .assistantText("existing Codex reply", delay: 0.01),
+                .result(sessionId: codexNativeId, delay: 0.01),
+            ],
+            forCwd: project.path
+        )
+
+        let result = try await appState.sendCrossProject(
+            projectId: nil,
+            threadId: localThreadId,
+            prompt: "continue existing Codex thread",
+            waitForResponse: true,
+            timeoutSeconds: 5
+        )
+
+        let requests = await mockBackend.receivedRequests
+        let request = try XCTUnwrap(requests.last)
+        XCTAssertEqual(request.sessionId, codexNativeId)
+        XCTAssertEqual(request.model, "gpt-5.4")
+        XCTAssertEqual(appState.stateForSession(localThreadId).agentProvider, .codex)
+        XCTAssertEqual(result.threadId, localThreadId)
+        XCTAssertTrue(result.done)
+    }
+
     // MARK: - Helpers
 
     private func makeProject(_ name: String) -> Project {

@@ -44,6 +44,13 @@ extension SystemEvent: Decodable {
         case tools
         case model
         case claudeCodeVersion = "claude_code_version"
+        case taskId = "task_id"
+        case status
+        case patch
+    }
+
+    private enum PatchCodingKeys: String, CodingKey {
+        case status
     }
 
     public init(from decoder: Decoder) throws {
@@ -53,6 +60,16 @@ extension SystemEvent: Decodable {
         self.tools = try container.decodeIfPresent([String].self, forKey: .tools)
         self.model = try container.decodeIfPresent(String.self, forKey: .model)
         self.claudeCodeVersion = try container.decodeIfPresent(String.self, forKey: .claudeCodeVersion)
+        self.taskId = try container.decodeIfPresent(String.self, forKey: .taskId)
+        // Background-task status lives at the top level (task_notification) or
+        // nested under `patch` (task_updated). task_started carries neither.
+        if let status = try container.decodeIfPresent(String.self, forKey: .status) {
+            self.taskStatus = status
+        } else if let patch = try? container.nestedContainer(keyedBy: PatchCodingKeys.self, forKey: .patch) {
+            self.taskStatus = try patch.decodeIfPresent(String.self, forKey: .status)
+        } else {
+            self.taskStatus = nil
+        }
     }
 }
 
@@ -211,6 +228,11 @@ extension ResultEvent: Decodable {
         case totalTurns = "total_turns"
         case usage
         case contextWindow = "context_window"
+        case origin
+    }
+
+    private enum OriginCodingKeys: String, CodingKey {
+        case kind
     }
 
     public init(from decoder: Decoder) throws {
@@ -222,6 +244,13 @@ extension ResultEvent: Decodable {
         self.totalTurns = try container.decodeIfPresent(Int.self, forKey: .totalTurns)
         self.usage = try container.decodeIfPresent(UsageInfo.self, forKey: .usage)
         self.contextWindow = try container.decodeIfPresent(ContextWindowInfo.self, forKey: .contextWindow)
+        // Recent Claude Code tags autonomous background follow-up results with
+        // `origin: { "kind": "task-notification" }`. Absent on user-turn results.
+        if let originContainer = try? container.nestedContainer(keyedBy: OriginCodingKeys.self, forKey: .origin) {
+            self.originKind = try originContainer.decodeIfPresent(String.self, forKey: .kind)
+        } else {
+            self.originKind = nil
+        }
     }
 }
 

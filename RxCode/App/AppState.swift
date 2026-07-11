@@ -35,6 +35,14 @@ struct SessionStreamState {
     var streamTask: Task<Void, Never>?
     var hasUncheckedCompletion = false
 
+    /// Live background-task ids ("backend agents": background shells, subagents)
+    /// this session has spawned that have not yet reported completion. Recent
+    /// Claude Code ends the spawning turn with a `result` while these keep
+    /// running, then autonomously runs a follow-up turn when they finish. While
+    /// this set is non-empty we keep the CLI process alive and the UI "in
+    /// progress" instead of tearing the turn down on that yield `result`.
+    var liveBackgroundTaskIds: Set<String> = []
+
     /// Last time any stream event (system / assistant / tool result / etc.) arrived
     /// for the active stream. Updated in `processStream` and polled by the
     /// inactivity watchdog so a CLI that goes silent without exiting (broken pipe

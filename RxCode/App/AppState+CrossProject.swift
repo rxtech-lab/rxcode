@@ -36,221 +36,25 @@ extension AppState {
         var sessionKey = internalSessionKey
 
         // Resolve per-backend send-request fields (MCP injection, ACP client
-        // spec, model split) before dispatching through the unified protocol.
-        var mcpClaudeConfigPath: String? = nil
-        var extraSystemPrompt: String? = nil
-        var mcpCodexOverrides: [String] = []
-        var acpMCPServers: [JSONValue] = []
-        var acpSpec: ACPClientSpec? = nil
-        var resolvedPrompt = prompt
-        var resolvedModel: String? = model
-        var resolvedSendMode: PermissionMode = permissionMode
-        var earlyStream: AsyncStream<StreamEvent>? = nil
-
-        func appendExtraSystemPrompt(_ context: String) {
-            let trimmed = context.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { return }
-            if let existing = extraSystemPrompt, !existing.isEmpty {
-                extraSystemPrompt = "\(existing)\n\n\(trimmed)"
-            } else {
-                extraSystemPrompt = trimmed
-            }
-        }
-
-        // Kick off the expensive, independent pre-spawn work concurrently.
-        // Memory lookup, git branch + briefing, IDE-MCP port allocation, and
-        // skill-context resolution all hop off MainActor and previously ran
-        // stacked serially — pushing the first stream event well after the
-        // user pressed send. Each `async let` starts immediately and is only
-        // joined when its value is read below.
-        //
-        // Snapshot the MainActor flags into locals first: `async let` evaluates
-        // the right-hand side in a nonisolated autoclosure, so it can't read
-        // `memoryEnabled` / `memoryInjectEnabled` / `memoryMaxContextItems`
-        // directly. The local `let` capture solves both isolation and the
-        // "captured var" warning for `sessionKey`.
-        let memoryActive = memoryEnabled && memoryInjectEnabled
-        let memoryLimit = memoryMaxContextItems
-        let memoryMode = memoryRetrievalMode
-        let memoryMinScore = memoryInjectionScoreThreshold
-        let capturedSessionKey = sessionKey
-        let memoryService = self.memoryService
-        let marketplace = self.marketplace
-        let ideMCPServer = self.ideMCPServer
-        let shouldIncludeIDEMCP = includeIDEMCP
-
-        func logPreflight(_ label: String, detail: String = "") {
-            let elapsed = Date().timeIntervalSince(streamStart)
-            if detail.isEmpty {
-                logger.info("[Stream:UI] preflight \(label, privacy: .public) stream=\(streamId) after=\(String(format: "%.2f", elapsed), privacy: .public)s")
-            } else {
-                logger.info("[Stream:UI] preflight \(label, privacy: .public) stream=\(streamId) after=\(String(format: "%.2f", elapsed), privacy: .public)s \(detail, privacy: .public)")
-            }
-        }
-
-        async let memoryHitsAsync = memoryActive
-            ? await memoryService.search(
-                prompt,
-                projectId: projectId,
-                limit: memoryLimit,
-                minScore: memoryMinScore
-            )
-            : []
-        async let currentBranchAsync = GitHelper.currentBranch(at: cwd)
-        async let idePortAsync: UInt16? = shouldIncludeIDEMCP
-            ? ideMCPServer.allocate(
-                sessionKey: capturedSessionKey,
-                capabilities: agentProvider.staticCapabilities
-            )
-            : nil
-        async let skillContextAsync: String? = marketplace.promptContext(for: agentProvider)
-        async let codexSkillOverridesAsync: [String] = shouldIncludeIDEMCP && agentProvider == .codex
-            ? await marketplace.codexConfigOverrides()
-            : []
-
-        let resolvedMemoryContext: String
-        let memoryHitCount: Int
-        if memoryActive {
-            let hits = await memoryHitsAsync
-            memoryHitCount = hits.count
-            resolvedMemoryContext = memoryContextSystemPrompt(relatedHits: hits)
-        } else {
-            memoryHitCount = 0
-            resolvedMemoryContext = ""
-        }
-        logPreflight(
-            "memory",
-            detail: "enabled=\(memoryActive) mode=\(memoryMode.title) minScore=\(String(format: "%.2f", memoryMinScore)) hits=\(memoryHitCount) contextChars=\(resolvedMemoryContext.count)"
+        // spec, model split, background context) concurrently before dispatching
+        // through the unified protocol. See `resolveStreamPreflight`.
+        let preflight = await resolveStreamPreflight(
+            streamId: streamId,
+            prompt: prompt,
+            cwd: cwd,
+            cliSessionId: cliSessionId,
+            sessionKey: sessionKey,
+            agentProvider: agentProvider,
+            model: model,
+            permissionMode: permissionMode,
+            registerMode: registerMode,
+            projectId: projectId,
+            includeIDEMCP: includeIDEMCP,
+            streamStart: streamStart
         )
-
-        let branchBriefingContext: String
-        if let branch = await currentBranchAsync,
-           let briefing = threadStore.branchBriefingItem(projectId: projectId, branch: branch) {
-            branchBriefingContext = Self.branchBriefingSystemPrompt(
-                branch: branch,
-                briefing: briefing.briefing
-            )
-            logPreflight("branchBriefing", detail: "branch=\(branch) contextChars=\(branchBriefingContext.count)")
-        } else {
-            branchBriefingContext = ""
-            logPreflight("branchBriefing", detail: "contextChars=0")
-        }
-
-        // The IDE-MCP port is provider-agnostic at allocation time — the
-        // bridge command is built from the port. Per-backend MCP config
-        // writes still happen serially after this since they consume the
-        // bridge, but they no longer block memory/git/skill resolution.
-        let idePort = await idePortAsync
-        let bridge = idePort.map { IDEMCPServer.bridgeCommand(forPort: $0) }
-        logPreflight(
-            "ideMCP",
-            detail: "enabled=\(shouldIncludeIDEMCP) port=\(idePort.map(String.init) ?? "<nil>")"
-        )
-
-        // Session-start hooks fire once, only for a brand-new thread (no resumed
-        // CLI session). Their stdout is injected into this turn's agent context
-        // the same way the branch briefing / memory context is, and the status
-        // cards inserted by UserAddedHook persist via the `.result` save.
-        //
-        // Project-new-chat hooks update passive banners and are driven by the
-        // visible chat views. Keep them out of this preflight path: awaiting
-        // network-backed banner checks here delays the first backend event.
-        var hookStartContext = ""
-        if cliSessionId == nil, let project = projects.first(where: { $0.id == projectId }) {
-            hookStartContext = await hookManager.dispatchSessionStart(
-                SessionStartPayload(project: project, sessionKey: sessionKey)
-            ).combinedOutput
-            logPreflight("hooksStart", detail: "contextChars=\(hookStartContext.count)")
-        }
-
-        switch agentProvider {
-        case .claudeCode:
-            mcpClaudeConfigPath = await mcp.writeClaudeConfig(projectPath: cwd, bridgeCommand: bridge)
-            logPreflight("claudeMCP", detail: "hasConfig=\(mcpClaudeConfigPath != nil)")
-            // Surface the accumulated briefing for the project's current branch
-            // to the agent as background context via `--append-system-prompt`.
-            appendExtraSystemPrompt(branchBriefingContext)
-            appendExtraSystemPrompt(resolvedMemoryContext)
-            appendExtraSystemPrompt(hookStartContext)
-            if let skillContext = await skillContextAsync {
-                logPreflight("skillContext", detail: "chars=\(skillContext.count)")
-                appendExtraSystemPrompt(skillContext)
-            } else {
-                logPreflight("skillContext", detail: "chars=0")
-            }
-        case .codex:
-            mcpCodexOverrides = await mcp.codexConfigOverrides(
-                projectPath: cwd,
-                bridgeCommand: bridge,
-                disableAllServers: !shouldIncludeIDEMCP
-            )
-            if !shouldIncludeIDEMCP {
-                mcpCodexOverrides += ["--disable", "plugins"]
-            }
-            logPreflight(
-                "codexMCP",
-                detail: "args=\(mcpCodexOverrides.count) disabledAll=\(!shouldIncludeIDEMCP)"
-            )
-            let codexSkillOverrides = await codexSkillOverridesAsync
-            logPreflight("codexSkillOverrides", detail: "args=\(codexSkillOverrides.count)")
-            mcpCodexOverrides += codexSkillOverrides
-            resolvedPrompt = Self.promptWithBackgroundContext(
-                [branchBriefingContext, resolvedMemoryContext, hookStartContext],
-                prompt: resolvedPrompt
-            )
-            if let skillContext = await skillContextAsync {
-                logPreflight("skillContext", detail: "chars=\(skillContext.count)")
-                resolvedPrompt = "\(skillContext)\n\nUser request:\n\(resolvedPrompt)"
-            } else {
-                logPreflight("skillContext", detail: "chars=0")
-            }
-            resolvedSendMode = registerMode
-        case .acp:
-            acpMCPServers = await mcp.acpMCPServers(
-                projectPath: cwd,
-                bridgeCommand: bridge
-            )
-            logPreflight("acpMCP", detail: "servers=\(acpMCPServers.count)")
-            resolvedPrompt = Self.promptWithBackgroundContext(
-                [branchBriefingContext, resolvedMemoryContext, hookStartContext],
-                prompt: resolvedPrompt
-            )
-            if let skillContext = await skillContextAsync {
-                logPreflight("skillContext", detail: "chars=\(skillContext.count)")
-                resolvedPrompt = "\(skillContext)\n\nUser request:\n\(resolvedPrompt)"
-            } else {
-                logPreflight("skillContext", detail: "chars=0")
-            }
-            // `model` may be a composite `<clientId>::<model>` key (from the picker)
-            // or a bare model id (from a per-session override).
-            let split = acpSelectionParts(for: model)
-            let resolvedClientId = split?.clientId
-                ?? sessionStates[sessionKey]?.acpClientId
-                ?? selectedACPClientId
-            resolvedModel = split?.model ?? model
-            resolvedSendMode = registerMode
-            if let spec = acpClients.first(where: { $0.id == resolvedClientId && $0.enabled }) {
-                acpSpec = spec
-            } else {
-                logger.error("[ACP] no enabled client for id=\(resolvedClientId, privacy: .public)")
-                earlyStream = AsyncStream<StreamEvent> { c in
-                    c.yield(.user(UserMessage(
-                        toolUseId: nil,
-                        content: "No ACP client configured. Add one in Settings → ACP Clients.",
-                        isError: true
-                    )))
-                    c.yield(.result(ResultEvent(
-                        durationMs: nil, totalCostUsd: nil,
-                        sessionId: cliSessionId ?? sessionKey,
-                        isError: true, totalTurns: nil, usage: nil, contextWindow: nil
-                    )))
-                    c.finish()
-                }
-            }
-        }
 
         let stream: AsyncStream<StreamEvent>
-        if let earlyStream {
+        if let earlyStream = preflight.earlyStream {
             stream = earlyStream
         } else {
             let preflightElapsed = Date().timeIntervalSince(streamStart)
@@ -260,19 +64,19 @@ extension AppState {
             }
             let request = BackendSendRequest(
                 streamId: streamId,
-                prompt: resolvedPrompt,
+                prompt: preflight.resolvedPrompt,
                 cwd: cwd,
                 sessionId: cliSessionId,
-                model: resolvedModel,
+                model: preflight.resolvedModel,
                 effort: effort,
-                permissionMode: resolvedSendMode,
+                permissionMode: preflight.resolvedSendMode,
                 planMode: permissionMode == .plan,
                 hookSettingsPath: hookSettingsPath,
-                mcpClaudeConfigPath: mcpClaudeConfigPath,
-                extraSystemPrompt: extraSystemPrompt,
-                mcpCodexOverrides: mcpCodexOverrides,
-                acpMCPServers: acpMCPServers,
-                acpSpec: acpSpec,
+                mcpClaudeConfigPath: preflight.mcpClaudeConfigPath,
+                extraSystemPrompt: preflight.extraSystemPrompt,
+                mcpCodexOverrides: preflight.mcpCodexOverrides,
+                acpMCPServers: preflight.acpMCPServers,
+                acpSpec: preflight.acpSpec,
                 clientSessionKey: sessionKey
             )
             stream = await backend(for: agentProvider).send(request)
@@ -350,6 +154,28 @@ extension AppState {
                     logger.info("[Stream:UI] event #\(eventCount) .system (gap=\(String(format: "%.1f", gap))s)")
                     if let model = systemEvent.model {
                         updateState(sessionKey) { $0.activeModelName = model }
+                    }
+
+                    // Track background "backend agent" tasks so a `result` that
+                    // merely yields the turn while such a task is still running
+                    // doesn't tear the turn down (see the `.result` handler).
+                    if let taskId = systemEvent.taskId {
+                        let terminalStatuses: Set<String> = ["completed", "killed", "failed", "stopped", "canceled", "cancelled", "timeout", "error"]
+                        switch systemEvent.subtype {
+                        case "task_started":
+                            updateState(sessionKey) { $0.liveBackgroundTaskIds.insert(taskId) }
+                            logger.info("[Stream:UI] background task started id=\(taskId, privacy: .public) (live=\(self.stateForSession(sessionKey).liveBackgroundTaskIds.count))")
+                        case "task_notification":
+                            // A notification is always the task's terminal wake signal.
+                            updateState(sessionKey) { $0.liveBackgroundTaskIds.remove(taskId) }
+                            logger.info("[Stream:UI] background task notified id=\(taskId, privacy: .public) status=\(systemEvent.taskStatus ?? "?", privacy: .public) (live=\(self.stateForSession(sessionKey).liveBackgroundTaskIds.count))")
+                        case "task_updated":
+                            if let status = systemEvent.taskStatus, terminalStatuses.contains(status) {
+                                updateState(sessionKey) { $0.liveBackgroundTaskIds.remove(taskId) }
+                            }
+                        default:
+                            break
+                        }
                     }
                     // Hook events (SessionStart, PreToolUse, etc.) carry the parent's session_id,
                     // not this subprocess's. Acting on them flips currentSessionId mid-stream and
@@ -638,6 +464,34 @@ extension AppState {
                     if let debugLogPrefix {
                         let totalElapsed = Date().timeIntervalSince(streamStart)
                         logger.info("\(debugLogPrefix, privacy: .public) phase=resultEvent stream=\(streamId) eventCount=\(eventCount, privacy: .public) total=\(String(format: "%.2f", totalElapsed), privacy: .public)s gap=\(String(format: "%.1f", gap), privacy: .public)s isError=\(resultEvent.isError, privacy: .public) session=\(resultEvent.sessionId, privacy: .public)")
+                    }
+
+                    // Recent Claude Code runs long tasks (background shells, subagents) as
+                    // "backend agents". The turn that spawns one ends with a normal `result`
+                    // (`origin == null`, `stop_reason == end_turn`) WHILE the task is still
+                    // running; when it finishes the CLI autonomously runs a follow-up turn
+                    // (a fresh `init` + a `result` with `origin.kind == "task-notification"`).
+                    // If we tore the turn down on that yield `result` we'd close stdin — which
+                    // kills the still-running CLI/task and loses the follow-up — and flip the
+                    // UI to idle. So while any background task is still live, keep the process
+                    // alive and the UI "in progress"; only fold in this result's (real) cost.
+                    // The follow-up result arrives once tasks drain (set now empty) and takes
+                    // the normal end-of-turn path below.
+                    if !stateForSession(sessionKey).liveBackgroundTaskIds.isEmpty {
+                        let live = stateForSession(sessionKey).liveBackgroundTaskIds.count
+                        logger.info("[Stream:UI] event #\(eventCount) .result yields with \(live) live background task(s); keeping turn in progress (origin=\(resultEvent.originKind ?? "none", privacy: .public))")
+                        updateState(sessionKey) { state in
+                            if let cost = resultEvent.totalCostUsd { state.costUsd = cost }
+                            if let duration = resultEvent.durationMs { state.durationMs += duration }
+                            if let turns = resultEvent.totalTurns { state.turns += turns }
+                            if let usage = resultEvent.usage {
+                                state.inputTokens += usage.inputTokens
+                                state.outputTokens += usage.outputTokens
+                                state.cacheCreationTokens += usage.cacheCreationInputTokens
+                                state.cacheReadTokens += usage.cacheReadInputTokens
+                            }
+                        }
+                        break
                     }
 
                     // With `--input-format stream-json` the CLI stays alive waiting for more

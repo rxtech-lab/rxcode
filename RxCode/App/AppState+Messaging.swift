@@ -494,6 +494,7 @@ extension AppState {
             state.textDeltaBuffer = ""
             state.pendingToolResults.removeAll()
             state.lastStreamEventDate = nil
+            state.liveBackgroundTaskIds.removeAll()
 
             extraMutations?(&state)
 

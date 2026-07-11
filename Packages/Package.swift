@@ -20,6 +20,7 @@ let package = Package(
     targets: [
         .target(
             name: "MessageList",
+            dependencies: ["RxCodeCore"],
             path: "Sources/MessageList",
             swiftSettings: [
                 .defaultIsolation(MainActor.self),

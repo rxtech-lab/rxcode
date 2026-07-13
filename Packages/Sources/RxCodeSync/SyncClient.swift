@@ -258,15 +258,23 @@ public actor SyncClient: PeerManagerHost {
     /// schedule a renewal before it expires. No mapping ⇒ WAN-direct simply isn't
     /// offered and the relay carries traffic.
     private func refreshWANMapping() async {
+        guard !Task.isCancelled else { return }
         guard let port = await advertiser?.listeningPort() else { return }
+        guard !Task.isCancelled else { return }
         let mapping = await portMapper.requestMapping(internalPort: port)
+        guard !Task.isCancelled else { return }
         currentWANMapping = mapping
         wanRenewTask?.cancel()
         guard let mapping, mapping.lifetimeSeconds > 0 else { return }
         // Renew at half the granted lifetime.
         let renewAfter = max(60, Int(mapping.lifetimeSeconds) / 2)
         wanRenewTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(renewAfter) * 1_000_000_000)
+            do {
+                try await Task.sleep(nanoseconds: UInt64(renewAfter) * 1_000_000_000)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
             await self?.refreshWANMapping()
         }
     }

@@ -70,4 +70,55 @@ final class MemoryIntentTests: XCTestCase {
         XCTAssertTrue(prompt.contains("- id: memory-1\n  content: Always run make lint."))
         XCTAssertTrue(prompt.contains("If an existing memory should be refined, return an update operation with its id."))
     }
+
+    func testMemoryMCPConfigurationUsesLoopbackHTTPURL() throws {
+        let raw = try XCTUnwrap(
+            IDEMCPServer.memoryAPIConfiguration(port: IDEMCPServer.memoryAPIDefaultPort)
+        )
+        let data = try XCTUnwrap(raw.data(using: .utf8))
+        let root = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        let servers = try XCTUnwrap(root["mcpServers"] as? [String: Any])
+        let server = try XCTUnwrap(servers["rxcode"] as? [String: Any])
+
+        XCTAssertEqual(
+            server["url"] as? String,
+            "http://127.0.0.1:\(IDEMCPServer.memoryAPIDefaultPort)/mcp"
+        )
+        XCTAssertNil(server["command"])
+        XCTAssertNil(server["args"])
+    }
+
+    func testMemoryMCPEndpointRejectsReservedPort() {
+        XCTAssertEqual(
+            IDEMCPServer.memoryAPIEndpoint(port: IDEMCPServer.memoryAPIDefaultPort)?.absoluteString,
+            "http://127.0.0.1:19846/mcp"
+        )
+        XCTAssertNil(IDEMCPServer.memoryAPIEndpoint(port: 19847))
+    }
+
+    func testMemoryMCPPortValidationReservesChatListenerRange() {
+        XCTAssertTrue(IDEMCPServer.isValidMemoryAPIPort(IDEMCPServer.memoryAPIDefaultPort))
+        XCTAssertFalse(IDEMCPServer.isValidMemoryAPIPort(19847))
+        XCTAssertFalse(IDEMCPServer.isValidMemoryAPIPort(19946))
+        XCTAssertFalse(IDEMCPServer.isValidMemoryAPIPort(1023))
+    }
+
+    func testMCPServerToolSelectionRoundTripsInStableOrder() {
+        let selected: Set<MCPServerTool> = [.memoryUpdate, .memorySearch]
+
+        let storedValue = IDEMCPServer.storedValue(for: selected)
+
+        XCTAssertEqual(storedValue, "memory_search,memory_update")
+        XCTAssertEqual(IDEMCPServer.exposedTools(from: storedValue), selected)
+    }
+
+    func testMCPServerDefaultsExposeMemorySearchWithoutMemoryGet() {
+        let exposedTools = IDEMCPServer.exposedTools(from: nil)
+
+        XCTAssertEqual(exposedTools, Set(MCPServerTool.allCases))
+        XCTAssertTrue(exposedTools.contains(.memorySearch))
+        XCTAssertFalse(IDEMCPServer.defaultExposedToolsValue.contains("memory_get"))
+    }
 }

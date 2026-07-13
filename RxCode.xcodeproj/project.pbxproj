@@ -46,6 +46,7 @@
 		DF46526A2FCD34B3002D9562 /* JSONSchemaValidator in Frameworks */ = {isa = PBXBuildFile; productRef = DF4652692FCD34B3002D9562 /* JSONSchemaValidator */; };
 		DF46683A2FCDB56B002D9562 /* JSONSchemaForm in Frameworks */ = {isa = PBXBuildFile; productRef = DF4668392FCDB56B002D9562 /* JSONSchemaForm */; };
 		DF46683C2FCDB56B002D9562 /* JSONSchemaValidator in Frameworks */ = {isa = PBXBuildFile; productRef = DF46683B2FCDB56B002D9562 /* JSONSchemaValidator */; };
+		DF98F2373004F38B00BBB638 /* MCP in Frameworks */ = {isa = PBXBuildFile; productRef = DF98F2363004F38B00BBB638 /* MCP */; };
 		DFA0CCD12FB4CC01005991E1 /* PlanDecisionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA0CCC02FB4CC01005991E1 /* PlanDecisionTests.swift */; };
 		DFA0CCD22FB4CC01005991E1 /* PlanCardViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA0CCC12FB4CC01005991E1 /* PlanCardViewTests.swift */; };
 		DFA0CCD42FB4CC01005991E1 /* RxCodeChatKit in Frameworks */ = {isa = PBXBuildFile; productRef = DFA0CCC32FB4CC01005991E1 /* RxCodeChatKit */; };
@@ -324,6 +325,7 @@
 				DF462DCB2FC73FA8002D9562 /* RxAuthSwiftUI in Frameworks */,
 				E6D001072FA0000100000001 /* RxCodeSync in Frameworks */,
 				DF462A602FC6EDCE002D9562 /* RxAuthSwift in Frameworks */,
+				DF98F2373004F38B00BBB638 /* MCP in Frameworks */,
 				DF23FF1D2FBB42F7008929A6 /* WaterfallGrid in Frameworks */,
 				FB0000030000000000000001 /* FirebaseAnalytics in Frameworks */,
 				DF462DC92FC73FA8002D9562 /* RxAuthSwift in Frameworks */,
@@ -637,6 +639,7 @@
 				DF4652672FCD34B3002D9562 /* JSONSchemaForm */,
 				DF4652692FCD34B3002D9562 /* JSONSchemaValidator */,
 				DFAA00022FCD34B3002D9562 /* JSONSchema */,
+				DF98F2363004F38B00BBB638 /* MCP */,
 			);
 			productName = RxCode;
 			productReference = E67335382F7356F600FD26C7 /* RxCode.app */;
@@ -701,6 +704,7 @@
 				DF4652662FCD34B3002D9562 /* XCRemoteSwiftPackageReference "swift-jsonschema-form" */,
 				DFAA00032FCD34B3002D9562 /* XCRemoteSwiftPackageReference "swift-json-schema" */,
 				DFA8E3B22FD1A27F00F33E7F /* XCRemoteSwiftPackageReference "SDWebImageSVGCoder" */,
+				DF98F2353004F38B00BBB638 /* XCRemoteSwiftPackageReference "swift-sdk" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = E67335392F7356F600FD26C7 /* Products */;
@@ -1565,6 +1569,14 @@
 				kind = branch;
 			};
 		};
+		DF98F2353004F38B00BBB638 /* XCRemoteSwiftPackageReference "swift-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/modelcontextprotocol/swift-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.12.1;
+			};
+		};
 		DFA8E3B22FD1A27F00F33E7F /* XCRemoteSwiftPackageReference "SDWebImageSVGCoder" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/SDWebImage/SDWebImageSVGCoder";
@@ -1702,6 +1714,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = DF4652662FCD34B3002D9562 /* XCRemoteSwiftPackageReference "swift-jsonschema-form" */;
 			productName = JSONSchemaValidator;
+		};
+		DF98F2363004F38B00BBB638 /* MCP */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DF98F2353004F38B00BBB638 /* XCRemoteSwiftPackageReference "swift-sdk" */;
+			productName = MCP;
 		};
 		DFA0CCC32FB4CC01005991E1 /* RxCodeChatKit */ = {
 			isa = XCSwiftPackageProductDependency;

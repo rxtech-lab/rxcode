@@ -3297,6 +3297,9 @@
         }
       }
     },
+    "Choose which RxCode tools are available to other local MCP clients." : {
+
+    },
     "Choose…" : {
       "localizations" : {
         "ko" : {
@@ -6395,6 +6398,9 @@
         }
       }
     },
+    "Enable MCP Server" : {
+
+    },
     "Enable Memory" : {
       "localizations" : {
         "ko" : {
@@ -6410,6 +6416,9 @@
           }
         }
       }
+    },
+    "Enable Memory to start the MCP server." : {
+
     },
     "Enabled" : {
       "localizations" : {
@@ -6727,6 +6736,9 @@
           }
         }
       }
+    },
+    "Expose selected RxCode tools to other local MCP clients." : {
+
     },
     "Extra environment" : {
       "localizations" : {
@@ -8328,6 +8340,9 @@
         }
       }
     },
+    "Keep RxCode running while another MCP client uses this server. Ports 19847–19946 are reserved for chat sessions." : {
+
+    },
     "Keep summaries on the thread model, or route titles and briefings through an OpenAI-compatible endpoint." : {
       "localizations" : {
         "ko" : {
@@ -9165,6 +9180,9 @@
           }
         }
       }
+    },
+    "MCP Server" : {
+
     },
     "MCP server disconnected" : {
       "comment" : "Notification title when an MCP server transitions from connected to failed.",
@@ -10901,6 +10919,9 @@
         }
       }
     },
+    "Off" : {
+
+    },
     "Offline" : {
       "localizations" : {
         "ko" : {
@@ -11810,6 +11831,9 @@
           }
         }
       }
+    },
+    "Port" : {
+
     },
     "PR #%lld" : {
       "localizations" : {
@@ -13363,6 +13387,9 @@
         }
       }
     },
+    "Running" : {
+
+    },
     "Running swift build" : {
       "localizations" : {
         "ko" : {
@@ -14561,6 +14588,9 @@
         }
       }
     },
+    "Server stopped" : {
+
+    },
     "Servers" : {
       "localizations" : {
         "ko" : {
@@ -15675,6 +15705,9 @@
         }
       }
     },
+    "Streamable HTTP" : {
+
+    },
     "streaming stops" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -16439,6 +16472,9 @@
           }
         }
       }
+    },
+    "Tools to Expose" : {
+
     },
     "Transport" : {
       "localizations" : {

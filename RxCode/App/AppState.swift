@@ -454,6 +454,8 @@ final class AppState {
     }
 
     var memoryRevision = 0
+    var memoryMCPServerRunning = false
+    var memoryMCPServerError: String?
 
     // MARK: - Notifications
 

@@ -8,6 +8,22 @@ import SwiftUI
 extension AppState {
     // MARK: - Memory
 
+    func configureMemoryMCPServer(enabled: Bool, port: Int, exposedTools: Set<MCPServerTool>) async {
+        await core.memoryMCPServer.setHandler(self)
+        do {
+            try await core.memoryMCPServer.configureMemoryAPI(
+                enabled: enabled && memoryEnabled,
+                port: port,
+                exposedTools: exposedTools
+            )
+            memoryMCPServerRunning = enabled && memoryEnabled
+            memoryMCPServerError = nil
+        } catch {
+            memoryMCPServerRunning = false
+            memoryMCPServerError = error.localizedDescription
+        }
+    }
+
     func allMemoryItems() async -> [MemoryItem] {
         await memoryService.allMemories()
     }

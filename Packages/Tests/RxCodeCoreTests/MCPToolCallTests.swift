@@ -25,4 +25,12 @@ struct MCPToolCallTests {
         #expect(message.toolCalls.first?.isError == false)
         #expect(message.toolCalls.first?.result == "")
     }
+
+    @Test("Memory tools use search instead of a get-by-id tool")
+    func memoryToolsUseSearch() {
+        let names = Set(IDEToolRegistry.allTools.map(\.name))
+
+        #expect(names.contains("ide__memory_search"))
+        #expect(!names.contains("ide__memory_get"))
+    }
 }

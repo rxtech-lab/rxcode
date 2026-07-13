@@ -1,3 +1,4 @@
+import AppKit
 import RxCodeChatKit
 import RxCodeCore
 import SwiftUI
@@ -10,6 +11,10 @@ struct MemorySettingsSection: View {
 
     @State private var editingDraft: MemoryDraft?
     @State private var showMemoryBrowser = false
+    @State private var showMCPServerSettings = false
+    @AppStorage(IDEMCPServer.memoryAPIEnabledDefaultsKey) private var memoryMCPServerEnabled = false
+    @AppStorage(IDEMCPServer.memoryAPIPortDefaultsKey) private var memoryMCPServerPort = IDEMCPServer.memoryAPIDefaultPort
+    @AppStorage(IDEMCPServer.exposedToolsDefaultsKey) private var exposedMCPTools = IDEMCPServer.defaultExposedToolsValue
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -22,6 +27,29 @@ struct MemorySettingsSection: View {
         .sheet(isPresented: $showMemoryBrowser) {
             MemoryBrowserSheet()
                 .environment(appState)
+        }
+        .sheet(isPresented: $showMCPServerSettings) {
+            MCPServerSettingsSheet(
+                isEnabled: $memoryMCPServerEnabled,
+                port: $memoryMCPServerPort,
+                storedExposedTools: $exposedMCPTools
+            )
+            .environment(appState)
+        }
+        .task {
+            await configureMCPServer()
+        }
+        .onChange(of: memoryMCPServerEnabled) { _, _ in
+            Task { await configureMCPServer() }
+        }
+        .onChange(of: memoryMCPServerPort) { _, _ in
+            Task { await configureMCPServer() }
+        }
+        .onChange(of: exposedMCPTools) { _, _ in
+            Task { await configureMCPServer() }
+        }
+        .onChange(of: appState.memoryEnabled) { _, _ in
+            Task { await configureMCPServer() }
         }
     }
 
@@ -91,7 +119,201 @@ struct MemorySettingsSection: View {
             Text("Saved memory history is available from Manage.")
                 .font(.system(size: ClaudeTheme.size(11)))
                 .foregroundStyle(.secondary)
+
+            Divider()
+
+            memoryMCPServerSection
         }
+    }
+
+    private var memoryMCPServerSection: some View {
+        Button {
+            showMCPServerSettings = true
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "server.rack")
+                    .font(.system(size: ClaudeTheme.size(17)))
+                    .foregroundStyle(ClaudeTheme.accent)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("MCP Server")
+                        .font(.system(size: ClaudeTheme.size(13), weight: .medium))
+                    Text("Choose which RxCode tools are available to other local MCP clients.")
+                        .font(.system(size: ClaudeTheme.size(11)))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 8)
+
+                if appState.memoryMCPServerRunning {
+                    Text("Running")
+                        .foregroundStyle(.green)
+                } else {
+                    Text("Off")
+                        .foregroundStyle(.secondary)
+                }
+                Image(systemName: "chevron.right")
+                    .foregroundStyle(.tertiary)
+            }
+            .font(.system(size: ClaudeTheme.size(11)))
+            .padding(12)
+            .contentShape(Rectangle())
+            .background(Color.secondary.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func configureMCPServer() async {
+        await appState.configureMemoryMCPServer(
+            enabled: memoryMCPServerEnabled,
+            port: memoryMCPServerPort,
+            exposedTools: IDEMCPServer.exposedTools(from: exposedMCPTools)
+        )
+    }
+}
+
+struct MCPServerSettingsSheet: View {
+    @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
+
+    @Binding var isEnabled: Bool
+    @Binding var port: Int
+    @Binding var storedExposedTools: String
+
+    @State private var portDraft = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("MCP Server")
+                        .font(.system(size: ClaudeTheme.size(16), weight: .semibold))
+                    Text("Expose selected RxCode tools to other local MCP clients.")
+                        .font(.system(size: ClaudeTheme.size(11)))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Done") { dismiss() }
+                    .keyboardShortcut(.defaultAction)
+            }
+
+            HStack {
+                Text("Enable MCP Server")
+                    .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+                Spacer(minLength: 12)
+                Toggle("", isOn: $isEnabled)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+            }
+            .disabled(!appState.memoryEnabled)
+
+            if !appState.memoryEnabled {
+                Label("Enable Memory to start the MCP server.", systemImage: "pause.circle")
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(.secondary)
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Tools to Expose")
+                    .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
+
+                ForEach(MCPServerTool.allCases) { tool in
+                    HStack(alignment: .center, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(tool.title)
+                                .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+                            Text(tool.summary)
+                                .font(.system(size: ClaudeTheme.size(11)))
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        Spacer(minLength: 12)
+
+                        Toggle("", isOn: binding(for: tool))
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Text("Port")
+                        .font(.system(size: ClaudeTheme.size(12)))
+                        .foregroundStyle(.secondary)
+                    TextField("Port", text: $portDraft)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 90)
+                        .onSubmit { applyPort() }
+                    Button("Apply") { applyPort() }
+                        .disabled(parsedPort == nil || parsedPort == port)
+                    Spacer()
+                }
+
+                serverStatus
+
+                Text("Keep RxCode running while another MCP client uses this server. Ports 19847–19946 are reserved for chat sessions.")
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(20)
+        .frame(width: 560)
+        .task { portDraft = String(port) }
+        .onChange(of: port) { _, newValue in
+            portDraft = String(newValue)
+        }
+    }
+
+    @ViewBuilder
+    private var serverStatus: some View {
+        if let error = appState.memoryMCPServerError {
+            Label(error, systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(.red)
+        } else if appState.memoryMCPServerRunning {
+            Label(
+                "Running on 127.0.0.1:\(port, format: .number.grouping(.never))",
+                systemImage: "checkmark.circle.fill"
+            )
+                .foregroundStyle(.green)
+        } else {
+            Label("Server stopped", systemImage: "circle")
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var parsedPort: Int? {
+        guard let value = Int(portDraft), IDEMCPServer.isValidMemoryAPIPort(value) else { return nil }
+        return value
+    }
+
+    private func binding(for tool: MCPServerTool) -> Binding<Bool> {
+        Binding(
+            get: { IDEMCPServer.exposedTools(from: storedExposedTools).contains(tool) },
+            set: { isSelected in
+                var tools = IDEMCPServer.exposedTools(from: storedExposedTools)
+                if isSelected {
+                    tools.insert(tool)
+                } else {
+                    tools.remove(tool)
+                }
+                storedExposedTools = IDEMCPServer.storedValue(for: tools)
+            }
+        )
+    }
+
+    private func applyPort() {
+        guard let parsedPort else { return }
+        port = parsedPort
     }
 }
 

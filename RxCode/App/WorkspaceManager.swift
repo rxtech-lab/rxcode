@@ -48,6 +48,9 @@ final class WorkspaceManager {
         let workspace = snapshot.all.first { $0.id == workspaceID } ?? snapshot.active
         let appState = AppState(core: core, workspace: workspace)
         appStatesByWorkspaceID[workspace.id] = appState
+        if workspace.id == frontmostWorkspaceID {
+            bindMemoryMCPServer(to: appState)
+        }
         startPerformanceMonitorIfNeeded()
         return appState
     }
@@ -65,6 +68,24 @@ final class WorkspaceManager {
     func markFrontmost(_ workspaceID: String) {
         frontmostWorkspaceID = workspaceID
         transferMobileSyncOwnership(to: workspaceID)
+        bindMemoryMCPServer(to: appState(for: workspaceID))
+    }
+
+    private func bindMemoryMCPServer(to appState: AppState) {
+        let defaults = UserDefaults.standard
+        let enabled = defaults.bool(forKey: IDEMCPServer.memoryAPIEnabledDefaultsKey)
+        let savedPort = defaults.integer(forKey: IDEMCPServer.memoryAPIPortDefaultsKey)
+        let port = savedPort == 0 ? IDEMCPServer.memoryAPIDefaultPort : savedPort
+        let exposedTools = IDEMCPServer.exposedTools(
+            from: defaults.string(forKey: IDEMCPServer.exposedToolsDefaultsKey)
+        )
+        Task {
+            await appState.configureMemoryMCPServer(
+                enabled: enabled,
+                port: port,
+                exposedTools: exposedTools
+            )
+        }
     }
 
     /// Hand mobile-sync ownership to `workspaceID`, tearing it down on the

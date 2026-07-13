@@ -3,6 +3,42 @@ import Network
 import RxCodeCore
 import os
 
+nonisolated enum MCPServerTool: String, CaseIterable, Identifiable, Sendable {
+    case memorySearch = "memory_search"
+    case memoryCreate = "memory_create"
+    case memoryUpdate = "memory_update"
+    case memoryDelete = "memory_delete"
+
+    var id: String { rawValue }
+
+    var internalName: String {
+        switch self {
+        case .memorySearch: "ide__memory_search"
+        case .memoryCreate: "ide__memory_add"
+        case .memoryUpdate: "ide__memory_update"
+        case .memoryDelete: "ide__memory_delete"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .memorySearch: "Memory Search"
+        case .memoryCreate: "Memory Create"
+        case .memoryUpdate: "Memory Update"
+        case .memoryDelete: "Memory Delete"
+        }
+    }
+
+    var summary: String {
+        switch self {
+        case .memorySearch: "Search saved memories and retrieve matching preferences, facts, and decisions."
+        case .memoryCreate: "Create new durable memories."
+        case .memoryUpdate: "Update existing durable memories."
+        case .memoryDelete: "Delete durable memories."
+        }
+    }
+}
+
 /// Hosts a local MCP server that polyfills missing editor capabilities for
 /// agents whose native toolset lacks them (currently: ACP's `ask_user` /
 /// `todos`), and exposes always-IDE-only introspection (running jobs,
@@ -18,8 +54,19 @@ actor IDEMCPServer {
 
     private static let basePort: UInt16 = 19847
     private static let maxPort: UInt16 = 19946
+    static let memoryAPIDefaultPort = 19846
+    static let memoryAPIEnabledDefaultsKey = "memoryMCPServerEnabled"
+    static let memoryAPIPortDefaultsKey = "memoryMCPServerPort"
+    static let exposedToolsDefaultsKey = "memoryMCPServerExposedTools"
+    static let defaultExposedToolsValue = MCPServerTool.allCases.map(\.rawValue).joined(separator: ",")
     private static let messageMaxLength = 1 << 20  // 1 MiB
     private static let logger = Logger(subsystem: "com.claudework", category: "IDEMCPServer")
+    private static let memoryAPISessionKey = "rxcode-mcp-server"
+
+    private struct ToolExposure: Equatable, Sendable {
+        let publicName: String
+        let internalName: String
+    }
 
     // MARK: - Session State
 
@@ -30,7 +77,8 @@ actor IDEMCPServer {
         let listener: NWListener
         let sessionKey: String
         let capabilities: CapabilitySet
-        var connections: Set<UUID> = []
+        var toolExposures: [ToolExposure]?
+        var connections: [UUID: NWConnection] = [:]
     }
     private var allocations: [String: Allocation] = [:]
     /// Port → sessionKey, so connection accept can resolve back.
@@ -81,18 +129,12 @@ actor IDEMCPServer {
             if portIndex[candidate] != nil { continue }
             do {
                 let listener = try makeListener(port: candidate)
-                var alloc = Allocation(
-                    port: candidate,
-                    listener: listener,
-                    sessionKey: sessionKey,
-                    capabilities: capabilities
-                )
-                _ = alloc
                 allocations[sessionKey] = Allocation(
                     port: candidate,
                     listener: listener,
                     sessionKey: sessionKey,
-                    capabilities: capabilities
+                    capabilities: capabilities,
+                    toolExposures: nil
                 )
                 portIndex[candidate] = sessionKey
                 listener.newConnectionHandler = { [weak self] connection in
@@ -115,7 +157,105 @@ actor IDEMCPServer {
         guard let alloc = allocations.removeValue(forKey: sessionKey) else { return }
         portIndex.removeValue(forKey: alloc.port)
         alloc.listener.cancel()
-        Self.logger.info("[IDE] released port \(alloc.port) for session=\(sessionKey, privacy: .public)")
+        for connection in alloc.connections.values {
+            connection.cancel()
+        }
+        Self.logger.info("[IDE] released port \(alloc.port) for session=\(sessionKey, privacy: .public) connections=\(alloc.connections.count)")
+    }
+
+    // MARK: - Settings-Managed MCP Server
+
+    /// Starts or stops the process-wide MCP listener configured in Settings.
+    /// It is bound to loopback and intentionally sits outside the ephemeral
+    /// per-chat port range used by agent sessions.
+    func configureMemoryAPI(enabled: Bool, port: Int, exposedTools: Set<MCPServerTool>) async throws {
+        guard enabled else {
+            await release(sessionKey: Self.memoryAPISessionKey)
+            return
+        }
+        guard Self.isValidMemoryAPIPort(port) else {
+            throw MemoryAPIError.invalidPort(port)
+        }
+        let requestedPort = UInt16(port)
+        let requestedToolExposures = Self.toolExposures(for: exposedTools)
+        if let allocation = allocations[Self.memoryAPISessionKey], allocation.port == requestedPort {
+            guard allocation.toolExposures != requestedToolExposures else { return }
+            let connections = Array(allocation.connections.values)
+            allocations[Self.memoryAPISessionKey]?.toolExposures = requestedToolExposures
+            allocations[Self.memoryAPISessionKey]?.connections.removeAll()
+            for connection in connections {
+                connection.cancel()
+            }
+            Self.logger.info("[RxCode MCP] updated tools=\(requestedToolExposures.count) revokedConnections=\(connections.count)")
+            return
+        }
+        await release(sessionKey: Self.memoryAPISessionKey)
+        guard portIndex[requestedPort] == nil else {
+            throw MemoryAPIError.portUnavailable(port)
+        }
+
+        do {
+            let listener = try makeListener(port: requestedPort)
+            allocations[Self.memoryAPISessionKey] = Allocation(
+                port: requestedPort,
+                listener: listener,
+                sessionKey: Self.memoryAPISessionKey,
+                capabilities: [],
+                toolExposures: requestedToolExposures
+            )
+            portIndex[requestedPort] = Self.memoryAPISessionKey
+            listener.newConnectionHandler = { [weak self] connection in
+                guard let self else { return }
+                Task { await self.accept(connection: connection, port: requestedPort) }
+            }
+            listener.start(queue: .global(qos: .userInitiated))
+            Self.logger.info("[RxCode MCP] listening on 127.0.0.1:\(requestedPort) tools=\(requestedToolExposures.count)")
+        } catch {
+            allocations.removeValue(forKey: Self.memoryAPISessionKey)
+            portIndex.removeValue(forKey: requestedPort)
+            throw MemoryAPIError.listenerFailed(port, error.localizedDescription)
+        }
+    }
+
+    static func isValidMemoryAPIPort(_ port: Int) -> Bool {
+        (1024...65_535).contains(port)
+            && !(Int(basePort)...Int(maxPort)).contains(port)
+    }
+
+    static func exposedTools(from storedValue: String?) -> Set<MCPServerTool> {
+        guard let storedValue else { return Set(MCPServerTool.allCases) }
+        return Set(storedValue.split(separator: ",").compactMap { MCPServerTool(rawValue: String($0)) })
+    }
+
+    static func storedValue(for exposedTools: Set<MCPServerTool>) -> String {
+        MCPServerTool.allCases
+            .filter { exposedTools.contains($0) }
+            .map(\.rawValue)
+            .joined(separator: ",")
+    }
+
+    private static func toolExposures(for tools: Set<MCPServerTool>) -> [ToolExposure] {
+        MCPServerTool.allCases.compactMap { tool in
+            guard tools.contains(tool) else { return nil }
+            return ToolExposure(publicName: tool.rawValue, internalName: tool.internalName)
+        }
+    }
+
+    static func memoryAPIConfiguration(port: Int) -> String? {
+        guard isValidMemoryAPIPort(port), let port = UInt16(exactly: port) else { return nil }
+        let bridge = bridgeCommand(forPort: port)
+        let value: [String: Any] = [
+            "mcpServers": [
+                "rxcode": [
+                    "command": bridge.command,
+                    "args": bridge.args,
+                ],
+            ],
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: value, options: [.prettyPrinted, .sortedKeys]) else {
+            return nil
+        }
+        return String(data: data, encoding: .utf8)
     }
 
     // MARK: - Listener
@@ -136,8 +276,9 @@ actor IDEMCPServer {
             connection.cancel()
             return
         }
+        let toolExposures = allocations[sessionKey]?.toolExposures
         let id = UUID()
-        allocations[sessionKey]?.connections.insert(id)
+        allocations[sessionKey]?.connections[id] = connection
         connection.stateUpdateHandler = { state in
             Self.logger.info("[IDE.conn] conn=\(id.uuidString.prefix(8), privacy: .public) session=\(sessionKey, privacy: .public) state=\(String(describing: state), privacy: .public)")
         }
@@ -148,11 +289,12 @@ actor IDEMCPServer {
             connection: connection,
             connectionId: id,
             sessionKey: sessionKey,
-            capabilities: capabilities
+            capabilities: capabilities,
+            toolExposures: toolExposures
         )
 
         connection.cancel()
-        allocations[sessionKey]?.connections.remove(id)
+        allocations[sessionKey]?.connections.removeValue(forKey: id)
         Self.logger.info("[IDE] closed connection id=\(id.uuidString, privacy: .public)")
     }
 
@@ -162,7 +304,8 @@ actor IDEMCPServer {
         connection: NWConnection,
         connectionId: UUID,
         sessionKey: String,
-        capabilities: CapabilitySet
+        capabilities: CapabilitySet,
+        toolExposures: [ToolExposure]?
     ) async {
         var pendingBuffer = Data()
         var chunkCount = 0
@@ -172,11 +315,16 @@ actor IDEMCPServer {
                 let lineData = pendingBuffer[pendingBuffer.startIndex..<newline]
                 pendingBuffer.removeSubrange(pendingBuffer.startIndex...newline)
                 if lineData.isEmpty { continue }
+                guard allocations[sessionKey]?.connections[connectionId] != nil else {
+                    Self.logger.info("[IDE.runMCP] revoked conn=\(connectionId.uuidString.prefix(8), privacy: .public) session=\(sessionKey, privacy: .public)")
+                    return
+                }
                 await processLine(
                     data: lineData,
                     connection: connection,
                     sessionKey: sessionKey,
                     capabilities: capabilities,
+                    toolExposures: toolExposures,
                     connectionId: connectionId
                 )
             }
@@ -223,6 +371,7 @@ actor IDEMCPServer {
         connection: NWConnection,
         sessionKey: String,
         capabilities: CapabilitySet,
+        toolExposures: [ToolExposure]?,
         connectionId: UUID
     ) async {
         let bytes = Data(data)
@@ -249,15 +398,19 @@ actor IDEMCPServer {
 
         switch method {
         case "initialize":
+            let requestedVersion = params["protocolVersion"] as? String
+            let supportedVersions = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]
+            let protocolVersion = requestedVersion.flatMap { supportedVersions.contains($0) ? $0 : nil }
+                ?? "2024-11-05"
             await reply(
                 id: id!,
                 result: [
-                    "protocolVersion": "2024-11-05",
+                    "protocolVersion": protocolVersion,
                     "capabilities": [
                         "tools": [String: Any]()
                     ],
                     "serverInfo": [
-                        "name": "rxcode-ide",
+                        "name": toolExposures == nil ? "rxcode-ide" : "rxcode",
                         "version": "1"
                     ]
                 ],
@@ -266,7 +419,11 @@ actor IDEMCPServer {
             Self.logger.info("[IDE.sent] conn=\(connTag, privacy: .public) session=\(sessionKey, privacy: .public) reply=initialize")
 
         case "tools/list":
-            let tools = await currentTools(sessionKey: sessionKey, capabilities: capabilities)
+            let tools = await currentTools(
+                sessionKey: sessionKey,
+                capabilities: capabilities,
+                toolExposures: toolExposures
+            )
             await reply(
                 id: id!,
                 result: ["tools": tools.map(Self.toolDescriptor)],
@@ -275,7 +432,17 @@ actor IDEMCPServer {
             Self.logger.info("[IDE.sent] conn=\(connTag, privacy: .public) session=\(sessionKey, privacy: .public) reply=tools/list count=\(tools.count)")
 
         case "tools/call":
-            let name = params["name"] as? String ?? ""
+            let publicName = params["name"] as? String ?? ""
+            let name: String
+            if let toolExposures {
+                guard let exposure = toolExposures.first(where: { $0.publicName == publicName }) else {
+                    await replyError(id: id!, code: -32601, message: "Unknown tool: \(publicName)", on: connection)
+                    return
+                }
+                name = exposure.internalName
+            } else {
+                name = publicName
+            }
             let arguments = params["arguments"] as? [String: Any] ?? [:]
             let argsValue = JSONValue.fromAny(arguments)
             let callStart = Date()
@@ -310,11 +477,28 @@ actor IDEMCPServer {
         }
     }
 
-    private func currentTools(sessionKey: String, capabilities: CapabilitySet) async -> [IDETool] {
+    private func currentTools(
+        sessionKey: String,
+        capabilities: CapabilitySet,
+        toolExposures: [ToolExposure]?
+    ) async -> [IDETool] {
+        let available: [IDETool]
         if let handler {
-            return await handler.ideAvailableTools(forSession: sessionKey)
+            available = await handler.ideAvailableTools(forSession: sessionKey)
+        } else {
+            available = IDEToolRegistry.tools(for: capabilities)
         }
-        return IDEToolRegistry.tools(for: capabilities)
+        guard let toolExposures else { return available }
+        let byName = Dictionary(uniqueKeysWithValues: available.map { ($0.name, $0) })
+        return toolExposures.compactMap { exposure in
+            guard let tool = byName[exposure.internalName] else { return nil }
+            return IDETool(
+                name: exposure.publicName,
+                description: tool.description,
+                visibility: tool.visibility,
+                inputSchema: tool.inputSchema
+            )
+        }
     }
 
     // MARK: - Reply
@@ -382,6 +566,7 @@ actor IDEMCPServer {
             "ide__get_thread_messages",
             "ide__get_thread_detail",
             "ide__memory_search",
+            "memory_search",
             "ide__get_usage",
         ]
 
@@ -440,6 +625,23 @@ actor IDEMCPServer {
         case .invalidArguments(let m): return "Invalid arguments: \(m)"
         case .notSupported(let m):     return "Not supported: \(m)"
         case .handlerFailed(let m):    return m
+        }
+    }
+}
+
+private enum MemoryAPIError: LocalizedError {
+    case invalidPort(Int)
+    case portUnavailable(Int)
+    case listenerFailed(Int, String)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidPort(let port):
+            return "Port \(port) is invalid. Use 1024–65535, excluding 19847–19946."
+        case .portUnavailable(let port):
+            return "Port \(port) is already in use by RxCode."
+        case .listenerFailed(let port, let message):
+            return "Could not start the memory MCP server on port \(port): \(message)"
         }
     }
 }

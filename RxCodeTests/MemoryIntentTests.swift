@@ -71,7 +71,7 @@ final class MemoryIntentTests: XCTestCase {
         XCTAssertTrue(prompt.contains("If an existing memory should be refined, return an update operation with its id."))
     }
 
-    func testMemoryMCPConfigurationUsesLoopbackBridge() throws {
+    func testMemoryMCPConfigurationUsesLoopbackHTTPURL() throws {
         let raw = try XCTUnwrap(
             IDEMCPServer.memoryAPIConfiguration(port: IDEMCPServer.memoryAPIDefaultPort)
         )
@@ -82,9 +82,20 @@ final class MemoryIntentTests: XCTestCase {
         let servers = try XCTUnwrap(root["mcpServers"] as? [String: Any])
         let server = try XCTUnwrap(servers["rxcode"] as? [String: Any])
 
-        XCTAssertEqual(server["command"] as? String, "/usr/bin/perl")
-        let args = try XCTUnwrap(server["args"] as? [String])
-        XCTAssertEqual(Array(args.suffix(2)), ["127.0.0.1", String(IDEMCPServer.memoryAPIDefaultPort)])
+        XCTAssertEqual(
+            server["url"] as? String,
+            "http://127.0.0.1:\(IDEMCPServer.memoryAPIDefaultPort)/mcp"
+        )
+        XCTAssertNil(server["command"])
+        XCTAssertNil(server["args"])
+    }
+
+    func testMemoryMCPEndpointRejectsReservedPort() {
+        XCTAssertEqual(
+            IDEMCPServer.memoryAPIEndpoint(port: IDEMCPServer.memoryAPIDefaultPort)?.absoluteString,
+            "http://127.0.0.1:19846/mcp"
+        )
+        XCTAssertNil(IDEMCPServer.memoryAPIEndpoint(port: 19847))
     }
 
     func testMemoryMCPPortValidationReservesChatListenerRange() {

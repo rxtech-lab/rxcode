@@ -13390,9 +13390,6 @@
     "Running" : {
 
     },
-    "Running on 127.0.0.1:%@" : {
-
-    },
     "Running swift build" : {
       "localizations" : {
         "ko" : {
@@ -15707,6 +15704,9 @@
           }
         }
       }
+    },
+    "Streamable HTTP" : {
+
     },
     "streaming stops" : {
       "extractionState" : "stale",

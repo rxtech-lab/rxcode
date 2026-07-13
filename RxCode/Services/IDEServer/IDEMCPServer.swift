@@ -1,4 +1,5 @@
 import Foundation
+import MCP
 import Network
 import RxCodeCore
 import os
@@ -68,6 +69,12 @@ actor IDEMCPServer {
         let internalName: String
     }
 
+    private struct SettingsHTTPServer {
+        let port: UInt16
+        let toolExposures: [ToolExposure]
+        let server: MCPHTTPServer
+    }
+
     // MARK: - Session State
 
     /// One allocated listener per RxCode session. Created on
@@ -81,6 +88,7 @@ actor IDEMCPServer {
         var connections: [UUID: NWConnection] = [:]
     }
     private var allocations: [String: Allocation] = [:]
+    private var settingsHTTPServer: SettingsHTTPServer?
     /// Port → sessionKey, so connection accept can resolve back.
     private var portIndex: [UInt16: String] = [:]
     private var nextPort: UInt16 = IDEMCPServer.basePort
@@ -170,7 +178,7 @@ actor IDEMCPServer {
     /// per-chat port range used by agent sessions.
     func configureMemoryAPI(enabled: Bool, port: Int, exposedTools: Set<MCPServerTool>) async throws {
         guard enabled else {
-            await release(sessionKey: Self.memoryAPISessionKey)
+            await stopSettingsHTTPServer()
             return
         }
         guard Self.isValidMemoryAPIPort(port) else {
@@ -178,43 +186,58 @@ actor IDEMCPServer {
         }
         let requestedPort = UInt16(port)
         let requestedToolExposures = Self.toolExposures(for: exposedTools)
-        if let allocation = allocations[Self.memoryAPISessionKey], allocation.port == requestedPort {
-            guard allocation.toolExposures != requestedToolExposures else { return }
-            let connections = Array(allocation.connections.values)
-            allocations[Self.memoryAPISessionKey]?.toolExposures = requestedToolExposures
-            allocations[Self.memoryAPISessionKey]?.connections.removeAll()
-            for connection in connections {
-                connection.cancel()
-            }
-            Self.logger.info("[RxCode MCP] updated tools=\(requestedToolExposures.count) revokedConnections=\(connections.count)")
+        if let settingsHTTPServer,
+           settingsHTTPServer.port == requestedPort,
+           settingsHTTPServer.toolExposures == requestedToolExposures
+        {
             return
         }
-        await release(sessionKey: Self.memoryAPISessionKey)
+        await stopSettingsHTTPServer()
         guard portIndex[requestedPort] == nil else {
             throw MemoryAPIError.portUnavailable(port)
         }
 
         do {
-            let listener = try makeListener(port: requestedPort)
-            allocations[Self.memoryAPISessionKey] = Allocation(
+            let httpServer = try MCPHTTPServer(
                 port: requestedPort,
-                listener: listener,
-                sessionKey: Self.memoryAPISessionKey,
-                capabilities: [],
-                toolExposures: requestedToolExposures
+                toolProvider: { [weak self] in
+                    guard let self else { return [] }
+                    return try await self.mcpTools(exposedBy: requestedToolExposures)
+                },
+                toolCaller: { [weak self] name, arguments in
+                    guard let self else {
+                        throw MCPError.internalError("IDE handler is unavailable")
+                    }
+                    return try await self.callMCPTool(
+                        name: name,
+                        arguments: arguments,
+                        exposedBy: requestedToolExposures
+                    )
+                }
             )
-            portIndex[requestedPort] = Self.memoryAPISessionKey
-            listener.newConnectionHandler = { [weak self] connection in
-                guard let self else { return }
-                Task { await self.accept(connection: connection, port: requestedPort) }
+            do {
+                try await httpServer.start()
+            } catch {
+                await httpServer.stop()
+                throw error
             }
-            listener.start(queue: .global(qos: .userInitiated))
-            Self.logger.info("[RxCode MCP] listening on 127.0.0.1:\(requestedPort) tools=\(requestedToolExposures.count)")
+            settingsHTTPServer = SettingsHTTPServer(
+                port: requestedPort,
+                toolExposures: requestedToolExposures,
+                server: httpServer
+            )
+            Self.logger.info("[RxCode MCP] Streamable HTTP listening on http://127.0.0.1:\(requestedPort)/mcp tools=\(requestedToolExposures.count)")
         } catch {
-            allocations.removeValue(forKey: Self.memoryAPISessionKey)
-            portIndex.removeValue(forKey: requestedPort)
+            await stopSettingsHTTPServer()
             throw MemoryAPIError.listenerFailed(port, error.localizedDescription)
         }
+    }
+
+    private func stopSettingsHTTPServer() async {
+        guard let settingsHTTPServer else { return }
+        self.settingsHTTPServer = nil
+        await settingsHTTPServer.server.stop()
+        Self.logger.info("[RxCode MCP] stopped Streamable HTTP server on port \(settingsHTTPServer.port)")
     }
 
     static func isValidMemoryAPIPort(_ port: Int) -> Bool {
@@ -242,13 +265,11 @@ actor IDEMCPServer {
     }
 
     static func memoryAPIConfiguration(port: Int) -> String? {
-        guard isValidMemoryAPIPort(port), let port = UInt16(exactly: port) else { return nil }
-        let bridge = bridgeCommand(forPort: port)
+        guard let endpoint = memoryAPIEndpoint(port: port) else { return nil }
         let value: [String: Any] = [
             "mcpServers": [
                 "rxcode": [
-                    "command": bridge.command,
-                    "args": bridge.args,
+                    "url": endpoint.absoluteString,
                 ],
             ],
         ]
@@ -256,6 +277,11 @@ actor IDEMCPServer {
             return nil
         }
         return String(data: data, encoding: .utf8)
+    }
+
+    static func memoryAPIEndpoint(port: Int) -> URL? {
+        guard isValidMemoryAPIPort(port) else { return nil }
+        return URL(string: "http://127.0.0.1:\(port)/mcp")
     }
 
     // MARK: - Listener
@@ -501,15 +527,53 @@ actor IDEMCPServer {
         }
     }
 
+    private func mcpTools(exposedBy toolExposures: [ToolExposure]) async throws -> [MCP.Tool] {
+        let tools = await currentTools(
+            sessionKey: Self.memoryAPISessionKey,
+            capabilities: [],
+            toolExposures: toolExposures
+        )
+        return try tools.map(Self.mcpTool)
+    }
+
+    private func callMCPTool(
+        name: String,
+        arguments: [String: MCP.Value],
+        exposedBy toolExposures: [ToolExposure]
+    ) async throws -> MCP.CallTool.Result {
+        guard let exposure = toolExposures.first(where: { $0.publicName == name }) else {
+            throw MCPError.methodNotFound("Unknown tool: \(name)")
+        }
+        guard let handler else {
+            throw MCPError.internalError("IDE handler is unavailable")
+        }
+
+        let encodedArguments = try JSONEncoder().encode(arguments)
+        let decodedArguments = try JSONDecoder().decode([String: JSONValue].self, from: encodedArguments)
+        do {
+            let result = try await handler.ideHandleToolCall(
+                name: exposure.internalName,
+                arguments: .object(decodedArguments),
+                sessionKey: Self.memoryAPISessionKey
+            )
+            return try Self.mcpCallResult(result)
+        } catch let error as IDEToolError {
+            switch error {
+            case .unknownTool:
+                throw MCPError.methodNotFound(Self.errorMessage(for: error))
+            case .invalidArguments:
+                throw MCPError.invalidParams(Self.errorMessage(for: error))
+            case .notSupported:
+                throw MCPError.serverError(code: -32004, message: Self.errorMessage(for: error))
+            case .handlerFailed:
+                throw MCPError.internalError(Self.errorMessage(for: error))
+            }
+        }
+    }
+
     // MARK: - Reply
 
     private func reply(id: Any, result: Any, on connection: NWConnection) async {
-        var payload: [String: Any] = [
-            "jsonrpc": "2.0",
-            "id": id,
-            "result": result
-        ]
-        _ = payload
         let body: [String: Any] = [
             "jsonrpc": "2.0",
             "id": id,
@@ -555,6 +619,26 @@ actor IDEMCPServer {
             descriptor["annotations"] = annotations
         }
         return descriptor
+    }
+
+    private static func mcpTool(_ tool: IDETool) throws -> MCP.Tool {
+        let annotations: MCP.Tool.Annotations
+        if toolAnnotations(for: tool) != nil {
+            annotations = .init(
+                readOnlyHint: true,
+                destructiveHint: false,
+                idempotentHint: true,
+                openWorldHint: false
+            )
+        } else {
+            annotations = nil
+        }
+        return try MCP.Tool(
+            name: tool.name,
+            description: tool.description,
+            inputSchema: MCP.Value(tool.inputSchema),
+            annotations: annotations
+        )
     }
 
     private static func toolAnnotations(for tool: IDETool) -> [String: Any]? {
@@ -610,6 +694,12 @@ actor IDEMCPServer {
         ]
     }
 
+    private static func mcpCallResult(_ value: JSONValue) throws -> MCP.CallTool.Result {
+        let wrapped = wrapToolResult(value)
+        let data = try JSONSerialization.data(withJSONObject: wrapped)
+        return try JSONDecoder().decode(MCP.CallTool.Result.self, from: data)
+    }
+
     private static func errorCode(for error: IDEToolError) -> Int {
         switch error {
         case .unknownTool:        return -32601
@@ -649,7 +739,7 @@ private enum MemoryAPIError: LocalizedError {
 // MARK: - JSONValue <-> Any helpers
 
 private extension JSONValue {
-    static func fromAny(_ any: Any) -> JSONValue {
+    nonisolated static func fromAny(_ any: Any) -> JSONValue {
         if let s = any as? String { return .string(s) }
         if let b = any as? Bool { return .bool(b) }
         if let n = any as? NSNumber {
@@ -666,7 +756,7 @@ private extension JSONValue {
         return .null
     }
 
-    func toAny() -> Any? {
+    nonisolated func toAny() -> Any? {
         switch self {
         case .null: return NSNull()
         case .bool(let b): return b

@@ -28,17 +28,21 @@ public actor PortMapper {
     /// Request a public address + TCP mapping for `internalPort`. Returns nil on
     /// any failure (no gateway, no NAT-PMP support, timeout).
     public func requestMapping(internalPort: UInt16, lifetime: UInt32 = 3600) async -> PortMapping? {
+        guard !Task.isCancelled else { return nil }
         guard let gateway = Self.defaultGatewayIPv4() else {
             logger.info("[PortMapper] no default gateway found — WAN-direct unavailable")
             return nil
         }
         guard let publicIP = await sendExternalAddressRequest(gateway: gateway) else {
+            guard !Task.isCancelled else { return nil }
             logger.info("[PortMapper] gateway \(gateway, privacy: .public) did not answer NAT-PMP — WAN-direct unavailable")
             return nil
         }
+        guard !Task.isCancelled else { return nil }
         guard let external = await sendMapRequest(gateway: gateway, internalPort: internalPort, lifetime: lifetime) else {
             return nil
         }
+        guard !Task.isCancelled else { return nil }
         logger.info("[PortMapper] mapped \(internalPort, privacy: .public) → \(publicIP, privacy: .public):\(external.port, privacy: .public) lifetime=\(external.lifetime, privacy: .public)s")
         return PortMapping(publicIP: publicIP, externalPort: external.port, lifetimeSeconds: external.lifetime)
     }

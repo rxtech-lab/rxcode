@@ -258,6 +258,28 @@ struct MCPServerSettingsSheet: View {
                     Spacer()
                 }
 
+                if let endpoint = IDEMCPServer.memoryAPIEndpoint(port: port) {
+                    LabeledContent("Transport") {
+                        Text("Streamable HTTP")
+                    }
+                    .font(.system(size: ClaudeTheme.size(11)))
+
+                    LabeledContent("Endpoint") {
+                        HStack(spacing: 8) {
+                            Text(verbatim: endpoint.absoluteString)
+                                .textSelection(.enabled)
+                            Button {
+                                copyEndpoint(endpoint)
+                            } label: {
+                                Image(systemName: "doc.on.doc")
+                            }
+                            .buttonStyle(.borderless)
+                            .help("Copy")
+                        }
+                    }
+                    .font(.system(size: ClaudeTheme.size(11)))
+                }
+
                 serverStatus
 
                 Text("Keep RxCode running while another MCP client uses this server. Ports 19847–19946 are reserved for chat sessions.")
@@ -280,10 +302,7 @@ struct MCPServerSettingsSheet: View {
             Label(error, systemImage: "exclamationmark.triangle.fill")
                 .foregroundStyle(.red)
         } else if appState.memoryMCPServerRunning {
-            Label(
-                "Running on 127.0.0.1:\(port, format: .number.grouping(.never))",
-                systemImage: "checkmark.circle.fill"
-            )
+            Label("Running", systemImage: "checkmark.circle.fill")
                 .foregroundStyle(.green)
         } else {
             Label("Server stopped", systemImage: "circle")
@@ -314,6 +333,11 @@ struct MCPServerSettingsSheet: View {
     private func applyPort() {
         guard let parsedPort else { return }
         port = parsedPort
+    }
+
+    private func copyEndpoint(_ endpoint: URL) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(endpoint.absoluteString, forType: .string)
     }
 }
 

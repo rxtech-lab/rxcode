@@ -21,6 +21,11 @@ struct MessageListView: View {
     @Environment(ChatBridge.self) private var chatBridge
     @Environment(WindowState.self) private var windowState
     @State private var settledItems: [ChatMessage] = []
+    /// Pre-grouped rows for `settledItems`. Streaming deltas re-evaluate this
+    /// view frequently, so rebuilding every historical row from `settledItems`
+    /// in `body` makes long threads do work proportional to their full history
+    /// for every delta.
+    @State private var settledTranscriptItems: [ChatTranscriptListItem] = []
     /// Owns the debounced content-growth scroll.
     @State private var scrollTask: Task<Void, Never>?
     /// Owns the multi-frame "settle at the bottom" sweep used on session open
@@ -293,7 +298,7 @@ struct MessageListView: View {
         var items: [ChatTranscriptListItem] = [
             .accessory(.init(id: "desktop-top-padding", kind: .topPadding)),
         ]
-        items += ChatTranscriptListItem.items(for: settledItems)
+        items += settledTranscriptItems
 
         if !windowState.focusMode {
             let activeMessages = activeResponseMessages(from: chatBridge.messages)
@@ -343,9 +348,18 @@ struct MessageListView: View {
     private func rebuildSettledItems() {
         PerformanceDiagnostics.increment("chat.settled_rebuild.total")
         let messages = settledOnlyMessages(from: chatBridge.messages)
+        guard messages != settledItems else {
+            PerformanceDiagnostics.increment("chat.settled_rebuild.skipped_unchanged")
+            return
+        }
+        let transcriptItems = ChatTranscriptListItem.items(for: messages)
         var t = Transaction()
         t.animation = nil
-        withTransaction(t) { settledItems = messages }
+        withTransaction(t) {
+            settledItems = messages
+            settledTranscriptItems = transcriptItems
+        }
+        PerformanceDiagnostics.increment("chat.settled_rebuild.applied")
     }
 
     private func handleLastMessageChange() {

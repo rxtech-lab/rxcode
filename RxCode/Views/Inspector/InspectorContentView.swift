@@ -10,8 +10,7 @@ import RxCodeCore
 struct InspectorContentView: View {
     @Environment(WindowState.self) private var windowState
 
-    let terminalsBySession: [String: [InspectorTerminal]]
-    let currentSessionKey: String
+    let terminals: [InspectorTerminal]
     let activeTerminalId: UUID?
     let memoClearID: UUID?
     let terminalFocusID: UUID?
@@ -21,72 +20,39 @@ struct InspectorContentView: View {
     let onAddTerminal: () -> Void
     let onRenameTerminal: (UUID, String) -> Void
 
-    private struct FlatEntry: Identifiable {
-        let sessionKey: String
-        let terminalId: UUID
-        let process: TerminalProcess
-        let resetID: UUID
-        var id: String { "\(sessionKey)|\(terminalId.uuidString)" }
-    }
-
-    /// Flattened list of every terminal across every session so they all stay
-    /// mounted (and their shells keep running) regardless of the active thread.
-    private var allEntries: [FlatEntry] {
-        terminalsBySession
-            .sorted { $0.key < $1.key }
-            .flatMap { sessionKey, terminals in
-                terminals.map { t in
-                    FlatEntry(
-                        sessionKey: sessionKey,
-                        terminalId: t.id,
-                        process: t.process,
-                        resetID: t.resetID
-                    )
-                }
-            }
-    }
-
-    private var currentTerminals: [InspectorTerminal] {
-        terminalsBySession[currentSessionKey] ?? []
+    private var activeTerminal: InspectorTerminal? {
+        guard let activeTerminalId else { return nil }
+        return terminals.first { $0.id == activeTerminalId }
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        switch windowState.inspectorTab {
+        case .terminal:
             VStack(spacing: 0) {
-                if currentTerminals.count > 1 || !currentTerminals.isEmpty {
+                if !terminals.isEmpty {
                     terminalTabBar
                 }
-                ZStack {
-                    ForEach(allEntries) { entry in
-                        let isActive = entry.sessionKey == currentSessionKey
-                            && entry.terminalId == activeTerminalId
+                Group {
+                    if let activeTerminal {
                         EmbeddedTerminalView(
                             executable: "/bin/zsh",
                             arguments: ["-il"],
                             currentDirectory: windowState.selectedProject?.path,
-                            process: entry.process,
-                            focusTrigger: isActive ? terminalFocusID : nil
+                            process: activeTerminal.process,
+                            focusTrigger: terminalFocusID
                         )
-                        .id(entry.resetID)
-                        .opacity(isActive ? 1 : 0)
-                        .allowsHitTesting(isActive)
+                        .id(activeTerminal.resetID)
                     }
                 }
                 .padding(8)
                 .background(ClaudeTheme.codeBackground)
             }
-            .frame(maxHeight: windowState.inspectorTab == .terminal ? .infinity : 0)
-            .clipped()
-
+        case .memo:
             InspectorMemoPanel(projectId: windowState.selectedProject?.id,
                                clearTrigger: memoClearID,
                                focusTrigger: memoFocusID)
-                .frame(maxHeight: windowState.inspectorTab == .memo ? .infinity : 0)
-                .clipped()
-
+        case .run:
             RunOutputInspectorView()
-                .frame(maxHeight: windowState.inspectorTab == .run ? .infinity : 0)
-                .clipped()
         }
     }
 
@@ -94,11 +60,11 @@ struct InspectorContentView: View {
     private var terminalTabBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 4) {
-                ForEach(Array(currentTerminals.enumerated()), id: \.element.id) { index, terminal in
+                ForEach(Array(terminals.enumerated()), id: \.element.id) { index, terminal in
                     TerminalTabChip(
                         title: terminal.customTitle ?? "Terminal \(index + 1)",
                         isActive: terminal.id == activeTerminalId,
-                        canClose: currentTerminals.count > 1,
+                        canClose: terminals.count > 1,
                         onSelect: { onSelectTerminal(terminal.id) },
                         onClose: { onCloseTerminal(terminal.id) },
                         onRename: { newTitle in onRenameTerminal(terminal.id, newTitle) }

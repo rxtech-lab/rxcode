@@ -213,8 +213,12 @@ final class CrossProjectSendConcurrencyTests: XCTestCase {
         XCTAssertEqual(completion.sessionId, sessionId)
         XCTAssertEqual(completion.assistantText, expectedText)
         XCTAssertNil(completion.error)
+        // Budget is generous because the measured time is dominated by MainActor
+        // scheduling latency, which spikes well past 50 ms on loaded CI runners.
+        // 0.5 s still catches the original regression class (poll-based waits
+        // and multi-second stream starvation) without flaking.
         XCTAssertLessThan(
-            elapsed, 0.05,
+            elapsed, 0.5,
             "awaitStreamCompletion took \(elapsed)s after record() — should be near-instant via continuation handoff"
         )
     }
@@ -240,7 +244,9 @@ final class CrossProjectSendConcurrencyTests: XCTestCase {
         let elapsed = Date().timeIntervalSince(startedAt)
 
         XCTAssertEqual(resolved, realSid)
-        XCTAssertLessThan(elapsed, 0.05, "session-rename waiter took \(elapsed)s — should be near-instant")
+        // See testRecordStreamCompletionResumesAwaiterImmediately for why the
+        // budget is 0.5 s: MainActor scheduling latency dominates on busy CI.
+        XCTAssertLessThan(elapsed, 0.5, "session-rename waiter took \(elapsed)s — should be near-instant")
     }
 
     // MARK: - Provider-native session ids

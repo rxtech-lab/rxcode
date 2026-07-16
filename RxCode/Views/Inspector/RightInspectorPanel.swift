@@ -17,15 +17,18 @@ struct InspectorTerminal: Identifiable {
 }
 
 struct RightInspectorPanel: View {
+    private static let maximumRetainedTerminalSessions = 12
+
     let maxAllowedWidth: CGFloat
 
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
 
     // Per-thread terminal storage. Each session/thread can have multiple
-    // terminals; all stay alive across thread switches.
+    // terminals. Inactive sessions are retained up to a bounded LRU limit.
     @State private var terminalsBySession: [String: [InspectorTerminal]] = [:]
     @State private var activeTerminalIdBySession: [String: UUID] = [:]
+    @State private var terminalSessionAccessOrder: [String] = []
     @State private var memoClearID: UUID? = nil
     @State private var terminalFocusID: UUID? = nil
     @State private var memoFocusID: UUID? = nil
@@ -44,6 +47,12 @@ struct RightInspectorPanel: View {
 
     private var showRightSidebar: Bool {
         appState.showRightSidebar
+    }
+
+    private var terminalIsVisible: Bool {
+        showRightSidebar
+            && windowState.inspectorMode == .inspector
+            && windowState.inspectorTab == .terminal
     }
 
     private var currentTerminals: [InspectorTerminal] {
@@ -75,6 +84,26 @@ struct RightInspectorPanel: View {
         } else if activeTerminalIdBySession[key] == nil,
                   let first = terminalsBySession[key]?.first {
             activeTerminalIdBySession[key] = first.id
+        }
+        retainTerminalSession(key)
+    }
+
+    private func ensureTerminalIfVisible() {
+        guard terminalIsVisible else { return }
+        ensureTerminal(for: currentSessionKey)
+    }
+
+    private func retainTerminalSession(_ key: String) {
+        terminalSessionAccessOrder.removeAll { $0 == key }
+        terminalSessionAccessOrder.append(key)
+
+        while terminalSessionAccessOrder.count > Self.maximumRetainedTerminalSessions {
+            let evictedKey = terminalSessionAccessOrder.removeFirst()
+            guard evictedKey != key else { continue }
+            terminalsBySession.removeValue(forKey: evictedKey)?.forEach { terminal in
+                terminal.process.terminate()
+            }
+            activeTerminalIdBySession.removeValue(forKey: evictedKey)
         }
     }
 
@@ -145,18 +174,19 @@ struct RightInspectorPanel: View {
                 case .review:
                     reviewContent
                 case .inspector:
-                    InspectorContentView(
-                        terminalsBySession: terminalsBySession,
-                        currentSessionKey: currentSessionKey,
-                        activeTerminalId: activeTerminalId,
-                        memoClearID: memoClearID,
-                        terminalFocusID: terminalFocusID,
-                        memoFocusID: memoFocusID,
-                        onSelectTerminal: selectTerminal,
-                        onCloseTerminal: closeTerminal,
-                        onAddTerminal: addTerminalToCurrent,
-                        onRenameTerminal: renameTerminal
-                    )
+                    if showRightSidebar {
+                        InspectorContentView(
+                            terminals: currentTerminals,
+                            activeTerminalId: activeTerminalId,
+                            memoClearID: memoClearID,
+                            terminalFocusID: terminalFocusID,
+                            memoFocusID: memoFocusID,
+                            onSelectTerminal: selectTerminal,
+                            onCloseTerminal: closeTerminal,
+                            onAddTerminal: addTerminalToCurrent,
+                            onRenameTerminal: renameTerminal
+                        )
+                    }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -179,21 +209,23 @@ struct RightInspectorPanel: View {
         .clipped()
         .background(terminalShortcuts)
         .task(id: currentSessionKey) {
-            // Ensure the terminal process exists for this session. The panel's
-            // visibility is owned by the workspace-level AppState — do not
-            // force it open here, or the user could never close it.
-            ensureTerminal(for: currentSessionKey)
+            ensureTerminalIfVisible()
         }
         .onChange(of: windowState.inspectorTab) { _, newTab in
-            if windowState.inspectorMode == .inspector { bumpFocus(for: newTab) }
+            if windowState.inspectorMode == .inspector {
+                ensureTerminalIfVisible()
+                bumpFocus(for: newTab)
+            }
         }
         .onChange(of: windowState.inspectorMode) { _, newMode in
             if newMode == .inspector, showRightSidebar {
+                ensureTerminalIfVisible()
                 bumpFocus(for: windowState.inspectorTab)
             }
         }
         .onChange(of: showRightSidebar) { _, isShowing in
             if isShowing, windowState.inspectorMode == .inspector {
+                ensureTerminalIfVisible()
                 bumpFocus(for: windowState.inspectorTab)
             }
         }

@@ -42,6 +42,11 @@ struct EmbeddedTerminalView: NSViewRepresentable {
     var focusTrigger: UUID? = nil
 
     func makeNSView(context: Context) -> LocalProcessTerminalView {
+        if let tv = process?.terminalView, process?.terminated == false {
+            tv.processDelegate = context.coordinator
+            return tv
+        }
+
         let tv = LocalProcessTerminalView(frame: .zero)
 
         // Set terminal background/foreground colors to match the theme

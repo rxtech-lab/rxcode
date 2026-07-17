@@ -216,10 +216,36 @@ extension ACPService {
             )
         } catch {
             logger.error("[ACP] turn failed: \(error.localizedDescription, privacy: .public)")
+            // Resolve the canonical pool key (may still be the bootstrap
+            // `pending-…` key if the failure happened before `session/new`
+            // returned) and the agent session id for the error result.
+            let key = streamToKey[streamId]
+            let sessionId = key.flatMap { sessions[$0]?.agentSessionId }
+                ?? incomingSessionId ?? clientSessionKey
+            // Put the real failure text into the session's stderr buffer —
+            // the `.result(isError:)` UI path renders `consumeStderr` output
+            // as the error bubble instead of a generic "returned an error".
+            if let key {
+                appendStderr(key: key, line: error.localizedDescription)
+            }
             continuation.yield(.user(UserMessage(
                 toolUseId: nil,
                 content: "ACP error: \(error.localizedDescription)",
                 isError: true
+            )))
+            // Follow the same failure contract as the other backends: an
+            // error `.result` so the UI shows a bubble, finalizes streaming,
+            // and records the turn as failed. Without it the turn vanishes
+            // silently (the `.user` event above carries no toolUseId and is
+            // dropped by the stream handler).
+            continuation.yield(.result(ResultEvent(
+                durationMs: nil,
+                totalCostUsd: nil,
+                sessionId: sessionId,
+                isError: true,
+                totalTurns: nil,
+                usage: nil,
+                contextWindow: nil
             )))
             continuation.finish()
             finalize(streamId: streamId)
@@ -396,6 +422,9 @@ extension ACPService {
             e.planEmitted = false
             e.planSyntheticId = "acp-plan-\(UUID().uuidString)"
             e.acceptingUpdates = false
+            // Clear accumulated stderr so an error bubble for this turn shows
+            // only this turn's diagnostics, not prior turns' output.
+            e.stderr = ""
         }
         streamToKey[streamId] = poolKey
 

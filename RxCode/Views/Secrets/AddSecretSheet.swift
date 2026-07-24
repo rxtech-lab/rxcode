@@ -151,7 +151,15 @@ struct AddSecretSheet: View {
         panel.allowedContentTypes = [.data, .text, .plainText]
         guard panel.runModal() == .OK, let url = panel.url else { return }
         if let data = try? Data(contentsOf: url) {
-            pickedFilename = url.lastPathComponent
+            // Prefer the path relative to the project root so files with the same
+            // base name in different folders don't collide on upload; fall back
+            // to the bare name for files chosen outside the project.
+            if let projectPath {
+                let root = URL(fileURLWithPath: projectPath, isDirectory: true)
+                pickedFilename = DetectedEnv.relativePath(of: url, under: root) ?? url.lastPathComponent
+            } else {
+                pickedFilename = url.lastPathComponent
+            }
             pickedContent = String(decoding: data, as: UTF8.self)
         } else {
             errorMessage = "Couldn't read the selected file."
@@ -226,9 +234,15 @@ struct AddSecretSheet: View {
         defer { isSaving = false }
         do {
             for upload in pendingUploads() {
+                // Manual filenames are free-form; picker/detected paths are
+                // project-relative. Both must normalize to a safe relative path.
+                guard let filename = SecretsFilePath.sanitize(upload.filename) else {
+                    errorMessage = "“\(upload.filename)” isn’t a valid file path. Use a relative path without “..”."
+                    return
+                }
                 let body = try await appState.encryptSecretFile(
                     forEnvironmentKey: environmentKey,
-                    filename: upload.filename,
+                    filename: filename,
                     content: upload.content
                 )
                 _ = try await appState.secrets.upsertFile(repo: repoIdentifier, envId: envId, body: body)
@@ -250,27 +264,56 @@ private struct ManualRow: Identifiable {
 }
 
 struct DetectedEnv: Identifiable {
+    /// Repo-relative path (e.g. "frontend/.env"), so files with the same base
+    /// name in different folders stay distinct.
     let filename: String
     let content: String
     var id: String { filename }
     var byteCount: Int { content.utf8.count }
 
-    /// Scans `directory` for files whose name starts with `.env`. Uses the
-    /// path-based listing because `.env` is a hidden dotfile.
+    /// Directories skipped while recursing — noise that never holds real secrets.
+    private static let ignoredDirectories: Set<String> = [
+        ".git", "node_modules", ".build", "build", "DerivedData", ".next", "Pods",
+    ]
+
+    /// Recursively scans `directory` for files whose name starts with `.env`,
+    /// keying each hit by its path relative to `directory`. Uses path-based
+    /// listing because `.env` is a hidden dotfile.
     static func scan(directory: String?) -> [DetectedEnv] {
         guard let directory else { return [] }
-        guard let names = try? FileManager.default.contentsOfDirectory(atPath: directory) else { return [] }
-        return names
-            .filter { $0 == ".env" || $0.hasPrefix(".env") }
-            .sorted()
-            .compactMap { name in
-                let path = (directory as NSString).appendingPathComponent(name)
-                var isDir: ObjCBool = false
-                guard FileManager.default.fileExists(atPath: path, isDirectory: &isDir), !isDir.boolValue else {
-                    return nil
-                }
-                guard let data = FileManager.default.contents(atPath: path) else { return nil }
-                return DetectedEnv(filename: name, content: String(decoding: data, as: UTF8.self))
+        let root = URL(fileURLWithPath: directory, isDirectory: true)
+        var results: [DetectedEnv] = []
+        scan(directory: root, root: root, into: &results)
+        return results.sorted { $0.filename < $1.filename }
+    }
+
+    private static func scan(directory: URL, root: URL, into results: inout [DetectedEnv]) {
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: []
+        ) else { return }
+        for entry in entries {
+            let isDir = (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+            if isDir {
+                if ignoredDirectories.contains(entry.lastPathComponent) { continue }
+                scan(directory: entry, root: root, into: &results)
+            } else {
+                let name = entry.lastPathComponent
+                guard name == ".env" || name.hasPrefix(".env") else { continue }
+                guard let data = fm.contents(atPath: entry.path) else { continue }
+                let relative = Self.relativePath(of: entry, under: root) ?? name
+                results.append(DetectedEnv(filename: relative, content: String(decoding: data, as: UTF8.self)))
             }
+        }
+    }
+
+    /// Path of `url` relative to `root`, or nil if `url` isn't inside `root`.
+    static func relativePath(of url: URL, under root: URL) -> String? {
+        let target = url.standardizedFileURL.pathComponents
+        let base = root.standardizedFileURL.pathComponents
+        guard target.count > base.count, Array(target.prefix(base.count)) == base else { return nil }
+        return target.dropFirst(base.count).joined(separator: "/")
     }
 }

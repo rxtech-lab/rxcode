@@ -158,10 +158,16 @@ extension AppState {
     ) throws -> [String] {
         var written: [String] = []
         for file in files {
-            let dest = directory.appendingPathComponent(file.filename)
-            if !overwrite, FileManager.default.fileExists(atPath: dest.path) { continue }
-            try Data(file.content.utf8).write(to: dest, options: .atomic)
-            written.append(file.filename)
+            // `filename` is a repo-relative path (e.g. "frontend/.env") that may
+            // arrive from an untrusted cloud/peer source, so resolve it through
+            // the shared safe-destination contract — the same one conflict
+            // detection uses — and skip anything invalid or escaping `directory`.
+            guard let dest = SecretsFilePath.safeDestination(for: file.filename, in: directory) else { continue }
+            if !overwrite, FileManager.default.fileExists(atPath: dest.url.path) { continue }
+            let parent = dest.url.deletingLastPathComponent()
+            try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
+            try Data(file.content.utf8).write(to: dest.url, options: .atomic)
+            written.append(dest.name)
         }
         return written
     }

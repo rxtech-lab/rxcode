@@ -193,6 +193,50 @@ public struct SecretsFileSearchList: Codable, Sendable {
     public let items: [SecretsFileSearch]
 }
 
+/// Validates repo-relative secret file paths. A file's identity is its path
+/// relative to the project root (e.g. "frontend/.env"), which is used both as
+/// the server key and as the on-disk destination on download — so it must never
+/// be absolute or escape the project directory via `..`.
+public enum SecretsFilePath {
+    /// Normalizes `raw` into a safe repo-relative path, or returns nil if it is
+    /// empty, absolute, or contains an empty / `.` / `..` component.
+    public static func sanitize(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !trimmed.hasPrefix("/") else { return nil }
+        // Treat backslashes as separators too, so "..\.." can't slip through.
+        let components = trimmed.split(whereSeparator: { $0 == "/" || $0 == "\\" }).map(String.init)
+        guard !components.isEmpty else { return nil }
+        for component in components where component.isEmpty || component == "." || component == ".." {
+            return nil
+        }
+        return components.joined(separator: "/")
+    }
+
+    /// Resolves `filename` to a safe destination inside `directory`, or nil if it
+    /// is invalid or would escape `directory`. This is the single contract shared
+    /// by conflict detection and the writer, so the overwrite decision and the
+    /// actual write can never be made against different paths.
+    public static func safeDestination(for filename: String, in directory: URL) -> (name: String, url: URL)? {
+        guard let name = sanitize(filename) else { return nil }
+        let dest = directory.appendingPathComponent(name)
+        let base = directory.standardizedFileURL.resolvingSymlinksInPath()
+        let resolved = dest.standardizedFileURL.resolvingSymlinksInPath()
+        guard resolved.path == base.path || resolved.path.hasPrefix(base.path + "/") else { return nil }
+        return (name, dest)
+    }
+
+    /// The sanitized names of `filenames` whose safe destination already exists
+    /// in `directory` — i.e. exactly the set the writer would refuse to
+    /// overwrite. Names that are invalid or escape `directory` (which the writer
+    /// silently skips) are excluded, so conflicts and writes stay consistent.
+    public static func conflicts(for filenames: [String], in directory: URL) -> [String] {
+        filenames.compactMap { filename in
+            guard let dest = safeDestination(for: filename, in: directory) else { return nil }
+            return FileManager.default.fileExists(atPath: dest.url.path) ? dest.name : nil
+        }
+    }
+}
+
 public struct UpsertFileBody: Codable, Sendable {
     public let filename: String
     public let ciphertext: String

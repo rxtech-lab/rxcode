@@ -180,10 +180,13 @@ final class AutopilotSecretsHook: Hook {
             controller.beginProgress("hook.secrets.downloading")
             let files = try await controller.fetchSecrets(repoFullName: repo, env: env)
 
-            // Detect files that would clobber something already in the folder.
-            let conflicts = files
-                .map(\.filename)
-                .filter { FileManager.default.fileExists(atPath: (project.path as NSString).appendingPathComponent($0)) }
+            // Detect files that would clobber something already in the folder,
+            // using the same safe-destination contract the writer applies so the
+            // overwrite prompt matches what actually gets written.
+            let conflicts = SecretsFilePath.conflicts(
+                for: files.map(\.filename),
+                in: URL(fileURLWithPath: project.path, isDirectory: true)
+            )
 
             var overwrite = false
             if !conflicts.isEmpty {

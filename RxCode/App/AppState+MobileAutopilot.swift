@@ -396,9 +396,9 @@ extension AppState {
             let directory = URL(fileURLWithPath: project.path, isDirectory: true)
             // Files that would clobber something already in the folder. When
             // overwrite is requested nothing is skipped, so there are no conflicts.
-            let conflicts = body.overwrite ? [] : files
-                .map(\.filename)
-                .filter { FileManager.default.fileExists(atPath: directory.appendingPathComponent($0).path) }
+            // Uses the same safe-destination contract as the writer so the two
+            // agree on the exact (sanitized) paths.
+            let conflicts = body.overwrite ? [] : SecretsFilePath.conflicts(for: files.map(\.filename), in: directory)
             let written = try writeDecryptedSecrets(files, to: directory, overwrite: body.overwrite)
             return try encoder.encode(AutopilotProjectSecretsDownloadResult(written: written, conflicts: conflicts))
 
@@ -413,9 +413,7 @@ extension AppState {
             }
             let files = body.files.map { (filename: $0.filename, content: $0.content) }
             let directory = URL(fileURLWithPath: project.path, isDirectory: true)
-            let conflicts = body.overwrite ? [] : files
-                .map(\.filename)
-                .filter { FileManager.default.fileExists(atPath: directory.appendingPathComponent($0).path) }
+            let conflicts = body.overwrite ? [] : SecretsFilePath.conflicts(for: files.map(\.filename), in: directory)
             let written = try writeDecryptedSecrets(files, to: directory, overwrite: body.overwrite)
             return try encoder.encode(AutopilotProjectSecretsDownloadResult(written: written, conflicts: conflicts))
 

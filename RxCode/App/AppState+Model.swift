@@ -188,7 +188,17 @@ extension AppState {
         return NSLocalizedString(key, comment: "")
     }
 
-    static let availableEfforts = ["low", "medium", "high", "xhigh", "max"]
+    /// Every level any provider accepts, deduplicated in ascending order.
+    ///
+    /// Only for the *global default* in Settings, which is chosen before a
+    /// provider is known. Anything scoped to a thread asks that thread's
+    /// backend via `reasoningLevels(for:)` — Claude and Codex do not accept the
+    /// same values, so the union is wrong for both individually.
+    static let availableEfforts: [String] = {
+        let ordered = [ReasoningLevel].codexEfforts + [ReasoningLevel].claudeCodeEfforts
+        var seen: Set<String> = []
+        return ordered.map(\.id).filter { seen.insert($0).inserted }
+    }()
 
     static func permissionModeDescription(_ mode: PermissionMode) -> String {
         let key: String

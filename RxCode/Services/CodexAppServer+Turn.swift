@@ -93,6 +93,17 @@ extension CodexAppServer {
                     } else {
                         let params = object["params"]?.objectValue ?? [:]
                         switch method {
+                        case "turn/started":
+                            // `turn/steer` requires the live turn id as a
+                            // precondition, and this notification is the only
+                            // place the app server reports it.
+                            if let activeThreadId, let turnId = Self.startedTurnId(from: params) {
+                                await setActiveTurn(
+                                    streamId: streamId,
+                                    threadId: activeThreadId,
+                                    turnId: turnId
+                                )
+                            }
                         case "turn/plan/updated":
                             if let items = TodoExtractor.parseCodexPlanUpdate(params: params) {
                                 planItems = items
@@ -106,6 +117,7 @@ extension CodexAppServer {
                         }
                         await handleNotification(method: method, object: object, activeThreadId: activeThreadId, continuation: continuation)
                         if method == "turn/completed" || method == "turn/failed" {
+                            await clearActiveTurn(streamId: streamId)
                             finalUsage = Self.usageInfo(from: object) ?? finalUsage
                             turnCompleted = method == "turn/completed"
                             if turnCompleted, planMode {

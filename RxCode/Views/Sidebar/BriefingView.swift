@@ -876,7 +876,7 @@ struct BriefingView: View {
     private func threadRow(_ item: ThreadSummaryItem) -> some View {
         BriefingThreadRow(
             item: item,
-            isInProgress: appState.sessionStates[item.sessionId]?.isStreaming == true,
+            isInProgress: appState.sessionActivity[item.sessionId]?.isStreaming == true,
             todoProgress: appState.todoProgress(forSessionId: item.sessionId),
             reviewPassed: appState.reviewPassedBySession[item.sessionId]
         ) {

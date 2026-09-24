@@ -1,5 +1,5 @@
 {
-  "originHash" : "44ebc85e966c82ebc9594079fae8ad88d1f3caf7e56e32ce136050b581e95491",
+  "originHash" : "5617ce898e5428453f5feecb7ea12fbcc2176df7ccd5bdf923fbdc8083b1a8b0",
   "pins" : [
     {
       "identity" : "abseil-cpp-binary",
@@ -125,6 +125,15 @@
       "state" : {
         "revision" : "540318ecedd63d883069ae7f1ed811a2df00b6ac",
         "version" : "2.4.0"
+      }
+    },
+    {
+      "identity" : "rxagentsdk",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/rxtech-lab/RxAgentSDK.git",
+      "state" : {
+        "revision" : "0dfd34e80c346ab45adbe8ca43112aca2a9e3ec7",
+        "version" : "1.0.5"
       }
     },
     {

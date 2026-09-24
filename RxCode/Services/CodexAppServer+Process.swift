@@ -158,16 +158,15 @@ extension CodexAppServer {
         return nil
     }
 
+    /// The environment for spawned `codex` processes: the GUI environment with
+    /// the login-shell `PATH`.
+    ///
+    /// The resolver owns the caching (shared with the other backends, and
+    /// remembered across launches), so asking it every time costs an actor hop
+    /// and picks up a re-probed PATH without a relaunch.
     func resolvedEnvironment() async -> [String: String] {
         var env = ProcessInfo.processInfo.environment
-        if let cachedShellPath {
-            env["PATH"] = cachedShellPath
-            return env
-        }
-        let rawShellPath = try? await runShellCommand("/bin/zsh", arguments: ["-ilc", "print -rn -- $PATH"], injectPath: false)
-        let shellPath = rawShellPath?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let shellPath, !shellPath.isEmpty {
-            cachedShellPath = shellPath
+        if let shellPath = await ShellPathResolver.shared.current(), !shellPath.isEmpty {
             env["PATH"] = shellPath
         }
         return env
@@ -190,13 +189,29 @@ extension CodexAppServer {
         let stderr = Pipe()
         process.standardOutput = stdout
         process.standardError = stderr
+
+        // Wait for exit asynchronously. `waitUntilExit()` parked this actor — and
+        // a cooperative thread — for the whole spawn, which on a cold launch is
+        // seconds of an agent CLI starting up.
+        let exited = Self.terminationSignal(for: process)
         try process.run()
-        process.waitUntilExit()
+        await exited.value
+
         let out = String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
         if process.terminationStatus != 0 {
             let err = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
             throw CodexError.versionCheckFailed(err.isEmpty ? out : err)
         }
         return out
+    }
+
+    /// Install a termination handler on `process` and return a task that
+    /// completes once it exits. Call this *before* `run()`: a process that exits
+    /// immediately would otherwise finish before anyone is listening. The stream
+    /// buffers the finish, so an early exit still wakes the awaiting caller.
+    nonisolated static func terminationSignal(for process: Process) -> Task<Void, Never> {
+        let (stream, continuation) = AsyncStream<Void>.makeStream()
+        process.terminationHandler = { _ in continuation.finish() }
+        return Task { for await _ in stream {} }
     }
 }

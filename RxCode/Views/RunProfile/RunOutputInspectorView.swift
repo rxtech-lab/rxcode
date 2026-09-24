@@ -155,38 +155,45 @@ struct RunOutputInspectorView: View {
 }
 
 /// Wraps an externally-owned `LocalProcessTerminalView` so SwiftUI can host
-/// it without taking ownership. SwiftTerm reuses the same view across mounts;
-/// when the view re-parents we just keep the same instance.
+/// it without taking ownership. SwiftUI reuses the same container across
+/// selection changes, so the container must be re-pointed at exactly one
+/// terminal: adding the new view without detaching the previous one leaves
+/// both stacked, and the stale view wins on the way back.
 struct RunTaskTerminalHost: NSViewRepresentable {
     let view: LocalProcessTerminalView
 
     func makeNSView(context: Context) -> NSView {
         let container = NSView()
-        container.addSubview(view)
-        view.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            view.topAnchor.constraint(equalTo: container.topAnchor),
-            view.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            view.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            view.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-        ])
-        DispatchQueue.main.async {
-            view.window?.makeFirstResponder(view)
-        }
+        install(in: container)
         return container
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        if view.superview !== nsView {
+        install(in: nsView)
+    }
+
+    /// Makes `view` the container's only subview. No-ops when it already is,
+    /// so a plain re-layout doesn't steal first responder.
+    private func install(in container: NSView) {
+        let alreadyInstalled = view.superview === container && container.subviews.count == 1
+        guard !alreadyInstalled else { return }
+
+        for stale in container.subviews where stale !== view {
+            stale.removeFromSuperview()
+        }
+        if view.superview !== container {
             view.removeFromSuperview()
-            nsView.addSubview(view)
             view.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(view)
             NSLayoutConstraint.activate([
-                view.topAnchor.constraint(equalTo: nsView.topAnchor),
-                view.bottomAnchor.constraint(equalTo: nsView.bottomAnchor),
-                view.leadingAnchor.constraint(equalTo: nsView.leadingAnchor),
-                view.trailingAnchor.constraint(equalTo: nsView.trailingAnchor),
+                view.topAnchor.constraint(equalTo: container.topAnchor),
+                view.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+                view.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                view.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             ])
+        }
+        DispatchQueue.main.async {
+            container.window?.makeFirstResponder(view)
         }
     }
 }

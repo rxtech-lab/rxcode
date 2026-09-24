@@ -69,11 +69,6 @@ actor ACPService {
     /// Reference to the permission server for bridging `session/request_permission`.
     weak var permissionServer: PermissionServer?
 
-    /// Cached PATH read from the user's interactive login shell, so spawned
-    /// `npx`/`uvx`/binary agents can locate `node` and friends when the host
-    /// app was launched from Finder with the minimal GUI PATH.
-    var cachedShellPath: String?
-
     init() {}
 
     func setPermissionServer(_ server: PermissionServer) {

@@ -10,6 +10,24 @@ public enum StreamEvent: Sendable {
     case rateLimitEvent(RateLimitInfo)
     case todoSnapshot(TodoSnapshotEvent)
     case acpModelsDiscovered(ACPModelsDiscoveredEvent)
+
+    // MARK: Incremental blocks
+
+    /// A chunk of assistant text. The legacy CLI backends deliver the same
+    /// information inside `.unknown` as a raw `content_block_delta` frame,
+    /// which forces every non-Claude backend to synthesize Claude wire JSON
+    /// just to be understood. Backends built on RxAgentSDK emit this instead.
+    case textDelta(String)
+    /// The model is reasoning. Carries the reasoning text where the backend
+    /// exposes it; the UI currently only uses the fact that it arrived.
+    case thinkingDelta(String)
+    /// A tool call has begun but its arguments have not finished streaming.
+    case toolCallStarted(id: String, name: String)
+    /// The tool call's complete, parsed arguments — emitted exactly once.
+    case toolCallInput(id: String, input: [String: JSONValue])
+
+    /// A wire frame the backend did not decode. Only the legacy CLI backends
+    /// produce this; `AppState.handlePartialEvent(_:for:)` parses it.
     case unknown(String)
 }
 

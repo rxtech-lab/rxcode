@@ -738,7 +738,7 @@ final class AppStateHookController: HookController {
     }
 
     func customMenuItems(projectId: UUID?, surface: CustomMenuItemRecord.Surface) -> [CustomMenuItemRecord] {
-        app?.threadStore.customMenuItems(projectId: projectId, surface: surface) ?? []
+        app?.cachedCustomMenuItems(projectId: projectId, surface: surface) ?? []
     }
 
     func shouldShowConditionalMenuItem(

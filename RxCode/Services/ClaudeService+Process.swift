@@ -715,6 +715,43 @@ extension ClaudeCodeServer {
         try handle.write(contentsOf: Data([0x0A])) // newline
     }
 
+    /// Deliver extra user input to a turn that is still running.
+    ///
+    /// This is the same NDJSON `user` frame the initial prompt is written as —
+    /// `--input-format stream-json` keeps stdin open for exactly this, and the
+    /// CLI folds the message into the turn at its next agent loop boundary. So
+    /// steering needs no new transport, only the handle we were already holding
+    /// open until `closeStdin(streamId:)`.
+    ///
+    /// Returns `false` once stdin is gone, which is how a turn that has already
+    /// reported its `result` is distinguished from one still running.
+    func steer(streamId: UUID, prompt: String) -> Bool {
+        guard let handle = stdinHandles[streamId] else {
+            logger.info("[Claude] steer declined, stdin already closed stream=\(streamId)")
+            return false
+        }
+        let userMessage: [String: Any] = [
+            "type": "user",
+            "message": [
+                "role": "user",
+                "content": [
+                    ["type": "text", "text": prompt]
+                ]
+            ]
+        ]
+        do {
+            try Self.writeJSONLine(userMessage, to: handle)
+            logger.info("[Claude] steered stream=\(streamId) promptLen=\(prompt.count)")
+            return true
+        } catch {
+            // A broken pipe here means the CLI exited between the handle lookup
+            // and the write. Treat it as "could not steer" so the caller still
+            // delivers the message as its own turn.
+            logger.warning("[Claude] steer failed stream=\(streamId): \(error.localizedDescription)")
+            return false
+        }
+    }
+
     /// Close stdin for an active stream. Call this after receiving the `result` event
     /// so the CLI process exits cleanly once it has flushed all remaining output.
     func closeStdin(streamId: UUID) {

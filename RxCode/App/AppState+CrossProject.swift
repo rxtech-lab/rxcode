@@ -46,6 +46,7 @@ extension AppState {
             sessionKey: sessionKey,
             agentProvider: agentProvider,
             model: model,
+            effort: effort,
             permissionMode: permissionMode,
             registerMode: registerMode,
             projectId: projectId,
@@ -68,7 +69,7 @@ extension AppState {
                 cwd: cwd,
                 sessionId: cliSessionId,
                 model: preflight.resolvedModel,
-                effort: effort,
+                effort: preflight.resolvedEffort,
                 permissionMode: preflight.resolvedSendMode,
                 planMode: permissionMode == .plan,
                 hookSettingsPath: hookSettingsPath,
@@ -77,7 +78,9 @@ extension AppState {
                 mcpCodexOverrides: preflight.mcpCodexOverrides,
                 acpMCPServers: preflight.acpMCPServers,
                 acpSpec: preflight.acpSpec,
-                clientSessionKey: sessionKey
+                clientSessionKey: sessionKey,
+                mcpServers: preflight.mcpRecords,
+                ideBridgeCommand: preflight.ideBridgeCommand
             )
             stream = await backend(for: agentProvider).send(request)
             let backendReturnedElapsed = Date().timeIntervalSince(streamStart)
@@ -742,6 +745,25 @@ extension AppState {
                 case .acpModelsDiscovered(let event):
                     logger.info("[Stream:UI] event #\(eventCount) .acpModelsDiscovered clientId=\(event.clientId, privacy: .public) configId=\(event.config.configId, privacy: .public) models=\(event.config.options.count) [\(Self.acpModelListDescription(event.config.options), privacy: .public)]")
                     applyDiscoveredACPModels(clientId: event.clientId, config: event.config)
+
+                // The four cases below are the decoded equivalents of the raw
+                // `content_block_*` frames that arrive as `.unknown`. Backends
+                // built on RxAgentSDK emit these directly; both paths converge
+                // on the same `apply…` helpers in `AppState+Stream.swift`.
+                case .textDelta(let text):
+                    applyTextDelta(text, for: sessionKey)
+                    recordStreamPartialResponseIfNeeded(streamId: streamId, sessionId: sessionKey)
+
+                case .thinkingDelta:
+                    applyThinkingDelta(for: sessionKey)
+
+                case .toolCallStarted(let id, let name):
+                    logger.debug("[Stream:UI] event #\(eventCount) .toolCallStarted \(name, privacy: .public) id=\(id, privacy: .public)")
+                    beginToolCall(id: id, name: name, for: sessionKey)
+
+                case .toolCallInput(let id, let input):
+                    applyToolCallInput(id: id, input: input, for: sessionKey)
+                    recordStreamPartialResponseIfNeeded(streamId: streamId, sessionId: sessionKey)
 
                 case .unknown(let raw):
                     if eventCount <= 5 || eventCount % 100 == 0 {

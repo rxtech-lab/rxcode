@@ -14,7 +14,7 @@ public enum ChatStatus: Sendable, Equatable {
 
 // MARK: - ChatTodoProgress
 
-struct ChatTodoProgress: Sendable, Equatable {
+nonisolated struct ChatTodoProgress: Sendable, Equatable {
     let done: Int
     let total: Int
     let inProgress: Bool
@@ -53,14 +53,40 @@ struct StatusBadgeDot: View {
         Circle()
             .fill(color)
             .frame(width: 6, height: 6)
-            .scaleEffect(shouldPulse ? (pulse ? 1.4 : 1.0) : 1.0)
-            .opacity(shouldPulse ? (pulse ? 0.65 : 1.0) : 1.0)
-            .onAppear {
-                guard shouldPulse else { return }
-                withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
-                    pulse = true
-                }
-            }
+            .scaleEffect(pulse ? 1.4 : 1.0)
+            .opacity(pulse ? 0.65 : 1.0)
+            .onAppear { syncPulse() }
+            .onDisappear { stopPulse() }
+            .onChange(of: shouldPulse) { syncPulse() }
+    }
+
+    /// Start or stop the pulse to match `status`.
+    ///
+    /// Stopping matters as much as starting. A `repeatForever` animation keeps
+    /// SwiftUI's display link running for as long as its value stays animated, and
+    /// this dot survives an `awaitingPermission` -> `done` transition with the same
+    /// view identity — so a pulse started for a permission prompt and never
+    /// stopped keeps re-running the whole sidebar `ForEach` every frame, forever,
+    /// on a thread that has long since gone quiet.
+    ///
+    /// Gating only the rendered value is not enough: `pulse` itself has to be reset
+    /// under a finite animation to detach the repeating one from the view graph.
+    private func syncPulse() {
+        guard shouldPulse else {
+            stopPulse()
+            return
+        }
+        guard !pulse else { return }
+        withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
+            pulse = true
+        }
+    }
+
+    private func stopPulse() {
+        guard pulse else { return }
+        withAnimation(.easeInOut(duration: 0.2)) {
+            pulse = false
+        }
     }
 
     private var shouldPulse: Bool {
@@ -99,7 +125,12 @@ struct ProjectChatRow: View {
     /// Serializable action items (code review, commit, autopilot setup) supplied
     /// by hooks. Rendered via `MenuItemsView`; taps route through the desktop
     /// menu action handler.
-    let hookMenuItems: [MenuItem]
+    ///
+    /// Deferred behind a closure so the hooks only run when the menu is actually
+    /// opened. Building the array at the call site ran every enabled hook — some
+    /// of which hit SwiftData — for every row on every view-graph update, to
+    /// populate a menu nobody had opened yet.
+    let hookMenuItems: () -> [MenuItem]
     /// Nesting depth; review children render one level in from their parent.
     var indentLevel: Int = 0
     /// Replaces the thread title (e.g. `"Review 1"` for a nested review child).
@@ -230,9 +261,10 @@ struct ProjectChatRow: View {
             // Code review / commit / autopilot actions now come from hooks as
             // serializable MenuItems (gated for review threads and file changes
             // inside the hooks). The handler dispatches taps locally on desktop.
-            if !hookMenuItems.isEmpty {
+            let items = hookMenuItems()
+            if !items.isEmpty {
                 Divider()
-                MenuItemsView(hookMenuItems)
+                MenuItemsView(items)
                     .menuActionHandler(appState.desktopMenuActionHandler(navigatingIn: windowState))
             }
             Divider()

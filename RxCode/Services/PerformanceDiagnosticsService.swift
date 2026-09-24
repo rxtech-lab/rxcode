@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import RxAgentUISupport
 import RxCodeCore
 import os
 
@@ -69,7 +70,7 @@ private nonisolated struct PerformanceLogRecord: Codable, Sendable {
     let mainActorMaxLagMilliseconds: Double
     let process: ProcessPerformanceMetrics
     let state: PerformanceStateSnapshot
-    let events: PerformanceDiagnostics.Snapshot
+    let events: RxCodeCore.PerformanceDiagnostics.Snapshot
 }
 
 /// Writes a compact JSONL sample every 30 seconds. Records contain only counts,
@@ -90,6 +91,26 @@ actor PerformanceDiagnosticsService {
         return encoder
     }()
 
+    /// Drains both counter registries into one interval.
+    ///
+    /// `RxCodeCore.PerformanceDiagnostics` holds what the app and ChatKit
+    /// record; the transcript list and markdown renderer now live in RxAgentSDK
+    /// and record into `RxAgentUISupport.PerformanceDiagnostics`. Both are
+    /// drained here so a record still carries `scroll.*` and `markdown.*`.
+    private static func drainEvents() -> RxCodeCore.PerformanceDiagnostics.Snapshot {
+        let sdk = RxAgentUISupport.PerformanceDiagnostics.drain()
+        return RxCodeCore.PerformanceDiagnostics.drain().merging(
+            counters: sdk.counters,
+            measurements: sdk.measurements.mapValues {
+                RxCodeCore.PerformanceDiagnostics.Measurement(
+                    count: $0.count,
+                    total: $0.total,
+                    maximum: $0.maximum
+                )
+            }
+        )
+    }
+
     func append(state: PerformanceStateSnapshot, mainActorMaxLagMilliseconds: Double) {
         let record = PerformanceLogRecord(
             timestamp: .now,
@@ -97,7 +118,7 @@ actor PerformanceDiagnosticsService {
             mainActorMaxLagMilliseconds: mainActorMaxLagMilliseconds,
             process: .current(),
             state: state,
-            events: PerformanceDiagnostics.drain()
+            events: Self.drainEvents()
         )
 
         do {

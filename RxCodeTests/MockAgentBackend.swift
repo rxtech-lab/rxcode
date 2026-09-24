@@ -114,6 +114,47 @@ actor MockAgentBackend: AgentBackend {
         }
     }
 
+    /// Mirrors what the real backends report, so effort-sanitization tests
+    /// exercise the actual per-provider vocabularies rather than a stand-in.
+    /// The protocol default is `[]`, which would make every level look
+    /// rejected and turn those assertions vacuous.
+    func availableReasoningLevels() async -> [ReasoningLevel] {
+        switch provider {
+        case .claudeCode: return .claudeCodeEfforts
+        case .codex: return .codexEfforts
+        default: return []
+        }
+    }
+
+    /// The transport is always capable; `acceptsSteering` decides whether a
+    /// given turn actually takes the input, which is the pair the real
+    /// backends have (a stdin that exists vs. a stdin still open).
+    nonisolated var supportsSteering: Bool { true }
+
+    /// Whether this mock's turns accept steering. Off by default so a test has
+    /// to opt in before a steer can succeed.
+    private var acceptsSteering = false
+
+    /// Every steer this mock accepted, in order.
+    private(set) var steeredPrompts: [String] = []
+
+    /// Steer attempts that were declined, so a test can tell "never asked"
+    /// apart from "asked and refused".
+    private(set) var declinedSteerCount = 0
+
+    func setAcceptsSteering(_ accepts: Bool) {
+        acceptsSteering = accepts
+    }
+
+    func steer(streamId: UUID, prompt: String) -> Bool {
+        guard acceptsSteering else {
+            declinedSteerCount += 1
+            return false
+        }
+        steeredPrompts.append(prompt)
+        return true
+    }
+
     func cancel(streamId: UUID) {
         // No-op — scripts run to completion or hit `continuation.finish()` on
         // their own. Cancellation in the production backend kills the CLI

@@ -138,6 +138,16 @@ extension CodexAppServer {
         }
     }
 
+    /// Request id for `turn/steer`. The turn's own handshake uses 1-3 and the
+    /// loop dispatches on those, so steering picks an id outside that range —
+    /// its reply is not something the loop needs to correlate.
+    static let steerRequestId = 100
+
+    /// The live turn id from a `turn/started` notification.
+    static func startedTurnId(from params: [String: JSONValue]) -> String? {
+        params["turn"]?.objectValue?["id"]?.stringValue
+    }
+
     static func request(id: Int, method: String, params: [String: JSONValue]) -> JSONValue {
         request(id: id, method: method, params: .object(params))
     }

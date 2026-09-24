@@ -9,66 +9,13 @@ import os
 final class ThreadStore {
     let logger = Logger(subsystem: "com.claudework", category: "ThreadStore")
     let context: ModelContext
+    /// Kept so background readers can open their own context over the same
+    /// store — see `ThreadStoreReader`.
+    let container: ModelContainer
 
-    init(context: ModelContext) {
-        self.context = context
-    }
-
-    /// The full SwiftData schema for the thread store, shared by the file-backed
-    /// (`make`) and in-memory (`inMemory`, used by tests) factories.
-    static var schema: Schema {
-        Schema([
-            ChatThread.self,
-            TodoSnapshot.self,
-            ThreadFileEdit.self,
-            QueuedMessageRecord.self,
-            PlanDecisionRecord.self,
-            ThreadSummaryRecord.self,
-            BranchBriefingRecord.self,
-            ThreadEmbeddingChunk.self,
-            MemoryRecord.self,
-            HookStatusRecord.self,
-            HookCardRecord.self,
-            CustomMenuItemRecord.self
-        ])
-    }
-
-    /// In-memory store over the full schema, for tests.
-    static func inMemory() -> ThreadStore {
-        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
-        let container = try! ModelContainer(for: schema, configurations: [config])
-        return ThreadStore(context: ModelContext(container))
-    }
-
-    /// Convenience initializer creating its own `ModelContainer` rooted at the
-    /// app's Application Support directory.
-    static func make(baseURL: URL = AppSupport.bundleScopedURL) -> ThreadStore {
-        let schema = Self.schema
-        let url = Self.storeURL(baseURL: baseURL)
-        let config = ModelConfiguration(schema: schema, url: url)
-        do {
-            let container = try ModelContainer(for: schema, configurations: [config])
-            let store = ThreadStore(context: ModelContext(container))
-            // Sweep hook cards left mid-run by a previous launch so they don't
-            // rebuild as a perpetual spinner.
-            store.finalizeInterruptedHooks()
-            store.finalizeInterruptedHookCards()
-            return store
-        } catch {
-            // Fall back to an in-memory container so the app still launches.
-            let fallback = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
-            let container = try! ModelContainer(for: schema, configurations: [fallback])
-            let store = ThreadStore(context: ModelContext(container))
-            store.logger.error("Falling back to in-memory ChatThread store: \(error.localizedDescription)")
-            return store
-        }
-    }
-
-    private static func storeURL(baseURL: URL) -> URL {
-        let fm = FileManager.default
-        let dir = baseURL
-        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir.appendingPathComponent("threads.store")
+    init(container: ModelContainer) {
+        self.container = container
+        self.context = ModelContext(container)
     }
 
     // MARK: - Reads
@@ -185,9 +132,10 @@ final class ThreadStore {
         let orphanIds = orphans.map(\.id)
 
         // Also sweep embedding chunks whose owning thread row is already gone —
-        // these are what feed the search source directly.
-        let chunkRows = (try? context.fetch(FetchDescriptor<ThreadEmbeddingChunk>())) ?? []
-        let orphanChunks = chunkRows.filter { !knownProjectIds.contains($0.projectId) }
+        // these are what feed the search source directly. Each chunk carries an
+        // embedding vector, so identifying the orphans reads the owning project
+        // id alone; only rows that are actually orphaned get materialized.
+        let orphanChunks = fetchOrphanEmbeddingChunks(excludingProjectIds: knownProjectIds)
 
         guard !orphans.isEmpty || !orphanChunks.isEmpty else { return 0 }
 
@@ -207,6 +155,7 @@ final class ThreadStore {
 
         return orphans.count
     }
+
 
     // MARK: - Writes
 
@@ -538,6 +487,26 @@ final class ThreadStore {
         return (try? context.fetch(descriptor))?.first
     }
 
+    /// Persisted todo progress for every session, keyed by session id, in a single
+    /// query. Backs the sidebar's per-row progress ring, which previously ran a
+    /// `fetchTodoSnapshot` per visible thread on every view-graph update.
+    ///
+    /// Only the counts are fetched, never `itemsData` — this reloads on every todo
+    /// revision bump, and materializing each row's encoded item list would churn
+    /// megabytes for numbers the sidebar already has.
+    func loadTodoProgressBySession() -> [String: ChatTodoProgress] {
+        var descriptor = FetchDescriptor<TodoSnapshot>()
+        descriptor.propertiesToFetch = [\.sessionId, \.done, \.total, \.inProgress]
+        let rows = (try? context.fetch(descriptor)) ?? []
+        return rows.reduce(into: [:]) { result, row in
+            result[row.sessionId] = ChatTodoProgress(
+                done: row.done,
+                total: row.total,
+                inProgress: row.inProgress > 0
+            )
+        }
+    }
+
     func upsertTodoSnapshot(sessionId: String, items: [TodoItem]) {
         if let existing = fetchTodoSnapshot(sessionId: sessionId) {
             existing.apply(items: items)
@@ -800,6 +769,20 @@ final class ThreadStore {
             predicate: #Predicate { $0.sessionId == sessionId }
         )
         return (try? context.fetchCount(descriptor)) ?? 0
+    }
+
+    /// Every session id that recorded at least one file edit, in a single query.
+    /// The sidebar gates "Commit Files" per row from this set: asking with a
+    /// `fileEditCount` per row instead meant one SQLite query per visible thread
+    /// on every SwiftUI view-graph update.
+    ///
+    /// Only `sessionId` is fetched — a row also carries the file's original and
+    /// modified contents, which must not be materialized just to test existence.
+    func sessionIdsWithFileEdits() -> Set<String> {
+        var descriptor = FetchDescriptor<ThreadFileEdit>()
+        descriptor.propertiesToFetch = [\.sessionId]
+        let rows = (try? context.fetch(descriptor)) ?? []
+        return Set(rows.map(\.sessionId))
     }
 
     private func fetchFileEdit(sessionId: String, path: String) -> ThreadFileEdit? {

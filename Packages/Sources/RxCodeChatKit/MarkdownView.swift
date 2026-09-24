@@ -1,6 +1,6 @@
 import SwiftUI
 import RxCodeCore
-import RxCodeMarkdown
+import AgentMarkdownUI
 
 extension MarkdownStyle {
     public static var rxCodeChat: MarkdownStyle {

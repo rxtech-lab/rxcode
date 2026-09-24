@@ -54,7 +54,10 @@ struct ProjectTreeView: View {
         .task(id: gitDirtyRefreshKey) {
             await appState.refreshProjectGitDirty()
         }
-        .onChange(of: appState.isStreaming(in: windowState)) { old, new in
+        // `isStreamingActivity`, not `isStreaming(in:)`: the latter reads
+        // `sessionStates`, which re-rendered this whole tree (and every row's
+        // eagerly built context menus) on every stream event.
+        .onChange(of: appState.isStreamingActivity(in: windowState)) { old, new in
             if old && !new {
                 Task { await appState.refreshProjectGitDirty() }
             }
@@ -297,7 +300,7 @@ struct ProjectTreeView: View {
                                 }
                             }
                         },
-                        hookMenuItems: appState.projectContextMenuItems(for: project)
+                        hookMenuItems: { appState.projectContextMenuItems(for: project) }
                     )
 
                     if expandedProjectIds.contains(project.id) {
@@ -345,7 +348,9 @@ private struct ProjectTreeRow: View {
     let onNewChat: () -> Void
     let onCodeReview: () -> Void
     let onCommitAll: () -> Void
-    let hookMenuItems: [MenuItem]
+    /// Deferred behind a closure so the hooks only run when the menu is opened,
+    /// rather than once per project row on every view-graph update.
+    let hookMenuItems: () -> [MenuItem]
 
     @State private var isHovered = false
     @State private var showLocationPopover = false
@@ -491,9 +496,10 @@ private struct ProjectTreeRow: View {
         // Code review, commit, create PR, and the autopilot setup actions now
         // come from hooks as serializable MenuItems (gated inside the hooks), so
         // the desktop and mobile render the same set. Taps dispatch locally here.
-        if !hookMenuItems.isEmpty {
+        let items = hookMenuItems()
+        if !items.isEmpty {
             Divider()
-            MenuItemsView(hookMenuItems)
+            MenuItemsView(items)
                 .menuActionHandler(appState.desktopMenuActionHandler(navigatingIn: windowState))
         }
         Divider()
@@ -780,7 +786,7 @@ private struct ProjectChatsList: View {
                     }
                 }
             },
-            hookMenuItems: appState.threadContextMenuItems(for: summary),
+            hookMenuItems: { appState.threadContextMenuItems(for: summary) },
             indentLevel: indentLevel,
             titleOverride: titleOverride,
             showLabelChip: showLabelChip,

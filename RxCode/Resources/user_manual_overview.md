@@ -12,6 +12,7 @@ RxCode is a native macOS client for coding agents. It gives Claude Code, Codex, 
 ## Main Areas
 
 - **Sidebar**: projects, history, files, Git status, and branch briefing.
+- **Tasks**: stories and task boards across projects, with saved board and table views for each project. See **Projects Dashboard** for the workflow.
 - **Content**: the active chat, briefing, or project view.
 - **Detail / Inspector**: changes, this-thread diff, terminal, and memo.
 - **Settings**: app preferences, agents, commands, integrations, and sync.

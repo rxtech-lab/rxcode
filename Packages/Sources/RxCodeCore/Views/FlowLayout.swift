@@ -3,15 +3,21 @@ import SwiftUI
 /// A layout that arranges its subviews left-to-right and wraps to a new line
 /// whenever the next subview would overflow the available width. Subviews that
 /// report a zero ideal size (e.g. empty `@ViewBuilder` conditionals) are
-/// skipped so they don't leave phantom gaps. Used for the briefing card's
-/// status chips, which can otherwise overflow a narrow card.
-struct FlowLayout: Layout {
+/// skipped so they don't leave phantom gaps. Shared by the chip rows that can
+/// otherwise overflow a narrow card: the briefing status chips, the task board
+/// pills, and the task prompt card's attachment chips.
+public struct FlowLayout: Layout {
     /// Horizontal gap between items on the same row.
-    var spacing: CGFloat = 6
+    public var spacing: CGFloat = 6
     /// Vertical gap between wrapped rows.
-    var lineSpacing: CGFloat = 6
+    public var lineSpacing: CGFloat = 6
 
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) -> CGSize {
+    public init(spacing: CGFloat = 6, lineSpacing: CGFloat = 6) {
+        self.spacing = spacing
+        self.lineSpacing = lineSpacing
+    }
+
+    public func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) -> CGSize {
         let maxWidth = proposal.width ?? .infinity
         let rows = computeRows(maxWidth: maxWidth, subviews: subviews)
         let width = rows.map(\.width).max() ?? 0
@@ -19,7 +25,7 @@ struct FlowLayout: Layout {
         return CGSize(width: min(width, maxWidth), height: height)
     }
 
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) {
+    public func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) {
         let rows = computeRows(maxWidth: bounds.width, subviews: subviews)
         var y = bounds.minY
         for row in rows {

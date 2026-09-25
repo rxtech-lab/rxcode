@@ -5,7 +5,7 @@ import SwiftUI
 // MARK: - RxCodeToolbar
 
 /// Shared trailing toolbar group: New Chat, Open in Editor, Terminal,
-/// Memo, Inspector toggle, Settings.
+/// Memo, Inspector toggle, What's New, Settings.
 ///
 /// Wrapped in an isolated struct so toolbar reads do not trigger NSToolbar
 /// re-layout when `selectedProject` changes.
@@ -84,6 +84,8 @@ struct RxCodeToolbarContent: ToolbarContent {
             .keyboardShortcut("4", modifiers: .command)
             .accessibilityIdentifier("toggle-inspector-button")
 
+            WhatsNewToolbarButton()
+
             Button {
                 openSettings()
             } label: {
@@ -91,6 +93,28 @@ struct RxCodeToolbarContent: ToolbarContent {
             }
             .help("Settings")
             .accessibilityIdentifier("settings-button")
+        }
+    }
+}
+
+private struct WhatsNewToolbarButton: View {
+    @Environment(AppState.self) private var appState
+    @State private var showWhatsNew = false
+
+    var body: some View {
+        Button {
+            showWhatsNew = true
+        } label: {
+            Image(systemName: "wand.and.stars")
+        }
+        .help("What's New")
+        .accessibilityLabel("What's New")
+        .accessibilityIdentifier("whats-new-button")
+        .sheet(isPresented: $showWhatsNew) {
+            WhatsNewSheet(features: WhatsNewFeature.all) {
+                showWhatsNew = false
+            }
+            .environment(appState)
         }
     }
 }

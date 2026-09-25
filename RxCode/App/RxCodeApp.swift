@@ -9,10 +9,19 @@ private struct StartNewChatKey: FocusedValueKey {
     typealias Value = () -> Void
 }
 
+private struct ShowWhatsNewKey: FocusedValueKey {
+    typealias Value = () -> Void
+}
+
 extension FocusedValues {
     var startNewChat: (() -> Void)? {
         get { self[StartNewChatKey.self] }
         set { self[StartNewChatKey.self] = newValue }
+    }
+
+    var showWhatsNew: (() -> Void)? {
+        get { self[ShowWhatsNewKey.self] }
+        set { self[ShowWhatsNewKey.self] = newValue }
     }
 }
 

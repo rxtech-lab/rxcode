@@ -4,13 +4,13 @@ import RxCodeCore
 /// Moves a task board card through its columns' triggers as the thread it was
 /// dispatched into stops and gets reviewed. Each column names where a card
 /// sitting in it goes on session stop, review start, review pass and review
-/// fail (`TaskColumn`); by default In Progress → Pending Review on stop, and
-/// Pending Review → In Progress when a review fails and a fix turn starts.
+/// fail (`TaskColumn`). By default a stopped In Progress task enters Pending
+/// Review only after a separate agent verifies completion. Incomplete or
+/// unverified work returns to Pending with an attention marker.
 ///
 /// Session stop fires on `afterSessionEnd` so it runs after the
-/// response-complete notification. Any finished turn counts — completed,
-/// errored or cancelled. A chat column is locked against manual moves while the
-/// agent owns the task, so leaving a failed run there would strand the card.
+/// response-complete notification. Errored and cancelled turns are released
+/// from the locked chat column and flagged for attention.
 ///
 /// Plan mode needs no special handling here. `HookManager` already suppresses
 /// every session-end hook for a planning turn (`sessionEndHooksSuppressed`), so
@@ -26,7 +26,7 @@ final class TaskBoardHook: Hook {
         // wait for the queue to drain so the task moves once, at the end.
         guard !payload.hasQueuedFollowups else { return .ignored }
 
-        let moved = controller.applyTaskTrigger(.sessionStop, sessionKey: payload.sessionKey, sessionContinues: false)
+        let moved = await controller.advanceTaskAfterSessionEnd(payload)
         return moved ? .proceed : .ignored
     }
 

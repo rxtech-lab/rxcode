@@ -24,6 +24,9 @@ struct TaskRunView: View {
     @State private var isComposerFocused = false
     @State private var composerHasMarkedText = false
     @State private var previewImage: Attachment?
+    @State private var transcriptHeight: CGFloat = 0
+    @State private var latestTurnHeight: CGFloat = 0
+    @State private var measuredTurnID: Int?
 
     private var task: ProjectTask? { appState.task(id: taskId) }
 
@@ -31,8 +34,7 @@ struct TaskRunView: View {
     /// `sessionActivity` (not `sessionStates`) so this view doesn't re-render on
     /// every streamed token.
     private var isAgentRunning: Bool {
-        guard let key = task?.sessionKey else { return false }
-        return appState.sessionActivity[appState.resolveCurrentSessionId(key)]?.isStreaming ?? false
+        task.map(appState.isAgentRunning(for:)) ?? false
     }
 
     var body: some View {
@@ -103,26 +105,47 @@ struct TaskRunView: View {
         } else {
             ScrollViewReader { proxy in
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 0) {
                         ForEach(turns) { turn in
                             turnView(turn, isLast: turn.id == turns.last?.id)
+                                .padding(.horizontal, 20)
+                                .padding(.top, 20)
+                                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                                    if turn.id == turns.last?.id {
+                                        latestTurnHeight = height
+                                        measuredTurnID = turn.id
+                                    }
+                                }
                                 .id(turn.id)
                         }
+                        // Keep the newest prompt at the top while its response is short.
+                        // The space gives way to the response as the turn grows.
+                        Color.clear.frame(height: tailSpacerHeight)
+                        Color.clear.frame(height: 20)
                     }
-                    .padding(20)
                 }
                 .scrollContentBackground(.hidden)
                 .frame(maxHeight: .infinity)
-                .onChange(of: turns) { _, newValue in
-                    if let last = newValue.last?.id {
-                        withAnimation { proxy.scrollTo(last, anchor: .bottom) }
-                    }
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                    transcriptHeight = height
                 }
-                .onAppear {
-                    if let last = turns.last?.id { proxy.scrollTo(last, anchor: .bottom) }
+                .task(id: turns.last?.id) {
+                    guard let last = turns.last?.id else { return }
+                    // Wait for the new turn and its trailing space to enter layout.
+                    for _ in 0..<10 {
+                        if measuredTurnID == last, transcriptHeight > 0 { break }
+                        try? await Task.sleep(for: .milliseconds(16))
+                    }
+                    guard !Task.isCancelled else { return }
+                    proxy.scrollTo(last, anchor: .top)
                 }
             }
         }
+    }
+
+    private var tailSpacerHeight: CGFloat {
+        let measuredHeight = measuredTurnID == turns.last?.id ? latestTurnHeight : 0
+        return max(0, transcriptHeight - measuredHeight - 20)
     }
 
     private func turnView(_ turn: TaskRunTurn, isLast: Bool) -> some View {
@@ -371,109 +394,5 @@ struct TaskRunView: View {
         }
         hasThread = true
         turns = TaskRunTurn.turns(from: messages)
-    }
-}
-
-// MARK: - Prompt
-
-/// A thread's user message as a card: attachments as chips, the task title as
-/// a heading, the description as Markdown, and the context list as labeled
-/// pills. Follow-ups have no title and render as plain Markdown.
-private struct TaskPromptView: View {
-    let content: TaskPromptContent
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if let title = content.title {
-                Text(title)
-                    .font(.system(size: ClaudeTheme.size(15), weight: .semibold))
-                    .foregroundStyle(ClaudeTheme.textPrimary)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if !content.body.isEmpty {
-                MarkdownContentView(text: content.body)
-            }
-
-            if !content.fields.isEmpty {
-                if content.title != nil { ClaudeThemeDivider() }
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(content.fields, id: \.self) { field in
-                        fieldRow(field)
-                    }
-                }
-            }
-
-            if !content.references.isEmpty {
-                FlowLayout(spacing: 6) {
-                    ForEach(content.references, id: \.self) { reference in
-                        referenceChip(reference)
-                    }
-                }
-            }
-        }
-    }
-
-    private func fieldRow(_ field: TaskPromptContent.Field) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Label(field.label, systemImage: Self.icon(for: field.label))
-                .font(.system(size: ClaudeTheme.size(11), weight: .medium))
-                .foregroundStyle(ClaudeTheme.textTertiary)
-                .frame(width: 110, alignment: .leading)
-
-            if field.label == "Tags" {
-                FlowLayout(spacing: 4) {
-                    ForEach(Self.tags(in: field.value), id: \.self) { tag in
-                        TaskPill(text: tag)
-                    }
-                }
-            } else {
-                Text(field.value)
-                    .font(.system(size: ClaudeTheme.size(12)))
-                    .foregroundStyle(ClaudeTheme.textPrimary)
-                    .textSelection(.enabled)
-            }
-        }
-    }
-
-    private func referenceChip(_ reference: TaskPromptContent.Reference) -> some View {
-        let icon: String = switch reference.kind {
-        case .image: "photo"
-        case .link: "link"
-        case .file: "doc"
-        }
-        let name = reference.kind == .link
-            ? reference.value
-            : URL(fileURLWithPath: reference.value).lastPathComponent
-        return Label(name, systemImage: icon)
-            .font(.system(size: ClaudeTheme.size(11)))
-            .foregroundStyle(ClaudeTheme.textSecondary)
-            .lineLimit(1)
-            .truncationMode(.middle)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(Capsule().fill(ClaudeTheme.surfaceElevated))
-            .help(reference.value)
-    }
-
-    private static func tags(in value: String) -> [String] {
-        value.split(separator: ",")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-    }
-
-    /// Icons for the labels `ProjectTask.agentPrompt` writes. The labels are
-    /// the prompt's fixed English keys, not localized UI strings.
-    private static func icon(for label: String) -> String {
-        switch label {
-        case "Story": "square.stack.3d.up"
-        case "Type": "shippingbox"
-        case "Priority": "flag"
-        case "Tags": "tag"
-        case "Target version": "number"
-        case "Milestone": "flag.checkered"
-        default: "info.circle"
-        }
     }
 }

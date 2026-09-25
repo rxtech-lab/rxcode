@@ -1,5 +1,6 @@
 import RxCodeCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The Tasks route — the app's landing surface.
 ///
@@ -202,6 +203,9 @@ struct TaskOverviewView: View {
 /// One project's card on the overview: a header that opens the project page,
 /// and up to `TaskOverviewView.previewLimit` recently active stories. Tasks
 /// show inside a story's sheet rather than on the card.
+///
+/// The header doubles as a drag handle and the whole card is a drop target, so
+/// cards can be rearranged the way board columns and view tabs are.
 private struct TaskProjectSection: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
@@ -210,6 +214,9 @@ private struct TaskProjectSection: View {
     let keyword: String
     @Binding var sheet: TaskBoardSheet?
     @Binding var storySheet: ProjectStory?
+
+    @State private var isDropTargeted = false
+    @State private var pendingDeletion: TaskBoardSheet?
 
     private var board: TaskBoard { appState.taskBoard(for: project.id) }
 
@@ -234,6 +241,7 @@ private struct TaskProjectSection: View {
                                     StoryContextMenuItems(
                                         story: story,
                                         onEdit: { sheet = .story(story) },
+                                        onDelete: { pendingDeletion = .story(story) },
                                         onNewTask: { sheet = .task($0) }
                                     )
                                 }
@@ -270,7 +278,18 @@ private struct TaskProjectSection: View {
         }
         .frame(maxHeight: .infinity, alignment: .top)
         .glassEffect(.regular, in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusLarge))
+        // A dragged card lands in this card's slot. The payload is the card's
+        // own type, so a story or task drag can never reorder projects.
+        .taskDropHighlight(isDropTargeted, in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusLarge))
+        .dropDestination(for: TaskProjectTransfer.self) { items, _ in
+            guard let dragged = items.first?.projectId, dragged != project.id else { return false }
+            appState.reorderProject(dragged, onto: project.id)
+            return true
+        } isTargeted: { isDropTargeted = $0 }
         .accessibilityIdentifier("task-project-section-\(project.id.uuidString)")
+        .taskDeletionConfirmation(pending: $pendingDeletion) { candidate in
+            if case .story(let story) = candidate { appState.deleteStory(story) }
+        }
     }
 
     private var emptyState: some View {
@@ -294,22 +313,17 @@ private struct TaskProjectSection: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            Button(action: openProject) {
-                HStack(spacing: 6) {
-                    Image(systemName: "folder")
-                        .foregroundStyle(ClaudeTheme.textSecondary)
-                    Text(project.name)
-                        .font(.system(size: ClaudeTheme.size(14), weight: .semibold))
-                        .foregroundStyle(ClaudeTheme.textPrimary)
-                        .lineLimit(1)
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: ClaudeTheme.size(10), weight: .semibold))
-                        .foregroundStyle(ClaudeTheme.textTertiary)
-                }
+            // Only the title carries the drag: the add button and the menu in
+            // the same row have to stay clickable. A tap gesture rather than a
+            // `Button`, which swallows the drag, as the view tabs do.
+            titleGroup
                 .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help("Open the project's task views")
+                .onTapGesture(perform: openProject)
+                .draggable(TaskProjectTransfer(projectId: project.id)) {
+                    TaskProjectDragPreview(project: project)
+                }
+                .accessibilityAddTraits(.isButton)
+                .help("Open the project's task views — drag onto another card to reorder")
 
             statusSummary
 
@@ -341,6 +355,22 @@ private struct TaskProjectSection: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
+    }
+
+    /// Folder icon, project name and the disclosure chevron — also the card's
+    /// drag handle.
+    private var titleGroup: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "folder")
+                .foregroundStyle(ClaudeTheme.textSecondary)
+            Text(project.name)
+                .font(.system(size: ClaudeTheme.size(14), weight: .semibold))
+                .foregroundStyle(ClaudeTheme.textPrimary)
+                .lineLimit(1)
+            Image(systemName: "chevron.right")
+                .font(.system(size: ClaudeTheme.size(10), weight: .semibold))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+        }
     }
 
     /// Per-status task counts, e.g. ○ 4  ◎ 2  ✓ 7.
@@ -456,5 +486,47 @@ struct StoryGlassCard: View {
         .taskBoardAnimation(TaskBoardMotion.feedback, value: isHovering)
         .taskBoardAnimation(value: isActive)
         .accessibilityIdentifier("task-story-card-\(story.id.uuidString)")
+    }
+}
+
+// MARK: - Project card drag
+
+/// The drag payload of a project card on the overview.
+///
+/// A dedicated `Transferable`, like the column and view-tab drags: story cards
+/// live inside the drop target, so the payloads have to be distinguishable by
+/// type for a drop to mean only one thing.
+struct TaskProjectTransfer: Codable, Sendable, Transferable {
+    let projectId: UUID
+
+    static var transferRepresentation: some TransferRepresentation {
+        CodableRepresentation(contentType: .rxCodeTaskProject)
+    }
+}
+
+extension UTType {
+    /// Declared in the app's Info.plist (`UTExportedTypeDeclarations`).
+    static let rxCodeTaskProject = UTType(exportedAs: "com.rxlab.RxCode.task-project")
+}
+
+/// The chip that follows the pointer while a project card is dragged.
+private struct TaskProjectDragPreview: View {
+    let project: Project
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
+        HStack(spacing: 6) {
+            Image(systemName: "folder")
+                .font(.system(size: ClaudeTheme.size(12)))
+                .foregroundStyle(ClaudeTheme.textSecondary)
+            Text(project.name)
+                .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
+                .foregroundStyle(ClaudeTheme.textPrimary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(ClaudeTheme.surfacePrimary, in: shape)
+        .overlay(shape.strokeBorder(ClaudeTheme.border, lineWidth: 1))
     }
 }

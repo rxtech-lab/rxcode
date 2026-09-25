@@ -70,6 +70,16 @@
 				<string>public.data</string>
 			</array>
 		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.rxlab.RxCode.task-project</string>
+			<key>UTTypeDescription</key>
+			<string>RxCode Task Project Card</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+		</dict>
 	</array>
 	<key>AutopilotBaseURL</key>
 	<string>https://autopilot.rxlab.app</string>

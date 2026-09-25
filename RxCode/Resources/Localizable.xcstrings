@@ -263,8 +263,6 @@
       }
     },
     "%@ copy" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -472,8 +470,7 @@
             "state" : "new",
             "value" : "%1$lld / %2$lld"
           }
-        }
-      ,
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -667,8 +664,6 @@
       }
     },
     "%lld in progress" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -707,8 +702,7 @@
             "state" : "new",
             "value" : "%1$lld of %2$lld tasks done, %3$lld in progress"
           }
-        }
-      ,
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -970,8 +964,6 @@
       }
     },
     "A column that triggers a chat needs an “On session stop” column that doesn't trigger a chat itself." : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -1165,8 +1157,6 @@
       }
     },
     "Add a column to this board" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -1226,8 +1216,6 @@
       }
     },
     "Add a project to start tracking tasks." : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -1303,8 +1291,6 @@
       }
     },
     "Add a tag" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -1315,8 +1301,6 @@
       }
     },
     "Add a task to this column" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -1327,6 +1311,7 @@
       }
     },
     "Add a task…" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -1353,8 +1338,6 @@
       }
     },
     "Add Column" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -1397,8 +1380,6 @@
       }
     },
     "Add Files…" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -1521,8 +1502,6 @@
       }
     },
     "Add more detail for the agent" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -1871,8 +1850,6 @@
       }
     },
     "Adding a task saves this story first, so the task has a story to belong to." : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -1948,8 +1925,6 @@
       }
     },
     "Agent" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -2043,6 +2018,26 @@
         }
       }
     },
+    "AI Suggestions" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI 建议"
+          }
+        }
+      }
+    },
+    "AI suggestions model" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI 建议模型"
+          }
+        }
+      }
+    },
     "All archived chats in the current project will be deleted. This action cannot be undone." : {
       "localizations" : {
         "ko" : {
@@ -2124,8 +2119,6 @@
       }
     },
     "All Projects" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -2309,6 +2302,16 @@
         }
       }
     },
+    "An agent is working on this story's tasks" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "代理正在处理此故事中的任务"
+          }
+        }
+      }
+    },
     "An SF Symbol name shown beside the title, e.g. \"bolt\"." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -2343,8 +2346,6 @@
       }
     },
     "Any story" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -2355,8 +2356,6 @@
       }
     },
     "Any version" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -2603,13 +2602,38 @@
       }
     },
     "Ask the default task agent to fill in empty properties" : {
-
-
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "让默认任务代理填写空白属性"
+          }
+        }
+      }
+    },
+    "Ask the selected model to fill in empty properties" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "让所选模型填写空属性"
+          }
+        }
+      }
+    },
+    "Assign an agent to a task and move it into a chat column to start work." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "작업에 에이전트를 지정하고 채팅 열로 옮겨 작업을 시작하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为任务指定智能体，并将其移至聊天列以开始执行。"
           }
         }
       }
@@ -2681,8 +2705,6 @@
       }
     },
     "Attachments" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -2864,8 +2886,6 @@
       }
     },
     "Auto-fill" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -2876,8 +2896,7 @@
       }
     },
     "Auto-fill properties for quick-added tasks" : {
-
-
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -3180,8 +3199,6 @@
       }
     },
     "Board columns, or the rows a table shows. At least one stays visible." : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -3481,8 +3498,6 @@
       }
     },
     "Changes apply to every story and task in this project." : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -3493,8 +3508,6 @@
       }
     },
     "Chat" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -3619,8 +3632,6 @@
       }
     },
     "Choose an existing value" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -3679,8 +3690,6 @@
       }
     },
     "Choose which RxCode tools are available to other local MCP clients." : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -3827,8 +3836,6 @@
       }
     },
     "Clear" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -3855,8 +3862,6 @@
       }
     },
     "Clear filter" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -4182,8 +4187,6 @@
       }
     },
     "Color" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -4194,8 +4197,6 @@
       }
     },
     "Column" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -4206,8 +4207,6 @@
       }
     },
     "Column options" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -4218,8 +4217,6 @@
       }
     },
     "Columns" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -4429,6 +4426,9 @@
         }
       }
     },
+    "Completion could not be verified. Review the task and continue its chat." : {
+
+    },
     "Condition" : {
       "localizations" : {
         "ko" : {
@@ -4531,6 +4531,12 @@
           }
         }
       }
+    },
+    "Confirm deleting story “%@”" : {
+      "comment" : "Final story deletion confirmation"
+    },
+    "Confirm deleting task “%@”" : {
+      "comment" : "Final task deletion confirmation"
     },
     "Connect any MCP server to give every agent extra tools. You can also skip this and add servers later in Settings → MCP." : {
       "localizations" : {
@@ -4965,8 +4971,6 @@
       }
     },
     "Copy device token" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -4988,6 +4992,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "复制安装命令"
+          }
+        }
+      }
+    },
+    "Could Not Create Task" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法创建任务"
           }
         }
       }
@@ -5041,8 +5055,6 @@
       }
     },
     "Counts as done" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -5262,6 +5274,16 @@
         }
       }
     },
+    "Create Task from Chat with AI" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用 AI 从聊天创建任务"
+          }
+        }
+      }
+    },
     "Create Workspace" : {
       "localizations" : {
         "ko" : {
@@ -5339,6 +5361,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在创建拉取请求…"
+          }
+        }
+      }
+    },
+    "Creating task from chat" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在从聊天创建任务"
           }
         }
       }
@@ -5655,8 +5687,6 @@
       }
     },
     "Default agent" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -5732,6 +5762,16 @@
         }
       }
     },
+    "Default task agent" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "默认任务代理"
+          }
+        }
+      }
+    },
     "Default template" : {
       "localizations" : {
         "ko" : {
@@ -5787,8 +5827,6 @@
       }
     },
     "Delete “%@”?" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -5885,8 +5923,6 @@
       }
     },
     "Delete column “%@”?" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -6062,6 +6098,12 @@
         }
       }
     },
+    "Delete story “%@”?" : {
+      "comment" : "First story deletion confirmation"
+    },
+    "Delete task “%@”?" : {
+      "comment" : "First task deletion confirmation"
+    },
     "Delete this document?" : {
       "localizations" : {
         "ko" : {
@@ -6079,8 +6121,6 @@
       }
     },
     "Delete View" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -6107,8 +6147,6 @@
       }
     },
     "Delete…" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -6156,6 +6194,22 @@
         }
       }
     },
+    "Describe a task…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "작업을 설명하세요…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "描述一个任务…"
+          }
+        }
+      }
+    },
     "Describe when this menu item should appear. The default model writes the Swift condition and it's compiled before use." : {
       "localizations" : {
         "ko" : {
@@ -6173,8 +6227,6 @@
       }
     },
     "Description" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -6275,8 +6327,6 @@
       }
     },
     "Direct · LAN%@" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -6287,8 +6337,6 @@
       }
     },
     "Direct · WAN%@" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -6299,8 +6347,6 @@
       }
     },
     "Direct peer-to-peer connections" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -6407,8 +6453,6 @@
       }
     },
     "Do nothing" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -6648,8 +6692,6 @@
       }
     },
     "Drag a card here." : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -6660,8 +6702,6 @@
       }
     },
     "Drag onto another column header to reorder the board" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -6672,8 +6712,6 @@
       }
     },
     "Drag to reorder. New tasks start in the first column." : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -6684,8 +6722,6 @@
       }
     },
     "Drop to attach" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -6696,8 +6732,6 @@
       }
     },
     "Dropping a card here starts a chat with its agent" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -6708,8 +6742,6 @@
       }
     },
     "Dropping a card here starts a chat with its assigned agent. The card stays here, locked, until the chat stops." : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -6720,8 +6752,6 @@
       }
     },
     "Dropping this task into In Progress runs the assigned agent in a new thread. It moves to Pending Review when the turn finishes." : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -6764,8 +6794,6 @@
       }
     },
     "Duplicate View" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -6776,8 +6804,6 @@
       }
     },
     "e.g. Priority board" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -6788,8 +6814,6 @@
       }
     },
     "e.g. QA" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -6838,8 +6862,6 @@
       }
     },
     "Edit Column…" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -6956,8 +6978,6 @@
       }
     },
     "Edit View" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -6968,8 +6988,6 @@
       }
     },
     "Edit View…" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -7012,8 +7030,6 @@
       }
     },
     "Editor Mode" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -7181,8 +7197,6 @@
       }
     },
     "Enable MCP Server" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -7209,8 +7223,6 @@
       }
     },
     "Enable Memory to start the MCP server." : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -7538,8 +7550,6 @@
       }
     },
     "Expose selected RxCode tools to other local MCP clients." : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -7706,8 +7716,6 @@
       }
     },
     "Fields" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -7778,8 +7786,6 @@
       }
     },
     "Files pasted or dropped into the description are listed here and sent to the agent with the task." : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -7790,8 +7796,7 @@
       }
     },
     "Filling in properties…" : {
-
-
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -7802,8 +7807,6 @@
       }
     },
     "Filter by keyword" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -7814,8 +7817,6 @@
       }
     },
     "Filters" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -7856,6 +7857,9 @@
           }
         }
       }
+    },
+    "Fix Check Error" : {
+
     },
     "Fix Failing CI" : {
       "extractionState" : "stale",
@@ -8138,6 +8142,22 @@
         }
       }
     },
+    "Generate Title" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "제목 생성"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "生成标题"
+          }
+        }
+      }
+    },
     "Get it on Google Play" : {
       "localizations" : {
         "ko" : {
@@ -8393,8 +8413,6 @@
       }
     },
     "Hide Column" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -8448,6 +8466,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "隐藏更多"
+          }
+        }
+      }
+    },
+    "Hide tasks" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "작업 숨기기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐藏任务"
           }
         }
       }
@@ -9258,8 +9292,7 @@
             "state" : "new",
             "value" : "Its %1$lld task(s) move to “%2$@”, and triggers that point here point there instead."
           }
-        }
-      ,
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -9268,9 +9301,27 @@
         }
       }
     },
+    "Jump to Project" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跳转到项目"
+          }
+        }
+      }
+    },
+    "Jump to Task" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跳转到任务"
+          }
+        }
+      }
+    },
     "Keep RxCode running while another MCP client uses this server. Ports 19847–19946 are reserved for chat sessions." : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -9377,8 +9428,6 @@
       }
     },
     "Last used" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -9389,8 +9438,6 @@
       }
     },
     "Last used (%@)" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -9433,8 +9480,6 @@
       }
     },
     "Layout" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -9472,6 +9517,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "生命周期"
+          }
+        }
+      }
+    },
+    "Linked task: %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关联任务：%@"
           }
         }
       }
@@ -9876,8 +9931,6 @@
       }
     },
     "Manage Fields…" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -9959,8 +10012,6 @@
       }
     },
     "Manage Milestones…" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -10035,8 +10086,6 @@
       }
     },
     "Manage Tags…" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -10063,8 +10112,6 @@
       }
     },
     "Manage Types…" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -10075,8 +10122,6 @@
       }
     },
     "Manage Versions…" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -10135,8 +10180,6 @@
       }
     },
     "Manage…" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -10179,8 +10222,6 @@
       }
     },
     "Markdown. Paste or drop images and files to attach them." : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -10239,8 +10280,6 @@
       }
     },
     "MCP Server" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -10430,8 +10469,6 @@
       }
     },
     "Milestone" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -10442,8 +10479,6 @@
       }
     },
     "Milestones" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -10594,8 +10629,6 @@
       }
     },
     "Move tasks to" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -10606,8 +10639,6 @@
       }
     },
     "Move To" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -10697,6 +10728,9 @@
           }
         }
       }
+    },
+    "Needs Attention" : {
+
     },
     "Never scanned" : {
       "localizations" : {
@@ -10818,8 +10852,6 @@
       }
     },
     "New Story" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -10840,8 +10872,6 @@
       }
     },
     "New tag" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -10862,8 +10892,6 @@
       }
     },
     "New task — click the arrow for stories, chats, columns and fields" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -10874,8 +10902,6 @@
       }
     },
     "New Task…" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -10886,8 +10912,6 @@
       }
     },
     "New Tasks" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -10898,8 +10922,6 @@
       }
     },
     "New tasks are assigned this agent. “Last used” keeps the model most recently picked in a task form." : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -10910,8 +10932,6 @@
       }
     },
     "New tasks land here." : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -11019,8 +11039,6 @@
       }
     },
     "New type" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -11031,8 +11049,6 @@
       }
     },
     "New view" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -11043,8 +11059,6 @@
       }
     },
     "New View" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -11507,8 +11521,6 @@
       }
     },
     "No milestones yet. Set one on a story or task to reuse it here." : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -11935,8 +11947,6 @@
       }
     },
     "No tags on this project yet." : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -11947,8 +11957,6 @@
       }
     },
     "No tags yet. Add one here, or on a story or task." : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -11985,8 +11993,6 @@
       }
     },
     "No tasks match this view." : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -12039,8 +12045,6 @@
       }
     },
     "No versions yet. Set one on a story or task to reuse it here." : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -12294,8 +12298,6 @@
       }
     },
     "Off" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -12407,9 +12409,23 @@
         }
       }
     },
+    "Open a project to organize tasks in board or table views with custom columns and filters." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트를 열어 사용자 지정 열과 필터가 있는 보드 또는 표 보기에서 작업을 정리하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开项目，在支持自定义列和筛选条件的看板或表格视图中整理任务。"
+          }
+        }
+      }
+    },
     "Open Chat" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -12533,8 +12549,6 @@
       }
     },
     "Open Project Board" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -12712,8 +12726,7 @@
       }
     },
     "Open the project's task views" : {
-
-
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -12723,14 +12736,32 @@
         }
       }
     },
+    "Open the project's task views — drag onto another card to reorder" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开项目的任务视图 — 拖到另一张卡片上即可重新排序"
+          }
+        }
+      }
+    },
     "Open the thread this task ran in" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "打开运行此任务的对话"
+          }
+        }
+      }
+    },
+    "Open this task's project page" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开此任务所属的项目页面"
           }
         }
       }
@@ -12752,8 +12783,6 @@
       }
     },
     "Optional" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -13256,8 +13285,6 @@
       }
     },
     "Plan" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -13267,9 +13294,23 @@
         }
       }
     },
+    "Plan and track work across your projects with stories, tasks, and a board for each project." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스토리, 작업, 프로젝트별 보드로 여러 프로젝트의 작업을 계획하고 추적하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通过故事、任务和每个项目的看板，规划并跟踪跨项目工作。"
+          }
+        }
+      }
+    },
     "Plan mode" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -13302,8 +13343,6 @@
       }
     },
     "Port" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -13448,8 +13487,6 @@
       }
     },
     "Priority" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -13648,9 +13685,33 @@
         }
       }
     },
+    "Projects dashboard" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트 대시보드"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目仪表盘"
+          }
+        }
+      }
+    },
+    "Projects Dashboard Guide" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目看板指南"
+          }
+        }
+      }
+    },
     "Properties" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -13741,13 +13802,38 @@
       }
     },
     "Quick Add" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "快速添加"
+          }
+        }
+      }
+    },
+    "Quick add keeps what you type as the description. The default agent then summarizes it into a title and fills in type, priority, tags, version and milestone. Properties you or the story already set are kept, and so is a title you typed yourself. Turned off, the title is shortened from the description's first line. ACP agents fall back to Claude Haiku." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "빠른 추가는 입력한 내용을 설명으로 유지합니다. 그런 다음 기본 에이전트가 이를 제목으로 요약하고 유형, 우선순위, 태그, 버전, 마일스톤을 채웁니다. 사용자나 스토리가 이미 설정한 속성과 직접 입력한 제목은 그대로 유지됩니다. 끄면 제목은 설명의 첫 줄을 줄여서 만듭니다. ACP 에이전트는 Claude Haiku로 대체됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "快速添加会将你输入的内容保留为描述。随后默认智能体会将其总结为标题，并填写类型、优先级、标签、版本和里程碑。你或故事已设置的属性会被保留，你自己输入的标题也会被保留。关闭后，标题取自描述第一行的缩略。ACP 智能体将回退到 Claude Haiku。"
+          }
+        }
+      }
+    },
+    "Quick add keeps your text as the description. When enabled, the suggestions model writes a title and fills empty properties, including version and milestone." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "快速添加会将你输入的内容保留为描述。启用后，建议模型会生成标题并填写空属性，包括版本和里程碑。"
           }
         }
       }
@@ -14229,8 +14315,6 @@
       }
     },
     "Remove attachment" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -14423,8 +14507,6 @@
       }
     },
     "Rename or delete types, labels, versions and milestones" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -14495,8 +14577,6 @@
       }
     },
     "Rename, recolor or delete this project's tags" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -14932,8 +15012,6 @@
       }
     },
     "Run the agent with --permission-mode plan so it proposes a plan before editing" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -14944,8 +15022,6 @@
       }
     },
     "Run with Agent" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -14972,8 +15048,6 @@
       }
     },
     "Running" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -15658,8 +15732,6 @@
       }
     },
     "Search or create a milestone" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -15670,8 +15742,6 @@
       }
     },
     "Search or create a tag" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -15682,8 +15752,6 @@
       }
     },
     "Search or create a version" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -15863,6 +15931,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "密钥"
+          }
+        }
+      }
+    },
+    "See recent stories and task progress for every project in one place." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "한곳에서 모든 프로젝트의 최근 스토리와 작업 진행 상황을 확인하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在一个页面查看各项目的近期故事和任务进度。"
           }
         }
       }
@@ -16228,8 +16312,6 @@
       }
     },
     "Server stopped" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -16669,6 +16751,9 @@
         }
       }
     },
+    "Show full error message" : {
+
+    },
     "Show Hidden Files" : {
       "localizations" : {
         "ko" : {
@@ -16809,6 +16894,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "显示故事"
+          }
+        }
+      }
+    },
+    "Show tasks" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "작업 표시"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示任务"
           }
         }
       }
@@ -17251,8 +17352,6 @@
       }
     },
     "Starts a chat" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -17263,8 +17362,6 @@
       }
     },
     "Status" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -17275,8 +17372,6 @@
       }
     },
     "Statuses" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -17400,8 +17495,6 @@
       }
     },
     "Stories and tasks using this" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -17412,8 +17505,6 @@
       }
     },
     "Story" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -17424,8 +17515,6 @@
       }
     },
     "Story title" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -17436,8 +17525,6 @@
       }
     },
     "Streamable HTTP" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -17528,6 +17615,22 @@
         }
       }
     },
+    "Summarizing…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "요약하는 중…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在总结…"
+          }
+        }
+      }
+    },
     "Switch between Claude Code, Codex, and installed ACP agents without changing the global default." : {
       "localizations" : {
         "ko" : {
@@ -17545,8 +17648,6 @@
       }
     },
     "Switch between the Markdown source and its preview" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -17611,8 +17712,6 @@
       }
     },
     "Tags" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -17673,8 +17772,6 @@
       }
     },
     "Task" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -17685,8 +17782,6 @@
       }
     },
     "Tasks" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -17697,8 +17792,6 @@
       }
     },
     "Tasks must carry every selected tag." : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -17767,8 +17860,6 @@
       }
     },
     "The agent is working on this task; it moves on when the turn finishes." : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -17799,6 +17890,9 @@
         }
       }
     },
+    "The agent run stopped before the task was completed." : {
+
+    },
     "The agent wants to run a command in this project." : {
       "localizations" : {
         "ko" : {
@@ -17811,6 +17905,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "代理想要在此项目中运行命令。"
+          }
+        }
+      }
+    },
+    "The chat has no readable messages, or the AI could not generate a task description. Try again later." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聊天中没有可读取的消息，或 AI 无法生成任务描述。请稍后重试。"
           }
         }
       }
@@ -17842,8 +17946,6 @@
       }
     },
     "The milestone is cleared from every story and task that uses it." : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -17911,6 +18013,9 @@
         }
       }
     },
+    "The run was interrupted before completion could be verified." : {
+
+    },
     "The session id of the thread to continue. Leave a {{sessionId}} placeholder to target the tapped thread." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -17928,9 +18033,10 @@
         }
       }
     },
+    "The story will be removed. Its tasks will remain on the board." : {
+
+    },
     "The tag is removed from every story, task and view that uses it." : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -17941,8 +18047,6 @@
       }
     },
     "The type is cleared from every story and task that uses it." : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -17953,8 +18057,6 @@
       }
     },
     "The version is cleared from every story, task and view that uses it." : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -18003,8 +18105,6 @@
       }
     },
     "Thinking Level" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -18078,6 +18178,9 @@
         }
       }
     },
+    "This is the final confirmation." : {
+
+    },
     "This memory will be removed from future agent context." : {
       "localizations" : {
         "ko" : {
@@ -18090,6 +18193,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此记忆将从后续智能体上下文中移除。"
+          }
+        }
+      }
+    },
+    "This model powers quick add and the task and story forms' title and Auto-fill buttons. ACP client suggestions run in a separate session." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此模型用于快速添加，以及任务和故事表单中的标题生成与自动填充按钮。ACP 客户端建议会在单独的会话中运行。"
           }
         }
       }
@@ -18183,6 +18296,9 @@
           }
         }
       }
+    },
+    "This task will be removed from the board." : {
+
     },
     "This unregisters %@ from the docs service and removes its indexed documents. The repo's files are not affected." : {
       "localizations" : {
@@ -18406,8 +18522,6 @@
       }
     },
     "Tools to Expose" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -18450,8 +18564,6 @@
       }
     },
     "Trigger chat" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -18478,8 +18590,6 @@
       }
     },
     "Triggers" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -18506,8 +18616,6 @@
       }
     },
     "Triggers that point here will point to “%@” instead." : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -18550,8 +18658,6 @@
       }
     },
     "Types" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -18578,8 +18684,6 @@
       }
     },
     "Unassigned" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -18629,8 +18733,6 @@
       }
     },
     "Untitled story" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -18641,13 +18743,27 @@
       }
     },
     "Untitled task" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "无标题任务"
+          }
+        }
+      }
+    },
+    "Unverified" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "검증되지 않음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未验证"
           }
         }
       }
@@ -19034,6 +19150,54 @@
         }
       }
     },
+    "Verified" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "검증됨"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已验证"
+          }
+        }
+      }
+    },
+    "Verifying" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "검증 중"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在验证"
+          }
+        }
+      }
+    },
+    "Verifying completion" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "작업 완료 여부 검증 중"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在验证任务完成情况"
+          }
+        }
+      }
+    },
     "Version" : {
       "localizations" : {
         "ko" : {
@@ -19051,8 +19215,6 @@
       }
     },
     "Versions" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -19079,8 +19241,6 @@
       }
     },
     "View" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -19133,8 +19293,6 @@
       }
     },
     "View options" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -19258,13 +19416,43 @@
       }
     },
     "What needs doing?" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "需要完成什么？"
+          }
+        }
+      }
+    },
+    "What you type becomes the description; the agent writes the title." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "입력한 내용은 설명이 되고, 제목은 에이전트가 작성합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你输入的内容将成为描述，标题由智能体撰写。"
+          }
+        }
+      }
+    },
+    "What you type becomes the description; the title is shortened from its first line." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "입력한 내용은 설명이 되고, 제목은 첫 줄을 줄여서 만듭니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你输入的内容将成为描述，标题取自其第一行的缩略。"
           }
         }
       }
@@ -19334,8 +19522,6 @@
       }
     },
     "When on the same network, sync connects straight to your device over the LAN (end-to-end encrypted) and falls back to the relay automatically. Turn off to always use relay servers." : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -19362,8 +19548,7 @@
       }
     },
     "When you add a task by title only, the default agent fills in its type, priority, tags, version and milestone. Properties you or the story already set are kept. ACP agents fall back to Claude Haiku." : {
-
-
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -19374,8 +19559,6 @@
       }
     },
     "Where a card in this column moves when its chat stops, or when a code review of that chat starts, passes or fails." : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -19526,6 +19709,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "工作区名称"
+          }
+        }
+      }
+    },
+    "Write the title and properties of quick-added tasks" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "빠르게 추가한 작업의 제목과 속성 작성"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为快速添加的任务撰写标题和属性"
+          }
+        }
+      }
+    },
+    "Write the title from the description" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설명을 바탕으로 제목 작성"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "根据描述撰写标题"
           }
         }
       }

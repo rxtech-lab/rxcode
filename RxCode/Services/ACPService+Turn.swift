@@ -17,7 +17,8 @@ extension ACPService {
         spec: ACPClientSpec,
         permissionMode: PermissionMode,
         clientSessionKey: String,
-        mcpServers: [JSONValue] = []
+        mcpServers: [JSONValue] = [],
+        isEphemeral: Bool = false
     ) -> AsyncStream<StreamEvent> {
         logger.info("[ACP] send streamId=\(streamId.uuidString, privacy: .public) client=\(spec.displayName, privacy: .public) launch=\(spec.launch.displayKind, privacy: .public) model=\(model ?? "<default>", privacy: .public) sessionId=\(sessionId ?? "<new>", privacy: .public) mode=\(String(describing: permissionMode), privacy: .public) cwd=\(cwd, privacy: .public) clientKey=\(clientSessionKey, privacy: .public) mcpServers=\(mcpServers.count) promptLen=\(prompt.count)")
         return AsyncStream<StreamEvent> { continuation in
@@ -32,6 +33,7 @@ extension ACPService {
                     permissionMode: permissionMode,
                     clientSessionKey: clientSessionKey,
                     mcpServers: mcpServers,
+                    isEphemeral: isEphemeral,
                     continuation: continuation
                 )
             }
@@ -39,6 +41,65 @@ extension ACPService {
                 task.cancel()
                 Task { await self.handleStreamTermination(streamId: streamId) }
             }
+        }
+    }
+
+    /// Runs a standalone text request without adding a chat thread or keeping
+    /// the ACP process in the session pool. Used for task board suggestions.
+    func generatePlainResponse(
+        prompt: String,
+        model: String?,
+        spec: ACPClientSpec,
+        cwd: String
+    ) async -> String? {
+        let streamId = UUID()
+        let timeout = Task {
+            try? await Task.sleep(for: .seconds(90))
+            if !Task.isCancelled { cancel(streamId: streamId) }
+        }
+        defer { timeout.cancel() }
+
+        return await withTaskCancellationHandler {
+            let stream = send(
+                streamId: streamId,
+                prompt: prompt,
+                cwd: cwd,
+                sessionId: nil,
+                model: model,
+                spec: spec,
+                permissionMode: .default,
+                clientSessionKey: "suggestion-\(streamId.uuidString)",
+                isEphemeral: true
+            )
+            var response = ""
+            var completed = false
+            for await event in stream {
+                switch event {
+                case .unknown(let raw):
+                    if let data = raw.data(using: .utf8),
+                       let frame = try? JSONDecoder().decode(JSONValue.self, from: data),
+                       frame.objectValue?["type"]?.stringValue == "content_block_delta",
+                       frame.objectValue?["delta"]?.objectValue?["type"]?.stringValue == "text_delta",
+                       let text = frame.objectValue?["delta"]?.objectValue?["text"]?.stringValue {
+                        response += text
+                    }
+                case .textDelta(let text):
+                    response += text
+                case .assistant(let message):
+                    for block in message.content {
+                        if case .text(let text) = block { response += text }
+                    }
+                case .result(let result):
+                    if result.isError { return nil }
+                    completed = true
+                default:
+                    break
+                }
+            }
+            let trimmed = response.trimmingCharacters(in: .whitespacesAndNewlines)
+            return completed && !trimmed.isEmpty ? trimmed : nil
+        } onCancel: {
+            Task { await self.cancel(streamId: streamId) }
         }
     }
 
@@ -168,6 +229,7 @@ extension ACPService {
         permissionMode: PermissionMode,
         clientSessionKey: String,
         mcpServers: [JSONValue] = [],
+        isEphemeral: Bool = false,
         continuation: AsyncStream<StreamEvent>.Continuation
     ) async {
         do {
@@ -212,6 +274,7 @@ extension ACPService {
                 spec: spec,
                 permissionMode: permissionMode,
                 mcpServers: mcpServers,
+                isEphemeral: isEphemeral,
                 continuation: continuation
             )
         } catch {
@@ -262,6 +325,7 @@ extension ACPService {
         spec: ACPClientSpec,
         permissionMode: PermissionMode,
         mcpServers: [JSONValue] = [],
+        isEphemeral: Bool = false,
         continuation: AsyncStream<StreamEvent>.Continuation
     ) async throws {
         let (process, stdin, stdout, stderr) = try await spawn(spec: spec, model: model, cwd: cwd)
@@ -271,7 +335,7 @@ extension ACPService {
             spec: spec,
             cwd: cwd,
             canonicalKey: bootstrapKey,
-            isEphemeral: false
+            isEphemeral: isEphemeral
         )
         entry.continuation = continuation
         entry.currentStreamId = streamId

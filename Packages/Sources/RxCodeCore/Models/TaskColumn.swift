@@ -277,9 +277,10 @@ public extension TaskBoard {
     /// An agent-owned task: it sits in a chat column with a linked thread. The
     /// board, forms and menus don't let the user change its status; the
     /// column's session-stop trigger moves it on when the turn finishes. A
-    /// task placed in such a column by hand (no thread) stays movable.
+    /// task placed in such a column by hand (no thread), or flagged after a
+    /// failed run, stays movable.
     func isStatusLocked(_ task: ProjectTask) -> Bool {
-        task.sessionKey != nil && column(for: task.status).triggersChat
+        task.sessionKey != nil && task.attentionReason == nil && column(for: task.status).triggersChat
     }
 
     /// Where `task` should move when `event` fires, or `nil` to stay put. A

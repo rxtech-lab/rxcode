@@ -93,27 +93,19 @@ struct TaskCountBadge: View {
     }
 }
 
-/// Outlined label pill (version, tag, story) matching GitHub's field chips.
-struct TaskPill: View {
-    let text: String
-    var icon: String?
-    var tint: Color = ClaudeTheme.textSecondary
+/// Spinner shown on a card whose linked thread is mid-turn, so a board can be
+/// read at a glance for what an agent is working on right now.
+struct TaskRunningIndicator: View {
+    /// Tooltip and accessibility label — a story card says "tasks", a task card
+    /// says "this task".
+    var label: LocalizedStringKey = "The agent is working on this task"
 
     var body: some View {
-        HStack(spacing: 3) {
-            if let icon {
-                Image(systemName: icon)
-                    .font(.system(size: ClaudeTheme.size(8), weight: .semibold))
-            }
-            Text(text)
-                .font(.system(size: ClaudeTheme.size(10), weight: .medium))
-                .lineLimit(1)
-        }
-        .foregroundStyle(tint)
-        .padding(.horizontal, 7)
-        .padding(.vertical, 2)
-        .background(Capsule().fill(tint.opacity(0.10)))
-        .overlay(Capsule().strokeBorder(tint.opacity(0.35), lineWidth: 1))
+        ProgressView()
+            .progressViewStyle(.circular)
+            .controlSize(.mini)
+            .help(Text(label))
+            .accessibilityLabel(Text(label))
     }
 }
 
@@ -687,6 +679,7 @@ struct TaskContextMenuItems: View {
 
     let task: ProjectTask
     let onEdit: () -> Void
+    let onDelete: () -> Void
     /// Called before revealing the chat, so a sheet hosting this menu can
     /// dismiss itself instead of staying over the thread.
     var onOpenChat: (() -> Void)?
@@ -700,6 +693,16 @@ struct TaskContextMenuItems: View {
             Button("Open Chat") {
                 onOpenChat?()
                 appState.openChat(for: task, in: windowState)
+            }
+        }
+        if let prompt = task.checkErrorFixPrompt, !appState.isStatusLocked(task),
+           appState.canOpenChat(for: task) || (task.agent.isAssigned && board.firstChatColumn != nil) {
+            Button("Fix Check Error", systemImage: "wrench.and.screwdriver") {
+                if appState.canOpenChat(for: task) {
+                    Task { await appState.sendTaskFollowUp(task, text: prompt) }
+                } else if let chatColumn = board.firstChatColumn {
+                    appState.moveTask(task, to: chatColumn.id)
+                }
             }
         }
 
@@ -725,7 +728,7 @@ struct TaskContextMenuItems: View {
         Divider()
 
         Button("Delete", role: .destructive) {
-            appState.deleteTask(task)
+            onDelete()
         }
     }
 }
@@ -735,6 +738,7 @@ struct StoryContextMenuItems: View {
 
     let story: ProjectStory
     let onEdit: () -> Void
+    let onDelete: () -> Void
     /// Opens the task form on a draft already parented to this story.
     let onNewTask: (ProjectTask) -> Void
 
@@ -745,172 +749,86 @@ struct StoryContextMenuItems: View {
         Button("Edit…", action: onEdit)
         Divider()
         Button("Delete", role: .destructive) {
-            appState.deleteStory(story)
+            onDelete()
         }
     }
 }
 
-// MARK: - Agent label
+/// Keeps both prompts on the view that owns the menu or form. A context menu's
+/// contents disappear after selection, so they cannot present the prompts.
+private struct TaskDeletionConfirmation: ViewModifier {
+    @Binding var pending: TaskBoardSheet?
+    @State private var finalCandidate: TaskBoardSheet?
+    let onDelete: (TaskBoardSheet) -> Void
 
-extension AppState {
-    /// "Opus · high" style summary of a task's agent assignment.
-    func taskAgentLabel(_ agent: TaskAgentConfig) -> String {
-        var parts: [String] = []
-        if let model = agent.model, !model.isEmpty {
-            parts.append(modelDisplayLabel(model, provider: agent.provider ?? .claudeCode))
-        } else if let provider = agent.provider {
-            parts.append(provider.displayNameText)
-        }
-        if let effort = agent.effort, !effort.isEmpty {
-            parts.append(effort)
-        }
-        return parts.joined(separator: " · ")
-    }
-}
-
-// MARK: - Story identity
-
-extension ProjectStory {
-    /// A stable per-story color, so a story and its tasks read as one group
-    /// across board columns. Derived from the id rather than stored, so it
-    /// needs no persistence and stays the same across launches.
-    var tint: Color {
-        let palette: [Color] = [
-            ClaudeTheme.accent, ClaudeTheme.statusRunning, .purple, ClaudeTheme.statusSuccess,
-            .pink, .teal, .indigo, ClaudeTheme.statusWarning,
-        ]
-        let seed = withUnsafeBytes(of: id.uuid) { $0.reduce(0) { $0 &+ Int($1) } }
-        return palette[seed % palette.count]
-    }
-}
-
-/// The story a task belongs to, as a tinted chip on the task card. Tapping
-/// shows a popover with the story's name and progress; hovering highlights the
-/// story and its sibling tasks on the board.
-struct TaskStoryChip: View {
-    let story: ProjectStory
-    let progress: StoryProgress
-    let column: TaskColumn
-    @Binding var hoveredStoryId: UUID?
-
-    @State private var showsPopover = false
-
-    var body: some View {
-        // A button, not a tap gesture, so the tap wins over the card's own
-        // tap-to-edit gesture.
-        Button {
-            showsPopover.toggle()
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "square.stack.3d.up")
-                    .font(.system(size: ClaudeTheme.size(9), weight: .semibold))
-                Text(story.title.isEmpty ? String(localized: "Untitled story") : story.title)
-                    .font(.system(size: ClaudeTheme.size(10), weight: .medium))
-                    .lineLimit(1)
-            }
-            .foregroundStyle(story.tint)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(Capsule().fill(story.tint.opacity(showsPopover ? 0.26 : 0.14)))
-            .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .help("Show story")
-        .onHover { hovering in
-            if hovering {
-                hoveredStoryId = story.id
-            } else if hoveredStoryId == story.id {
-                hoveredStoryId = nil
-            }
-        }
-        .popover(isPresented: $showsPopover, arrowEdge: .top) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 6) {
-                    Image(systemName: "square.stack.3d.up")
-                        .foregroundStyle(story.tint)
-                    Text("Story")
-                        .font(.system(size: ClaudeTheme.size(11)))
-                        .foregroundStyle(ClaudeTheme.textTertiary)
-                    Spacer(minLength: 0)
-                    TaskStatusIcon(column: column, size: 11)
-                }
-                Text(story.title.isEmpty ? String(localized: "Untitled story") : story.title)
-                    .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
-                    .foregroundStyle(ClaudeTheme.textPrimary)
-                    .fixedSize(horizontal: false, vertical: true)
-                StoryProgressBar(progress: progress)
-            }
-            .padding(12)
-            .frame(width: 240)
-        }
-    }
-}
-
-// MARK: - Task summary
-
-/// Two-line preview of what a task is about, with an icon that opens the full
-/// text in a popover. Prefers the generated summary of the thread the agent
-/// ran in (what was actually done); falls back to the task's description.
-struct TaskSummaryPreview: View {
-    @Environment(AppState.self) private var appState
-
-    let task: ProjectTask
-
-    @State private var showsFull = false
-
-    private var content: (title: LocalizedStringKey, text: String)? {
-        if let key = task.sessionKey {
-            // Re-read when a thread summary is regenerated.
-            _ = appState.threadSummaryRevision
-            let sessionId = appState.resolveCurrentSessionId(key)
-            let summary = appState.threadStore.threadSummaryItem(sessionId: sessionId)?.summary
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            if !summary.isEmpty { return ("Agent Summary", summary) }
-        }
-        let details = task.details.trimmingCharacters(in: .whitespacesAndNewlines)
-        return details.isEmpty ? nil : ("Description", details)
+    private var isPending: Binding<Bool> {
+        Binding(get: { pending != nil }, set: { if !$0 { pending = nil } })
     }
 
-    var body: some View {
-        if let content {
-            HStack(alignment: .top, spacing: 6) {
-                // Stripped, not rendered: descriptions are Markdown, and two
-                // truncated lines of a card have no room for block layout —
-                // raw syntax would just eat the preview.
-                Text(stripMarkdown(content.text))
-                    .font(.system(size: ClaudeTheme.size(11)))
-                    .foregroundStyle(ClaudeTheme.textSecondary)
-                    .lineLimit(2)
-                    .truncationMode(.tail)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+    private var isFinal: Binding<Bool> {
+        Binding(get: { finalCandidate != nil }, set: { if !$0 { finalCandidate = nil } })
+    }
 
-                Button {
-                    showsFull.toggle()
-                } label: {
-                    Image(systemName: "text.alignleft")
-                        .font(.system(size: ClaudeTheme.size(10), weight: .semibold))
-                        .foregroundStyle(showsFull ? ClaudeTheme.accent : ClaudeTheme.textTertiary)
-                        .frame(width: 16, height: 16)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help(Text(content.title))
-                .popover(isPresented: $showsFull, arrowEdge: .trailing) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(content.title)
-                            .font(.system(size: ClaudeTheme.size(11), weight: .semibold))
-                            .foregroundStyle(ClaudeTheme.textTertiary)
-                        ScrollView {
-                            MarkdownContentView(text: content.text)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .frame(maxHeight: 360)
-                        .fixedSize(horizontal: false, vertical: true)
+    func body(content: Content) -> some View {
+        content
+            .confirmationDialog(
+                firstTitle,
+                isPresented: isPending,
+                titleVisibility: .visible
+            ) {
+                Button("Continue", role: .destructive) {
+                    guard let candidate = pending else { return }
+                    pending = nil
+                    Task { @MainActor in
+                        await Task.yield()
+                        finalCandidate = candidate
                     }
-                    .padding(14)
-                    .frame(width: 340)
+                }
+                Button("Cancel", role: .cancel) { pending = nil }
+            } message: {
+                switch pending {
+                case .task:
+                    Text("This task will be removed from the board.")
+                case .story:
+                    Text("The story will be removed. Its tasks will remain on the board.")
+                case nil:
+                    EmptyView()
                 }
             }
+            .alert(finalTitle, isPresented: isFinal) {
+                Button("Cancel", role: .cancel) { finalCandidate = nil }
+                Button("Delete", role: .destructive) {
+                    guard let candidate = finalCandidate else { return }
+                    finalCandidate = nil
+                    onDelete(candidate)
+                }
+            } message: {
+                Text("This is the final confirmation.")
+            }
+    }
+
+    private var firstTitle: String {
+        switch pending {
+        case .task(let task): String(localized: "Delete task “\(task.title)”?", comment: "First task deletion confirmation")
+        case .story(let story): String(localized: "Delete story “\(story.title)”?", comment: "First story deletion confirmation")
+        case nil: ""
         }
+    }
+
+    private var finalTitle: String {
+        switch finalCandidate {
+        case .task(let task): String(localized: "Confirm deleting task “\(task.title)”", comment: "Final task deletion confirmation")
+        case .story(let story): String(localized: "Confirm deleting story “\(story.title)”", comment: "Final story deletion confirmation")
+        case nil: ""
+        }
+    }
+}
+
+extension View {
+    func taskDeletionConfirmation(
+        pending: Binding<TaskBoardSheet?>,
+        onDelete: @escaping (TaskBoardSheet) -> Void
+    ) -> some View {
+        modifier(TaskDeletionConfirmation(pending: pending, onDelete: onDelete))
     }
 }

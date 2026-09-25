@@ -254,6 +254,12 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
     /// The thread this task was dispatched into, set by `AppState.startTask`.
     /// `TaskBoardHook` matches on it to advance the task when the turn finishes.
     public var sessionKey: String?
+    /// The existing chat from which this task was created. This is not a run:
+    /// it must not lock the description or participate in column triggers.
+    public var sourceSessionKey: String?
+    /// Why the last run needs a person's attention before review. Cleared when
+    /// a later completion check passes or the task is run again.
+    public var attentionReason: String?
     /// Ordering within a column. A `Double` so a drop between two neighbours is
     /// their midpoint and no renumbering pass is needed.
     public var sortIndex: Double
@@ -275,6 +281,8 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
         agent: TaskAgentConfig = TaskAgentConfig(),
         attachments: [Attachment.DTO] = [],
         sessionKey: String? = nil,
+        sourceSessionKey: String? = nil,
+        attentionReason: String? = nil,
         sortIndex: Double = 0,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
@@ -293,6 +301,8 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
         self.agent = agent
         self.attachments = attachments
         self.sessionKey = sessionKey
+        self.sourceSessionKey = sourceSessionKey
+        self.attentionReason = attentionReason
         self.sortIndex = sortIndex
         self.createdAt = createdAt
         self.updatedAt = updatedAt
@@ -304,7 +314,7 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
     private enum CodingKeys: String, CodingKey {
         case id, projectId, storyId, title, details, status, version, tags
         case milestone, priority, typeId
-        case agent, attachments, sessionKey, sortIndex, createdAt, updatedAt
+        case agent, attachments, sessionKey, sourceSessionKey, attentionReason, sortIndex, createdAt, updatedAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -323,6 +333,8 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
         agent = try c.decodeIfPresent(TaskAgentConfig.self, forKey: .agent) ?? TaskAgentConfig()
         attachments = try c.decodeIfPresent([Attachment.DTO].self, forKey: .attachments) ?? []
         sessionKey = try c.decodeIfPresent(String.self, forKey: .sessionKey)
+        sourceSessionKey = try c.decodeIfPresent(String.self, forKey: .sourceSessionKey)
+        attentionReason = try c.decodeIfPresent(String.self, forKey: .attentionReason)
         sortIndex = try c.decodeIfPresent(Double.self, forKey: .sortIndex) ?? 0
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
@@ -369,18 +381,29 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
         if let milestone, !milestone.isEmpty {
             context.append("- **Milestone:** \(milestone)")
         }
+        if let fixPrompt = checkErrorFixPrompt {
+            blocks.append(fixPrompt)
+        }
         if !context.isEmpty {
             blocks.append(context.joined(separator: "\n"))
         }
 
         return blocks.joined(separator: "\n\n")
     }
+
+    /// The full check result to send when asking the task's agent to fix it.
+    public var checkErrorFixPrompt: String? {
+        guard let reason = attentionReason?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !reason.isEmpty else { return nil }
+        return "Fix the issue found by the task completion check, then verify the task again:\n\n\(reason)"
+    }
 }
 
 // MARK: - TaskPromptContent
 
-/// A thread's user message split back into its parts, so the Run tab can show
-/// a dispatched task as a card instead of raw Markdown.
+/// A thread's user message split back into its parts, so the Run tab and the
+/// chat message list can show a dispatched task as a card instead of raw
+/// Markdown.
 ///
 /// Understands the `ProjectTask.agentPrompt` layout and the attachment lines
 /// `buildPromptWithAttachments` puts in front of it. Anything else (a typed
@@ -438,6 +461,15 @@ public struct TaskPromptContent: Sendable, Hashable {
 
         let body = blocks.joined(separator: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines)
         return TaskPromptContent(references: references, title: title, body: body, fields: fields)
+    }
+
+    /// The parse of `text` when it is a dispatched task message — a
+    /// `**Task:**` heading followed by its context list — and `nil` for
+    /// anything else, such as a typed follow-up that happens to use Markdown.
+    /// Callers use this to decide between the task card and plain Markdown.
+    public static func task(in text: String) -> TaskPromptContent? {
+        let content = parse(text)
+        return content.title == nil ? nil : content
     }
 
     /// `[Attached image: /path]`, `[Attached file: /path]` or `[Link: url]`.

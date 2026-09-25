@@ -30,6 +30,9 @@ struct TaskFormSheet: View {
     @State private var versionInput = ""
     @State private var milestoneInput = ""
     @State private var isAutoFilling = false
+    @State private var isGeneratingTitle = false
+    @State private var suggestionAgent: TaskAgentConfig?
+    @State private var pendingDeletion: TaskBoardSheet?
 
     private enum Tab: Hashable {
         case details, run
@@ -56,7 +59,14 @@ struct TaskFormSheet: View {
 
     private var canSave: Bool {
         let title = isStory ? story.title : task.title
+        return !isAutoFilling && !isGeneratingTitle
+            && !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var hasSuggestionInput: Bool {
+        let title = isStory ? story.title : task.title
         return !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !currentDetails.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var body: some View {
@@ -90,9 +100,17 @@ struct TaskFormSheet: View {
         }
         .onAppear {
             loadDraft()
+            suggestionAgent = appState.configuredTaskSuggestionAgent()
             // Open on the outcome: a task that has run is usually reopened to
             // see what the agent did.
             if showsRunTab { tab = .run }
+        }
+        .taskDeletionConfirmation(pending: $pendingDeletion) { candidate in
+            switch candidate {
+            case .task(let task): appState.deleteTask(task)
+            case .story(let story): appState.deleteStory(story)
+            }
+            dismiss()
         }
     }
 
@@ -158,12 +176,7 @@ struct TaskFormSheet: View {
         HStack {
             if isExistingRecord {
                 Button("Delete", role: .destructive) {
-                    if isStory {
-                        appState.deleteStory(story)
-                    } else {
-                        appState.deleteTask(task)
-                    }
-                    dismiss()
+                    pendingDeletion = isStory ? .story(story) : .task(task)
                 }
             }
             if isExistingRecord, !isStory, appState.canOpenChat(for: task) {
@@ -172,6 +185,17 @@ struct TaskFormSheet: View {
                     appState.openChat(for: task, in: windowState)
                 }
                 .help("Open the thread this task ran in")
+            }
+            if isExistingRecord, !isStory, let savedTask = appState.task(id: task.id) {
+                Button {
+                    dismiss()
+                    windowState.taskDetailProjectId = savedTask.projectId
+                    windowState.generalRoute = .tasks
+                } label: {
+                    Label("Jump to Project", systemImage: "folder")
+                }
+                .help("Open this task's project page")
+                .accessibilityIdentifier("task-form-jump-to-project")
             }
             Spacer()
             Button("Cancel") { dismiss() }
@@ -189,16 +213,31 @@ struct TaskFormSheet: View {
 
     private var detailsSection: some View {
         Section(LocalizedStringKey(headerTitle)) {
-            TextField(
-                "Title",
-                text: isStory ? $story.title : $task.title,
-                prompt: Text(isStory ? "Story title" : "What needs doing?")
-            )
-            // Grouped forms right-align fields, and a right-aligned field
-            // hides a trailing space until the next character is typed, so
-            // typing a space looked like it did nothing. Leading alignment
-            // shows it immediately.
-            .multilineTextAlignment(.leading)
+            HStack(spacing: 6) {
+                TextField(
+                    "Title",
+                    text: isStory ? $story.title : $task.title,
+                    prompt: Text(isStory ? "Story title" : "What needs doing?")
+                )
+                // Grouped forms right-align fields, and a right-aligned field
+                // hides a trailing space until the next character is typed, so
+                // typing a space looked like it did nothing. Leading alignment
+                // shows it immediately.
+                .multilineTextAlignment(.leading)
+
+                Button(action: generateTitle) {
+                    if isGeneratingTitle {
+                        ProgressView().controlSize(.mini)
+                    } else {
+                        Image(systemName: "sparkles")
+                    }
+                }
+                .buttonStyle(.borderless)
+                .disabled(isGeneratingTitle || isAutoFilling || currentDetails.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .help("Write the title from the description")
+                .accessibilityLabel("Generate Title")
+                .accessibilityIdentifier("task-form-generate-title")
+            }
 
             MarkdownDescriptionEditor(
                 text: isStory ? $story.details : $task.details,
@@ -266,6 +305,7 @@ struct TaskFormSheet: View {
     }
 
     private var currentProjectId: UUID { isStory ? story.projectId : task.projectId }
+    private var currentDetails: String { isStory ? story.details : task.details }
     private var board: TaskBoard { appState.taskBoard(for: currentProjectId) }
 
     /// The task's column, normalized so a status whose column was deleted
@@ -279,6 +319,32 @@ struct TaskFormSheet: View {
 
     private var classificationSection: some View {
         Section {
+            LabeledContent("AI suggestions model") {
+                Menu {
+                    Button("Default task agent") { selectSuggestionAgent(nil) }
+                    Divider()
+                    ForEach(appState.availableAgentModelSections(), id: \.id) { section in
+                        Section(section.title) {
+                            ForEach(section.models, id: \.key) { model in
+                                Button(model.displayName) {
+                                    selectSuggestionAgent(TaskAgentConfig(provider: model.provider, model: model.id))
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    TaskBoardChipLabel(
+                        icon: "sparkles",
+                        title: suggestionAgent.map(appState.taskAgentLabel) ?? String(localized: "Default task agent"),
+                        isActive: suggestionAgent != nil
+                    )
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .disabled(isAutoFilling || isGeneratingTitle)
+            }
+
             if !isStory {
                 Picker("Status", selection: statusBinding) {
                     ForEach(board.effectiveColumns) { column in
@@ -342,21 +408,19 @@ struct TaskFormSheet: View {
             HStack {
                 Text("Properties")
                 Spacer()
-                if !isStory {
-                    Button {
-                        autoFill()
-                    } label: {
-                        if isAutoFilling {
-                            ProgressView().controlSize(.mini)
-                        } else {
-                            Label("Auto-fill", systemImage: "sparkles")
-                        }
+                Button {
+                    autoFill()
+                } label: {
+                    if isAutoFilling {
+                        ProgressView().controlSize(.mini)
+                    } else {
+                        Label("Auto-fill", systemImage: "sparkles")
                     }
-                    .buttonStyle(.borderless)
-                    .controlSize(.small)
-                    .disabled(isAutoFilling || task.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    .help("Ask the default task agent to fill in empty properties")
                 }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+                .disabled(isAutoFilling || isGeneratingTitle || !hasSuggestionInput)
+                .help("Ask the selected model to fill in empty properties")
                 Button {
                     fieldsSheet = .tags
                 } label: {
@@ -686,17 +750,66 @@ struct TaskFormSheet: View {
         }
     }
 
-    /// Fills the draft's empty properties from the default task agent. The
+    /// Summarizes the draft's description into a title. Unlike auto-fill this
+    /// does overwrite — it is only reachable by pressing the button, and the
+    /// point of pressing it is to replace whatever the title says now.
+    private func generateTitle() {
+        guard !isGeneratingTitle, !isAutoFilling else { return }
+        let details = currentDetails
+        let wasStory = isStory
+        let itemId = wasStory ? story.id : task.id
+        let projectId = currentProjectId
+        let parentTitle = wasStory ? nil : board.story(id: task.storyId)?.title
+        isGeneratingTitle = true
+        Task {
+            defer { isGeneratingTitle = false }
+            guard let title = await appState.suggestTitle(details: details, storyTitle: parentTitle, projectId: projectId) else { return }
+            guard isStory == wasStory, (wasStory ? story.id : task.id) == itemId,
+                  currentProjectId == projectId else { return }
+            if wasStory {
+                story.title = title
+            } else {
+                task.title = title
+            }
+        }
+    }
+
+    /// Fills the draft's empty properties from the selected suggestion model. The
     /// draft is only filled, never overwritten, and nothing is saved until
     /// the user presses Save.
     private func autoFill() {
+        guard !isAutoFilling, !isGeneratingTitle else { return }
+        // Unconfirmed combo-box text is still a user choice and must win.
+        if let version = TaskSingleValueCombo.resolve(versionInput, in: board.allVersions) {
+            field(\.version, \.version).wrappedValue = version
+        }
+        if let milestone = TaskSingleValueCombo.resolve(milestoneInput, in: board.allMilestones) {
+            field(\.milestone, \.milestone).wrappedValue = milestone
+        }
         isAutoFilling = true
-        let draft = task
+        let wasStory = isStory
+        let storyDraft = story
+        let taskDraft = task
         Task {
             defer { isAutoFilling = false }
-            guard let suggestion = await appState.suggestClassification(for: draft) else { return }
-            suggestion.apply(to: &task, board: board)
+            let suggestion: TaskClassification?
+            if wasStory {
+                suggestion = await appState.suggestClassification(for: storyDraft)
+            } else {
+                suggestion = await appState.suggestClassification(for: taskDraft)
+            }
+            guard let suggestion, isStory == wasStory else { return }
+            if wasStory, story.id == storyDraft.id, story.projectId == storyDraft.projectId {
+                suggestion.apply(to: &story, board: board)
+            } else if !wasStory, task.id == taskDraft.id, task.projectId == taskDraft.projectId {
+                suggestion.apply(to: &task, board: board)
+            }
         }
+    }
+
+    private func selectSuggestionAgent(_ agent: TaskAgentConfig?) {
+        appState.setConfiguredTaskSuggestionAgent(agent)
+        suggestionAgent = agent
     }
 
     private func handleAttachmentImport(_ result: Result<[URL], Error>) {
@@ -710,6 +823,7 @@ struct TaskFormSheet: View {
     }
 
     private func save() {
+        guard canSave else { return }
         // Values typed but not yet confirmed with Return still count.
         if let version = TaskSingleValueCombo.resolve(versionInput, in: board.allVersions) {
             field(\.version, \.version).wrappedValue = version

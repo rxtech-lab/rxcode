@@ -17,7 +17,7 @@ struct StoryTasksSheet: View {
     let storyId: UUID
     let projectId: UUID
 
-    @State private var newTaskTitle = ""
+    @State private var newTaskText = ""
     @State private var editing: TaskBoardSheet?
     @FocusState private var isAddFieldFocused: Bool
 
@@ -145,38 +145,49 @@ struct StoryTasksSheet: View {
     // MARK: - Quick add
 
     private var addField: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "plus.circle.fill")
-                .font(.system(size: ClaudeTheme.size(14)))
-                .foregroundStyle(ClaudeTheme.accent)
-            TextField("Add a task…", text: $newTaskTitle)
-                .textFieldStyle(.plain)
-                .font(.system(size: ClaudeTheme.size(13)))
-                .focused($isAddFieldFocused)
-                .onSubmit(addTask)
-                .accessibilityIdentifier("story-sheet-add-task")
-            Button("Add", action: addTask)
-                .buttonStyle(.glass)
-                .controlSize(.small)
-                .disabled(trimmedNewTitle.isEmpty)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: ClaudeTheme.size(14)))
+                    .foregroundStyle(ClaudeTheme.accent)
+                TextField("Describe a task…", text: $newTaskText)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: ClaudeTheme.size(13)))
+                    .focused($isAddFieldFocused)
+                    .onSubmit(addTask)
+                    .accessibilityIdentifier("story-sheet-add-task")
+                Button("Add", action: addTask)
+                    .buttonStyle(.glass)
+                    .controlSize(.small)
+                    .disabled(trimmedNewText.isEmpty)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .glassEffect(.regular, in: Capsule())
+
+            // What is typed is the description the agent runs on, so say where
+            // the title on the card is going to come from.
+            Text(appState.autoClassifiesQuickAddedTasks
+                 ? "What you type becomes the description; the agent writes the title."
+                 : "What you type becomes the description; the title is shortened from its first line.")
+                .font(.system(size: ClaudeTheme.size(10)))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+                .padding(.horizontal, 14)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .glassEffect(.regular, in: Capsule())
         .padding(16)
     }
 
-    private var trimmedNewTitle: String {
-        newTaskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+    private var trimmedNewText: String {
+        newTaskText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Creates a pending task in this story and keeps focus in the field so
-    /// several tasks can be typed in a row.
+    /// Creates a pending task in this story from the typed description and
+    /// keeps focus in the field so several tasks can be typed in a row.
     private func addTask() {
-        let title = trimmedNewTitle
-        guard !title.isEmpty else { return }
-        appState.quickAddTask(title: title, projectId: projectId, storyId: storyId)
-        newTaskTitle = ""
+        let text = trimmedNewText
+        guard !text.isEmpty else { return }
+        appState.quickAddTask(text: text, projectId: projectId, storyId: storyId)
+        newTaskText = ""
         isAddFieldFocused = true
     }
 }
@@ -190,6 +201,7 @@ private struct StoryTaskRow: View {
 
     let task: ProjectTask
     let onOpen: () -> Void
+    @State private var pendingDeletion: TaskBoardSheet?
 
     private var isDone: Bool { board.column(for: task.status).countsAsDone }
 
@@ -230,7 +242,7 @@ private struct StoryTaskRow: View {
                                 if isClassifying {
                                     HStack(spacing: 4) {
                                         ProgressView().controlSize(.mini)
-                                        Text("Filling in properties…")
+                                        Text("Summarizing…")
                                             .font(.system(size: ClaudeTheme.size(10)))
                                             .foregroundStyle(ClaudeTheme.textTertiary)
                                     }
@@ -264,7 +276,12 @@ private struct StoryTaskRow: View {
         .padding(.vertical, 10)
         .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusMedium))
         .contextMenu {
-            TaskContextMenuItems(task: task, onEdit: onOpen, onOpenChat: { dismiss() })
+            TaskContextMenuItems(task: task, onEdit: onOpen, onDelete: {
+                pendingDeletion = .task(task)
+            }, onOpenChat: { dismiss() })
+        }
+        .taskDeletionConfirmation(pending: $pendingDeletion) { candidate in
+            if case .task(let task) = candidate { appState.deleteTask(task) }
         }
     }
 

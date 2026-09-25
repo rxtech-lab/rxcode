@@ -11,9 +11,11 @@ struct ProjectTaskTests {
     func taskRoundTrip() throws {
         let projectId = UUID()
         let storyId = UUID()
+        let parentTaskId = UUID()
         let task = ProjectTask(
             projectId: projectId,
             storyId: storyId,
+            parentTaskId: parentTaskId,
             title: "Wire the board",
             details: "Columns plus drag and drop",
             status: .pendingReview,
@@ -41,6 +43,7 @@ struct ProjectTaskTests {
         #expect(decoded.id == task.id)
         #expect(decoded.projectId == projectId)
         #expect(decoded.storyId == storyId)
+        #expect(decoded.parentTaskId == parentTaskId)
         #expect(decoded.title == "Wire the board")
         #expect(decoded.status == .pendingReview)
         #expect(decoded.version == "v1.3.0")
@@ -87,6 +90,60 @@ struct ProjectTaskTests {
         #expect(board.column(for: .pendingReview).onReviewFail == .inProgress)
         #expect(board.column(for: .done).countsAsDone)
         #expect(board.tasks(in: .pendingReview).map(\.title) == ["old"])
+        #expect(board.tasks[0].parentTaskId == nil)
+    }
+
+    @Test("Finishing a linked parent starts queued children once")
+    func linkedTaskCompletion() {
+        let projectID = UUID()
+        let parent = ProjectTask(projectId: projectID, title: "Parent", status: .pendingReview)
+        let child = ProjectTask(projectId: projectID, parentTaskId: parent.id, title: "Child", status: .pending)
+        let finishedChild = ProjectTask(projectId: projectID, parentTaskId: parent.id, title: "Already done", status: .done)
+        let unrelated = ProjectTask(projectId: projectID, title: "Unrelated", status: .pending)
+        let previous = TaskBoard(tasks: [parent, child, finishedChild, unrelated])
+        var board = previous
+        board.tasks[0].status = .done
+
+        let completed = board.newlyFinishedTaskIDs(comparedTo: previous)
+        #expect(completed == [parent.id])
+        let dispatched = board.advanceChildren(of: completed)
+        #expect(dispatched.map(\.id) == [child.id])
+        #expect(board.tasks.first { $0.id == child.id }?.status == .inProgress)
+        #expect(board.tasks.first { $0.id == finishedChild.id }?.status == .done)
+        #expect(board.tasks.first { $0.id == unrelated.id }?.status == .pending)
+        #expect(board.newlyFinishedTaskIDs(comparedTo: board).isEmpty)
+    }
+
+    @Test("Finishing a parent restarts a pending child with an earlier session")
+    func linkedTaskCompletionAfterEarlierRun() {
+        let projectID = UUID()
+        let parent = ProjectTask(projectId: projectID, title: "Parent", status: .pendingReview)
+        let child = ProjectTask(
+            projectId: projectID, parentTaskId: parent.id, title: "Child", status: .pending,
+            agent: TaskAgentConfig(provider: .codex), sessionKey: "earlier-session"
+        )
+        let previous = TaskBoard(tasks: [parent, child])
+        var board = previous
+        board.tasks[0].status = .done
+
+        let dispatched = board.advanceChildren(of: board.newlyFinishedTaskIDs(comparedTo: previous))
+
+        #expect(dispatched.map(\.id) == [child.id])
+        #expect(board.tasks[1].status == .inProgress)
+        #expect(board.tasks[1].sessionKey == "earlier-session")
+        #expect(board.advanceChildren(of: [parent.id]).isEmpty)
+    }
+
+    @Test("Links reject self, missing parents, and cycles")
+    func linkedTaskValidation() {
+        let projectID = UUID()
+        let first = ProjectTask(projectId: projectID, title: "First")
+        let second = ProjectTask(projectId: projectID, parentTaskId: first.id, title: "Second")
+        let board = TaskBoard(tasks: [first, second])
+        #expect(board.canLinkTask(second.id, to: first.id))
+        #expect(!board.canLinkTask(first.id, to: second.id))
+        #expect(!board.canLinkTask(first.id, to: first.id))
+        #expect(!board.canLinkTask(first.id, to: UUID()))
     }
 
     @Test("Columns round-trip with their triggers")

@@ -170,40 +170,177 @@ extension TaskFormSheet {
         }
     }
 
-    /// What the model filled in, as read-only chips.
-    @ViewBuilder
+    /// What the model filled in, as chips that each open a menu, so a wrong
+    /// guess is corrected in place. Unset properties show as dimmed chips so
+    /// they can be filled in too.
     var draftPropertyChips: some View {
-        let chips = suggestedProperties
-        if !chips.isEmpty {
-            LabeledContent("Suggested properties") {
-                FlowLayout(spacing: 4) {
-                    ForEach(chips, id: \.text) { chip in
-                        TaskBoardChipLabel(icon: chip.icon, title: chip.text, isActive: true)
+        LabeledContent("Suggested properties") {
+            FlowLayout(spacing: 4) {
+                draftTypeChip
+                draftPriorityChip
+                draftStoryChip
+                draftValueChip(
+                    icon: "tag",
+                    placeholder: String(localized: "Version"),
+                    value: $task.version,
+                    options: board.allVersions
+                )
+                draftValueChip(
+                    icon: "flag",
+                    placeholder: String(localized: "Milestone"),
+                    value: $task.milestone,
+                    options: board.allMilestones
+                )
+                ForEach(task.tags, id: \.self) { tag in
+                    draftChipMenu(icon: "number", title: tag, isActive: true) {
+                        Button("Remove Tag", role: .destructive) {
+                            task.tags.removeAll { $0 == tag }
+                        }
+                    }
+                }
+                draftAddTagChip
+            }
+        }
+    }
+
+    var draftTypeChip: some View {
+        let selected = board.itemType(id: task.typeId)
+        return draftChipMenu(
+            icon: "circle.fill",
+            title: selected?.name ?? String(localized: "Type"),
+            isActive: selected != nil
+        ) {
+            draftNoneButton(isSelected: selected == nil) { task.typeId = nil }
+            Divider()
+            ForEach(board.effectiveTypes) { type in
+                Button {
+                    task.typeId = type.id
+                } label: {
+                    Label {
+                        Text(type.name)
+                    } icon: {
+                        Image(systemName: type.id == selected?.id ? "checkmark.circle.fill" : "circle.fill")
+                            .foregroundStyle(type.tint)
+                    }
+                }
+            }
+        }
+        .accessibilityIdentifier("task-draft-type")
+    }
+
+    var draftPriorityChip: some View {
+        draftChipMenu(
+            icon: task.priority?.systemImage ?? "equal",
+            title: task.priority.map { String(localized: $0.displayName) } ?? String(localized: "Priority"),
+            isActive: task.priority != nil
+        ) {
+            draftNoneButton(isSelected: task.priority == nil) { task.priority = nil }
+            Divider()
+            ForEach(TaskPriority.allCases, id: \.self) { priority in
+                Button {
+                    task.priority = priority
+                } label: {
+                    if task.priority == priority {
+                        Label(String(localized: priority.displayName), systemImage: "checkmark")
+                    } else {
+                        Text(priority.displayName)
+                    }
+                }
+            }
+        }
+        .accessibilityIdentifier("task-draft-priority")
+    }
+
+    var draftStoryChip: some View {
+        let parent = board.story(id: task.storyId)
+        return draftChipMenu(
+            icon: "square.stack.3d.up",
+            title: parent?.title ?? String(localized: "Story"),
+            isActive: parent != nil
+        ) {
+            draftNoneButton(isSelected: parent == nil) { task.storyId = nil }
+            Divider()
+            ForEach(appState.stories(projectFilter: task.projectId)) { story in
+                Button {
+                    task.storyId = story.id
+                } label: {
+                    if story.id == parent?.id {
+                        Label(story.title, systemImage: "checkmark")
+                    } else {
+                        Text(story.title)
+                    }
+                }
+            }
+        }
+        .accessibilityIdentifier("task-draft-story")
+    }
+
+    /// Version and milestone: pick an existing value, or clear it. New values
+    /// are created from the full form once the task exists.
+    func draftValueChip(
+        icon: String,
+        placeholder: String,
+        value: Binding<String?>,
+        options: [String]
+    ) -> some View {
+        let current = value.wrappedValue.flatMap { $0.isEmpty ? nil : $0 }
+        // A suggested value the board doesn't know yet still shows as picked.
+        let choices = current.map { options.contains($0) ? options : [$0] + options } ?? options
+        return draftChipMenu(icon: icon, title: current ?? placeholder, isActive: current != nil) {
+            draftNoneButton(isSelected: current == nil) { value.wrappedValue = nil }
+            if !choices.isEmpty { Divider() }
+            ForEach(choices, id: \.self) { option in
+                Button {
+                    value.wrappedValue = option
+                } label: {
+                    if option == current {
+                        Label(option, systemImage: "checkmark")
+                    } else {
+                        Text(option)
                     }
                 }
             }
         }
     }
 
-    var suggestedProperties: [(icon: String, text: String)] {
-        var chips: [(icon: String, text: String)] = []
-        if let type = board.itemType(id: task.typeId) {
-            chips.append((icon: "circle.fill", text: type.name))
+    @ViewBuilder
+    var draftAddTagChip: some View {
+        let unused = board.allTags.filter { !task.tags.contains($0) }
+        if !unused.isEmpty {
+            draftChipMenu(icon: "plus", title: String(localized: "Tag"), isActive: false) {
+                ForEach(unused, id: \.self) { tag in
+                    Button(tag) { task.tags.append(tag) }
+                }
+            }
+            .accessibilityIdentifier("task-draft-add-tag")
         }
-        if let priority = task.priority {
-            chips.append((icon: priority.systemImage, text: String(localized: priority.displayName)))
+    }
+
+    func draftChipMenu<Content: View>(
+        icon: String,
+        title: String,
+        isActive: Bool,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        Menu {
+            content()
+        } label: {
+            TaskBoardChipLabel(icon: icon, title: title, isActive: isActive)
         }
-        if let parent = board.story(id: task.storyId) {
-            chips.append((icon: "square.stack.3d.up", text: parent.title))
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .disabled(isGeneratingDraft)
+    }
+
+    func draftNoneButton(isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            if isSelected {
+                Label("None", systemImage: "checkmark")
+            } else {
+                Text("None")
+            }
         }
-        if let version = task.version, !version.isEmpty {
-            chips.append((icon: "tag", text: version))
-        }
-        if let milestone = task.milestone, !milestone.isEmpty {
-            chips.append((icon: "flag", text: milestone))
-        }
-        chips += task.tags.map { (icon: "number", text: $0) }
-        return chips
     }
 
     var draftComposerFooter: some View {

@@ -8,6 +8,7 @@ private let logger = Logger(subsystem: "com.idealapp.RxCode", category: "RootVie
 private enum MobileRootTab: Hashable {
     case briefing
     case projects
+    case tasks
     case settings
     case search
 }
@@ -21,10 +22,14 @@ struct RootView: View {
     @State private var selectedSession: String?
     @State private var selectedBriefingGroup: BriefingGroupKey?
     @State private var briefingDetailPath = NavigationPath()
-    @State private var showingBriefing = true
+    @State private var showingBriefing = false
     @State private var showSettings = false
-    @State private var selectedTab: MobileRootTab = .briefing
+    @State private var showingTasks = true
+    @State private var selectedTab: MobileRootTab = .tasks
     @State private var projectsPath = NavigationPath()
+    /// Owned here (not by the stack) so the Tasks navigation survives layout
+    /// changes, and so chats opened from a task push onto it.
+    @State private var tasksPath = NavigationPath()
     @State private var minimumLoadingTimeElapsed = false
     @State private var connectionTimedOut = false
     @State private var showPairingSheet = false
@@ -178,7 +183,7 @@ struct RootView: View {
 
     private var mainContent: some View {
         Group {
-            if compactClass == .compact {
+            if usesPhoneLayout {
                 phoneTabs
             } else {
                 ipadSplitView
@@ -188,8 +193,19 @@ struct RootView: View {
 
     @State private var searchText = ""
 
+    /// iPhones keep the tab layout in every orientation. Large iPhones report a
+    /// regular width in landscape, and swapping to the split view on rotation
+    /// would rebuild every stack and drop the user's navigation.
+    private var usesPhoneLayout: Bool {
+        compactClass == .compact || UIDevice.current.userInterfaceIdiom == .phone
+    }
+
     private var phoneTabs: some View {
         TabView(selection: $selectedTab) {
+            Tab("Tasks", systemImage: "checklist", value: MobileRootTab.tasks) {
+                tasksStack
+            }
+
             Tab("Briefing", systemImage: "doc.text", value: MobileRootTab.briefing) {
                 NavigationStack(path: $briefingDetailPath) {
                     MobileBriefingView(
@@ -236,7 +252,9 @@ struct RootView: View {
 
     private var ipadSplitView: some View {
         Group {
-            if showingBriefing {
+            if showingTasks {
+                tasksSplitView
+            } else if showingBriefing {
                 briefingSplitView
             } else {
                 projectSplitView
@@ -252,6 +270,7 @@ struct RootView: View {
             if newValue != nil {
                 selectedSession = nil
                 showingBriefing = false
+                showingTasks = false
             }
         }
     }
@@ -305,6 +324,31 @@ struct RootView: View {
         }
     }
 
+    private var tasksSplitView: some View {
+        NavigationSplitView {
+            projectSidebar
+        } detail: {
+            tasksStack
+        }
+    }
+
+    /// Chats opened from a task push onto the Tasks stack, so Back returns to
+    /// the task instead of jumping to the project's thread list.
+    private var tasksStack: some View {
+        NavigationStack(path: $tasksPath) {
+            MobileTasksDashboardView { sessionID in
+                tasksPath.append(sessionID)
+            }
+            .navigationDestination(for: String.self) { sessionID in
+                chatDestination(sessionID, onClose: closeTasksChat)
+            }
+        }
+    }
+
+    private func closeTasksChat() {
+        if !tasksPath.isEmpty { tasksPath.removeLast() }
+    }
+
     private func closeBriefingChat() {
         if !briefingDetailPath.isEmpty {
             briefingDetailPath.removeLast()
@@ -333,7 +377,11 @@ struct RootView: View {
     }
 
     private var projectSidebar: some View {
-        ProjectsSidebar(selected: $selectedProject, showingBriefing: $showingBriefing)
+        ProjectsSidebar(
+            selected: $selectedProject,
+            showingBriefing: $showingBriefing,
+            showingTasks: $showingTasks
+        )
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showSettings = true } label: {
@@ -343,8 +391,8 @@ struct RootView: View {
             }
     }
 
-    private func chatDestination(_ sessionID: String) -> some View {
-        MobileChatView(sessionID: sessionID, onClose: { closeChat() })
+    private func chatDestination(_ sessionID: String, onClose: (() -> Void)? = nil) -> some View {
+        MobileChatView(sessionID: sessionID, onClose: onClose ?? { closeChat() })
             .id(sessionID)
             .toolbar(.hidden, for: .tabBar)
             .task(id: sessionID) {
@@ -357,7 +405,7 @@ struct RootView: View {
     /// Pop the chat view after its thread is archived or deleted. Compact mode
     /// is driven by `projectsPath`; the split view by `selectedSession`.
     private func closeChat() {
-        if compactClass == .compact {
+        if usesPhoneLayout {
             if !projectsPath.isEmpty { projectsPath.removeLast() }
         } else {
             selectedSession = nil
@@ -369,14 +417,22 @@ struct RootView: View {
     private func openActiveSession(_ sessionID: String?) {
         guard let sessionID else { return }
         // Skip navigation if we're already inside the briefing detail flow.
-        if isViewingBriefingDetail {
+        if isViewingBriefingDetail || isViewingTasksDetail {
             return
         }
         navigate(toSession: sessionID, projectID: nil)
     }
 
+    /// A task, board, or chat pushed from the Tasks tab. Subscribing to a chat
+    /// opened there updates `activeSessionID`, which must not pull the user
+    /// over to the Projects tab.
+    private var isViewingTasksDetail: Bool {
+        let tasksVisible = usesPhoneLayout ? selectedTab == .tasks : showingTasks
+        return tasksVisible && !tasksPath.isEmpty
+    }
+
     private var isViewingBriefingDetail: Bool {
-        if compactClass == .compact {
+        if usesPhoneLayout {
             // iPhone: the path holds [briefingGroupKey, …], so a non-empty
             // path while on the Briefing tab means a detail screen is open.
             return selectedTab == .briefing && !briefingDetailPath.isEmpty
@@ -410,6 +466,7 @@ struct RootView: View {
     private func navigate(toSession sessionID: String, projectID: UUID?) {
         selectedTab = .projects
         showingBriefing = false
+        showingTasks = false
 
         // Resolve the owning project so the navigation stack keeps its
         // Projects → Threads → Chat hierarchy. Draft sessions encode the
@@ -418,7 +475,7 @@ struct RootView: View {
             ?? state.sessions.first(where: { $0.id == sessionID })?.projectId
             ?? MobileDraftSessionID.projectID(from: sessionID)
 
-        if compactClass == .compact {
+        if usesPhoneLayout {
             // Push the project level before the chat so the back button
             // returns to the thread list, not the project list.
             var path = NavigationPath()

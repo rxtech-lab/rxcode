@@ -163,6 +163,7 @@ struct ProjectWindowView: View {
                     }, aboveInputAccessory: {
                         VStack(spacing: 8) {
                             PermissionQueueBanner()
+                            ThreadDiffBanner()
                             HookBannerHost(surface: .newProject, position: .aboveInputBox)
                         }
                     })

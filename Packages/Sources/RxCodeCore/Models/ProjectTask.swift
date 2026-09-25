@@ -236,6 +236,8 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
     public let id: UUID
     public var projectId: UUID
     public var storyId: UUID?
+    /// Task that must finish before this task starts. Links stay within a board.
+    public var parentTaskId: UUID?
     public var title: String
     public var details: String
     public var status: TaskStatus
@@ -270,6 +272,7 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
         id: UUID = UUID(),
         projectId: UUID,
         storyId: UUID? = nil,
+        parentTaskId: UUID? = nil,
         title: String,
         details: String = "",
         status: TaskStatus = .pending,
@@ -290,6 +293,7 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
         self.id = id
         self.projectId = projectId
         self.storyId = storyId
+        self.parentTaskId = parentTaskId
         self.title = title
         self.details = details
         self.status = status
@@ -312,7 +316,7 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
     /// default so a board written by an older build keeps loading after new
     /// fields are added.
     private enum CodingKeys: String, CodingKey {
-        case id, projectId, storyId, title, details, status, version, tags
+        case id, projectId, storyId, parentTaskId, title, details, status, version, tags
         case milestone, priority, typeId
         case agent, attachments, sessionKey, sourceSessionKey, attentionReason, sortIndex, createdAt, updatedAt
     }
@@ -322,6 +326,7 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
         projectId = try c.decodeIfPresent(UUID.self, forKey: .projectId) ?? UUID()
         storyId = try c.decodeIfPresent(UUID.self, forKey: .storyId)
+        parentTaskId = try c.decodeIfPresent(UUID.self, forKey: .parentTaskId)
         title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
         details = try c.decodeIfPresent(String.self, forKey: .details) ?? ""
         status = try c.decodeIfPresent(TaskStatus.self, forKey: .status) ?? .pending
@@ -339,6 +344,10 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
     }
+
+    /// The description is what the agent was prompted with, so it is frozen
+    /// once the task has been dispatched.
+    public var isDescriptionLocked: Bool { sessionKey != nil }
 
     /// The prompt handed to the agent when the task is dispatched, also shown
     /// as the thread's first user message.
@@ -732,6 +741,8 @@ public struct TaskBoard: Codable, Sendable {
     /// Customized columns, in board order. Empty means the board still shows
     /// `TaskColumn.defaults`; see `effectiveColumns`.
     public var columns: [TaskColumn]
+    /// The Notion database this board syncs with, if linked.
+    public var notion: NotionBoardLink?
 
     public static let currentSchemaVersion = 1
 
@@ -742,7 +753,8 @@ public struct TaskBoard: Codable, Sendable {
         savedViews: [TaskSavedView] = [],
         labels: [TaskLabel] = [],
         itemTypes: [TaskItemType] = [],
-        columns: [TaskColumn] = []
+        columns: [TaskColumn] = [],
+        notion: NotionBoardLink? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.stories = stories
@@ -751,10 +763,11 @@ public struct TaskBoard: Codable, Sendable {
         self.labels = labels
         self.itemTypes = itemTypes
         self.columns = columns
+        self.notion = notion
     }
 
     private enum CodingKeys: String, CodingKey {
-        case schemaVersion, stories, tasks, savedViews, labels, itemTypes, columns
+        case schemaVersion, stories, tasks, savedViews, labels, itemTypes, columns, notion
     }
 
     public init(from decoder: Decoder) throws {
@@ -766,11 +779,60 @@ public struct TaskBoard: Codable, Sendable {
         labels = try c.decodeIfPresent([TaskLabel].self, forKey: .labels) ?? []
         itemTypes = try c.decodeIfPresent([TaskItemType].self, forKey: .itemTypes) ?? []
         columns = try c.decodeIfPresent([TaskColumn].self, forKey: .columns) ?? []
+        notion = try? c.decodeIfPresent(NotionBoardLink.self, forKey: .notion)
     }
 
     public func story(id: UUID?) -> ProjectStory? {
         guard let id else { return nil }
         return stories.first { $0.id == id }
+    }
+
+    /// A parent must be on this board and cannot make a dependency cycle.
+    public func canLinkTask(_ taskID: UUID, to parentID: UUID) -> Bool {
+        var visited: Set<UUID> = [taskID]
+        var current: UUID? = parentID
+        while let id = current {
+            guard visited.insert(id).inserted,
+                  let parent = tasks.first(where: { $0.id == id })
+            else { return false }
+            current = parent.parentTaskId
+        }
+        return true
+    }
+
+    /// Only an existing task crossing from unfinished to finished releases children.
+    public func newlyFinishedTaskIDs(comparedTo previous: TaskBoard?) -> Set<UUID> {
+        guard let previous else { return [] }
+        let oldTasks = Dictionary(uniqueKeysWithValues: previous.tasks.map { ($0.id, $0) })
+        return Set(tasks.compactMap { task in
+            guard column(for: task.status).countsAsDone,
+                  let old = oldTasks[task.id],
+                  !previous.column(for: old.status).countsAsDone
+            else { return nil }
+            return task.id
+        })
+    }
+
+    /// Advance queued children when their parent crosses into a finished column.
+    /// Returns children moved into a chat column so the app can dispatch them.
+    public mutating func advanceChildren(of newlyFinishedParentIDs: Set<UUID>) -> [ProjectTask] {
+        guard !newlyFinishedParentIDs.isEmpty,
+              let target = effectiveColumns.first(where: { $0.id == .inProgress }) ?? firstChatColumn
+        else { return [] }
+        var moved: [ProjectTask] = []
+        for index in tasks.indices {
+            guard let parentID = tasks[index].parentTaskId,
+                  newlyFinishedParentIDs.contains(parentID),
+                  tasks.contains(where: { $0.id == parentID }),
+                  !column(for: tasks[index].status).countsAsDone,
+                  !column(for: tasks[index].status).triggersChat
+            else { continue }
+            tasks[index].status = target.id
+            tasks[index].sortIndex = appendSortIndex(for: target.id)
+            tasks[index].updatedAt = Date()
+            moved.append(tasks[index])
+        }
+        return target.triggersChat ? moved : []
     }
 
     /// Tasks in one column, in board order. Tasks whose column was deleted

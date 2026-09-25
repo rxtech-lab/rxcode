@@ -116,7 +116,9 @@ extension CodexAppServer {
     /// execution when the `code_mode_host` feature is on) can be located. Mirrors
     /// how Codex resolves it: the `CODEX_CODE_MODE_HOST_PATH` env override, a
     /// sibling of the `codex` binary (and of its symlink target — the Homebrew
-    /// symlink dir differs from the Caskroom target dir), or the shell `PATH`.
+    /// symlink dir differs from the Caskroom target dir), the native binary dir
+    /// of an npm install, or the shell `PATH`. A false negative is costly: newer
+    /// Codex refuses every tool call with "code-mode host is disabled".
     static func codeModeHostAvailable(binary: String, path: String?) -> Bool {
         let fm = FileManager.default
         let hostName = "codex-code-mode-host"
@@ -134,6 +136,12 @@ extension CodexAppServer {
             }
         }
 
+        for dir in npmVendorBinDirs(resolvedCodexDir: resolvedDir) {
+            if fm.isExecutableFile(atPath: (dir as NSString).appendingPathComponent(hostName)) {
+                return true
+            }
+        }
+
         if let path, !path.isEmpty {
             for dir in path.split(separator: ":") where !dir.isEmpty {
                 if fm.isExecutableFile(atPath: (String(dir) as NSString).appendingPathComponent(hostName)) {
@@ -143,6 +151,35 @@ extension CodexAppServer {
         }
 
         return false
+    }
+
+    /// Native `bin` dirs of an npm-installed Codex. There `codex` resolves to the
+    /// `@openai/codex/bin/codex.js` launcher, while the real binary and its
+    /// sidecar live in a platform package's `vendor/<target-triple>/bin` — either
+    /// inside `@openai/codex` itself, nested under its `node_modules`, or hoisted
+    /// as a sibling (`@openai/codex-darwin-arm64`).
+    static func npmVendorBinDirs(resolvedCodexDir: String) -> [String] {
+        let fm = FileManager.default
+        let packageRoot = (resolvedCodexDir as NSString).deletingLastPathComponent
+        let scopeDir = (packageRoot as NSString).deletingLastPathComponent
+        guard (scopeDir as NSString).lastPathComponent == "@openai" else { return [] }
+
+        func packages(in dir: String) -> [String] {
+            let names = (try? fm.contentsOfDirectory(atPath: dir)) ?? []
+            return names.filter { $0.hasPrefix("codex") }.map { (dir as NSString).appendingPathComponent($0) }
+        }
+
+        let packageDirs = [packageRoot]
+            + packages(in: (packageRoot as NSString).appendingPathComponent("node_modules/@openai"))
+            + packages(in: scopeDir)
+        var result: [String] = []
+        for package in packageDirs {
+            let vendor = (package as NSString).appendingPathComponent("vendor")
+            for triple in (try? fm.contentsOfDirectory(atPath: vendor)) ?? [] {
+                result.append(((vendor as NSString).appendingPathComponent(triple) as NSString).appendingPathComponent("bin"))
+            }
+        }
+        return result
     }
 
     func findNvmCodexBinary(root: String) -> String? {

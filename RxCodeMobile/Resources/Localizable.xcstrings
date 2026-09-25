@@ -49,6 +49,9 @@
         }
       }
     },
+    "· Agent working" : {
+
+    },
     "#%lld" : {
       "localizations" : {
         "ko" : {
@@ -227,6 +230,16 @@
         }
       }
     },
+    "%lld of %lld tasks done" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld tasks done"
+          }
+        }
+      }
+    },
     "%lld outdated action(s)" : {
       "localizations" : {
         "ko" : {
@@ -280,6 +293,9 @@
           }
         }
       }
+    },
+    "%lld stories" : {
+
     },
     "%lld/%lld" : {
       "localizations" : {
@@ -587,6 +603,9 @@
         }
       }
     },
+    "Add a project on your Mac to plan its tasks here." : {
+
+    },
     "Add a QR code" : {
       "localizations" : {
         "ko" : {
@@ -602,6 +621,9 @@
           }
         }
       }
+    },
+    "Add a task and your Mac will run it with its assigned agent." : {
+
     },
     "Add Argument" : {
       "localizations" : {
@@ -739,6 +761,9 @@
         }
       }
     },
+    "Agent" : {
+
+    },
     "Agent Clients" : {
       "localizations" : {
         "en" : {
@@ -761,6 +786,9 @@
         }
       }
     },
+    "Agent is working on this task" : {
+
+    },
     "Agent operation failed." : {
       "localizations" : {
         "en" : {
@@ -782,6 +810,12 @@
           }
         }
       }
+    },
+    "Agent Response" : {
+
+    },
+    "Agent running" : {
+
     },
     "All" : {
       "localizations" : {
@@ -892,6 +926,12 @@
           }
         }
       }
+    },
+    "Any story" : {
+
+    },
+    "Any version" : {
+
     },
     "API keys stay on the Mac and are not synced to this device." : {
       "localizations" : {
@@ -1084,6 +1124,12 @@
           }
         }
       }
+    },
+    "Ask the agent to change something…" : {
+
+    },
+    "Assign an agent in Config, then run the task." : {
+
     },
     "Assistant has a question" : {
       "localizations" : {
@@ -1714,6 +1760,9 @@
         }
       }
     },
+    "Classifying" : {
+
+    },
     "Claude Code Usage" : {
       "localizations" : {
         "en" : {
@@ -1973,6 +2022,9 @@
           }
         }
       }
+    },
+    "Config" : {
+
     },
     "Configuration" : {
       "localizations" : {
@@ -2270,6 +2322,9 @@
         }
       }
     },
+    "Continues the task's existing chat and moves it back into progress." : {
+
+    },
     "Control desktop summaries" : {
       "localizations" : {
         "en" : {
@@ -2399,6 +2454,9 @@
           }
         }
       }
+    },
+    "Couldn't load tasks. Pull to refresh." : {
+
     },
     "Couldn't load the selected image." : {
       "localizations" : {
@@ -2607,6 +2665,9 @@
           }
         }
       }
+    },
+    "Created" : {
+
     },
     "Created from %@" : {
       "localizations" : {
@@ -3052,6 +3113,18 @@
         }
       }
     },
+    "Delete Story" : {
+
+    },
+    "Delete Story?" : {
+
+    },
+    "Delete Task" : {
+
+    },
+    "Delete Task?" : {
+
+    },
     "Delete template?" : {
       "localizations" : {
         "ko" : {
@@ -3188,6 +3261,9 @@
         }
       }
     },
+    "Description" : {
+
+    },
     "design/overview" : {
       "localizations" : {
         "ko" : {
@@ -3292,6 +3368,9 @@
         }
       }
     },
+    "Details" : {
+
+    },
     "Detected · Make" : {
       "localizations" : {
         "ko" : {
@@ -3385,8 +3464,6 @@
       }
     },
     "Direct · LAN%@" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -3397,8 +3474,6 @@
       }
     },
     "Direct connection" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -3630,6 +3705,12 @@
         }
       }
     },
+    "Edit Story" : {
+
+    },
+    "Edit Task" : {
+
+    },
     "Edit Template" : {
       "localizations" : {
         "ko" : {
@@ -3645,6 +3726,9 @@
           }
         }
       }
+    },
+    "Edit View" : {
+
     },
     "Empty Folder" : {
       "localizations" : {
@@ -4382,6 +4466,9 @@
         }
       }
     },
+    "Filling in details…" : {
+
+    },
     "Filter Skills" : {
       "localizations" : {
         "en" : {
@@ -4403,6 +4490,18 @@
           }
         }
       }
+    },
+    "Filter stories" : {
+
+    },
+    "Filter tasks" : {
+
+    },
+    "Filters" : {
+
+    },
+    "Fix Check Error" : {
+
     },
     "Focus mode" : {
       "localizations" : {
@@ -4469,6 +4568,12 @@
           }
         }
       }
+    },
+    "Follow Up" : {
+
+    },
+    "Follow-up" : {
+
     },
     "Form couldn't be rendered — edit raw JSON." : {
       "localizations" : {
@@ -5007,6 +5112,9 @@
         }
       }
     },
+    "It may have been deleted on your Mac." : {
+
+    },
     "Key" : {
       "localizations" : {
         "en" : {
@@ -5044,6 +5152,9 @@
           }
         }
       }
+    },
+    "Layout" : {
+
     },
     "Live" : {
       "localizations" : {
@@ -5197,6 +5308,9 @@
         }
       }
     },
+    "Loading tasks…" : {
+
+    },
     "Loading thread" : {
       "localizations" : {
         "ko" : {
@@ -5250,6 +5364,9 @@
           }
         }
       }
+    },
+    "Locked once the task has run, so it keeps matching what the agent was asked to do." : {
+
     },
     "Long text" : {
       "localizations" : {
@@ -5699,6 +5816,9 @@
         }
       }
     },
+    "Milestone" : {
+
+    },
     "Mints a DOCS_UPLOAD_TOKEN and installs it as the repo's GitHub Actions secret so CI can publish docs automatically." : {
       "localizations" : {
         "ko" : {
@@ -5753,6 +5873,12 @@
         }
       }
     },
+    "Move To" : {
+
+    },
+    "Moving this task into a chat column runs the assigned agent in a new thread on your Mac." : {
+
+    },
     "Name" : {
       "localizations" : {
         "en" : {
@@ -5790,6 +5916,9 @@
           }
         }
       }
+    },
+    "Needs Attention" : {
+
     },
     "New" : {
       "localizations" : {
@@ -5829,6 +5958,15 @@
         }
       }
     },
+    "New Story" : {
+
+    },
+    "New tag" : {
+
+    },
+    "New Task" : {
+
+    },
     "New Template" : {
       "localizations" : {
         "ko" : {
@@ -5866,6 +6004,12 @@
           }
         }
       }
+    },
+    "New view" : {
+
+    },
+    "New View" : {
+
     },
     "New worktree" : {
       "localizations" : {
@@ -6053,6 +6197,9 @@
         }
       }
     },
+    "No description" : {
+
+    },
     "No diff content available." : {
       "localizations" : {
         "en" : {
@@ -6176,6 +6323,15 @@
           }
         }
       }
+    },
+    "No matches" : {
+
+    },
+    "No Matching Stories" : {
+
+    },
+    "No Matching Tasks" : {
+
     },
     "No MCP servers configured. Tap + to add one." : {
       "localizations" : {
@@ -6345,6 +6501,9 @@
         }
       }
     },
+    "No response text." : {
+
+    },
     "No Run Profiles" : {
       "localizations" : {
         "en" : {
@@ -6366,6 +6525,9 @@
           }
         }
       }
+    },
+    "No Runs Yet" : {
+
     },
     "No scans yet." : {
       "localizations" : {
@@ -6459,6 +6621,12 @@
         }
       }
     },
+    "No Stories" : {
+
+    },
+    "No stories yet" : {
+
+    },
     "No summary available yet" : {
       "localizations" : {
         "en" : {
@@ -6518,6 +6686,15 @@
           }
         }
       }
+    },
+    "No tasks" : {
+
+    },
+    "No Tasks" : {
+
+    },
+    "No tasks in this story yet." : {
+
     },
     "No templates yet. Tap + to create one." : {
       "localizations" : {
@@ -6658,6 +6835,9 @@
           }
         }
       }
+    },
+    "None" : {
+
     },
     "Normal" : {
       "localizations" : {
@@ -6860,6 +7040,9 @@
           }
         }
       }
+    },
+    "Open Chat" : {
+
     },
     "Open failing CI run" : {
       "localizations" : {
@@ -7303,6 +7486,9 @@
         }
       }
     },
+    "Priority" : {
+
+    },
     "Privacy Report" : {
       "localizations" : {
         "ko" : {
@@ -7492,6 +7678,9 @@
           }
         }
       }
+    },
+    "Quick Add Task" : {
+
     },
     "Reconnecting in %llds" : {
       "localizations" : {
@@ -7987,6 +8176,12 @@
         }
       }
     },
+    "Run" : {
+
+    },
+    "Run actions" : {
+
+    },
     "Run Profile Error" : {
       "localizations" : {
         "en" : {
@@ -8052,6 +8247,12 @@
           }
         }
       }
+    },
+    "Run the task with its agent to see what it was asked and what it answered." : {
+
+    },
+    "Run with Agent" : {
+
     },
     "Running" : {
       "localizations" : {
@@ -8166,6 +8367,9 @@
           }
         }
       }
+    },
+    "Saving in this column runs the assigned agent on your Mac." : {
+
     },
     "Scan" : {
       "localizations" : {
@@ -8691,8 +8895,6 @@
       }
     },
     "Select which Mac this device controls. When Direct connection is on and you're on the same network, sync connects straight to your Mac (end-to-end encrypted) and falls back to the relay automatically." : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -8701,6 +8903,12 @@
           }
         }
       }
+    },
+    "Send" : {
+
+    },
+    "Send Follow-up" : {
+
     },
     "Serious" : {
       "localizations" : {
@@ -9094,6 +9302,12 @@
         }
       }
     },
+    "Status" : {
+
+    },
+    "Statuses" : {
+
+    },
     "stdio" : {
       "localizations" : {
         "ko" : {
@@ -9147,6 +9361,21 @@
           }
         }
       }
+    },
+    "Stories" : {
+
+    },
+    "Stories and tasks across projects" : {
+
+    },
+    "Stories group related tasks and roll up their progress." : {
+
+    },
+    "Story" : {
+
+    },
+    "Story Not Found" : {
+
     },
     "Success" : {
       "localizations" : {
@@ -9328,6 +9557,9 @@
         }
       }
     },
+    "Tags" : {
+
+    },
     "Target" : {
       "localizations" : {
         "en" : {
@@ -9349,6 +9581,21 @@
           }
         }
       }
+    },
+    "Task" : {
+
+    },
+    "Task Board Error" : {
+
+    },
+    "Task Not Found" : {
+
+    },
+    "Tasks" : {
+
+    },
+    "Tasks in this story are kept and moved to the board root." : {
+
     },
     "Template" : {
       "localizations" : {
@@ -9381,6 +9628,15 @@
           }
         }
       }
+    },
+    "The agent is working on this task; it moves on when the turn finishes." : {
+
+    },
+    "The agent is working…" : {
+
+    },
+    "The description is locked once a task has run, so it keeps matching what the agent was asked to do." : {
+
     },
     "The desktop sent an AskUserQuestion call this app could not parse." : {
       "localizations" : {
@@ -9563,6 +9819,9 @@
           }
         }
       }
+    },
+    "The run ended with an error. Open the chat for details." : {
+
     },
     "Thermal" : {
       "localizations" : {
@@ -10004,6 +10263,9 @@
         }
       }
     },
+    "Title" : {
+
+    },
     "Todos" : {
       "localizations" : {
         "ko" : {
@@ -10118,6 +10380,9 @@
         }
       }
     },
+    "Try another view or search." : {
+
+    },
     "Type" : {
       "localizations" : {
         "en" : {
@@ -10228,6 +10493,9 @@
         }
       }
     },
+    "Unassigned" : {
+
+    },
     "Uncommitted" : {
       "localizations" : {
         "en" : {
@@ -10337,6 +10605,15 @@
           }
         }
       }
+    },
+    "Untitled Story" : {
+
+    },
+    "Untitled Task" : {
+
+    },
+    "Updated" : {
+
     },
     "Updated %@. Pull to refresh." : {
       "localizations" : {
@@ -10518,6 +10795,12 @@
         }
       }
     },
+    "Version" : {
+
+    },
+    "View" : {
+
+    },
     "View Changes" : {
       "localizations" : {
         "en" : {
@@ -10587,6 +10870,9 @@
           }
         }
       }
+    },
+    "What needs to be done?" : {
+
     },
     "What should we build in %@?" : {
       "localizations" : {
@@ -10805,6 +11091,9 @@
           }
         }
       }
+    },
+    "Your Mac titles and classifies the task in the background." : {
+
     }
   },
   "version" : "1.1"

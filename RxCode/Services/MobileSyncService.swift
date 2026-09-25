@@ -633,6 +633,12 @@ final class MobileSyncService: ObservableObject {
         }
     }
 
+    func broadcastTaskBoardUpdate(_ snapshot: MobileTaskBoardSnapshot) {
+        Task {
+            await broadcastToAllClients(.taskBoardUpdate(TaskBoardUpdatePayload(snapshot: snapshot)))
+        }
+    }
+
     // MARK: - Online presence
 
     /// Mark a paired peer as online. Returns true if this changed the state
@@ -932,4 +938,5 @@ extension Notification.Name {
     static let mobileSyncMCPConfigRequested = Notification.Name("mobileSync.mcpConfigRequested")
     static let mobileSyncMCPMutationRequested = Notification.Name("mobileSync.mcpMutationRequested")
     static let mobileSyncAutopilotRequested = Notification.Name("mobileSync.autopilotRequested")
+    static let mobileSyncTaskBoardRequested = Notification.Name("mobileSync.taskBoardRequested")
 }

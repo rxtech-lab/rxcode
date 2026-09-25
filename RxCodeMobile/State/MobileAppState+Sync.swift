@@ -518,5 +518,11 @@ extension MobileAppState {
         for continuation in pendingAutopilot.values {
             continuation.resume(throwing: AutopilotRemoteError.desktopChanged)
         }
+        taskBoardsByProject = [:]
+        let pendingTaskBoards = pendingTaskBoardRequests
+        pendingTaskBoardRequests = [:]
+        for continuation in pendingTaskBoards.values {
+            continuation.resume(throwing: AutopilotRemoteError.desktopChanged)
+        }
     }
 }

@@ -47,6 +47,8 @@ func main() {
 	apnsProduction := flag.Bool("apns-production", envBool("APNS_PRODUCTION", false), "use production APNs endpoint instead of sandbox (env: APNS_PRODUCTION)")
 	fcmProjectID := flag.String("fcm-project-id", os.Getenv("FCM_PROJECT_ID"), "Firebase project ID (env: FCM_PROJECT_ID)")
 	fcmServiceAccountPath := flag.String("fcm-service-account", os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"), "path to Firebase service-account JSON (env: GOOGLE_APPLICATION_CREDENTIALS)")
+	notionClientID := flag.String("notion-client-id", os.Getenv("NOTION_CLIENT_ID"), "Notion public integration OAuth client ID (env: NOTION_CLIENT_ID)")
+	notionRedirectURI := flag.String("notion-redirect-uri", os.Getenv("NOTION_REDIRECT_URI"), "redirect URI registered on the Notion integration; empty derives <this relay>/notion/oauth/callback per request (env: NOTION_REDIRECT_URI)")
 	redisURL := flag.String("redis-url", os.Getenv("REDIS_URL"), "Redis URL for the multi-node pub/sub backplane; empty runs single-node (env: REDIS_URL)")
 	flag.Parse()
 
@@ -112,10 +114,26 @@ func main() {
 		log.Printf("FCM sender disabled (set FCM_SERVICE_ACCOUNT_B64, FCM_SERVICE_ACCOUNT_JSON, or GOOGLE_APPLICATION_CREDENTIALS to enable)")
 	}
 
+	// The client secret is read from env only, never a flag, so it doesn't
+	// show up in process listings.
+	notionOAuth := NewNotionOAuth(*notionClientID, os.Getenv("NOTION_CLIENT_SECRET"), *notionRedirectURI)
+	if notionOAuth != nil {
+		redirect := *notionRedirectURI
+		if redirect == "" {
+			redirect = "<request host>/notion/oauth/callback"
+		}
+		log.Printf("Notion OAuth enabled (redirect=%s)", redirect)
+	} else {
+		log.Printf("Notion OAuth disabled (set NOTION_CLIENT_ID and NOTION_CLIENT_SECRET to enable)")
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", hub.ServeWS)
 	mux.HandleFunc("/push", pushHandler(pushSender, fcmSender))
-	mux.HandleFunc("/healthz", healthHandler(hub, pushSender, fcmSender))
+	mux.HandleFunc("/healthz", healthHandler(hub, pushSender, fcmSender, notionOAuth != nil))
+	mux.HandleFunc("/notion/oauth/start", notionHandler(notionOAuth, (*NotionOAuth).handleStart))
+	mux.HandleFunc("/notion/oauth/callback", notionHandler(notionOAuth, (*NotionOAuth).handleCallback))
+	mux.HandleFunc("/notion/oauth/refresh", notionHandler(notionOAuth, (*NotionOAuth).handleRefresh))
 
 	srv := &http.Server{
 		Addr:              *addr,

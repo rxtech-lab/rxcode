@@ -19,6 +19,7 @@ struct TaskProjectDetailView: View {
     @State private var showingLabelManager = false
     @State private var columnEditor: TaskColumnEditorPayload?
     @State private var showingColumnManager = false
+    @State private var notionSheet: NotionSyncPayload?
 
     private var board: TaskBoard { appState.taskBoard(for: project.id) }
     private var views: [TaskSavedView] { appState.taskViews(for: project.id) }
@@ -55,6 +56,10 @@ struct TaskProjectDetailView: View {
             TaskFieldsSheet(projectId: project.id)
                 .environment(appState)
         }
+        .sheet(item: $notionSheet) { payload in
+            NotionSyncSheet(projectId: payload.projectId)
+                .environment(appState)
+        }
     }
 
     // MARK: - Header
@@ -83,6 +88,8 @@ struct TaskProjectDetailView: View {
                     .lineLimit(1)
 
                 Spacer()
+
+                NotionSyncButton(projectId: project.id, sheet: $notionSheet)
 
                 Menu {
                     TaskCreationMenuItems(

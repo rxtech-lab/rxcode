@@ -21,3 +21,6 @@ data:
   # API. The corresponding service-account JSON is provided through
   # FCM_SERVICE_ACCOUNT_B64 in `secrets.yaml`. Non-sensitive on its own.
   FCM_PROJECT_ID: "xcode-64741"
+  # Redirect URI registered on the public Notion integration. The client ID
+  # and secret live in `secrets.yaml` (NOTION_CLIENT_ID, NOTION_CLIENT_SECRET).
+  NOTION_REDIRECT_URI: "https://relaycode.rxlab.app/notion/oauth/callback"

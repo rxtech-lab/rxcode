@@ -134,6 +134,7 @@ struct MobileChatView: View {
             .animation(.easeInOut(duration: 0.2), value: sessionQuestions.count)
             .animation(.easeInOut(duration: 0.2), value: pendingPlans.count)
             .animation(.easeInOut(duration: 0.25), value: shouldShowThreadLoading)
+            .animation(.easeInOut(duration: 0.2), value: shouldShowDiffBanner)
             .navigationBarTitleDisplayMode(.inline)
             .navigationTitle(title)
             .toolbar { threadActionsToolbar }
@@ -146,10 +147,17 @@ struct MobileChatView: View {
             .task(id: resolvedSessionID) {
                 if !MobileDraftSessionID.isDraft(resolvedSessionID) {
                     await state.subscribe(to: resolvedSessionID)
+                    await refreshDiffBanner()
                 }
             }
             .onChange(of: isThreadLoadingMessages) { _, isLoading in
                 handleThreadLoadingChange(isLoading)
+            }
+            .onChange(of: isStreaming) { _, streaming in
+                // A finished turn may have edited files — refresh the diff
+                // banner so it reflects the latest thread changes.
+                guard !streaming else { return }
+                Task { await refreshDiffBanner() }
             }
             .sheet(isPresented: $showingQueueSheet) {
                 QueuedMessagesSheet(
@@ -386,6 +394,12 @@ struct MobileChatView: View {
                         .padding(.bottom, 4)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
+                if shouldShowDiffBanner {
+                    diffBanner
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 4)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
                 MobileInputBar(
                     text: $composer,
                     isStreaming: isStreaming,
@@ -543,6 +557,26 @@ struct MobileChatView: View {
     /// Plans still awaiting a decision — what the plan banner surfaces.
     var pendingPlans: [PendingPlan] {
         sessionPlans.filter { !$0.isDecided && !$0.isStreaming }
+    }
+
+    /// Files edited across this thread, from the latest change overview the
+    /// desktop sent — only when that overview belongs to this thread.
+    var diffBannerEdits: [SyncFileEdit] {
+        guard let changes = state.threadChanges,
+              changes.sessionID == resolvedSessionID || changes.sessionID == sessionID
+        else { return [] }
+        return changes.turnEdits
+    }
+
+    /// The diff banner stays hidden mid-turn so it doesn't flicker as edits
+    /// land; it reappears once the turn finishes and the overview refreshes.
+    var shouldShowDiffBanner: Bool {
+        !isStreaming && !diffBannerEdits.isEmpty
+    }
+
+    private func refreshDiffBanner() async {
+        guard !MobileDraftSessionID.isDraft(resolvedSessionID) else { return }
+        await state.requestThreadChanges(sessionID: resolvedSessionID)
     }
 
     // MARK: - Initial loading

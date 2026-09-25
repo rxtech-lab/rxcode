@@ -29,6 +29,7 @@ struct SessionsList: View {
     var usesSelection = true
     @State private var searchText = ""
     @State private var showingNewThread = false
+    @State private var showingTasks = false
     @State private var showingDeleteProjectConfirm = false
     @State private var showingSearch = false
     @State private var isCreatingPR = false
@@ -101,6 +102,15 @@ struct SessionsList: View {
                 }
                 .environmentObject(state)
                 .mobileSheetPresentation()
+            }
+            .sheet(isPresented: $showingTasks) {
+                NavigationStack {
+                    MobileTaskBoardView(projectID: projectID) { sessionID in
+                        state.pendingDeepLink = MobileDeepLink(sessionID: sessionID, projectID: projectID)
+                    }
+                    .environmentObject(state)
+                }
+                .mobileSheetPresentation([.large])
             }
             .modifier(SessionsListSearchModifier(
                 isEnabled: usesSelection, // Only show search on iPad (usesSelection=true)
@@ -349,6 +359,16 @@ struct SessionsList: View {
                 .accessibilityLabel("Project actions")
                 .accessibilityIdentifier("project-actions-\(projectID.uuidString)")
             }
+        }
+        ToolbarItem(placement: .topBarTrailing) {
+            Button {
+                showingTasks = true
+            } label: {
+                Image(systemName: "checklist")
+                    .font(.system(size: 16, weight: .medium))
+            }
+            .accessibilityLabel("Tasks")
+            .accessibilityIdentifier("project-tasks-\(projectID.uuidString)")
         }
         ToolbarItem(placement: .topBarTrailing) {
             Button {

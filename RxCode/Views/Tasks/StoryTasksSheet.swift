@@ -1,3 +1,4 @@
+import RxCodeChatKit
 import RxCodeCore
 import SwiftUI
 
@@ -25,10 +26,10 @@ struct StoryTasksSheet: View {
 
     /// Open work first, in column order, then by board order within a column.
     private var tasks: [ProjectTask] {
-        let order = Dictionary(uniqueKeysWithValues: TaskStatus.allCases.enumerated().map { ($1, $0) })
+        let board = board
         return board.tasks(inStory: storyId).sorted {
-            let lhs = order[$0.status] ?? 0
-            let rhs = order[$1.status] ?? 0
+            let lhs = board.columnIndex(of: board.resolvedStatus(of: $0))
+            let rhs = board.columnIndex(of: board.resolvedStatus(of: $1))
             return lhs == rhs ? $0.sortIndex < $1.sortIndex : lhs < rhs
         }
     }
@@ -73,7 +74,7 @@ struct StoryTasksSheet: View {
                     .font(.system(size: ClaudeTheme.size(17), weight: .semibold))
                     .foregroundStyle(ClaudeTheme.textPrimary)
                     .lineLimit(2)
-                TaskStatusIcon(status: board.rolledUpStatus(for: story), size: 13)
+                TaskStatusIcon(status: board.rolledUpStatus(for: story), board: board, size: 13)
 
                 Spacer(minLength: 8)
 
@@ -93,14 +94,16 @@ struct StoryTasksSheet: View {
 
             let details = story.details.trimmingCharacters(in: .whitespacesAndNewlines)
             if !details.isEmpty {
-                Text(details)
-                    .font(.system(size: ClaudeTheme.size(12)))
-                    .foregroundStyle(ClaudeTheme.textSecondary)
-                    .lineLimit(4)
-                    .textSelection(.enabled)
+                MarkdownContentView(text: details)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            StoryProgressBar(progress: board.progress(for: story))
+            let pills = TaskClassificationPills(story: story, board: board)
+            if pills.hasContent {
+                FlowLayout(spacing: 4) { pills }
+            }
+
+            StoryProgressBar(story: story, board: board)
         }
         .padding(20)
     }
@@ -172,12 +175,7 @@ struct StoryTasksSheet: View {
     private func addTask() {
         let title = trimmedNewTitle
         guard !title.isEmpty else { return }
-        appState.upsertTask(ProjectTask(
-            projectId: projectId,
-            storyId: storyId,
-            title: title,
-            agent: appState.defaultTaskAgent()
-        ))
+        appState.quickAddTask(title: title, projectId: projectId, storyId: storyId)
         newTaskTitle = ""
         isAddFieldFocused = true
     }
@@ -193,44 +191,49 @@ private struct StoryTaskRow: View {
     let task: ProjectTask
     let onOpen: () -> Void
 
+    private var isDone: Bool { board.column(for: task.status).countsAsDone }
+
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Menu {
-                ForEach(TaskStatus.allCases, id: \.self) { status in
-                    Button(status.displayNameText) {
-                        appState.moveTask(task, to: status)
+                ForEach(board.effectiveColumns) { column in
+                    Button(column.name) {
+                        appState.moveTask(task, to: column.id)
                     }
-                    .disabled(status == task.status)
+                    .disabled(column.id == board.resolvedStatus(of: task))
                 }
             } label: {
-                TaskStatusIcon(status: task.status, size: 14)
+                TaskStatusIcon(status: task.status, board: board, size: 14)
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .fixedSize()
-            .disabled(task.isStatusLocked)
-            .help(task.isStatusLocked ? "The agent is working on this task" : "Change status")
+            .disabled(board.isStatusLocked(task))
+            .help(board.isStatusLocked(task) ? "The agent is working on this task" : "Change status")
 
             VStack(alignment: .leading, spacing: 5) {
                 Button(action: onOpen) {
                     VStack(alignment: .leading, spacing: 5) {
                         Text(task.title.isEmpty ? String(localized: "Untitled task") : task.title)
                             .font(.system(size: ClaudeTheme.size(13), weight: .medium))
-                            .foregroundStyle(task.status == .done ? ClaudeTheme.textSecondary : ClaudeTheme.textPrimary)
-                            .strikethrough(task.status == .done, color: ClaudeTheme.textTertiary)
+                            .foregroundStyle(isDone ? ClaudeTheme.textSecondary : ClaudeTheme.textPrimary)
+                            .strikethrough(isDone, color: ClaudeTheme.textTertiary)
                             .lineLimit(2)
                             .multilineTextAlignment(.leading)
 
                         if hasPills {
                             FlowLayout(spacing: 4) {
-                                if let version = task.version, !version.isEmpty {
-                                    TaskPill(text: version, icon: "tag", tint: ClaudeTheme.accent)
-                                }
-                                ForEach(task.tags, id: \.self) { tag in
-                                    TaskPill(text: tag)
-                                }
+                                TaskClassificationPills(task: task, board: board)
                                 if task.agent.isAssigned {
                                     TaskPill(text: appState.taskAgentLabel(task.agent), icon: "sparkles", tint: ClaudeTheme.statusRunning)
+                                }
+                                if isClassifying {
+                                    HStack(spacing: 4) {
+                                        ProgressView().controlSize(.mini)
+                                        Text("Filling in properties…")
+                                            .font(.system(size: ClaudeTheme.size(10)))
+                                            .foregroundStyle(ClaudeTheme.textTertiary)
+                                    }
                                 }
                             }
                         }
@@ -265,7 +268,10 @@ private struct StoryTaskRow: View {
         }
     }
 
+    private var board: TaskBoard { appState.taskBoard(for: task.projectId) }
+    private var isClassifying: Bool { appState.classifyingTaskIds.contains(task.id) }
+
     private var hasPills: Bool {
-        !(task.version ?? "").isEmpty || !task.tags.isEmpty || task.agent.isAssigned
+        TaskClassificationPills(task: task, board: board).hasContent || task.agent.isAssigned || isClassifying
     }
 }

@@ -148,7 +148,7 @@ public enum GeneralRoute: String, Codable, Sendable, CaseIterable, Hashable {
 
     public var displayName: LocalizedStringResource {
         switch self {
-        case .tasks: return "Tasks"
+        case .tasks: return "Projects"
         case .briefing: return "Briefing"
         }
     }

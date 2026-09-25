@@ -90,6 +90,7 @@ struct TaskOverviewView: View {
     }
 
     var body: some View {
+        let visibleProjects = visibleProjects
         VStack(spacing: 0) {
             header
             ClaudeThemeDivider()
@@ -110,10 +111,14 @@ struct TaskOverviewView: View {
                             TaskProjectSection(project: project, keyword: keyword, sheet: $sheet, storySheet: $storySheet)
                                 .frame(width: Self.cardWidth)
                                 .frame(maxHeight: .infinity)
+                                .transition(.scale(scale: 0.96).combined(with: .opacity))
                         }
                     }
                     .padding(16)
                     .frame(maxHeight: .infinity, alignment: .topLeading)
+                    // Filtering drops non-matching projects; the rest slide
+                    // together instead of jumping.
+                    .taskBoardAnimation(value: visibleProjects.map(\.id))
                 }
                 .defaultScrollAnchor(.leading)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -176,7 +181,11 @@ struct TaskOverviewView: View {
             .buttonStyle(.bordered)
 
             Button {
-                sheet = .task(ProjectTask(projectId: newItemProjectId, title: ""))
+                sheet = .task(ProjectTask(
+                    projectId: newItemProjectId,
+                    title: "",
+                    status: appState.taskBoard(for: newItemProjectId).firstColumn.id
+                ))
             } label: {
                 Label("New Task", systemImage: "plus")
             }
@@ -222,10 +231,18 @@ private struct TaskProjectSection: View {
                                     storySheet = story
                                 }
                                 .contextMenu {
-                                    StoryContextMenuItems(story: story) { sheet = .story(story) }
+                                    StoryContextMenuItems(
+                                        story: story,
+                                        onEdit: { sheet = .story(story) },
+                                        onNewTask: { sheet = .task($0) }
+                                    )
                                 }
+                                .transition(TaskBoardMotion.card)
                             }
                         }
+                        // Stories are ordered by recent activity, so one that
+                        // just moved glides to the top rather than teleporting.
+                        .taskBoardAnimation(value: storySignature(stories, board: board))
                         .padding(.horizontal, 12)
                         .padding(.bottom, 12)
                         .padding(.top, 2)
@@ -310,7 +327,9 @@ private struct TaskProjectSection: View {
                 Button("Open Project Board", action: openProject)
                 Divider()
                 Button("New Story") { sheet = .story(ProjectStory(projectId: project.id, title: "")) }
-                Button("New Task") { sheet = .task(ProjectTask(projectId: project.id, title: "")) }
+                Button("New Task") {
+                    sheet = .task(ProjectTask(projectId: project.id, title: "", status: board.firstColumn.id))
+                }
                 Divider()
                 Button("New Chat") { appState.startNewChat(inProject: project.id, window: windowState) }
             } label: {
@@ -327,11 +346,11 @@ private struct TaskProjectSection: View {
     /// Per-status task counts, e.g. ○ 4  ◎ 2  ✓ 7.
     private var statusSummary: some View {
         HStack(spacing: 8) {
-            ForEach(TaskStatus.allCases, id: \.self) { status in
-                let count = board.tasks.filter { $0.status == status }.count
+            ForEach(board.effectiveColumns) { column in
+                let count = board.tasks(in: column.id).count
                 if count > 0 {
                     HStack(spacing: 3) {
-                        TaskStatusIcon(status: status, size: 10)
+                        TaskStatusIcon(column: column, size: 10)
                         Text("\(count)")
                             .font(.system(size: ClaudeTheme.size(11), weight: .medium))
                             .foregroundStyle(ClaudeTheme.textSecondary)
@@ -345,6 +364,14 @@ private struct TaskProjectSection: View {
     private func openProject() {
         windowState.taskDetailProjectId = project.id
     }
+
+    /// Order plus the rolled-up status and progress each story card shows.
+    private func storySignature(_ stories: [ProjectStory], board: TaskBoard) -> [String] {
+        stories.prefix(TaskOverviewView.previewLimit).map { story in
+            let progress = board.progress(for: story)
+            return "\(story.id):\(board.rolledUpStatus(for: story).rawValue):\(progress.done)/\(progress.total)"
+        }
+    }
 }
 
 // MARK: - Story card
@@ -357,41 +384,77 @@ struct StoryGlassCard: View {
     let board: TaskBoard
     let onOpen: () -> Void
 
+    @State private var isHovering = false
+
     var body: some View {
-        let status = board.rolledUpStatus(for: story)
+        let status = board.column(for: board.rolledUpStatus(for: story))
+        let progress = board.progress(for: story)
+        let isActive = progress.active > 0
+        let shape = RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusMedium)
         Button(action: onOpen) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Image(systemName: "square.stack.3d.up")
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "square.stack.3d.up.fill")
                         .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
                         .foregroundStyle(story.tint)
-                    Text(story.title.isEmpty ? String(localized: "Untitled story") : story.title)
-                        .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
-                        .foregroundStyle(ClaudeTheme.textPrimary)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
+                        .frame(width: 26, height: 26)
+                        .background(
+                            RoundedRectangle(cornerRadius: 7)
+                                .fill(story.tint.opacity(0.15))
+                        )
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(story.title.isEmpty ? String(localized: "Untitled story") : story.title)
+                            .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
+                            .foregroundStyle(ClaudeTheme.textPrimary)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+
+                        let details = story.details.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !details.isEmpty {
+                            // Stripped, not rendered: descriptions are Markdown
+                            // and a two-line card preview has no room for block
+                            // layout — raw syntax would just eat the preview.
+                            Text(stripMarkdown(details))
+                                .font(.system(size: ClaudeTheme.size(11)))
+                                .foregroundStyle(ClaudeTheme.textSecondary)
+                                .lineLimit(2)
+                                .multilineTextAlignment(.leading)
+                        }
+                    }
+
                     Spacer(minLength: 0)
-                    TaskPill(text: status.displayNameText, tint: status.tint)
+                    TaskPill(text: status.name, icon: status.systemImage, tint: status.tint)
                         .fixedSize()
+                        .id(status.id)
+                        .transition(.scale(scale: 0.8).combined(with: .opacity))
                 }
 
-                let details = story.details.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !details.isEmpty {
-                    Text(details)
-                        .font(.system(size: ClaudeTheme.size(11)))
-                        .foregroundStyle(ClaudeTheme.textSecondary)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
+                let pills = TaskClassificationPills(story: story, board: board)
+                if pills.hasContent {
+                    FlowLayout(spacing: 4) { pills }
                 }
 
-                StoryProgressBar(progress: board.progress(for: story))
+                StoryProgressBar(story: story, board: board)
+                    .padding(.top, 2)
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusMedium))
+            .contentShape(shape)
         }
         .buttonStyle(.plain)
-        .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusMedium))
+        .glassEffect(.regular.interactive(), in: shape)
+        .overlay(
+            shape.strokeBorder(
+                (board.firstChatColumn?.tint ?? ClaudeTheme.accent).opacity(isActive ? 0.45 : 0),
+                lineWidth: 1
+            )
+            .allowsHitTesting(false)
+        )
+        .scaleEffect(isHovering ? 1.012 : 1)
+        .onHover { isHovering = $0 }
+        .taskBoardAnimation(TaskBoardMotion.feedback, value: isHovering)
+        .taskBoardAnimation(value: isActive)
         .accessibilityIdentifier("task-story-card-\(story.id.uuidString)")
     }
 }

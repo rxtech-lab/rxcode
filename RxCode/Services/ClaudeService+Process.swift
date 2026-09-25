@@ -677,7 +677,13 @@ extension ClaudeCodeServer {
         // is preserved across reparenting, so we can locate descendants via getsid()
         // even after an intermediate parent has died and orphans were reparented to
         // launchd. Pure SETPGROUP would not survive reparenting on its own.
-        _ = posix_spawnattr_setflags(&attr, Int16(POSIX_SPAWN_SETSID))
+        //
+        // CLOEXEC_DEFAULT closes every descriptor except the dup2'd stdio in the child.
+        // Without it the CLI inherits all of the app's open fds (sockets, files, and the
+        // pipes of other concurrent streams), which can exhaust the child's fd table so
+        // it dies at startup with "possibly due to low max file descriptors", and keeps
+        // other streams' pipe write ends open so their EOF never arrives.
+        _ = posix_spawnattr_setflags(&attr, Int16(POSIX_SPAWN_SETSID | POSIX_SPAWN_CLOEXEC_DEFAULT))
 
         var argv: [UnsafeMutablePointer<CChar>?] = ([executable] + arguments).map { strdup($0) }
         argv.append(nil)

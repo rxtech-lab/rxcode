@@ -2,8 +2,9 @@ import XCTest
 import RxCodeCore
 @testable import RxCode
 
-/// Covers the board's completion path: `TaskBoardHook` advancing the task whose
-/// thread just finished, and the redirect-aware session matching underneath it.
+/// Covers the board's column triggers: `TaskBoardHook` moving the task whose
+/// thread just stopped or was reviewed, the redirect-aware session matching
+/// underneath it, and column management.
 ///
 /// Wired to the real `AppStateHookController` (as `PlanModeHookSuppressionTests`
 /// is) so the seam between hook and `AppState` is exercised rather than mocked.
@@ -72,13 +73,13 @@ final class TaskBoardHookTests: XCTestCase {
         appState.task(id: id)?.status
     }
 
-    // MARK: - advanceLinkedTaskToReview
+    // MARK: - Session-stop trigger
 
     func testAdvancesLinkedInProgressTask() {
         let task = makeTask()
         seed([task])
 
-        XCTAssertEqual(appState.advanceLinkedTaskToReview(sessionKey: "sess-1"), task.id)
+        XCTAssertEqual(appState.applyTaskTrigger(.sessionStop, sessionKey: "sess-1"), task.id)
         XCTAssertEqual(status(of: task.id), .pendingReview)
     }
 
@@ -86,17 +87,17 @@ final class TaskBoardHookTests: XCTestCase {
         let task = makeTask()
         seed([task])
 
-        XCTAssertNil(appState.advanceLinkedTaskToReview(sessionKey: "other-session"))
+        XCTAssertNil(appState.applyTaskTrigger(.sessionStop, sessionKey: "other-session"))
         XCTAssertEqual(status(of: task.id), .inProgress)
     }
 
-    func testIgnoresTaskThatIsNotInProgress() {
+    func testIgnoresColumnWithoutSessionStopTarget() {
         // A task the user already dragged to Done must not be dragged back to
         // review by a late turn completion on its old thread.
         let task = makeTask(status: .done)
         seed([task])
 
-        XCTAssertNil(appState.advanceLinkedTaskToReview(sessionKey: "sess-1"))
+        XCTAssertNil(appState.applyTaskTrigger(.sessionStop, sessionKey: "sess-1"))
         XCTAssertEqual(status(of: task.id), .done)
     }
 
@@ -104,7 +105,7 @@ final class TaskBoardHookTests: XCTestCase {
         let task = makeTask(sessionKey: nil)
         seed([task])
 
-        XCTAssertNil(appState.advanceLinkedTaskToReview(sessionKey: "sess-1"))
+        XCTAssertNil(appState.applyTaskTrigger(.sessionStop, sessionKey: "sess-1"))
         XCTAssertEqual(status(of: task.id), .inProgress)
     }
 
@@ -115,7 +116,7 @@ final class TaskBoardHookTests: XCTestCase {
         seed([task])
         appState.sessionIdRedirect["pending-abc"] = "real-sid"
 
-        XCTAssertEqual(appState.advanceLinkedTaskToReview(sessionKey: "real-sid"), task.id)
+        XCTAssertEqual(appState.applyTaskTrigger(.sessionStop, sessionKey: "real-sid"), task.id)
         XCTAssertEqual(status(of: task.id), .pendingReview)
     }
 
@@ -129,7 +130,7 @@ final class TaskBoardHookTests: XCTestCase {
         let task = makeTask()
         seed([existing, task])
 
-        appState.advanceLinkedTaskToReview(sessionKey: "sess-1")
+        appState.applyTaskTrigger(.sessionStop, sessionKey: "sess-1")
 
         let column = appState.tasks(in: .pendingReview, projectFilter: project.id)
         XCTAssertEqual(column.map(\.title), ["already in review", "Wire the board"])
@@ -206,6 +207,132 @@ final class TaskBoardHookTests: XCTestCase {
         let outcome = await hook.afterSessionEnd(payload(), controller: appState.hookController)
 
         XCTAssertEqual(outcome.control, .ignored)
+    }
+
+    // MARK: - Custom columns
+
+    private static let qa: TaskStatus = "qa"
+
+    /// Backlog → In Progress (chat) → QA, where a review routes the card to
+    /// Done on pass and back to In Progress on fail.
+    private func seedCustomColumns(_ tasks: [ProjectTask]) {
+        var columns = TaskColumn.defaults.filter { $0.id != .pendingReview }
+        let inProgress = columns.firstIndex { $0.id == .inProgress }!
+        columns[inProgress].onSessionStop = Self.qa
+        columns.insert(
+            TaskColumn(id: Self.qa, name: "QA", onReviewPass: .done, onReviewFail: .inProgress),
+            at: inProgress + 1
+        )
+        appState.taskBoards[project.id] = TaskBoard(tasks: tasks, columns: columns)
+    }
+
+    private func reviewPayload(passed: Bool?, fixTurnStarted: Bool = false) -> ReviewEventPayload {
+        ReviewEventPayload(
+            project: project,
+            sessionKey: "sess-1",
+            sessionId: "sess-1",
+            passed: passed,
+            fixTurnStarted: fixTurnStarted
+        )
+    }
+
+    func testSessionStopFollowsCustomColumnTarget() async {
+        let task = makeTask()
+        seedCustomColumns([task])
+
+        _ = await hook.afterSessionEnd(payload(), controller: appState.hookController)
+
+        XCTAssertEqual(status(of: task.id), Self.qa)
+    }
+
+    func testReviewPassAndFailFollowColumnTargets() async {
+        let task = makeTask(status: Self.qa)
+        seedCustomColumns([task])
+
+        _ = await hook.onReviewStop(reviewPayload(passed: false, fixTurnStarted: true), controller: appState.hookController)
+        XCTAssertEqual(status(of: task.id), .inProgress)
+
+        _ = await hook.afterSessionEnd(payload(), controller: appState.hookController)
+        XCTAssertEqual(status(of: task.id), Self.qa)
+
+        _ = await hook.onReviewStop(reviewPayload(passed: true), controller: appState.hookController)
+        XCTAssertEqual(status(of: task.id), .done)
+    }
+
+    /// Without a fix turn the thread won't stop again, so routing the card into
+    /// a chat column would leave it locked there.
+    func testReviewFailWithoutFixTurnDoesNotEnterChatColumn() async {
+        let task = makeTask(status: Self.qa)
+        seedCustomColumns([task])
+
+        let outcome = await hook.onReviewStop(reviewPayload(passed: false), controller: appState.hookController)
+
+        XCTAssertEqual(outcome.control, .ignored)
+        XCTAssertEqual(status(of: task.id), Self.qa)
+    }
+
+    func testReviewWithoutVerdictLeavesCardAlone() async {
+        let task = makeTask(status: Self.qa)
+        seedCustomColumns([task])
+
+        _ = await hook.onReviewStop(reviewPayload(passed: nil), controller: appState.hookController)
+
+        XCTAssertEqual(status(of: task.id), Self.qa)
+    }
+
+    func testReviewStartFollowsColumnTarget() async {
+        let task = makeTask(status: .pendingReview)
+        var columns = TaskColumn.defaults
+        let review = columns.firstIndex { $0.id == .pendingReview }!
+        columns[review].onReviewStart = .pending
+        appState.taskBoards[project.id] = TaskBoard(tasks: [task], columns: columns)
+
+        _ = await hook.onReviewStart(reviewPayload(passed: nil), controller: appState.hookController)
+
+        XCTAssertEqual(status(of: task.id), .pending)
+    }
+
+    func testColumnWithoutTriggerLeavesCardAlone() async {
+        let task = makeTask(status: .backlog)
+        seed([task])
+
+        let outcome = await hook.afterSessionEnd(payload(), controller: appState.hookController)
+
+        XCTAssertEqual(outcome.control, .ignored)
+        XCTAssertEqual(status(of: task.id), .backlog)
+    }
+
+    func testCustomChatColumnLocksDispatchedTask() {
+        var columns = TaskColumn.defaults
+        columns.append(TaskColumn(id: "agent", name: "Agent", triggersChat: true, onSessionStop: .done))
+        let task = makeTask(status: "agent")
+        appState.taskBoards[project.id] = TaskBoard(tasks: [task], columns: columns)
+
+        XCTAssertTrue(appState.isStatusLocked(task))
+        appState.moveTask(task, to: .backlog)
+        XCTAssertEqual(status(of: task.id), "agent")
+    }
+
+    func testInterruptedRunUsesSessionStopTarget() {
+        let task = makeTask()
+        seedCustomColumns([task])
+
+        appState.releaseInterruptedTasks()
+
+        XCTAssertEqual(status(of: task.id), Self.qa)
+    }
+
+    func testDeletingColumnMovesTasksAndRepointsTriggers() {
+        let task = makeTask(status: Self.qa, sessionKey: nil)
+        seedCustomColumns([task])
+        let qa = appState.taskBoard(for: project.id).column(for: Self.qa)
+
+        appState.deleteColumn(qa, projectId: project.id, moveTasksTo: .done)
+
+        let board = appState.taskBoard(for: project.id)
+        XCTAssertFalse(board.effectiveColumns.contains { $0.id == Self.qa })
+        XCTAssertEqual(status(of: task.id), .done)
+        XCTAssertEqual(board.column(for: .inProgress).onSessionStop, .done)
     }
 
     // MARK: - Run turns

@@ -20,21 +20,26 @@ struct TaskFormSheet: View {
     @State private var task = ProjectTask(projectId: UUID(), title: "")
     @State private var story = ProjectStory(projectId: UUID(), title: "")
     @State private var tagInput = ""
-    @State private var showingImagePicker = false
+    @State private var showingAttachmentPicker = false
     @State private var isExistingRecord = false
     @State private var tab: Tab = .details
     /// A task opened from a story's Tasks section, edited in a nested form.
     @State private var childTask: TaskBoardSheet?
+    /// The fields manager, opened scrolled to one section.
+    @State private var fieldsSheet: TaskFieldsSheet.Field?
+    @State private var versionInput = ""
+    @State private var milestoneInput = ""
+    @State private var isAutoFilling = false
 
     private enum Tab: Hashable {
         case details, run
     }
 
-    /// A task that has left Pending has a run to look at. Uses the stored
-    /// status, so flipping the picker in this form doesn't swap tabs mid-edit.
+    /// A task that has been dispatched has a run to look at. Uses the stored
+    /// task, so flipping the picker in this form doesn't swap tabs mid-edit.
     private var showsRunTab: Bool {
         guard isExistingRecord, !isStory, let stored = appState.task(id: task.id) else { return false }
-        return stored.status != .pending
+        return stored.sessionKey != nil
     }
 
     /// Uses the stored task, not the draft, so changing the status picker in
@@ -45,7 +50,8 @@ struct TaskFormSheet: View {
     }
 
     private var isStatusLocked: Bool {
-        appState.task(id: task.id)?.isStatusLocked ?? false
+        guard let stored = appState.task(id: task.id) else { return false }
+        return appState.isStatusLocked(stored)
     }
 
     private var canSave: Bool {
@@ -108,14 +114,18 @@ struct TaskFormSheet: View {
             if isStory {
                 storyTasksSection
             }
+            classificationSection
+            tagsSection
             if !isStory {
-                classificationSection
-                tagsSection
                 agentSection
                 attachmentsSection
             }
         }
         .formStyle(.grouped)
+        .sheet(item: $fieldsSheet) { field in
+            TaskFieldsSheet(projectId: currentProjectId, initialField: field)
+                .environment(appState)
+        }
         // Effort levels are provider-dependent and fetched at runtime, so reload
         // them whenever the picked provider changes and drop an effort the new
         // provider doesn't accept.
@@ -127,11 +137,13 @@ struct TaskFormSheet: View {
             }
         }
         .fileImporter(
-            isPresented: $showingImagePicker,
-            allowedContentTypes: [.image],
+            isPresented: $showingAttachmentPicker,
+            // Any file, not just images: the description can reference
+            // anything, and the agent reads text files straight off disk.
+            allowedContentTypes: [.item],
             allowsMultipleSelection: true
         ) { result in
-            handleImageImport(result)
+            handleAttachmentImport(result)
         }
     }
 
@@ -188,15 +200,14 @@ struct TaskFormSheet: View {
             // shows it immediately.
             .multilineTextAlignment(.leading)
 
-            TextField(
-                "Description",
+            MarkdownDescriptionEditor(
                 text: isStory ? $story.details : $task.details,
-                prompt: Text("Add more detail for the agent"),
-                axis: .vertical
+                // Stories keep no attachment list, so a file dropped on a story
+                // description is recorded as a Markdown link only.
+                attachments: isStory ? nil : $task.attachments,
+                placeholder: String(localized: "Add more detail for the agent"),
+                isDisabled: isDescriptionLocked
             )
-            .lineLimit(4...8)
-            .multilineTextAlignment(.leading)
-            .disabled(isDescriptionLocked)
 
             if isDescriptionLocked {
                 Label("The description is locked once a task leaves Pending, so it keeps matching what the agent was asked to do.", systemImage: "lock")
@@ -223,12 +234,12 @@ struct TaskFormSheet: View {
                     childTask = .task(task)
                 } label: {
                     HStack(spacing: 8) {
-                        TaskStatusIcon(status: task.status, size: 12)
+                        TaskStatusIcon(status: task.status, board: board, size: 12)
                         Text(task.title.isEmpty ? String(localized: "Untitled task") : task.title)
                             .foregroundStyle(ClaudeTheme.textPrimary)
                             .lineLimit(1)
                         Spacer()
-                        Text(task.status.displayName)
+                        Text(board.column(for: task.status).name)
                             .font(.system(size: ClaudeTheme.size(11)))
                             .foregroundStyle(ClaudeTheme.textTertiary)
                         Image(systemName: "chevron.right")
@@ -254,61 +265,206 @@ struct TaskFormSheet: View {
         }
     }
 
+    private var currentProjectId: UUID { isStory ? story.projectId : task.projectId }
+    private var board: TaskBoard { appState.taskBoard(for: currentProjectId) }
+
+    /// The task's column, normalized so a status whose column was deleted
+    /// still selects a picker row.
+    private var statusBinding: Binding<TaskStatus> {
+        Binding(
+            get: { board.resolvedStatus(of: task) },
+            set: { task.status = $0 }
+        )
+    }
+
     private var classificationSection: some View {
-        Section("Classification") {
-            Picker("Status", selection: $task.status) {
-                ForEach(TaskStatus.allCases, id: \.self) { status in
-                    Text(status.displayName).tag(status)
+        Section {
+            if !isStory {
+                Picker("Status", selection: statusBinding) {
+                    ForEach(board.effectiveColumns) { column in
+                        Text(column.name).tag(column.id)
+                    }
+                }
+                // Only the stored status locks the picker, so a new task can still
+                // be created straight into a chat column.
+                .disabled(isStatusLocked)
+                .help(isStatusLocked ? "The agent is working on this task; it moves on when the turn finishes." : "")
+
+                Picker("Story", selection: storyBinding) {
+                    Text("None").tag(UUID?.none)
+                    ForEach(appState.stories(projectFilter: task.projectId)) { story in
+                        Text(story.title).tag(UUID?.some(story.id))
+                    }
                 }
             }
-            // Only the stored status locks the picker, so a new task can still
-            // be created straight into In Progress.
-            .disabled(isStatusLocked)
-            .help(isStatusLocked ? "The agent is working on this task; it moves to Pending Review when the turn finishes." : "")
 
-            Picker("Story", selection: storyBinding) {
-                Text("None").tag(UUID?.none)
-                ForEach(appState.stories(projectFilter: task.projectId)) { story in
-                    Text(story.title).tag(UUID?.some(story.id))
+            typeMenu
+
+            Picker(selection: field(\.priority, \.priority)) {
+                Text("None").tag(TaskPriority?.none)
+                ForEach(TaskPriority.allCases, id: \.self) { priority in
+                    Label {
+                        Text(priority.displayName)
+                    } icon: {
+                        Image(systemName: priority.systemImage)
+                            .foregroundStyle(priority.tint)
+                    }
+                    .tag(TaskPriority?.some(priority))
                 }
+            } label: {
+                Text("Priority")
             }
 
-            TextField("Version", text: versionBinding, prompt: Text("e.g. v1.3.0"))
-                .multilineTextAlignment(.leading)
+            TaskSingleValueCombo(
+                title: "Version",
+                prompt: "Search or create a version",
+                icon: "tag",
+                tint: ClaudeTheme.accent,
+                value: field(\.version, \.version),
+                input: $versionInput,
+                options: board.allVersions,
+                manageTitle: "Manage Versions…",
+                onManage: { fieldsSheet = .versions }
+            )
+
+            TaskSingleValueCombo(
+                title: "Milestone",
+                prompt: "Search or create a milestone",
+                icon: "flag",
+                tint: ClaudeTheme.statusSuccess,
+                value: field(\.milestone, \.milestone),
+                input: $milestoneInput,
+                options: board.allMilestones,
+                manageTitle: "Manage Milestones…",
+                onManage: { fieldsSheet = .milestones }
+            )
+        } header: {
+            HStack {
+                Text("Properties")
+                Spacer()
+                if !isStory {
+                    Button {
+                        autoFill()
+                    } label: {
+                        if isAutoFilling {
+                            ProgressView().controlSize(.mini)
+                        } else {
+                            Label("Auto-fill", systemImage: "sparkles")
+                        }
+                    }
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+                    .disabled(isAutoFilling || task.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .help("Ask the default task agent to fill in empty properties")
+                }
+                Button {
+                    fieldsSheet = .tags
+                } label: {
+                    Label("Manage Fields…", systemImage: "slider.horizontal.3")
+                }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+                .help("Rename or delete types, labels, versions and milestones")
+            }
+        }
+    }
+
+    /// Types are picked from a dropdown; adding, renaming and recoloring
+    /// happen in the fields sheet so every story and task shares one list.
+    private var typeMenu: some View {
+        let typeId = field(\.typeId, \.typeId)
+        let selected = board.itemType(id: typeId.wrappedValue)
+        return LabeledContent("Type") {
+            Menu {
+                Button {
+                    typeId.wrappedValue = nil
+                } label: {
+                    if selected == nil {
+                        Label("None", systemImage: "checkmark")
+                    } else {
+                        Text("None")
+                    }
+                }
+                Divider()
+                ForEach(board.effectiveTypes) { type in
+                    Button {
+                        typeId.wrappedValue = type.id
+                    } label: {
+                        Label {
+                            Text(type.name)
+                        } icon: {
+                            Image(systemName: type.id == selected?.id ? "checkmark.circle.fill" : "circle.fill")
+                                .foregroundStyle(type.tint)
+                        }
+                    }
+                }
+                Divider()
+                Button("Manage Types…") {
+                    fieldsSheet = .types
+                }
+            } label: {
+                HStack(spacing: 5) {
+                    if let selected {
+                        TaskColorDot(color: selected.tint)
+                        Text(selected.name)
+                            .foregroundStyle(ClaudeTheme.textPrimary)
+                    } else {
+                        Text("None")
+                            .foregroundStyle(ClaudeTheme.textTertiary)
+                    }
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: ClaudeTheme.size(9), weight: .semibold))
+                        .foregroundStyle(ClaudeTheme.textTertiary)
+                }
+                .font(.system(size: ClaudeTheme.size(12)))
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .accessibilityIdentifier("task-form-type")
         }
     }
 
     private var tagsSection: some View {
-        Section("Tags") {
+        let tags = isStory ? story.tags : task.tags
+        let unused = board.allTags.filter { !tags.contains($0) }
+        return Section {
             HStack(spacing: 6) {
-                TextField("Add a tag", text: $tagInput, prompt: Text("Add a tag"))
-                    .labelsHidden()
-                    .multilineTextAlignment(.leading)
-                    .onSubmit(addTag)
+                TaskComboField(
+                    title: "Add a tag",
+                    prompt: "Search or create a tag",
+                    text: $tagInput,
+                    options: unused.map { TaskComboOption(name: $0, color: board.tint(forTag: $0)) },
+                    onSubmit: addTag,
+                    onPick: appendTag,
+                    showsLabel: false,
+                    manageTitle: "Manage Tags…",
+                    onManage: { fieldsSheet = .tags }
+                )
                 Button("Add", action: addTag)
                     .disabled(tagInput.trimmingCharacters(in: .whitespaces).isEmpty)
             }
-            if !task.tags.isEmpty {
+            if !tags.isEmpty {
                 FlowLayout(spacing: 4) {
-                    ForEach(task.tags, id: \.self) { tag in
-                        Button {
-                            task.tags.removeAll { $0 == tag }
-                        } label: {
-                            HStack(spacing: 3) {
-                                Text(tag)
-                                Image(systemName: "xmark")
-                                    .font(.system(size: ClaudeTheme.size(8), weight: .semibold))
-                            }
-                            .font(.system(size: ClaudeTheme.size(10), weight: .medium))
-                            .foregroundStyle(ClaudeTheme.textSecondary)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 3)
-                            .background(Capsule().fill(ClaudeTheme.surfaceSecondary))
+                    ForEach(tags, id: \.self) { tag in
+                        TaskRemovableChip(text: tag, tint: board.tint(forTag: tag)) {
+                            removeTag(tag)
                         }
-                        .buttonStyle(.plain)
-                        .help("Remove tag")
                     }
                 }
+            }
+        } header: {
+            HStack {
+                Text("Tags")
+                Spacer()
+                Button {
+                    fieldsSheet = .tags
+                } label: {
+                    Label("Manage Tags…", systemImage: "tag")
+                }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+                .help("Rename, recolor or delete this project's tags")
             }
         }
     }
@@ -381,11 +537,11 @@ struct TaskFormSheet: View {
     }
 
     private var attachmentsSection: some View {
-        Section("Images") {
+        Section {
             if !task.attachments.isEmpty {
                 ForEach(task.attachments, id: \.id) { dto in
                     HStack(spacing: 6) {
-                        Image(systemName: "photo")
+                        Image(systemName: dto.type == Attachment.AttachmentType.image.rawValue ? "photo" : "doc")
                             .foregroundStyle(ClaudeTheme.textSecondary)
                         Text(dto.name)
                             .lineLimit(1)
@@ -397,16 +553,20 @@ struct TaskFormSheet: View {
                                 .foregroundStyle(ClaudeTheme.textTertiary)
                         }
                         .buttonStyle(.plain)
-                        .help("Remove image")
+                        .help("Remove attachment")
                     }
                 }
             }
 
             Button {
-                showingImagePicker = true
+                showingAttachmentPicker = true
             } label: {
-                Label("Add Images…", systemImage: "photo.badge.plus")
+                Label("Add Files…", systemImage: "paperclip")
             }
+        } header: {
+            Text("Attachments")
+        } footer: {
+            Text("Files pasted or dropped into the description are listed here and sent to the agent with the task.")
         }
     }
 
@@ -441,10 +601,20 @@ struct TaskFormSheet: View {
         Binding(get: { task.storyId }, set: { task.storyId = $0 })
     }
 
-    private var versionBinding: Binding<String> {
+    /// A field shared by stories and tasks, bound to whichever the form edits.
+    private func field<Value>(
+        _ taskPath: WritableKeyPath<ProjectTask, Value>,
+        _ storyPath: WritableKeyPath<ProjectStory, Value>
+    ) -> Binding<Value> {
         Binding(
-            get: { task.version ?? "" },
-            set: { task.version = $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
+            get: { isStory ? story[keyPath: storyPath] : task[keyPath: taskPath] },
+            set: { newValue in
+                if isStory {
+                    story[keyPath: storyPath] = newValue
+                } else {
+                    task[keyPath: taskPath] = newValue
+                }
+            }
         )
     }
 
@@ -488,20 +658,48 @@ struct TaskFormSheet: View {
             appState.upsertStory(story)
             isExistingRecord = true
         }
-        childTask = .task(ProjectTask(projectId: story.projectId, storyId: story.id, title: ""))
+        childTask = .task(appState.newTaskDraft(inStory: story))
     }
 
     private func addTag() {
         let trimmed = tagInput.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty, !task.tags.contains(trimmed) else {
-            tagInput = ""
-            return
-        }
-        task.tags.append(trimmed)
         tagInput = ""
+        guard !trimmed.isEmpty else { return }
+        // Reuse the board's spelling of a label that differs only by case.
+        appendTag(board.allTags.first { $0.caseInsensitiveCompare(trimmed) == .orderedSame } ?? trimmed)
     }
 
-    private func handleImageImport(_ result: Result<[URL], Error>) {
+    private func appendTag(_ tag: String) {
+        tagInput = ""
+        if isStory {
+            if !story.tags.contains(tag) { story.tags.append(tag) }
+        } else {
+            if !task.tags.contains(tag) { task.tags.append(tag) }
+        }
+    }
+
+    private func removeTag(_ tag: String) {
+        if isStory {
+            story.tags.removeAll { $0 == tag }
+        } else {
+            task.tags.removeAll { $0 == tag }
+        }
+    }
+
+    /// Fills the draft's empty properties from the default task agent. The
+    /// draft is only filled, never overwritten, and nothing is saved until
+    /// the user presses Save.
+    private func autoFill() {
+        isAutoFilling = true
+        let draft = task
+        Task {
+            defer { isAutoFilling = false }
+            guard let suggestion = await appState.suggestClassification(for: draft) else { return }
+            suggestion.apply(to: &task, board: board)
+        }
+    }
+
+    private func handleAttachmentImport(_ result: Result<[URL], Error>) {
         guard case .success(let urls) = result else { return }
         for url in urls {
             guard let attachment = AttachmentFactory.fromFileURL(url) else { continue }
@@ -512,6 +710,16 @@ struct TaskFormSheet: View {
     }
 
     private func save() {
+        // Values typed but not yet confirmed with Return still count.
+        if let version = TaskSingleValueCombo.resolve(versionInput, in: board.allVersions) {
+            field(\.version, \.version).wrappedValue = version
+        }
+        if let milestone = TaskSingleValueCombo.resolve(milestoneInput, in: board.allMilestones) {
+            field(\.milestone, \.milestone).wrappedValue = milestone
+        }
+        if !tagInput.trimmingCharacters(in: .whitespaces).isEmpty {
+            addTag()
+        }
         if isStory {
             story.title = story.title.trimmingCharacters(in: .whitespacesAndNewlines)
             appState.upsertStory(story)

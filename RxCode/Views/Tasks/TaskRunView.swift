@@ -1,10 +1,11 @@
+import AppKit
 import RxCodeChatKit
 import RxCodeCore
 import SwiftUI
 
 /// The task form's Run tab: what the agent was asked, what it answered, and
 /// any follow-ups, read from the task's thread. A composer at the bottom
-/// continues the same thread.
+/// continues the same thread, and accepts pasted or dropped images and files.
 struct TaskRunView: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
@@ -16,7 +17,13 @@ struct TaskRunView: View {
     @State private var hasThread = true
     @State private var isLoading = true
     @State private var followUp = ""
+    @State private var followUpAttachments: [Attachment] = []
     @State private var isSending = false
+    @State private var isDropTargeted = false
+    @State private var composerController = MarkdownEditorController()
+    @State private var isComposerFocused = false
+    @State private var composerHasMarkedText = false
+    @State private var previewImage: Attachment?
 
     private var task: ProjectTask? { appState.task(id: taskId) }
 
@@ -38,6 +45,7 @@ struct TaskRunView: View {
                 composer(task)
             }
         }
+        .sheet(item: $previewImage) { ImagePreviewSheet(attachment: $0) }
         // Reload when a run starts or ends, or the task changes column.
         .task(id: "\(task?.status.rawValue ?? "")|\(isAgentRunning)|\(task?.sessionKey ?? "")") {
             await reload()
@@ -48,8 +56,8 @@ struct TaskRunView: View {
 
     private func statusBar(_ task: ProjectTask) -> some View {
         HStack(spacing: 8) {
-            TaskStatusIcon(status: task.status, size: 12)
-            Text(task.status.displayName)
+            TaskStatusIcon(status: task.status, board: appState.taskBoard(for: task.projectId), size: 12)
+            Text(appState.column(for: task).name)
                 .font(.system(size: ClaudeTheme.size(12), weight: .medium))
                 .foregroundStyle(ClaudeTheme.textSecondary)
             if task.agent.isAssigned {
@@ -121,7 +129,7 @@ struct TaskRunView: View {
         VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 6) {
                 sectionLabel(turn.id == 0 ? "Task" : "Follow-up", systemImage: turn.id == 0 ? "checklist" : "arrowshape.turn.up.right")
-                MarkdownContentView(text: turn.prompt)
+                TaskPromptView(content: TaskPromptContent.parse(turn.prompt))
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(
@@ -163,55 +171,189 @@ struct TaskRunView: View {
     // MARK: - Follow-up
 
     private func composer(_ task: ProjectTask) -> some View {
-        let canSend = hasThread && !task.isStatusLocked && !isAgentRunning && !isSending
-            && !followUp.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        return HStack(alignment: .bottom, spacing: 8) {
-            TextField(
-                "Follow-up",
-                text: $followUp,
-                prompt: Text(composerPrompt(task)),
-                axis: .vertical
-            )
-            .textFieldStyle(.plain)
-            .font(.system(size: ClaudeTheme.size(13)))
-            .lineLimit(1...5)
-            .disabled(!hasThread || task.isStatusLocked || isAgentRunning)
-            .onSubmit { if canSend { send(task) } }
-            .accessibilityIdentifier("task-run-follow-up")
-
-            Button {
-                send(task)
-            } label: {
-                if isSending {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Image(systemName: "arrow.up")
-                        .font(.system(size: ClaudeTheme.size(12), weight: .bold))
+        let canCompose = hasThread && !appState.isStatusLocked(task) && !isAgentRunning
+        let hasContent = !followUp.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !followUpAttachments.isEmpty
+        let canSend = canCompose && !isSending && hasContent
+        let shape = RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusLarge)
+        return VStack(alignment: .leading, spacing: 8) {
+            // Images are chips inside the text; the row holds everything else.
+            if followUpAttachments.contains(where: { $0.type != .image }) {
+                FlowLayout(spacing: 6) {
+                    ForEach(followUpAttachments.filter { $0.type != .image }) { attachment in
+                        attachmentChip(attachment, isRemovable: canCompose)
+                    }
                 }
             }
-            .buttonStyle(.glassProminent)
-            .buttonBorderShape(.circle)
-            .disabled(!canSend)
-            .help("Send the follow-up to this task's thread")
+
+            HStack(alignment: .bottom, spacing: 8) {
+                followUpField(task, isEditable: canCompose) {
+                    guard canSend else { return false }
+                    send(task)
+                    return true
+                }
+
+                Button {
+                    send(task)
+                } label: {
+                    if isSending {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: "arrow.up")
+                            .font(.system(size: ClaudeTheme.size(12), weight: .bold))
+                    }
+                }
+                .buttonStyle(.glassProminent)
+                .buttonBorderShape(.circle)
+                .disabled(!canSend)
+                .help("Send the follow-up to this task's thread")
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusLarge))
+        .glassEffect(.regular, in: shape)
+        .overlay {
+            if isDropTargeted, canCompose {
+                shape
+                    .strokeBorder(ClaudeTheme.accent, lineWidth: 1.5)
+                    .background(shape.fill(ClaudeTheme.accent.opacity(0.08)))
+                    .overlay {
+                        Label("Drop to attach", systemImage: "paperclip")
+                            .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+                            .foregroundStyle(ClaudeTheme.accent)
+                    }
+                    .allowsHitTesting(false)
+            }
+        }
+        .onDrop(of: AttachmentIntake.dropTypes, isTargeted: $isDropTargeted) { providers in
+            guard canCompose else { return false }
+            AttachmentIntake.load(
+                providers,
+                onAttachment: addFollowUpAttachment,
+                onText: { [composerController] text in composerController.insert(text) }
+            )
+            return true
+        }
         .padding(16)
+    }
+
+    /// A 1–5 line field: the hidden `Text` sizes it, the chat input's text view
+    /// sits on top and scrolls past five lines. Each pasted or dropped image is
+    /// an `[ImageN]` chip, N being its place among the image attachments.
+    private func followUpField(
+        _ task: ProjectTask,
+        isEditable: Bool,
+        onReturn: @escaping () -> Bool
+    ) -> some View {
+        let fontSize = ClaudeTheme.size(13)
+        return Text(followUp.isEmpty || followUp.hasSuffix("\n") ? followUp + " " : followUp)
+            .font(.system(size: fontSize))
+            .lineLimit(1...5)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .hidden()
+            .overlay {
+                IMETextView(
+                    text: $followUp,
+                    isFocused: $isComposerFocused,
+                    hasMarkedText: $composerHasMarkedText,
+                    font: .systemFont(ofSize: fontSize),
+                    textColor: NSColor(isEditable ? ClaudeTheme.textPrimary : ClaudeTheme.textSecondary),
+                    placeholder: composerPrompt(task),
+                    onReturn: { [composerController] in
+                        if !onReturn() { composerController.insert("\n") }
+                    },
+                    onPasteCommandV: {
+                        guard isEditable else { return true }
+                        guard let pasted = AttachmentIntake.attachments(from: .general) else { return false }
+                        pasted.forEach(addFollowUpAttachment)
+                        return true
+                    },
+                    onImageChipTap: { index in previewImage = followUpImage(at: index) },
+                    isEditable: isEditable,
+                    accessibilityIdentifier: "task-run-follow-up",
+                    onTextViewReady: { [composerController] textView in
+                        // Let dropped files reach the composer's SwiftUI drop target.
+                        textView.unregisterDraggedTypes()
+                        composerController.textView = textView
+                    },
+                    chipThumbnail: { index in
+                        followUpImage(at: index).flatMap(ChipThumbnailCache.shared.thumbnail(for:))
+                    }
+                )
+            }
+    }
+
+    private func attachmentChip(_ attachment: Attachment, isRemovable: Bool) -> some View {
+        let icon: String = switch attachment.type {
+        case .image: "photo"
+        case .link: "link"
+        case .text: "doc.plaintext"
+        case .file: "doc"
+        }
+        return HStack(spacing: 4) {
+            Label(attachment.name, systemImage: icon)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            if isRemovable {
+                Button {
+                    followUpAttachments.removeAll { $0.id == attachment.id }
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: ClaudeTheme.size(9), weight: .bold))
+                }
+                .buttonStyle(.plain)
+                .help("Remove attachment")
+            }
+        }
+        .font(.system(size: ClaudeTheme.size(11)))
+        .foregroundStyle(ClaudeTheme.textSecondary)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(Capsule().fill(ClaudeTheme.surfaceElevated))
+        .help(attachment.path.isEmpty ? attachment.name : attachment.path)
+    }
+
+    private func addFollowUpAttachment(_ attachment: Attachment) {
+        guard attachment.path.isEmpty
+            || !followUpAttachments.contains(where: { $0.path == attachment.path })
+        else { return }
+        followUpAttachments.append(attachment)
+        if attachment.type == .image {
+            composerController.insert("[Image\(followUpImages.count)]")
+        }
+    }
+
+    private var followUpImages: [Attachment] {
+        followUpAttachments.filter { $0.type == .image }
+    }
+
+    /// The image behind an `[ImageN]` chip (1-based).
+    private func followUpImage(at index: Int) -> Attachment? {
+        let images = followUpImages
+        return images.indices.contains(index - 1) ? images[index - 1] : nil
     }
 
     private func composerPrompt(_ task: ProjectTask) -> String {
         if !hasThread { return String(localized: "No thread to follow up in") }
-        if task.isStatusLocked || isAgentRunning { return String(localized: "Wait for the agent to finish…") }
+        if appState.isStatusLocked(task) || isAgentRunning { return String(localized: "Wait for the agent to finish…") }
         return String(localized: "Ask the agent for a follow-up…")
     }
 
     private func send(_ task: ProjectTask) {
         let text = followUp
+        // An image whose chip was deleted from the text is dropped from the send.
+        let images = followUpImages
+        let attachments = followUpAttachments.filter { attachment in
+            guard attachment.type == .image,
+                  let index = images.firstIndex(where: { $0.id == attachment.id })
+            else { return true }
+            return text.contains("[Image\(index + 1)]")
+        }
         isSending = true
         Task {
-            if await appState.sendTaskFollowUp(task, text: text) {
+            if await appState.sendTaskFollowUp(task, text: text, attachments: attachments) {
                 followUp = ""
+                followUpAttachments = []
             }
             isSending = false
             await reload()
@@ -229,5 +371,109 @@ struct TaskRunView: View {
         }
         hasThread = true
         turns = TaskRunTurn.turns(from: messages)
+    }
+}
+
+// MARK: - Prompt
+
+/// A thread's user message as a card: attachments as chips, the task title as
+/// a heading, the description as Markdown, and the context list as labeled
+/// pills. Follow-ups have no title and render as plain Markdown.
+private struct TaskPromptView: View {
+    let content: TaskPromptContent
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let title = content.title {
+                Text(title)
+                    .font(.system(size: ClaudeTheme.size(15), weight: .semibold))
+                    .foregroundStyle(ClaudeTheme.textPrimary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if !content.body.isEmpty {
+                MarkdownContentView(text: content.body)
+            }
+
+            if !content.fields.isEmpty {
+                if content.title != nil { ClaudeThemeDivider() }
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(content.fields, id: \.self) { field in
+                        fieldRow(field)
+                    }
+                }
+            }
+
+            if !content.references.isEmpty {
+                FlowLayout(spacing: 6) {
+                    ForEach(content.references, id: \.self) { reference in
+                        referenceChip(reference)
+                    }
+                }
+            }
+        }
+    }
+
+    private func fieldRow(_ field: TaskPromptContent.Field) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Label(field.label, systemImage: Self.icon(for: field.label))
+                .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+                .frame(width: 110, alignment: .leading)
+
+            if field.label == "Tags" {
+                FlowLayout(spacing: 4) {
+                    ForEach(Self.tags(in: field.value), id: \.self) { tag in
+                        TaskPill(text: tag)
+                    }
+                }
+            } else {
+                Text(field.value)
+                    .font(.system(size: ClaudeTheme.size(12)))
+                    .foregroundStyle(ClaudeTheme.textPrimary)
+                    .textSelection(.enabled)
+            }
+        }
+    }
+
+    private func referenceChip(_ reference: TaskPromptContent.Reference) -> some View {
+        let icon: String = switch reference.kind {
+        case .image: "photo"
+        case .link: "link"
+        case .file: "doc"
+        }
+        let name = reference.kind == .link
+            ? reference.value
+            : URL(fileURLWithPath: reference.value).lastPathComponent
+        return Label(name, systemImage: icon)
+            .font(.system(size: ClaudeTheme.size(11)))
+            .foregroundStyle(ClaudeTheme.textSecondary)
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Capsule().fill(ClaudeTheme.surfaceElevated))
+            .help(reference.value)
+    }
+
+    private static func tags(in value: String) -> [String] {
+        value.split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
+
+    /// Icons for the labels `ProjectTask.agentPrompt` writes. The labels are
+    /// the prompt's fixed English keys, not localized UI strings.
+    private static func icon(for label: String) -> String {
+        switch label {
+        case "Story": "square.stack.3d.up"
+        case "Type": "shippingbox"
+        case "Priority": "flag"
+        case "Tags": "tag"
+        case "Target version": "number"
+        case "Milestone": "flag.checkered"
+        default: "info.circle"
+        }
     }
 }

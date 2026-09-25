@@ -34,6 +34,8 @@ extension AppState {
         projectId: UUID?,
         threadId: String?,
         prompt: String,
+        displayText: String? = nil,
+        attachments: [Attachment] = [],
         agentProvider: AgentProvider? = nil,
         model: String? = nil,
         effort: String? = nil,
@@ -126,7 +128,8 @@ extension AppState {
 
         guard let streamId = await sendPrompt(
             prompt,
-            displayText: prompt,
+            displayText: displayText ?? prompt,
+            attachments: attachments,
             debugLogPrefix: "[IDE_SEND_THREAD]",
             includeIDEMCP: includeIDEMCP,
             in: window

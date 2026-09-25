@@ -25,6 +25,9 @@ struct MarkdownDescriptionEditor: View {
     var placeholder: String
     var isDisabled: Bool = false
     var height: CGFloat = 170
+    /// Prefix for the accessibility identifiers, so two editors can be on
+    /// screen at once and still be told apart.
+    var identifierPrefix: String = "task-description"
 
     @State private var controller = MarkdownEditorController()
     @State private var isDropTargeted = false
@@ -102,7 +105,7 @@ struct MarkdownDescriptionEditor: View {
             .labelsHidden()
             .fixedSize()
             .help("Switch between the Markdown source and its preview")
-            .accessibilityIdentifier("task-description-mode")
+            .accessibilityIdentifier("\(identifierPrefix)-mode")
         }
     }
 
@@ -133,7 +136,7 @@ struct MarkdownDescriptionEditor: View {
                 onPasteCommandV: handlePaste,
                 onImageChipTap: openImage,
                 isEditable: !isDisabled,
-                accessibilityIdentifier: "task-description-editor",
+                accessibilityIdentifier: "\(identifierPrefix)-editor",
                 onTextViewReady: { [controller] textView in
                     // NSTextView would swallow a dropped file into a path string;
                     // unregistering lets the drag reach the SwiftUI drop target.

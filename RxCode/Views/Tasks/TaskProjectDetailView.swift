@@ -11,6 +11,7 @@ struct TaskProjectDetailView: View {
 
     let project: Project
     @Binding var sheet: TaskBoardSheet?
+    @Binding var newItemMode: TaskCreationMode?
 
     @State private var selectedViewId: UUID?
     @State private var keyword = ""
@@ -84,14 +85,32 @@ struct TaskProjectDetailView: View {
                 Spacer()
 
                 Menu {
-                    Button {
-                        sheet = .task(newTask(status: board.firstColumn.id))
+                    Menu {
+                        Button {
+                            openNewTask(mode: .ai)
+                        } label: {
+                            Label("With AI", systemImage: TaskCreationMode.ai.systemImage)
+                        }
+                        Button {
+                            openNewTask(mode: .form)
+                        } label: {
+                            Label("With Form", systemImage: TaskCreationMode.form.systemImage)
+                        }
                     } label: {
                         Label("New Task", systemImage: "plus")
                     }
 
-                    Button {
-                        sheet = .story(ProjectStory(projectId: project.id, title: ""))
+                    Menu {
+                        Button {
+                            openNewStory(mode: .ai)
+                        } label: {
+                            Label("With AI", systemImage: TaskCreationMode.ai.systemImage)
+                        }
+                        Button {
+                            openNewStory(mode: .form)
+                        } label: {
+                            Label("With Form", systemImage: TaskCreationMode.form.systemImage)
+                        }
                     } label: {
                         Label("New Story", systemImage: "square.stack.3d.up")
                     }
@@ -118,16 +137,16 @@ struct TaskProjectDetailView: View {
                 } label: {
                     Label("New Task", systemImage: "plus")
                 } primaryAction: {
-                    sheet = .task(newTask(status: board.firstColumn.id))
+                    openNewTask(mode: nil)
                 }
                 .menuStyle(.button)
                 .buttonStyle(.borderedProminent)
                 .fixedSize()
-                .help("New task — click the arrow for stories, chats, columns and fields")
+                .help("New task — click the arrow to write it with AI, or for stories, chats, columns and fields")
                 .background {
                     // Menu items don't register key equivalents, so keep ⇧⌘N on a hidden button.
                     Button("") {
-                        sheet = .task(newTask(status: board.firstColumn.id))
+                        openNewTask(mode: nil)
                     }
                     .keyboardShortcut("n", modifiers: [.command, .shift])
                     .opacity(0)
@@ -235,6 +254,16 @@ struct TaskProjectDetailView: View {
 
     /// A draft pre-filled from the current view's filters, so a task created
     /// inside a filtered view shows up in it.
+    private func openNewTask(mode: TaskCreationMode?) {
+        newItemMode = mode
+        sheet = .task(newTask(status: board.firstColumn.id))
+    }
+
+    private func openNewStory(mode: TaskCreationMode?) {
+        newItemMode = mode
+        sheet = .story(ProjectStory(projectId: project.id, title: ""))
+    }
+
     private func newTask(status: TaskStatus) -> ProjectTask {
         let view = currentView
         return ProjectTask(
@@ -449,7 +478,9 @@ struct TaskBoardLayoutView: View {
 
     var body: some View {
         ScrollView(.horizontal) {
-            HStack(alignment: .top, spacing: 12) {
+            // Lazy so a wide board only builds the columns on screen — each
+            // column carries its own story and task card list.
+            LazyHStack(alignment: .top, spacing: 12) {
                 let columns = view.visibleColumns(in: board.effectiveColumns)
                 let visibleStoryIds = Set(stories.filter { story in
                     columns.contains { $0.id == board.rolledUpStatus(for: story) }

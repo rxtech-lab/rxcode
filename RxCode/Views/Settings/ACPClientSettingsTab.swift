@@ -16,6 +16,13 @@ private enum ACPClientSettingsPage: String, CaseIterable, Identifiable {
     }
 }
 
+private struct ACPVersionSelection: Identifiable {
+    let agent: ACPRegistryAgent
+    let client: ACPClientSpec?
+
+    var id: String { client?.id ?? agent.id }
+}
+
 struct ACPClientSettingsTab: View {
     @Environment(AppState.self) private var appState
 
@@ -25,6 +32,7 @@ struct ACPClientSettingsTab: View {
     @State private var actionError: String?
     @State private var registrySearch: String = ""
     @State private var installingAgentId: String?
+    @State private var versionSelection: ACPVersionSelection?
 
     var body: some View {
         ScrollView {
@@ -43,7 +51,7 @@ struct ACPClientSettingsTab: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .task {
-            if selectedPage == .registry && appState.acpRegistry == nil && !appState.acpRegistryLoading {
+            if appState.acpRegistry == nil && !appState.acpRegistryLoading {
                 await appState.refreshACPRegistry()
             }
         }
@@ -67,6 +75,16 @@ struct ACPClientSettingsTab: View {
                 },
                 onCancel: { editingClient = nil }
             )
+        }
+        .sheet(item: $versionSelection) { selection in
+            ACPVersionSheet(selection: selection) { version in
+                versionSelection = nil
+                if let client = selection.client {
+                    updateAgent(client, from: selection.agent, version: version)
+                } else {
+                    installAgent(selection.agent, version: version)
+                }
+            }
         }
         .alert("Remove ACP client?", isPresented: removalBinding, presenting: pendingRemoval) { client in
             Button("Cancel", role: .cancel) { pendingRemoval = nil }
@@ -151,6 +169,12 @@ struct ACPClientSettingsTab: View {
                     .font(.system(size: ClaudeTheme.size(11)))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
+                if let version = client.installedVersion {
+                    Text(ACPPackageVersion.isPinned(client.launch, to: version)
+                         ? "Version \(version)" : "Version \(version) (not pinned)")
+                        .font(.system(size: ClaudeTheme.size(10)))
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Toggle("", isOn: Binding(
@@ -171,6 +195,28 @@ struct ACPClientSettingsTab: View {
             }
             .buttonStyle(.borderless)
             .help("Edit")
+
+            if let registryId = client.registryId,
+               let agent = appState.acpRegistry?.agents.first(where: { $0.id == registryId }) {
+                if installingAgentId == agent.id {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Button("Version…") {
+                        versionSelection = ACPVersionSelection(agent: agent, client: client)
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(installingAgentId != nil)
+
+                    if client.installedVersion != agent.version
+                        || !ACPPackageVersion.isPinned(client.launch, to: agent.version) {
+                        Button("Update to \(agent.version)") {
+                            updateAgent(client, from: agent)
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(installingAgentId != nil)
+                    }
+                }
+            }
 
             Button {
                 pendingRemoval = client
@@ -308,8 +354,8 @@ struct ACPClientSettingsTab: View {
                     .controlSize(.small)
                     .padding(.top, 2)
             } else {
-                Button("Add") {
-                    installAgent(agent)
+                Button("Add…") {
+                    versionSelection = ACPVersionSelection(agent: agent, client: nil)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -325,13 +371,25 @@ struct ACPClientSettingsTab: View {
         )
     }
 
-    private func installAgent(_ agent: ACPRegistryAgent) {
+    private func installAgent(_ agent: ACPRegistryAgent, version: String? = nil) {
         installingAgentId = agent.id
         Task {
             defer { installingAgentId = nil }
             do {
-                let spec = try await appState.installACPClient(from: agent)
+                let spec = try await appState.installACPClient(from: agent, version: version)
                 appState.addACPClient(spec)
+            } catch {
+                actionError = error.localizedDescription
+            }
+        }
+    }
+
+    private func updateAgent(_ client: ACPClientSpec, from agent: ACPRegistryAgent, version: String? = nil) {
+        installingAgentId = agent.id
+        Task {
+            defer { installingAgentId = nil }
+            do {
+                try await appState.updateACPClient(id: client.id, from: agent, version: version)
             } catch {
                 actionError = error.localizedDescription
             }
@@ -373,6 +431,100 @@ struct ACPClientSettingsTab: View {
     }
     private var actionErrorBinding: Binding<Bool> {
         Binding(get: { actionError != nil }, set: { if !$0 { actionError = nil } })
+    }
+}
+
+private struct ACPVersionSheet: View {
+    let selection: ACPVersionSelection
+    let onSelect: (String) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var version: String
+    @State private var publishedVersions: [String] = []
+    @State private var isLoadingVersions = false
+    @State private var versionLoadFailed = false
+
+    init(selection: ACPVersionSelection, onSelect: @escaping (String) -> Void) {
+        self.selection = selection
+        self.onSelect = onSelect
+        _version = State(initialValue: selection.client?.installedVersion ?? selection.agent.version)
+    }
+
+    private var supportsExactVersions: Bool {
+        selection.agent.distribution.npx != nil || selection.agent.distribution.uvx != nil
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(selection.client == nil ? "Install ACP Client" : "Manage ACP Version")
+                .font(.headline)
+            Text(selection.agent.name)
+                .font(.subheadline)
+            Text("Registry release: \(selection.agent.version)")
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 8) {
+                Picker("Version", selection: $version) {
+                    ForEach(displayVersions, id: \.self) { release in
+                        Text(release == selection.agent.version
+                             ? "\(release) (registry release)" : release)
+                            .tag(release)
+                    }
+                }
+                .pickerStyle(.menu)
+                .frame(maxWidth: .infinity)
+                if isLoadingVersions {
+                    ProgressView().controlSize(.small)
+                }
+            }
+
+            Text(supportsExactVersions
+                 ? "Choose a published stable npm or PyPI release. RxCode will pin and verify it before saving."
+                 : "This client has a binary distribution only. The registry supplies a download for its current release.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if versionLoadFailed {
+                HStack(spacing: 6) {
+                    Text("Could not load published versions.")
+                    Button("Retry") { Task { await loadVersions() } }
+                        .buttonStyle(.link)
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                Button(selection.client == nil ? "Install" : "Install Version") {
+                    onSelect(version)
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(!ACPPackageVersion.isValid(version)
+                          || (!supportsExactVersions && version != selection.agent.version))
+            }
+        }
+        .padding(20)
+        .frame(width: 520)
+        .task { await loadVersions() }
+    }
+
+    private var displayVersions: [String] {
+        let initial = version == selection.agent.version
+            ? [version] : [version, selection.agent.version]
+        return initial + publishedVersions.filter { !initial.contains($0) }
+    }
+
+    private func loadVersions() async {
+        guard supportsExactVersions else { return }
+        isLoadingVersions = true
+        versionLoadFailed = false
+        defer { isLoadingVersions = false }
+        do {
+            publishedVersions = try await AgentVersionCatalog.shared.versions(for: selection.agent)
+        } catch {
+            versionLoadFailed = true
+        }
     }
 }
 

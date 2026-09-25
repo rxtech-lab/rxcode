@@ -161,16 +161,17 @@ struct ProjectChatRow: View {
         summary.threadLabel == AppState.manualCodeReviewLabel
     }
 
+    /// The completion-check chip, driven by `AppState` rather than the label
+    /// alone so a check whose verdict never landed stops claiming to verify.
     private var taskCompletionChip: (text: String, color: Color)? {
-        guard let label = summary.threadLabel else { return nil }
-        switch label {
-        case AppState.taskCompletionCheckLabel:
+        switch appState.taskCompletionCheckState(for: summary) {
+        case .verifying:
             return (String(localized: "Verifying"), ClaudeTheme.statusRunning)
-        case AppState.taskCompletionVerifiedLabel:
+        case .verified:
             return (String(localized: "Verified"), ClaudeTheme.statusSuccess)
-        case AppState.taskCompletionUnverifiedLabel:
+        case .unverified:
             return (String(localized: "Unverified"), ClaudeTheme.statusWarning)
-        default:
+        case nil:
             return nil
         }
     }
@@ -184,8 +185,13 @@ struct ProjectChatRow: View {
 
     /// Title cleaned of `[Attached image: ...]` / `[ImageN]` / etc. markers that may
     /// be baked into older persisted summaries from before title stripping landed.
+    ///
+    /// Completion-check threads get a fixed title instead of their generated one —
+    /// the row is only ever "the verification run for the parent thread", and the
+    /// generated title just repeats the prompt.
     private var displayTitle: String {
         if let titleOverride, !titleOverride.isEmpty { return titleOverride }
+        if taskCompletionChip != nil { return String(localized: "Task Verification") }
         let cleaned = ChatSession.stripAttachmentMarkers(from: summary.title)
         let resolved = cleaned.isEmpty ? ChatSession.defaultTitle : cleaned
         return resolved.prefix(1).uppercased() + resolved.dropFirst()
@@ -201,6 +207,12 @@ struct ProjectChatRow: View {
                 statusIndicator
             }
 
+            Text(displayTitle)
+                .font(.system(size: ClaudeTheme.size(13), weight: isCurrent ? .medium : .regular))
+                .foregroundStyle(isCurrent ? ClaudeTheme.textPrimary : ClaudeTheme.textSecondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+
             if let taskCompletionChip {
                 Text(taskCompletionChip.text)
                     .font(.system(size: ClaudeTheme.size(10), weight: .semibold))
@@ -209,12 +221,6 @@ struct ProjectChatRow: View {
                     .padding(.vertical, 2)
                     .background(taskCompletionChip.color.opacity(0.14), in: Capsule())
                     .fixedSize()
-            } else {
-                Text(displayTitle)
-                    .font(.system(size: ClaudeTheme.size(13), weight: isCurrent ? .medium : .regular))
-                    .foregroundStyle(isCurrent ? ClaudeTheme.textPrimary : ClaudeTheme.textSecondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
             }
 
             Spacer(minLength: 4)
@@ -278,7 +284,7 @@ struct ProjectChatRow: View {
         .onHover { hovering in
             isHovered = hovering
         }
-        .help(taskCompletionChip?.text ?? displayTitle)
+        .help(taskCompletionChip.map { "\(displayTitle) — \($0.text)" } ?? displayTitle)
         .onTapGesture { onSelect() }
         .contextMenu {
             if linkedTask != nil {

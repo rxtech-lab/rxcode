@@ -16,6 +16,10 @@ struct OnboardingView: View {
     @State private var codexInstalled = false
     @State private var codexVersion: String?
     @State private var codexError: String?
+    @State private var installingRuntime: AgentRuntimeInstaller.Runtime?
+    @State private var cliInstallError: String?
+    @State private var signingInRuntime: AgentRuntimeInstaller.Runtime?
+    @State private var cliSignInMessage: String?
 
     // ACP install
     @State private var installingAgentId: String?
@@ -258,7 +262,13 @@ struct OnboardingView: View {
                 codexInstalled: codexInstalled,
                 codexVersion: codexVersion,
                 codexError: codexError,
-                onCheckAgain: { Task { await checkCLI() } }
+                onCheckAgain: { Task { await checkCLI() } },
+                installingRuntime: installingRuntime,
+                installError: cliInstallError,
+                onInstall: installRuntime,
+                signingInRuntime: signingInRuntime,
+                signInMessage: cliSignInMessage,
+                onSignIn: signInRuntime
             )
         case .acpSetup:
             ACPSetupPreview(
@@ -365,6 +375,45 @@ struct OnboardingView: View {
     }
 
     // MARK: - CLI
+
+    private func installRuntime(_ runtime: AgentRuntimeInstaller.Runtime) {
+        installingRuntime = runtime
+        cliInstallError = nil
+        Task {
+            defer { installingRuntime = nil }
+            do {
+                try await AgentRuntimeInstaller.shared.install(runtime, version: "latest")
+                await checkCLI()
+            } catch {
+                cliInstallError = error.localizedDescription
+            }
+        }
+    }
+
+    private func signInRuntime(_ runtime: AgentRuntimeInstaller.Runtime) {
+        signingInRuntime = runtime
+        cliSignInMessage = nil
+        Task {
+            defer { signingInRuntime = nil }
+            do {
+                switch runtime {
+                case .codex:
+                    try await appState.codex.signIn()
+                case .claude:
+                    do {
+                        try await appState.claude.signIn()
+                    } catch {
+                        try ClaudeCodeServer.openLoginInTerminal(binary: appState.claudeBinaryPath ?? "claude")
+                        cliSignInMessage = "Complete Claude Code sign-in in Terminal."
+                        return
+                    }
+                }
+                cliSignInMessage = "Sign-in completed."
+            } catch {
+                cliSignInMessage = error.localizedDescription
+            }
+        }
+    }
 
     private func checkCLI() async {
         isCheckingCLI = true

@@ -7,6 +7,7 @@ actor CodexAppServer {
         case binaryNotFound
         case versionCheckFailed(String)
         case spawnFailed(String)
+        case loginFailed(String)
 
         var errorDescription: String? {
             switch self {
@@ -16,6 +17,8 @@ actor CodexAppServer {
                 return "Version check failed: \(detail)"
             case .spawnFailed(let detail):
                 return "Failed to spawn codex app-server: \(detail)"
+            case .loginFailed(let detail):
+                return "Codex sign-in failed: \(detail)"
             }
         }
     }
@@ -111,6 +114,7 @@ actor CodexAppServer {
     static var candidatePaths: [String] {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         return [
+            AgentRuntimeInstaller.executablePath(for: .codex),
             "/opt/homebrew/bin/codex",
             "/usr/local/bin/codex",
             "\(home)/.local/bin/codex",

@@ -47,6 +47,7 @@ extension ThreadStore {
             // rebuild as a perpetual spinner.
             store.finalizeInterruptedHooks()
             store.finalizeInterruptedHookCards()
+            store.finalizeInterruptedCompletionChecks()
             return store
         } catch {
             // Fall back to an in-memory container so the app still launches.

@@ -18,6 +18,44 @@ enum TaskBoardSheet: Identifiable {
     }
 }
 
+/// How a new story or task is being written in `TaskFormSheet`: by describing
+/// it to the suggestion agent, or by filling the fields in by hand. Only
+/// applies while creating — an existing record is always edited in the form.
+enum TaskCreationMode: String, Hashable, Identifiable, CaseIterable {
+    case ai, form
+
+    var id: String { rawValue }
+
+    var title: LocalizedStringKey {
+        switch self {
+        case .ai: "AI"
+        case .form: "Form"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .ai: "sparkles"
+        case .form: "list.bullet.rectangle"
+        }
+    }
+
+    /// The tab `TaskFormSheet` opens on.
+    ///
+    /// A saved record has no draft left to write, so it is always the form —
+    /// even when a menu asked for AI. Otherwise the caller decides, and
+    /// without one each kind keeps its own habit: a story is usually outlined
+    /// from a description, a task written straight into the fields.
+    static func resolved(
+        isExistingRecord: Bool,
+        isStory: Bool,
+        requested: TaskCreationMode?
+    ) -> TaskCreationMode {
+        guard !isExistingRecord else { return .form }
+        return requested ?? (isStory ? .ai : .form)
+    }
+}
+
 // MARK: - Column styling
 
 extension TaskColumn {

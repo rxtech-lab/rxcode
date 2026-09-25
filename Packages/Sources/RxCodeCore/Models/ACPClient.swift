@@ -72,6 +72,57 @@ public struct ACPDistribution: Codable, Hashable, Sendable {
     }
 }
 
+/// Registry package strings may already contain a version. Always derive the
+/// launch spec from the selected registry release so npm and uv cannot drift.
+public enum ACPPackageVersion {
+    public static func isValid(_ version: String) -> Bool {
+        version.range(
+            of: #"^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?(?:\+[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?$"#,
+            options: .regularExpression
+        ) != nil
+    }
+
+    public static func npx(_ package: String, version: String) -> String? {
+        guard isValid(version) else { return nil }
+        let name: String
+        if let separator = package.dropFirst().lastIndex(of: "@") {
+            name = String(package[..<separator])
+        } else {
+            name = package
+        }
+        guard validNpmName(name) else { return nil }
+        return "\(name)@\(version)"
+    }
+
+    public static func uvx(_ package: String, version: String) -> String? {
+        guard isValid(version) else { return nil }
+        let name = package.components(separatedBy: "==")[0].components(separatedBy: "@")[0]
+        guard !name.isEmpty,
+              name.range(of: #"^[A-Za-z0-9][A-Za-z0-9._-]*$"#, options: .regularExpression) != nil
+        else { return nil }
+        return "\(name)@\(version)"
+    }
+
+    public static func isPinned(_ launch: ACPClientSpec.LaunchKind, to version: String) -> Bool {
+        switch launch {
+        case .npx(let package, _, _):
+            return npx(package, version: version) == package
+        case .uvx(let package, _, _):
+            return uvx(package, version: version) == package
+                || package.hasSuffix("==\(version)")
+        case .binary, .custom:
+            return true
+        }
+    }
+
+    private static func validNpmName(_ name: String) -> Bool {
+        name.range(
+            of: #"^(?:@[A-Za-z0-9._-]+/)?[A-Za-z0-9._-]+$"#,
+            options: .regularExpression
+        ) != nil
+    }
+}
+
 public struct ACPNpxDist: Codable, Hashable, Sendable {
     public var package: String
     public var args: [String]?
@@ -99,6 +150,8 @@ public struct ACPClientSpec: Codable, Identifiable, Hashable, Sendable {
     public var id: String
     /// `ACPRegistryAgent.id` this was installed from (if any).
     public var registryId: String?
+    /// Version selected from the registry when RxCode installed this client.
+    public var installedVersion: String?
     public var displayName: String
     public var enabled: Bool
     /// Method by which this client is launched.
@@ -127,6 +180,7 @@ public struct ACPClientSpec: Codable, Identifiable, Hashable, Sendable {
     public init(
         id: String = UUID().uuidString,
         registryId: String? = nil,
+        installedVersion: String? = nil,
         displayName: String,
         enabled: Bool = true,
         launch: LaunchKind,
@@ -140,6 +194,7 @@ public struct ACPClientSpec: Codable, Identifiable, Hashable, Sendable {
     ) {
         self.id = id
         self.registryId = registryId
+        self.installedVersion = installedVersion
         self.displayName = displayName
         self.enabled = enabled
         self.launch = launch

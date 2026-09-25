@@ -172,14 +172,23 @@ extension AppState {
     func recentStories(for projectId: UUID, keyword: String = "") -> [ProjectStory] {
         let board = taskBoard(for: projectId)
         let trimmed = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        var lastTaskActivity: [UUID: Date] = [:]
+        var matchingTaskStories: Set<UUID> = []
+        for task in board.tasks {
+            guard let storyId = task.storyId else { continue }
+            lastTaskActivity[storyId] = max(lastTaskActivity[storyId] ?? .distantPast, task.updatedAt)
+            if !trimmed.isEmpty && task.matches(keyword: trimmed) {
+                matchingTaskStories.insert(storyId)
+            }
+        }
         let matching = board.stories.filter { story in
             trimmed.isEmpty
                 || story.matches(keyword: trimmed)
-                || board.tasks(inStory: story.id).contains { $0.matches(keyword: trimmed) }
+                || matchingTaskStories.contains(story.id)
         }
         return matching
             .map { story in
-                let lastActivity = board.tasks(inStory: story.id).map(\.updatedAt).max() ?? .distantPast
+                let lastActivity = lastTaskActivity[story.id] ?? .distantPast
                 return (story, max(story.updatedAt, lastActivity))
             }
             .sorted { $0.1 > $1.1 }
@@ -729,6 +738,15 @@ extension AppState {
             return nil
         }
         return TaskTitleSuggestion.parse(raw)
+    }
+
+    /// Produces an unsaved story and task outline for the creation preview.
+    func suggestStoryDraft(source: String, projectId: UUID) async -> StoryDraftSuggestion? {
+        guard let raw = await runTaskAgentCompletion(
+            prompt: StoryDraftSuggestion.prompt(source: source),
+            projectId: projectId
+        ) else { return nil }
+        return StoryDraftSuggestion.parse(raw)
     }
 
     /// The title of the story a task belongs to, if any.

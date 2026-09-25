@@ -77,6 +77,7 @@
 		FE0A11BB22CC33DD44EE5501 /* PlanModeHookSuppressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0A11BB22CC33DD44EE5502 /* PlanModeHookSuppressionTests.swift */; };
 		FE0A11BB22CC33DD44EE5601 /* TaskBoardHookTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0A11BB22CC33DD44EE5602 /* TaskBoardHookTests.swift */; };
 		FE0A11BB22CC33DD44EE5701 /* MarkdownDescriptionEditorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0A11BB22CC33DD44EE5702 /* MarkdownDescriptionEditorTests.swift */; };
+		FE0A11BB22CC33DD44EE5901 /* TaskCreationModeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0A11BB22CC33DD44EE5902 /* TaskCreationModeTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -181,6 +182,7 @@
 		FE0A11BB22CC33DD44EE5502 /* PlanModeHookSuppressionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlanModeHookSuppressionTests.swift; sourceTree = "<group>"; };
 		FE0A11BB22CC33DD44EE5602 /* TaskBoardHookTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TaskBoardHookTests.swift; sourceTree = "<group>"; };
 		FE0A11BB22CC33DD44EE5702 /* MarkdownDescriptionEditorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MarkdownDescriptionEditorTests.swift; sourceTree = "<group>"; };
+		FE0A11BB22CC33DD44EE5902 /* TaskCreationModeTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TaskCreationModeTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -370,6 +372,7 @@
 				DFA0CCC02FB4CC01005991E1 /* PlanDecisionTests.swift */,
 				FE0A11BB22CC33DD44EE5502 /* PlanModeHookSuppressionTests.swift */,
 				FE0A11BB22CC33DD44EE5602 /* TaskBoardHookTests.swift */,
+				FE0A11BB22CC33DD44EE5902 /* TaskCreationModeTests.swift */,
 				AC0A11BB22CC33DD44EE5802 /* ACPServiceSuggestionTests.swift */,
 				FE0A11BB22CC33DD44EE5702 /* MarkdownDescriptionEditorTests.swift */,
 				DFA0CCC12FB4CC01005991E1 /* PlanCardViewTests.swift */,
@@ -840,6 +843,7 @@
 				DFA0CCD12FB4CC01005991E1 /* PlanDecisionTests.swift in Sources */,
 				FE0A11BB22CC33DD44EE5501 /* PlanModeHookSuppressionTests.swift in Sources */,
 				FE0A11BB22CC33DD44EE5601 /* TaskBoardHookTests.swift in Sources */,
+				FE0A11BB22CC33DD44EE5901 /* TaskCreationModeTests.swift in Sources */,
 				AC0A11BB22CC33DD44EE5801 /* ACPServiceSuggestionTests.swift in Sources */,
 				FE0A11BB22CC33DD44EE5701 /* MarkdownDescriptionEditorTests.swift in Sources */,
 				DFA0CCD22FB4CC01005991E1 /* PlanCardViewTests.swift in Sources */,
@@ -1636,7 +1640,7 @@
 			repositoryURL = "https://github.com/rxtech-lab/RxAgentSDK.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 1.0.5;
+				minimumVersion = 1.0.6;
 			};
 		};
 		DFAA00032FCD34B3002D9562 /* XCRemoteSwiftPackageReference "swift-json-schema" */ = {

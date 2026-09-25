@@ -36,13 +36,15 @@ The Agent Client Protocol lets RxCode talk to additional coding agents besides C
 
 Open **Settings -> ACP Clients -> Registry**. RxCode fetches the official registry from `cdn.agentclientprotocol.com` and lists each agent with version, license, and a short description.
 
-Click **Add** to install. RxCode downloads the platform-specific binary distribution into:
+Click **Add…** to install the registry release. For clients with an npm or PyPI package, choose a published stable version from the dropdown in the install sheet. RxCode pins that package version and starts it before saving the client. Binary-only clients can use the current registry release because the registry supplies no historical download URLs. Binary downloads are stored in:
 
 ```
 ~/Library/Application Support/RxCode/acp-binaries/<id>/<version>/
 ```
 
 If a binary distribution is not available for macOS, RxCode falls back to `npx` or `uvx` packages declared in the registry.
+
+In **Installed**, click **Version…** to choose another package version from the dropdown, or **Update to** to install the current registry release. The selected version appears on the client card.
 
 ### Models
 

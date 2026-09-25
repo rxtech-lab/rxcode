@@ -10,6 +10,12 @@ struct CLISetupPreview: View {
     let codexVersion: String?
     let codexError: String?
     let onCheckAgain: () -> Void
+    let installingRuntime: AgentRuntimeInstaller.Runtime?
+    let installError: String?
+    let onInstall: (AgentRuntimeInstaller.Runtime) -> Void
+    let signingInRuntime: AgentRuntimeInstaller.Runtime?
+    let signInMessage: String?
+    let onSignIn: (AgentRuntimeInstaller.Runtime) -> Void
 
     var body: some View {
         VStack(spacing: 14) {
@@ -33,15 +39,37 @@ struct CLISetupPreview: View {
                     installed: claudeInstalled,
                     version: claudeVersion,
                     error: claudeError,
-                    installCommand: "npm install -g @anthropic-ai/claude-code"
+                    installCommand: "npm install -g @anthropic-ai/claude-code",
+                    isInstalling: installingRuntime == .claude,
+                    installDisabled: installingRuntime != nil,
+                    onInstall: { onInstall(.claude) },
+                    isSigningIn: signingInRuntime == .claude,
+                    signInDisabled: signingInRuntime != nil,
+                    onSignIn: { onSignIn(.claude) }
                 )
                 CLIStatusRow(
                     title: "Codex",
                     installed: codexInstalled,
                     version: codexVersion,
                     error: codexError,
-                    installCommand: "npm install -g @openai/codex"
+                    installCommand: "npm install -g @openai/codex",
+                    isInstalling: installingRuntime == .codex,
+                    installDisabled: installingRuntime != nil,
+                    onInstall: { onInstall(.codex) },
+                    isSigningIn: signingInRuntime == .codex,
+                    signInDisabled: signingInRuntime != nil,
+                    onSignIn: { onSignIn(.codex) }
                 )
+            }
+            if let signInMessage {
+                Text(signInMessage)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.white.opacity(0.75))
+            }
+            if let installError {
+                Text(installError)
+                    .font(.system(size: 11))
+                    .foregroundStyle(ClaudeTheme.statusError)
             }
 
             HStack {
@@ -80,6 +108,12 @@ struct CLIStatusRow: View {
     let version: String?
     let error: String?
     let installCommand: String
+    let isInstalling: Bool
+    let installDisabled: Bool
+    let onInstall: () -> Void
+    let isSigningIn: Bool
+    let signInDisabled: Bool
+    let onSignIn: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -92,6 +126,18 @@ struct CLIStatusRow: View {
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.white.opacity(0.9))
                 Spacer()
+                if installed {
+                    Button(action: onSignIn) {
+                        if isSigningIn {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Text("Sign In")
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(signInDisabled)
+                }
             }
 
             if !installed {
@@ -103,6 +149,17 @@ struct CLIStatusRow: View {
                 }
 
                 HStack(spacing: 8) {
+                    Button(action: onInstall) {
+                        if isInstalling {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Label("Download", systemImage: "arrow.down.circle")
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(installDisabled)
+
                     Text(verbatim: installCommand)
                         .font(.system(size: 12, design: .monospaced))
                         .foregroundStyle(.white.opacity(0.86))

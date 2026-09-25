@@ -108,6 +108,22 @@ final class AppStateTests: XCTestCase {
 
     // MARK: - Task board chat activity
 
+    func testRecentStoriesUsesLatestChildActivityAndMatchesChildKeywords() {
+        let projectId = UUID()
+        let older = ProjectStory(projectId: projectId, title: "Older", updatedAt: Date(timeIntervalSince1970: 10))
+        let newer = ProjectStory(projectId: projectId, title: "Newer", updatedAt: Date(timeIntervalSince1970: 20))
+        let child = ProjectTask(
+            projectId: projectId,
+            storyId: older.id,
+            title: "Find this child",
+            updatedAt: Date(timeIntervalSince1970: 30)
+        )
+        appState.taskBoards[projectId] = TaskBoard(stories: [newer, older], tasks: [child])
+
+        XCTAssertEqual(appState.recentStories(for: projectId).map(\.id), [older.id, newer.id])
+        XCTAssertEqual(appState.recentStories(for: projectId, keyword: "Find this").map(\.id), [older.id])
+    }
+
     func testIsAgentRunningIsFalseWithoutALinkedThread() {
         let task = ProjectTask(projectId: UUID(), title: "No thread", sessionKey: nil)
         appState.sessionStates = ["sess-1": streamState(isStreaming: true)]
@@ -413,6 +429,42 @@ final class AppStateTests: XCTestCase {
 
         XCTAssertEqual(acpSections.map(\.id), ["acp:enabled"])
         XCTAssertEqual(acpSections.first?.models.map(\.id), ["enabled::model-a"])
+    }
+
+    func testACPExactVersionUsesPackageInsteadOfCurrentRegistryBinary() async throws {
+        let agent = try JSONDecoder().decode(ACPRegistryAgent.self, from: Data(#"""
+        {
+          "id": "example", "name": "Example", "version": "2.0.0", "description": "Example",
+          "distribution": {
+            "npx": {"package": "@example/agent@2.0.0"},
+            "binary": {"darwin-aarch64": {"archive": "https://example.com/agent-2.0.0.zip", "cmd": "agent"}}
+          }
+        }
+        """#.utf8))
+
+        let launch = try await appState.resolveLaunch(for: agent, version: "1.2.3")
+        guard case .npx(let package, _, _) = launch else {
+            return XCTFail("Expected the exact package release")
+        }
+        XCTAssertEqual(package, "@example/agent@1.2.3")
+    }
+
+    func testACPBinaryOnlyClientRejectsUnavailableExactVersion() async throws {
+        let agent = try JSONDecoder().decode(ACPRegistryAgent.self, from: Data(#"""
+        {
+          "id": "example", "name": "Example", "version": "2.0.0", "description": "Example",
+          "distribution": {
+            "binary": {"darwin-aarch64": {"archive": "https://example.com/agent-2.0.0.zip", "cmd": "agent"}}
+          }
+        }
+        """#.utf8))
+
+        do {
+            _ = try await appState.resolveLaunch(for: agent, version: "1.2.3")
+            XCTFail("Expected an unavailable version error")
+        } catch ACPInstallError.historicalBinaryUnavailable(let version) {
+            XCTAssertEqual(version, "1.2.3")
+        }
     }
 
     // MARK: - Project and session persistence
@@ -729,6 +781,65 @@ final class AppStateTests: XCTestCase {
         var state = SessionStreamState()
         state.isStreaming = isStreaming
         return state
+    }
+}
+
+@MainActor
+final class ClaudeLoginTests: XCTestCase {
+    func testInteractivePromptFallsBackBeforeProcessExits() async throws {
+        let script = try loginScript("print -n 'Paste code here if prompted > '\nexec /bin/sleep 10")
+        defer { try? FileManager.default.removeItem(at: script.deletingLastPathComponent()) }
+        let started = Date()
+
+        do {
+            try await makeAppState().claude.runLoginProcess(
+                binary: script.path, timeout: .seconds(2),
+                environment: ProcessInfo.processInfo.environment
+            )
+            XCTFail("Expected an interactive login fallback")
+        } catch ClaudeCodeServer.ClaudeError.interactiveLoginRequired {
+            XCTAssertLessThan(Date().timeIntervalSince(started), 1.5)
+        }
+    }
+
+    func testUnrecognizedPromptFallsBackOnTimeout() async throws {
+        let script = try loginScript("print -n 'Waiting for authorization... '\nexec /bin/sleep 10")
+        defer { try? FileManager.default.removeItem(at: script.deletingLastPathComponent()) }
+        let started = Date()
+
+        do {
+            try await makeAppState().claude.runLoginProcess(
+                binary: script.path, timeout: .milliseconds(200),
+                environment: ProcessInfo.processInfo.environment
+            )
+            XCTFail("Expected a timed login fallback")
+        } catch ClaudeCodeServer.ClaudeError.interactiveLoginRequired {
+            XCTAssertLessThan(Date().timeIntervalSince(started), 2)
+        }
+    }
+
+    func testCompletedBackgroundLoginSucceeds() async throws {
+        let script = try loginScript("print 'Login complete'\nexit 0")
+        defer { try? FileManager.default.removeItem(at: script.deletingLastPathComponent()) }
+
+        try await makeAppState().claude.runLoginProcess(
+            binary: script.path, timeout: .seconds(2),
+            environment: ProcessInfo.processInfo.environment
+        )
+    }
+
+    private func loginScript(_ body: String) throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RxCode-ClaudeLoginTests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let script = directory.appendingPathComponent("claude")
+        try "#!/bin/zsh\n\(body)\n".write(to: script, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: script.path)
+        return script
+    }
+
+    private func makeAppState() -> AppState {
+        AppState(persistence: MockAppStatePersistence(), startBackgroundServices: false)
     }
 }
 

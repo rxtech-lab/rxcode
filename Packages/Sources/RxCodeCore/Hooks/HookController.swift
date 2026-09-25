@@ -306,6 +306,13 @@ public protocol HookController: AnyObject {
     func requestReleaseCreate(project: Project)
     func requestCISetup(project: Project)
 
+    // MARK: Project task board
+
+    /// Move the task linked to `sessionKey` from In Progress to Pending Review.
+    /// No-op when the thread owns no task. Returns true when a task advanced.
+    @discardableResult
+    func advanceLinkedTaskToReview(sessionKey: String) -> Bool
+
     // MARK: Setup-session tracking
 
     /// Record that `sessionKey` belongs to a setup chat of the given `kind` (e.g.

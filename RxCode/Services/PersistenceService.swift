@@ -20,6 +20,10 @@ protocol AppStatePersistenceService: Actor {
     func saveHookProfiles(_ profiles: [HookProfile], projectId: UUID) throws
     func loadHookProfiles(projectId: UUID) -> [HookProfile]
 
+    func saveTaskBoard(_ board: TaskBoard, projectId: UUID) throws
+    func loadTaskBoard(projectId: UUID) -> TaskBoard
+    func deleteTaskBoard(projectId: UUID) throws
+
     func saveACPClients(_ clients: [ACPClientSpec]) throws
     func loadACPClients() -> [ACPClientSpec]
     nonisolated func acpRegistrySnapshotURL() -> URL
@@ -265,6 +269,31 @@ actor PersistenceService: AppStatePersistenceService {
     private func hookProfilesURL(projectId: UUID) -> URL {
         baseURL
             .appendingPathComponent("hooks")
+            .appendingPathComponent("\(projectId.uuidString).json")
+    }
+
+    // MARK: - Task Board
+
+    func saveTaskBoard(_ board: TaskBoard, projectId: UUID) throws {
+        let url = taskBoardURL(projectId: projectId)
+        try encode(board, to: url)
+    }
+
+    func loadTaskBoard(projectId: UUID) -> TaskBoard {
+        let url = taskBoardURL(projectId: projectId)
+        return decode(TaskBoard.self, from: url) ?? TaskBoard()
+    }
+
+    /// Removes a deleted project's board. Missing file is not an error.
+    func deleteTaskBoard(projectId: UUID) throws {
+        let url = taskBoardURL(projectId: projectId)
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        try FileManager.default.removeItem(at: url)
+    }
+
+    private func taskBoardURL(projectId: UUID) -> URL {
+        baseURL
+            .appendingPathComponent("task_board")
             .appendingPathComponent("\(projectId.uuidString).json")
     }
 

@@ -635,12 +635,14 @@ final class AppStateTests: XCTestCase {
     }
 }
 
-private actor MockAppStatePersistence: AppStatePersistenceService {
+/// Shared by the app-level test target (also used by `TaskBoardHookTests`).
+actor MockAppStatePersistence: AppStatePersistenceService {
     private var projectSnapshots: [[Project]] = []
     private var sessionSaves: [(session: ChatSession, persistTitle: Bool)] = []
     private var deletedSessions: [(projectId: UUID, sessionId: String, origin: SessionOrigin, cwd: String?)] = []
     private var runProfiles: [UUID: [RunProfile]] = [:]
     private var hookProfiles: [UUID: [HookProfile]] = [:]
+    private var taskBoards: [UUID: TaskBoard] = [:]
     private var acpClients: [ACPClientSpec] = []
     private var fullSessions: [String: ChatSession] = [:]
     private var legacySessions: [String: ChatSession] = [:]
@@ -718,6 +720,18 @@ private actor MockAppStatePersistence: AppStatePersistenceService {
 
     func loadHookProfiles(projectId: UUID) -> [HookProfile] {
         hookProfiles[projectId] ?? []
+    }
+
+    func saveTaskBoard(_ board: TaskBoard, projectId: UUID) throws {
+        taskBoards[projectId] = board
+    }
+
+    func loadTaskBoard(projectId: UUID) -> TaskBoard {
+        taskBoards[projectId] ?? TaskBoard()
+    }
+
+    func deleteTaskBoard(projectId: UUID) throws {
+        taskBoards.removeValue(forKey: projectId)
     }
 
     func saveACPClients(_ clients: [ACPClientSpec]) throws {

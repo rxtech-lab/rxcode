@@ -785,6 +785,14 @@ final class AppStateHookController: HookController {
         )
     }
 
+    // MARK: Project task board
+
+    @discardableResult
+    func advanceLinkedTaskToReview(sessionKey: String) -> Bool {
+        guard let app else { return false }
+        return app.advanceLinkedTaskToReview(sessionKey: sessionKey) != nil
+    }
+
     // MARK: Setup-session tracking
 
     func markSetupSession(kind: String, sessionKey: String) {

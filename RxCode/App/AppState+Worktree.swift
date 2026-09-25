@@ -420,6 +420,10 @@ extension AppState {
         Task.detached(priority: .utility) { [memoryService] in await memoryService.deleteAll(projectId: projectId) }
         allSessionSummaries.removeAll { $0.projectId == project.id }
 
+        // Cascade the task board too, so re-adding the same folder later
+        // doesn't resurrect the old board.
+        deleteTaskBoard(for: project.id)
+
         // Remove from projects list and persist
         projects.removeAll { $0.id == project.id }
         do {
@@ -521,10 +525,12 @@ extension AppState {
     func selectSession(id: String, in window: WindowState) {
         logger.info("[SelectSession] click sid=\(id, privacy: .public) currentSid=\(window.currentSessionId ?? "<nil>", privacy: .public) selectedProject=\(window.selectedProject?.id.uuidString ?? "<nil>", privacy: .public) summariesCount=\(self.allSessionSummaries.count)")
         guard window.currentSessionId != id else {
-            if window.showingBriefing {
-                window.showingBriefing = false
+            // Any General route (Tasks, Briefing) covers the chat, so clicking
+            // the current thread must still reveal it.
+            if window.generalRoute != nil {
+                window.generalRoute = nil
                 window.requestInputFocus = true
-                logger.info("[SelectSession] same sid, leaving briefing sid=\(id, privacy: .public)")
+                logger.info("[SelectSession] same sid, leaving general route sid=\(id, privacy: .public)")
             } else {
                 logger.info("[SelectSession] no-op: already current sid=\(id, privacy: .public)")
             }

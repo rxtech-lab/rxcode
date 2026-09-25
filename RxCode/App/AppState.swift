@@ -1151,6 +1151,14 @@ final class AppState {
     }
     var mobilePendingWorktrees: [UUID: MobilePendingWorktree] = [:]
 
+    // MARK: - Task Board
+
+    /// One `TaskBoard` per project, loaded lazily. Keyed by `Project.id`, and a
+    /// non-nil entry means "already read from disk" — same convention as
+    /// `runProfilesByProject` below. The global board rendered by
+    /// `TaskBoardView` is an aggregation of these.
+    var taskBoards: [UUID: TaskBoard] = [:]
+
     // MARK: - Run Profiles
 
     /// Loaded lazily per project. Keyed by `Project.id`.
@@ -1366,6 +1374,7 @@ final class AppState {
         hookManager.register(CodeReviewHook())
         hookManager.register(CommitPushHook())
         hookManager.register(SendMessageHook())
+        hookManager.register(TaskBoardHook())
     }
 
 

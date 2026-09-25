@@ -17,8 +17,8 @@ struct ProjectWindowView: View {
     }
 
     private var navigationTitleText: String {
-        if windowState.showingBriefing {
-            return "Briefing"
+        if let route = windowState.generalRoute {
+            return route.displayNameText
         }
         if let id = windowState.currentSessionId,
            let title = appState.allSessionSummaries.first(where: { $0.id == id })?.title,
@@ -145,7 +145,9 @@ struct ProjectWindowView: View {
 
     private var detailContent: some View {
         Group {
-            if windowState.showingBriefing {
+            if windowState.showingTasks {
+                TaskBoardView()
+            } else if windowState.showingBriefing {
                 BriefingView()
             } else if windowState.selectedProject != nil {
                 VStack(spacing: 0) {

@@ -92,6 +92,11 @@ final class LocalAIProviderAcceptanceTests: XCTestCase {
     }
 
     private func sendBriefingNewThreadTurn(provider: Provider) {
+        // The app now lands on the Tasks board, so navigate to Briefing first.
+        let briefingRow = app.buttons["general-route-briefing"]
+        XCTAssertTrue(briefingRow.waitForExistence(timeout: 10))
+        briefingRow.click()
+
         XCTAssertTrue(app.staticTexts["Briefings"].waitForExistence(timeout: 10))
 
         let actionsButton = app.buttons["briefing-group-actions-button"]

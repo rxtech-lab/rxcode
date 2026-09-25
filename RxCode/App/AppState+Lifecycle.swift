@@ -162,6 +162,10 @@ extension AppState {
         projects = await loadDeduplicatedProjects()
         seedUITestBriefingIfRequested()
 
+        // Task boards back the landing surface, so they load with the project
+        // list. Decoding happens inside the persistence actor.
+        await loadAllTaskBoards()
+
         // Sidebar threads are sourced from the local SwiftData store. The CLI
         // is still the transcript backend (replay on thread open), but it does
         // not drive thread discovery.
@@ -497,10 +501,10 @@ extension AppState {
             selectProject(first, in: window)
         }
 
-        // Show the briefing as the landing view on launch, even after restoring a project.
-        // `selectProject` clears `showingBriefing` for normal switches; re-enable here so the
-        // user lands on the briefing dashboard rather than a fresh chat.
-        window.showingBriefing = true
+        // Show the task board as the landing view on launch, even after restoring a
+        // project. `selectProject` clears `generalRoute` for normal switches; re-set it
+        // here so the user lands on the board rather than a fresh chat.
+        window.generalRoute = .tasks
 
         window.isInitialized = true
     }

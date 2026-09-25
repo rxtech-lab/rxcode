@@ -55,7 +55,7 @@ public struct Attachment: Identifiable, Sendable {
 // MARK: - Codable bridge
 
 extension Attachment {
-    public struct DTO: Codable, Sendable {
+    public struct DTO: Codable, Sendable, Hashable {
         public let id: UUID
         public let type: String
         public let name: String

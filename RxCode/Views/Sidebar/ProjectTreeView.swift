@@ -197,33 +197,50 @@ struct ProjectTreeView: View {
                     .padding(.horizontal, 12)
                     .padding(.bottom, 2)
 
+                GeneralRouteRow(route: .tasks, help: "Open the project task board")
+
+                GeneralRouteRow(route: .briefing, help: "Open project branch briefing")
+                    .popoverTip(RxCodeTips.BriefingTip(), arrowEdge: .trailing)
+            }
+        }
+
+        /// One "General" nav row. Both entries render identically; only the
+        /// route differs, so the styling lives in one place.
+        private struct GeneralRouteRow: View {
+            @Environment(WindowState.self) private var windowState
+            let route: GeneralRoute
+            let help: String
+
+            private var isSelected: Bool { windowState.generalRoute == route }
+
+            var body: some View {
                 Button {
-                    windowState.showingBriefing = true
+                    windowState.generalRoute = route
                 } label: {
                     HStack(spacing: 8) {
-                        Image(systemName: "text.page")
+                        Image(systemName: route.systemImage)
                             .font(.system(size: ClaudeTheme.size(12), weight: .medium))
                             .frame(width: 18, height: 18)
 
-                        Text("Briefing")
+                        Text(route.displayName)
                             .font(.system(size: ClaudeTheme.size(13), weight: .medium))
                             .lineLimit(1)
 
                         Spacer(minLength: 4)
                     }
-                    .foregroundStyle(windowState.showingBriefing ? ClaudeTheme.accent : ClaudeTheme.textSecondary)
+                    .foregroundStyle(isSelected ? ClaudeTheme.accent : ClaudeTheme.textSecondary)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 7)
                     .background(
                         RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
-                            .fill(windowState.showingBriefing ? ClaudeTheme.accent.opacity(0.10) : Color.clear)
+                            .fill(isSelected ? ClaudeTheme.accent.opacity(0.10) : Color.clear)
                     )
                     .padding(.horizontal, 8)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help("Open project branch briefing")
-                .popoverTip(RxCodeTips.BriefingTip(), arrowEdge: .trailing)
+                .help(help)
+                .accessibilityIdentifier("general-route-\(route.rawValue)")
             }
         }
     }
@@ -752,7 +769,7 @@ private struct ProjectChatsList: View {
 
         return ProjectChatRow(
             summary: summary,
-            isCurrent: !windowState.showingBriefing && windowState.currentSessionId == sessionId,
+            isCurrent: windowState.generalRoute == nil && windowState.currentSessionId == sessionId,
             status: status,
             todoProgress: progress,
             onSelect: { onSelectSession(sessionId) },

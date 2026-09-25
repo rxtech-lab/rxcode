@@ -84,8 +84,6 @@ struct RxCodeToolbarContent: ToolbarContent {
             .keyboardShortcut("4", modifiers: .command)
             .accessibilityIdentifier("toggle-inspector-button")
 
-            WhatsNewToolbarButton()
-
             Button {
                 openSettings()
             } label: {
@@ -93,28 +91,6 @@ struct RxCodeToolbarContent: ToolbarContent {
             }
             .help("Settings")
             .accessibilityIdentifier("settings-button")
-        }
-    }
-}
-
-private struct WhatsNewToolbarButton: View {
-    @Environment(AppState.self) private var appState
-    @State private var showWhatsNew = false
-
-    var body: some View {
-        Button {
-            showWhatsNew = true
-        } label: {
-            Image(systemName: "wand.and.stars")
-        }
-        .help("What's New")
-        .accessibilityLabel("What's New")
-        .accessibilityIdentifier("whats-new-button")
-        .sheet(isPresented: $showWhatsNew) {
-            WhatsNewSheet(features: WhatsNewFeature.all) {
-                showWhatsNew = false
-            }
-            .environment(appState)
         }
     }
 }

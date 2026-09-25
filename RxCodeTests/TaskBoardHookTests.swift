@@ -16,6 +16,7 @@ final class TaskBoardHookTests: XCTestCase {
     private var appState: AppState!
     private var hook: TaskBoardHook!
     private var project: Project!
+    private var retryDelay: TimeInterval!
 
     override func setUp() async throws {
         persistence = MockAppStatePersistence()
@@ -23,13 +24,19 @@ final class TaskBoardHookTests: XCTestCase {
         hook = TaskBoardHook()
         project = Project(name: "P", path: "/tmp/p", gitHubRepo: nil)
         appState.projects = [project]
+        // No agent can be spawned here, so every completion check fails and is
+        // retried — without this the hook tests would sit out the backoff.
+        retryDelay = AppState.taskCompletionCheckRetryDelay
+        AppState.taskCompletionCheckRetryDelay = 0
     }
 
     override func tearDown() async throws {
+        AppState.taskCompletionCheckRetryDelay = retryDelay
         persistence = nil
         appState = nil
         hook = nil
         project = nil
+        retryDelay = nil
     }
 
     // MARK: - Helpers
@@ -244,6 +251,109 @@ final class TaskBoardHookTests: XCTestCase {
         XCTAssertTrue(prompt.contains(explanation))
         XCTAssertTrue(task.checkErrorFixPrompt?.contains(explanation) == true)
         XCTAssertEqual(TaskPromptContent.task(in: prompt)?.title, task.title)
+    }
+
+    /// The retry policy: a check that never returned a verdict is worth running
+    /// again, while an explicit COMPLETE/INCOMPLETE is the checker's answer and
+    /// is taken as it stands. (`testHookFlagsTaskWhenCompletionCannotBeVerified`
+    /// covers the task being flagged once the attempts are exhausted.)
+    func testOnlyFailedCompletionChecksAreRetried() {
+        func checkResult(_ text: String, error: String? = nil) -> HookLinkedThreadResult {
+            HookLinkedThreadResult(threadId: "check-1", assistantText: text, error: error)
+        }
+
+        XCTAssertEqual(AppState.taskCompletionCheckMaxAttempts, 3)
+        // Thread could not be sent, the agent errored, it timed out with no
+        // text, and it answered without the marker.
+        XCTAssertEqual(AppState.taskCompletionOutcome(from: nil), .failed(reason: nil))
+        XCTAssertEqual(
+            AppState.taskCompletionOutcome(from: checkResult("", error: "stream failed")),
+            .failed(reason: "stream failed")
+        )
+        XCTAssertEqual(AppState.taskCompletionOutcome(from: checkResult("")), .failed(reason: nil))
+        XCTAssertEqual(
+            AppState.taskCompletionOutcome(from: checkResult("Looks done to me.")),
+            .failed(reason: "Looks done to me.")
+        )
+
+        XCTAssertEqual(
+            AppState.taskCompletionOutcome(from: checkResult("Checks passed.\nTASK_RESULT: COMPLETE")),
+            .verdict(true, explanation: "Checks passed.")
+        )
+        XCTAssertEqual(
+            AppState.taskCompletionOutcome(from: checkResult("One item is missing.\nTASK_RESULT: INCOMPLETE")),
+            .verdict(false, explanation: "One item is missing.")
+        )
+    }
+
+    // MARK: - Completion check status
+
+    private func checkThread(id: String, label: String?) -> ChatSession.Summary {
+        ChatSession.Summary(
+            id: id,
+            projectId: project.id,
+            title: "Task Completion Check",
+            createdAt: Date(),
+            updatedAt: Date(),
+            isPinned: false,
+            parentThreadId: "sess-1",
+            threadLabel: label
+        )
+    }
+
+    /// The in-progress label alone never means "still verifying": a check whose
+    /// verdict never landed keeps it, so the chip follows the live stream.
+    func testCheckThreadStopsVerifyingOnceItsRunEnds() {
+        let summary = checkThread(id: "check-1", label: AppState.taskCompletionCheckLabel)
+
+        XCTAssertEqual(appState.taskCompletionCheckState(for: summary), .unverified)
+
+        var streaming = SessionStreamState()
+        streaming.isStreaming = true
+        appState.sessionStates["check-1"] = streaming
+        XCTAssertEqual(appState.taskCompletionCheckState(for: summary), .verifying)
+
+        appState.sessionStates["check-1"]?.isStreaming = false
+        XCTAssertEqual(appState.taskCompletionCheckState(for: summary), .unverified)
+
+        XCTAssertEqual(
+            appState.taskCompletionCheckState(for: checkThread(id: "check-2", label: AppState.taskCompletionVerifiedLabel)),
+            .verified
+        )
+        XCTAssertNil(appState.taskCompletionCheckState(for: checkThread(id: "check-3", label: "Code Review")))
+    }
+
+    /// The verdict has to land on the thread's *current* id — the CLI may have
+    /// renamed the session (and with it the store row) after the spawn returned
+    /// the key it knew.
+    func testCompletionVerdictLabelsTheRenamedCheckThread() {
+        let pendingKey = "pending-check"
+        let realId = "check-real"
+        appState.threadStore = ThreadStore.inMemory()
+        appState.allSessionSummaries = [checkThread(id: realId, label: AppState.taskCompletionCheckLabel)]
+        appState.threadStore.upsert(appState.allSessionSummaries[0])
+        appState.applySessionIdRedirect(from: pendingKey, to: realId)
+
+        appState.setTaskCompletionLabel(pendingKey, parentThreadId: "sess-1", verified: true)
+
+        XCTAssertEqual(appState.allSessionSummaries[0].threadLabel, AppState.taskCompletionVerifiedLabel)
+        XCTAssertEqual(appState.threadStore.fetch(id: realId)?.threadLabel, AppState.taskCompletionVerifiedLabel)
+    }
+
+    /// A check interrupted by quitting the app has no run left to finish it, so
+    /// loading the store settles it rather than leaving a perpetual "Verifying".
+    func testInterruptedCompletionChecksAreFinalizedOnLoad() {
+        let store = ThreadStore.inMemory()
+        let running = checkThread(id: "check-running", label: AppState.taskCompletionCheckLabel)
+        let decided = checkThread(id: "check-decided", label: AppState.taskCompletionVerifiedLabel)
+        let review = checkThread(id: "review", label: AppState.manualCodeReviewLabel)
+        for summary in [running, decided, review] { store.upsert(summary) }
+
+        XCTAssertEqual(store.finalizeInterruptedCompletionChecks(), [running.id])
+
+        XCTAssertEqual(store.fetch(id: running.id)?.threadLabel, AppState.taskCompletionUnverifiedLabel)
+        XCTAssertEqual(store.fetch(id: decided.id)?.threadLabel, AppState.taskCompletionVerifiedLabel)
+        XCTAssertEqual(store.fetch(id: review.id)?.threadLabel, AppState.manualCodeReviewLabel)
     }
 
     func testChatAgentCanCreateStoryAndTaskInIt() async throws {

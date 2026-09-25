@@ -13,6 +13,11 @@ struct TaskBoardView: View {
     @Environment(WindowState.self) private var windowState
 
     @State private var sheet: TaskBoardSheet?
+    /// Which tab the next new story or task opens on, set by the menu entry
+    /// that asked for it. Cleared with the sheet so a later "+" gets the
+    /// kind's own default back.
+    @State private var newItemMode: TaskCreationMode?
+    @State private var isContentReady = false
 
     private var detailProject: Project? {
         guard let id = windowState.taskDetailProjectId else { return nil }
@@ -23,16 +28,27 @@ struct TaskBoardView: View {
         Group {
             if appState.projects.isEmpty {
                 emptyProjectsState
+            } else if !isContentReady {
+                ProgressView(detailProject == nil ? "Loading projects…" : "Loading project…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .accessibilityIdentifier(detailProject == nil ? "task-overview-loading" : "task-project-loading")
             } else if let detailProject {
-                TaskProjectDetailView(project: detailProject, sheet: $sheet)
+                TaskProjectDetailView(project: detailProject, sheet: $sheet, newItemMode: $newItemMode)
                     .id(detailProject.id)
             } else {
-                TaskOverviewView(sheet: $sheet)
+                TaskOverviewView(sheet: $sheet, newItemMode: $newItemMode)
             }
         }
         .background(ClaudeTheme.background)
-        .sheet(item: $sheet) { payload in
-            TaskFormSheet(payload: payload, defaultProjectId: defaultProjectId)
+        .task {
+            // Give the navigation change a frame to paint before constructing
+            // the project cards or detail page. The boards are loaded at launch.
+            try? await Task.sleep(for: .milliseconds(50))
+            guard !Task.isCancelled else { return }
+            isContentReady = true
+        }
+        .sheet(item: $sheet, onDismiss: { newItemMode = nil }) { payload in
+            TaskFormSheet(payload: payload, defaultProjectId: defaultProjectId, initialMode: newItemMode)
                 .environment(appState)
                 .environment(windowState)
         }
@@ -75,6 +91,7 @@ struct TaskOverviewView: View {
     @Environment(WindowState.self) private var windowState
 
     @Binding var sheet: TaskBoardSheet?
+    @Binding var newItemMode: TaskCreationMode?
     @State private var keyword = ""
     /// The story whose task sheet is open.
     @State private var storySheet: ProjectStory?
@@ -107,9 +124,15 @@ struct TaskOverviewView: View {
                 // Horizontal only: each card fills the page height and scrolls
                 // its own rows, like a GitHub Projects board column.
                 ScrollView(.horizontal) {
-                    HStack(alignment: .top, spacing: Self.cardSpacing) {
+                    LazyHStack(alignment: .top, spacing: Self.cardSpacing) {
                         ForEach(visibleProjects) { project in
-                            TaskProjectSection(project: project, keyword: keyword, sheet: $sheet, storySheet: $storySheet)
+                            TaskProjectSection(
+                                project: project,
+                                keyword: keyword,
+                                sheet: $sheet,
+                                newItemMode: $newItemMode,
+                                storySheet: $storySheet
+                            )
                                 .frame(width: Self.cardWidth)
                                 .frame(maxHeight: .infinity)
                                 .transition(.scale(scale: 0.96).combined(with: .opacity))
@@ -174,27 +197,44 @@ struct TaskOverviewView: View {
 
             Spacer()
 
-            Button {
-                sheet = .story(ProjectStory(projectId: newItemProjectId, title: ""))
+            Menu {
+                TaskCreationMenuItems(
+                    onNewTask: { openNewTask(mode: $0) },
+                    onNewStory: { openNewStory(mode: $0) }
+                )
             } label: {
-                Label("New Story", systemImage: "square.stack.3d.up")
+                Label("New", systemImage: "plus")
             }
-            .buttonStyle(.bordered)
-
-            Button {
-                sheet = .task(ProjectTask(
-                    projectId: newItemProjectId,
-                    title: "",
-                    status: appState.taskBoard(for: newItemProjectId).firstColumn.id
-                ))
-            } label: {
-                Label("New Task", systemImage: "plus")
-            }
+            .menuStyle(.button)
             .buttonStyle(.borderedProminent)
-            .keyboardShortcut("n", modifiers: [.command, .shift])
+            .fixedSize()
+            .help("New task or story, written with AI or in a form")
+            .accessibilityIdentifier("task-board-add")
+            .background {
+                // Menu items don't register key equivalents, so keep ⇧⌘N on a hidden button.
+                Button("") { openNewTask(mode: nil) }
+                    .keyboardShortcut("n", modifiers: [.command, .shift])
+                    .opacity(0)
+                    .frame(width: 0, height: 0)
+                    .accessibilityHidden(true)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
+    }
+
+    private func openNewStory(mode: TaskCreationMode?) {
+        newItemMode = mode
+        sheet = .story(ProjectStory(projectId: newItemProjectId, title: ""))
+    }
+
+    private func openNewTask(mode: TaskCreationMode?) {
+        newItemMode = mode
+        sheet = .task(ProjectTask(
+            projectId: newItemProjectId,
+            title: "",
+            status: appState.taskBoard(for: newItemProjectId).firstColumn.id
+        ))
     }
 }
 
@@ -213,6 +253,7 @@ private struct TaskProjectSection: View {
     let project: Project
     let keyword: String
     @Binding var sheet: TaskBoardSheet?
+    @Binding var newItemMode: TaskCreationMode?
     @Binding var storySheet: ProjectStory?
 
     @State private var isDropTargeted = false
@@ -299,7 +340,7 @@ private struct TaskProjectSection: View {
                 .foregroundStyle(ClaudeTheme.textTertiary)
             if keyword.isEmpty {
                 Button {
-                    sheet = .story(ProjectStory(projectId: project.id, title: ""))
+                    openNewStory(mode: nil)
                 } label: {
                     Label("New Story", systemImage: "square.stack.3d.up")
                 }
@@ -312,38 +353,51 @@ private struct TaskProjectSection: View {
     }
 
     private var header: some View {
-        HStack(spacing: 10) {
-            // Only the title carries the drag: the add button and the menu in
-            // the same row have to stay clickable. A tap gesture rather than a
-            // `Button`, which swallows the drag, as the view tabs do.
-            titleGroup
-                .contentShape(Rectangle())
-                .onTapGesture(perform: openProject)
-                .draggable(TaskProjectTransfer(projectId: project.id)) {
-                    TaskProjectDragPreview(project: project)
-                }
-                .accessibilityAddTraits(.isButton)
-                .help("Open the project's task views — drag onto another card to reorder")
+        HStack(alignment: .top, spacing: 10) {
+            // The counts sit on their own line under the title: side by side
+            // they squeeze the narrow card until a two-digit count wraps.
+            VStack(alignment: .leading, spacing: 6) {
+                // Only the title carries the drag: the add button and the menu
+                // in the same row have to stay clickable. A tap gesture rather
+                // than a `Button`, which swallows the drag, as the view tabs do.
+                titleGroup
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: openProject)
+                    .draggable(TaskProjectTransfer(projectId: project.id)) {
+                        TaskProjectDragPreview(project: project)
+                    }
+                    .accessibilityAddTraits(.isButton)
+                    .help("Open the project's task views — drag onto another card to reorder")
 
-            statusSummary
+                // Never compressed: a squeezed row clips the digits instead of
+                // dropping a count.
+                statusSummary
+                    .fixedSize()
+            }
 
             Spacer(minLength: 8)
 
-            Button {
-                sheet = .story(ProjectStory(projectId: project.id, title: ""))
+            Menu {
+                TaskCreationMenuItems(
+                    onNewTask: { openNewTask(mode: $0) },
+                    onNewStory: { openNewStory(mode: $0) }
+                )
             } label: {
                 Image(systemName: "plus")
             }
-            .buttonStyle(.borderless)
-            .help("New story in this project")
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("New task or story in this project")
+            .accessibilityIdentifier("task-overview-project-add")
 
             Menu {
                 Button("Open Project Board", action: openProject)
                 Divider()
-                Button("New Story") { sheet = .story(ProjectStory(projectId: project.id, title: "")) }
-                Button("New Task") {
-                    sheet = .task(ProjectTask(projectId: project.id, title: "", status: board.firstColumn.id))
-                }
+                TaskCreationMenuItems(
+                    onNewTask: { openNewTask(mode: $0) },
+                    onNewStory: { openNewStory(mode: $0) }
+                )
                 Divider()
                 Button("New Chat") { appState.startNewChat(inProject: project.id, window: windowState) }
             } label: {
@@ -375,9 +429,14 @@ private struct TaskProjectSection: View {
 
     /// Per-status task counts, e.g. ○ 4  ◎ 2  ✓ 7.
     private var statusSummary: some View {
-        HStack(spacing: 8) {
+        let board = board
+        var counts: [TaskStatus: Int] = [:]
+        for task in board.tasks {
+            counts[board.resolvedStatus(of: task), default: 0] += 1
+        }
+        return HStack(spacing: 8) {
             ForEach(board.effectiveColumns) { column in
-                let count = board.tasks(in: column.id).count
+                let count = counts[column.id, default: 0]
                 if count > 0 {
                     HStack(spacing: 3) {
                         TaskStatusIcon(column: column, size: 10)
@@ -385,6 +444,8 @@ private struct TaskProjectSection: View {
                             .font(.system(size: ClaudeTheme.size(11), weight: .medium))
                             .foregroundStyle(ClaudeTheme.textSecondary)
                             .monospacedDigit()
+                            .lineLimit(1)
+                            .fixedSize()
                     }
                 }
             }
@@ -393,6 +454,16 @@ private struct TaskProjectSection: View {
 
     private func openProject() {
         windowState.taskDetailProjectId = project.id
+    }
+
+    private func openNewStory(mode: TaskCreationMode?) {
+        newItemMode = mode
+        sheet = .story(ProjectStory(projectId: project.id, title: ""))
+    }
+
+    private func openNewTask(mode: TaskCreationMode?) {
+        newItemMode = mode
+        sheet = .task(ProjectTask(projectId: project.id, title: "", status: board.firstColumn.id))
     }
 
     /// Order plus the rolled-up status and progress each story card shows.

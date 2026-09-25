@@ -8,6 +8,10 @@ import TipKit
 struct ChatSettingsTab: View {
     @Environment(AppState.self) private var appState
     @State private var isRefreshingAgentStatus = false
+    @State private var installingRuntime: AgentRuntimeInstaller.Runtime?
+    @State private var signingInRuntime: AgentRuntimeInstaller.Runtime?
+    @State private var installSheetRuntime: AgentRuntimeInstaller.Runtime?
+    @State private var runtimeMessage: String?
 
     var body: some View {
         @Bindable var appState = appState
@@ -33,6 +37,13 @@ struct ChatSettingsTab: View {
             }
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .sheet(item: $installSheetRuntime) { runtime in
+            AgentRuntimeInstallSheet(
+                runtime: runtime,
+                installedVersion: installedVersion(in: runtime == .claude ? appState.claudeVersion : appState.codexVersion),
+                onInstalled: { await appState.refreshAgentInstallations() }
+            )
         }
     }
 
@@ -67,28 +78,43 @@ struct ChatSettingsTab: View {
 
             VStack(spacing: 8) {
                 agentRuntimeRow(
+                    runtime: .claude,
                     title: "Claude Code",
                     installed: appState.claudeInstalled,
+                    signedIn: appState.claudeSignedIn,
                     version: appState.claudeVersion,
                     path: appState.claudeBinaryPath
                 )
                 agentRuntimeRow(
+                    runtime: .codex,
                     title: "Codex",
                     installed: appState.codexInstalled,
+                    signedIn: appState.codexSignedIn,
                     version: appState.codexVersion,
                     path: appState.codexBinaryPath
                 )
+            }
+            Text("Downloads use npm and are stored in RxCode's application support folder. Use Manage to install a specific published version.")
+                .font(.system(size: ClaudeTheme.size(11)))
+                .foregroundStyle(.secondary)
+            if let runtimeMessage {
+                Text(runtimeMessage)
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
             }
         }
     }
 
     private func agentRuntimeRow(
+        runtime: AgentRuntimeInstaller.Runtime,
         title: String,
         installed: Bool,
+        signedIn: Bool,
         version: String?,
         path: String?
     ) -> some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .center, spacing: 10) {
             Image(systemName: installed ? "checkmark.circle.fill" : "xmark.circle.fill")
                 .foregroundStyle(installed ? ClaudeTheme.statusSuccess : ClaudeTheme.statusError)
                 .font(.system(size: ClaudeTheme.size(14)))
@@ -106,6 +132,11 @@ struct ChatSettingsTab: View {
                             .font(.system(size: ClaudeTheme.size(11)))
                             .foregroundStyle(.secondary)
                     }
+                    if installed && signedIn {
+                        Text("Signed In")
+                            .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+                            .foregroundStyle(ClaudeTheme.statusSuccess)
+                    }
                 }
 
                 Text(path ?? "No executable detected")
@@ -117,6 +148,31 @@ struct ChatSettingsTab: View {
             }
 
             Spacer(minLength: 0)
+
+            if signingInRuntime == runtime || installingRuntime == runtime {
+                ProgressView().controlSize(.small)
+            }
+            Menu {
+                Button(installed ? "Install Version…" : "Download…") {
+                    installSheetRuntime = runtime
+                }
+                if installed {
+                    Button(signedIn ? LocalizedStringKey("Re-sign In") : LocalizedStringKey("Sign In")) { signIn(runtime) }
+                        .disabled(signingInRuntime != nil)
+                }
+                if path == AgentRuntimeInstaller.executablePath(for: runtime) {
+                    Divider()
+                    Button("Remove", role: .destructive) { remove(runtime) }
+                        .disabled(installingRuntime != nil)
+                }
+            } label: {
+                Text(installed ? "Manage" : "Install")
+            }
+            .menuStyle(.button)
+            .fixedSize()
+            .controlSize(.small)
+            .disabled(installingRuntime != nil)
+            .accessibilityLabel("\(title) actions")
         }
         .padding(10)
         .background(Color(NSColor.controlBackgroundColor))
@@ -125,6 +181,57 @@ struct ChatSettingsTab: View {
             RoundedRectangle(cornerRadius: 8)
                 .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1)
         )
+    }
+
+    private func installedVersion(in output: String?) -> String? {
+        guard let output,
+              let range = output.range(
+                of: #"[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?"#,
+                options: .regularExpression
+              )
+        else { return nil }
+        return String(output[range])
+    }
+
+    private func remove(_ runtime: AgentRuntimeInstaller.Runtime) {
+        installingRuntime = runtime
+        runtimeMessage = nil
+        Task {
+            defer { installingRuntime = nil }
+            do {
+                try await AgentRuntimeInstaller.shared.uninstall(runtime)
+                await appState.refreshAgentInstallations()
+                runtimeMessage = "RxCode's managed copy was removed."
+            } catch {
+                runtimeMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func signIn(_ runtime: AgentRuntimeInstaller.Runtime) {
+        signingInRuntime = runtime
+        runtimeMessage = nil
+        Task {
+            defer { signingInRuntime = nil }
+            do {
+                switch runtime {
+                case .codex:
+                    try await appState.codex.signIn()
+                case .claude:
+                    do {
+                        try await appState.claude.signIn()
+                    } catch {
+                        try ClaudeCodeServer.openLoginInTerminal(binary: appState.claudeBinaryPath ?? "claude")
+                        runtimeMessage = "Complete Claude Code sign-in in Terminal."
+                        return
+                    }
+                }
+                runtimeMessage = "Sign-in completed."
+                await appState.refreshAgentSignInStatus()
+            } catch {
+                runtimeMessage = error.localizedDescription
+            }
+        }
     }
 
     // MARK: - Archive Section

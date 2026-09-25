@@ -9,9 +9,49 @@ import RxCodeCore
 /// The board CRUD these operate on lives in `AppState+Tasks.swift`.
 extension AppState {
 
-    static let taskCompletionCheckLabel = "Task Completion Check"
-    static let taskCompletionVerifiedLabel = "Task Completion Check: Verified"
-    static let taskCompletionUnverifiedLabel = "Task Completion Check: Unverified"
+    static let taskCompletionCheckLabel = TaskCompletionCheckLabel.inProgress
+    static let taskCompletionVerifiedLabel = TaskCompletionCheckLabel.verified
+    static let taskCompletionUnverifiedLabel = TaskCompletionCheckLabel.unverified
+
+    // MARK: - Completion check status
+
+    /// What a thread's task-completion check is currently saying, or `nil` when
+    /// the thread is not a check thread. Drives the sidebar chip.
+    enum TaskCompletionCheckState {
+        case verifying
+        case verified
+        case unverified
+    }
+
+    /// Reads the check state of `summary`, treating a check thread that is no
+    /// longer streaming as finished without a verdict.
+    ///
+    /// The in-progress label is persisted, so on its own it cannot say whether
+    /// the check is still running: a check whose verdict never landed — the
+    /// spawn timed out, the turn was cancelled, the app quit mid-check — keeps
+    /// that label forever and the row goes on claiming to verify. The live
+    /// stream is the authority on "still running", so ask it.
+    func taskCompletionCheckState(for summary: ChatSession.Summary) -> TaskCompletionCheckState? {
+        switch summary.threadLabel {
+        case TaskCompletionCheckLabel.inProgress:
+            let key = resolveCurrentSessionId(summary.id)
+            return sessionActivity[key]?.isStreaming == true ? .verifying : .unverified
+        case TaskCompletionCheckLabel.verified:
+            return .verified
+        case TaskCompletionCheckLabel.unverified:
+            return .unverified
+        default:
+            return nil
+        }
+    }
+
+    /// How many times the completion check is run before the task is flagged
+    /// for attention. Only a *failed* check is retried — see
+    /// `advanceTaskAfterSessionEnd`.
+    static let taskCompletionCheckMaxAttempts = 3
+    /// Backoff between completion-check attempts, so a provider hiccup or rate
+    /// limit isn't retried instantly. A `var` only so tests don't wait it out.
+    static var taskCompletionCheckRetryDelay: TimeInterval = 2
 
     // MARK: - Chat navigation
 
@@ -258,7 +298,9 @@ extension AppState {
     // MARK: - Column triggers
 
     /// Check a finished task in a separate linked thread before routing it to
-    /// Pending Review. An unclear result is treated as needing attention.
+    /// Pending Review. A check that fails to produce a verdict is retried up to
+    /// `taskCompletionCheckMaxAttempts` times; an unclear result after that is
+    /// treated as needing attention.
     func advanceTaskAfterSessionEnd(_ payload: SessionEndPayload) async -> Bool {
         let resolvedKey = resolveCurrentSessionId(payload.sessionKey)
         guard let task = taskBoards.values.flatMap(\.tasks).first(where: {
@@ -287,27 +329,35 @@ extension AppState {
             Agent's final response: \(payload.lastAssistantText)
             """
             let selection = hookController.resolveAgentModelSelection(storedModel: nil, fallbackSessionId: payload.sessionId)
-            if let result = await hookController.spawnLinkedThread(
-                projectId: task.projectId,
-                parentThreadId: payload.sessionId,
-                label: Self.taskCompletionCheckLabel,
-                agentProvider: selection?.provider,
-                model: selection?.model,
-                prompt: prompt,
-                timeoutSeconds: 300
-            ) {
-                let verdict = result.error == nil ? Self.taskCompletionVerdict(from: result.assistantText) : nil
-                setTaskCompletionLabel(
-                    result.threadId,
+
+            // Only a *failed* check is retried: a spawn/transport error or a
+            // response that never reaches the verdict marker says nothing about
+            // the task, while an explicit INCOMPLETE is a real answer and is
+            // taken on the first attempt. Each attempt spawns its own labelled
+            // thread, so the retries stay auditable from the parent thread.
+            attempts: for attempt in 1...Self.taskCompletionCheckMaxAttempts {
+                switch await runTaskCompletionCheck(
+                    projectId: task.projectId,
                     parentThreadId: payload.sessionId,
-                    verified: verdict == true
-                )
-                if let error = result.error, !error.isEmpty {
-                    reason = error
-                } else {
-                    complete = verdict == true
-                    if !complete, let explanation = Self.taskCompletionExplanation(from: result.assistantText) {
-                        reason = explanation
+                    prompt: prompt,
+                    selection: selection
+                ) {
+                case .verdict(let verified, let explanation):
+                    complete = verified
+                    if !verified, let explanation { reason = explanation }
+                    break attempts
+
+                case .failed(let failure):
+                    if let failure { reason = failure }
+                    logger.error("[Tasks] completion check attempt \(attempt, privacy: .public)/\(Self.taskCompletionCheckMaxAttempts, privacy: .public) failed for task \(task.id.uuidString, privacy: .public): \(failure ?? "no verdict in the response", privacy: .public)")
+                    // Don't spend another agent run once the card or its thread
+                    // has moved on — the guard below would discard the result.
+                    guard attempt < Self.taskCompletionCheckMaxAttempts,
+                          self.task(id: task.id)?.status == task.status,
+                          !hookController.threadHasNewerActivity(sessionId: payload.sessionId)
+                    else { break attempts }
+                    if Self.taskCompletionCheckRetryDelay > 0 {
+                        try? await Task.sleep(nanoseconds: UInt64(Self.taskCompletionCheckRetryDelay * 1_000_000_000))
                     }
                 }
             }
@@ -353,16 +403,78 @@ extension AppState {
         return explanation.isEmpty ? nil : explanation
     }
 
-    private func setTaskCompletionLabel(_ sessionId: String, parentThreadId: String, verified: Bool) {
+    /// What one completion-check run produced.
+    enum TaskCompletionCheckOutcome: Equatable {
+        /// The checker answered: `true` for COMPLETE, `false` for INCOMPLETE,
+        /// with the prose it gave ahead of the marker.
+        case verdict(Bool, explanation: String?)
+        /// The checker itself produced no verdict, with the error text when the
+        /// agent reported one. Worth another attempt.
+        case failed(reason: String?)
+
+        var isVerified: Bool {
+            if case .verdict(true, _) = self { return true }
+            return false
+        }
+    }
+
+    /// The retry policy, as a pure function of what the spawned thread returned:
+    /// a missing result (the thread could not be sent), a reported error, or a
+    /// response that never reaches the `TASK_RESULT:` marker are all checker
+    /// failures and are retried; an explicit COMPLETE/INCOMPLETE is a verdict.
+    static func taskCompletionOutcome(from result: HookLinkedThreadResult?) -> TaskCompletionCheckOutcome {
+        guard let result else { return .failed(reason: nil) }
+        if let error = result.error, !error.isEmpty { return .failed(reason: error) }
+        let explanation = taskCompletionExplanation(from: result.assistantText)
+        guard result.error == nil, let verdict = taskCompletionVerdict(from: result.assistantText) else {
+            return .failed(reason: explanation)
+        }
+        return .verdict(verdict, explanation: explanation)
+    }
+
+    /// Runs the completion check once in its own linked thread and labels that
+    /// thread with the outcome.
+    private func runTaskCompletionCheck(
+        projectId: UUID,
+        parentThreadId: String,
+        prompt: String,
+        selection: (provider: AgentProvider, model: String)?
+    ) async -> TaskCompletionCheckOutcome {
+        let result = await hookController.spawnLinkedThread(
+            projectId: projectId,
+            parentThreadId: parentThreadId,
+            label: Self.taskCompletionCheckLabel,
+            agentProvider: selection?.provider,
+            model: selection?.model,
+            prompt: prompt,
+            timeoutSeconds: 300
+        )
+        let outcome = Self.taskCompletionOutcome(from: result)
+        if let result {
+            setTaskCompletionLabel(result.threadId, parentThreadId: parentThreadId, verified: outcome.isVerified)
+        }
+        return outcome
+    }
+
+    /// Replaces the check thread's in-progress label with its verdict.
+    ///
+    /// The id has to be resolved through the redirect chain first: the spawn
+    /// returns the key it knew when it gave up waiting, and the CLI can rotate
+    /// `session_id` after that (a `pending-…` key whose rename landed late, or
+    /// a mid-run rotation). The thread row is renamed with the session, so
+    /// writing to the stale id silently does nothing — which left the thread on
+    /// "Task Completion Check" and the sidebar chip reading "Verifying" forever.
+    func setTaskCompletionLabel(_ sessionId: String, parentThreadId: String, verified: Bool) {
         guard !sessionId.isEmpty else { return }
+        let resolved = resolveCurrentSessionId(sessionId)
         let label = verified ? Self.taskCompletionVerifiedLabel : Self.taskCompletionUnverifiedLabel
         threadStore.setThreadLinkage(
-            sessionId: sessionId,
+            sessionId: resolved,
             parentThreadId: parentThreadId,
             threadLabel: label,
             skipHooks: true
         )
-        if let index = allSessionSummaries.firstIndex(where: { $0.id == sessionId }) {
+        if let index = allSessionSummaries.firstIndex(where: { $0.id == resolved }) {
             allSessionSummaries[index].threadLabel = label
         }
     }

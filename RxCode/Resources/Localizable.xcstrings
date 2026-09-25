@@ -262,6 +262,9 @@
         }
       }
     },
+    "%@ actions" : {
+
+    },
     "%@ copy" : {
       "localizations" : {
         "zh-Hans" : {
@@ -359,6 +362,9 @@
           }
         }
       }
+    },
+    "%@ version" : {
+
     },
     "%@ wants to pair" : {
       "localizations" : {
@@ -1301,11 +1307,22 @@
       }
     },
     "Add a task to this column" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "向此列添加任务"
+          }
+        }
+      }
+    },
+    "Add a task to this column, or a story" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "向此列添加任务，或新建故事"
           }
         }
       }
@@ -1757,6 +1774,16 @@
         }
       }
     },
+    "Add Task…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加任务…"
+          }
+        }
+      }
+    },
     "Add to projects" : {
       "localizations" : {
         "en" : {
@@ -1826,6 +1853,9 @@
           }
         }
       }
+    },
+    "Add…" : {
+
     },
     "Added" : {
       "localizations" : {
@@ -2001,6 +2031,9 @@
           }
         }
       }
+    },
+    "AI" : {
+
     },
     "AI generate" : {
       "localizations" : {
@@ -3631,6 +3664,9 @@
         }
       }
     },
+    "Choose a published stable npm or PyPI release. RxCode will pin and verify it before saving." : {
+
+    },
     "Choose an existing value" : {
       "localizations" : {
         "zh-Hans" : {
@@ -3640,6 +3676,9 @@
           }
         }
       }
+    },
+    "Choose File…" : {
+
     },
     "Choose one" : {
       "localizations" : {
@@ -3915,6 +3954,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "点击 + 添加一个。"
+          }
+        }
+      }
+    },
+    "Click a task to edit it before the story is created." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建故事前，点击任务即可编辑。"
           }
         }
       }
@@ -5006,6 +5055,9 @@
         }
       }
     },
+    "Could not load published versions." : {
+
+    },
     "Could not load registry. Check your network connection." : {
       "localizations" : {
         "ko" : {
@@ -5021,6 +5073,9 @@
           }
         }
       }
+    },
+    "Could not read the selected file." : {
+
     },
     "Could not start pairing. Pick a different relay server or add a new one." : {
       "localizations" : {
@@ -5274,12 +5329,61 @@
         }
       }
     },
+    "Create Story and Tasks" : {
+
+    },
+    "Create Story with AI" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用 AI 创建故事"
+          }
+        }
+      }
+    },
+    "Create Story with Form" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用表单创建故事"
+          }
+        }
+      }
+    },
+    "Create Story with Tasks" : {
+
+    },
+    "Create Task" : {
+
+    },
     "Create Task from Chat with AI" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "使用 AI 从聊天创建任务"
+          }
+        }
+      }
+    },
+    "Create Task with AI" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用 AI 创建任务"
+          }
+        }
+      }
+    },
+    "Create Task with Form" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用表单创建任务"
           }
         }
       }
@@ -5454,6 +5558,9 @@
           }
         }
       }
+    },
+    "Currently installed: %@" : {
+
     },
     "Custom" : {
       "extractionState" : "stale",
@@ -6210,6 +6317,18 @@
         }
       }
     },
+    "Describe the story and tasks, or choose a text or PDF file." : {
+
+    },
+    "Describe the story and the tasks it needs" : {
+
+    },
+    "Describe the task, or choose a text or PDF file." : {
+
+    },
+    "Describe what needs doing" : {
+
+    },
     "Describe when this menu item should appear. The default model writes the Swift condition and it's compiled before use." : {
       "localizations" : {
         "ko" : {
@@ -6691,6 +6810,22 @@
         }
       }
     },
+    "Download…" : {
+
+    },
+    "Downloads use npm and are stored in RxCode's application support folder. Use Manage to install a specific published version." : {
+
+    },
+    "Draft" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "草稿"
+          }
+        }
+      }
+    },
     "Drag a card here." : {
       "localizations" : {
         "zh-Hans" : {
@@ -6957,6 +7092,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "编辑故事"
+          }
+        }
+      }
+    },
+    "Edit Task" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑任务"
           }
         }
       }
@@ -8024,6 +8169,9 @@
         }
       }
     },
+    "Form" : {
+
+    },
     "Format the JSON body." : {
       "localizations" : {
         "ko" : {
@@ -8138,6 +8286,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "使用 AI 生成条件"
+          }
+        }
+      }
+    },
+    "Generate Draft" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "生成草稿"
           }
         }
       }
@@ -8360,6 +8518,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "全局默认值加项目级覆盖"
+          }
+        }
+      }
+    },
+    "Go back and change the description" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "返回修改描述"
           }
         }
       }
@@ -8985,6 +9153,9 @@
         }
       }
     },
+    "Install %@" : {
+
+    },
     "Install a DOCS_UPLOAD_TOKEN secret so this repo's CI can upload docs. RxCode mints the token and stores it as the repository's GitHub Actions secret for you — no terminal needed." : {
       "localizations" : {
         "ko" : {
@@ -9016,6 +9187,9 @@
           }
         }
       }
+    },
+    "Install ACP Client" : {
+
     },
     "Install additional ACP-compatible agents — RxCode downloads the right binary for macOS and probes the model list." : {
       "localizations" : {
@@ -9161,6 +9335,12 @@
         }
       }
     },
+    "Install Version" : {
+
+    },
+    "Install Version…" : {
+
+    },
     "installed" : {
       "localizations" : {
         "ko" : {
@@ -9252,6 +9432,9 @@
           }
         }
       }
+    },
+    "Installing…" : {
+
     },
     "Interface" : {
       "localizations" : {
@@ -9446,6 +9629,9 @@
           }
         }
       }
+    },
+    "Latest" : {
+
     },
     "Latest release: %@" : {
       "localizations" : {
@@ -9648,6 +9834,12 @@
           }
         }
       }
+    },
+    "Loading project…" : {
+
+    },
+    "Loading projects…" : {
+
     },
     "Loading registry…" : {
       "localizations" : {
@@ -9865,6 +10057,9 @@
           }
         }
       }
+    },
+    "Manage ACP Version" : {
+
     },
     "Manage agents that speak the Agent Client Protocol. Detected from agentclientprotocol.com." : {
       "localizations" : {
@@ -10748,6 +10943,16 @@
         }
       }
     },
+    "New" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建"
+          }
+        }
+      }
+    },
     "New Chat" : {
       "localizations" : {
         "en" : {
@@ -10862,6 +11067,7 @@
       }
     },
     "New story in this project" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -10892,11 +11098,42 @@
       }
     },
     "New task — click the arrow for stories, chats, columns and fields" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "新建任务 — 点击箭头可创建故事、对话、列和字段"
+          }
+        }
+      }
+    },
+    "New task or story in this project" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在此项目中新建任务或故事"
+          }
+        }
+      }
+    },
+    "New task or story, written with AI or in a form" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建任务或故事，可使用 AI 或表单"
+          }
+        }
+      }
+    },
+    "New task, story or chat, or manage columns and fields" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建任务、故事或对话，或管理列和字段"
           }
         }
       }
@@ -12188,6 +12425,9 @@
           }
         }
       }
+    },
+    "Not installed" : {
+
     },
     "Not signed in" : {
       "localizations" : {
@@ -13870,6 +14110,9 @@
         }
       }
     },
+    "Re-sign In" : {
+
+    },
     "Ready to start." : {
       "localizations" : {
         "ko" : {
@@ -14067,6 +14310,9 @@
           }
         }
       }
+    },
+    "Registry release: %@" : {
+
     },
     "Reindex all threads" : {
       "localizations" : {
@@ -14387,6 +14633,9 @@
           }
         }
       }
+    },
+    "Remove task" : {
+
     },
     "Remove this docs repository?" : {
       "localizations" : {
@@ -14933,6 +15182,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "查看 CLI 设置检查"
+          }
+        }
+      }
+    },
+    "Revise" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "修改"
           }
         }
       }
@@ -17210,6 +17469,9 @@
         }
       }
     },
+    "Signed In" : {
+
+    },
     "sk-..." : {
       "localizations" : {
         "ko" : {
@@ -17583,6 +17845,16 @@
         }
       }
     },
+    "Suggested properties" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "建议的属性"
+          }
+        }
+      }
+    },
     "Summarization model" : {
       "localizations" : {
         "ko" : {
@@ -17777,6 +18049,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "任务"
+          }
+        }
+      }
+    },
+    "Task details" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "任务详情"
+          }
+        }
+      }
+    },
+    "Task title" : {
+
+    },
+    "Task Verification" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "작업 검증"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "任务验证"
           }
         }
       }
@@ -18016,6 +18317,12 @@
     "The run was interrupted before completion could be verified." : {
 
     },
+    "The selected file contains no readable text." : {
+
+    },
+    "The selected file is too large (20 MB maximum)." : {
+
+    },
     "The session id of the thread to continue. Leave a {{sessionId}} placeholder to target the tapped thread." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -18034,6 +18341,12 @@
       }
     },
     "The story will be removed. Its tasks will remain on the board." : {
+
+    },
+    "The suggestion agent did not respond. Review this draft before creating it." : {
+
+    },
+    "The suggestion agent did not respond. Review this single-task draft before creating it." : {
 
     },
     "The tag is removed from every story, task and view that uses it." : {
@@ -18161,6 +18474,9 @@
           }
         }
       }
+    },
+    "This client has a binary distribution only. The registry supplies a download for its current release." : {
+
     },
     "This form couldn't be rendered. Edit the raw template JSON instead (name, enabled, mergeSettings)." : {
       "localizations" : {
@@ -18768,6 +19084,9 @@
         }
       }
     },
+    "Update to %@" : {
+
+    },
     "Updated %@" : {
       "localizations" : {
         "ko" : {
@@ -19213,6 +19532,15 @@
           }
         }
       }
+    },
+    "Version %@" : {
+
+    },
+    "Version %@ (not pinned)" : {
+
+    },
+    "Version…" : {
+
     },
     "Versions" : {
       "localizations" : {

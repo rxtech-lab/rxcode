@@ -118,7 +118,8 @@ extension ACPService {
     func probeModels(
         spec: ACPClientSpec,
         cwd: String,
-        timeout: Duration = .seconds(20)
+        timeout: Duration = .seconds(20),
+        allowSessionFailure: Bool = false
     ) async throws -> ACPModelConfig? {
         let streamId = UUID()
         let key = "probe-\(streamId.uuidString)"
@@ -149,7 +150,10 @@ extension ACPService {
         do {
             let result = try await withThrowingTaskGroup(of: ACPModelConfig?.self) { group in
                 group.addTask {
-                    try await self.runProbeSequence(key: key, spec: spec, cwd: cwd)
+                    try await self.runProbeSequence(
+                        key: key, spec: spec, cwd: cwd,
+                        allowSessionFailure: allowSessionFailure
+                    )
                 }
                 group.addTask {
                     try await Task.sleep(for: timeout)
@@ -178,7 +182,8 @@ extension ACPService {
     func runProbeSequence(
         key: String,
         spec: ACPClientSpec,
-        cwd: String
+        cwd: String,
+        allowSessionFailure: Bool = false
     ) async throws -> ACPModelConfig? {
         logger.info("[ACP] probe → initialize \(spec.displayName, privacy: .public)")
         _ = try await sendRequest(
@@ -197,14 +202,21 @@ extension ACPService {
         logger.info("[ACP] probe ← initialize ok \(spec.displayName, privacy: .public)")
 
         logger.info("[ACP] probe → session/new \(spec.displayName, privacy: .public)")
-        let newResult = try await sendRequest(
-            key: key,
-            method: "session/new",
-            params: [
-                "cwd": .string(cwd),
-                "mcpServers": .array([])
-            ]
-        )
+        let newResult: JSONValue
+        do {
+            newResult = try await sendRequest(
+                key: key,
+                method: "session/new",
+                params: [
+                    "cwd": .string(cwd),
+                    "mcpServers": .array([])
+                ]
+            )
+        } catch {
+            guard allowSessionFailure else { throw error }
+            logger.info("[ACP] package launched but session/new failed for \(spec.displayName, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
         let optionCount = newResult.objectValue?["configOptions"]?.arrayValue?.count ?? 0
         logger.info("[ACP] probe ← session/new ok \(spec.displayName, privacy: .public) configOptions=\(optionCount)")
 

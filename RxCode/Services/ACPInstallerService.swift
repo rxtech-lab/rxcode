@@ -18,6 +18,8 @@ enum ACPInstallError: LocalizedError {
     case extractFailed(stderr: String, exitCode: Int32)
     case cmdMissing(path: String)
     case noCompatibleDistribution
+    case invalidPackageVersion(package: String, version: String)
+    case historicalBinaryUnavailable(version: String)
 
     var errorDescription: String? {
         switch self {
@@ -31,6 +33,10 @@ enum ACPInstallError: LocalizedError {
             return "Executable not found at \(path) after extraction"
         case .noCompatibleDistribution:
             return "No compatible distribution for this platform."
+        case .invalidPackageVersion(let package, let version):
+            return "Cannot pin \(package) to version \(version)."
+        case .historicalBinaryUnavailable(let version):
+            return "Version \(version) is unavailable for this binary-only client. The ACP registry provides a download for its current release only."
         }
     }
 }

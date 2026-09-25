@@ -75,6 +75,7 @@ actor ClaudeCodeServer {
         case processNotRunning
         case stdinUnavailable
         case spawnFailed(String)
+        case interactiveLoginRequired
 
         var errorDescription: String? {
             switch self {
@@ -88,6 +89,8 @@ actor ClaudeCodeServer {
                 return "stdin pipe is not available."
             case .spawnFailed(let detail):
                 return "Failed to spawn claude process: \(detail)"
+            case .interactiveLoginRequired:
+                return "Claude Code needs an interactive terminal to complete sign-in."
             }
         }
     }

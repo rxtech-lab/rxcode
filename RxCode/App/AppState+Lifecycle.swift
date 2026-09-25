@@ -244,8 +244,17 @@ extension AppState {
             // Restore an existing rxauth session (token refresh runs silently).
             // One-time migration: purge the legacy GitHub device-flow access
             // token from the old `com.claudework.github` keychain entry so it
-            // never gets re-used. `try?` — failure (no entry) is the happy path.
-            try? KeychainHelper.delete(service: "com.claudework.github", account: "access_token")
+            // never gets re-used. Runs off the main actor and only until it
+            // succeeds (a missing entry counts): a `SecItem` call can block for
+            // seconds on a keychain permission prompt, which froze launch.
+            let legacyTokenPurgedKey = "didPurgeLegacyGitHubAccessToken"
+            if !UserDefaults.standard.bool(forKey: legacyTokenPurgedKey) {
+                Task.detached(priority: .utility) {
+                    if (try? KeychainHelper.delete(service: "com.claudework.github", account: "access_token")) != nil {
+                        UserDefaults.standard.set(true, forKey: legacyTokenPurgedKey)
+                    }
+                }
+            }
             // `OAuthManager.checkExistingAuth` refreshes the access token if it
             // has expired and starts its own 5-minute refresh timer, so no
             // extra scheduling is needed here.
@@ -376,6 +385,19 @@ extension AppState {
             codexModels = []
             logger.info("Codex CLI not detected; Codex model list cleared")
         }
+
+        await refreshAgentSignInStatus()
+    }
+
+    /// Re-read each CLI's stored credentials so settings can offer
+    /// "Re-sign In" instead of "Sign In" when an account is already linked.
+    func refreshAgentSignInStatus() async {
+        let claude = claude, codex = codex
+        let checkClaude = claudeInstalled, checkCodex = codexInstalled
+        async let claudeSignedIn = checkClaude ? claude.isSignedIn() : false
+        async let codexSignedIn = checkCodex ? codex.isSignedIn() : false
+        self.claudeSignedIn = await claudeSignedIn
+        self.codexSignedIn = await codexSignedIn
     }
 
     func refreshOpenAISummarizationModels() async {

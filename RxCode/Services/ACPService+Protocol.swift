@@ -466,12 +466,18 @@ extension ACPService {
         let options = params.objectValue?["options"]?.arrayValue ?? []
         let wantKind: String
         switch decision {
-        case .allow, .allowSessionTool, .allowAlwaysCommand, .allowAndSetMode:
+        case .allowSessionTool, .allowAlwaysCommand:
+            // Broad grants map to the agent's own "always" option so it stops asking.
+            wantKind = "allow_always"
+        case .allow, .allowAndSetMode:
             wantKind = "allow_once"
         case .deny, .denyWithReason:
             wantKind = "reject_once"
         }
         let chosen = options.first { $0.objectValue?["kind"]?.stringValue == wantKind }
+            ?? (wantKind == "allow_always"
+                ? options.first { $0.objectValue?["kind"]?.stringValue == "allow_once" }
+                : nil)
             ?? options.first
         let optionId = chosen?.objectValue?["optionId"]?.stringValue ?? wantKind
         logger.info("[ACP] permission reply wantKind=\(wantKind, privacy: .public) optionId=\(optionId, privacy: .public)")

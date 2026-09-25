@@ -330,15 +330,51 @@ extension AppState {
     /// then falls back to whatever else the registry declares (`npx`/`uvx`).
     /// After install, probes the agent (`initialize` + `session/new`) to
     /// populate the model picker from its advertised `configOptions`.
-    func installACPClient(from agent: ACPRegistryAgent) async throws -> ACPClientSpec {
-        let launch = try await resolveLaunch(for: agent)
+    func installACPClient(from agent: ACPRegistryAgent, version: String? = nil) async throws -> ACPClientSpec {
+        let selectedVersion = version ?? agent.version
+        let launch = try await resolveLaunch(for: agent, version: selectedVersion)
         let spec = ACPClientSpec(
             registryId: agent.id,
+            installedVersion: selectedVersion,
             displayName: agent.name,
             launch: launch,
             iconURL: agent.icon
         )
-        return await probedSpec(spec, agentId: agent.id)
+        return try await preparedInstalledSpec(spec, agentId: agent.id)
+    }
+
+    /// Install a newer registry release while retaining the user's client
+    /// identity, enablement, model override, arguments, and environment.
+    func updateACPClient(id: String, from agent: ACPRegistryAgent, version: String? = nil) async throws {
+        guard let current = acpClients.first(where: { $0.id == id }),
+              current.registryId == agent.id else { return }
+        let selectedVersion = version ?? agent.version
+        let launch = try await resolveLaunch(for: agent, version: selectedVersion)
+        var updated = current
+        updated.launch = launch
+        updated.installedVersion = selectedVersion
+        updated.iconURL = agent.icon
+        updated = try await preparedInstalledSpec(updated, agentId: agent.id)
+        updateACPClient(updated)
+    }
+
+    /// A package launch must actually start the selected release before its
+    /// version is recorded. A missing model selector is still a valid probe.
+    func preparedInstalledSpec(_ spec: ACPClientSpec, agentId: String) async throws -> ACPClientSpec {
+        switch spec.launch {
+        case .npx, .uvx:
+            var result = spec
+            let config = try await acp.probeModels(
+                spec: spec, cwd: NSHomeDirectory(),
+                timeout: .seconds(90), allowSessionFailure: true
+            )
+            result.modelConfigId = config?.configId
+            result.models = config?.options.map(\.value) ?? []
+            result.modelOptions = config?.options
+            return result
+        case .binary, .custom:
+            return await probedSpec(spec, agentId: agentId)
+        }
     }
 
     /// Re-probes an installed client and persists the result. If the probe
@@ -405,7 +441,25 @@ extension AppState {
         }.joined(separator: ", ")
     }
 
-    func resolveLaunch(for agent: ACPRegistryAgent) async throws -> ACPClientSpec.LaunchKind {
+    func resolveLaunch(for agent: ACPRegistryAgent, version: String) async throws -> ACPClientSpec.LaunchKind {
+        guard ACPPackageVersion.isValid(version) else {
+            throw ACPInstallError.invalidPackageVersion(package: agent.id, version: version)
+        }
+        if version != agent.version {
+            if let npx = agent.distribution.npx {
+                guard let package = ACPPackageVersion.npx(npx.package, version: version) else {
+                    throw ACPInstallError.invalidPackageVersion(package: npx.package, version: version)
+                }
+                return .npx(package: package, args: npx.args ?? [], env: npx.env ?? [:])
+            }
+            if let uvx = agent.distribution.uvx {
+                guard let package = ACPPackageVersion.uvx(uvx.package, version: version) else {
+                    throw ACPInstallError.invalidPackageVersion(package: uvx.package, version: version)
+                }
+                return .uvx(package: package, args: uvx.args ?? [], env: uvx.env ?? [:])
+            }
+            throw ACPInstallError.historicalBinaryUnavailable(version: version)
+        }
         // Prefer the platform binary; on download/extract failure, fall through.
         if let bin = agent.distribution.binary?[ACPPlatform.current] {
             do {
@@ -415,19 +469,31 @@ extension AppState {
                 return .binary(path: path, args: bin.args ?? [], env: bin.env ?? [:])
             } catch {
                 if let npx = agent.distribution.npx {
-                    return .npx(package: npx.package, args: npx.args ?? [], env: npx.env ?? [:])
+                    guard let package = ACPPackageVersion.npx(npx.package, version: agent.version) else {
+                        throw ACPInstallError.invalidPackageVersion(package: npx.package, version: agent.version)
+                    }
+                    return .npx(package: package, args: npx.args ?? [], env: npx.env ?? [:])
                 }
                 if let uvx = agent.distribution.uvx {
-                    return .uvx(package: uvx.package, args: uvx.args ?? [], env: uvx.env ?? [:])
+                    guard let package = ACPPackageVersion.uvx(uvx.package, version: agent.version) else {
+                        throw ACPInstallError.invalidPackageVersion(package: uvx.package, version: agent.version)
+                    }
+                    return .uvx(package: package, args: uvx.args ?? [], env: uvx.env ?? [:])
                 }
                 throw error
             }
         }
         if let npx = agent.distribution.npx {
-            return .npx(package: npx.package, args: npx.args ?? [], env: npx.env ?? [:])
+            guard let package = ACPPackageVersion.npx(npx.package, version: agent.version) else {
+                throw ACPInstallError.invalidPackageVersion(package: npx.package, version: agent.version)
+            }
+            return .npx(package: package, args: npx.args ?? [], env: npx.env ?? [:])
         }
         if let uvx = agent.distribution.uvx {
-            return .uvx(package: uvx.package, args: uvx.args ?? [], env: uvx.env ?? [:])
+            guard let package = ACPPackageVersion.uvx(uvx.package, version: agent.version) else {
+                throw ACPInstallError.invalidPackageVersion(package: uvx.package, version: agent.version)
+            }
+            return .uvx(package: package, args: uvx.args ?? [], env: uvx.env ?? [:])
         }
         throw ACPInstallError.noCompatibleDistribution
     }

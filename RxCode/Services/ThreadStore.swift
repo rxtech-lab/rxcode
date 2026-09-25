@@ -721,6 +721,24 @@ final class ThreadStore {
         save()
     }
 
+    /// Finalize completion-check threads left mid-check by a previous launch.
+    /// Their run died with the process, so no verdict is ever coming — without
+    /// this the sidebar rebuilds them as a "Verifying" chip that never resolves.
+    /// Returns the ids that were relabelled.
+    @discardableResult
+    func finalizeInterruptedCompletionChecks() -> [String] {
+        let inProgress = TaskCompletionCheckLabel.inProgress
+        let descriptor = FetchDescriptor<ChatThread>(
+            predicate: #Predicate { $0.threadLabel == inProgress }
+        )
+        guard let rows = try? context.fetch(descriptor), !rows.isEmpty else { return [] }
+        for row in rows {
+            row.threadLabel = TaskCompletionCheckLabel.unverified
+        }
+        save()
+        return rows.map(\.id)
+    }
+
     /// Stamp linkage metadata (parent thread / label / skip-hooks) onto a thread
     /// row. Used right after a linked `[Code Review]` thread's real id resolves.
     func setThreadLinkage(

@@ -4,66 +4,129 @@ import UniformTypeIdentifiers
 
 /// Create/edit sheet for a task or a story.
 ///
+/// A new record can be written two ways: described once to the suggestion
+/// agent (AI), or filled in field by field (Form). The kind and the mode are
+/// both picked from the add menu that opens the sheet, so the sheet itself
+/// shows only the one flow asked for.
+///
 /// Edits a local draft and commits it on Save, so cancelling leaves the board
 /// untouched. The agent block deliberately does *not* reuse `ModelPickerSheet` /
 /// `EffortPickerSheet`: those write straight into `WindowState` session
 /// overrides and cannot bind to a draft. It reuses their data sources instead.
 struct TaskFormSheet: View {
-    @Environment(AppState.self) private var appState
-    @Environment(WindowState.self) private var windowState
-    @Environment(\.dismiss) private var dismiss
+    @Environment(AppState.self) var appState
+    @Environment(WindowState.self) var windowState
+    @Environment(\.dismiss) var dismiss
 
     let payload: TaskBoardSheet
     let defaultProjectId: UUID
+    /// How a new record is written. `nil` keeps the per-kind default:
+    /// stories are usually outlined from a description, tasks written directly.
+    var initialMode: TaskCreationMode?
 
-    @State private var isStory = false
-    @State private var task = ProjectTask(projectId: UUID(), title: "")
-    @State private var story = ProjectStory(projectId: UUID(), title: "")
-    @State private var tagInput = ""
-    @State private var showingAttachmentPicker = false
-    @State private var isExistingRecord = false
-    @State private var tab: Tab = .details
+    @State var isStory = false
+    @State var task = ProjectTask(projectId: UUID(), title: "")
+    @State var story = ProjectStory(projectId: UUID(), title: "")
+    @State var tagInput = ""
+    @State var showingAttachmentPicker = false
+    @State var isExistingRecord = false
+    @State var tab: Tab = .details
     /// A task opened from a story's Tasks section, edited in a nested form.
-    @State private var childTask: TaskBoardSheet?
+    @State var childTask: TaskBoardSheet?
     /// The fields manager, opened scrolled to one section.
-    @State private var fieldsSheet: TaskFieldsSheet.Field?
-    @State private var versionInput = ""
-    @State private var milestoneInput = ""
-    @State private var isAutoFilling = false
-    @State private var isGeneratingTitle = false
-    @State private var suggestionAgent: TaskAgentConfig?
-    @State private var pendingDeletion: TaskBoardSheet?
+    @State var fieldsSheet: TaskFieldsSheet.Field?
+    @State var versionInput = ""
+    @State var milestoneInput = ""
+    @State var isAutoFilling = false
+    @State var isGeneratingTitle = false
+    @State var suggestionAgent: TaskAgentConfig?
+    @State var pendingDeletion: TaskBoardSheet?
+    @State var creationMode: TaskCreationMode = .form
+    /// The free-form description the AI flow drafts from.
+    @State var draftPrompt = ""
+    @State var storyTaskDrafts: [StoryTaskDraft] = []
+    /// A generated story task being added or edited in its own sheet.
+    @State var editingStoryTaskDraft: StoryTaskDraft?
+    /// A task draft has been generated and is waiting to be reviewed. Tracked
+    /// separately from the title, which the user may clear while editing.
+    @State var hasTaskDraft = false
+    @State var isGeneratingDraft = false
+    @State var showingSourceFilePicker = false
+    @State var draftError: String?
+    /// The AI flow's step: write the description, then review what the model
+    /// drafted from it. Revising goes back without dropping the draft; only
+    /// editing the description does that.
+    @State var draftStep: DraftStep = .describe
 
-    private enum Tab: Hashable {
+    struct StoryTaskDraft: Identifiable {
+        let id = UUID()
+        var title: String
+        var details: String
+    }
+
+    enum Tab: Hashable {
         case details, run
+    }
+
+    enum DraftStep {
+        case describe, review
+    }
+
+    /// Whether the model has produced something to review.
+    var hasGeneratedDraft: Bool {
+        isStory ? !storyTaskDrafts.isEmpty : hasTaskDraft
+    }
+
+    var canGenerateDraft: Bool {
+        !isGeneratingDraft && !draftPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     /// A task that has been dispatched has a run to look at. Uses the stored
     /// task, so flipping the picker in this form doesn't swap tabs mid-edit.
-    private var showsRunTab: Bool {
+    var showsRunTab: Bool {
         guard isExistingRecord, !isStory, let stored = appState.task(id: task.id) else { return false }
         return stored.sessionKey != nil
     }
 
     /// Uses the stored task, not the draft, so changing the status picker in
     /// this form doesn't lock the field mid-edit.
-    private var isDescriptionLocked: Bool {
+    var isDescriptionLocked: Bool {
         guard !isStory else { return false }
         return appState.task(id: task.id)?.isDescriptionLocked ?? false
     }
 
-    private var isStatusLocked: Bool {
+    var isStatusLocked: Bool {
         guard let stored = appState.task(id: task.id) else { return false }
         return appState.isStatusLocked(stored)
     }
 
-    private var canSave: Bool {
+    /// The AI flow, which only exists while creating: an existing record has
+    /// nothing left to draft.
+    var isComposing: Bool { !isExistingRecord && creationMode == .ai }
+
+    var canSave: Bool {
         let title = isStory ? story.title : task.title
-        return !isAutoFilling && !isGeneratingTitle
+        return !isAutoFilling && !isGeneratingTitle && !isGeneratingDraft
             && !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && (!isStory || storyTaskDrafts.allSatisfy {
+                !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            })
     }
 
-    private var hasSuggestionInput: Bool {
+    /// Whether the reviewed draft in the AI tab can be committed.
+    var canCreateFromDraft: Bool {
+        guard !isGeneratingDraft else { return false }
+        if isStory {
+            return !storyTaskDrafts.isEmpty
+                && !story.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && storyTaskDrafts.allSatisfy {
+                    !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                }
+        }
+        return hasTaskDraft && !task.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var hasSuggestionInput: Bool {
         let title = isStory ? story.title : task.title
         return !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !currentDetails.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -83,14 +146,20 @@ struct TaskFormSheet: View {
                 .padding(.bottom, 4)
             }
 
-            if showsRunTab, tab == .run {
+            if isComposing {
+                draftComposer
+            } else if showsRunTab, tab == .run {
                 TaskRunView(taskId: task.id)
                     .frame(maxHeight: .infinity)
             } else {
                 detailsForm
             }
 
-            footer
+            if isComposing {
+                draftComposerFooter
+            } else {
+                footer
+            }
         }
         .frame(width: 560, height: 680)
         .sheet(item: $childTask) { payload in
@@ -112,22 +181,16 @@ struct TaskFormSheet: View {
             }
             dismiss()
         }
+        .fileImporter(
+            isPresented: $showingSourceFilePicker,
+            allowedContentTypes: [.plainText, .pdf]
+        ) { result in
+            importSourceFile(result)
+        }
     }
 
-    private var detailsForm: some View {
+    var detailsForm: some View {
         Form {
-            // Kind is fixed once a record exists — converting a story into a
-            // task (or back) would orphan children or lose the agent assignment.
-            if !isExistingRecord {
-                Section {
-                    Picker("Kind", selection: $isStory) {
-                        Text("Task").tag(false)
-                        Text("Story").tag(true)
-                    }
-                    .pickerStyle(.segmented)
-                }
-            }
-
             detailsSection
             if isStory {
                 storyTasksSection
@@ -167,12 +230,12 @@ struct TaskFormSheet: View {
 
     // MARK: - Footer
 
-    private var headerTitle: String {
+    var headerTitle: String {
         if isExistingRecord { return isStory ? "Edit Story" : "Edit Task" }
         return isStory ? "New Story" : "New Task"
     }
 
-    private var footer: some View {
+    var footer: some View {
         HStack {
             if isExistingRecord {
                 Button("Delete", role: .destructive) {
@@ -211,7 +274,7 @@ struct TaskFormSheet: View {
 
     // MARK: - Sections
 
-    private var detailsSection: some View {
+    var detailsSection: some View {
         Section(LocalizedStringKey(headerTitle)) {
             HStack(spacing: 6) {
                 TextField(
@@ -262,8 +325,7 @@ struct TaskFormSheet: View {
         }
     }
 
-    /// A story's tasks. Each row, and New Task, opens the full task form.
-    private var storyTasksSection: some View {
+    var storyTasksSection: some View {
         Section {
             let existing = isExistingRecord
                 ? appState.taskBoard(for: story.projectId).tasks(inStory: story.id).sorted { $0.sortIndex < $1.sortIndex }
@@ -304,20 +366,20 @@ struct TaskFormSheet: View {
         }
     }
 
-    private var currentProjectId: UUID { isStory ? story.projectId : task.projectId }
-    private var currentDetails: String { isStory ? story.details : task.details }
-    private var board: TaskBoard { appState.taskBoard(for: currentProjectId) }
+    var currentProjectId: UUID { isStory ? story.projectId : task.projectId }
+    var currentDetails: String { isStory ? story.details : task.details }
+    var board: TaskBoard { appState.taskBoard(for: currentProjectId) }
 
     /// The task's column, normalized so a status whose column was deleted
     /// still selects a picker row.
-    private var statusBinding: Binding<TaskStatus> {
+    var statusBinding: Binding<TaskStatus> {
         Binding(
             get: { board.resolvedStatus(of: task) },
             set: { task.status = $0 }
         )
     }
 
-    private var classificationSection: some View {
+    var classificationSection: some View {
         Section {
             LabeledContent("AI suggestions model") {
                 Menu {
@@ -435,7 +497,7 @@ struct TaskFormSheet: View {
 
     /// Types are picked from a dropdown; adding, renaming and recoloring
     /// happen in the fields sheet so every story and task shares one list.
-    private var typeMenu: some View {
+    var typeMenu: some View {
         let typeId = field(\.typeId, \.typeId)
         let selected = board.itemType(id: typeId.wrappedValue)
         return LabeledContent("Type") {
@@ -489,7 +551,7 @@ struct TaskFormSheet: View {
         }
     }
 
-    private var tagsSection: some View {
+    var tagsSection: some View {
         let tags = isStory ? story.tags : task.tags
         let unused = board.allTags.filter { !tags.contains($0) }
         return Section {
@@ -533,7 +595,7 @@ struct TaskFormSheet: View {
         }
     }
 
-    private var agentSection: some View {
+    var agentSection: some View {
         Section {
             LabeledContent("Model") {
                 Menu {
@@ -585,7 +647,7 @@ struct TaskFormSheet: View {
     }
 
     @ViewBuilder
-    private var effortPicker: some View {
+    var effortPicker: some View {
         let provider = task.agent.provider ?? appState.selectedAgentProvider
         let levels = appState.reasoningLevels(for: provider)
         // ACP clients expose no reasoning levels, so the picker hides itself
@@ -600,7 +662,7 @@ struct TaskFormSheet: View {
         }
     }
 
-    private var attachmentsSection: some View {
+    var attachmentsSection: some View {
         Section {
             if !task.attachments.isEmpty {
                 ForEach(task.attachments, id: \.id) { dto in
@@ -636,7 +698,7 @@ struct TaskFormSheet: View {
 
     // MARK: - Small builders
 
-    private var modelMenuTitle: String {
+    var modelMenuTitle: String {
         guard let model = task.agent.model, !model.isEmpty else {
             return task.agent.provider?.displayNameText ?? String(localized: "Unassigned")
         }
@@ -645,7 +707,7 @@ struct TaskFormSheet: View {
 
     // MARK: - Bindings
 
-    private var projectBinding: Binding<UUID> {
+    var projectBinding: Binding<UUID> {
         Binding(
             get: { isStory ? story.projectId : task.projectId },
             set: { newValue in
@@ -661,12 +723,12 @@ struct TaskFormSheet: View {
         )
     }
 
-    private var storyBinding: Binding<UUID?> {
+    var storyBinding: Binding<UUID?> {
         Binding(get: { task.storyId }, set: { task.storyId = $0 })
     }
 
     /// A field shared by stories and tasks, bound to whichever the form edits.
-    private func field<Value>(
+    func field<Value>(
         _ taskPath: WritableKeyPath<ProjectTask, Value>,
         _ storyPath: WritableKeyPath<ProjectStory, Value>
     ) -> Binding<Value> {
@@ -682,13 +744,14 @@ struct TaskFormSheet: View {
         )
     }
 
-    private var permissionBinding: Binding<PermissionMode?> {
+    var permissionBinding: Binding<PermissionMode?> {
         Binding(get: { task.agent.permissionMode }, set: { task.agent.permissionMode = $0 })
     }
 
     // MARK: - Actions
 
-    private func loadDraft() {
+
+    func loadDraft() {
         switch payload {
         case .task(let incoming):
             isStory = false
@@ -711,12 +774,17 @@ struct TaskFormSheet: View {
                 story.projectId = defaultProjectId
             }
         }
+        creationMode = .resolved(
+            isExistingRecord: isExistingRecord,
+            isStory: isStory,
+            requested: initialMode
+        )
     }
 
     /// Opens a blank task form assigned to this story. A story that hasn't
     /// been saved yet is saved first — the task needs an existing parent, and
     /// the story form stays open for further edits.
-    private func newStoryTask() {
+    func newStoryTask() {
         if !isExistingRecord {
             story.title = story.title.trimmingCharacters(in: .whitespacesAndNewlines)
             appState.upsertStory(story)
@@ -725,7 +793,7 @@ struct TaskFormSheet: View {
         childTask = .task(appState.newTaskDraft(inStory: story))
     }
 
-    private func addTag() {
+    func addTag() {
         let trimmed = tagInput.trimmingCharacters(in: .whitespaces)
         tagInput = ""
         guard !trimmed.isEmpty else { return }
@@ -733,7 +801,7 @@ struct TaskFormSheet: View {
         appendTag(board.allTags.first { $0.caseInsensitiveCompare(trimmed) == .orderedSame } ?? trimmed)
     }
 
-    private func appendTag(_ tag: String) {
+    func appendTag(_ tag: String) {
         tagInput = ""
         if isStory {
             if !story.tags.contains(tag) { story.tags.append(tag) }
@@ -742,7 +810,7 @@ struct TaskFormSheet: View {
         }
     }
 
-    private func removeTag(_ tag: String) {
+    func removeTag(_ tag: String) {
         if isStory {
             story.tags.removeAll { $0 == tag }
         } else {
@@ -753,7 +821,7 @@ struct TaskFormSheet: View {
     /// Summarizes the draft's description into a title. Unlike auto-fill this
     /// does overwrite — it is only reachable by pressing the button, and the
     /// point of pressing it is to replace whatever the title says now.
-    private func generateTitle() {
+    func generateTitle() {
         guard !isGeneratingTitle, !isAutoFilling else { return }
         let details = currentDetails
         let wasStory = isStory
@@ -777,7 +845,7 @@ struct TaskFormSheet: View {
     /// Fills the draft's empty properties from the selected suggestion model. The
     /// draft is only filled, never overwritten, and nothing is saved until
     /// the user presses Save.
-    private func autoFill() {
+    func autoFill() {
         guard !isAutoFilling, !isGeneratingTitle else { return }
         // Unconfirmed combo-box text is still a user choice and must win.
         if let version = TaskSingleValueCombo.resolve(versionInput, in: board.allVersions) {
@@ -807,12 +875,12 @@ struct TaskFormSheet: View {
         }
     }
 
-    private func selectSuggestionAgent(_ agent: TaskAgentConfig?) {
+    func selectSuggestionAgent(_ agent: TaskAgentConfig?) {
         appState.setConfiguredTaskSuggestionAgent(agent)
         suggestionAgent = agent
     }
 
-    private func handleAttachmentImport(_ result: Result<[URL], Error>) {
+    func handleAttachmentImport(_ result: Result<[URL], Error>) {
         guard case .success(let urls) = result else { return }
         for url in urls {
             guard let attachment = AttachmentFactory.fromFileURL(url) else { continue }
@@ -822,7 +890,7 @@ struct TaskFormSheet: View {
         }
     }
 
-    private func save() {
+    func save() {
         guard canSave else { return }
         // Values typed but not yet confirmed with Return still count.
         if let version = TaskSingleValueCombo.resolve(versionInput, in: board.allVersions) {
@@ -835,6 +903,10 @@ struct TaskFormSheet: View {
             addTag()
         }
         if isStory {
+            if !storyTaskDrafts.isEmpty {
+                saveComposedStory()
+                return
+            }
             story.title = story.title.trimmingCharacters(in: .whitespacesAndNewlines)
             appState.upsertStory(story)
         } else {

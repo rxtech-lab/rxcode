@@ -53,6 +53,7 @@
 		DF46683C2FCDB56B002D9562 /* JSONSchemaValidator in Frameworks */ = {isa = PBXBuildFile; productRef = DF46683B2FCDB56B002D9562 /* JSONSchemaValidator */; };
 		DF98F2373004F38B00BBB638 /* MCP in Frameworks */ = {isa = PBXBuildFile; productRef = DF98F2363004F38B00BBB638 /* MCP */; };
 		DFA0CCD12FB4CC01005991E1 /* PlanDecisionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA0CCC02FB4CC01005991E1 /* PlanDecisionTests.swift */; };
+		A7C31E012FC5000000000002 /* PermissionSessionAllowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7C31E012FC5000000000001 /* PermissionSessionAllowTests.swift */; };
 		DFA0CCD22FB4CC01005991E1 /* PlanCardViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA0CCC12FB4CC01005991E1 /* PlanCardViewTests.swift */; };
 		DFA0CCD42FB4CC01005991E1 /* RxCodeChatKit in Frameworks */ = {isa = PBXBuildFile; productRef = DFA0CCC32FB4CC01005991E1 /* RxCodeChatKit */; };
 		DFA0CCE12FB4CC02005991E1 /* HistoryListArchiveFilterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA0CCD52FB4CC02005991E1 /* HistoryListArchiveFilterTests.swift */; };
@@ -77,6 +78,7 @@
 		FE0A11BB22CC33DD44EE5501 /* PlanModeHookSuppressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0A11BB22CC33DD44EE5502 /* PlanModeHookSuppressionTests.swift */; };
 		FE0A11BB22CC33DD44EE5601 /* TaskBoardHookTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0A11BB22CC33DD44EE5602 /* TaskBoardHookTests.swift */; };
 		FE0A11BB22CC33DD44EE5701 /* MarkdownDescriptionEditorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0A11BB22CC33DD44EE5702 /* MarkdownDescriptionEditorTests.swift */; };
+		FE0A11BB22CC33DD44EE5901 /* TaskCreationModeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0A11BB22CC33DD44EE5902 /* TaskCreationModeTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -170,6 +172,7 @@
 		DF5B0DDC2FC023C8000CE36F /* MobileUITestPlan-iPad.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = "MobileUITestPlan-iPad.xctestplan"; sourceTree = "<group>"; };
 		DF5B0DDE2FCB300100CE36F /* MobileUnitTestPlan.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = MobileUnitTestPlan.xctestplan; sourceTree = "<group>"; };
 		DFA0CCC02FB4CC01005991E1 /* PlanDecisionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlanDecisionTests.swift; sourceTree = "<group>"; };
+		A7C31E012FC5000000000001 /* PermissionSessionAllowTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PermissionSessionAllowTests.swift; sourceTree = "<group>"; };
 		DFA0CCC12FB4CC01005991E1 /* PlanCardViewTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlanCardViewTests.swift; sourceTree = "<group>"; };
 		DFA0CCD52FB4CC02005991E1 /* HistoryListArchiveFilterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HistoryListArchiveFilterTests.swift; sourceTree = "<group>"; };
 		DFA9E5040000000000000001 /* AgentEventBridgeTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentEventBridgeTests.swift; sourceTree = "<group>"; };
@@ -181,6 +184,7 @@
 		FE0A11BB22CC33DD44EE5502 /* PlanModeHookSuppressionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlanModeHookSuppressionTests.swift; sourceTree = "<group>"; };
 		FE0A11BB22CC33DD44EE5602 /* TaskBoardHookTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TaskBoardHookTests.swift; sourceTree = "<group>"; };
 		FE0A11BB22CC33DD44EE5702 /* MarkdownDescriptionEditorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MarkdownDescriptionEditorTests.swift; sourceTree = "<group>"; };
+		FE0A11BB22CC33DD44EE5902 /* TaskCreationModeTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TaskCreationModeTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -368,8 +372,10 @@
 				7A5C0001000000000000A001 /* MockAgentBackend.swift */,
 				7A5C0002000000000000A001 /* CrossProjectSendConcurrencyTests.swift */,
 				DFA0CCC02FB4CC01005991E1 /* PlanDecisionTests.swift */,
+				A7C31E012FC5000000000001 /* PermissionSessionAllowTests.swift */,
 				FE0A11BB22CC33DD44EE5502 /* PlanModeHookSuppressionTests.swift */,
 				FE0A11BB22CC33DD44EE5602 /* TaskBoardHookTests.swift */,
+				FE0A11BB22CC33DD44EE5902 /* TaskCreationModeTests.swift */,
 				AC0A11BB22CC33DD44EE5802 /* ACPServiceSuggestionTests.swift */,
 				FE0A11BB22CC33DD44EE5702 /* MarkdownDescriptionEditorTests.swift */,
 				DFA0CCC12FB4CC01005991E1 /* PlanCardViewTests.swift */,
@@ -838,8 +844,10 @@
 				7A5C0001000000000000A002 /* MockAgentBackend.swift in Sources */,
 				7A5C0002000000000000A002 /* CrossProjectSendConcurrencyTests.swift in Sources */,
 				DFA0CCD12FB4CC01005991E1 /* PlanDecisionTests.swift in Sources */,
+				A7C31E012FC5000000000002 /* PermissionSessionAllowTests.swift in Sources */,
 				FE0A11BB22CC33DD44EE5501 /* PlanModeHookSuppressionTests.swift in Sources */,
 				FE0A11BB22CC33DD44EE5601 /* TaskBoardHookTests.swift in Sources */,
+				FE0A11BB22CC33DD44EE5901 /* TaskCreationModeTests.swift in Sources */,
 				AC0A11BB22CC33DD44EE5801 /* ACPServiceSuggestionTests.swift in Sources */,
 				FE0A11BB22CC33DD44EE5701 /* MarkdownDescriptionEditorTests.swift in Sources */,
 				DFA0CCD22FB4CC01005991E1 /* PlanCardViewTests.swift in Sources */,
@@ -1604,7 +1612,7 @@
 			repositoryURL = "https://github.com/rxtech-lab/RxAuthSwift";
 			requirement = {
 				kind = exactVersion;
-				version = 1.1.1;
+				version = 1.3.0;
 			};
 		};
 		DF4652662FCD34B3002D9562 /* XCRemoteSwiftPackageReference "swift-jsonschema-form" */ = {
@@ -1636,7 +1644,7 @@
 			repositoryURL = "https://github.com/rxtech-lab/RxAgentSDK.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 1.0.5;
+				minimumVersion = 1.0.6;
 			};
 		};
 		DFAA00032FCD34B3002D9562 /* XCRemoteSwiftPackageReference "swift-json-schema" */ = {

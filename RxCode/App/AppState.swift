@@ -951,6 +951,8 @@ final class AppState {
 
     var claudeInstalled = false
     var codexInstalled = false
+    var claudeSignedIn = false
+    var codexSignedIn = false
     var onboardingCompleted = false
 
     // MARK: - What's New

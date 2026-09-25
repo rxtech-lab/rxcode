@@ -11,6 +11,7 @@ struct TaskProjectDetailView: View {
 
     let project: Project
     @Binding var sheet: TaskBoardSheet?
+    @Binding var newItemMode: TaskCreationMode?
 
     @State private var selectedViewId: UUID?
     @State private var keyword = ""
@@ -84,17 +85,12 @@ struct TaskProjectDetailView: View {
                 Spacer()
 
                 Menu {
-                    Button {
-                        sheet = .task(newTask(status: board.firstColumn.id))
-                    } label: {
-                        Label("New Task", systemImage: "plus")
-                    }
+                    TaskCreationMenuItems(
+                        onNewTask: { openNewTask(mode: $0) },
+                        onNewStory: { openNewStory(mode: $0) }
+                    )
 
-                    Button {
-                        sheet = .story(ProjectStory(projectId: project.id, title: ""))
-                    } label: {
-                        Label("New Story", systemImage: "square.stack.3d.up")
-                    }
+                    Divider()
 
                     Button {
                         appState.startNewChat(inProject: project.id, window: windowState)
@@ -116,18 +112,17 @@ struct TaskProjectDetailView: View {
                         Label("Fields", systemImage: "slider.horizontal.3")
                     }
                 } label: {
-                    Label("New Task", systemImage: "plus")
-                } primaryAction: {
-                    sheet = .task(newTask(status: board.firstColumn.id))
+                    Label("New", systemImage: "plus")
                 }
                 .menuStyle(.button)
                 .buttonStyle(.borderedProminent)
                 .fixedSize()
-                .help("New task — click the arrow for stories, chats, columns and fields")
+                .help("New task, story or chat, or manage columns and fields")
+                .accessibilityIdentifier("task-project-add")
                 .background {
                     // Menu items don't register key equivalents, so keep ⇧⌘N on a hidden button.
                     Button("") {
-                        sheet = .task(newTask(status: board.firstColumn.id))
+                        openNewTask(mode: nil)
                     }
                     .keyboardShortcut("n", modifiers: [.command, .shift])
                     .opacity(0)
@@ -204,7 +199,11 @@ struct TaskProjectDetailView: View {
                     view.matches($0, rolledUpStatus: board.rolledUpStatus(for: $0)) && $0.matches(keyword: keyword)
                 },
                 onOpen: { sheet = $0 },
-                onAdd: { sheet = .task(newTask(status: $0)) },
+                onAddTask: { status, mode in
+                    newItemMode = mode
+                    sheet = .task(newTask(status: status))
+                },
+                onAddStory: { openNewStory(mode: $0) },
                 onHideStatus: { hide($0, in: view) },
                 onEditView: { viewEditor = TaskViewEditorPayload(projectId: project.id, view: view, isNew: false) },
                 onEditColumn: { columnEditor = TaskColumnEditorPayload(projectId: project.id, column: $0, isNew: false) },
@@ -235,6 +234,16 @@ struct TaskProjectDetailView: View {
 
     /// A draft pre-filled from the current view's filters, so a task created
     /// inside a filtered view shows up in it.
+    private func openNewTask(mode: TaskCreationMode?) {
+        newItemMode = mode
+        sheet = .task(newTask(status: board.firstColumn.id))
+    }
+
+    private func openNewStory(mode: TaskCreationMode?) {
+        newItemMode = mode
+        sheet = .story(ProjectStory(projectId: project.id, title: ""))
+    }
+
     private func newTask(status: TaskStatus) -> ProjectTask {
         let view = currentView
         return ProjectTask(
@@ -416,7 +425,8 @@ struct TaskBoardLayoutView: View {
     let tasks: [ProjectTask]
     let stories: [ProjectStory]
     let onOpen: (TaskBoardSheet) -> Void
-    let onAdd: (TaskStatus) -> Void
+    let onAddTask: (TaskStatus, TaskCreationMode) -> Void
+    let onAddStory: (TaskCreationMode) -> Void
     let onHideStatus: (TaskStatus) -> Void
     let onEditView: () -> Void
     let onEditColumn: (TaskColumn) -> Void
@@ -427,54 +437,80 @@ struct TaskBoardLayoutView: View {
     static let columnWidth: CGFloat = 320
 
     /// Shared across columns: a story and its tasks usually sit in different
-    /// columns, and hovering either highlights the whole group.
-    @State private var hoveredStoryId: UUID?
+    /// columns, and hovering either highlights the whole group. Handed to the
+    /// cards through the environment; see `TaskBoardHoverState`.
+    @State private var hoverState = TaskBoardHoverState()
     @State private var collapsedStoryIds = Set<UUID>()
 
-    private var completedStoryIds: Set<UUID> {
-        Set(board.stories.filter { story in
-            let progress = board.progress(for: story)
-            return progress.total > 0 && progress.done == progress.total
-        }.map(\.id))
+    private static func completedStoryIds(in rollups: [UUID: StoryRollup]) -> Set<UUID> {
+        Set(rollups.compactMap { id, rollup in
+            rollup.progress.total > 0 && rollup.progress.done == rollup.progress.total ? id : nil
+        })
     }
 
-    /// Where every card and column sits. Animating on this — rather than
-    /// wrapping each drop in `withAnimation` — also covers moves nobody
+    /// Where every card and column sits, hashed. Animating on this — rather
+    /// than wrapping each drop in `withAnimation` — also covers moves nobody
     /// dragged: an agent finishing, a trigger advancing a card, a sync.
-    private var layoutSignature: [String] {
-        view.visibleColumns(in: board.effectiveColumns).map { "c:\($0.id.rawValue)" }
-            + tasks.map { "t:\($0.id):\(board.resolvedStatus(of: $0).rawValue):\($0.sortIndex)" }
-            + stories.map { "s:\($0.id):\(board.rolledUpStatus(for: $0).rawValue)" }
+    private func layoutSignature(
+        columns: [TaskColumn],
+        taskStatus: (ProjectTask) -> TaskStatus,
+        storyStatus: (ProjectStory) -> TaskStatus
+    ) -> Int {
+        var hasher = Hasher()
+        hasher.combine(columns.count)
+        for column in columns { hasher.combine(column.id) }
+        hasher.combine(tasks.count)
+        for task in tasks {
+            hasher.combine(task.id)
+            hasher.combine(taskStatus(task))
+            hasher.combine(task.sortIndex)
+        }
+        hasher.combine(stories.count)
+        for story in stories {
+            hasher.combine(story.id)
+            hasher.combine(storyStatus(story))
+        }
+        return hasher.finalize()
     }
 
     var body: some View {
+        // Board-wide derived state, computed once per update and handed down,
+        // instead of every column and card re-deriving it from the whole board.
+        let rollups = board.storyRollups()
+        let completedStoryIds = Self.completedStoryIds(in: rollups)
+        let columns = view.visibleColumns(in: board.effectiveColumns)
+        let taskStatus = { (task: ProjectTask) in board.resolvedStatus(of: task) }
+        let storyStatus = { (story: ProjectStory) in
+            rollups[story.id]?.status ?? board.rolledUpStatus(for: story)
+        }
+        let storiesByStatus = Dictionary(grouping: stories, by: storyStatus)
+        let visibleColumnIds = Set(columns.map(\.id))
+        let visibleStoryIds = Set(stories.lazy.filter { visibleColumnIds.contains(storyStatus($0)) }.map(\.id))
+        let collapsedVisibleStoryIds = collapsedStoryIds
+            .intersection(visibleStoryIds)
+            .intersection(completedStoryIds)
+        let tasksByStatus = Dictionary(grouping: tasks.filter { task in
+            !(task.storyId.map(collapsedVisibleStoryIds.contains) ?? false)
+        }, by: taskStatus)
+
         ScrollView(.horizontal) {
-            HStack(alignment: .top, spacing: 12) {
-                let columns = view.visibleColumns(in: board.effectiveColumns)
-                let visibleStoryIds = Set(stories.filter { story in
-                    columns.contains { $0.id == board.rolledUpStatus(for: story) }
-                }.map(\.id))
-                let collapsedVisibleStoryIds = collapsedStoryIds
-                    .intersection(visibleStoryIds)
-                    .intersection(completedStoryIds)
+            // Lazy so a wide board only builds the columns on screen — each
+            // column carries its own story and task card list.
+            LazyHStack(alignment: .top, spacing: 12) {
                 ForEach(columns) { column in
                     TaskColumnView(
                         column: column,
-                        tasks: tasks
-                            .filter { task in
-                                board.resolvedStatus(of: task) == column.id
-                                    && !(task.storyId.map(collapsedVisibleStoryIds.contains) ?? false)
-                            }
-                            .sorted { $0.sortIndex < $1.sortIndex },
-                        stories: stories.filter { board.rolledUpStatus(for: $0) == column.id },
+                        tasks: (tasksByStatus[column.id] ?? []).sorted { $0.sortIndex < $1.sortIndex },
+                        stories: storiesByStatus[column.id] ?? [],
                         board: board,
+                        storyRollups: rollups,
                         onOpen: onOpen,
-                        onAdd: { onAdd(column.id) },
+                        onAddTask: { onAddTask(column.id, $0) },
+                        onAddStory: onAddStory,
                         onHide: columns.count > 1 ? { onHideStatus(column.id) } : nil,
                         onEditView: onEditView,
                         onEditColumn: { onEditColumn(column) },
                         onReorder: { onReorderColumn($0, column.id) },
-                        hoveredStoryId: $hoveredStoryId,
                         collapsedStoryIds: $collapsedStoryIds
                     )
                     .frame(width: Self.columnWidth)
@@ -499,9 +535,12 @@ struct TaskBoardLayoutView: View {
             }
             .padding(16)
             .frame(maxHeight: .infinity, alignment: .top)
-            .taskBoardAnimation(value: layoutSignature)
+            .taskBoardAnimation(
+                value: layoutSignature(columns: columns, taskStatus: taskStatus, storyStatus: storyStatus)
+            )
             .taskBoardAnimation(value: collapsedStoryIds)
         }
+        .environment(hoverState)
         .onChange(of: completedStoryIds) { _, completed in
             collapsedStoryIds.formIntersection(completed)
         }

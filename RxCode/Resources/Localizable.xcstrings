@@ -19609,6 +19609,134 @@
           }
         }
       }
+    },
+    "Describe a task…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "작업을 설명하세요…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "描述一个任务…"
+          }
+        }
+      }
+    },
+    "Generate Title" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "제목 생성"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "生成标题"
+          }
+        }
+      }
+    },
+    "Summarizing…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "요약하는 중…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在总结…"
+          }
+        }
+      }
+    },
+    "What you type becomes the description; the agent writes the title." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "입력한 내용은 설명이 되고, 제목은 에이전트가 작성합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你输入的内容将成为描述，标题由智能体撰写。"
+          }
+        }
+      }
+    },
+    "What you type becomes the description; the title is shortened from its first line." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "입력한 내용은 설명이 되고, 제목은 첫 줄을 줄여서 만듭니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你输入的内容将成为描述，标题取自其第一行的缩略。"
+          }
+        }
+      }
+    },
+    "Write the title and properties of quick-added tasks" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "빠르게 추가한 작업의 제목과 속성 작성"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为快速添加的任务撰写标题和属性"
+          }
+        }
+      }
+    },
+    "Write the title from the description" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설명을 바탕으로 제목 작성"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "根据描述撰写标题"
+          }
+        }
+      }
+    },
+    "Quick add keeps what you type as the description. The default agent then summarizes it into a title and fills in type, priority, tags, version and milestone. Properties you or the story already set are kept, and so is a title you typed yourself. Turned off, the title is shortened from the description's first line. ACP agents fall back to Claude Haiku." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "빠른 추가는 입력한 내용을 설명으로 유지합니다. 그런 다음 기본 에이전트가 이를 제목으로 요약하고 유형, 우선순위, 태그, 버전, 마일스톤을 채웁니다. 사용자나 스토리가 이미 설정한 속성과 직접 입력한 제목은 그대로 유지됩니다. 끄면 제목은 설명의 첫 줄을 줄여서 만듭니다. ACP 에이전트는 Claude Haiku로 대체됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "快速添加会将你输入的内容保留为描述。随后默认智能体会将其总结为标题，并填写类型、优先级、标签、版本和里程碑。你或故事已设置的属性会被保留，你自己输入的标题也会被保留。关闭后，标题取自描述第一行的缩略。ACP 智能体将回退到 Claude Haiku。"
+          }
+        }
+      }
     }
   },
   "version" : "1.1"

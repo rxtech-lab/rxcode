@@ -45,14 +45,14 @@ struct TasksSettingsTab: View {
             }
 
             Section {
-                Toggle("Auto-fill properties for quick-added tasks", isOn: $autoClassify)
+                Toggle("Write the title and properties of quick-added tasks", isOn: $autoClassify)
                     .onChange(of: autoClassify) { _, newValue in
                         appState.autoClassifiesQuickAddedTasks = newValue
                     }
             } header: {
                 Text("Quick Add")
             } footer: {
-                Text("When you add a task by title only, the default agent fills in its type, priority, tags, version and milestone. Properties you or the story already set are kept. ACP agents fall back to Claude Haiku.")
+                Text("Quick add keeps what you type as the description. The default agent then summarizes it into a title and fills in type, priority, tags, version and milestone. Properties you or the story already set are kept, and so is a title you typed yourself. Turned off, the title is shortened from the description's first line. ACP agents fall back to Claude Haiku.")
             }
         }
         .formStyle(.grouped)

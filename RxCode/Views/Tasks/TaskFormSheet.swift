@@ -30,6 +30,7 @@ struct TaskFormSheet: View {
     @State private var versionInput = ""
     @State private var milestoneInput = ""
     @State private var isAutoFilling = false
+    @State private var isGeneratingTitle = false
 
     private enum Tab: Hashable {
         case details, run
@@ -189,16 +190,31 @@ struct TaskFormSheet: View {
 
     private var detailsSection: some View {
         Section(LocalizedStringKey(headerTitle)) {
-            TextField(
-                "Title",
-                text: isStory ? $story.title : $task.title,
-                prompt: Text(isStory ? "Story title" : "What needs doing?")
-            )
-            // Grouped forms right-align fields, and a right-aligned field
-            // hides a trailing space until the next character is typed, so
-            // typing a space looked like it did nothing. Leading alignment
-            // shows it immediately.
-            .multilineTextAlignment(.leading)
+            HStack(spacing: 6) {
+                TextField(
+                    "Title",
+                    text: isStory ? $story.title : $task.title,
+                    prompt: Text(isStory ? "Story title" : "What needs doing?")
+                )
+                // Grouped forms right-align fields, and a right-aligned field
+                // hides a trailing space until the next character is typed, so
+                // typing a space looked like it did nothing. Leading alignment
+                // shows it immediately.
+                .multilineTextAlignment(.leading)
+
+                Button(action: generateTitle) {
+                    if isGeneratingTitle {
+                        ProgressView().controlSize(.mini)
+                    } else {
+                        Image(systemName: "sparkles")
+                    }
+                }
+                .buttonStyle(.borderless)
+                .disabled(isGeneratingTitle || currentDetails.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .help("Write the title from the description")
+                .accessibilityLabel("Generate Title")
+                .accessibilityIdentifier("task-form-generate-title")
+            }
 
             MarkdownDescriptionEditor(
                 text: isStory ? $story.details : $task.details,
@@ -266,6 +282,7 @@ struct TaskFormSheet: View {
     }
 
     private var currentProjectId: UUID { isStory ? story.projectId : task.projectId }
+    private var currentDetails: String { isStory ? story.details : task.details }
     private var board: TaskBoard { appState.taskBoard(for: currentProjectId) }
 
     /// The task's column, normalized so a status whose column was deleted
@@ -683,6 +700,24 @@ struct TaskFormSheet: View {
             story.tags.removeAll { $0 == tag }
         } else {
             task.tags.removeAll { $0 == tag }
+        }
+    }
+
+    /// Summarizes the draft's description into a title. Unlike auto-fill this
+    /// does overwrite — it is only reachable by pressing the button, and the
+    /// point of pressing it is to replace whatever the title says now.
+    private func generateTitle() {
+        let details = currentDetails
+        let parentTitle = isStory ? nil : board.story(id: task.storyId)?.title
+        isGeneratingTitle = true
+        Task {
+            defer { isGeneratingTitle = false }
+            guard let title = await appState.suggestTitle(details: details, storyTitle: parentTitle) else { return }
+            if isStory {
+                story.title = title
+            } else {
+                task.title = title
+            }
         }
     }
 

@@ -572,6 +572,35 @@ struct ProjectTaskTests {
         #expect(prompt.contains("- **Milestone:** Beta"))
     }
 
+    @Test("A generated title is stripped of the decoration models add")
+    func titleSuggestionParsing() {
+        #expect(TaskTitleSuggestion.parse("Fix the crash on paste") == "Fix the crash on paste")
+        #expect(TaskTitleSuggestion.parse("```\nTitle: \"Fix the crash on paste\".\n```") == "Fix the crash on paste")
+        #expect(TaskTitleSuggestion.parse("\n\n- # Add a retry to RelayClient\n") == "Add a retry to RelayClient")
+        #expect(TaskTitleSuggestion.parse("“修复粘贴时的崩溃。”") == "修复粘贴时的崩溃")
+        #expect(TaskTitleSuggestion.parse("   \n ") == nil)
+
+        // An ellipsis the writer meant is not a stray closing period.
+        #expect(TaskTitleSuggestion.parse("Wait for the relay…") == "Wait for the relay…")
+    }
+
+    @Test("A title falls back to the description's first line, shortened")
+    func titleSuggestionFallback() {
+        #expect(TaskTitleSuggestion.fallback(from: "") == "")
+        #expect(TaskTitleSuggestion.fallback(from: "\n\n  Fix login  \nmore detail") == "Fix login")
+        #expect(TaskTitleSuggestion.fallback(from: "- Fix login") == "Fix login")
+
+        let long = String(repeating: "word ", count: 40)
+        let shortened = TaskTitleSuggestion.fallback(from: long)
+        #expect(shortened.count <= TaskTitleSuggestion.maxLength + 1)
+        #expect(shortened.hasSuffix("…"))
+        #expect(!shortened.contains("  "))
+
+        // No spaces to break on: cut where the limit lands.
+        let cjk = String(repeating: "修", count: 100)
+        #expect(TaskTitleSuggestion.truncate(cjk).count == TaskTitleSuggestion.maxLength + 1)
+    }
+
     @Test("Keyword search covers title, details, tags and version")
     func keywordMatching() {
         let task = ProjectTask(projectId: UUID(), title: "Order routing", details: "OMS work", version: "v2", tags: ["backend"])

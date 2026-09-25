@@ -217,8 +217,9 @@ extension AppState {
         workspaceDefaults.set(model, for: Self.defaultTaskModelKey)
     }
 
-    /// Whether quick-added tasks are sent to the default agent to fill in
-    /// type, priority, tags, version and milestone. On unless turned off.
+    /// Whether quick-added tasks are sent to the default agent to summarize a
+    /// title from what was typed and to fill in type, priority, tags, version
+    /// and milestone. On unless turned off.
     var autoClassifiesQuickAddedTasks: Bool {
         get { workspaceDefaults.bool(for: Self.autoClassifyTasksKey, default: true) }
         set { workspaceDefaults.set(newValue, for: Self.autoClassifyTasksKey) }
@@ -515,16 +516,24 @@ extension AppState {
         )
     }
 
-    /// Creates a task in the board's first column from just a title. It inherits its story's
-    /// version and milestone, and — unless turned off in Settings → Tasks —
-    /// the default agent fills in the remaining properties in the background.
+    /// Creates a task in the board's first column from a line of free text.
+    ///
+    /// The text is the *description*: it is what the agent is eventually asked
+    /// to do, so it is kept whole rather than squeezed into a title. The title
+    /// starts as a local shortening of it and — unless turned off in
+    /// Settings → Tasks — the default agent rewrites it into a summary and
+    /// fills in the remaining properties in the background. Version and
+    /// milestone are inherited from the story.
     @discardableResult
-    func quickAddTask(title: String, projectId: UUID, storyId: UUID?) -> ProjectTask {
+    func quickAddTask(text: String, projectId: UUID, storyId: UUID?) -> ProjectTask {
+        let details = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let story = taskBoard(for: projectId).story(id: storyId)
+        let provisionalTitle = TaskTitleSuggestion.fallback(from: details)
         let task = ProjectTask(
             projectId: projectId,
             storyId: storyId,
-            title: title,
+            title: provisionalTitle,
+            details: details,
             status: taskBoard(for: projectId).firstColumn.id,
             version: story?.version,
             milestone: story?.milestone,
@@ -533,22 +542,31 @@ extension AppState {
         upsertTask(task)
         if autoClassifiesQuickAddedTasks {
             classifyingTaskIds.insert(task.id)
-            Task { await classifyTask(id: task.id) }
+            Task { await enrichTask(id: task.id, provisionalTitle: provisionalTitle) }
         }
         return task
     }
 
-    /// Asks the default agent for the task's properties and fills the ones
-    /// still empty. The task is re-read after the (slow) call, so edits made
-    /// meanwhile are kept and a deleted task is left alone.
-    func classifyTask(id: UUID) async {
+    /// Asks the default agent for a title and for the task's properties, and
+    /// fills in the ones still empty. The task is re-read after the (slow)
+    /// calls, so edits made meanwhile are kept and a deleted task is left
+    /// alone; the title is only replaced while it is still the placeholder
+    /// quick add derived, never once the user has typed their own.
+    func enrichTask(id: UUID, provisionalTitle: String?) async {
         defer { classifyingTaskIds.remove(id) }
-        guard let task = task(id: id),
-              let suggestion = await suggestClassification(for: task),
-              var current = self.task(id: id)
-        else { return }
+        guard let task = task(id: id) else { return }
+        // Independent prompts: run them together rather than paying for two
+        // round trips in a row while the card sits under a spinner.
+        async let title = suggestTitle(details: task.details, storyTitle: storyTitle(for: task))
+        async let classification = suggestClassification(for: task)
+        let (suggestedTitle, suggestion) = await (title, classification)
+
+        guard var current = self.task(id: id) else { return }
         let before = current
-        suggestion.apply(to: &current, board: taskBoard(for: current.projectId))
+        if let suggestedTitle, current.title.isEmpty || current.title == provisionalTitle {
+            current.title = suggestedTitle
+        }
+        suggestion?.apply(to: &current, board: taskBoard(for: current.projectId))
         if current != before {
             upsertTask(current)
         }
@@ -564,7 +582,7 @@ extension AppState {
             storyTitle: board.story(id: task.storyId)?.title,
             board: board
         )
-        guard let raw = await runTaskClassificationCompletion(prompt: prompt) else {
+        guard let raw = await runTaskAgentCompletion(prompt: prompt) else {
             logger.warning("[Tasks] no classification response for task \(task.id.uuidString, privacy: .public)")
             return nil
         }
@@ -575,10 +593,30 @@ extension AppState {
         return suggestion
     }
 
-    /// Runs the classification prompt on the default task agent. ACP clients
+    /// A one-line title summarizing `details`, from the default task agent.
+    /// Takes the text rather than a record so an unsaved draft — and a story
+    /// as much as a task — can ask for one. `nil` when the description is
+    /// empty or no agent could answer.
+    func suggestTitle(details: String, storyTitle: String?) async -> String? {
+        let trimmed = details.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let prompt = TaskTitleSuggestion.prompt(details: trimmed, storyTitle: storyTitle)
+        guard let raw = await runTaskAgentCompletion(prompt: prompt) else {
+            logger.warning("[Tasks] no title response")
+            return nil
+        }
+        return TaskTitleSuggestion.parse(raw)
+    }
+
+    /// The title of the story a task belongs to, if any.
+    private func storyTitle(for task: ProjectTask) -> String? {
+        taskBoard(for: task.projectId).story(id: task.storyId)?.title
+    }
+
+    /// Runs a one-shot task prompt on the default task agent. ACP clients
     /// have no one-shot mode, so they fall back to a cheap Claude model, the
     /// same way the hook condition gate does.
-    private func runTaskClassificationCompletion(prompt: String) async -> String? {
+    private func runTaskAgentCompletion(prompt: String) async -> String? {
         let agent = defaultTaskAgent()
         switch agent.provider ?? selectedAgentProvider {
         case .claudeCode:

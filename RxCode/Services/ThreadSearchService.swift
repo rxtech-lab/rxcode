@@ -85,8 +85,12 @@ actor ThreadSearchService {
 
     // MARK: - Lifecycle
 
-    /// Load any existing chunk rows into memory. Cheap: ~2KB per chunk.
-    func start(threadStore: ThreadStore) async {
+    /// Load any existing chunk rows into memory.
+    ///
+    /// The chunks come through `reader` (a background context): every row
+    /// carries its embedding vector, so hydrating a long-lived index this way
+    /// keeps tens of megabytes of blob reads off the main thread at launch.
+    func start(threadStore: ThreadStore, reader: ThreadStoreReader) async {
         guard !didStart else {
             logger.info("start() called again — already initialised, ignoring")
             return
@@ -100,13 +104,13 @@ actor ThreadSearchService {
             logger.error("Both sentence and word embeddings unavailable; search disabled")
             return
         }
-        let rows = await MainActor.run { threadStore.loadAllEmbeddingChunks() }
+        let rows = await reader.loadEmbeddingChunkSnapshots()
         for row in rows {
             let chunk = Chunk(
                 index: row.chunkIndex,
                 projectId: row.projectId,
                 text: row.text,
-                vector: row.floatVector()
+                vector: row.vector
             )
             index[row.threadId, default: []].append(chunk)
         }
@@ -116,11 +120,11 @@ actor ThreadSearchService {
         logger.info("Loaded \(rows.count) embedding chunks across \(self.index.count) threads")
     }
 
-    func restart(threadStore: ThreadStore) async {
+    func restart(threadStore: ThreadStore, reader: ThreadStoreReader) async {
         index.removeAll()
         didStart = false
         self.threadStore = nil
-        await start(threadStore: threadStore)
+        await start(threadStore: threadStore, reader: reader)
     }
 
     // MARK: - Indexing
@@ -302,7 +306,7 @@ actor ThreadSearchService {
     /// once per `backfillVersion` (bump the constant if the embedding/chunking
     /// strategy changes and old vectors should be discarded).
     func backfillIfNeeded(
-        loadAll: @MainActor @Sendable () -> [ChatSession.Summary],
+        loadAll: @Sendable () async -> [ChatSession.Summary],
         loadFull: @MainActor @Sendable (ChatSession.Summary) async -> ChatSession?
     ) async {
         guard threadStore != nil else {
@@ -315,7 +319,7 @@ actor ThreadSearchService {
             return
         }
 
-        let summaries = await MainActor.run { loadAll() }
+        let summaries = await loadAll()
         logger.info("Backfill starting: \(summaries.count) thread summaries to evaluate")
         var done = 0
         var alreadyIndexed = 0

@@ -25,7 +25,7 @@ extension AppState {
     ) -> Bool {
         guard record.conditionTypeValue == .swiftScript,
               let script = record.conditionScript, !script.isEmpty else {
-            menuConditionLogger.debug("[ContextMenuCondition] shouldShow[\(record.title, privacy: .public)]: conditionType=\(record.conditionType, privacy: .public) scriptEmpty=\((record.conditionScript ?? "").isEmpty) -> show=true (no condition)")
+            // No log here: this runs on every render of every row's menu.
             return true
         }
 

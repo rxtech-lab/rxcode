@@ -15,8 +15,14 @@ extension ClaudeCodeServer {
     ///   1. The user's interactive login shell PATH (captures nvm/asdf/.zshrc init)
     ///   2. Well-known tool directories (Homebrew, npm-global, nvm latest)
     ///   3. The GUI process's existing PATH as a final fallback
+    /// The merge is cached against the login-shell PATH it was built from, so a
+    /// re-probed PATH (the resolver refreshes in the background) rebuilds it
+    /// instead of pinning the stale answer for the process.
     func resolvedShellPath() async -> String {
-        if let cached = cachedShellPath { return cached }
+        let loginShellPath = await readUserShellPath()
+        if let cached = cachedShellPath, cachedShellPathSource == loginShellPath {
+            return cached
+        }
 
         var paths: [String] = []
         var seen = Set<String>()
@@ -26,8 +32,8 @@ extension ClaudeCodeServer {
             paths.append(trimmed)
         }
 
-        if let shellPath = await readUserShellPath() {
-            for component in shellPath.split(separator: ":") { add(String(component)) }
+        if let loginShellPath {
+            for component in loginShellPath.split(separator: ":") { add(String(component)) }
         }
 
         let home = FileManager.default.homeDirectoryForCurrentUser.path
@@ -45,30 +51,18 @@ extension ClaudeCodeServer {
             for component in existing.split(separator: ":") { add(String(component)) }
         }
 
-        // Double-check after awaits: another reentrant caller may have populated it.
-        if let cached = cachedShellPath { return cached }
-
         let combined = paths.joined(separator: ":")
         cachedShellPath = combined
+        cachedShellPathSource = loginShellPath
         logger.info("Resolved shell PATH for subprocess (entries=\(paths.count))")
         return combined
     }
 
-    /// Spawn the user's login shell once to read its `$PATH`.
-    /// Uses `-ilc` so `.zshrc` (and the nvm/asdf init it typically sources) runs.
+    /// The user's login-shell `$PATH`, via the process-wide resolver so the
+    /// `/bin/zsh -ilc` round trip is paid once per machine rather than once per
+    /// backend per launch.
     func readUserShellPath() async -> String? {
-        do {
-            let output = try await runShellCommand(
-                "/bin/zsh",
-                arguments: ["-ilc", "print -rn -- $PATH"],
-                injectPath: false
-            )
-            let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty ? nil : trimmed
-        } catch {
-            logger.warning("Failed to read user shell PATH: \(error.localizedDescription)")
-            return nil
-        }
+        await ShellPathResolver.shared.current()
     }
 
     /// Locate the bin directory of the most recent nvm-installed Node, if any.

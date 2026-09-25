@@ -70,6 +70,14 @@ extension AppState {
             return "todoSnapshot"
         case .acpModelsDiscovered:
             return "acpModelsDiscovered"
+        case .textDelta:
+            return "textDelta"
+        case .thinkingDelta:
+            return "thinkingDelta"
+        case .toolCallStarted:
+            return "toolCallStarted"
+        case .toolCallInput:
+            return "toolCallInput"
         case .unknown:
             return "unknown"
         }

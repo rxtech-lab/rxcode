@@ -211,7 +211,22 @@ final class AppState {
 
     /// Independent state for all active sessions. Key: sessionId
     /// `internal` (not private) — read access required from WindowState / extensions
-    var sessionStates: [String: SessionStreamState] = [:]
+    ///
+    /// Every mutation here — down to a single text-delta flush — invalidates
+    /// every view that read this dictionary. Views that only need per-session
+    /// status (sidebar rows, menu bar, toolbar) must read `sessionActivity`
+    /// instead; see `AppState+SessionActivity.swift`.
+    var sessionStates: [String: SessionStreamState] = [:] {
+        didSet { sessionStatesDidChange() }
+    }
+
+    /// Coarse, equality-gated projection of `sessionStates` (streaming flag,
+    /// unchecked-completion flag, live todos). Only published when a value
+    /// actually changes, so views reading it don't re-render per stream event.
+    var sessionActivity: [String: SessionActivity] = [:]
+
+    @ObservationIgnored var sessionActivityTodoFingerprints: [String: SessionActivity.TodoFingerprint] = [:]
+    @ObservationIgnored var sessionActivityTodoRefreshTask: Task<Void, Never>?
 
     /// Maps a stale session id (a `pending-...` placeholder, or a sid that was
     /// advanced by `compact_boundary`) to the current sid it was swapped to.
@@ -268,14 +283,29 @@ final class AppState {
     /// Bumped each time a thread file-edit row is appended in SwiftData. The
     /// "This thread" inspector reads this so SwiftUI observation re-runs the
     /// `threadFileEdits(in:)` fetch after a new Edit/Write tool call lands.
-    var threadFileEditsRevision: Int = 0
+    var threadFileEditsRevision: Int = 0 {
+        didSet { refreshThreadFileEditIndex() }
+    }
+
+    /// Session ids known to have recorded file edits. Kept in sync with
+    /// `threadFileEditsRevision` so `threadHasFileChanges(sessionId:)` — called
+    /// once per sidebar row per view update — is a pure in-memory lookup instead
+    /// of a SwiftData count query.
+    var sessionIdsWithFileEdits: Set<String> = []
 
     /// Bumped each time a todo snapshot row is upserted in SwiftData (MCP
     /// `ide__set_todos`, Codex `.todoSnapshot` events, in-message TodoWrite
     /// persistence). The toolbar's `TodoProgressToolbarItem` reads this so
     /// SwiftUI re-runs the `fetchTodoSnapshot` method when the snapshot
     /// changes without an accompanying observable property mutation.
-    var todoSnapshotsRevision: Int = 0
+    var todoSnapshotsRevision: Int = 0 {
+        didSet { refreshTodoSnapshotIndex() }
+    }
+
+    /// Persisted todo progress by session id. Kept in sync with
+    /// `todoSnapshotsRevision` so the sidebar's per-row progress ring reads from
+    /// memory rather than fetching a snapshot per row per view update.
+    var todoProgressBySession: [String: ChatTodoProgress] = [:]
 
     /// Bumped each time a custom context-menu item is created, edited, toggled,
     /// or removed (`CustomMenuItemRecord` in SwiftData). The sidebar's project /
@@ -283,6 +313,11 @@ final class AppState {
     /// re-runs the `customMenuItems(...)` fetch and the new item appears without
     /// an app restart.
     var customMenuItemsRevision: Int = 0
+
+    /// Enabled custom menu rows, cached per `customMenuItemsRevision`. Menu
+    /// content is built eagerly inside row `body`s, so without this every
+    /// sidebar re-render ran a SwiftData fetch per project/thread row.
+    @ObservationIgnored var customMenuItemsCache: (revision: Int, rows: [CustomMenuItemRecord])?
 
     /// Compiles + runs user-authored Swift "show condition" scripts for custom
     /// menu items. Shared across windows; results land in `menuConditionResults`.
@@ -611,14 +646,16 @@ final class AppState {
     @ObservationIgnored var rateLimitUsageRefreshTasks: [AgentProvider: Task<RateLimitUsage?, Never>] = [:]
 
     /// Sessions currently streaming, anywhere across all windows.
+    /// Reads `sessionActivity` (not `sessionStates`) so the menu bar label doesn't
+    /// re-render its image on every stream event.
     var inProgressSessionCount: Int {
-        sessionStates.values.reduce(0) { $0 + ($1.isStreaming ? 1 : 0) }
+        sessionActivity.values.reduce(0) { $0 + ($1.isStreaming ? 1 : 0) }
     }
 
     /// Sessions whose stream finished but the user hasn't selected since. Cleared
     /// on session select via `hasUncheckedCompletion`.
     var uncheckedFinishedSessionCount: Int {
-        sessionStates.values.reduce(0) { $0 + ($1.hasUncheckedCompletion ? 1 : 0) }
+        sessionActivity.values.reduce(0) { $0 + ($1.hasUncheckedCompletion ? 1 : 0) }
     }
 
     func setDefaultAgentProvider(_ provider: AgentProvider) {
@@ -1050,6 +1087,11 @@ final class AppState {
     /// returns the override if one is registered, otherwise falls through to
     /// the real service. Production code never writes to this dictionary.
     var agentBackendOverrides: [AgentProvider: any AgentBackend] = [:]
+
+    /// What each provider's backend reported for `availableReasoningLevels()`.
+    /// A property of the agent binary rather than of any thread, so it is
+    /// fetched once per provider and read by the composer's effort picker.
+    var reasoningLevelsByProvider: [AgentProvider: [ReasoningLevel]] = [:]
     let acpRegistryService = ACPRegistryService()
     let openAISummarization = OpenAISummarizationService()
     let foundationModelSummarization = FoundationModelSummarizationService()
@@ -1058,6 +1100,12 @@ final class AppState {
     var marketplaceStateRevision = 0
     var mcp: MCPService
     var threadStore: ThreadStore
+    /// Background reader over the same store as `threadStore`, for whole-table
+    /// reads (launch indexes) that would otherwise run on the main thread. It
+    /// is a `Sendable` value that opens its context inside each read's detached
+    /// task, so constructing it here on the main actor costs nothing and binds
+    /// nothing to this executor.
+    let threadStoreReader: ThreadStoreReader
     var searchService = ThreadSearchService()
     var memoryService = MemoryService()
     /// Live progress for a user-triggered full reindex. `nil` when idle.
@@ -1224,7 +1272,9 @@ final class AppState {
         self.persistence = injectedPersistence ?? PersistenceService(metaStore: metaStore, cliStore: cliStore, baseURL: active.storageURL)
         self.marketplace = MarketplaceService(baseURL: active.storageURL)
         self.mcp = MCPService(baseURL: active.storageURL, claudeService: claude)
-        self.threadStore = ThreadStore.make(baseURL: active.storageURL)
+        let threadStore = ThreadStore.make(baseURL: active.storageURL)
+        self.threadStore = threadStore
+        self.threadStoreReader = ThreadStoreReader(container: threadStore.container)
         let rxAuth = RxAuthService(keychainService: active.rxAuthKeychainService)
         self.rxAuth = rxAuth
         self.autopilot = AutopilotService(rxAuth: rxAuth)
@@ -1238,6 +1288,8 @@ final class AppState {
                 self?.broadcastMobileRunTasks()
             }
         }
+
+        installSDKBackendsIfEnabled()
 
         if startBackgroundServices {
             // Bridge ACP `session/request_permission` and Codex in-band permission
@@ -1257,14 +1309,15 @@ final class AppState {
             let searchService = self.searchService
             let memoryService = self.memoryService
             let threadStore = self.threadStore
+            let threadStoreReader = self.threadStoreReader
             let persistence = self.persistence
             let workspaceDefaults = self.workspaceDefaults
             Task.detached(priority: .utility) { [weak self] in
                 await searchService.setWorkspaceDefaults(workspaceDefaults)
-                await searchService.start(threadStore: threadStore)
+                await searchService.start(threadStore: threadStore, reader: threadStoreReader)
                 await memoryService.start(threadStore: threadStore)
                 await searchService.backfillIfNeeded(
-                    loadAll: { @MainActor in threadStore.loadAllSummaries() },
+                    loadAll: { await threadStoreReader.loadSummaries() },
                     loadFull: { @MainActor summary -> ChatSession? in
                         let cwd = self?.projects.first(where: { $0.id == summary.projectId })?.path ?? ""
                         return await persistence.loadFullSession(summary: summary, cwd: cwd)

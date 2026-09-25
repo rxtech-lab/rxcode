@@ -89,7 +89,18 @@ extension AppState {
         case "effort":
             if parts.count > 1 {
                 let arg = String(parts[1]).trimmingCharacters(in: .whitespaces).lowercased()
-                setSessionEffort(Self.availableEfforts.contains(arg) ? arg : nil, in: window)
+                // Validated against this thread's provider, so `/effort max`
+                // on a Codex thread resets to Auto rather than setting a
+                // level codex rejects.
+                //
+                // Awaited rather than read straight from the cache: this can
+                // run before any picker has warmed it, and an unloaded
+                // provider reports no levels — which would reject every level,
+                // including valid ones.
+                let provider = effectiveModelSelection(in: window).provider
+                await loadReasoningLevels(for: provider)
+                let levels = reasoningLevels(for: provider)
+                setSessionEffort(levels.contains { $0.id == arg } ? arg : nil, in: window)
             } else {
                 window.showEffortPicker = true
             }

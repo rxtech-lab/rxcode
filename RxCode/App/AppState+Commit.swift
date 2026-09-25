@@ -26,10 +26,25 @@ extension AppState {
     // MARK: - Commit affordance gating
 
     /// Whether the thread-level "Commit Files" action should be offered: hidden
-    /// when the thread recorded no file edits. Read directly from the local
-    /// `ThreadStore`, so it's always accurate on the desktop.
+    /// when the thread recorded no file edits.
+    ///
+    /// Answered from `sessionIdsWithFileEdits`, not from a per-call SwiftData
+    /// query: the sidebar asks this for every visible thread on every view-graph
+    /// update, and a count query there put synchronous SQLite reads on the main
+    /// thread at display-link rate.
     func threadHasFileChanges(sessionId: String) -> Bool {
-        threadStore.fileEditCount(sessionId: sessionId) > 0
+        sessionIdsWithFileEdits.contains(sessionId)
+    }
+
+    /// Reload the file-edit index from SwiftData. Driven by `threadFileEditsRevision`,
+    /// so every existing bump site keeps the index fresh without also having to
+    /// remember to refresh it.
+    func refreshThreadFileEditIndex() {
+        let ids = threadStore.sessionIdsWithFileEdits()
+        // Assigning an equal value still fires observation, and this runs on every
+        // recorded edit — only publish when the answer actually changed.
+        guard ids != sessionIdsWithFileEdits else { return }
+        sessionIdsWithFileEdits = ids
     }
 
     /// Whether the project-level "Commit All Changes" action should be offered.

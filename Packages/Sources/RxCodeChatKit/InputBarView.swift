@@ -30,6 +30,10 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
     @State private var textFieldLayoutID = 0
     @State private var measuredInputHeight: CGFloat = 20
     @State private var inputHasMarkedText = false
+    /// Queued messages whose "steer now" was declined by the running turn.
+    /// Non-private because the queue UI lives in an InputBarView extension in
+    /// another file; it renders these as an inline "still queued" note.
+    @State var steerDeclinedIDs: Set<UUID> = []
 
     init(accessory: Accessory, @ViewBuilder topAccessory: () -> TopAccessory) {
         self.accessory = accessory
@@ -751,6 +755,10 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
         historyIndex = -1
 
         if chatBridge.isStreaming {
+            // Sending mid-turn queues by default: the message goes out when the
+            // current response finishes. The queued row is where the user
+            // overrides that — steering it into the running turn, or
+            // interrupting to send it straight away.
             withAnimation(.easeOut(duration: 0.2)) {
                 chatBridge.enqueueMessage(text: windowState.inputText, attachments: windowState.attachments)
             }

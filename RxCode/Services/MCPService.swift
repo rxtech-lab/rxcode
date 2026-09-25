@@ -297,6 +297,22 @@ actor MCPService {
         try loadConfig().servers.filter { $0.isEnabled(for: projectPath) }
     }
 
+    /// The enabled servers for a project, unrendered.
+    ///
+    /// `writeClaudeConfig`, `codexConfigOverrides` and `acpMCPServers` are three
+    /// renderings of this same list into three CLI config dialects. A backend
+    /// that renders its own — every RxAgentSDK-based one does — takes the list.
+    /// Failure is reported as an empty list to match the rendering methods,
+    /// which also degrade to "no servers" rather than failing the turn.
+    func enabledServerRecords(projectPath: String?) -> [MCPServerRecord] {
+        do {
+            return try enabledRecords(projectPath: projectPath)
+        } catch {
+            logger.warning("Failed to read MCP servers: \(error.localizedDescription)")
+            return []
+        }
+    }
+
     // MARK: - Probe
 
     func probe(name: String, projectPath: String?) async -> MCPProbeResult {

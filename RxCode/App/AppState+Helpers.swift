@@ -408,10 +408,15 @@ extension AppState {
         return next
     }
 
-    /// Cancels any in-flight stream for the current session, removes the chosen
-    /// queued message, and sends it as the next user turn.
+    /// Interrupts the running turn and sends a chosen queued message as a new one.
+    ///
+    /// The blunt option, and the destructive one: whatever the agent had in
+    /// flight is thrown away. `steerQueuedMessage(id:in:)` is the alternative
+    /// that keeps the turn alive, so this runs only when the user asks for it
+    /// by name — or when the agent can't be steered at all.
     func sendQueuedNow(id: UUID, in window: WindowState) async {
         guard let target = window.messageQueue.first(where: { $0.id == id }) else { return }
+
         // Take a snapshot of remaining queue items so we can restore them after
         // `cancelStreaming` clobbers `window.inputText`/`window.attachments`.
         let remaining = window.messageQueue.filter { $0.id != id }
@@ -457,9 +462,13 @@ extension AppState {
     /// Concatenates every queued message (texts joined with a blank line,
     /// attachments merged in order), cancels any in-flight stream, clears the
     /// queue, then sends the combined message as a single user turn.
+    ///
+    /// The interrupting counterpart to `steerAllQueuedAsOne(in:)`, chosen the
+    /// same way: only when the user asks for it by name.
     func sendAllQueuedAsOne(in window: WindowState) async {
         guard !window.messageQueue.isEmpty else { return }
         let snapshot = window.messageQueue
+
         let draftText = window.inputText
         let draftAttachments = window.attachments
         let shouldRestoreDraft = !draftText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty

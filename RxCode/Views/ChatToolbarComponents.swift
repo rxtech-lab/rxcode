@@ -1,3 +1,4 @@
+import AgentChatUI
 import AppKit
 import RxCodeChatKit
 import RxCodeCore
@@ -34,6 +35,46 @@ struct ChatToolbarControls: View {
     }
 
     var effectiveMode: PermissionMode { windowState.sessionPermissionMode ?? appState.permissionMode }
+
+    /// What the selected agent actually accepts, rather than one list shared by
+    /// every provider — Claude's `--effort` and Codex's `model_reasoning_effort`
+    /// do not take the same values.
+    private var reasoningLevels: [ReasoningLevel] {
+        appState.reasoningLevels(for: effectiveProvider)
+    }
+
+    /// The provider's levels as picker rows. The one-line rationale rides along
+    /// as each row's subtitle, which the SDK's rows surface as a tooltip.
+    private var effortItems: [AgentPickerItem] {
+        reasoningLevels.map {
+            AgentPickerItem(id: $0.id, title: $0.displayName, subtitle: $0.levelDescription)
+        }
+    }
+
+    private var effortSelection: Binding<String?> {
+        Binding(
+            get: { windowState.sessionEffort },
+            set: { appState.setSessionEffort($0, in: windowState) }
+        )
+    }
+
+    /// What the chip reads. Names the axis while nothing is pinned — the icon
+    /// alone doesn't say what "Auto" would be auto about — and the chosen level
+    /// once there is one.
+    ///
+    /// Falls back to the raw wire value for an effort the provider didn't
+    /// report, so a stale session setting still reads as itself rather than
+    /// silently showing the resting label.
+    private var effortLabel: String {
+        guard let effort = windowState.sessionEffort else { return "Thinking" }
+        return reasoningLevels.first { $0.id == effort }?.displayName ?? effortDisplayName(effort)
+    }
+
+    /// Names what clearing the pick falls back to, rather than calling it
+    /// "Auto".
+    private var effortDefaultRowTitle: String {
+        appState.defaultEffortTitle(for: effectiveProvider)
+    }
     var effectiveModel: String { appState.effectiveModelSelection(in: windowState).model }
     var effectiveProvider: AgentProvider { appState.effectiveModelSelection(in: windowState).provider }
 
@@ -106,36 +147,34 @@ struct ChatToolbarControls: View {
             .accessibilityIdentifier("provider-model-menu")
             .popoverTip(RxCodeTips.AgentSelectionTip(), arrowEdge: .top)
 
-            Menu {
-                Section("Effort Picker") {
-                    Button {
-                        appState.setSessionEffort(nil, in: windowState)
-                    } label: {
-                        Text("Auto Effort")
-                        if windowState.sessionEffort == nil { Image(systemName: "checkmark") }
+            // Hidden for an agent with no reasoning control — ACP has no
+            // standard one, and an empty menu reads as a broken control.
+            if !reasoningLevels.isEmpty {
+                Menu {
+                    Section("Effort Picker") {
+                        AgentPickerRows(
+                            items: effortItems,
+                            selection: effortSelection,
+                            defaultTitle: effortDefaultRowTitle
+                        )
                     }
-                    Divider()
-                    ForEach(AppState.availableEfforts, id: \.self) { effort in
-                        Button {
-                            appState.setSessionEffort(effort, in: windowState)
-                        } label: {
-                            Text(LocalizedStringKey(effortDisplayName(effort)))
-                            if windowState.sessionEffort == effort { Image(systemName: "checkmark") }
-                        }
-                    }
+                } label: {
+                    controlLabel(
+                        title: effortLabel,
+                        icon: "brain",
+                        isAccent: false,
+                        isActive: windowState.sessionEffort != nil
+                    )
                 }
-            } label: {
-                controlLabel(
-                    title: windowState.sessionEffort.map { effortDisplayName($0) } ?? "Auto Effort",
-                    icon: nil,
-                    isAccent: false,
-                    isActive: false
-                )
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .help("Effort level: \(effortLabel)")
+                .accessibilityIdentifier("effort-menu")
             }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-            .help("Effort level: \(windowState.sessionEffort.map { effortDisplayName($0) } ?? "Auto Effort")")
-            .accessibilityIdentifier("effort-menu")
+        }
+        .task(id: effectiveProvider) {
+            await appState.loadReasoningLevels(for: effectiveProvider)
+            appState.reconcileSessionEffort(in: windowState, provider: effectiveProvider)
         }
         .frame(maxWidth: placement == .composer ? .infinity : nil, alignment: .leading)
     }

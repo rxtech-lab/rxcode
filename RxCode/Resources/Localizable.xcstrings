@@ -2463,6 +2463,7 @@
       }
     },
     "Auto Effort" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -11336,6 +11337,7 @@
       }
     },
     "Opus 4.6 only" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {

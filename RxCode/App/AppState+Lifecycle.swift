@@ -100,45 +100,106 @@ extension AppState {
         if window.pendingPermissions.contains(where: { $0.sessionId == id }) {
             return .awaitingPermission
         }
-        if let state = sessionStates[id] {
-            if state.isStreaming { return .streaming }
-            if state.hasUncheckedCompletion { return .done }
+        // `sessionActivity`, not `sessionStates`: this runs in every sidebar row's
+        // body, and reading `sessionStates` re-rendered them all per stream event.
+        if let activity = sessionActivity[id] {
+            if activity.isStreaming { return .streaming }
+            if activity.hasUncheckedCompletion { return .done }
         }
         return .idle
     }
 
     func todoProgress(forSessionId id: String) -> ChatTodoProgress? {
-        if let messages = sessionStates[id]?.messages,
-           let todos = TodoExtractor.latest(in: messages)
-        {
+        // Live todos are extracted off the hot path into `sessionActivity`
+        // instead of rescanning the whole transcript per row per render.
+        if let todos = liveTodos(forSessionId: id) {
             return ChatTodoProgress(todos: todos)
         }
 
-        guard let snapshot = threadStore.fetchTodoSnapshot(sessionId: id), snapshot.total > 0 else {
+        // Read the persisted fallback from the in-memory index rather than
+        // fetching per call: the sidebar asks this for every visible thread on
+        // every view-graph update, where a SwiftData fetch would land on the
+        // main thread at display-link rate.
+        guard let snapshot = todoProgressBySession[id], snapshot.total > 0 else {
             return nil
         }
 
-        return ChatTodoProgress(
-            done: snapshot.done,
-            total: snapshot.total,
-            inProgress: snapshot.inProgress > 0
-        )
+        return snapshot
+    }
+
+    /// Reload the todo-snapshot index from SwiftData. Driven by
+    /// `todoSnapshotsRevision`, so every existing bump site keeps the index fresh
+    /// without also having to remember to refresh it.
+    func refreshTodoSnapshotIndex() {
+        let progress = threadStore.loadTodoProgressBySession()
+        // Assigning an equal value still fires observation, and this runs on every
+        // todo write — only publish when the answer actually changed.
+        guard progress != todoProgressBySession else { return }
+        todoProgressBySession = progress
     }
 
     // MARK: - Initialization
 
-    /// Once per app launch — start services and load shared data
+    /// Once per app launch — start services and load shared data.
+    ///
+    /// Only the data the first frame renders is awaited here; everything else
+    /// (agent discovery, sign-in restore, registries, store maintenance) runs
+    /// alongside or after it. Launch previously sat on the splash screen
+    /// through a `/bin/zsh -ilc` PATH probe, two CLI version checks, a Codex
+    /// model round trip and a network token refresh before it began reading
+    /// the sidebar's own data.
     func initialize() async {
+        let launchStart = ContinuousClock.now
+
         ThemeStore.shared.current = selectedTheme
         ThemeStore.shared.fontSizeAdjustment = fontSizeAdjustment
         ThemeStore.shared.messageFontSizeAdjustment = messageFontSizeAdjustment
 
-        await refreshAgentInstallations()
+        // Services nothing on the critical path waits for, started first so
+        // they overlap the loads below.
+        startEagerBackgroundServices()
 
+        projects = await loadDeduplicatedProjects()
+        seedUITestBriefingIfRequested()
+
+        // Sidebar threads are sourced from the local SwiftData store. The CLI
+        // is still the transcript backend (replay on thread open), but it does
+        // not drive thread discovery.
+        //
+        // Every index the sidebar reads — summaries, review verdicts, the
+        // file-edit and todo indexes, queued drafts — is fetched in a single
+        // pass on a background context, so a store with thousands of rows no
+        // longer blocks the main thread while the window comes up.
+        let snapshot = await threadStoreReader.loadStartupSnapshot()
+        allSessionSummaries = snapshot.summaries
+        reviewPassedBySession = snapshot.reviewVerdicts
+        sessionIdsWithFileEdits = snapshot.sessionIdsWithFileEdits
+        todoProgressBySession = snapshot.todoProgress
+        persistedQueues = snapshot.queues
+
+        permissionMode = PermissionMode(rawValue: workspaceDefaults.string(for: "selectedPermissionMode") ?? "") ?? .default
+
+        // Permission request routing is handled per-window in initializeWindow's listener.
+        isInitialized = true
+
+        let elapsed = ContinuousClock.now - launchStart
+        let elapsedMs = Double(elapsed.components.seconds) * 1_000
+            + Double(elapsed.components.attoseconds) / 1_000_000_000_000_000
+        logger.info("Launch critical path took \(String(format: "%.0f", elapsedMs))ms (threads=\(self.allSessionSummaries.count) projects=\(self.projects.count))")
+
+        // Hand the rest of the boot to a task so the window can finish coming
+        // up (per-window init runs right after this returns).
+        Task { [weak self] in await self?.finishInitialization() }
+    }
+
+    /// Work that has to start as early as possible but that the first frame
+    /// does not read: the permission server, agent discovery, and sign-in.
+    private func startEagerBackgroundServices() {
         // Prewarm each backend's shell PATH cache in parallel so the first
         // user message in a thread doesn't pay the `/bin/zsh -ilc` round trip
-        // on its critical path. The result is cached inside each actor, so
-        // every subsequent spawn reuses it.
+        // on its critical path. All three share `ShellPathResolver`, so this is
+        // one shell spawn — and none at all once a previous launch has
+        // remembered the PATH.
         Task { [claude, codex, acp] in
             await withTaskGroup(of: Void.self) { group in
                 group.addTask { await claude.prewarm() }
@@ -147,31 +208,19 @@ extension AppState {
             }
         }
 
-        projects = await persistence.loadProjects()
-        var seenPaths = Set<String>()
-        let deduplicated = projects.filter { seenPaths.insert($0.path).inserted }
-        if deduplicated.count != projects.count {
-            projects = deduplicated
-            try? await persistence.saveProjects(projects)
-        }
+        // CLI discovery spawns `claude --version`, `codex --version` and a
+        // Codex `model/list` round trip. Settings and the model picker read the
+        // results; nothing on the launch path does.
+        Task { [weak self] in await self?.refreshAgentInstallations() }
 
-        // Restore an existing rxauth session (token refresh runs silently).
-        // One-time migration: purge the legacy GitHub device-flow access token
-        // from the old `com.claudework.github` keychain entry so it never
-        // gets re-used. `try?` — failure (no entry present) is the happy path.
-        try? KeychainHelper.delete(service: "com.claudework.github", account: "access_token")
-        // Restore an existing rxauth session. `OAuthManager.checkExistingAuth`
-        // refreshes the access token if it has expired and starts its own
-        // 5-minute refresh timer, so no extra scheduling is needed here.
-        await rxAuth.restore()
-        if isSignedIn {
-            startAutopilotWarmup()
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await permission.start()
+            } catch {
+                logger.error("Failed to start permission server: \(error.localizedDescription)")
+            }
         }
-
-        // Periodically pull GitHub Actions CI status for open projects (no-ops
-        // until signed in). Notifies on failure and, when enabled, auto-starts a
-        // fix thread.
-        startCIStatusPoller()
 
         // React to RxAuthSwift session expiry by clearing autopilot repos.
         // `isSignedIn`/`rxUser` are computed from the manager, so they update
@@ -186,60 +235,39 @@ extension AppState {
             }
         }
 
+        Task { [weak self] in
+            guard let self else { return }
+            // Restore an existing rxauth session (token refresh runs silently).
+            // One-time migration: purge the legacy GitHub device-flow access
+            // token from the old `com.claudework.github` keychain entry so it
+            // never gets re-used. `try?` — failure (no entry) is the happy path.
+            try? KeychainHelper.delete(service: "com.claudework.github", account: "access_token")
+            // `OAuthManager.checkExistingAuth` refreshes the access token if it
+            // has expired and starts its own 5-minute refresh timer, so no
+            // extra scheduling is needed here.
+            await rxAuth.restore()
+            if isSignedIn {
+                startAutopilotWarmup()
+            }
+            // Periodically pull GitHub Actions CI status for open projects
+            // (no-ops until signed in). Notifies on failure and, when enabled,
+            // auto-starts a fix thread.
+            startCIStatusPoller()
+        }
+    }
+
+    /// Everything that can wait until the window is on screen: registries,
+    /// retention policy, and the store sweeps that keep orphan rows out of
+    /// history and search.
+    private func finishInitialization() async {
         marketplaceCustomSources = await marketplace.customSources()
 
-        seedUITestBriefingIfRequested()
-
-        let prunedBriefingMetadata = threadStore.deleteBriefingMetadata(
-            excludingProjectIds: Set(projects.map(\.id))
-        )
-        if prunedBriefingMetadata.threadSummaries > 0 || prunedBriefingMetadata.branchBriefings > 0 {
-            threadSummaryRevision &+= 1
-            branchBriefingRevision &+= 1
-            logger.info("Pruned orphan briefing metadata summaries=\(prunedBriefingMetadata.threadSummaries) briefings=\(prunedBriefingMetadata.branchBriefings)")
-        }
-
-        // Purge threads + search chunks left behind by projects that were
-        // deleted before the cascade in `deleteProject` existed (or by any
-        // leak). This clears them from history and the search source so they
-        // never resurface as "Unknown project" results. Runs before we load
-        // the sidebar summaries below so the loaded list already excludes them.
-        let knownProjectIds = Set(projects.map(\.id))
-        let prunedOrphanThreads = threadStore.pruneOrphanThreads(excludingProjectIds: knownProjectIds)
-        if prunedOrphanThreads > 0 {
-            logger.info("Pruned \(prunedOrphanThreads) orphan thread(s) from deleted projects")
-        }
-        // Keep the in-memory search index consistent too (disk is already clean
-        // above). Detached so a fresh boot isn't blocked on the embedding actor.
-        Task.detached(priority: .utility) { [searchService] in
-            await searchService.pruneOrphans(knownProjectIds: knownProjectIds)
-        }
-
-        // Sidebar threads are now sourced from the local SwiftData store.
-        // CLI session files are no longer surfaced in the sidebar list — the
-        // CLI is still the transcript backend (replay on thread open), but
-        // it does not drive thread discovery.
-        allSessionSummaries = threadStore.loadAllSummaries()
-        // Restore persisted code-review verdicts so sidebar review dots survive a reload.
-        reviewPassedBySession = threadStore.loadReviewVerdicts()
-        autoArchiveExpiredSessionsIfNeeded()
-        await autoDeleteExpiredSessionsIfNeeded()
-        purgeStaleBranchBriefingsIfNeeded()
-
-        persistedQueues = threadStore.loadAllQueues()
-
-        // Hydrate ACP state (clients + cached registry) early so the model picker
-        // and Settings tab don't flash empty on first open.
+        // Hydrate ACP state (clients + cached registry) so the model picker and
+        // Settings tab don't flash empty on first open.
         await loadACPClientsFromDisk()
-        Task { await self.refreshACPRegistry(forceRefresh: false) }
+        Task { [weak self] in await self?.refreshACPRegistry(forceRefresh: false) }
 
-        permissionMode = PermissionMode(rawValue: workspaceDefaults.string(for: "selectedPermissionMode") ?? "") ?? .default
-
-        do {
-            try await permission.start()
-        } catch {
-            logger.error("Failed to start permission server: \(error.localizedDescription)")
-        }
+        await runStartupStoreMaintenance()
 
         // Warm MCP server statuses in the background so the Settings sheet
         // shows live connection results without the user clicking "Test".
@@ -257,10 +285,54 @@ extension AppState {
         // Recurring probe so disconnected MCP servers surface promptly even
         // when the user isn't actively interacting with the Settings tab.
         startMCPPeriodicProbe()
+    }
 
-        // Permission request routing is handled per-window in initializeWindow's listener.
+    /// Launch-time store sweeps: orphan rows from deleted projects, then the
+    /// archive/delete retention policy. These write, so they run on the main
+    /// store rather than the background reader's context.
+    private func runStartupStoreMaintenance() async {
+        let knownProjectIds = Set(projects.map(\.id))
 
-        isInitialized = true
+        let prunedBriefingMetadata = threadStore.deleteBriefingMetadata(
+            excludingProjectIds: knownProjectIds
+        )
+        if prunedBriefingMetadata.threadSummaries > 0 || prunedBriefingMetadata.branchBriefings > 0 {
+            threadSummaryRevision &+= 1
+            branchBriefingRevision &+= 1
+            logger.info("Pruned orphan briefing metadata summaries=\(prunedBriefingMetadata.threadSummaries) briefings=\(prunedBriefingMetadata.branchBriefings)")
+        }
+
+        // Purge threads + search chunks left behind by projects that were
+        // deleted before the cascade in `deleteProject` existed (or by any
+        // leak). This clears them from history and the search source so they
+        // never resurface as "Unknown project" results.
+        let prunedOrphanThreads = threadStore.pruneOrphanThreads(excludingProjectIds: knownProjectIds)
+        if prunedOrphanThreads > 0 {
+            logger.info("Pruned \(prunedOrphanThreads) orphan thread(s) from deleted projects")
+            // The sidebar list was published before this sweep ran — reload it
+            // so the pruned threads drop out.
+            allSessionSummaries = await threadStoreReader.loadSummaries()
+        }
+        // Keep the in-memory search index consistent too (disk is already clean
+        // above). Detached so the boot isn't blocked on the embedding actor.
+        Task.detached(priority: .utility) { [searchService] in
+            await searchService.pruneOrphans(knownProjectIds: knownProjectIds)
+        }
+
+        autoArchiveExpiredSessionsIfNeeded()
+        await autoDeleteExpiredSessionsIfNeeded()
+        purgeStaleBranchBriefingsIfNeeded()
+    }
+
+    /// Projects as persisted, minus duplicate paths (rewriting the file when a
+    /// duplicate is dropped).
+    private func loadDeduplicatedProjects() async -> [Project] {
+        let loaded = await persistence.loadProjects()
+        var seenPaths = Set<String>()
+        let deduplicated = loaded.filter { seenPaths.insert($0.path).inserted }
+        guard deduplicated.count != loaded.count else { return loaded }
+        try? await persistence.saveProjects(deduplicated)
+        return deduplicated
     }
 
     func refreshAgentInstallations() async {
@@ -535,6 +607,14 @@ extension AppState {
             guard let self, let window else { return }
             await self.sendAllQueuedAsOne(in: window)
         }
+        bridge.steerQueuedMessageHandler = { [weak self, weak window] id in
+            guard let self, let window else { return false }
+            return await self.steerQueuedMessage(id: id, in: window)
+        }
+        bridge.steerAllQueuedAsOneHandler = { [weak self, weak window] in
+            guard let self, let window else { return false }
+            return await self.steerAllQueuedAsOne(in: window)
+        }
 
         startBridgeObservation(bridge, for: window)
     }
@@ -561,6 +641,7 @@ extension AppState {
                 let provider = selection.provider
                 let currentModel = selection.model
                 bridge.agentProvider = provider
+                bridge.canSteer = self.canSteer(in: window)
                 bridge.modelDisplayName = modelDisplayName(for: currentModel, provider: provider, in: window)
                 bridge.sessionStats = ChatSessionStats(
                     costUsd: state.costUsd,

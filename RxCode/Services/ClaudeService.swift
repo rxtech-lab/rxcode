@@ -59,6 +59,9 @@ actor ClaudeCodeServer {
     /// `env: node: No such file or directory` when its `node` shebang resolver
     /// cannot locate Node.
     var cachedShellPath: String?
+    /// Login-shell PATH `cachedShellPath` was merged from, so the merge is
+    /// rebuilt when the resolver comes back with a different one.
+    var cachedShellPathSource: String?
 
     init(cliStore: CLISessionStore) {
         self.cliStore = cliStore
@@ -145,6 +148,14 @@ typealias ClaudeService = ClaudeCodeServer
 extension ClaudeCodeServer: AgentBackend {
     nonisolated var provider: AgentProvider { .claudeCode }
     nonisolated var staticCapabilities: CapabilitySet { AgentProvider.claudeCode.staticCapabilities }
+
+    /// `--input-format stream-json` keeps stdin open for the life of the turn,
+    /// so another user frame is always writable in principle.
+    nonisolated var supportsSteering: Bool { true }
+
+    /// What `--effort` accepts. Static rather than discovered — the CLI has no
+    /// query for it, and these five are the documented set.
+    func availableReasoningLevels() async -> [ReasoningLevel] { .claudeCodeEfforts }
 
     func send(_ request: BackendSendRequest) -> AsyncStream<StreamEvent> {
         send(

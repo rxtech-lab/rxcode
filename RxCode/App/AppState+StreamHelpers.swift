@@ -20,14 +20,7 @@ extension AppState {
     }
 
     func consumeAgentStderr(agentProvider: AgentProvider, streamId: UUID) async -> String? {
-        switch agentProvider {
-        case .claudeCode:
-            return await claude.consumeStderr(for: streamId)
-        case .codex:
-            return await codex.consumeStderr(for: streamId)
-        case .acp:
-            return await acp.consumeStderr(for: streamId)
-        }
+        await backend(for: agentProvider).consumeStderr(for: streamId)
     }
 
     // MARK: - Editing File Snapshot Capture

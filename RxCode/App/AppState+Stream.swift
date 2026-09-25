@@ -302,32 +302,7 @@ extension AppState {
             if blockType == "tool_use" {
                 guard let id = contentBlock["id"] as? String,
                       let name = contentBlock["name"] as? String else { return }
-                let toolCall = ToolCall(id: id, name: name, input: [:])
-                // Flush the text buffer first so text blocks are committed before tools
-                flushPendingUpdates(for: sessionKey, forceText: true)
-                updateState(sessionKey) { state in
-                    state.isThinking = false
-                    // needsNewMessage: new Claude turn after tool result — create a new ChatMessage
-                    if state.needsNewMessage {
-                        if let idx = state.messages.indices.reversed().first(where: { state.messages[$0].role == .assistant && state.messages[$0].isStreaming }) {
-                            state.messages[idx].isStreaming = false
-                            state.messages[idx].finalizeToolCalls()
-                            Self.stripNoOpText(at: idx, in: &state.messages)
-                        }
-                        state.messages.append(ChatMessage(role: .assistant, isStreaming: true))
-                        state.needsNewMessage = false
-                    } else if state.messages.last?.role != .assistant || !(state.messages.last?.isStreaming ?? false) {
-                        state.messages.append(ChatMessage(role: .assistant, isStreaming: true))
-                    }
-                    if let lastIndex = state.messages.indices.last,
-                       state.messages[lastIndex].role == .assistant
-                    {
-                        state.messages[lastIndex].appendToolCall(toolCall)
-                    }
-                    // Ready to receive input_json_delta
-                    state.activeToolId = id
-                    state.activeToolInputBuffer = ""
-                }
+                beginToolCall(id: id, name: name, for: sessionKey)
             } else if blockType == "text" {
                 // New text block started — if needsNewMessage, prepare a new ChatMessage
                 updateState(sessionKey) { state in
@@ -348,66 +323,134 @@ extension AppState {
                   let deltaType = delta["type"] as? String else { return }
 
             if deltaType == "text_delta", let text = delta["text"] as? String {
-                updateState(sessionKey) { state in
-                    state.isThinking = false
-                    state.textDeltaBuffer += text
-                }
+                applyTextDelta(text, for: sessionKey)
             } else if deltaType == "input_json_delta", let partial = delta["partial_json"] as? String {
                 updateState(sessionKey) { state in
                     state.activeToolInputBuffer += partial
                 }
             } else if deltaType == "thinking_delta" {
-                updateState(sessionKey) { $0.isThinking = true }
+                applyThinkingDelta(for: sessionKey)
             }
 
         case "content_block_stop":
-            // Finalize tool_use input — parse the accumulated JSON and apply to the tool call
-            updateState(sessionKey) { state in
-                guard let toolId = state.activeToolId, !state.activeToolInputBuffer.isEmpty else {
+            // Finalize tool_use input — parse the accumulated JSON and apply to the tool call.
+            // Only Claude's wire format streams arguments in fragments, so this
+            // is the one place that has to reassemble them; backends built on
+            // RxAgentSDK deliver the parsed input as `.toolCallInput`.
+            let pending: (id: String, input: [String: JSONValue])? = {
+                var result: (String, [String: JSONValue])?
+                updateState(sessionKey) { state in
+                    guard let toolId = state.activeToolId, !state.activeToolInputBuffer.isEmpty else {
+                        state.activeToolId = nil
+                        return
+                    }
+                    let buffer = state.activeToolInputBuffer
                     state.activeToolId = nil
-                    return
-                }
-                let buffer = state.activeToolInputBuffer
-                state.activeToolId = nil
-                state.activeToolInputBuffer = ""
+                    state.activeToolInputBuffer = ""
 
-                guard let inputData = buffer.data(using: .utf8),
-                      let parsed = try? JSONDecoder().decode([String: JSONValue].self, from: inputData) else { return }
-
-                if let msgIdx = state.messages.indices.reversed().first(where: { state.messages[$0].role == .assistant && state.messages[$0].isStreaming }),
-                   let blockIdx = state.messages[msgIdx].toolCallIndex(id: toolId)
-                {
-                    state.messages[msgIdx].blocks[blockIdx].toolCall?.input = parsed
-                    if let toolName = state.messages[msgIdx].blocks[blockIdx].toolCall?.name {
-                        // Kick off the pre-edit file snapshot now that the tool
-                        // input (and therefore `file_path`) is finally known.
-                        // ACP runtimes hit `captureEditingFileSnapshot` from
-                        // their `.assistant` block; the Claude streaming path
-                        // never delivers `file_path` until input_json_delta
-                        // finishes, so this is the earliest point it can run.
-                        Self.captureEditingFileSnapshot(
-                            toolName: toolName,
-                            input: parsed,
-                            state: &state
-                        )
-                    }
-                    if let toolName = state.messages[msgIdx].blocks[blockIdx].toolCall?.name,
-                       toolName.lowercased() == "todowrite"
-                    {
-                        let todos = TodoExtractor.parse(input: parsed)
-                        let done = todos.filter { $0.status == .completed }.count
-                        let active = todos.first(where: { $0.status == .inProgress })?.activeForm ?? "-"
-                        logger.info(
-                            "[TodoWrite] session=\(sessionKey, privacy: .public) total=\(todos.count) done=\(done) active=\(active, privacy: .public)"
-                        )
-                        threadStore.upsertTodoSnapshot(sessionId: sessionKey, items: todos)
-                        todoSnapshotsRevision &+= 1
-                    }
+                    guard let inputData = buffer.data(using: .utf8),
+                          let parsed = try? JSONDecoder().decode([String: JSONValue].self, from: inputData)
+                    else { return }
+                    result = (toolId, parsed)
                 }
+                return result
+            }()
+            if let pending {
+                applyToolCallInput(id: pending.id, input: pending.input, for: sessionKey)
             }
 
         default:
             break
+        }
+    }
+
+    // MARK: - Block Application
+    //
+    // The bodies below are shared by two producers: `handlePartialEvent(_:for:)`
+    // above, which decodes Claude's raw wire frames, and the RxAgentSDK-backed
+    // backends, which emit `StreamEvent.textDelta` / `.toolCallStarted` /
+    // `.toolCallInput` already decoded. Keeping one implementation means the
+    // two paths cannot drift.
+
+    /// Append a chunk of assistant text to the session's delta buffer.
+    func applyTextDelta(_ text: String, for sessionKey: String) {
+        guard !text.isEmpty else { return }
+        updateState(sessionKey) { state in
+            state.isThinking = false
+            state.textDeltaBuffer += text
+        }
+    }
+
+    /// Note that the model is reasoning. The text itself is not rendered yet.
+    func applyThinkingDelta(for sessionKey: String) {
+        updateState(sessionKey) { $0.isThinking = true }
+    }
+
+    /// Open a tool call whose arguments have not arrived yet.
+    func beginToolCall(id: String, name: String, for sessionKey: String) {
+        // Flush the text buffer first so text blocks are committed before tools
+        flushPendingUpdates(for: sessionKey, forceText: true)
+        updateState(sessionKey) { state in
+            state.isThinking = false
+            // needsNewMessage: new Claude turn after tool result — create a new ChatMessage
+            if state.needsNewMessage {
+                if let idx = state.messages.indices.reversed().first(where: { state.messages[$0].role == .assistant && state.messages[$0].isStreaming }) {
+                    state.messages[idx].isStreaming = false
+                    state.messages[idx].finalizeToolCalls()
+                    Self.stripNoOpText(at: idx, in: &state.messages)
+                }
+                state.messages.append(ChatMessage(role: .assistant, isStreaming: true))
+                state.needsNewMessage = false
+            } else if state.messages.last?.role != .assistant || !(state.messages.last?.isStreaming ?? false) {
+                state.messages.append(ChatMessage(role: .assistant, isStreaming: true))
+            }
+            if let lastIndex = state.messages.indices.last,
+               state.messages[lastIndex].role == .assistant
+            {
+                state.messages[lastIndex].appendToolCall(ToolCall(id: id, name: name, input: [:]))
+            }
+            // Ready to receive the arguments
+            state.activeToolId = id
+            state.activeToolInputBuffer = ""
+        }
+    }
+
+    /// Attach a tool call's complete arguments and run the side effects that
+    /// depend on them — the pre-edit file snapshot and TodoWrite extraction.
+    func applyToolCallInput(id toolId: String, input: [String: JSONValue], for sessionKey: String) {
+        var todos: [TodoItem]?
+        updateState(sessionKey) { state in
+            if state.activeToolId == toolId {
+                state.activeToolId = nil
+                state.activeToolInputBuffer = ""
+            }
+            guard let msgIdx = state.messages.indices.reversed().first(where: {
+                state.messages[$0].role == .assistant && state.messages[$0].isStreaming
+            }), let blockIdx = state.messages[msgIdx].toolCallIndex(id: toolId) else { return }
+
+            state.messages[msgIdx].blocks[blockIdx].toolCall?.input = input
+            guard let toolName = state.messages[msgIdx].blocks[blockIdx].toolCall?.name else { return }
+
+            // Kick off the pre-edit file snapshot now that the tool input (and
+            // therefore `file_path`) is finally known. ACP runtimes hit
+            // `captureEditingFileSnapshot` from their `.assistant` block; the
+            // Claude streaming path never delivers `file_path` until the
+            // arguments finish, so this is the earliest point it can run.
+            Self.captureEditingFileSnapshot(toolName: toolName, input: input, state: &state)
+
+            if toolName.lowercased() == "todowrite" {
+                todos = TodoExtractor.parse(input: input)
+            }
+        }
+
+        if let todos {
+            let done = todos.filter { $0.status == .completed }.count
+            let active = todos.first(where: { $0.status == .inProgress })?.activeForm ?? "-"
+            logger.info(
+                "[TodoWrite] session=\(sessionKey, privacy: .public) total=\(todos.count) done=\(done) active=\(active, privacy: .public)"
+            )
+            threadStore.upsertTodoSnapshot(sessionId: sessionKey, items: todos)
+            todoSnapshotsRevision &+= 1
         }
     }
 

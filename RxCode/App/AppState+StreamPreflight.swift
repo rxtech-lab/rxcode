@@ -17,8 +17,16 @@ extension AppState {
         var acpSpec: ACPClientSpec?
         var resolvedPrompt: String
         var resolvedModel: String?
+        /// The turn's effort after checking it against the provider's own
+        /// levels. Nil means "the agent's default" — either nothing was
+        /// selected, or what was selected is not a level this agent accepts.
+        var resolvedEffort: String?
         var resolvedSendMode: PermissionMode
         var earlyStream: AsyncStream<StreamEvent>?
+        /// The same MCP servers as the three rendered fields above, unrendered.
+        /// Backends that render their own config read these instead.
+        var mcpRecords: [MCPServerRecord] = []
+        var ideBridgeCommand: MCPBridgeCommand?
     }
 
     /// Runs the expensive, independent pre-spawn work (memory lookup, git
@@ -34,6 +42,7 @@ extension AppState {
         sessionKey: String,
         agentProvider: AgentProvider,
         model: String?,
+        effort: String?,
         permissionMode: PermissionMode,
         registerMode: PermissionMode,
         projectId: UUID,
@@ -262,8 +271,16 @@ extension AppState {
             acpSpec: acpSpec,
             resolvedPrompt: resolvedPrompt,
             resolvedModel: resolvedModel,
+            // The single guard for every send path — foreground, queued,
+            // cross-project and MCP-driven turns all funnel through here.
+            resolvedEffort: await sanitizedEffort(effort, for: agentProvider),
             resolvedSendMode: resolvedSendMode,
-            earlyStream: earlyStream
+            earlyStream: earlyStream,
+            // Unrendered, for backends that build their own config. The
+            // provider switch above writes the same servers into the three
+            // rendered fields; these are the source those were rendered from.
+            mcpRecords: await mcp.enabledServerRecords(projectPath: cwd),
+            ideBridgeCommand: bridge.map { MCPBridgeCommand(command: $0.command, args: $0.args) }
         )
     }
 }

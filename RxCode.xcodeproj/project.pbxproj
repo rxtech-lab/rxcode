@@ -13,6 +13,8 @@
 		5C2222222FCB200000000002 /* BriefingThreadRowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C2222222FCB200000000001 /* BriefingThreadRowTests.swift */; };
 		5C3333332FCB400000000002 /* ThreadStoreThreadSummaryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3333332FCB400000000001 /* ThreadStoreThreadSummaryTests.swift */; };
 		5C3333332FCB400000000004 /* ThreadStoreHookCardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3333332FCB400000000003 /* ThreadStoreHookCardTests.swift */; };
+		5C3333332FCB400000000006 /* ThreadStoreSidebarIndexTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3333332FCB400000000005 /* ThreadStoreSidebarIndexTests.swift */; };
+		5C3333332FCB400000000008 /* ThreadStoreReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3333332FCB400000000007 /* ThreadStoreReaderTests.swift */; };
 		5C4444442FCE100000000002 /* GeneratedTextSanitizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C4444442FCE100000000001 /* GeneratedTextSanitizerTests.swift */; };
 		6E17B0012FC8000100A10001 /* LocalAIProviderAcceptanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E17B0002FC8000100A10001 /* LocalAIProviderAcceptanceTests.swift */; };
 		7A5C0001000000000000A002 /* MockAgentBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A5C0001000000000000A001 /* MockAgentBackend.swift */; };
@@ -35,6 +37,8 @@
 		DF230BB42FBC9001008929A6 /* RxCodeMobileNotificationService.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = DF230BAB2FBC9001008929A6 /* RxCodeMobileNotificationService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		DF23F7362FB8C3EC008929A6 /* icon.icon in Resources */ = {isa = PBXBuildFile; fileRef = DF23F7352FB8C3EC008929A6 /* icon.icon */; };
 		DF23FF1D2FBB42F7008929A6 /* WaterfallGrid in Frameworks */ = {isa = PBXBuildFile; productRef = DF23FF1C2FBB42F7008929A6 /* WaterfallGrid */; };
+		DF2CBCE430650E1000BDB861 /* RxAgentSDK in Frameworks */ = {isa = PBXBuildFile; productRef = DFA9E5020000000000000001 /* RxAgentSDK */; };
+		DF2CC5C3306549D600BDB861 /* RxAgentSDK in Frameworks */ = {isa = PBXBuildFile; productRef = DFA9E5030000000000000001 /* RxAgentSDK */; };
 		DF31D3DC2FBC8143005D518E /* icon.icon in Resources */ = {isa = PBXBuildFile; fileRef = DF23F7352FB8C3EC008929A6 /* icon.icon */; };
 		DF4628922FC611E6002D9562 /* RxAuthSwift in Frameworks */ = {isa = PBXBuildFile; productRef = DF4628912FC611E6002D9562 /* RxAuthSwift */; };
 		DF4628942FC611E6002D9562 /* RxAuthSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = DF4628932FC611E6002D9562 /* RxAuthSwiftUI */; };
@@ -52,6 +56,10 @@
 		DFA0CCD42FB4CC01005991E1 /* RxCodeChatKit in Frameworks */ = {isa = PBXBuildFile; productRef = DFA0CCC32FB4CC01005991E1 /* RxCodeChatKit */; };
 		DFA0CCE12FB4CC02005991E1 /* HistoryListArchiveFilterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA0CCD52FB4CC02005991E1 /* HistoryListArchiveFilterTests.swift */; };
 		DFA8E3B42FD1A27F00F33E7F /* SDWebImageSVGCoder in Frameworks */ = {isa = PBXBuildFile; productRef = DFA8E3B32FD1A27F00F33E7F /* SDWebImageSVGCoder */; };
+		DFA9E5050000000000000001 /* AgentEventBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA9E5040000000000000001 /* AgentEventBridgeTests.swift */; };
+		DFA9E5070000000000000001 /* AppStateSteeringTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA9E5060000000000000001 /* AppStateSteeringTests.swift */; };
+		DFA9E5090000000000000001 /* ReasoningLevelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA9E5080000000000000001 /* ReasoningLevelTests.swift */; };
+		DFA9E50B0000000000000001 /* EffortSanitizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA9E50A0000000000000001 /* EffortSanitizationTests.swift */; };
 		DFAA00012FCD34B3002D9562 /* JSONSchema in Frameworks */ = {isa = PBXBuildFile; productRef = DFAA00022FCD34B3002D9562 /* JSONSchema */; };
 		DFAA01102FCD34B3002D9562 /* JSONSchema in Frameworks */ = {isa = PBXBuildFile; productRef = DFAA01112FCD34B3002D9562 /* JSONSchema */; };
 		E62000012FCB000100000001 /* MemoryIntentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E62000002FCB000100000001 /* MemoryIntentTests.swift */; };
@@ -135,6 +143,8 @@
 		5C2222222FCB200000000001 /* BriefingThreadRowTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BriefingThreadRowTests.swift; sourceTree = "<group>"; };
 		5C3333332FCB400000000001 /* ThreadStoreThreadSummaryTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ThreadStoreThreadSummaryTests.swift; sourceTree = "<group>"; };
 		5C3333332FCB400000000003 /* ThreadStoreHookCardTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ThreadStoreHookCardTests.swift; sourceTree = "<group>"; };
+		5C3333332FCB400000000005 /* ThreadStoreSidebarIndexTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ThreadStoreSidebarIndexTests.swift; sourceTree = "<group>"; };
+		5C3333332FCB400000000007 /* ThreadStoreReaderTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ThreadStoreReaderTests.swift; sourceTree = "<group>"; };
 		5C4444442FCE100000000001 /* GeneratedTextSanitizerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GeneratedTextSanitizerTests.swift; sourceTree = "<group>"; };
 		6E17B0002FC8000100A10001 /* LocalAIProviderAcceptanceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LocalAIProviderAcceptanceTests.swift; sourceTree = "<group>"; };
 		6E17B0032FC8000100A10001 /* RxCodeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RxCodeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -158,6 +168,10 @@
 		DFA0CCC02FB4CC01005991E1 /* PlanDecisionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlanDecisionTests.swift; sourceTree = "<group>"; };
 		DFA0CCC12FB4CC01005991E1 /* PlanCardViewTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlanCardViewTests.swift; sourceTree = "<group>"; };
 		DFA0CCD52FB4CC02005991E1 /* HistoryListArchiveFilterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HistoryListArchiveFilterTests.swift; sourceTree = "<group>"; };
+		DFA9E5040000000000000001 /* AgentEventBridgeTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AgentEventBridgeTests.swift; sourceTree = "<group>"; };
+		DFA9E5060000000000000001 /* AppStateSteeringTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppStateSteeringTests.swift; sourceTree = "<group>"; };
+		DFA9E5080000000000000001 /* ReasoningLevelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ReasoningLevelTests.swift; sourceTree = "<group>"; };
+		DFA9E50A0000000000000001 /* EffortSanitizationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EffortSanitizationTests.swift; sourceTree = "<group>"; };
 		E62000002FCB000100000001 /* MemoryIntentTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MemoryIntentTests.swift; sourceTree = "<group>"; };
 		E67335382F7356F600FD26C7 /* RxCode.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RxCode.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		FE0A11BB22CC33DD44EE5502 /* PlanModeHookSuppressionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlanModeHookSuppressionTests.swift; sourceTree = "<group>"; };
@@ -243,6 +257,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DF2CC5C3306549D600BDB861 /* RxAgentSDK in Frameworks */,
 				92E180F9B311F3C72D5DE6B7 /* Cocoa.framework in Frameworks */,
 				DCA8CF4A05C959C4A6EB391F /* RxCodeCore in Frameworks */,
 				DFA0CCD42FB4CC01005991E1 /* RxCodeChatKit in Frameworks */,
@@ -312,6 +327,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DF2CBCE430650E1000BDB861 /* RxAgentSDK in Frameworks */,
 				E6821AC12F7CEE7200829FC9 /* SwiftTerm in Frameworks */,
 				DF4628922FC611E6002D9562 /* RxAuthSwift in Frameworks */,
 				E6C001022F9B000100000001 /* Sparkle in Frameworks */,
@@ -352,6 +368,12 @@
 				5C2222222FCB200000000001 /* BriefingThreadRowTests.swift */,
 				5C3333332FCB400000000001 /* ThreadStoreThreadSummaryTests.swift */,
 				5C3333332FCB400000000003 /* ThreadStoreHookCardTests.swift */,
+				5C3333332FCB400000000005 /* ThreadStoreSidebarIndexTests.swift */,
+				DFA9E5040000000000000001 /* AgentEventBridgeTests.swift */,
+				DFA9E5060000000000000001 /* AppStateSteeringTests.swift */,
+				DFA9E5080000000000000001 /* ReasoningLevelTests.swift */,
+				DFA9E50A0000000000000001 /* EffortSanitizationTests.swift */,
+				5C3333332FCB400000000007 /* ThreadStoreReaderTests.swift */,
 				5C4444442FCE100000000001 /* GeneratedTextSanitizerTests.swift */,
 				E62000002FCB000100000001 /* MemoryIntentTests.swift */,
 			);
@@ -450,6 +472,7 @@
 				CCDF9594876099576D4FD46E /* RxCodeCore */,
 				DFA0CCC32FB4CC01005991E1 /* RxCodeChatKit */,
 				DF06CCD02FB4CAB5005991E1 /* ViewInspector */,
+				DFA9E5030000000000000001 /* RxAgentSDK */,
 			);
 			productName = RxCodeTests;
 			productReference = 7321B5E8B81AAB1A2DC0593B /* RxCodeTests.xctest */;
@@ -640,6 +663,7 @@
 				DF4652692FCD34B3002D9562 /* JSONSchemaValidator */,
 				DFAA00022FCD34B3002D9562 /* JSONSchema */,
 				DF98F2363004F38B00BBB638 /* MCP */,
+				DFA9E5020000000000000001 /* RxAgentSDK */,
 			);
 			productName = RxCode;
 			productReference = E67335382F7356F600FD26C7 /* RxCode.app */;
@@ -705,6 +729,7 @@
 				DFAA00032FCD34B3002D9562 /* XCRemoteSwiftPackageReference "swift-json-schema" */,
 				DFA8E3B22FD1A27F00F33E7F /* XCRemoteSwiftPackageReference "SDWebImageSVGCoder" */,
 				DF98F2353004F38B00BBB638 /* XCRemoteSwiftPackageReference "swift-sdk" */,
+				DFA9E5010000000000000001 /* XCRemoteSwiftPackageReference "RxAgentSDK" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = E67335392F7356F600FD26C7 /* Products */;
@@ -810,6 +835,12 @@
 				5C2222222FCB200000000002 /* BriefingThreadRowTests.swift in Sources */,
 				5C3333332FCB400000000002 /* ThreadStoreThreadSummaryTests.swift in Sources */,
 				5C3333332FCB400000000004 /* ThreadStoreHookCardTests.swift in Sources */,
+				5C3333332FCB400000000006 /* ThreadStoreSidebarIndexTests.swift in Sources */,
+				DFA9E5050000000000000001 /* AgentEventBridgeTests.swift in Sources */,
+				DFA9E5070000000000000001 /* AppStateSteeringTests.swift in Sources */,
+				DFA9E5090000000000000001 /* ReasoningLevelTests.swift in Sources */,
+				DFA9E50B0000000000000001 /* EffortSanitizationTests.swift in Sources */,
+				5C3333332FCB400000000008 /* ThreadStoreReaderTests.swift in Sources */,
 				5C4444442FCE100000000002 /* GeneratedTextSanitizerTests.swift in Sources */,
 				E62000012FCB000100000001 /* MemoryIntentTests.swift in Sources */,
 			);
@@ -1413,10 +1444,12 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = icon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = RxCode/RxCode.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 24;
 				DEVELOPMENT_TEAM = P9KK452K8P;
+				"DEVELOPMENT_TEAM[sdk=macosx*]" = P9KK452K8P;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -1433,6 +1466,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.rxlab.RxCode;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = RxCode;
+				"PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]" = RxCode;
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -1585,6 +1619,14 @@
 				minimumVersion = 1.8.0;
 			};
 		};
+		DFA9E5010000000000000001 /* XCRemoteSwiftPackageReference "RxAgentSDK" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/rxtech-lab/RxAgentSDK.git";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 1.0.4;
+			};
+		};
 		DFAA00032FCD34B3002D9562 /* XCRemoteSwiftPackageReference "swift-json-schema" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/sirily11/swift-json-schema";
@@ -1728,6 +1770,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = DFA8E3B22FD1A27F00F33E7F /* XCRemoteSwiftPackageReference "SDWebImageSVGCoder" */;
 			productName = SDWebImageSVGCoder;
+		};
+		DFA9E5020000000000000001 /* RxAgentSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DFA9E5010000000000000001 /* XCRemoteSwiftPackageReference "RxAgentSDK" */;
+			productName = RxAgentSDK;
+		};
+		DFA9E5030000000000000001 /* RxAgentSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DFA9E5010000000000000001 /* XCRemoteSwiftPackageReference "RxAgentSDK" */;
+			productName = RxAgentSDK;
 		};
 		DFAA00022FCD34B3002D9562 /* JSONSchema */ = {
 			isa = XCSwiftPackageProductDependency;

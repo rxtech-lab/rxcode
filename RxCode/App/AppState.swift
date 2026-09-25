@@ -1161,6 +1161,8 @@ final class AppState {
     /// Quick-added tasks whose properties the default agent is still filling
     /// in, so their rows can show progress.
     var classifyingTaskIds: Set<UUID> = []
+    /// Task checks currently running in a linked verification chat.
+    var verifyingTaskIds: Set<UUID> = []
 
     // MARK: - Run Profiles
 
@@ -1409,24 +1411,5 @@ final class AppState {
         mobileSnapshotSeq &+= 1
         if mobileSnapshotSeq == 0 { mobileSnapshotSeq = 1 } // skip wraparound zero
         return mobileSnapshotSeq
-    }
-}
-
-// MARK: - App Errors
-
-enum AppError: LocalizedError {
-    case noProjectSelected
-    case claudeNotInstalled
-    case streamFailed(String)
-
-    var errorDescription: String? {
-        switch self {
-        case .noProjectSelected:
-            return "No project selected. Please select or add a project first."
-        case .claudeNotInstalled:
-            return "Claude CLI binary not found. Please install it first."
-        case .streamFailed(let message):
-            return message
-        }
     }
 }

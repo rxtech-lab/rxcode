@@ -793,6 +793,11 @@ final class AppStateHookController: HookController {
         return app.applyTaskTrigger(event, sessionKey: sessionKey, sessionContinues: sessionContinues) != nil
     }
 
+    func advanceTaskAfterSessionEnd(_ payload: SessionEndPayload) async -> Bool {
+        guard let app else { return false }
+        return await app.advanceTaskAfterSessionEnd(payload)
+    }
+
     // Review events are dispatched on their own task rather than awaited: the
     // caller (`CodeReviewHook`) is itself running inside the serial session-end
     // dispatch, and review listeners must not wait on it or hold it up.

@@ -317,6 +317,10 @@ public protocol HookController: AnyObject {
     @discardableResult
     func applyTaskTrigger(_ event: TaskTriggerEvent, sessionKey: String, sessionContinues: Bool) -> Bool
 
+    /// Verify the linked task with a separate agent before routing a stopped
+    /// run into review. Incomplete or unverified work is marked for attention.
+    func advanceTaskAfterSessionEnd(_ payload: SessionEndPayload) async -> Bool
+
     /// Fan a code-review start out to every hook's `onReviewStart`.
     func notifyReviewStarted(_ payload: ReviewEventPayload)
 

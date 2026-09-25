@@ -11,6 +11,9 @@ struct HistoryListView: View {
     @State private var showDeleteAllAlert = false
     @State private var sessionToDelete: ChatSession?
     @State private var sessionToArchive: ChatSession?
+    @State private var taskToEdit: ProjectTask?
+    @State private var creatingTaskSessionIds: Set<String> = []
+    @State private var showTaskCreationError = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -94,6 +97,16 @@ struct HistoryListView: View {
             Button("Cancel", role: .cancel) {
                 renamingSession = nil
             }
+        }
+        .sheet(item: $taskToEdit) { task in
+            TaskFormSheet(payload: .task(task), defaultProjectId: task.projectId)
+                .environment(appState)
+                .environment(windowState)
+        }
+        .alert("Could Not Create Task", isPresented: $showTaskCreationError) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("The chat has no readable messages, or the AI could not generate a task description. Try again later.")
         }
     }
 
@@ -182,6 +195,24 @@ struct HistoryListView: View {
         .contextMenu {
             if let summary = appState.allSessionSummaries.first(where: { $0.id == session.id }) {
                 let chatSession = summary.makeSession()
+                let linkedTask = appState.linkedTask(forSessionId: summary.id, projectId: summary.projectId)
+
+                if let linkedTask {
+                    Button {
+                        taskToEdit = linkedTask
+                    } label: {
+                        Label("Jump to Task", systemImage: "link")
+                    }
+                } else {
+                    Button {
+                        createTask(from: summary)
+                    } label: {
+                        Label("Create Task from Chat with AI", systemImage: "sparkles")
+                    }
+                    .disabled(creatingTaskSessionIds.contains(summary.id))
+                }
+
+                Divider()
 
                 Button {
                     renameText = session.title
@@ -229,6 +260,21 @@ struct HistoryListView: View {
                 } label: {
                     Label("Delete", systemImage: "trash")
                 }
+            }
+        }
+    }
+
+    private func createTask(from summary: ChatSession.Summary) {
+        guard creatingTaskSessionIds.insert(summary.id).inserted else { return }
+        Task {
+            let created = await appState.createTaskFromChat(summary)
+            creatingTaskSessionIds.remove(summary.id)
+            if let created {
+                taskToEdit = created
+            } else if let existing = appState.linkedTask(forSessionId: summary.id, projectId: summary.projectId) {
+                taskToEdit = existing
+            } else {
+                showTaskCreationError = true
             }
         }
     }

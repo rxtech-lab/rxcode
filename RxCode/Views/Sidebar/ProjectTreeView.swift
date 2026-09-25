@@ -564,6 +564,9 @@ private struct ProjectChatsList: View {
     let onDeleteSession: (ChatSession) -> Void
 
     @State private var showsAllThreads = false
+    @State private var taskSheet: TaskBoardSheet?
+    @State private var creatingTaskSessionIds: Set<String> = []
+    @State private var showTaskCreationError = false
     /// Parent thread ids whose nested review children are currently expanded.
     @State private var expandedReviewParentIds: Set<String> = []
 
@@ -647,6 +650,16 @@ private struct ProjectChatsList: View {
         .clipped()
         .animation(.easeInOut(duration: 0.18), value: showsAllThreads)
         .animation(.easeInOut(duration: 0.18), value: expandedReviewParentIds)
+        .sheet(item: $taskSheet) { payload in
+            TaskFormSheet(payload: payload, defaultProjectId: project.id)
+                .environment(appState)
+                .environment(windowState)
+        }
+        .alert("Could Not Create Task", isPresented: $showTaskCreationError) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("The chat has no readable messages, or the AI could not generate a task description. Try again later.")
+        }
     }
 
     /// A top-level thread row plus, when expanded, its nested review children.
@@ -766,13 +779,33 @@ private struct ProjectChatsList: View {
         let session = summary.makeSession()
         let status = appState.chatStatus(forSessionId: sessionId, in: windowState)
         let progress = appState.todoProgress(forSessionId: sessionId)
+        let linkedTask = appState.linkedTask(forSessionId: sessionId, projectId: summary.projectId)
 
         return ProjectChatRow(
             summary: summary,
             isCurrent: windowState.generalRoute == nil && windowState.currentSessionId == sessionId,
             status: status,
             todoProgress: progress,
+            linkedTask: linkedTask,
+            isCreatingTask: creatingTaskSessionIds.contains(sessionId),
             onSelect: { onSelectSession(sessionId) },
+            onOpenTask: {
+                if let linkedTask { taskSheet = .task(linkedTask) }
+            },
+            onCreateTask: {
+                guard creatingTaskSessionIds.insert(sessionId).inserted else { return }
+                Task {
+                    let created = await appState.createTaskFromChat(summary)
+                    creatingTaskSessionIds.remove(sessionId)
+                    if let created {
+                        taskSheet = .task(created)
+                    } else if let existing = appState.linkedTask(forSessionId: sessionId, projectId: summary.projectId) {
+                        taskSheet = .task(existing)
+                    } else {
+                        showTaskCreationError = true
+                    }
+                }
+            },
             onRename: { onRenameSession(session) },
             onTogglePin: {
                 Task { await appState.togglePinSession(session) }

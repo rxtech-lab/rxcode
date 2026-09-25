@@ -58,6 +58,17 @@ struct WhatsNewFeature: Identifiable {
                 Highlight(icon: "bubble.left.and.bubble.right", text: "Create a new thread or continue an existing one with a templated message."),
                 Highlight(icon: "iphone", text: "Scope an item to one project or all of them; it shows up on desktop and mobile alike.")
             ]
+        ),
+        WhatsNewFeature(
+            slug: "projects-dashboard",
+            title: "Projects dashboard",
+            subtitle: "Plan and track work across your projects with stories, tasks, and a board for each project.",
+            icon: "square.grid.2x2.fill",
+            highlights: [
+                Highlight(icon: "square.stack.3d.up", text: "See recent stories and task progress for every project in one place."),
+                Highlight(icon: "rectangle.split.3x1", text: "Open a project to organize tasks in board or table views with custom columns and filters."),
+                Highlight(icon: "sparkles", text: "Assign an agent to a task and move it into a chat column to start work.")
+            ]
         )
     ]
 }

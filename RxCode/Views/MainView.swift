@@ -21,6 +21,7 @@ struct MainView: View {
     @State private var projectToRename: Project? = nil
     @State private var renameText: String = ""
     @State private var memoAnchor: Bool = false
+    @State private var showAllWhatsNew = false
 
     // Kept for backward compatibility with `ClaudeSegmentedControl` and `SidebarTabShortcuts`.
     enum SidebarTab: String, CaseIterable {
@@ -117,6 +118,9 @@ struct MainView: View {
                 }
             }
             .hookUI()
+            .focusedSceneValue(\.showWhatsNew) {
+                showAllWhatsNew = true
+            }
             .task(id: appState.isInitialized) {
                 guard appState.isInitialized else { return }
                 if appState.wasOnboardedAtLaunch {
@@ -135,6 +139,12 @@ struct MainView: View {
             .sheet(isPresented: Bindable(appState).showWhatsNewSheet) {
                 WhatsNewSheet(features: appState.whatsNewBatch) {
                     appState.showWhatsNewSheet = false
+                }
+                .environment(appState)
+            }
+            .sheet(isPresented: $showAllWhatsNew) {
+                WhatsNewSheet(features: WhatsNewFeature.all) {
+                    showAllWhatsNew = false
                 }
                 .environment(appState)
             }

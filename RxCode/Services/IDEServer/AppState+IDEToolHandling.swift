@@ -39,6 +39,12 @@ extension AppState: IDEToolHandling {
             throw IDEToolError.notSupported("ide__get_job_output is not yet implemented")
         case "ide__get_projects":
             return handleGetProjects()
+        case "ide__get_stories":
+            return try await handleGetStories(arguments: arguments, sessionKey: sessionKey)
+        case "ide__create_story":
+            return try await handleCreateStory(arguments: arguments, sessionKey: sessionKey)
+        case "ide__create_task":
+            return try await handleCreateTask(arguments: arguments, sessionKey: sessionKey)
         case "ide__get_threads":
             return await handleGetThreads(arguments: arguments)
         case "ide__get_thread_messages", "ide__get_thread_detail":
@@ -118,6 +124,93 @@ extension AppState: IDEToolHandling {
             ])
         }
         return jsonTextResult(.array(entries))
+    }
+
+    @MainActor
+    private func taskToolProjectId(arguments: JSONValue, sessionKey: String) throws -> UUID {
+        let explicit = try parseOptionalProjectId(arguments["project_id"]?.stringValue)
+        guard let id = explicit ?? threadStore.fetch(id: sessionKey)?.projectId
+                ?? allSessionSummaries.first(where: { $0.id == resolveCurrentSessionId(sessionKey) })?.projectId,
+              projects.contains(where: { $0.id == id })
+        else {
+            throw IDEToolError.invalidArguments("Pass a valid project_id or call from a saved project chat.")
+        }
+        return id
+    }
+
+    @MainActor
+    private func handleGetStories(arguments: JSONValue, sessionKey: String) async throws -> JSONValue {
+        let projectId = try taskToolProjectId(arguments: arguments, sessionKey: sessionKey)
+        await ensureTaskBoardLoaded(for: projectId)
+        return jsonTextResult(.array(taskBoard(for: projectId).stories.map { story in
+            .object([
+                "id": .string(story.id.uuidString),
+                "project_id": .string(projectId.uuidString),
+                "title": .string(story.title),
+                "details": .string(story.details),
+            ])
+        }))
+    }
+
+    @MainActor
+    private func handleCreateStory(arguments: JSONValue, sessionKey: String) async throws -> JSONValue {
+        let projectId = try taskToolProjectId(arguments: arguments, sessionKey: sessionKey)
+        guard let title = arguments["title"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !title.isEmpty else {
+            throw IDEToolError.invalidArguments("A nonempty title is required.")
+        }
+        await ensureTaskBoardLoaded(for: projectId)
+        let story = ProjectStory(projectId: projectId, title: title, details: arguments["details"]?.stringValue ?? "")
+        upsertStory(story)
+        return jsonTextResult(.object([
+            "id": .string(story.id.uuidString),
+            "project_id": .string(projectId.uuidString),
+            "title": .string(story.title),
+        ]))
+    }
+
+    @MainActor
+    private func handleCreateTask(arguments: JSONValue, sessionKey: String) async throws -> JSONValue {
+        let projectId = try taskToolProjectId(arguments: arguments, sessionKey: sessionKey)
+        let title = arguments["title"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let details = arguments["details"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !title.isEmpty || !details.isEmpty else {
+            throw IDEToolError.invalidArguments("A nonempty title or details is required.")
+        }
+        await ensureTaskBoardLoaded(for: projectId)
+        let storyId: UUID?
+        if let raw = arguments["story_id"]?.stringValue {
+            guard let id = UUID(uuidString: raw), taskBoard(for: projectId).story(id: id) != nil else {
+                throw IDEToolError.invalidArguments("story_id must identify a story in this project.")
+            }
+            storyId = id
+        } else {
+            storyId = nil
+        }
+        let task: ProjectTask
+        if title.isEmpty {
+            task = quickAddTask(text: details, projectId: projectId, storyId: storyId, sourceSessionKey: sessionKey)
+        } else {
+            let story = taskBoard(for: projectId).story(id: storyId)
+            task = ProjectTask(
+                projectId: projectId,
+                storyId: storyId,
+                title: title,
+                details: details,
+                status: taskBoard(for: projectId).firstColumn.id,
+                version: story?.version,
+                milestone: story?.milestone,
+                agent: defaultTaskAgent(),
+                sourceSessionKey: sessionKey
+            )
+            upsertTask(task)
+        }
+        return jsonTextResult(.object([
+            "id": .string(task.id.uuidString),
+            "project_id": .string(projectId.uuidString),
+            "story_id": storyId.map { .string($0.uuidString) } ?? .null,
+            "title": .string(task.title),
+        ]))
     }
 
     @MainActor

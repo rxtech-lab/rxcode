@@ -115,7 +115,11 @@ struct ProjectChatRow: View {
     let isCurrent: Bool
     let status: ChatStatus
     let todoProgress: ChatTodoProgress?
+    let linkedTask: ProjectTask?
+    let isCreatingTask: Bool
     let onSelect: () -> Void
+    let onOpenTask: () -> Void
+    let onCreateTask: () -> Void
     let onRename: () -> Void
     let onTogglePin: () -> Void
     let onToggleArchive: () -> Void
@@ -157,6 +161,20 @@ struct ProjectChatRow: View {
         summary.threadLabel == AppState.manualCodeReviewLabel
     }
 
+    private var taskCompletionChip: (text: String, color: Color)? {
+        guard let label = summary.threadLabel else { return nil }
+        switch label {
+        case AppState.taskCompletionCheckLabel:
+            return (String(localized: "Verifying"), ClaudeTheme.statusRunning)
+        case AppState.taskCompletionVerifiedLabel:
+            return (String(localized: "Verified"), ClaudeTheme.statusSuccess)
+        case AppState.taskCompletionUnverifiedLabel:
+            return (String(localized: "Unverified"), ClaudeTheme.statusWarning)
+        default:
+            return nil
+        }
+    }
+
     private var isActiveStatus: Bool {
         switch status {
         case .awaitingPermission, .done, .error: return true
@@ -183,15 +201,37 @@ struct ProjectChatRow: View {
                 statusIndicator
             }
 
-            Text(displayTitle)
-                .font(.system(size: ClaudeTheme.size(13), weight: isCurrent ? .medium : .regular))
-                .foregroundStyle(isCurrent ? ClaudeTheme.textPrimary : ClaudeTheme.textSecondary)
-                .lineLimit(1)
-                .truncationMode(.tail)
+            if let taskCompletionChip {
+                Text(taskCompletionChip.text)
+                    .font(.system(size: ClaudeTheme.size(10), weight: .semibold))
+                    .foregroundStyle(taskCompletionChip.color)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2)
+                    .background(taskCompletionChip.color.opacity(0.14), in: Capsule())
+                    .fixedSize()
+            } else {
+                Text(displayTitle)
+                    .font(.system(size: ClaudeTheme.size(13), weight: isCurrent ? .medium : .regular))
+                    .foregroundStyle(isCurrent ? ClaudeTheme.textPrimary : ClaudeTheme.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
 
             Spacer(minLength: 4)
 
-            if showLabelChip, let label = summary.threadLabel, !label.isEmpty {
+            if let linkedTask {
+                Image(systemName: "link")
+                    .font(.system(size: ClaudeTheme.size(10), weight: .medium))
+                    .foregroundStyle(ClaudeTheme.textTertiary)
+                    .help("Linked task: \(linkedTask.title)")
+                    .accessibilityLabel("Linked task: \(linkedTask.title)")
+            } else if isCreatingTask {
+                ProgressView()
+                    .controlSize(.mini)
+                    .help("Creating task from chat")
+            }
+
+            if taskCompletionChip == nil, showLabelChip, let label = summary.threadLabel, !label.isEmpty {
                 Text(label)
                     .font(.system(size: ClaudeTheme.size(9), weight: .semibold))
                     .foregroundStyle(ClaudeTheme.accent)
@@ -238,9 +278,20 @@ struct ProjectChatRow: View {
         .onHover { hovering in
             isHovered = hovering
         }
-        .help(displayTitle)
+        .help(taskCompletionChip?.text ?? displayTitle)
         .onTapGesture { onSelect() }
         .contextMenu {
+            if linkedTask != nil {
+                Button(action: onOpenTask) {
+                    Label("Jump to Task", systemImage: "link")
+                }
+            } else {
+                Button(action: onCreateTask) {
+                    Label("Create Task from Chat with AI", systemImage: "sparkles")
+                }
+                .disabled(isCreatingTask)
+            }
+            Divider()
             Button { onRename() } label: {
                 Label("Rename", systemImage: "pencil")
             }

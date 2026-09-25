@@ -429,6 +429,14 @@ struct TaskBoardLayoutView: View {
     /// Shared across columns: a story and its tasks usually sit in different
     /// columns, and hovering either highlights the whole group.
     @State private var hoveredStoryId: UUID?
+    @State private var collapsedStoryIds = Set<UUID>()
+
+    private var completedStoryIds: Set<UUID> {
+        Set(board.stories.filter { story in
+            let progress = board.progress(for: story)
+            return progress.total > 0 && progress.done == progress.total
+        }.map(\.id))
+    }
 
     /// Where every card and column sits. Animating on this — rather than
     /// wrapping each drop in `withAnimation` — also covers moves nobody
@@ -443,11 +451,20 @@ struct TaskBoardLayoutView: View {
         ScrollView(.horizontal) {
             HStack(alignment: .top, spacing: 12) {
                 let columns = view.visibleColumns(in: board.effectiveColumns)
+                let visibleStoryIds = Set(stories.filter { story in
+                    columns.contains { $0.id == board.rolledUpStatus(for: story) }
+                }.map(\.id))
+                let collapsedVisibleStoryIds = collapsedStoryIds
+                    .intersection(visibleStoryIds)
+                    .intersection(completedStoryIds)
                 ForEach(columns) { column in
                     TaskColumnView(
                         column: column,
                         tasks: tasks
-                            .filter { board.resolvedStatus(of: $0) == column.id }
+                            .filter { task in
+                                board.resolvedStatus(of: task) == column.id
+                                    && !(task.storyId.map(collapsedVisibleStoryIds.contains) ?? false)
+                            }
                             .sorted { $0.sortIndex < $1.sortIndex },
                         stories: stories.filter { board.rolledUpStatus(for: $0) == column.id },
                         board: board,
@@ -457,7 +474,8 @@ struct TaskBoardLayoutView: View {
                         onEditView: onEditView,
                         onEditColumn: { onEditColumn(column) },
                         onReorder: { onReorderColumn($0, column.id) },
-                        hoveredStoryId: $hoveredStoryId
+                        hoveredStoryId: $hoveredStoryId,
+                        collapsedStoryIds: $collapsedStoryIds
                     )
                     .frame(width: Self.columnWidth)
                     .transition(.scale(scale: 0.96).combined(with: .opacity))
@@ -482,6 +500,10 @@ struct TaskBoardLayoutView: View {
             .padding(16)
             .frame(maxHeight: .infinity, alignment: .top)
             .taskBoardAnimation(value: layoutSignature)
+            .taskBoardAnimation(value: collapsedStoryIds)
+        }
+        .onChange(of: completedStoryIds) { _, completed in
+            collapsedStoryIds.formIntersection(completed)
         }
     }
 }
@@ -497,6 +519,7 @@ struct TaskTableLayoutView: View {
     let onOpen: (TaskBoardSheet) -> Void
 
     @State private var selection = Set<UUID>()
+    @State private var pendingDeletion: TaskBoardSheet?
 
     var body: some View {
         Table(tasks, selection: $selection) {
@@ -572,7 +595,9 @@ struct TaskTableLayoutView: View {
         .scrollContentBackground(.hidden)
         .contextMenu(forSelectionType: UUID.self) { ids in
             if ids.count == 1, let id = ids.first, let task = tasks.first(where: { $0.id == id }) {
-                TaskContextMenuItems(task: task) { onOpen(.task(task)) }
+                TaskContextMenuItems(task: task, onEdit: { onOpen(.task(task)) }, onDelete: {
+                    pendingDeletion = .task(task)
+                })
             }
         } primaryAction: { ids in
             guard let id = ids.first, let task = tasks.first(where: { $0.id == id }) else { return }
@@ -584,6 +609,9 @@ struct TaskTableLayoutView: View {
                     .font(.system(size: ClaudeTheme.size(12)))
                     .foregroundStyle(ClaudeTheme.textTertiary)
             }
+        }
+        .taskDeletionConfirmation(pending: $pendingDeletion) { candidate in
+            if case .task(let task) = candidate { appState.deleteTask(task) }
         }
     }
 }

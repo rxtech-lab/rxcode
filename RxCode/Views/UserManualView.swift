@@ -128,6 +128,7 @@ private struct UserManualSidebarRow: View {
 private enum UserManualMenu: String, CaseIterable, Identifiable {
     case overview
     case projects
+    case tasks
     case chat
     case commands
     case permissions
@@ -147,6 +148,7 @@ private enum UserManualMenu: String, CaseIterable, Identifiable {
         switch self {
         case .overview: "Overview"
         case .projects: "Projects and Sidebar"
+        case .tasks: "Projects Dashboard"
         case .chat: "Chat and Attachments"
         case .commands: "Commands and Shortcuts"
         case .permissions: "Permissions and Inspector"
@@ -162,6 +164,7 @@ private enum UserManualMenu: String, CaseIterable, Identifiable {
         switch self {
         case .overview: "sparkle"
         case .projects: "sidebar.left"
+        case .tasks: "square.grid.2x2"
         case .chat: "bubble.left.and.bubble.right"
         case .commands: "terminal.fill"
         case .permissions: "checkmark.shield"

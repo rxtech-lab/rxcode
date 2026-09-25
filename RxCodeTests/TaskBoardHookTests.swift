@@ -73,6 +73,28 @@ final class TaskBoardHookTests: XCTestCase {
         appState.task(id: id)?.status
     }
 
+    // MARK: - Chat dispatch
+
+    func testCreatingAssignedTaskInChatColumnDispatches() {
+        let task = makeTask(sessionKey: nil)
+
+        XCTAssertTrue(appState.shouldDispatchTask(task, from: nil))
+        XCTAssertFalse(appState.shouldDispatchTask(task, from: .inProgress), "editing in the same chat column must not start another thread")
+    }
+
+    func testEnteringChatColumnDispatchesButOtherTasksDoNot() {
+        let task = makeTask(sessionKey: nil)
+        XCTAssertTrue(appState.shouldDispatchTask(task, from: .pending))
+
+        var unassigned = task
+        unassigned.agent = TaskAgentConfig()
+        XCTAssertFalse(appState.shouldDispatchTask(unassigned, from: nil))
+
+        var pending = task
+        pending.status = .pending
+        XCTAssertFalse(appState.shouldDispatchTask(pending, from: nil))
+    }
+
     // MARK: - Session-stop trigger
 
     func testAdvancesLinkedInProgressTask() {
@@ -138,19 +160,20 @@ final class TaskBoardHookTests: XCTestCase {
 
     // MARK: - Hook gating
 
-    func testHookAdvancesOnCleanCompletion() async {
+    func testHookFlagsTaskWhenCompletionCannotBeVerified() async {
         let task = makeTask()
         seed([task])
 
         let outcome = await hook.afterSessionEnd(payload(), controller: appState.hookController)
 
         XCTAssertEqual(outcome.control, .proceed)
-        XCTAssertEqual(status(of: task.id), .pendingReview)
+        XCTAssertEqual(status(of: task.id), .pending)
+        XCTAssertNotNil(appState.task(id: task.id)?.attentionReason)
     }
 
-    /// In Progress is locked while the agent owns the task, so a stopped turn
-    /// must still release it for review rather than strand it.
-    func testHookAdvancesCancelledTurn() async {
+    /// A stopped run must leave the locked chat column, but an unfinished turn
+    /// cannot enter Pending Review.
+    func testHookFlagsCancelledTurn() async {
         let task = makeTask()
         seed([task])
 
@@ -159,10 +182,11 @@ final class TaskBoardHookTests: XCTestCase {
         )
 
         XCTAssertEqual(outcome.control, .proceed)
-        XCTAssertEqual(status(of: task.id), .pendingReview)
+        XCTAssertEqual(status(of: task.id), .pending)
+        XCTAssertNotNil(appState.task(id: task.id)?.attentionReason)
     }
 
-    func testHookAdvancesErroredTurn() async {
+    func testHookFlagsErroredTurn() async {
         let task = makeTask()
         seed([task])
 
@@ -171,20 +195,96 @@ final class TaskBoardHookTests: XCTestCase {
         )
 
         XCTAssertEqual(outcome.control, .proceed)
-        XCTAssertEqual(status(of: task.id), .pendingReview)
+        XCTAssertEqual(status(of: task.id), .pending)
+        XCTAssertNotNil(appState.task(id: task.id)?.attentionReason)
     }
 
     /// A run cut short by quitting the app never reports a session end, so
     /// loading boards releases it.
-    func testInterruptedRunsMoveToReviewOnLoad() {
+    func testInterruptedRunsNeedAttentionOnLoad() {
         let running = makeTask()
         let manual = ProjectTask(projectId: running.projectId, title: "No agent", status: .inProgress)
         seed([running, manual])
 
         appState.releaseInterruptedTasks()
 
-        XCTAssertEqual(status(of: running.id), .pendingReview)
+        XCTAssertEqual(status(of: running.id), .pending)
+        XCTAssertNotNil(appState.task(id: running.id)?.attentionReason)
         XCTAssertEqual(status(of: manual.id), .inProgress)
+    }
+
+    func testAttentionFlagSurvivesBoardEncodingAndAllowsManualMove() throws {
+        var task = makeTask()
+        task.attentionReason = "One requested change is missing."
+        let restored = try JSONDecoder().decode(ProjectTask.self, from: JSONEncoder().encode(task))
+        seed([restored])
+
+        XCTAssertEqual(restored.attentionReason, task.attentionReason)
+        XCTAssertFalse(appState.isStatusLocked(restored))
+        appState.moveTask(restored, to: .pending)
+        XCTAssertEqual(status(of: task.id), .pending)
+    }
+
+    func testCompletionVerdictRequiresFinalExplicitMarker() {
+        XCTAssertEqual(AppState.taskCompletionVerdict(from: "Checks passed.\nTASK_RESULT: COMPLETE"), true)
+        XCTAssertEqual(AppState.taskCompletionVerdict(from: "One item is missing.\nTASK_RESULT: INCOMPLETE"), false)
+        XCTAssertNil(AppState.taskCompletionVerdict(from: "TASK_RESULT: COMPLETE\nOne item is still missing."))
+        XCTAssertNil(AppState.taskCompletionVerdict(from: "Looks done."))
+    }
+
+    func testCompletionExplanationAndRetryPromptKeepFullError() {
+        let explanation = String(repeating: "The requested check still fails. ", count: 20)
+            + "\n\nThe missing change is in TaskCardView."
+        let response = explanation + "\nTASK_RESULT: INCOMPLETE\n"
+        XCTAssertEqual(AppState.taskCompletionExplanation(from: response), explanation)
+
+        var task = makeTask()
+        task.attentionReason = explanation
+        let prompt = task.agentPrompt(storyTitle: nil)
+        XCTAssertTrue(prompt.contains(explanation))
+        XCTAssertTrue(task.checkErrorFixPrompt?.contains(explanation) == true)
+        XCTAssertEqual(TaskPromptContent.task(in: prompt)?.title, task.title)
+    }
+
+    func testChatAgentCanCreateStoryAndTaskInIt() async throws {
+        let projectArg = JSONValue.string(project.id.uuidString)
+        _ = try await appState.ideHandleToolCall(
+            name: "ide__create_story",
+            arguments: .object(["project_id": projectArg, "title": .string("Dashboard work")]),
+            sessionKey: "chat-1"
+        )
+        let story = try XCTUnwrap(appState.stories(projectFilter: project.id).first)
+
+        _ = try await appState.ideHandleToolCall(
+            name: "ide__create_task",
+            arguments: .object([
+                "project_id": projectArg,
+                "story_id": .string(story.id.uuidString),
+                "title": .string("Add task tool"),
+                "details": .string("Agents can create tasks from chat.")
+            ]),
+            sessionKey: "chat-1"
+        )
+
+        let task = try XCTUnwrap(appState.allTasks(projectFilter: project.id).first)
+        XCTAssertEqual(task.storyId, story.id)
+        XCTAssertEqual(task.sourceSessionKey, "chat-1")
+        XCTAssertEqual(task.status, .backlog)
+
+        do {
+            _ = try await appState.ideHandleToolCall(
+                name: "ide__create_task",
+                arguments: .object([
+                    "project_id": projectArg,
+                    "story_id": .string(UUID().uuidString),
+                    "title": .string("Wrong story")
+                ]),
+                sessionKey: "chat-1"
+            )
+            XCTFail("A task cannot link to a story from another project or an unknown story")
+        } catch {
+            XCTAssertEqual(appState.allTasks(projectFilter: project.id).count, 1)
+        }
     }
 
     /// A thread with messages still queued hasn't finished its work, so the task

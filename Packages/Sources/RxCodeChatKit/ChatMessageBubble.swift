@@ -92,10 +92,19 @@ private struct CompactChatMessageBubble: View {
         }
     }
 
+    @ViewBuilder
     private func userTextBubble(_ text: String) -> some View {
-        MarkdownContentView(text: text, style: .rxCodeChatUser, expandsHorizontally: false)
-            .bubbleStyle(.user)
-            .frame(maxWidth: 500, alignment: .trailing)
+        Group {
+            // A task dispatched from the board arrives as a `**Task:**` message;
+            // show it as the card the task form's Run tab uses.
+            if let taskPrompt = TaskPromptContent.task(in: text) {
+                TaskPromptView(content: taskPrompt, style: .userBubble)
+            } else {
+                MarkdownContentView(text: text, style: .rxCodeChatUser, expandsHorizontally: false)
+            }
+        }
+        .bubbleStyle(.user)
+        .frame(maxWidth: 500, alignment: .trailing)
     }
 
     private func assistantText(_ text: String) -> some View {

@@ -9,6 +9,7 @@ struct TasksSettingsTab: View {
     /// Mirrors the persisted setting, which lives in workspace defaults and
     /// isn't observable on its own.
     @State private var configured: TaskAgentConfig?
+    @State private var suggestionAgent: TaskAgentConfig?
     @State private var autoClassify = true
 
     var body: some View {
@@ -52,12 +53,44 @@ struct TasksSettingsTab: View {
             } header: {
                 Text("Quick Add")
             } footer: {
-                Text("Quick add keeps what you type as the description. The default agent then summarizes it into a title and fills in type, priority, tags, version and milestone. Properties you or the story already set are kept, and so is a title you typed yourself. Turned off, the title is shortened from the description's first line. ACP agents fall back to Claude Haiku.")
+                Text("Quick add keeps your text as the description. When enabled, the suggestions model writes a title and fills empty properties, including version and milestone.")
+            }
+
+            Section {
+                LabeledContent("AI suggestions model") {
+                    Menu {
+                        Button("Default task agent") { selectSuggestionAgent(nil) }
+                        Divider()
+                        ForEach(appState.availableAgentModelSections(), id: \.id) { section in
+                            Section(section.title) {
+                                ForEach(section.models, id: \.key) { model in
+                                    Button(model.displayName) {
+                                        selectSuggestionAgent(TaskAgentConfig(provider: model.provider, model: model.id))
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        TaskBoardChipLabel(
+                            icon: "sparkles",
+                            title: suggestionAgent.map(appState.taskAgentLabel) ?? String(localized: "Default task agent"),
+                            isActive: suggestionAgent != nil
+                        )
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                }
+            } header: {
+                Text("AI Suggestions")
+            } footer: {
+                Text("This model powers quick add and the task and story forms' title and Auto-fill buttons. ACP client suggestions run in a separate session.")
             }
         }
         .formStyle(.grouped)
         .onAppear {
             configured = appState.configuredDefaultTaskAgent()
+            suggestionAgent = appState.configuredTaskSuggestionAgent()
             autoClassify = appState.autoClassifiesQuickAddedTasks
         }
     }
@@ -72,5 +105,10 @@ struct TasksSettingsTab: View {
     private func select(_ agent: TaskAgentConfig?) {
         appState.setConfiguredDefaultTaskAgent(provider: agent?.provider, model: agent?.model)
         configured = appState.configuredDefaultTaskAgent()
+    }
+
+    private func selectSuggestionAgent(_ agent: TaskAgentConfig?) {
+        appState.setConfiguredTaskSuggestionAgent(agent)
+        suggestionAgent = agent
     }
 }

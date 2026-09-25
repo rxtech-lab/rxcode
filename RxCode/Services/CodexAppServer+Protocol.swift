@@ -69,6 +69,10 @@ extension CodexAppServer {
 
     - `ide__get_projects` — list every project registered in RxCode, so you \
     can discover sibling projects to read or message.
+    - `ide__get_stories` — list stories on a project's task board before \
+    linking a new task to one.
+    - `ide__create_story` / `ide__create_task` — record user-requested work \
+    from a chat. Pass `story_id` to place a task in an existing story.
     - `ide__get_threads` — list or natural-language search chat threads across \
     projects.
     - `ide__get_thread_messages` — fetch the message history of a specific \

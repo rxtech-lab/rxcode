@@ -29,6 +29,18 @@ extension AppState {
         return project
     }
 
+    /// Project-card drag-and-drop on the Tasks overview: the project with id
+    /// `moved` takes `target`'s slot. The stored order is the app-wide project
+    /// order, so the sidebar and briefing follow the cards.
+    func reorderProject(_ moved: UUID, onto target: UUID) {
+        guard let order = projects.reordered(moving: moved, onto: target) else { return }
+        projects = order
+        Task {
+            do { try await persistence.saveProjects(projects) }
+            catch { logger.error("Failed to save projects: \(error.localizedDescription)") }
+        }
+    }
+
     func selectProject(_ project: Project, in window: WindowState) {
         guard window.selectedProject?.id != project.id else { return }
 
@@ -97,12 +109,9 @@ extension AppState {
 
     @discardableResult
     func addAndSelectProject(name: String, path: String, gitHubRepo: String? = nil, suppressAddedHook: Bool = false, in window: WindowState) async -> Project? {
-        if let existing = projects.first(where: { $0.path == path }) {
-            selectProject(existing, in: window)
-            return existing
-        }
+        let startedOnProjectsPage = window.showingTasks
         let project = await addProject(name: name, path: path, gitHubRepo: gitHubRepo, suppressHookEvent: suppressAddedHook)
-        if let project {
+        if let project, !startedOnProjectsPage, !window.showingTasks {
             selectProject(project, in: window)
         }
         return project

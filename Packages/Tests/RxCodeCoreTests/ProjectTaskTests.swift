@@ -27,6 +27,7 @@ struct ProjectTaskTests {
                 planMode: true
             ),
             sessionKey: "sess-1",
+            sourceSessionKey: "source-1",
             sortIndex: 4
         )
 
@@ -50,6 +51,7 @@ struct ProjectTaskTests {
         #expect(decoded.agent.permissionMode == .acceptEdits)
         #expect(decoded.agent.planMode)
         #expect(decoded.sessionKey == "sess-1")
+        #expect(decoded.sourceSessionKey == "source-1")
         #expect(decoded.sortIndex == 4)
     }
 
@@ -462,6 +464,44 @@ struct ProjectTaskTests {
         #expect(followUp.fields.isEmpty)
     }
 
+    @Test("Only dispatched task messages resolve through task(in:)")
+    func taskPromptDetection() {
+        var task = ProjectTask(projectId: UUID(), title: "Parse task messages")
+        task.details = "Render them like the Run tab."
+        task.version = "v1.18.0"
+        task.milestone = "v2"
+
+        let prompt = task.agentPrompt(storyTitle: "Projects Dashboard", typeName: "Feature")
+        let content = TaskPromptContent.task(in: prompt)
+        #expect(content?.title == "Parse task messages")
+        #expect(content?.fields.map(\.label) == ["Story", "Type", "Target version", "Milestone"])
+
+        // Typed messages stay plain Markdown, even when they look list-like or
+        // merely mention a task.
+        #expect(TaskPromptContent.task(in: "Please also add tests\n\n- a list") == nil)
+        #expect(TaskPromptContent.task(in: "The **Task:** label is not at the start") == nil)
+    }
+
+    @Test("Chat display extraction preserves a task message's structure")
+    func taskPromptSurvivesDisplayExtraction() {
+        var task = ProjectTask(projectId: UUID(), title: "Parse task messages")
+        task.details = "Render them like the Run tab."
+        task.tags = ["ui", "chat"]
+        // The chat strips attachment markers before rendering; the task card has
+        // to survive that pass, otherwise the bubble falls back to raw Markdown.
+        let sent = "[Attached image: /tmp/shot.png]\n\n"
+            + task.agentPrompt(storyTitle: "Projects Dashboard", typeName: "Feature")
+
+        let displayed = ChatSession.extractDisplayedContent(from: sent)
+        #expect(displayed.imagePaths == ["/tmp/shot.png"])
+
+        let content = TaskPromptContent.task(in: displayed.text)
+        #expect(content?.title == "Parse task messages")
+        #expect(content?.body == "Render them like the Run tab.")
+        #expect(content?.fields.map(\.label) == ["Story", "Type", "Tags"])
+        #expect(content?.fields.last?.value == "ui, chat")
+    }
+
     @Test("Stories match tag and version filters on their own fields")
     func storyViewMatching() {
         let story = ProjectStory(projectId: UUID(), title: "Epic")
@@ -535,6 +575,58 @@ struct ProjectTaskTests {
         #expect(parsed?.priority == "HIGH")
         #expect(parsed?.milestone == "Beta")
         #expect(TaskClassification.parse("no json here") == nil)
+
+        // One odd value must not discard the rest of the suggestion.
+        let loose = TaskClassification.parse(#"{"type": "Bug", "priority": "P1", "tags": "ui", "version": 2, "milestone": "Beta"}"#)
+        #expect(loose?.version == "2")
+        #expect(loose?.tags == ["ui"])
+        #expect(loose?.milestone == "Beta")
+        var task = ProjectTask(projectId: UUID(), title: "t")
+        loose?.apply(to: &task, board: TaskBoard())
+        #expect(task.priority == .high)
+        #expect(task.version == "2")
+    }
+
+    @Test("Classification prompt asks for priority, version and milestone whenever the board has them")
+    func classificationPromptFillsProperties() {
+        let board = TaskBoard(tasks: [ProjectTask(projectId: UUID(), title: "x", version: "v2", milestone: "Beta")])
+        let prompt = TaskClassification.prompt(title: "Fix", details: "", storyTitle: nil, board: board)
+        #expect(prompt.contains("priority: always one of"))
+        #expect(prompt.contains("for new work use the newest, v2. Never null."))
+        #expect(prompt.contains("existing milestone from [Beta]. Never null."))
+
+        let empty = TaskClassification.prompt(title: "Fix", details: "", storyTitle: nil, board: TaskBoard())
+        #expect(empty.contains("even if new. Otherwise null."))
+        #expect(!empty.contains("\"story\""))
+    }
+
+    @Test("Classification picks a parent story only for a task without one")
+    func classificationStory() {
+        let projectId = UUID()
+        let parent = ProjectStory(projectId: projectId, title: "Projects Dashboard", version: "v3", milestone: "GA")
+        let board = TaskBoard(stories: [parent])
+
+        let prompt = TaskClassification.prompt(title: "Fix", details: "", storyTitle: nil, board: board)
+        #expect(prompt.contains(#""story": string|null"#))
+        #expect(prompt.contains(#"from ["Projects Dashboard"]"#))
+        #expect(!TaskClassification.prompt(title: "Fix", details: "", storyTitle: "Projects Dashboard", board: board).contains("- story:"))
+        #expect(!TaskClassification.prompt(title: "Fix", details: "", storyTitle: nil, board: board, isStory: true).contains("- story:"))
+
+        let suggestion = TaskClassification.parse(#"{"story": "projects dashboard", "version": "v9"}"#)
+        var task = ProjectTask(projectId: projectId, title: "t")
+        suggestion?.apply(to: &task, board: board)
+        #expect(task.storyId == parent.id)
+        #expect(task.version == "v3")
+        #expect(task.milestone == "GA")
+
+        var unknown = ProjectTask(projectId: projectId, title: "t")
+        TaskClassification(story: "Nope").apply(to: &unknown, board: board)
+        #expect(unknown.storyId == nil)
+
+        let other = UUID()
+        var chosen = ProjectTask(projectId: projectId, storyId: other, title: "t")
+        suggestion?.apply(to: &chosen, board: board)
+        #expect(chosen.storyId == other)
     }
 
     @Test("Classification only fills empty fields and reuses board spelling")
@@ -561,6 +653,33 @@ struct ProjectTaskTests {
         var unknownType = ProjectTask(projectId: UUID(), title: "t")
         TaskClassification(type: "Epic").apply(to: &unknownType, board: board)
         #expect(unknownType.typeId == nil)
+    }
+
+    @Test("Classification fills story version and milestone without replacing choices")
+    func storyClassificationApply() {
+        let board = TaskBoard()
+        let suggestion = TaskClassification(
+            type: "Feature", priority: "medium", tags: ["ui"],
+            version: "v1.18.0", milestone: "v2"
+        )
+        var story = ProjectStory(projectId: UUID(), title: "Projects Dashboard")
+        suggestion.apply(to: &story, board: board)
+        #expect(story.version == "v1.18.0")
+        #expect(story.milestone == "v2")
+        #expect(story.priority == .medium)
+
+        story.version = "v1.19.0"
+        story.milestone = "v3"
+        suggestion.apply(to: &story, board: board)
+        #expect(story.version == "v1.19.0")
+        #expect(story.milestone == "v3")
+
+        let prompt = TaskClassification.prompt(
+            title: story.title, details: "Target version v1.18.0; milestone v2",
+            storyTitle: nil, board: board, isStory: true
+        )
+        #expect(prompt.contains("Story title: Projects Dashboard"))
+        #expect(prompt.contains("version explicitly stated"))
     }
 
     @Test("The agent prompt carries type, priority and milestone")

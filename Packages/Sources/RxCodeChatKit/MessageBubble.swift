@@ -238,21 +238,30 @@ struct MessageBubble: View {
             VStack(alignment: .leading, spacing: 6) {
                 let isLong = displayText.count > Self.longTextThreshold
                 let collapsed = isLong && !isLongTextExpanded
-                MarkdownContentView(
-                    text: markdownUserText(displayText),
-                    style: .rxCodeChatUser,
-                    expandsHorizontally: false
-                ) { url in
-                    // Intercept the synthetic `rxcode-image://<index>` link emitted
-                    // by markdownUserText and open the matching image in the preview
-                    // sheet rather than the system browser.
-                    guard url.scheme == "rxcode-image",
-                          let index = Int(url.host ?? ""),
-                          let path = imagePath(forChipIndex: index) else {
-                        return .systemAction
+                Group {
+                    // A task dispatched from the board arrives as a `**Task:**`
+                    // message; show it as the card the task form's Run tab uses
+                    // instead of raw Markdown.
+                    if let taskPrompt = TaskPromptContent.task(in: displayText) {
+                        TaskPromptView(content: taskPrompt, style: .userBubble)
+                    } else {
+                        MarkdownContentView(
+                            text: markdownUserText(displayText),
+                            style: .rxCodeChatUser,
+                            expandsHorizontally: false
+                        ) { url in
+                            // Intercept the synthetic `rxcode-image://<index>` link emitted
+                            // by markdownUserText and open the matching image in the preview
+                            // sheet rather than the system browser.
+                            guard url.scheme == "rxcode-image",
+                                  let index = Int(url.host ?? ""),
+                                  let path = imagePath(forChipIndex: index) else {
+                                return .systemAction
+                            }
+                            previewImagePath = path
+                            return .handled
+                        }
                     }
-                    previewImagePath = path
-                    return .handled
                 }
                 .frame(maxHeight: collapsed ? Self.collapsedMaxHeight : nil, alignment: .topLeading)
                 .clipped()

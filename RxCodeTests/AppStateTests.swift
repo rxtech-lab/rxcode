@@ -106,6 +106,75 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(appState.messages(in: window).map(\.content), ["Draft thread"])
     }
 
+    // MARK: - Task board chat activity
+
+    func testIsAgentRunningIsFalseWithoutALinkedThread() {
+        let task = ProjectTask(projectId: UUID(), title: "No thread", sessionKey: nil)
+        appState.sessionStates = ["sess-1": streamState(isStreaming: true)]
+
+        XCTAssertFalse(appState.isAgentRunning(for: task))
+    }
+
+    func testIsAgentRunningFollowsTheLinkedThreadsStreamingState() {
+        let task = ProjectTask(projectId: UUID(), title: "Linked", sessionKey: "sess-1")
+
+        XCTAssertFalse(appState.isAgentRunning(for: task), "no state yet means nothing is streaming")
+
+        appState.sessionStates = ["sess-1": streamState(isStreaming: true)]
+        XCTAssertTrue(appState.isAgentRunning(for: task))
+
+        appState.sessionStates = ["sess-1": streamState(isStreaming: false)]
+        XCTAssertFalse(appState.isAgentRunning(for: task))
+    }
+
+    func testIsAgentRunningResolvesARenamedSessionId() {
+        // A task dispatched this launch is still linked to the `pending-…` key
+        // the stream opened under; the CLI rename lives in the redirect table.
+        let task = ProjectTask(projectId: UUID(), title: "Pending link", sessionKey: "pending-1")
+        appState.sessionIdRedirect = ["pending-1": "real-1"]
+        appState.sessionStates = ["real-1": streamState(isStreaming: true)]
+
+        XCTAssertTrue(appState.isAgentRunning(for: task))
+    }
+
+    func testLinkedTaskFindsRenamedThreadOnlyInItsProject() {
+        let project = makeProject("Chat")
+        let otherProject = makeProject("Other")
+        let task = ProjectTask(projectId: project.id, title: "Linked", sessionKey: "pending-1")
+        let sourceTask = ProjectTask(projectId: project.id, title: "From chat", sourceSessionKey: "source-1")
+        appState.setTaskBoard(TaskBoard(tasks: [task, sourceTask]), for: project.id)
+        appState.sessionIdRedirect = ["pending-1": "real-1"]
+
+        XCTAssertEqual(appState.linkedTask(forSessionId: "real-1", projectId: project.id)?.id, task.id)
+        XCTAssertEqual(appState.linkedTask(forSessionId: "source-1", projectId: project.id)?.id, sourceTask.id)
+        XCTAssertFalse(sourceTask.isDescriptionLocked)
+        XCTAssertNil(appState.linkedTask(forSessionId: "real-1", projectId: otherProject.id))
+        XCTAssertNil(appState.linkedTask(forSessionId: "unlinked", projectId: project.id))
+    }
+
+    func testIsAgentRunningForStoryIsTrueWhileAnyChildTaskStreams() {
+        let project = makeProject("Board")
+        let story = ProjectStory(projectId: project.id, title: "Projects Dashboard")
+        let idle = ProjectTask(projectId: project.id, storyId: story.id, title: "Idle", sessionKey: "sess-idle")
+        let live = ProjectTask(projectId: project.id, storyId: story.id, title: "Live", sessionKey: "sess-live")
+        let other = ProjectTask(projectId: project.id, title: "Unparented", sessionKey: "sess-other")
+        let board = TaskBoard(stories: [story], tasks: [idle, live, other])
+
+        appState.sessionStates = [
+            "sess-idle": streamState(isStreaming: false),
+            "sess-live": streamState(isStreaming: true),
+        ]
+        XCTAssertTrue(appState.isAgentRunning(forStory: story, in: board))
+
+        appState.sessionStates = [
+            "sess-idle": streamState(isStreaming: false),
+            "sess-live": streamState(isStreaming: false),
+            // A task outside the story must not light the story card up.
+            "sess-other": streamState(isStreaming: true),
+        ]
+        XCTAssertFalse(appState.isAgentRunning(forStory: story, in: board))
+    }
+
     // MARK: - Drafts and queues
 
     func testDraftKeyIsProjectScopedBeforeSessionExists() {
@@ -355,6 +424,34 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(appState.projects.map(\.name), ["A"])
         let saveCount = await persistence.savedProjectsSnapshots().count
         XCTAssertEqual(saveCount, 1)
+    }
+
+    func testAddingProjectFromFolderKeepsProjectsPageOpen() async {
+        let currentProject = makeProject("Current")
+        appState.projects = [currentProject]
+        window.selectedProject = currentProject
+        window.taskDetailProjectId = currentProject.id
+        window.generalRoute = .tasks
+
+        await appState.addProjectFromFolder(URL(fileURLWithPath: "/tmp/new-dashboard-project"), in: window)
+
+        XCTAssertEqual(appState.projects.map(\.name), ["Current", "new-dashboard-project"])
+        XCTAssertEqual(window.generalRoute, .tasks)
+        XCTAssertEqual(window.taskDetailProjectId, currentProject.id)
+        XCTAssertEqual(window.selectedProject?.id, currentProject.id)
+        XCTAssertNil(window.currentSessionId)
+    }
+
+    func testAddingProjectFromChatSelectsNewProject() async {
+        let currentProject = makeProject("Current")
+        appState.projects = [currentProject]
+        window.selectedProject = currentProject
+        window.generalRoute = nil
+
+        await appState.addProjectFromFolder(URL(fileURLWithPath: "/tmp/new-chat-project"), in: window)
+
+        XCTAssertEqual(window.selectedProject?.name, "new-chat-project")
+        XCTAssertNil(window.generalRoute)
     }
 
     func testSaveSessionSkipsEmptyMessages() async {

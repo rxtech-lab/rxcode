@@ -201,6 +201,7 @@ private struct StoryTaskRow: View {
 
     let task: ProjectTask
     let onOpen: () -> Void
+    @State private var pendingDeletion: TaskBoardSheet?
 
     private var isDone: Bool { board.column(for: task.status).countsAsDone }
 
@@ -275,7 +276,12 @@ private struct StoryTaskRow: View {
         .padding(.vertical, 10)
         .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusMedium))
         .contextMenu {
-            TaskContextMenuItems(task: task, onEdit: onOpen, onOpenChat: { dismiss() })
+            TaskContextMenuItems(task: task, onEdit: onOpen, onDelete: {
+                pendingDeletion = .task(task)
+            }, onOpenChat: { dismiss() })
+        }
+        .taskDeletionConfirmation(pending: $pendingDeletion) { candidate in
+            if case .task(let task) = candidate { appState.deleteTask(task) }
         }
     }
 

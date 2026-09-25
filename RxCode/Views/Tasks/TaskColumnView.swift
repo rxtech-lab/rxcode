@@ -25,6 +25,7 @@ struct TaskColumnView: View {
     /// column's slot in the board order.
     let onReorder: (TaskStatus) -> Void
     @Binding var hoveredStoryId: UUID?
+    @Binding var collapsedStoryIds: Set<UUID>
 
     private var status: TaskStatus { column.id }
 
@@ -43,6 +44,14 @@ struct TaskColumnView: View {
                             progress: board.progress(for: story),
                             board: board,
                             hoveredStoryId: $hoveredStoryId,
+                            isCollapsed: collapsedStoryIds.contains(story.id),
+                            onToggleCollapse: {
+                                if collapsedStoryIds.contains(story.id) {
+                                    collapsedStoryIds.remove(story.id)
+                                } else {
+                                    collapsedStoryIds.insert(story.id)
+                                }
+                            },
                             onOpen: { onOpen(.story(story)) },
                             onNewTask: { onOpen(.task($0)) }
                         )

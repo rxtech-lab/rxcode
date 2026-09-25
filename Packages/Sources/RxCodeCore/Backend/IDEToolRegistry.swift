@@ -120,6 +120,45 @@ public enum IDEToolRegistry {
             ])
         ),
         IDETool(
+            name: "ide__get_stories",
+            description: "List stories on a project task board so you can choose an existing story before creating a task. Uses the current chat's project unless project_id is given.",
+            visibility: .alwaysIDEOnly,
+            inputSchema: .object([
+                "type": .string("object"),
+                "properties": .object([
+                    "project_id": .object(["type": .string("string"), "description": .string("Optional project UUID.")]),
+                ]),
+            ])
+        ),
+        IDETool(
+            name: "ide__create_story",
+            description: "Create a story on a project task board when the user's chat request calls for tracking a group of work. Uses the current chat's project unless project_id is given.",
+            visibility: .alwaysIDEOnly,
+            inputSchema: .object([
+                "type": .string("object"),
+                "properties": .object([
+                    "project_id": .object(["type": .string("string")]),
+                    "title": .object(["type": .string("string")]),
+                    "details": .object(["type": .string("string")]),
+                ]),
+                "required": .array([.string("title")]),
+            ])
+        ),
+        IDETool(
+            name: "ide__create_task",
+            description: "Create a task from the user's chat request. Pass story_id to add it to an existing story found with ide__get_stories; omit it for an independent task. Uses the current chat's project unless project_id is given. If title is omitted, RxCode derives one from details.",
+            visibility: .alwaysIDEOnly,
+            inputSchema: .object([
+                "type": .string("object"),
+                "properties": .object([
+                    "project_id": .object(["type": .string("string")]),
+                    "story_id": .object(["type": .string("string")]),
+                    "title": .object(["type": .string("string")]),
+                    "details": .object(["type": .string("string")]),
+                ]),
+            ])
+        ),
+        IDETool(
             name: "ide__get_threads",
             description: "List or natural-language search chat threads. With `query`, results are ranked by the same on-device embedding search the global search overlay uses and include matched snippets + scores. Without `query`, returns recent threads sorted by updatedAt. Each result includes the AI-generated summary when available.",
             visibility: .alwaysIDEOnly,

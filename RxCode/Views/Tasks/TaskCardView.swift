@@ -20,12 +20,12 @@ struct TaskCardView: View {
         let story = story
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 5) {
-                TaskStatusIcon(status: task.status, size: 11)
+                TaskStatusIcon(status: task.status, board: board, size: 11)
                 if let story {
                     TaskStoryChip(
                         story: story,
                         progress: board.progress(for: story),
-                        status: board.rolledUpStatus(for: story),
+                        column: board.column(for: board.rolledUpStatus(for: story)),
                         hoveredStoryId: $hoveredStoryId
                     )
                 } else {
@@ -57,12 +57,7 @@ struct TaskCardView: View {
 
             if hasPills {
                 FlowLayout(spacing: 4) {
-                    if let version = task.version, !version.isEmpty {
-                        TaskPill(text: version, icon: "tag", tint: ClaudeTheme.accent)
-                    }
-                    ForEach(task.tags, id: \.self) { tag in
-                        TaskPill(text: tag)
-                    }
+                    TaskClassificationPills(task: task, board: board)
                     if task.agent.isAssigned {
                         TaskPill(text: appState.taskAgentLabel(task.agent), icon: "sparkles", tint: ClaudeTheme.statusRunning)
                     }
@@ -89,7 +84,7 @@ struct TaskCardView: View {
     }
 
     private var hasPills: Bool {
-        !(task.version ?? "").isEmpty || !task.tags.isEmpty || task.agent.isAssigned
+        TaskClassificationPills(task: task, board: board).hasContent || task.agent.isAssigned
             || task.agent.planMode || !task.attachments.isEmpty
     }
 }
@@ -99,8 +94,11 @@ struct TaskCardView: View {
 struct StoryCardView: View {
     let story: ProjectStory
     let progress: StoryProgress
+    var board: TaskBoard?
     @Binding var hoveredStoryId: UUID?
     let onOpen: () -> Void
+    /// Opens the task form on a draft parented to this story.
+    let onNewTask: (ProjectTask) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -126,7 +124,18 @@ struct StoryCardView: View {
                 .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
 
-            StoryProgressBar(progress: progress)
+            if let board {
+                let pills = TaskClassificationPills(story: story, board: board)
+                if pills.hasContent {
+                    FlowLayout(spacing: 4) { pills }
+                }
+            }
+
+            if let board {
+                StoryProgressBar(story: story, board: board)
+            } else {
+                StoryProgressBar(progress: progress)
+            }
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -144,7 +153,7 @@ struct StoryCardView: View {
         }
         .onTapGesture(perform: onOpen)
         .contextMenu {
-            StoryContextMenuItems(story: story, onEdit: onOpen)
+            StoryContextMenuItems(story: story, onEdit: onOpen, onNewTask: onNewTask)
         }
     }
 }
@@ -158,6 +167,7 @@ private struct TaskCardChrome: ViewModifier {
     var isDimmed = false
 
     @State private var isHovering = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
@@ -178,9 +188,12 @@ private struct TaskCardChrome: ViewModifier {
                     lineWidth: highlight == nil ? 1 : 1.5
                 )
             )
+            .shadow(color: .black.opacity(isHovering ? 0.08 : 0), radius: 6, y: 3)
+            .offset(y: isHovering && !reduceMotion ? -1 : 0)
             .opacity(isDimmed ? 0.45 : 1)
             .animation(.easeOut(duration: 0.15), value: isDimmed)
             .animation(.easeOut(duration: 0.15), value: highlight == nil)
+            .taskBoardAnimation(TaskBoardMotion.feedback, value: isHovering)
             .contentShape(Rectangle())
             .onHover { isHovering = $0 }
     }

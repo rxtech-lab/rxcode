@@ -4,11 +4,22 @@ import AppKit
 import RxCodeCore
 
 /// Detail preview sheet for image attachments
-struct ImagePreviewSheet: View {
+public struct ImagePreviewSheet: View {
     let attachment: Attachment
     @Environment(\.dismiss) private var dismiss
 
-    var body: some View {
+    public init(attachment: Attachment) {
+        self.attachment = attachment
+    }
+
+    /// In-memory data first (a pasted image), then the file on disk.
+    private var image: NSImage? {
+        if let data = attachment.imageData, let image = NSImage(data: data) { return image }
+        guard !attachment.path.isEmpty else { return nil }
+        return NSImage(contentsOfFile: attachment.path)
+    }
+
+    public var body: some View {
         VStack(spacing: 0) {
             HStack {
                 Image(systemName: "photo.fill")
@@ -36,7 +47,7 @@ struct ImagePreviewSheet: View {
             Divider()
 
             ScrollView([.horizontal, .vertical]) {
-                if let data = attachment.imageData, let nsImage = NSImage(data: data) {
+                if let nsImage = image {
                     Image(nsImage: nsImage)
                         .resizable()
                         .aspectRatio(contentMode: .fit)

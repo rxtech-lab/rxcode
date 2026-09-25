@@ -48,6 +48,29 @@
 			<string>Viewer</string>
 		</dict>
 	</array>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.rxlab.RxCode.task-column</string>
+			<key>UTTypeDescription</key>
+			<string>RxCode Task Board Column</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.rxlab.RxCode.task-view</string>
+			<key>UTTypeDescription</key>
+			<string>RxCode Task View Tab</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+		</dict>
+	</array>
 	<key>AutopilotBaseURL</key>
 	<string>https://autopilot.rxlab.app</string>
 	<key>NSHumanReadableCopyright</key>

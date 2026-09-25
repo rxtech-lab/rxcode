@@ -788,9 +788,22 @@ final class AppStateHookController: HookController {
     // MARK: Project task board
 
     @discardableResult
-    func advanceLinkedTaskToReview(sessionKey: String) -> Bool {
+    func applyTaskTrigger(_ event: TaskTriggerEvent, sessionKey: String, sessionContinues: Bool) -> Bool {
         guard let app else { return false }
-        return app.advanceLinkedTaskToReview(sessionKey: sessionKey) != nil
+        return app.applyTaskTrigger(event, sessionKey: sessionKey, sessionContinues: sessionContinues) != nil
+    }
+
+    // Review events are dispatched on their own task rather than awaited: the
+    // caller (`CodeReviewHook`) is itself running inside the serial session-end
+    // dispatch, and review listeners must not wait on it or hold it up.
+    func notifyReviewStarted(_ payload: ReviewEventPayload) {
+        guard let app else { return }
+        Task { await app.hookManager.dispatchReviewStart(payload) }
+    }
+
+    func notifyReviewStopped(_ payload: ReviewEventPayload) {
+        guard let app else { return }
+        Task { await app.hookManager.dispatchReviewStop(payload) }
     }
 
     // MARK: Setup-session tracking

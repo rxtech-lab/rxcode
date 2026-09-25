@@ -6,7 +6,10 @@ import RxCodeCore
 // SwiftUI's TextEditor (PlatformTextView) overrides insertText to enforce binding sync, which
 // races and discards composing Hangul on commit. Hosting an NSTextView directly lets us own the
 // binding and skip write-back while marked text is active, eliminating the race.
-struct IMETextView: NSViewRepresentable {
+///
+/// Also backs the task description editor, which binds a display string where
+/// each Markdown image reference is stood in for by an `[ImageN]` chip token.
+public struct IMETextView: NSViewRepresentable {
     @Binding var text: String
     @Binding var isFocused: Bool
     @Binding var hasMarkedText: Bool
@@ -24,16 +27,67 @@ struct IMETextView: NSViewRepresentable {
     var onEscape: () -> Bool
     var onPasteCommandV: () -> Bool
     var onImageChipTap: ((Int) -> Void)? = nil
+    var isEditable: Bool = true
+    var accessibilityIdentifier: String = "chat-input-text-view"
+    /// Called once with the backing text view, so a host can insert at the caret
+    /// or adjust drag registration.
+    var onTextViewReady: ((NSTextView) -> Void)? = nil
+    /// Thumbnail for the `[ImageN]` chip with the given 1-based index. When it
+    /// returns an image, the chip draws it in place of its leading bracket.
+    var chipThumbnail: ((Int) -> NSImage?)? = nil
 
-    func makeCoordinator() -> Coordinator {
+    public init(
+        text: Binding<String>,
+        isFocused: Binding<Bool>,
+        hasMarkedText: Binding<Bool>,
+        focusTrigger: UUID? = nil,
+        font: NSFont,
+        textColor: NSColor,
+        placeholder: String = "",
+        onReturn: @escaping () -> Void,
+        onUpArrow: @escaping () -> Bool = { false },
+        onDownArrow: @escaping () -> Bool = { false },
+        onTab: @escaping () -> Bool = { false },
+        onShiftTab: @escaping () -> Void = {},
+        onEscape: @escaping () -> Bool = { false },
+        onPasteCommandV: @escaping () -> Bool = { false },
+        onImageChipTap: ((Int) -> Void)? = nil,
+        isEditable: Bool = true,
+        accessibilityIdentifier: String = "chat-input-text-view",
+        onTextViewReady: ((NSTextView) -> Void)? = nil,
+        chipThumbnail: ((Int) -> NSImage?)? = nil
+    ) {
+        self._text = text
+        self._isFocused = isFocused
+        self._hasMarkedText = hasMarkedText
+        self.focusTrigger = focusTrigger
+        self.font = font
+        self.textColor = textColor
+        self.placeholder = placeholder
+        self.onReturn = onReturn
+        self.onUpArrow = onUpArrow
+        self.onDownArrow = onDownArrow
+        self.onTab = onTab
+        self.onShiftTab = onShiftTab
+        self.onEscape = onEscape
+        self.onPasteCommandV = onPasteCommandV
+        self.onImageChipTap = onImageChipTap
+        self.isEditable = isEditable
+        self.accessibilityIdentifier = accessibilityIdentifier
+        self.onTextViewReady = onTextViewReady
+        self.chipThumbnail = chipThumbnail
+    }
+
+    public func makeCoordinator() -> Coordinator {
         Coordinator(text: $text)
     }
 
-    func makeNSView(context: Context) -> NSScrollView {
+    public func makeNSView(context: Context) -> NSScrollView {
         // Install a custom layout manager so we can draw a rounded background behind
         // [Image\d+] tokens, turning them into visual chips.
         let textStorage = NSTextStorage()
         let layoutManager = ChipLayoutManager()
+        layoutManager.delegate = layoutManager
         textStorage.addLayoutManager(layoutManager)
         let container = NSTextContainer(size: NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
         container.widthTracksTextView = true
@@ -52,7 +106,8 @@ struct IMETextView: NSViewRepresentable {
         textView.isAutomaticTextReplacementEnabled = false
         textView.isAutomaticSpellingCorrectionEnabled = false
         textView.smartInsertDeleteEnabled = false
-        textView.setAccessibilityIdentifier("chat-input-text-view")
+        textView.setAccessibilityIdentifier(accessibilityIdentifier)
+        textView.isEditable = isEditable
         textView.textContainerInset = .zero
         textView.isHorizontallyResizable = false
         textView.isVerticallyResizable = true
@@ -70,10 +125,11 @@ struct IMETextView: NSViewRepresentable {
 
         applyCallbacks(to: textView)
         textView.refreshChipAppearance()
+        onTextViewReady?(textView)
         return scrollView
     }
 
-    static func dismantleNSView(_ nsView: NSScrollView, coordinator: Coordinator) {
+    public static func dismantleNSView(_ nsView: NSScrollView, coordinator: Coordinator) {
         guard let textView = nsView.documentView as? _IMETextView else { return }
         if textView.window?.firstResponder === textView {
             textView.window?.makeFirstResponder(nil)
@@ -85,7 +141,7 @@ struct IMETextView: NSViewRepresentable {
         nsView.documentView = nil
     }
 
-    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+    public func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? _IMETextView else { return }
         applyCallbacks(to: textView)
         // Skip write-in while IME is composing — same reason coordinator skips write-back.
@@ -98,6 +154,7 @@ struct IMETextView: NSViewRepresentable {
         }
         if textView.font != font { textView.font = font }
         if textView.textColor != textColor { textView.textColor = textColor }
+        if textView.isEditable != isEditable { textView.isEditable = isEditable }
         if textView.placeholder != placeholder { textView.placeholder = placeholder }
         // Take first responder only when an explicit focus request fires (UUID changed).
         // Plain SwiftUI re-renders no longer race with text selection in message bubbles.
@@ -122,6 +179,7 @@ struct IMETextView: NSViewRepresentable {
         textView.onEscape = onEscape
         textView.onPasteCommandV = onPasteCommandV
         textView.onImageChipTap = onImageChipTap
+        (textView.layoutManager as? ChipLayoutManager)?.thumbnail = chipThumbnail
         textView.onMarkedTextChange = { active in
             if hasMarkedText != active {
                 hasMarkedText = active
@@ -134,7 +192,7 @@ struct IMETextView: NSViewRepresentable {
         }
     }
 
-    final class Coordinator: NSObject, NSTextViewDelegate {
+    public final class Coordinator: NSObject, NSTextViewDelegate {
         let text: Binding<String>
         var lastAppliedText: String = ""
         var lastAppliedFocusTrigger: UUID?
@@ -143,7 +201,7 @@ struct IMETextView: NSViewRepresentable {
             self.text = text
         }
 
-        func textDidChange(_ notification: Notification) {
+        public func textDidChange(_ notification: Notification) {
             guard let tv = notification.object as? NSTextView else { return }
             // Skip binding write-back during IME composition; the binding picks up the committed
             // text from the next textDidChange after the IME finalizes.
@@ -178,7 +236,10 @@ nonisolated private func enumerateChipRanges(in text: String, _ body: (NSRange, 
 
 // MARK: - Chip Layout Manager
 
-fileprivate final class ChipLayoutManager: NSLayoutManager, @unchecked Sendable {
+fileprivate final class ChipLayoutManager: NSLayoutManager, NSLayoutManagerDelegate, @unchecked Sendable {
+    /// Set from the main actor; AppKit calls layout and drawing on the main thread.
+    nonisolated(unsafe) var thumbnail: ((Int) -> NSImage?)?
+
     nonisolated override init() {
         super.init()
     }
@@ -202,10 +263,11 @@ fileprivate final class ChipLayoutManager: NSLayoutManager, @unchecked Sendable 
             NSColor(ClaudeTheme.accent).withAlphaComponent(0.35)
         }
 
-        enumerateChipRanges(in: storage.string) { charRange, _ in
+        enumerateChipRanges(in: storage.string) { charRange, index in
             let glyphRange = self.glyphRange(forCharacterRange: charRange, actualCharacterRange: nil)
             let visible = NSIntersectionRange(glyphRange, glyphsToShow)
             guard visible.length > 0 else { return }
+            defer { self.drawThumbnail(forChipAt: charRange.location, index: index, origin: origin, in: container) }
 
             self.enumerateEnclosingRects(
                 forGlyphRange: glyphRange,
@@ -222,6 +284,105 @@ fileprivate final class ChipLayoutManager: NSLayoutManager, @unchecked Sendable 
                 path.stroke()
             }
         }
+    }
+}
+
+// MARK: Chip thumbnails
+//
+// A chip with a thumbnail turns its `[` into a whitespace control glyph as wide
+// as the line is tall, draws the image into that box, and hides its `]`. The
+// characters themselves are untouched, so the bound text stays `[ImageN]`.
+
+extension ChipLayoutManager {
+    nonisolated private func thumbnailImage(for index: Int) -> NSImage? {
+        guard let thumbnail else { return nil }
+        return MainActor.assumeIsolated { thumbnail(index) }
+    }
+
+    /// Chip start locations that have a thumbnail, keyed to the chip's range.
+    nonisolated private func thumbnailChips(in storage: NSTextStorage) -> [Int: NSRange] {
+        guard thumbnail != nil else { return [:] }
+        var chips: [Int: NSRange] = [:]
+        enumerateChipRanges(in: storage.string) { range, index in
+            if thumbnailImage(for: index) != nil { chips[range.location] = range }
+        }
+        return chips
+    }
+
+    nonisolated func layoutManager(
+        _ layoutManager: NSLayoutManager,
+        shouldGenerateGlyphs glyphs: UnsafePointer<CGGlyph>,
+        properties props: UnsafePointer<NSLayoutManager.GlyphProperty>,
+        characterIndexes charIndexes: UnsafePointer<Int>,
+        font aFont: NSFont,
+        forGlyphRange glyphRange: NSRange
+    ) -> Int {
+        guard let storage = textStorage else { return 0 }
+        let chips = thumbnailChips(in: storage)
+        guard !chips.isEmpty else { return 0 }
+        let closers = Set(chips.values.map { NSMaxRange($0) - 1 })
+        var properties = Array(UnsafeBufferPointer(start: props, count: glyphRange.length))
+        var changed = false
+        for i in 0..<glyphRange.length {
+            if chips[charIndexes[i]] != nil {
+                properties[i] = .controlCharacter
+                changed = true
+            } else if closers.contains(charIndexes[i]) {
+                properties[i] = .null
+                changed = true
+            }
+        }
+        guard changed else { return 0 }
+        setGlyphs(glyphs, properties: properties, characterIndexes: charIndexes, font: aFont, forGlyphRange: glyphRange)
+        return glyphRange.length
+    }
+
+    nonisolated func layoutManager(
+        _ layoutManager: NSLayoutManager,
+        shouldUse action: NSLayoutManager.ControlCharacterAction,
+        forControlCharacterAt charIndex: Int
+    ) -> NSLayoutManager.ControlCharacterAction {
+        guard let storage = textStorage, thumbnailChips(in: storage)[charIndex] != nil else { return action }
+        return .whitespace
+    }
+
+    nonisolated func layoutManager(
+        _ layoutManager: NSLayoutManager,
+        boundingBoxForControlGlyphAt glyphIndex: Int,
+        for textContainer: NSTextContainer,
+        proposedLineFragment proposedRect: NSRect,
+        glyphPosition: NSPoint,
+        characterIndex charIndex: Int
+    ) -> NSRect {
+        let font = textStorage?.attribute(.font, at: charIndex, effectiveRange: nil) as? NSFont
+            ?? .systemFont(ofSize: NSFont.systemFontSize)
+        let side = ceil(font.ascender - font.descender)
+        // A little trailing room separates the image from the label.
+        return NSRect(x: 0, y: 0, width: side + 3, height: side)
+    }
+
+    nonisolated fileprivate func drawThumbnail(
+        forChipAt charIndex: Int,
+        index: Int,
+        origin: NSPoint,
+        in container: NSTextContainer
+    ) {
+        guard let image = thumbnailImage(for: index) else { return }
+        let glyphIndex = glyphIndexForCharacter(at: charIndex)
+        guard glyphIndex < numberOfGlyphs,
+              propertyForGlyph(at: glyphIndex) == .controlCharacter else { return }
+        let box = boundingRect(forGlyphRange: NSRange(location: glyphIndex, length: 1), in: container)
+            .offsetBy(dx: origin.x, dy: origin.y)
+        let side = max(0, min(box.height, box.width - 3) - 2)
+        let target = NSRect(x: box.minX, y: box.midY - side / 2, width: side, height: side)
+        NSGraphicsContext.saveGraphicsState()
+        NSBezierPath(roundedRect: target, xRadius: 3, yRadius: 3).addClip()
+        // Aspect-fill: crop the source to a centered square.
+        let size = image.size
+        let crop = min(size.width, size.height)
+        let source = NSRect(x: (size.width - crop) / 2, y: (size.height - crop) / 2, width: crop, height: crop)
+        image.draw(in: target, from: source, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        NSGraphicsContext.restoreGraphicsState()
     }
 }
 

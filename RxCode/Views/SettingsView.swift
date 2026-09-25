@@ -66,6 +66,12 @@ struct SettingsView: View {
                     Label("Autopilot", systemImage: "paperplane.circle")
                 }
                 .tag(7)
+
+            TasksSettingsTab()
+                .tabItem {
+                    Label("Tasks", systemImage: "checklist")
+                }
+                .tag(8)
         }
         .frame(width: 680, height: 620)
         .focusable(false)

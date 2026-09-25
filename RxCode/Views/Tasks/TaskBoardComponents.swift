@@ -1,3 +1,4 @@
+import RxCodeChatKit
 import RxCodeCore
 import SwiftUI
 
@@ -17,52 +18,62 @@ enum TaskBoardSheet: Identifiable {
     }
 }
 
-// MARK: - Status styling
+// MARK: - Column styling
 
-extension TaskStatus {
-    /// Column accent, using the existing status tokens so the board matches the
-    /// rest of the app's state colors. Ordered like the GitHub Projects palette:
-    /// ready (blue), in progress (orange), in review (purple), done (green).
-    var tint: Color {
-        switch self {
-        case .pending: return ClaudeTheme.statusRunning
-        case .inProgress: return ClaudeTheme.statusWarning
-        case .pendingReview: return .purple
-        case .done: return ClaudeTheme.statusSuccess
-        }
+extension TaskColumn {
+    var tint: Color { Color(hex: colorHex) }
+
+    /// The one-line description under a board column header: the column's own
+    /// description, or a summary of what it automates.
+    var columnDescription: String {
+        let trimmed = details.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? triggerSummary : trimmed
     }
 
-    /// The one-line column description under a board column header.
-    var columnDescription: LocalizedStringResource {
-        switch self {
-        case .pending: return "This item hasn't been started"
-        case .inProgress: return "This is actively being worked on"
-        case .pendingReview: return "This item is in review"
-        case .done: return "This has been completed"
-        }
+    /// "Starts a chat · On session stop → Pending Review" style summary.
+    var triggerSummary: String {
+        triggerSummary(columnName: { $0.rawValue })
     }
 
-    /// Hollow ring for open states, filled check once done — the issue-state
-    /// glyphs GitHub uses on project cards.
-    var ringSymbol: String {
-        switch self {
-        case .pending: return "circle"
-        case .inProgress: return "circle.dotted.circle"
-        case .pendingReview: return "eye.circle"
-        case .done: return "checkmark.circle.fill"
+    func triggerSummary(columnName: (TaskStatus) -> String) -> String {
+        var parts: [String] = []
+        if triggersChat { parts.append(String(localized: "Starts a chat")) }
+        for event in TaskTriggerEvent.allCases {
+            if let target = target(for: event) {
+                parts.append("\(String(localized: event.displayName)) → \(columnName(target))")
+            }
         }
+        if countsAsDone { parts.append(String(localized: "Counts as done")) }
+        return parts.joined(separator: " · ")
     }
 }
 
+extension TaskBoard {
+    /// A column's trigger summary with target ids resolved to column names.
+    func triggerSummary(for column: TaskColumn) -> String {
+        column.triggerSummary { self.column(for: $0).name }
+    }
+}
+
+/// The ring glyph of a column, in its color.
 struct TaskStatusIcon: View {
-    let status: TaskStatus
+    let column: TaskColumn
     var size: CGFloat = 12
 
+    init(column: TaskColumn, size: CGFloat = 12) {
+        self.column = column
+        self.size = size
+    }
+
+    init(status: TaskStatus, board: TaskBoard, size: CGFloat = 12) {
+        self.init(column: board.column(for: status), size: size)
+    }
+
     var body: some View {
-        Image(systemName: status.ringSymbol)
+        Image(systemName: column.systemImage)
             .font(.system(size: ClaudeTheme.size(size), weight: .semibold))
-            .foregroundStyle(status.tint)
-            .help(Text(status.displayName))
+            .foregroundStyle(column.tint)
+            .help(Text(column.name))
     }
 }
 
@@ -74,6 +85,8 @@ struct TaskCountBadge: View {
         Text("\(count)")
             .font(.system(size: ClaudeTheme.size(11), weight: .medium))
             .foregroundStyle(ClaudeTheme.textSecondary)
+            .monospacedDigit()
+            .contentTransition(.numericText(value: Double(count)))
             .padding(.horizontal, 7)
             .padding(.vertical, 1)
             .background(Capsule().fill(ClaudeTheme.surfaceTertiary))
@@ -104,32 +117,494 @@ struct TaskPill: View {
     }
 }
 
-/// "5 / 6  ▰▰▰▰▱  83%" — rolled-up story progress.
-struct StoryProgressBar: View {
-    let progress: StoryProgress
+// MARK: - Motion
 
-    var body: some View {
-        HStack(spacing: 8) {
-            Text("\(progress.done) / \(progress.total)")
-                .font(.system(size: ClaudeTheme.size(11), weight: .medium))
-                .foregroundStyle(ClaudeTheme.textSecondary)
-                .monospacedDigit()
+/// Shared timing for the task pages, so cards, columns, tabs and project cards
+/// all move with the same feel.
+enum TaskBoardMotion {
+    /// Cards changing column or order, columns and tabs being reordered.
+    static let move = Animation.spring(response: 0.38, dampingFraction: 0.82)
+    /// Drop-target highlights and hover lifts: quick, so they track the pointer.
+    static let feedback = Animation.easeOut(duration: 0.16)
 
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(ClaudeTheme.accent.opacity(0.18))
-                    Capsule()
-                        .fill(ClaudeTheme.accent)
-                        .frame(width: proxy.size.width * progress.fraction)
+    /// A card arriving in or leaving a column or list.
+    static let card: AnyTransition = .asymmetric(
+        insertion: .scale(scale: 0.94).combined(with: .opacity),
+        removal: .scale(scale: 0.97).combined(with: .opacity)
+    )
+}
+
+extension View {
+    /// `.animation(_:value:)` that turns itself off under Reduce Motion.
+    func taskBoardAnimation<V: Equatable>(_ animation: Animation = TaskBoardMotion.move, value: V) -> some View {
+        modifier(TaskBoardAnimation(animation: animation, value: value))
+    }
+
+    /// The accent outline and slight lift a drop target shows while something
+    /// is dragged over it. Mirrors the composer's drag affordance
+    /// (`InputBarView.dragOverlay`).
+    func taskDropHighlight(_ isTargeted: Bool, in shape: some InsettableShape, scale: CGFloat = 1.01) -> some View {
+        modifier(TaskDropHighlight(isTargeted: isTargeted, shape: shape, scale: scale))
+    }
+}
+
+private struct TaskBoardAnimation<V: Equatable>: ViewModifier {
+    let animation: Animation
+    let value: V
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content.animation(reduceMotion ? nil : animation, value: value)
+    }
+}
+
+private struct TaskDropHighlight<S: InsettableShape>: ViewModifier {
+    let isTargeted: Bool
+    let shape: S
+    let scale: CGFloat
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .overlay {
+                if isTargeted {
+                    shape
+                        .strokeBorder(ClaudeTheme.accent.opacity(0.6), lineWidth: 2, antialiased: true)
+                        .background(ClaudeTheme.accent.opacity(0.05), in: shape)
+                        .transition(.opacity)
+                        .allowsHitTesting(false)
                 }
             }
-            .frame(height: 6)
+            .scaleEffect(isTargeted && !reduceMotion ? scale : 1)
+            .animation(reduceMotion ? nil : TaskBoardMotion.feedback, value: isTargeted)
+    }
+}
 
-            Text("\(progress.percent)%")
-                .font(.system(size: ClaudeTheme.size(11), weight: .medium))
-                .foregroundStyle(ClaudeTheme.textSecondary)
-                .monospacedDigit()
+// MARK: - Classification styling
+
+extension TaskPriority {
+    var tint: Color { Color(hex: colorHex) }
+}
+
+extension TaskItemType {
+    var tint: Color { Color(hex: colorHex) }
+}
+
+extension TaskBoard {
+    /// A tag's label color, or the neutral pill color when it has none.
+    func tint(forTag tag: String) -> Color {
+        labelColorHex(for: tag).map { Color(hex: $0) } ?? ClaudeTheme.textSecondary
+    }
+}
+
+/// Small filled dot used beside type and label names in pickers and lists.
+struct TaskColorDot: View {
+    let color: Color
+    var size: CGFloat = 8
+
+    var body: some View {
+        Circle()
+            .fill(color)
+            .frame(width: size, height: size)
+    }
+}
+
+/// The classification fields shared by stories and tasks, as pills: type,
+/// priority, milestone, version, then tags — each in its board color.
+struct TaskClassificationPills: View {
+    let board: TaskBoard
+    var typeId: UUID?
+    var priority: TaskPriority?
+    var version: String?
+    var milestone: String?
+    var tags: [String] = []
+
+    var hasContent: Bool {
+        board.itemType(id: typeId) != nil || priority != nil || !(version ?? "").isEmpty
+            || !(milestone ?? "").isEmpty || !tags.isEmpty
+    }
+
+    var body: some View {
+        if let type = board.itemType(id: typeId) {
+            TaskPill(text: type.name, icon: "circle.fill", tint: type.tint)
         }
+        if let priority {
+            TaskPill(text: priority.displayNameText, icon: priority.systemImage, tint: priority.tint)
+        }
+        if let milestone, !milestone.isEmpty {
+            TaskPill(text: milestone, icon: "flag", tint: ClaudeTheme.statusSuccess)
+        }
+        if let version, !version.isEmpty {
+            TaskPill(text: version, icon: "tag", tint: ClaudeTheme.accent)
+        }
+        ForEach(tags, id: \.self) { tag in
+            TaskPill(text: tag, tint: board.tint(forTag: tag))
+        }
+    }
+}
+
+extension TaskClassificationPills {
+    init(task: ProjectTask, board: TaskBoard) {
+        self.init(
+            board: board,
+            typeId: task.typeId,
+            priority: task.priority,
+            version: task.version,
+            milestone: task.milestone,
+            tags: task.tags
+        )
+    }
+
+    init(story: ProjectStory, board: TaskBoard) {
+        self.init(
+            board: board,
+            typeId: story.typeId,
+            priority: story.priority,
+            version: story.version,
+            milestone: story.milestone,
+            tags: story.tags
+        )
+    }
+}
+
+/// A selected value in a form — a tag, version or milestone — as a tinted
+/// chip that removes the value when clicked.
+struct TaskRemovableChip: View {
+    let text: String
+    var icon: String?
+    var tint: Color = ClaudeTheme.textSecondary
+    let onRemove: () -> Void
+
+    var body: some View {
+        Button(action: onRemove) {
+            HStack(spacing: 3) {
+                if let icon {
+                    Image(systemName: icon)
+                        .font(.system(size: ClaudeTheme.size(8), weight: .semibold))
+                }
+                Text(text)
+                    .lineLimit(1)
+                Image(systemName: "xmark")
+                    .font(.system(size: ClaudeTheme.size(8), weight: .semibold))
+            }
+            .font(.system(size: ClaudeTheme.size(10), weight: .medium))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(Capsule().fill(tint.opacity(0.12)))
+            .overlay(Capsule().strokeBorder(tint.opacity(0.35), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .help("Remove")
+    }
+}
+
+/// A single-value field that works like the tags field: a combobox to search
+/// the board's existing values or type a new one (Return), with the current
+/// value shown as a removable chip. Picking another value replaces it.
+struct TaskSingleValueCombo: View {
+    let title: LocalizedStringKey
+    let prompt: LocalizedStringKey
+    let icon: String
+    let tint: Color
+    @Binding var value: String?
+    /// The combobox text, owned by the form so Save can commit a value that
+    /// was typed but not confirmed with Return.
+    @Binding var input: String
+    let options: [String]
+    var manageTitle: LocalizedStringKey = "Manage…"
+    var onManage: (() -> Void)?
+
+    var body: some View {
+        LabeledContent(title) {
+            HStack(spacing: 6) {
+                if let value, !value.isEmpty {
+                    TaskRemovableChip(text: value, icon: icon, tint: tint) {
+                        self.value = nil
+                    }
+                    .fixedSize()
+                }
+                TaskComboField(
+                    title: title,
+                    prompt: prompt,
+                    text: $input,
+                    options: options.filter { $0 != value }.map { TaskComboOption(name: $0, color: tint) },
+                    onSubmit: commit,
+                    onPick: { picked in
+                        input = picked
+                        commit()
+                    },
+                    showsLabel: false,
+                    manageTitle: manageTitle,
+                    onManage: onManage
+                )
+            }
+        }
+    }
+
+    private func commit() {
+        if let committed = Self.resolve(input, in: options) {
+            value = committed
+        }
+        input = ""
+    }
+
+    /// The value `text` names, reusing an existing value's spelling when it
+    /// differs only by case. `nil` for blank text.
+    static func resolve(_ text: String, in options: [String]) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return options.first { $0.caseInsensitiveCompare(trimmed) == .orderedSame } ?? trimmed
+    }
+}
+
+/// One choice offered by a `TaskComboField`.
+struct TaskComboOption: Hashable {
+    let name: String
+    var color: Color?
+}
+
+/// A combobox: a text field whose dropdown lists the board's existing values
+/// filtered by what's typed, plus a chevron that browses all of them. Picking
+/// reuses a value; typing a new one and pressing Return creates it. This is
+/// how types, tags, versions and milestones are shared between stories and
+/// tasks without retyping them.
+struct TaskComboField: View {
+    let title: LocalizedStringKey
+    let prompt: LocalizedStringKey
+    @Binding var text: String
+    let options: [TaskComboOption]
+    /// Return pressed. `nil` for fields where the typed text is the value.
+    var onSubmit: (() -> Void)?
+    /// An option chosen from the chevron menu.
+    let onPick: (String) -> Void
+    var showsLabel = true
+    /// Adds a "Manage…" item to the dropdown, e.g. to open the fields sheet.
+    var manageTitle: LocalizedStringKey = "Manage…"
+    var onManage: (() -> Void)?
+
+    /// Options containing the typed text, exact prefix matches first.
+    private var matches: [TaskComboOption] {
+        let needle = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else { return options }
+        let lowered = needle.lowercased()
+        let found = options.filter { $0.name.localizedCaseInsensitiveContains(needle) && $0.name != needle }
+        return found.filter { $0.name.lowercased().hasPrefix(lowered) }
+            + found.filter { !$0.name.lowercased().hasPrefix(lowered) }
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            TextField(title, text: $text, prompt: Text(prompt))
+                .labelsHidden(!showsLabel)
+                .multilineTextAlignment(.leading)
+                .onSubmit { onSubmit?() }
+                .textInputSuggestions {
+                    ForEach(matches, id: \.self) { option in
+                        optionLabel(option)
+                            .textInputCompletion(option.name)
+                    }
+                }
+
+            if !options.isEmpty || onManage != nil {
+                Menu {
+                    ForEach(options, id: \.self) { option in
+                        Button {
+                            onPick(option.name)
+                        } label: {
+                            optionLabel(option)
+                        }
+                    }
+                    if !text.isEmpty, onSubmit == nil {
+                        Divider()
+                        Button("Clear") { onPick("") }
+                    }
+                    if let onManage {
+                        if !options.isEmpty { Divider() }
+                        Button(manageTitle, action: onManage)
+                    }
+                } label: {
+                    Image(systemName: "chevron.up.chevron.down")
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("Choose an existing value")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func optionLabel(_ option: TaskComboOption) -> some View {
+        if let color = option.color {
+            Label {
+                Text(option.name)
+            } icon: {
+                Image(systemName: "circle.fill")
+                    .foregroundStyle(color)
+            }
+        } else {
+            Text(option.name)
+        }
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func labelsHidden(_ hidden: Bool) -> some View {
+        if hidden { labelsHidden() } else { self }
+    }
+}
+
+/// "5 / 6  ▰▰▰▨▱  83%" — rolled-up story progress. Finished children fill the
+/// bar solid; started-but-unfinished children follow as an animated striped
+/// "pending" segment in `activeTint`, with a live "N in progress" caption.
+struct StoryProgressBar: View {
+    let progress: StoryProgress
+    var tint: Color = ClaudeTheme.accent
+    var activeTint: Color = ClaudeTheme.accent
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 8) {
+                Text("\(progress.done) / \(progress.total)")
+                    .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+                    .foregroundStyle(ClaudeTheme.textSecondary)
+                    .monospacedDigit()
+
+                StoryProgressTrack(progress: progress, tint: tint, activeTint: activeTint)
+                    .frame(height: 6)
+
+                Text("\(progress.percent)%")
+                    .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+                    .foregroundStyle(ClaudeTheme.textSecondary)
+                    .monospacedDigit()
+            }
+
+            if progress.active > 0 {
+                HStack(spacing: 5) {
+                    PulsingDot(color: activeTint)
+                    Text("\(progress.active) in progress")
+                        .font(.system(size: ClaudeTheme.size(10), weight: .medium))
+                        .foregroundStyle(activeTint)
+                        .monospacedDigit()
+                }
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: progress)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("\(progress.done) of \(progress.total) tasks done, \(progress.active) in progress"))
+    }
+}
+
+extension StoryProgressBar {
+    /// Colors the bar with the board's own columns: the first done column for
+    /// finished work and the first chat column for the pending segment.
+    init(story: ProjectStory, board: TaskBoard) {
+        self.init(
+            progress: board.progress(for: story),
+            tint: board.effectiveColumns.first(where: \.countsAsDone)?.tint ?? ClaudeTheme.accent,
+            activeTint: board.firstChatColumn?.tint ?? ClaudeTheme.accent
+        )
+    }
+}
+
+/// The bar itself: solid done segment, striped pending segment, then track.
+private struct StoryProgressTrack: View {
+    let progress: StoryProgress
+    let tint: Color
+    let activeTint: Color
+
+    var body: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let doneWidth = width * progress.fraction
+            let activeWidth = width * progress.activeFraction
+            ZStack(alignment: .leading) {
+                Capsule().fill(tint.opacity(0.18))
+
+                if activeWidth > 0 {
+                    PendingStripes(color: activeTint)
+                        .frame(width: doneWidth + activeWidth)
+                        .clipShape(Capsule())
+                }
+
+                if doneWidth > 0 {
+                    Capsule()
+                        .fill(tint)
+                        .frame(width: doneWidth)
+                }
+            }
+        }
+    }
+}
+
+/// Diagonal barber-pole stripes that drift left to right while work is
+/// underway. The motion is a single repeating offset animation, so it stays
+/// cheap on boards with many stories; Reduce Motion freezes it.
+private struct PendingStripes: View {
+    let color: Color
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var phase: CGFloat = 0
+
+    private let period: CGFloat = 8
+
+    var body: some View {
+        GeometryReader { proxy in
+            let height = proxy.size.height
+            Canvas { context, size in
+                context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(color.opacity(0.35)))
+                var stripes = Path()
+                var x = -height - period
+                while x < size.width + period {
+                    stripes.move(to: CGPoint(x: x, y: size.height))
+                    stripes.addLine(to: CGPoint(x: x + height, y: 0))
+                    stripes.addLine(to: CGPoint(x: x + height + period / 2, y: 0))
+                    stripes.addLine(to: CGPoint(x: x + period / 2, y: size.height))
+                    stripes.closeSubpath()
+                    x += period
+                }
+                context.fill(stripes, with: .color(color.opacity(0.85)))
+            }
+            .frame(width: proxy.size.width + period * 2)
+            .offset(x: phase - period * 2)
+        }
+        .clipped()
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.linear(duration: 0.8).repeatForever(autoreverses: false)) {
+                phase = period
+            }
+        }
+    }
+}
+
+/// Small status dot with a soft expanding halo.
+private struct PulsingDot: View {
+    let color: Color
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isPulsing = false
+
+    var body: some View {
+        Circle()
+            .fill(color)
+            .frame(width: 6, height: 6)
+            .background(
+                Circle()
+                    .fill(color.opacity(isPulsing ? 0 : 0.5))
+                    .scaleEffect(isPulsing ? 2.4 : 1)
+            )
+            .onAppear {
+                guard !reduceMotion else { return }
+                withAnimation(.easeOut(duration: 1.2).repeatForever(autoreverses: false)) {
+                    isPulsing = true
+                }
+            }
     }
 }
 
@@ -216,6 +691,8 @@ struct TaskContextMenuItems: View {
     /// dismiss itself instead of staying over the thread.
     var onOpenChat: (() -> Void)?
 
+    private var board: TaskBoard { appState.taskBoard(for: task.projectId) }
+
     var body: some View {
         Button("Edit…", action: onEdit)
 
@@ -226,23 +703,24 @@ struct TaskContextMenuItems: View {
             }
         }
 
-        if task.agent.isAssigned, task.status != .inProgress {
+        if task.agent.isAssigned, !board.column(for: task.status).triggersChat,
+           let chatColumn = board.firstChatColumn {
             Button("Run with Agent") {
-                appState.moveTask(task, to: .inProgress)
+                appState.moveTask(task, to: chatColumn.id)
             }
         }
 
         Divider()
 
         Menu("Move To") {
-            ForEach(TaskStatus.allCases, id: \.self) { status in
-                Button(status.displayNameText) {
-                    appState.moveTask(task, to: status)
+            ForEach(board.effectiveColumns) { column in
+                Button(column.name) {
+                    appState.moveTask(task, to: column.id)
                 }
-                .disabled(status == task.status)
+                .disabled(column.id == board.resolvedStatus(of: task))
             }
         }
-        .disabled(task.isStatusLocked)
+        .disabled(board.isStatusLocked(task))
 
         Divider()
 
@@ -257,8 +735,13 @@ struct StoryContextMenuItems: View {
 
     let story: ProjectStory
     let onEdit: () -> Void
+    /// Opens the task form on a draft already parented to this story.
+    let onNewTask: (ProjectTask) -> Void
 
     var body: some View {
+        Button("New Task") {
+            onNewTask(appState.newTaskDraft(inStory: story))
+        }
         Button("Edit…", action: onEdit)
         Divider()
         Button("Delete", role: .destructive) {
@@ -307,7 +790,7 @@ extension ProjectStory {
 struct TaskStoryChip: View {
     let story: ProjectStory
     let progress: StoryProgress
-    let status: TaskStatus
+    let column: TaskColumn
     @Binding var hoveredStoryId: UUID?
 
     @State private var showsPopover = false
@@ -349,7 +832,7 @@ struct TaskStoryChip: View {
                         .font(.system(size: ClaudeTheme.size(11)))
                         .foregroundStyle(ClaudeTheme.textTertiary)
                     Spacer(minLength: 0)
-                    TaskStatusIcon(status: status, size: 11)
+                    TaskStatusIcon(column: column, size: 11)
                 }
                 Text(story.title.isEmpty ? String(localized: "Untitled story") : story.title)
                     .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
@@ -391,7 +874,10 @@ struct TaskSummaryPreview: View {
     var body: some View {
         if let content {
             HStack(alignment: .top, spacing: 6) {
-                Text(content.text)
+                // Stripped, not rendered: descriptions are Markdown, and two
+                // truncated lines of a card have no room for block layout —
+                // raw syntax would just eat the preview.
+                Text(stripMarkdown(content.text))
                     .font(.system(size: ClaudeTheme.size(11)))
                     .foregroundStyle(ClaudeTheme.textSecondary)
                     .lineLimit(2)
@@ -415,10 +901,7 @@ struct TaskSummaryPreview: View {
                             .font(.system(size: ClaudeTheme.size(11), weight: .semibold))
                             .foregroundStyle(ClaudeTheme.textTertiary)
                         ScrollView {
-                            Text(content.text)
-                                .font(.system(size: ClaudeTheme.size(12)))
-                                .foregroundStyle(ClaudeTheme.textPrimary)
-                                .textSelection(.enabled)
+                            MarkdownContentView(text: content.text)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         .frame(maxHeight: 360)

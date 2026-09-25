@@ -3386,9 +3386,27 @@
     },
     "Direct · LAN%@" : {
 
+
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "直连 · 局域网%@"
+          }
+        }
+      }
     },
     "Direct connection" : {
 
+
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "直接连接"
+          }
+        }
+      }
     },
     "Disabled" : {
       "localizations" : {
@@ -8674,6 +8692,15 @@
     },
     "Select which Mac this device controls. When Direct connection is on and you're on the same network, sync connects straight to your Mac (end-to-end encrypted) and falls back to the relay automatically." : {
 
+
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择此设备要控制的 Mac。启用直接连接且设备处于同一网络时，同步会直接连接到 Mac（端到端加密），并在需要时自动切换到中继。"
+          }
+        }
+      }
     },
     "Serious" : {
       "localizations" : {

@@ -1158,6 +1158,9 @@ final class AppState {
     /// `runProfilesByProject` below. The global board rendered by
     /// `TaskBoardView` is an aggregation of these.
     var taskBoards: [UUID: TaskBoard] = [:]
+    /// Quick-added tasks whose properties the default agent is still filling
+    /// in, so their rows can show progress.
+    var classifyingTaskIds: Set<UUID> = []
 
     // MARK: - Run Profiles
 
@@ -1368,13 +1371,16 @@ final class AppState {
         hookManager.register(AutopilotReleaseHook())
         hookManager.register(CIUpdateHook())
         #endif
+        // The task board moves a card on session stop before any review starts:
+        // it only edits the board, and a card must already sit in its
+        // post-stop column when CodeReviewHook fires the review-start trigger.
+        hookManager.register(TaskBoardHook())
         // Registered last so their (potentially long) after-stop work runs after
         // the response-complete notification has already fired. CodeReviewHook
         // must come before CommitPushHook so the commit gate sees the verdict.
         hookManager.register(CodeReviewHook())
         hookManager.register(CommitPushHook())
         hookManager.register(SendMessageHook())
-        hookManager.register(TaskBoardHook())
     }
 
 

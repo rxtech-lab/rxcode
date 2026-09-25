@@ -59,6 +59,122 @@ struct ProjectTaskTests {
         #expect(TaskStatus.inProgress.rawValue == "in_progress")
         #expect(TaskStatus.pendingReview.rawValue == "pending_review")
         #expect(TaskStatus.done.rawValue == "done")
+        #expect(TaskStatus.backlog.rawValue == "backlog")
+    }
+
+    // MARK: - Columns
+
+    @Test("Status encodes as a bare string and keeps unknown ids")
+    func statusCoding() throws {
+        let data = try JSONEncoder().encode([TaskStatus.inProgress, TaskStatus(rawValue: "custom-qa")])
+        #expect(String(data: data, encoding: .utf8) == #"["in_progress","custom-qa"]"#)
+        let decoded = try JSONDecoder().decode([TaskStatus].self, from: data)
+        #expect(decoded == [.inProgress, "custom-qa"])
+    }
+
+    @Test("A board written before columns existed gets the default columns")
+    func legacyBoardGetsDefaultColumns() throws {
+        let json = #"{"schemaVersion":1,"tasks":[{"title":"old","status":"pending_review"}]}"#
+        let board = try JSONDecoder().decode(TaskBoard.self, from: Data(json.utf8))
+
+        #expect(board.columns.isEmpty)
+        #expect(board.effectiveColumns.map(\.id) == [.backlog, .pending, .inProgress, .pendingReview, .done])
+        let inProgress = board.column(for: .inProgress)
+        #expect(inProgress.triggersChat)
+        #expect(inProgress.onSessionStop == .pendingReview)
+        #expect(board.column(for: .pendingReview).onReviewFail == .inProgress)
+        #expect(board.column(for: .done).countsAsDone)
+        #expect(board.tasks(in: .pendingReview).map(\.title) == ["old"])
+    }
+
+    @Test("Columns round-trip with their triggers")
+    func columnRoundTrip() throws {
+        let column = TaskColumn(
+            id: "qa", name: "QA", colorHex: "#12A594", systemImage: "testtube.2",
+            triggersChat: true, countsAsDone: false,
+            onSessionStop: .pendingReview, onReviewStart: "qa-running",
+            onReviewPass: .done, onReviewFail: .inProgress
+        )
+        let data = try JSONEncoder().encode(TaskBoard(columns: [column]))
+        let decoded = try JSONDecoder().decode(TaskBoard.self, from: data)
+        #expect(decoded.columns == [column])
+    }
+
+    @Test("A task whose column was deleted shows in the first column")
+    func orphanedStatusFallsBack() {
+        let task = ProjectTask(projectId: UUID(), title: "orphan", status: "deleted")
+        let board = TaskBoard(tasks: [task])
+        #expect(board.resolvedStatus(of: task) == .backlog)
+        #expect(board.tasks(in: .backlog).map(\.title) == ["orphan"])
+    }
+
+    @Test("Trigger targets ignore missing columns and the column itself")
+    func triggerTargets() {
+        var columns = TaskColumn.defaults
+        let review = columns.firstIndex { $0.id == .pendingReview }!
+        columns[review].onReviewPass = "deleted"
+        columns[review].onReviewStart = .pendingReview
+        let task = ProjectTask(projectId: UUID(), title: "t", status: .pendingReview, sessionKey: "s")
+        let board = TaskBoard(tasks: [task], columns: columns)
+
+        #expect(board.triggerTarget(for: task, event: .reviewPass) == nil)
+        #expect(board.triggerTarget(for: task, event: .reviewStart) == nil)
+        #expect(board.triggerTarget(for: task, event: .reviewFail) == .inProgress)
+        #expect(!board.isStatusLocked(task))
+        #expect(board.isStatusLocked(ProjectTask(projectId: UUID(), title: "t", status: .inProgress, sessionKey: "s")))
+        #expect(!board.isStatusLocked(ProjectTask(projectId: UUID(), title: "t", status: .inProgress)))
+    }
+
+    @Test("Dragging a column header onto another column takes its slot")
+    func columnReorder() {
+        let board = TaskBoard()
+        #expect(board.effectiveColumns.map(\.id) == [.backlog, .pending, .inProgress, .pendingReview, .done])
+
+        // Rightward: the dragged column lands where the target was and the
+        // columns it passed shift left.
+        #expect(board.columnOrder(moving: .backlog, to: .inProgress)
+            == [.pending, .inProgress, .backlog, .pendingReview, .done])
+        // Leftward: the target and everything after it shift right.
+        #expect(board.columnOrder(moving: .done, to: .pending)
+            == [.backlog, .done, .pending, .inProgress, .pendingReview])
+        // No-ops the caller can skip.
+        #expect(board.columnOrder(moving: .done, to: .done) == nil)
+        #expect(board.columnOrder(moving: "deleted", to: .done) == nil)
+        #expect(board.columnOrder(moving: .done, to: "deleted") == nil)
+    }
+
+    @Test("Dragging a view tab onto another tab takes its slot")
+    func viewReorder() {
+        let a = TaskSavedView(name: "A"), b = TaskSavedView(name: "B"), c = TaskSavedView(name: "C")
+        let board = TaskBoard(savedViews: [a, b, c])
+
+        #expect(board.viewOrder(moving: a.id, to: c.id)?.map(\.name) == ["B", "C", "A"])
+        #expect(board.viewOrder(moving: c.id, to: a.id)?.map(\.name) == ["C", "A", "B"])
+        #expect(board.viewOrder(moving: a.id, to: a.id) == nil)
+        #expect(board.viewOrder(moving: UUID(), to: a.id) == nil)
+        // A board with no saved views still has its implicit default tab.
+        #expect(TaskBoard().viewOrder(moving: TaskSavedView.defaultViewId, to: UUID()) == nil)
+    }
+
+    @Test("Story progress and roll-up follow countsAsDone")
+    func customDoneColumn() {
+        let storyId = UUID()
+        let story = ProjectStory(id: storyId, projectId: UUID(), title: "S")
+        let columns = [
+            TaskColumn(id: "todo", name: "Todo"),
+            TaskColumn(id: "shipped", name: "Shipped", countsAsDone: true),
+            TaskColumn(id: "archived", name: "Archived", countsAsDone: true),
+        ]
+        let board = TaskBoard(
+            stories: [story],
+            tasks: [
+                ProjectTask(projectId: story.projectId, storyId: storyId, title: "a", status: "shipped"),
+                ProjectTask(projectId: story.projectId, storyId: storyId, title: "b", status: "archived"),
+            ],
+            columns: columns
+        )
+        #expect(board.progress(for: story).done == 2)
+        #expect(board.rolledUpStatus(for: story) == "shipped")
     }
 
     // MARK: - Tolerant decoding
@@ -269,8 +385,11 @@ struct ProjectTaskTests {
         #expect(!active.matches(loose))
         // Columns keep board order regardless of the order they were picked in.
         let reversed = TaskSavedView(name: "R", statuses: [.done, .pending])
-        #expect(reversed.visibleStatuses == [.pending, .done])
-        #expect(TaskSavedView(name: "All").visibleStatuses == TaskStatus.allCases)
+        let columns = TaskColumn.defaults
+        #expect(reversed.visibleColumns(in: columns).map(\.id) == [.pending, .done])
+        #expect(TaskSavedView(name: "All").visibleColumns(in: columns) == columns)
+        // A view whose columns were all deleted falls back to the whole board.
+        #expect(TaskSavedView(name: "Gone", statuses: ["deleted"]).visibleColumns(in: columns) == columns)
     }
 
     @Test("A view written before layouts existed decodes as an unfiltered board")
@@ -302,7 +421,7 @@ struct ProjectTaskTests {
             )
         }
 
-        #expect(board([]).rolledUpStatus(for: story) == .pending)
+        #expect(board([]).rolledUpStatus(for: story) == .backlog)
         #expect(board([.pending, .pending]).rolledUpStatus(for: story) == .pending)
         #expect(board([.pending, .inProgress]).rolledUpStatus(for: story) == .inProgress)
         #expect(board([.done, .pendingReview]).rolledUpStatus(for: story) == .pendingReview)
@@ -312,15 +431,145 @@ struct ProjectTaskTests {
         #expect(progress.done == 2)
         #expect(progress.total == 3)
         #expect(progress.percent == 67)
+        #expect(progress.active == 1)
         #expect(board([]).progress(for: story).fraction == 0)
+
+        let started = board([.pending, .inProgress, .pendingReview, .done]).progress(for: story)
+        #expect(started.done == 1)
+        #expect(started.active == 2)
+        #expect(started.activeFraction == 0.5)
     }
 
-    @Test("Stories are hidden by tag and version filters")
+    @Test("Task prompts parse back into title, body, fields and attachments")
+    func taskPromptParsing() {
+        var task = ProjectTask(projectId: UUID(), title: "Drag columns")
+        task.details = "Should be able to drag.\n\nAnd drop."
+        task.tags = ["dashboard", "ui"]
+        let prompt = "[Attached image: /tmp/a.png]\n[Link: https://example.com]\n\n"
+            + task.agentPrompt(storyTitle: "Dashboard", typeName: "Feature")
+
+        let content = TaskPromptContent.parse(prompt)
+        #expect(content.title == "Drag columns")
+        #expect(content.body == "Should be able to drag.\n\nAnd drop.")
+        #expect(content.fields.map(\.label) == ["Story", "Type", "Tags"])
+        #expect(content.fields.last?.value == "dashboard, ui")
+        #expect(content.references.map(\.kind) == [.image, .link])
+        #expect(content.references.first?.value == "/tmp/a.png")
+
+        let followUp = TaskPromptContent.parse("Please also add tests\n\n- a list")
+        #expect(followUp.title == nil)
+        #expect(followUp.body == "Please also add tests\n\n- a list")
+        #expect(followUp.fields.isEmpty)
+    }
+
+    @Test("Stories match tag and version filters on their own fields")
     func storyViewMatching() {
         let story = ProjectStory(projectId: UUID(), title: "Epic")
         #expect(TaskSavedView(name: "All").matches(story, rolledUpStatus: .pending))
         #expect(!TaskSavedView(name: "UI", tags: ["ui"]).matches(story, rolledUpStatus: .pending))
         #expect(!TaskSavedView(name: "Done", statuses: [.done]).matches(story, rolledUpStatus: .pending))
+
+        let tagged = ProjectStory(projectId: UUID(), title: "Epic", tags: ["ui"], version: "v2")
+        #expect(TaskSavedView(name: "UI", tags: ["ui"]).matches(tagged, rolledUpStatus: .pending))
+        #expect(TaskSavedView(name: "v2", version: "v2").matches(tagged, rolledUpStatus: .pending))
+        #expect(!TaskSavedView(name: "v3", version: "v3").matches(tagged, rolledUpStatus: .pending))
+    }
+
+    // MARK: - Classification fields
+
+    @Test("Stories and tasks round trip their classification fields")
+    func classificationRoundTrip() throws {
+        let typeId = UUID()
+        let story = ProjectStory(
+            projectId: UUID(), title: "Epic", tags: ["ui"], version: "v1",
+            milestone: "Beta", priority: .high, typeId: typeId
+        )
+        let task = ProjectTask(
+            projectId: UUID(), title: "t", milestone: "Beta", priority: .urgent, typeId: typeId
+        )
+        let board = TaskBoard(
+            stories: [story], tasks: [task],
+            labels: [TaskLabel(name: "ui", colorHex: "#FF0000")],
+            itemTypes: [TaskItemType(id: typeId, name: "Spike", colorHex: "#00FF00")]
+        )
+        let decoded = try JSONDecoder().decode(TaskBoard.self, from: JSONEncoder().encode(board))
+        #expect(decoded.stories == [story])
+        #expect(decoded.tasks == [task])
+        #expect(decoded.labelColorHex(for: "ui") == "#FF0000")
+        #expect(decoded.itemType(id: typeId)?.name == "Spike")
+    }
+
+    @Test("Boards written before classification fields still decode")
+    func legacyBoardDecodes() throws {
+        let json = #"{"stories":[{"id":"\#(UUID().uuidString)","projectId":"\#(UUID().uuidString)","title":"Old"}],"tasks":[{"title":"t","priority":"bogus"}]}"#
+        let board = try JSONDecoder().decode(TaskBoard.self, from: Data(json.utf8))
+        #expect(board.stories.first?.tags == [])
+        #expect(board.stories.first?.priority == nil)
+        #expect(board.tasks.first?.priority == nil)
+        #expect(board.labels.isEmpty)
+        #expect(board.effectiveTypes == TaskItemType.defaults)
+    }
+
+    @Test("Board facets include story tags, labels and milestones")
+    func boardFacetsIncludeStories() {
+        let projectId = UUID()
+        let board = TaskBoard(
+            stories: [ProjectStory(projectId: projectId, title: "s", tags: ["epic"], version: "v3", milestone: "GA")],
+            tasks: [ProjectTask(projectId: projectId, title: "t", tags: ["ui"], milestone: "Beta")],
+            labels: [TaskLabel(name: "unused")]
+        )
+        #expect(board.allTags == ["epic", "ui", "unused"])
+        #expect(board.allVersions == ["v3"])
+        #expect(board.allMilestones == ["Beta", "GA"])
+    }
+
+    @Test("Classification parses JSON wrapped in prose")
+    func classificationParsing() {
+        let raw = """
+        Sure! ```json
+        {"type": "Bug", "priority": "HIGH", "tags": ["ui"], "version": null, "milestone": "Beta"}
+        ```
+        """
+        let parsed = TaskClassification.parse(raw)
+        #expect(parsed?.type == "Bug")
+        #expect(parsed?.priority == "HIGH")
+        #expect(parsed?.milestone == "Beta")
+        #expect(TaskClassification.parse("no json here") == nil)
+    }
+
+    @Test("Classification only fills empty fields and reuses board spelling")
+    func classificationApply() {
+        let board = TaskBoard(tasks: [ProjectTask(projectId: UUID(), title: "x", tags: ["UI"])])
+        let suggestion = TaskClassification(
+            type: "bug", priority: "High", tags: ["ui", "perf", "a", "b"],
+            version: "v9", milestone: "null"
+        )
+
+        var blank = ProjectTask(projectId: UUID(), title: "t")
+        suggestion.apply(to: &blank, board: board)
+        #expect(blank.typeId == TaskItemType.defaults[1].id)
+        #expect(blank.priority == .high)
+        #expect(blank.tags == ["UI", "perf", "a"])
+        #expect(blank.version == "v9")
+        #expect(blank.milestone == nil)
+
+        var preset = ProjectTask(projectId: UUID(), title: "t", version: "v1", priority: .low)
+        suggestion.apply(to: &preset, board: board)
+        #expect(preset.version == "v1")
+        #expect(preset.priority == .low)
+
+        var unknownType = ProjectTask(projectId: UUID(), title: "t")
+        TaskClassification(type: "Epic").apply(to: &unknownType, board: board)
+        #expect(unknownType.typeId == nil)
+    }
+
+    @Test("The agent prompt carries type, priority and milestone")
+    func agentPromptClassification() {
+        let task = ProjectTask(projectId: UUID(), title: "Fix", milestone: "Beta", priority: .urgent)
+        let prompt = task.agentPrompt(storyTitle: nil, typeName: "Bug")
+        #expect(prompt.contains("- **Type:** Bug"))
+        #expect(prompt.contains("- **Priority:** Urgent"))
+        #expect(prompt.contains("- **Milestone:** Beta"))
     }
 
     @Test("Keyword search covers title, details, tags and version")

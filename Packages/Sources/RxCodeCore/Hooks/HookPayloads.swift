@@ -130,6 +130,35 @@ public struct SessionEndPayload: Codable, Sendable {
     }
 }
 
+/// A code review of a thread starting or stopping.
+public struct ReviewEventPayload: Codable, Sendable {
+    public let project: Project
+    /// The reviewed (parent) thread's key, as passed to its session-end hooks.
+    public let sessionKey: String
+    /// The reviewed thread's resolved session id.
+    public let sessionId: String
+    /// Stop events only: the verdict, or `nil` when the review was stopped or
+    /// could not complete. Always `nil` for a start event.
+    public let passed: Bool?
+    /// Stop events only: whether a fix turn was started in the reviewed thread
+    /// after a failed review, so the thread keeps running.
+    public let fixTurnStarted: Bool
+
+    public init(
+        project: Project,
+        sessionKey: String,
+        sessionId: String,
+        passed: Bool? = nil,
+        fixTurnStarted: Bool = false
+    ) {
+        self.project = project
+        self.sessionKey = sessionKey
+        self.sessionId = sessionId
+        self.passed = passed
+        self.fixTurnStarted = fixTurnStarted
+    }
+}
+
 public struct RepositoryPayload: Codable, Sendable {
     public let project: Project
     /// True when the project was added by cloning a remote repo, false for a

@@ -25,7 +25,6 @@ struct TaskViewFormSheet: View {
 
     private var canSave: Bool {
         !draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !draft.visibleStatuses.isEmpty
     }
 
     var body: some View {
@@ -47,19 +46,19 @@ struct TaskViewFormSheet: View {
                 }
 
                 Section {
-                    ForEach(TaskStatus.allCases, id: \.self) { status in
-                        Toggle(isOn: statusBinding(status)) {
+                    ForEach(board.effectiveColumns) { column in
+                        Toggle(isOn: statusBinding(column.id)) {
                             Label {
-                                Text(status.displayName)
+                                Text(column.name)
                             } icon: {
-                                TaskStatusIcon(status: status)
+                                TaskStatusIcon(column: column)
                             }
                         }
                     }
                 } header: {
                     Text("Statuses")
                 } footer: {
-                    Text("Board columns, or the rows a table shows.")
+                    Text("Board columns, or the rows a table shows. At least one stays visible.")
                 }
 
                 Section("Filters") {
@@ -120,17 +119,20 @@ struct TaskViewFormSheet: View {
 
     // MARK: - Bindings
 
-    /// Toggling reads through `visibleStatuses` so "all" (the empty list) turns
-    /// into an explicit list the first time a column is switched off.
+    /// Toggling reads through `visibleColumns` so "all" (the empty list) turns
+    /// into an explicit list the first time a column is switched off. The last
+    /// visible column can't be switched off.
     private func statusBinding(_ status: TaskStatus) -> Binding<Bool> {
-        Binding(
-            get: { draft.visibleStatuses.contains(status) },
+        let columns = board.effectiveColumns
+        return Binding(
+            get: { draft.visibleColumns(in: columns).contains { $0.id == status } },
             set: { isOn in
-                var set = Set(draft.visibleStatuses)
+                var set = Set(draft.visibleColumns(in: columns).map(\.id))
                 if isOn { set.insert(status) } else { set.remove(status) }
-                draft.statuses = set.count == TaskStatus.allCases.count
+                guard !set.isEmpty else { return }
+                draft.statuses = set.count == columns.count
                     ? []
-                    : TaskStatus.allCases.filter(set.contains)
+                    : columns.map(\.id).filter(set.contains)
             }
         )
     }

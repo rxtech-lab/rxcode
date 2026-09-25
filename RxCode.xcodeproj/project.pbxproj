@@ -75,6 +75,7 @@
 		FB0000080000000000000001 /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = FB0000060000000000000001 /* FirebaseCrashlytics */; };
 		FE0A11BB22CC33DD44EE5501 /* PlanModeHookSuppressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0A11BB22CC33DD44EE5502 /* PlanModeHookSuppressionTests.swift */; };
 		FE0A11BB22CC33DD44EE5601 /* TaskBoardHookTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0A11BB22CC33DD44EE5602 /* TaskBoardHookTests.swift */; };
+		FE0A11BB22CC33DD44EE5701 /* MarkdownDescriptionEditorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0A11BB22CC33DD44EE5702 /* MarkdownDescriptionEditorTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -177,6 +178,7 @@
 		E67335382F7356F600FD26C7 /* RxCode.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RxCode.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		FE0A11BB22CC33DD44EE5502 /* PlanModeHookSuppressionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlanModeHookSuppressionTests.swift; sourceTree = "<group>"; };
 		FE0A11BB22CC33DD44EE5602 /* TaskBoardHookTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TaskBoardHookTests.swift; sourceTree = "<group>"; };
+		FE0A11BB22CC33DD44EE5702 /* MarkdownDescriptionEditorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MarkdownDescriptionEditorTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -366,6 +368,7 @@
 				DFA0CCC02FB4CC01005991E1 /* PlanDecisionTests.swift */,
 				FE0A11BB22CC33DD44EE5502 /* PlanModeHookSuppressionTests.swift */,
 				FE0A11BB22CC33DD44EE5602 /* TaskBoardHookTests.swift */,
+				FE0A11BB22CC33DD44EE5702 /* MarkdownDescriptionEditorTests.swift */,
 				DFA0CCC12FB4CC01005991E1 /* PlanCardViewTests.swift */,
 				DFA0CCD52FB4CC02005991E1 /* HistoryListArchiveFilterTests.swift */,
 				5C2222222FCB200000000001 /* BriefingThreadRowTests.swift */,
@@ -834,6 +837,7 @@
 				DFA0CCD12FB4CC01005991E1 /* PlanDecisionTests.swift in Sources */,
 				FE0A11BB22CC33DD44EE5501 /* PlanModeHookSuppressionTests.swift in Sources */,
 				FE0A11BB22CC33DD44EE5601 /* TaskBoardHookTests.swift in Sources */,
+				FE0A11BB22CC33DD44EE5701 /* MarkdownDescriptionEditorTests.swift in Sources */,
 				DFA0CCD22FB4CC01005991E1 /* PlanCardViewTests.swift in Sources */,
 				DFA0CCE12FB4CC02005991E1 /* HistoryListArchiveFilterTests.swift in Sources */,
 				5C2222222FCB200000000002 /* BriefingThreadRowTests.swift in Sources */,

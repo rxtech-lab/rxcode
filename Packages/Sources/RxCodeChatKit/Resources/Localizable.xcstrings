@@ -1229,6 +1229,15 @@
     },
     "Combine every queued message and send it as a single turn" : {
 
+
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "合并所有排队的消息，并作为同一轮发送"
+          }
+        }
+      }
     },
     "Command" : {
       "localizations" : {
@@ -1732,6 +1741,15 @@
     },
     "Couldn't reach the current response — still queued, sends when it ends." : {
 
+
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法插入当前回复 — 消息仍在队列中，回复结束后会发送。"
+          }
+        }
+      }
     },
     "Create a branch of current conversation" : {
       "localizations" : {
@@ -2464,7 +2482,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "error"
+            "value" : "错误"
           }
         }
       }
@@ -3135,9 +3153,27 @@
     },
     "Interrupt and send all now" : {
 
+
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "中断并立即全部发送"
+          }
+        }
+      }
     },
     "Interrupt and send now" : {
 
+
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "中断并立即发送"
+          }
+        }
+      }
     },
     "Interrupted" : {
       "localizations" : {
@@ -3842,7 +3878,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ok"
+            "value" : "成功"
           }
         }
       }
@@ -4943,6 +4979,15 @@
     },
     "Send before the current response ends — steer it in, or interrupt" : {
 
+
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在当前回复结束前发送 — 可插入当前回复，或中断后发送"
+          }
+        }
+      }
     },
     "Send feedback" : {
       "localizations" : {
@@ -5472,9 +5517,27 @@
     },
     "Steer all into current response" : {
 
+
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将所有消息插入当前回复"
+          }
+        }
+      }
     },
     "Steer into current response" : {
 
+
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "插入当前回复"
+          }
+        }
+      }
     },
     "Stop Review" : {
       "localizations" : {

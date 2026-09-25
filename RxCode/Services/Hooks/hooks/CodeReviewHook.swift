@@ -152,6 +152,7 @@ final class CodeReviewHook: Hook {
         // Mark running so a follow-up message / Stop action can interrupt the
         // in-flight review thread; cleared once the spawn returns.
         controller.markReviewRunning(parentSessionKey: parentKey)
+        controller.notifyReviewStarted(reviewEvent(payload))
         let result = await controller.spawnLinkedThread(
             projectId: payload.project.id,
             parentThreadId: payload.sessionId,
@@ -171,6 +172,7 @@ final class CodeReviewHook: Hook {
                        result: Self.cancellationText(reason: controller.reviewCancelReason(parentSessionKey: parentKey), started: true),
                        isError: true)
             recordVerdict(false, payload: payload, controller: controller)
+            controller.notifyReviewStopped(reviewEvent(payload))
             return .ignored
         }
 
@@ -182,6 +184,7 @@ final class CodeReviewHook: Hook {
             finishCard(card, hook: hook, payload: payload, controller: controller,
                        result: "Code review could not complete: \(detail)", isError: true)
             recordVerdict(false, payload: payload, controller: controller)
+            controller.notifyReviewStopped(reviewEvent(payload))
             return .ignored
         }
 
@@ -207,6 +210,7 @@ final class CodeReviewHook: Hook {
             // carried-over feedback so a later review starts fresh.
             controller.setReviewRound(0, sessionId: payload.sessionKey)
             controller.setLastReviewFeedback(nil, sessionId: payload.sessionKey)
+            controller.notifyReviewStopped(reviewEvent(payload, passed: true))
             return .proceed
 
         case .fail:
@@ -234,6 +238,7 @@ final class CodeReviewHook: Hook {
             finishCard(card, hook: hook, payload: payload, controller: controller,
                        result: "\(status)\n\(reviewLink)\n\n\(body)",
                        isError: true)
+            controller.notifyReviewStopped(reviewEvent(payload, passed: false, fixTurnStarted: attempt != nil))
             return .proceed
 
         case .unknown:
@@ -246,8 +251,25 @@ final class CodeReviewHook: Hook {
             finishCard(card, hook: hook, payload: payload, controller: controller,
                        result: "⚠️ Code review ended without a verdict (it may have been cancelled or interrupted).\n\(reviewLink)\n\n\(body)",
                        isError: true)
+            controller.notifyReviewStopped(reviewEvent(payload))
             return .ignored
         }
+    }
+
+    /// The review start/stop event for the reviewed thread, which moves its
+    /// linked task board card through the column review triggers.
+    private func reviewEvent(
+        _ payload: SessionEndPayload,
+        passed: Bool? = nil,
+        fixTurnStarted: Bool = false
+    ) -> ReviewEventPayload {
+        ReviewEventPayload(
+            project: payload.project,
+            sessionKey: payload.sessionKey,
+            sessionId: payload.sessionId,
+            passed: passed,
+            fixTurnStarted: fixTurnStarted
+        )
     }
 
     /// Complete the card and persist it as the session's "last hook" so the

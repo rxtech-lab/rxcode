@@ -14,6 +14,11 @@ final class NotificationService: NSObject {
     private let logger = Logger(subsystem: "com.idealapp.RxCode", category: "Notification")
     private var didRequestAuthorization = false
 
+    /// True when the app is launched as the XCTest host. Unit tests drive real
+    /// `AppState` streams, which would otherwise fire hook-driven banners (and
+    /// mobile fan-out) for fixture sessions on the developer's machine.
+    private let isRunningTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+
     /// Invoked on the main actor when the user clicks a notification.
     /// Parameters: projectId, sessionId
     var onNotificationTapped: ((UUID, String) -> Void)?
@@ -24,7 +29,7 @@ final class NotificationService: NSObject {
     }
 
     func requestAuthorizationIfNeeded() async {
-        guard !didRequestAuthorization else { return }
+        guard !isRunningTests, !didRequestAuthorization else { return }
         didRequestAuthorization = true
         do {
             let granted = try await UNUserNotificationCenter.current()
@@ -38,6 +43,7 @@ final class NotificationService: NSObject {
     /// Post a "permission needed" notification when the CLI queues a tool approval.
     /// Silently no-ops if the user hasn't granted notification permission.
     func postPermissionNeeded(toolName: String, projectName: String?, projectId: UUID?, sessionId: String?) async {
+        guard !isRunningTests else { return }
         let projectSuffixForMirror: String = projectName.map { " — \($0)" } ?? ""
         await fanoutToMobile(.init(
             kind: .permissionNeeded,
@@ -88,6 +94,7 @@ final class NotificationService: NSObject {
     /// Post a "question needed" notification when the CLI invokes AskUserQuestion.
     /// Silently no-ops if the user hasn't granted notification permission.
     func postQuestionNeeded(projectName: String?, projectId: UUID?, sessionId: String?) async {
+        guard !isRunningTests else { return }
         let projectSuffixForMirror: String = projectName.map { " — \($0)" } ?? ""
         await fanoutToMobile(.init(
             kind: .questionNeeded,
@@ -138,6 +145,7 @@ final class NotificationService: NSObject {
     /// transitions a server from connected to failed. Silently no-ops if the user
     /// hasn't granted notification permission.
     func postMCPDisconnected(name: String, error: String?) async {
+        guard !isRunningTests else { return }
         let detailForMirror = (error?.trimmingCharacters(in: .whitespacesAndNewlines))
             .flatMap { $0.isEmpty ? nil : $0 } ?? "connection lost"
         await fanoutToMobile(.init(
@@ -188,6 +196,7 @@ final class NotificationService: NSObject {
     /// banner. Uses a per-project identifier so a newer failure replaces the
     /// previous banner instead of stacking.
     func postCIFailed(projectName: String?, projectId: UUID?, failingWorkflowNames: [String]) async {
+        guard !isRunningTests else { return }
         let body = Self.ciFailureBody(failingWorkflowNames)
         let projectSuffix: String = projectName.map { " — \($0)" } ?? ""
         await fanoutToMobile(.init(
@@ -244,6 +253,7 @@ final class NotificationService: NSObject {
     /// desktop's skill / ACP / MCP configuration. Silently no-ops if the user
     /// has not authorized notifications.
     func postRemoteConfigChanged(title: String, body: String) async {
+        guard !isRunningTests else { return }
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         switch settings.authorizationStatus {
         case .authorized, .provisional:
@@ -274,6 +284,7 @@ final class NotificationService: NSObject {
     /// Mobile fan-out always runs; the local macOS banner is skipped when
     /// `postLocalBanner` is false (e.g. the desktop app is foregrounded).
     func postResponseComplete(title: String, body: String, projectId: UUID, sessionId: String, postLocalBanner: Bool = true) async {
+        guard !isRunningTests else { return }
         // Notification banners (the APNs alert and the macOS local banner) render
         // Markdown syntax literally, so strip it from the assistant-summary body.
         let cleanBody = stripMarkdown(body)

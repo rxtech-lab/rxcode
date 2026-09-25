@@ -577,12 +577,13 @@ extension AppState {
     // MARK: - Permission Response
 
     func respondToPermission(_ request: PermissionRequest, decision: PermissionDecision, in window: WindowState) async {
-        await permission.respond(toolUseId: request.id, decision: decision)
+        let autoResolvedIds = await permission.respond(toolUseId: request.id, decision: decision)
         window.pendingPermissions.removeAll { $0.id == request.id }
         mobilePendingRequests.removeValue(forKey: request.id)
         if let sessionId = request.sessionId {
             broadcastMobileSessionStatus(sessionID: sessionId)
         }
+        clearAutoResolvedPermissions(autoResolvedIds)
 
         // Fan the resolved decision out to hooks. Dispatching here (rather than at
         // each UI button) means desktop and mobile responses both fire exactly once.
@@ -597,6 +598,29 @@ extension AppState {
             await hookManager.dispatchPermissionApprove(payload)
         } else {
             await hookManager.dispatchPermissionDenied(payload)
+        }
+    }
+
+    /// Remove requests the PermissionServer resolved as a side effect of a broad grant
+    /// (session tool allow, Bash allowlist, switch to auto) from every window's queue,
+    /// so the user is not prompted again for calls that were already queued.
+    func clearAutoResolvedPermissions(_ ids: [String]) {
+        guard !ids.isEmpty else { return }
+        let idSet = Set(ids)
+        for window in registeredWindows() {
+            window.pendingPermissions.removeAll { idSet.contains($0.id) }
+            if let presented = window.presentedPermissionId, idSet.contains(presented) {
+                window.presentedPermissionId = nil
+            }
+        }
+        var sessionIds = Set<String>()
+        for id in ids {
+            if let sessionId = mobilePendingRequests.removeValue(forKey: id)?.sessionId {
+                sessionIds.insert(sessionId)
+            }
+        }
+        for sessionId in sessionIds {
+            broadcastMobileSessionStatus(sessionID: sessionId)
         }
     }
 
@@ -863,7 +887,8 @@ extension AppState {
             reregisterPermissionMode(in: window)
         }
 
-        await permission.respond(toolUseId: toolUseId, decision: decision)
+        let autoResolvedIds = await permission.respond(toolUseId: toolUseId, decision: decision)
+        clearAutoResolvedPermissions(autoResolvedIds)
 
         // Fan the plan decision out to hooks (one site → fires once for desktop + mobile).
         switch action {

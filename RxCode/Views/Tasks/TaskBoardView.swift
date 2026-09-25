@@ -197,31 +197,19 @@ struct TaskOverviewView: View {
 
             Spacer()
 
-            // Split buttons: the primary action keeps the usual default, the
-            // arrow picks the tab the sheet opens on.
             Menu {
-                modeButtons(isStory: true)
+                TaskCreationMenuItems(
+                    onNewTask: { openNewTask(mode: $0) },
+                    onNewStory: { openNewStory(mode: $0) }
+                )
             } label: {
-                Label("New Story", systemImage: "square.stack.3d.up")
-            } primaryAction: {
-                openNewStory(mode: nil)
-            }
-            .menuStyle(.button)
-            .buttonStyle(.bordered)
-            .fixedSize()
-            .help("New story — click the arrow to write it with AI or by hand")
-
-            Menu {
-                modeButtons(isStory: false)
-            } label: {
-                Label("New Task", systemImage: "plus")
-            } primaryAction: {
-                openNewTask(mode: nil)
+                Label("New", systemImage: "plus")
             }
             .menuStyle(.button)
             .buttonStyle(.borderedProminent)
             .fixedSize()
-            .help("New task — click the arrow to write it with AI or by hand")
+            .help("New task or story, written with AI or in a form")
+            .accessibilityIdentifier("task-board-add")
             .background {
                 // Menu items don't register key equivalents, so keep ⇧⌘N on a hidden button.
                 Button("") { openNewTask(mode: nil) }
@@ -233,17 +221,6 @@ struct TaskOverviewView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-    }
-
-    @ViewBuilder
-    private func modeButtons(isStory: Bool) -> some View {
-        ForEach(TaskCreationMode.allCases) { mode in
-            Button {
-                if isStory { openNewStory(mode: mode) } else { openNewTask(mode: mode) }
-            } label: {
-                Label(mode == .ai ? "With AI" : "With Form", systemImage: mode.systemImage)
-            }
-        }
     }
 
     private func openNewStory(mode: TaskCreationMode?) {
@@ -400,41 +377,27 @@ private struct TaskProjectSection: View {
 
             Spacer(minLength: 8)
 
-            Button {
-                openNewStory(mode: nil)
+            Menu {
+                TaskCreationMenuItems(
+                    onNewTask: { openNewTask(mode: $0) },
+                    onNewStory: { openNewStory(mode: $0) }
+                )
             } label: {
                 Image(systemName: "plus")
             }
-            .buttonStyle(.borderless)
-            .help("New story in this project")
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("New task or story in this project")
+            .accessibilityIdentifier("task-overview-project-add")
 
             Menu {
                 Button("Open Project Board", action: openProject)
                 Divider()
-                Menu("New Story") {
-                    Button {
-                        openNewStory(mode: .ai)
-                    } label: {
-                        Label("With AI", systemImage: TaskCreationMode.ai.systemImage)
-                    }
-                    Button {
-                        openNewStory(mode: .form)
-                    } label: {
-                        Label("With Form", systemImage: TaskCreationMode.form.systemImage)
-                    }
-                }
-                Menu("New Task") {
-                    Button {
-                        openNewTask(mode: .ai)
-                    } label: {
-                        Label("With AI", systemImage: TaskCreationMode.ai.systemImage)
-                    }
-                    Button {
-                        openNewTask(mode: .form)
-                    } label: {
-                        Label("With Form", systemImage: TaskCreationMode.form.systemImage)
-                    }
-                }
+                TaskCreationMenuItems(
+                    onNewTask: { openNewTask(mode: $0) },
+                    onNewStory: { openNewStory(mode: $0) }
+                )
                 Divider()
                 Button("New Chat") { appState.startNewChat(inProject: project.id, window: windowState) }
             } label: {

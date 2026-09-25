@@ -10,11 +10,7 @@ struct ChatSettingsTab: View {
     @State private var isRefreshingAgentStatus = false
     @State private var installingRuntime: AgentRuntimeInstaller.Runtime?
     @State private var signingInRuntime: AgentRuntimeInstaller.Runtime?
-    @State private var claudeRequestedVersion = "latest"
-    @State private var codexRequestedVersion = "latest"
-    @State private var availableVersions: [AgentRuntimeInstaller.Runtime: [String]] = [:]
-    @State private var loadingVersions: Set<AgentRuntimeInstaller.Runtime> = []
-    @State private var versionErrors: [AgentRuntimeInstaller.Runtime: String] = [:]
+    @State private var installSheetRuntime: AgentRuntimeInstaller.Runtime?
     @State private var runtimeMessage: String?
 
     var body: some View {
@@ -42,18 +38,12 @@ struct ChatSettingsTab: View {
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .task {
-            if claudeRequestedVersion == "latest",
-               let installed = installedVersion(in: appState.claudeVersion) {
-                claudeRequestedVersion = installed
-            }
-            if codexRequestedVersion == "latest",
-               let installed = installedVersion(in: appState.codexVersion) {
-                codexRequestedVersion = installed
-            }
-            async let claude: Void = loadVersions(for: .claude)
-            async let codex: Void = loadVersions(for: .codex)
-            _ = await (claude, codex)
+        .sheet(item: $installSheetRuntime) { runtime in
+            AgentRuntimeInstallSheet(
+                runtime: runtime,
+                installedVersion: installedVersion(in: runtime == .claude ? appState.claudeVersion : appState.codexVersion),
+                onInstalled: { await appState.refreshAgentInstallations() }
+            )
         }
     }
 
@@ -91,20 +81,20 @@ struct ChatSettingsTab: View {
                     runtime: .claude,
                     title: "Claude Code",
                     installed: appState.claudeInstalled,
+                    signedIn: appState.claudeSignedIn,
                     version: appState.claudeVersion,
-                    path: appState.claudeBinaryPath,
-                    requestedVersion: $claudeRequestedVersion
+                    path: appState.claudeBinaryPath
                 )
                 agentRuntimeRow(
                     runtime: .codex,
                     title: "Codex",
                     installed: appState.codexInstalled,
+                    signedIn: appState.codexSignedIn,
                     version: appState.codexVersion,
-                    path: appState.codexBinaryPath,
-                    requestedVersion: $codexRequestedVersion
+                    path: appState.codexBinaryPath
                 )
             }
-            Text("Downloads use npm and are stored in RxCode's application support folder. Choose a published stable version or Latest.")
+            Text("Downloads use npm and are stored in RxCode's application support folder. Use Manage to install a specific published version.")
                 .font(.system(size: ClaudeTheme.size(11)))
                 .foregroundStyle(.secondary)
             if let runtimeMessage {
@@ -120,11 +110,11 @@ struct ChatSettingsTab: View {
         runtime: AgentRuntimeInstaller.Runtime,
         title: String,
         installed: Bool,
+        signedIn: Bool,
         version: String?,
-        path: String?,
-        requestedVersion: Binding<String>
+        path: String?
     ) -> some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .center, spacing: 10) {
             Image(systemName: installed ? "checkmark.circle.fill" : "xmark.circle.fill")
                 .foregroundStyle(installed ? ClaudeTheme.statusSuccess : ClaudeTheme.statusError)
                 .font(.system(size: ClaudeTheme.size(14)))
@@ -142,6 +132,11 @@ struct ChatSettingsTab: View {
                             .font(.system(size: ClaudeTheme.size(11)))
                             .foregroundStyle(.secondary)
                     }
+                    if installed && signedIn {
+                        Text("Signed In")
+                            .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+                            .foregroundStyle(ClaudeTheme.statusSuccess)
+                    }
                 }
 
                 Text(path ?? "No executable detected")
@@ -150,57 +145,34 @@ struct ChatSettingsTab: View {
                     .lineLimit(2)
                     .truncationMode(.middle)
                     .textSelection(.enabled)
-
-                HStack(spacing: 8) {
-                    Picker("Version", selection: requestedVersion) {
-                        Text("Latest").tag("latest")
-                        ForEach(displayVersions(for: runtime, selected: requestedVersion.wrappedValue), id: \.self) { version in
-                            Text(version).tag(version)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .frame(width: 150)
-                    .accessibilityLabel("\(title) version")
-                    if loadingVersions.contains(runtime) {
-                        ProgressView().controlSize(.small)
-                    }
-                    Button {
-                        install(runtime, version: requestedVersion.wrappedValue)
-                    } label: {
-                        if installingRuntime == runtime {
-                            ProgressView().controlSize(.small)
-                        } else {
-                            Text(installed ? "Install Version" : "Download")
-                        }
-                    }
-                    .disabled(installingRuntime != nil)
-                    if installed {
-                        Button("Sign In") { signIn(runtime) }
-                            .disabled(signingInRuntime != nil)
-                        if signingInRuntime == runtime {
-                            ProgressView().controlSize(.small)
-                        }
-                    }
-                    if path == AgentRuntimeInstaller.executablePath(for: runtime) {
-                        Button("Remove") { remove(runtime) }
-                            .disabled(installingRuntime != nil)
-                    }
-                }
-                .controlSize(.small)
-                if let error = versionErrors[runtime] {
-                    HStack(spacing: 6) {
-                        Text(error)
-                            .foregroundStyle(.secondary)
-                        Button("Retry") {
-                            Task { await loadVersions(for: runtime) }
-                        }
-                        .buttonStyle(.link)
-                    }
-                    .font(.system(size: ClaudeTheme.size(11)))
-                }
             }
 
             Spacer(minLength: 0)
+
+            if signingInRuntime == runtime || installingRuntime == runtime {
+                ProgressView().controlSize(.small)
+            }
+            Menu {
+                Button(installed ? "Install Version…" : "Download…") {
+                    installSheetRuntime = runtime
+                }
+                if installed {
+                    Button(signedIn ? LocalizedStringKey("Re-sign In") : LocalizedStringKey("Sign In")) { signIn(runtime) }
+                        .disabled(signingInRuntime != nil)
+                }
+                if path == AgentRuntimeInstaller.executablePath(for: runtime) {
+                    Divider()
+                    Button("Remove", role: .destructive) { remove(runtime) }
+                        .disabled(installingRuntime != nil)
+                }
+            } label: {
+                Text(installed ? "Manage" : "Install")
+            }
+            .menuStyle(.button)
+            .fixedSize()
+            .controlSize(.small)
+            .disabled(installingRuntime != nil)
+            .accessibilityLabel("\(title) actions")
         }
         .padding(10)
         .background(Color(NSColor.controlBackgroundColor))
@@ -211,14 +183,6 @@ struct ChatSettingsTab: View {
         )
     }
 
-    private func displayVersions(for runtime: AgentRuntimeInstaller.Runtime, selected: String) -> [String] {
-        var versions = availableVersions[runtime] ?? []
-        if selected != "latest" && !versions.contains(selected) {
-            versions.insert(selected, at: 0)
-        }
-        return versions
-    }
-
     private func installedVersion(in output: String?) -> String? {
         guard let output,
               let range = output.range(
@@ -227,32 +191,6 @@ struct ChatSettingsTab: View {
               )
         else { return nil }
         return String(output[range])
-    }
-
-    private func loadVersions(for runtime: AgentRuntimeInstaller.Runtime) async {
-        loadingVersions.insert(runtime)
-        versionErrors[runtime] = nil
-        defer { loadingVersions.remove(runtime) }
-        do {
-            availableVersions[runtime] = try await AgentVersionCatalog.shared.versions(for: runtime)
-        } catch {
-            versionErrors[runtime] = "Could not load published versions."
-        }
-    }
-
-    private func install(_ runtime: AgentRuntimeInstaller.Runtime, version: String) {
-        installingRuntime = runtime
-        runtimeMessage = nil
-        Task {
-            defer { installingRuntime = nil }
-            do {
-                try await AgentRuntimeInstaller.shared.install(runtime, version: version)
-                await appState.refreshAgentInstallations()
-                runtimeMessage = "\(runtime == .claude ? "Claude Code" : "Codex") installed successfully."
-            } catch {
-                runtimeMessage = error.localizedDescription
-            }
-        }
     }
 
     private func remove(_ runtime: AgentRuntimeInstaller.Runtime) {
@@ -289,6 +227,7 @@ struct ChatSettingsTab: View {
                     }
                 }
                 runtimeMessage = "Sign-in completed."
+                await appState.refreshAgentSignInStatus()
             } catch {
                 runtimeMessage = error.localizedDescription
             }

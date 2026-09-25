@@ -173,49 +173,51 @@ public struct TaskColumn: Identifiable, Codable, Sendable, Hashable {
     /// In Progress starts the agent and hands the card to Pending Review when
     /// the turn ends — plus a Backlog in front. Built-in ids are stable so
     /// tasks written before columns were configurable keep their column.
-    public static var defaults: [TaskColumn] {
-        [
-            TaskColumn(
-                id: .backlog,
-                name: String(localized: "Backlog"),
-                colorHex: "#8B8D98",
-                systemImage: "tray",
-                details: String(localized: "Ideas and work not planned yet")
-            ),
-            TaskColumn(
-                id: .pending,
-                name: String(localized: "Pending"),
-                colorHex: "#0090FF",
-                systemImage: "circle",
-                details: String(localized: "This item hasn't been started")
-            ),
-            TaskColumn(
-                id: .inProgress,
-                name: String(localized: "In Progress"),
-                colorHex: "#F76B15",
-                systemImage: "circle.dotted.circle",
-                details: String(localized: "This is actively being worked on"),
-                triggersChat: true,
-                onSessionStop: .pendingReview
-            ),
-            TaskColumn(
-                id: .pendingReview,
-                name: String(localized: "Pending Review"),
-                colorHex: "#8E4EC6",
-                systemImage: "eye.circle",
-                details: String(localized: "This item is in review"),
-                onReviewFail: .inProgress
-            ),
-            TaskColumn(
-                id: .done,
-                name: String(localized: "Done"),
-                colorHex: "#30A46C",
-                systemImage: "checkmark.circle.fill",
-                details: String(localized: "This has been completed"),
-                countsAsDone: true
-            ),
-        ]
-    }
+    ///
+    /// Built once: boards that never customized their columns resolve every
+    /// card's status through this list, so rebuilding it (and re-localizing
+    /// its strings) per lookup was a hot spot while the board renders.
+    public static let defaults: [TaskColumn] = [
+        TaskColumn(
+            id: .backlog,
+            name: String(localized: "Backlog"),
+            colorHex: "#8B8D98",
+            systemImage: "tray",
+            details: String(localized: "Ideas and work not planned yet")
+        ),
+        TaskColumn(
+            id: .pending,
+            name: String(localized: "Pending"),
+            colorHex: "#0090FF",
+            systemImage: "circle",
+            details: String(localized: "This item hasn't been started")
+        ),
+        TaskColumn(
+            id: .inProgress,
+            name: String(localized: "In Progress"),
+            colorHex: "#F76B15",
+            systemImage: "circle.dotted.circle",
+            details: String(localized: "This is actively being worked on"),
+            triggersChat: true,
+            onSessionStop: .pendingReview
+        ),
+        TaskColumn(
+            id: .pendingReview,
+            name: String(localized: "Pending Review"),
+            colorHex: "#8E4EC6",
+            systemImage: "eye.circle",
+            details: String(localized: "This item is in review"),
+            onReviewFail: .inProgress
+        ),
+        TaskColumn(
+            id: .done,
+            name: String(localized: "Done"),
+            colorHex: "#30A46C",
+            systemImage: "checkmark.circle.fill",
+            details: String(localized: "This has been completed"),
+            countsAsDone: true
+        ),
+    ]
 }
 
 // MARK: - TaskBoard columns

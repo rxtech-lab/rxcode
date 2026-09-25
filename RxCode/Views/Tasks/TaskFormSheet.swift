@@ -5,11 +5,10 @@ import UniformTypeIdentifiers
 
 /// Create/edit sheet for a task or a story.
 ///
-/// A new record can be written two ways, picked with the tabs at the top:
-/// described once to the suggestion agent (AI), or filled in field by field
-/// (Form). The kind — task or story — is a dropdown next to the tabs, so all
-/// four combinations are reachable without reopening the sheet, and switching
-/// keeps whatever has been drafted so far.
+/// A new record can be written two ways: described once to the suggestion
+/// agent (AI), or filled in field by field (Form). The kind and the mode are
+/// both picked from the add menu that opens the sheet, so the sheet itself
+/// shows only the one flow asked for.
 ///
 /// Edits a local draft and commits it on Save, so cancelling leaves the board
 /// untouched. The agent block deliberately does *not* reuse `ModelPickerSheet` /
@@ -22,7 +21,7 @@ struct TaskFormSheet: View {
 
     let payload: TaskBoardSheet
     let defaultProjectId: UUID
-    /// The tab a new record opens on. `nil` keeps the per-kind default:
+    /// How a new record is written. `nil` keeps the per-kind default:
     /// stories are usually outlined from a description, tasks written directly.
     var initialMode: TaskCreationMode?
 
@@ -44,18 +43,23 @@ struct TaskFormSheet: View {
     @State private var suggestionAgent: TaskAgentConfig?
     @State private var pendingDeletion: TaskBoardSheet?
     @State private var creationMode: TaskCreationMode = .form
-    /// The free-form description the AI tab drafts from. Shared by both kinds,
-    /// so switching the kind dropdown re-uses what has already been typed.
+    /// The free-form description the AI flow drafts from.
     @State private var draftPrompt = ""
     @State private var storyTaskDrafts: [StoryTaskDraft] = []
+    /// A generated story task being added or edited in its own sheet.
+    @State private var editingStoryTaskDraft: StoryTaskDraft?
     /// A task draft has been generated and is waiting to be reviewed. Tracked
     /// separately from the title, which the user may clear while editing.
     @State private var hasTaskDraft = false
     @State private var isGeneratingDraft = false
     @State private var showingSourceFilePicker = false
     @State private var draftError: String?
+    /// The AI flow's step: write the description, then review what the model
+    /// drafted from it. Revising goes back without dropping the draft; only
+    /// editing the description does that.
+    @State private var draftStep: DraftStep = .describe
 
-    private struct StoryTaskDraft: Identifiable {
+    fileprivate struct StoryTaskDraft: Identifiable {
         let id = UUID()
         var title: String
         var details: String
@@ -63,6 +67,19 @@ struct TaskFormSheet: View {
 
     private enum Tab: Hashable {
         case details, run
+    }
+
+    private enum DraftStep {
+        case describe, review
+    }
+
+    /// Whether the model has produced something to review.
+    private var hasGeneratedDraft: Bool {
+        isStory ? !storyTaskDrafts.isEmpty : hasTaskDraft
+    }
+
+    private var canGenerateDraft: Bool {
+        !isGeneratingDraft && !draftPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     /// A task that has been dispatched has a run to look at. Uses the stored
@@ -84,7 +101,7 @@ struct TaskFormSheet: View {
         return appState.isStatusLocked(stored)
     }
 
-    /// The AI tab, which only exists while creating: an existing record has
+    /// The AI flow, which only exists while creating: an existing record has
     /// nothing left to draft.
     private var isComposing: Bool { !isExistingRecord && creationMode == .ai }
 
@@ -118,9 +135,7 @@ struct TaskFormSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if !isExistingRecord {
-                creationHeader
-            } else if showsRunTab {
+            if showsRunTab {
                 Picker("View", selection: $tab) {
                     Text("Details").tag(Tab.details)
                     Text("Run").tag(Tab.run)
@@ -175,151 +190,177 @@ struct TaskFormSheet: View {
         }
     }
 
-    // MARK: - Creation header
-
-    /// Kind on the left as a dropdown, mode on the right as tabs. Both stay
-    /// live until the record is saved, and neither discards the other tab's
-    /// work: the AI tab's draft *is* the form's draft.
-    private var creationHeader: some View {
-        HStack(spacing: 12) {
-            Picker("Kind", selection: kindBinding) {
-                Label("Task", systemImage: "checkmark.circle").tag(false)
-                Label("Story", systemImage: "square.stack.3d.up").tag(true)
-            }
-            .pickerStyle(.menu)
-            .labelsHidden()
-            .fixedSize()
-            .disabled(isGeneratingDraft || isAutoFilling || isGeneratingTitle)
-            .help("Create a task or a story")
-            .accessibilityIdentifier("task-form-kind")
-
-            Spacer(minLength: 8)
-
-            Picker("Mode", selection: $creationMode) {
-                ForEach(TaskCreationMode.allCases) { mode in
-                    Text(mode.title).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(width: 170)
-            .disabled(isGeneratingDraft)
-            .help("Describe it once and let the model draft it, or fill in the fields yourself")
-            .accessibilityIdentifier("task-form-mode")
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 16)
-        .padding(.bottom, 8)
-    }
-
-    // MARK: - AI tab
+    // MARK: - AI flow
 
     private var draftComposer: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(isStory ? "Create Story with Tasks" : "Create Task")
-                .font(.headline)
-
-            Picker("Project", selection: projectBinding) {
-                ForEach(appState.projects) { project in
-                    Text(project.name).tag(project.id)
-                }
+        Form {
+            switch draftStep {
+            case .describe: describeSections
+            case .review: reviewSections
             }
-
-            Text(isStory
-                ? "Describe the story and tasks, or choose a text or PDF file."
-                : "Describe the task, or choose a text or PDF file.")
-                .font(.subheadline)
-                .foregroundStyle(ClaudeTheme.textSecondary)
-            // The same editor the Form tab uses, so the source description
-            // takes pasted and dropped images here too. A task keeps them in
-            // its attachment list; a story has none, so they stay Markdown
-            // links in the text the draft is generated from.
-            MarkdownDescriptionEditor(
-                text: $draftPrompt,
-                attachments: isStory ? nil : $task.attachments,
-                placeholder: isStory
-                    ? String(localized: "Describe the story and the tasks it needs")
-                    : String(localized: "Describe what needs doing"),
-                height: 130,
-                identifierPrefix: "story-create-prompt"
-            )
-            // An edited source makes the draft below stale, so it goes.
-            .onChange(of: draftPrompt) { _, _ in clearGeneratedDraft() }
-
-            HStack {
-                Button("Choose File…") { showingSourceFilePicker = true }
-                Spacer()
-                Button {
-                    Task { await generateDraft() }
-                } label: {
-                    if isGeneratingDraft { ProgressView().controlSize(.small) }
-                    else { Label("Generate Draft", systemImage: "sparkles") }
-                }
-                .disabled(isGeneratingDraft || draftPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .accessibilityIdentifier("story-create-generate")
-            }
-
-            if let draftError {
-                Text(draftError)
-                    .foregroundStyle(.red)
-                    .font(.callout)
-            }
-
-            if isStory {
-                if !storyTaskDrafts.isEmpty { storyDraftPreview }
-            } else if hasTaskDraft {
-                taskDraftPreview
-            }
-            Spacer(minLength: 0)
         }
-        .padding(20)
+        .formStyle(.grouped)
+        .sheet(item: $editingStoryTaskDraft) { draft in
+            StoryTaskDraftSheet(
+                draft: draft,
+                isNew: !storyTaskDrafts.contains { $0.id == draft.id }
+            ) { saved in
+                if let index = storyTaskDrafts.firstIndex(where: { $0.id == saved.id }) {
+                    storyTaskDrafts[index] = saved
+                } else {
+                    storyTaskDrafts.append(saved)
+                }
+            }
+        }
     }
 
-    private var storyDraftPreview: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Divider()
-            TextField("Story title", text: $story.title)
-                .accessibilityIdentifier("story-create-title")
-            Text("Tasks")
-                .font(.headline)
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 12) {
-                    storyTaskDraftRows
+    /// Step one: what to draft from.
+    @ViewBuilder
+    private var describeSections: some View {
+            Section(isStory ? "Create Story with Tasks" : "Create Task") {
+                Picker("Project", selection: projectBinding) {
+                    ForEach(appState.projects) { project in
+                        Text(project.name).tag(project.id)
+                    }
                 }
             }
-            Button("Add Task") { storyTaskDrafts.append(StoryTaskDraft(title: "", details: "")) }
+
+            Section {
+                // The same editor the form uses, so the source description
+                // takes pasted and dropped images here too. A task keeps them
+                // in its attachment list; a story has none, so they stay
+                // Markdown links in the text the draft is generated from.
+                MarkdownDescriptionEditor(
+                    text: $draftPrompt,
+                    attachments: isStory ? nil : $task.attachments,
+                    placeholder: isStory
+                        ? String(localized: "Describe the story and the tasks it needs")
+                        : String(localized: "Describe what needs doing"),
+                    height: 130,
+                    identifierPrefix: "story-create-prompt"
+                )
+                // An edited source makes the draft below stale, so it goes.
+                .onChange(of: draftPrompt) { _, _ in clearGeneratedDraft() }
+
+                Button {
+                    showingSourceFilePicker = true
+                } label: {
+                    Label("Choose File…", systemImage: "doc")
+                }
+                .disabled(isGeneratingDraft)
+            } header: {
+                Text("Description")
+            } footer: {
+                if let draftError {
+                    Text(draftError)
+                        .foregroundStyle(.red)
+                } else {
+                    Text(isStory
+                        ? "Describe the story and tasks, or choose a text or PDF file."
+                        : "Describe the task, or choose a text or PDF file.")
+                }
+            }
+    }
+
+    /// Step two: the model's draft, editable before it is created.
+    @ViewBuilder
+    private var reviewSections: some View {
+        if isStory {
+            storyDraftSections
+        } else {
+            taskDraftSection
+        }
+    }
+
+    @ViewBuilder
+    private var storyDraftSections: some View {
+        Section {
+            TextField("Title", text: $story.title, prompt: Text("Story title"))
+                .multilineTextAlignment(.leading)
+                .accessibilityIdentifier("story-create-title")
+        } header: {
+            Text("Story")
+        } footer: {
+            if let draftError {
+                Text(draftError).foregroundStyle(.red)
+            }
+        }
+
+        Section {
+            ForEach(storyTaskDrafts) { draft in
+                storyTaskDraftRow(draft)
+            }
+            Button {
+                editingStoryTaskDraft = StoryTaskDraft(title: "", details: "")
+            } label: {
+                Label("Add Task…", systemImage: "plus")
+            }
+            .accessibilityIdentifier("story-create-add-task")
+        } header: {
+            Text("Tasks")
+        } footer: {
+            Text("Click a task to edit it before the story is created.")
+        }
+    }
+
+    private func storyTaskDraftRow(_ draft: StoryTaskDraft) -> some View {
+        HStack(spacing: 8) {
+            Button {
+                editingStoryTaskDraft = draft
+            } label: {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(draft.title.isEmpty ? String(localized: "Untitled task") : draft.title)
+                        .foregroundStyle(draft.title.isEmpty ? ClaudeTheme.textTertiary : ClaudeTheme.textPrimary)
+                        .lineLimit(1)
+                    if !draft.details.isEmpty {
+                        Text(draft.details)
+                            .font(.system(size: ClaudeTheme.size(11)))
+                            .foregroundStyle(ClaudeTheme.textTertiary)
+                            .lineLimit(2)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                storyTaskDrafts.removeAll { $0.id == draft.id }
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(ClaudeTheme.textTertiary)
+            }
+            .buttonStyle(.borderless)
+            .help("Remove task")
         }
     }
 
     /// The generated task, editable before it is saved. Only the fields worth
-    /// correcting in place are here — the Form tab has the rest, and switching
-    /// to it carries this draft over untouched.
-    private var taskDraftPreview: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Divider()
-            TextField("Task title", text: $task.title)
+    /// correcting in place are here; the rest can be changed once it exists.
+    private var taskDraftSection: some View {
+        Section {
+            TextField("Title", text: $task.title, prompt: Text("Task title"))
+                .multilineTextAlignment(.leading)
                 .accessibilityIdentifier("task-create-title")
-            ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
-                    TextField("Task details", text: $task.details, axis: .vertical)
-                        .lineLimit(3...12)
-                    draftPropertyChips
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+            TextField("Details", text: $task.details, prompt: Text("Task details"), axis: .vertical)
+                .multilineTextAlignment(.leading)
+                .lineLimit(3...12)
+            draftPropertyChips
+        } header: {
+            Text("Draft")
+        } footer: {
+            if let draftError {
+                Text(draftError).foregroundStyle(.red)
             }
         }
     }
 
-    /// What the model filled in, as read-only chips: the Form tab is one tap
-    /// away for changing any of them.
+    /// What the model filled in, as read-only chips.
     @ViewBuilder
     private var draftPropertyChips: some View {
         let chips = suggestedProperties
         if !chips.isEmpty {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Suggested properties")
-                    .font(.system(size: ClaudeTheme.size(11)))
-                    .foregroundStyle(ClaudeTheme.textTertiary)
+            LabeledContent("Suggested properties") {
                 FlowLayout(spacing: 4) {
                     ForEach(chips, id: \.text) { chip in
                         TaskBoardChipLabel(icon: chip.icon, title: chip.text, isActive: true)
@@ -350,37 +391,48 @@ struct TaskFormSheet: View {
         return chips
     }
 
-    private var storyTaskDraftRows: some View {
-        ForEach($storyTaskDrafts) { $draft in
-            VStack(alignment: .leading, spacing: 5) {
-                HStack {
-                    TextField("Task title", text: $draft.title)
-                    Button {
-                        storyTaskDrafts.removeAll { $0.id == draft.id }
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Remove task")
-                }
-                TextField("Task details", text: $draft.details, axis: .vertical)
-                    .lineLimit(2...5)
-            }
-        }
-    }
-
     private var draftComposerFooter: some View {
         HStack {
+            if draftStep == .review {
+                Button {
+                    draftError = nil
+                    draftStep = .describe
+                } label: {
+                    Label("Revise", systemImage: "chevron.left")
+                }
+                .help("Go back and change the description")
+                .accessibilityIdentifier("draft-revise")
+            }
             Spacer()
             Button("Cancel") { dismiss() }
                 .keyboardShortcut(.cancelAction)
-            Button(isStory ? "Create Story and Tasks" : "Create Task") {
-                if isStory { saveComposedStory() } else { save() }
+            switch draftStep {
+            case .describe:
+                Button {
+                    Task { await generateDraft() }
+                } label: {
+                    HStack(spacing: 6) {
+                        if isGeneratingDraft {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Image(systemName: "sparkles")
+                        }
+                        Text("Generate Draft")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!canGenerateDraft)
+                .keyboardShortcut(.defaultAction)
+                .accessibilityIdentifier("story-create-generate")
+            case .review:
+                Button(isStory ? "Create Story and Tasks" : "Create Task") {
+                    if isStory { saveComposedStory() } else { save() }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!canCreateFromDraft)
+                .keyboardShortcut(.defaultAction)
+                .accessibilityIdentifier(isStory ? "story-create-save" : "task-create-save")
             }
-            .buttonStyle(.borderedProminent)
-            .disabled(!canCreateFromDraft)
-            .keyboardShortcut(.defaultAction)
-            .accessibilityIdentifier(isStory ? "story-create-save" : "task-create-save")
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
@@ -522,17 +574,8 @@ struct TaskFormSheet: View {
         }
     }
 
-    /// Shows unsaved generated tasks in the form before they are committed.
     private var storyTasksSection: some View {
         Section {
-            if !isExistingRecord && !storyTaskDrafts.isEmpty {
-                storyTaskDraftRows
-                Button("Add Task") {
-                    storyTaskDrafts.append(StoryTaskDraft(title: "", details: ""))
-                }
-                .accessibilityIdentifier("story-form-add-draft-task")
-            }
-
             let existing = isExistingRecord
                 ? appState.taskBoard(for: story.projectId).tasks(inStory: story.id).sorted { $0.sortIndex < $1.sortIndex }
                 : []
@@ -558,17 +601,15 @@ struct TaskFormSheet: View {
                 .buttonStyle(.plain)
             }
 
-            if isExistingRecord || storyTaskDrafts.isEmpty {
-                Button(action: newStoryTask) {
-                    Label("New Task…", systemImage: "plus")
-                }
-                .disabled(!canSave)
-                .accessibilityIdentifier("story-form-new-task")
+            Button(action: newStoryTask) {
+                Label("New Task…", systemImage: "plus")
             }
+            .disabled(!canSave)
+            .accessibilityIdentifier("story-form-new-task")
         } header: {
             Text("Tasks")
         } footer: {
-            if !isExistingRecord && storyTaskDrafts.isEmpty {
+            if !isExistingRecord {
                 Text("Adding a task saves this story first, so the task has a story to belong to.")
             }
         }
@@ -935,34 +976,6 @@ struct TaskFormSheet: View {
         Binding(get: { task.storyId }, set: { task.storyId = $0 })
     }
 
-    /// Kind is only switchable before the record exists — converting a story
-    /// into a task (or back) would orphan children or lose the agent
-    /// assignment. The two drafts are separate, so nothing typed is lost;
-    /// only the generated outline, which belongs to the kind it was made for.
-    private var kindBinding: Binding<Bool> {
-        Binding(
-            get: { isStory },
-            set: { newValue in
-                guard newValue != isStory else { return }
-                // Keep the record in the project the other kind was pointed at.
-                let projectId = isStory ? story.projectId : task.projectId
-                isStory = newValue
-                projectBinding.wrappedValue = projectId
-                if !newValue {
-                    // The task draft may never have been set up: it is only
-                    // prepared on load when the sheet opened on a task.
-                    task.status = appState.taskBoard(for: projectId).firstColumn.id
-                    if !task.agent.isAssigned {
-                        let fallback = appState.defaultTaskAgent()
-                        task.agent.provider = fallback.provider
-                        task.agent.model = fallback.model
-                    }
-                }
-                clearGeneratedDraft()
-            }
-        )
-    }
-
     /// A field shared by stories and tasks, bound to whichever the form edits.
     private func field<Value>(
         _ taskPath: WritableKeyPath<ProjectTask, Value>,
@@ -987,11 +1000,14 @@ struct TaskFormSheet: View {
     // MARK: - Actions
 
     private func generateDraft() async {
+        guard canGenerateDraft else { return }
         if isStory {
             await generateStoryDraft()
         } else {
             await generateTaskDraft()
         }
+        // A stale result is discarded, so only move on when one landed.
+        if hasGeneratedDraft { draftStep = .review }
     }
 
     private func generateStoryDraft() async {
@@ -1053,8 +1069,7 @@ struct TaskFormSheet: View {
     }
 
     /// Drops what the model produced, keeping the source text: the outline
-    /// belongs to the description it was generated from, and to the kind it
-    /// was generated for.
+    /// belongs to the description it was generated from.
     private func clearGeneratedDraft() {
         storyTaskDrafts = []
         hasTaskDraft = false
@@ -1259,6 +1274,56 @@ struct TaskFormSheet: View {
             appState.upsertTask(task)
         }
         dismiss()
+    }
+}
+
+/// Adds or edits one task of a generated story outline. Works on a copy, so
+/// Cancel leaves the outline as it was.
+private struct StoryTaskDraftSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    @State var draft: TaskFormSheet.StoryTaskDraft
+    let isNew: Bool
+    let onSave: (TaskFormSheet.StoryTaskDraft) -> Void
+
+    private var canSave: Bool {
+        !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Form {
+                Section(isNew ? "New Task" : "Edit Task") {
+                    TextField("Title", text: $draft.title, prompt: Text("What needs doing?"))
+                        .multilineTextAlignment(.leading)
+                        .accessibilityIdentifier("story-draft-task-title")
+                    TextField("Details", text: $draft.details, prompt: Text("Task details"), axis: .vertical)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(4...12)
+                        .accessibilityIdentifier("story-draft-task-details")
+                }
+            }
+            .formStyle(.grouped)
+
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button(isNew ? "Add" : "Save") {
+                    draft.title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                    draft.details = draft.details.trimmingCharacters(in: .whitespacesAndNewlines)
+                    onSave(draft)
+                    dismiss()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!canSave)
+                .keyboardShortcut(.defaultAction)
+                .accessibilityIdentifier("story-draft-task-save")
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+        }
+        .frame(width: 460, height: 360)
     }
 }
 

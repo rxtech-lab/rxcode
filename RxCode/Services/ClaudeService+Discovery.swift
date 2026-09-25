@@ -192,6 +192,16 @@ extension ClaudeCodeServer {
         return version
     }
 
+    /// Whether `claude auth status` reports a logged-in account.
+    func isSignedIn() async -> Bool {
+        guard let binary = await findClaudeBinary(),
+              let output = try? await runShellCommand(binary, arguments: ["auth", "status"]),
+              let data = output.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return false }
+        return object["loggedIn"] as? Bool ?? false
+    }
+
     /// Try sign-in without a terminal. A prompt or a stalled login lets the
     /// caller retry in Terminal, where the user can answer interactively.
     func signIn() async throws {

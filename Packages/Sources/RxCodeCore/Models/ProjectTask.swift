@@ -653,6 +653,68 @@ public struct StoryProgress: Sendable, Hashable {
     public var percent: Int { Int((fraction * 100).rounded()) }
 }
 
+/// A story's rolled-up progress and column, as computed by
+/// `TaskBoard.storyRollups()`.
+public struct StoryRollup: Sendable, Hashable {
+    public var progress: StoryProgress
+    public var status: TaskStatus
+
+    public init(progress: StoryProgress, status: TaskStatus) {
+        self.progress = progress
+        self.status = status
+    }
+}
+
+/// A board's columns resolved once, so rolling up many stories doesn't
+/// re-resolve the column list for every child task.
+private struct StoryRollupContext {
+    let columns: [TaskColumn]
+    let indexById: [TaskStatus: Int]
+    let chatStartIndex: Int?
+
+    init(board: TaskBoard) {
+        columns = board.effectiveColumns
+        indexById = Dictionary(
+            columns.enumerated().map { ($0.element.id, $0.offset) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        chatStartIndex = columns.firstIndex(where: \.triggersChat)
+    }
+
+    /// Board position of `status`; a status whose column was deleted counts
+    /// as the first column, like `TaskBoard.column(for:)`.
+    func index(of status: TaskStatus) -> Int { indexById[status] ?? 0 }
+
+    func column(for status: TaskStatus) -> TaskColumn { columns[index(of: status)] }
+
+    func progress(of children: [ProjectTask]) -> StoryProgress {
+        var done = 0
+        var active = 0
+        for task in children {
+            let index = index(of: task.status)
+            if columns[index].countsAsDone {
+                done += 1
+            } else if let chatStartIndex, index >= chatStartIndex {
+                active += 1
+            }
+        }
+        return StoryProgress(done: done, active: active, total: children.count)
+    }
+
+    func status(of children: [ProjectTask]) -> TaskStatus {
+        let statuses = children.map { columns[index(of: $0.status)].id }
+        guard let first = statuses.first else { return columns[0].id }
+        if Set(statuses).count == 1 { return first }
+        let open = statuses.filter { !column(for: $0).countsAsDone }
+        if open.isEmpty {
+            return columns.first(where: \.countsAsDone)?.id ?? first
+        }
+        if Set(open).count == 1 { return open[0] }
+        if let chatStartIndex { return columns[chatStartIndex].id }
+        return open.max { index(of: $0) < index(of: $1) } ?? open[0]
+    }
+}
+
 // MARK: - TaskBoard
 
 /// One project's board. Persisted as `task_board/<projectId>.json`; the global
@@ -723,15 +785,7 @@ public struct TaskBoard: Codable, Sendable {
     }
 
     public func progress(for story: ProjectStory) -> StoryProgress {
-        let children = tasks(inStory: story.id)
-        let done = children.filter { column(for: $0.status).countsAsDone }.count
-        let startIndex = firstChatColumn.map { columnIndex(of: $0.id) }
-        let active = children.filter { task in
-            let status = resolvedStatus(of: task)
-            guard !column(for: status).countsAsDone, let startIndex else { return false }
-            return columnIndex(of: status) >= startIndex
-        }.count
-        return StoryProgress(done: done, active: active, total: children.count)
+        StoryRollupContext(board: self).progress(of: tasks(inStory: story.id))
     }
 
     /// A story's column, derived from its children:
@@ -742,18 +796,29 @@ public struct TaskBoard: Codable, Sendable {
     ///   the latest column an unfinished child has reached on a board without
     ///   one.
     public func rolledUpStatus(for story: ProjectStory) -> TaskStatus {
-        let children = tasks(inStory: story.id).map(resolvedStatus(of:))
-        guard !children.isEmpty else { return firstColumn.id }
-        let columns = effectiveColumns
-        if Set(children).count == 1 { return children[0] }
-        let open = children.filter { !column(for: $0).countsAsDone }
-        if open.isEmpty {
-            return columns.first(where: \.countsAsDone)?.id ?? children[0]
+        StoryRollupContext(board: self).status(of: tasks(inStory: story.id))
+    }
+
+    /// `progress(for:)` and `rolledUpStatus(for:)` for every story, in one
+    /// pass over the tasks. Views that show many stories and cards at once
+    /// should use this rather than calling the per-story methods per card,
+    /// which each rescan every task.
+    public func storyRollups() -> [UUID: StoryRollup] {
+        var children: [UUID: [ProjectTask]] = [:]
+        for task in tasks {
+            if let storyId = task.storyId { children[storyId, default: []].append(task) }
         }
-        if Set(open).count == 1 { return open[0] }
-        return firstChatColumn?.id
-            ?? open.max { columnIndex(of: $0) < columnIndex(of: $1) }
-            ?? open[0]
+        let context = StoryRollupContext(board: self)
+        var rollups: [UUID: StoryRollup] = [:]
+        rollups.reserveCapacity(stories.count)
+        for story in stories {
+            let storyTasks = children[story.id] ?? []
+            rollups[story.id] = StoryRollup(
+                progress: context.progress(of: storyTasks),
+                status: context.status(of: storyTasks)
+            )
+        }
+        return rollups
     }
 
     /// The views a project shows as tabs: its saved views, or the implicit

@@ -262,6 +262,9 @@
         }
       }
     },
+    "%@ actions" : {
+
+    },
     "%@ copy" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1304,11 +1307,22 @@
       }
     },
     "Add a task to this column" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "向此列添加任务"
+          }
+        }
+      }
+    },
+    "Add a task to this column, or a story" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "向此列添加任务，或新建故事"
           }
         }
       }
@@ -1760,8 +1774,15 @@
         }
       }
     },
-    "Add Task" : {
-
+    "Add Task…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加任务…"
+          }
+        }
+      }
     },
     "Add to projects" : {
       "localizations" : {
@@ -3937,6 +3958,16 @@
         }
       }
     },
+    "Click a task to edit it before the story is created." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建故事前，点击任务即可编辑。"
+          }
+        }
+      }
+    },
     "Click to select · Command-right-click to add or remove · Right-click for Show Diff" : {
       "localizations" : {
         "ko" : {
@@ -5120,9 +5151,6 @@
         }
       }
     },
-    "Create a task or a story" : {
-
-    },
     "Create and checkout" : {
       "localizations" : {
         "ko" : {
@@ -5304,6 +5332,26 @@
     "Create Story and Tasks" : {
 
     },
+    "Create Story with AI" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用 AI 创建故事"
+          }
+        }
+      }
+    },
+    "Create Story with Form" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用表单创建故事"
+          }
+        }
+      }
+    },
     "Create Story with Tasks" : {
 
     },
@@ -5316,6 +5364,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "使用 AI 从聊天创建任务"
+          }
+        }
+      }
+    },
+    "Create Task with AI" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用 AI 创建任务"
+          }
+        }
+      }
+    },
+    "Create Task with Form" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用表单创建任务"
           }
         }
       }
@@ -5490,6 +5558,9 @@
           }
         }
       }
+    },
+    "Currently installed: %@" : {
+
     },
     "Custom" : {
       "extractionState" : "stale",
@@ -6246,9 +6317,6 @@
         }
       }
     },
-    "Describe it once and let the model draft it, or fill in the fields yourself" : {
-
-    },
     "Describe the story and tasks, or choose a text or PDF file." : {
 
     },
@@ -6742,8 +6810,21 @@
         }
       }
     },
-    "Downloads use npm and are stored in RxCode's application support folder. Choose a published stable version or Latest." : {
+    "Download…" : {
 
+    },
+    "Downloads use npm and are stored in RxCode's application support folder. Use Manage to install a specific published version." : {
+
+    },
+    "Draft" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "草稿"
+          }
+        }
+      }
     },
     "Drag a card here." : {
       "localizations" : {
@@ -7011,6 +7092,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "编辑故事"
+          }
+        }
+      }
+    },
+    "Edit Task" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑任务"
           }
         }
       }
@@ -8200,7 +8291,14 @@
       }
     },
     "Generate Draft" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "生成草稿"
+          }
+        }
+      }
     },
     "Generate Title" : {
       "localizations" : {
@@ -8420,6 +8518,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "全局默认值加项目级覆盖"
+          }
+        }
+      }
+    },
+    "Go back and change the description" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "返回修改描述"
           }
         }
       }
@@ -9045,6 +9153,9 @@
         }
       }
     },
+    "Install %@" : {
+
+    },
     "Install a DOCS_UPLOAD_TOKEN secret so this repo's CI can upload docs. RxCode mints the token and stores it as the repository's GitHub Actions secret for you — no terminal needed." : {
       "localizations" : {
         "ko" : {
@@ -9227,6 +9338,9 @@
     "Install Version" : {
 
     },
+    "Install Version…" : {
+
+    },
     "installed" : {
       "localizations" : {
         "ko" : {
@@ -9318,6 +9432,9 @@
           }
         }
       }
+    },
+    "Installing…" : {
+
     },
     "Interface" : {
       "localizations" : {
@@ -10598,9 +10715,6 @@
         }
       }
     },
-    "Mode" : {
-
-    },
     "Model" : {
       "localizations" : {
         "ko" : {
@@ -10829,6 +10943,16 @@
         }
       }
     },
+    "New" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建"
+          }
+        }
+      }
+    },
     "New Chat" : {
       "localizations" : {
         "en" : {
@@ -10942,10 +11066,8 @@
         }
       }
     },
-    "New story — click the arrow to write it with AI or by hand" : {
-
-    },
     "New story in this project" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -10986,11 +11108,35 @@
         }
       }
     },
-    "New task — click the arrow to write it with AI or by hand" : {
-
+    "New task or story in this project" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在此项目中新建任务或故事"
+          }
+        }
+      }
     },
-    "New task — click the arrow to write it with AI, or for stories, chats, columns and fields" : {
-
+    "New task or story, written with AI or in a form" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建任务或故事，可使用 AI 或表单"
+          }
+        }
+      }
+    },
+    "New task, story or chat, or manage columns and fields" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建任务、故事或对话，或管理列和字段"
+          }
+        }
+      }
     },
     "New Task…" : {
       "localizations" : {
@@ -12279,6 +12425,9 @@
           }
         }
       }
+    },
+    "Not installed" : {
+
     },
     "Not signed in" : {
       "localizations" : {
@@ -13961,6 +14110,9 @@
         }
       }
     },
+    "Re-sign In" : {
+
+    },
     "Ready to start." : {
       "localizations" : {
         "ko" : {
@@ -15030,6 +15182,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "查看 CLI 设置检查"
+          }
+        }
+      }
+    },
+    "Revise" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "修改"
           }
         }
       }
@@ -17307,6 +17469,9 @@
         }
       }
     },
+    "Signed In" : {
+
+    },
     "sk-..." : {
       "localizations" : {
         "ko" : {
@@ -17681,7 +17846,14 @@
       }
     },
     "Suggested properties" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "建议的属性"
+          }
+        }
+      }
     },
     "Summarization model" : {
       "localizations" : {
@@ -17882,7 +18054,14 @@
       }
     },
     "Task details" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "任务详情"
+          }
+        }
+      }
     },
     "Task title" : {
 
@@ -19748,12 +19927,6 @@
           }
         }
       }
-    },
-    "With AI" : {
-
-    },
-    "With Form" : {
-
     },
     "Work with coding agents in one native app" : {
       "localizations" : {

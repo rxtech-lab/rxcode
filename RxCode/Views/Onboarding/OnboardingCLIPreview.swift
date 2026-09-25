@@ -4,9 +4,11 @@ import SwiftUI
 struct CLISetupPreview: View {
     let isCheckingCLI: Bool
     let claudeInstalled: Bool
+    let claudeSignedIn: Bool
     let claudeVersion: String?
     let claudeError: String?
     let codexInstalled: Bool
+    let codexSignedIn: Bool
     let codexVersion: String?
     let codexError: String?
     let onCheckAgain: () -> Void
@@ -37,6 +39,7 @@ struct CLISetupPreview: View {
                 CLIStatusRow(
                     title: "Claude Code",
                     installed: claudeInstalled,
+                    signedIn: claudeSignedIn,
                     version: claudeVersion,
                     error: claudeError,
                     installCommand: "npm install -g @anthropic-ai/claude-code",
@@ -50,6 +53,7 @@ struct CLISetupPreview: View {
                 CLIStatusRow(
                     title: "Codex",
                     installed: codexInstalled,
+                    signedIn: codexSignedIn,
                     version: codexVersion,
                     error: codexError,
                     installCommand: "npm install -g @openai/codex",
@@ -105,6 +109,7 @@ struct CLISetupPreview: View {
 struct CLIStatusRow: View {
     let title: String
     let installed: Bool
+    let signedIn: Bool
     let version: String?
     let error: String?
     let installCommand: String
@@ -131,7 +136,7 @@ struct CLIStatusRow: View {
                         if isSigningIn {
                             ProgressView().controlSize(.small)
                         } else {
-                            Text("Sign In")
+                            Text(signedIn ? LocalizedStringKey("Re-sign In") : LocalizedStringKey("Sign In"))
                         }
                     }
                     .buttonStyle(.bordered)

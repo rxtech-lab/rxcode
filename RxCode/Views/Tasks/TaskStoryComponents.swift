@@ -36,6 +36,31 @@ extension ProjectStory {
     }
 }
 
+// MARK: - Story hover
+
+/// The story under the pointer anywhere on the board, shared by every column
+/// so a story and its tasks light up together.
+///
+/// A reference in the environment rather than a binding threaded through each
+/// card: hover changes then only update the views that read `storyId` in their
+/// body (the card chrome), instead of rebuilding every card's whole body on
+/// each pointer move.
+@Observable
+final class TaskBoardHoverState {
+    var storyId: UUID?
+
+    /// Hover handler for a view that represents `storyId`: claims the
+    /// highlight on enter, and releases it on exit unless another view
+    /// already took it over.
+    func update(hovering: Bool, storyId: UUID) {
+        if hovering {
+            if self.storyId != storyId { self.storyId = storyId }
+        } else if self.storyId == storyId {
+            self.storyId = nil
+        }
+    }
+}
+
 /// The story a task belongs to, as a tinted chip on the task card. Tapping
 /// shows a popover with the story's name and progress; hovering highlights the
 /// story and its sibling tasks on the board.
@@ -43,8 +68,8 @@ struct TaskStoryChip: View {
     let story: ProjectStory
     let progress: StoryProgress
     let column: TaskColumn
-    @Binding var hoveredStoryId: UUID?
 
+    @Environment(TaskBoardHoverState.self) private var hover: TaskBoardHoverState?
     @State private var showsPopover = false
 
     var body: some View {
@@ -68,13 +93,7 @@ struct TaskStoryChip: View {
         }
         .buttonStyle(.plain)
         .help("Show story")
-        .onHover { hovering in
-            if hovering {
-                hoveredStoryId = story.id
-            } else if hoveredStoryId == story.id {
-                hoveredStoryId = nil
-            }
-        }
+        .onHover { hover?.update(hovering: $0, storyId: story.id) }
         .popover(isPresented: $showsPopover, arrowEdge: .top) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 6) {
@@ -110,6 +129,23 @@ struct TaskSummaryPreview: View {
 
     @State private var showsFull = false
 
+    /// `stripMarkdown` results by source text. Cards re-render on board edits
+    /// and agent activity far more often than their text changes, and the
+    /// regex passes showed up while scrolling the board.
+    private static let strippedText: NSCache<NSString, NSString> = {
+        let cache = NSCache<NSString, NSString>()
+        cache.countLimit = 500
+        return cache
+    }()
+
+    private static func preview(of text: String) -> String {
+        let key = text as NSString
+        if let cached = strippedText.object(forKey: key) { return cached as String }
+        let stripped = stripMarkdown(text)
+        strippedText.setObject(stripped as NSString, forKey: key)
+        return stripped
+    }
+
     private var content: (title: LocalizedStringKey, text: String)? {
         if let key = task.sessionKey {
             // Re-read when a thread summary is regenerated.
@@ -129,7 +165,7 @@ struct TaskSummaryPreview: View {
                 // Stripped, not rendered: descriptions are Markdown, and two
                 // truncated lines of a card have no room for block layout —
                 // raw syntax would just eat the preview.
-                Text(stripMarkdown(content.text))
+                Text(Self.preview(of: content.text))
                     .font(.system(size: ClaudeTheme.size(11)))
                     .foregroundStyle(ClaudeTheme.textSecondary)
                     .lineLimit(2)

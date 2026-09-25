@@ -15,8 +15,12 @@ struct TaskColumnView: View {
     /// moves only as its tasks do.
     let stories: [ProjectStory]
     let board: TaskBoard
+    /// Every story's progress and column, computed once for the whole board.
+    let storyRollups: [UUID: StoryRollup]
     let onOpen: (TaskBoardSheet) -> Void
-    let onAdd: () -> Void
+    /// A new task starts in this column; a story has no column of its own.
+    let onAddTask: (TaskCreationMode) -> Void
+    let onAddStory: (TaskCreationMode) -> Void
     /// `nil` when this is the view's last visible column.
     let onHide: (() -> Void)?
     let onEditView: () -> Void
@@ -24,7 +28,6 @@ struct TaskColumnView: View {
     /// A column header was dropped on this one: the dragged column takes this
     /// column's slot in the board order.
     let onReorder: (TaskStatus) -> Void
-    @Binding var hoveredStoryId: UUID?
     @Binding var collapsedStoryIds: Set<UUID>
 
     private var status: TaskStatus { column.id }
@@ -41,9 +44,8 @@ struct TaskColumnView: View {
                     ForEach(stories) { story in
                         StoryCardView(
                             story: story,
-                            progress: board.progress(for: story),
+                            progress: storyRollups[story.id]?.progress ?? board.progress(for: story),
                             board: board,
-                            hoveredStoryId: $hoveredStoryId,
                             isCollapsed: collapsedStoryIds.contains(story.id),
                             onToggleCollapse: {
                                 if collapsedStoryIds.contains(story.id) {
@@ -64,7 +66,11 @@ struct TaskColumnView: View {
                             .transition(.opacity)
                     }
                     ForEach(tasks) { task in
-                        TaskCardView(task: task, board: board, hoveredStoryId: $hoveredStoryId) {
+                        TaskCardView(
+                            task: task,
+                            board: board,
+                            storyRollup: task.storyId.flatMap { storyRollups[$0] }
+                        ) {
                             onOpen(.task(task))
                         }
                         // A card in a chat column stays put while its agent runs.
@@ -152,11 +158,15 @@ struct TaskColumnView: View {
                 .fixedSize()
                 .help("Column options")
 
-                Button(action: onAdd) {
+                Menu {
+                    TaskCreationMenuItems(onNewTask: onAddTask, onNewStory: onAddStory)
+                } label: {
                     Image(systemName: "plus")
                 }
-                .buttonStyle(.borderless)
-                .help("Add a task to this column")
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("Add a task to this column, or a story")
             }
 
             Text(column.details.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty

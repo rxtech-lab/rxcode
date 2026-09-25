@@ -3,6 +3,12 @@ import Foundation
 import RxCodeCore
 
 extension CodexAppServer {
+    /// `codex login status` exits non-zero when no credentials are stored.
+    func isSignedIn() async -> Bool {
+        guard let binary = await findCodexBinary() else { return false }
+        return (try? await runShellCommand(binary, arguments: ["login", "status"])) != nil
+    }
+
     /// Keep this app-server alive until its browser callback completes. The
     /// callback listener belongs to the process that started the login.
     func signIn() async throws {

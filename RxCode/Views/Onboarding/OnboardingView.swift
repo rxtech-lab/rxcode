@@ -257,9 +257,11 @@ struct OnboardingView: View {
             CLISetupPreview(
                 isCheckingCLI: isCheckingCLI,
                 claudeInstalled: claudeInstalled,
+                claudeSignedIn: appState.claudeSignedIn,
                 claudeVersion: claudeVersion,
                 claudeError: claudeError,
                 codexInstalled: codexInstalled,
+                codexSignedIn: appState.codexSignedIn,
                 codexVersion: codexVersion,
                 codexError: codexError,
                 onCheckAgain: { Task { await checkCLI() } },
@@ -409,6 +411,7 @@ struct OnboardingView: View {
                     }
                 }
                 cliSignInMessage = "Sign-in completed."
+                await appState.refreshAgentSignInStatus()
             } catch {
                 cliSignInMessage = error.localizedDescription
             }
@@ -470,6 +473,7 @@ struct OnboardingView: View {
             }
         }
 
+        await appState.refreshAgentSignInStatus()
         isCheckingCLI = false
     }
 

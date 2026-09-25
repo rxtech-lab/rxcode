@@ -56,6 +56,37 @@ enum TaskCreationMode: String, Hashable, Identifiable, CaseIterable {
     }
 }
 
+/// The four ways to start a new record, for an add menu. The sheet opens on
+/// the picked kind and mode and doesn't offer to switch either.
+struct TaskCreationMenuItems: View {
+    let onNewTask: (TaskCreationMode) -> Void
+    let onNewStory: (TaskCreationMode) -> Void
+
+    var body: some View {
+        Button {
+            onNewTask(.ai)
+        } label: {
+            Label("Create Task with AI", systemImage: TaskCreationMode.ai.systemImage)
+        }
+        Button {
+            onNewTask(.form)
+        } label: {
+            Label("Create Task with Form", systemImage: TaskCreationMode.form.systemImage)
+        }
+        Divider()
+        Button {
+            onNewStory(.ai)
+        } label: {
+            Label("Create Story with AI", systemImage: TaskCreationMode.ai.systemImage)
+        }
+        Button {
+            onNewStory(.form)
+        } label: {
+            Label("Create Story with Form", systemImage: TaskCreationMode.form.systemImage)
+        }
+    }
+}
+
 // MARK: - Column styling
 
 extension TaskColumn {
@@ -534,8 +565,14 @@ extension StoryProgressBar {
     /// Colors the bar with the board's own columns: the first done column for
     /// finished work and the first chat column for the pending segment.
     init(story: ProjectStory, board: TaskBoard) {
+        self.init(progress: board.progress(for: story), board: board)
+    }
+
+    /// Same colors, for a caller that already has the story's progress (from
+    /// `TaskBoard.storyRollups()`).
+    init(progress: StoryProgress, board: TaskBoard) {
         self.init(
-            progress: board.progress(for: story),
+            progress: progress,
             tint: board.effectiveColumns.first(where: \.countsAsDone)?.tint ?? ClaudeTheme.accent,
             activeTint: board.firstChatColumn?.tint ?? ClaudeTheme.accent
         )

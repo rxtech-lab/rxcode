@@ -442,6 +442,32 @@ struct ProjectTaskTests {
         #expect(started.activeFraction == 0.5)
     }
 
+    @Test("Board-wide story rollups match the per-story progress and column")
+    func storyRollupsMatchPerStory() {
+        let projectId = UUID()
+        let stories = (0..<4).map { ProjectStory(projectId: projectId, title: "Story \($0)") }
+        let statusSets: [[TaskStatus]] = [
+            [],
+            [.done, .done, .inProgress],
+            [.pending, .pendingReview, "deleted-column"],
+            [.done, .done],
+        ]
+        var tasks: [ProjectTask] = []
+        for (story, statuses) in zip(stories, statusSets) {
+            tasks += statuses.map { ProjectTask(projectId: projectId, storyId: story.id, title: "t", status: $0) }
+        }
+        tasks.append(ProjectTask(projectId: projectId, title: "No story", status: .inProgress))
+        let board = TaskBoard(stories: stories, tasks: tasks)
+
+        let rollups = board.storyRollups()
+        #expect(rollups.count == stories.count)
+        for story in stories {
+            #expect(rollups[story.id]?.progress == board.progress(for: story))
+            #expect(rollups[story.id]?.status == board.rolledUpStatus(for: story))
+        }
+        #expect(rollups[stories[2].id]?.status == .inProgress)
+    }
+
     @Test("Task prompts parse back into title, body, fields and attachments")
     func taskPromptParsing() {
         var task = ProjectTask(projectId: UUID(), title: "Drag columns")

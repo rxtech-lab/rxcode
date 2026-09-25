@@ -336,30 +336,19 @@ extension AppState {
 
     /// Dispatches a task into a real chat thread using its assigned agent.
     ///
-    /// Everything here reuses the normal send path: the assignment is copied
-    /// onto the window's per-session override fields (the same ones the model /
-    /// effort / permission pickers write), then `sendPrompt` runs exactly as it
-    /// would for a typed message.
+    /// Everything here reuses the normal send path through a background window:
+    /// the assignment is copied onto its per-session override fields, then
+    /// `sendPrompt` runs exactly as it would for a typed message.
     func startTask(_ task: ProjectTask) async {
         guard let project = projects.first(where: { $0.id == task.projectId }) else {
             logger.error("startTask: no project for id \(task.projectId.uuidString, privacy: .public)")
             return
         }
-        guard let window = windowForRunningTask(projectId: task.projectId) else {
-            logger.error("startTask: no live window available to run the task")
-            return
-        }
-
-        // Preserve the visible route: running a task from the board should not
-        // yank the board out from under the user. `selectProject` /
-        // `startNewChat` both clear `generalRoute` to reveal the chat, so it is
-        // restored below — the thread streams in the background either way.
-        let routeBeforeDispatch = window.generalRoute
-
-        if window.selectedProject?.id != project.id {
-            selectProject(project, in: window)
-        }
-        startNewChat(in: window)
+        // The stream only needs session context, not a visible window. Using
+        // the board's window here briefly reveals the new chat before the
+        // route can be restored, and also replaces its current chat selection.
+        let window = WindowState()
+        window.selectedProject = project
 
         // Apply the agent assignment onto the per-session overrides.
         if let model = task.agent.model, !model.isEmpty {
@@ -398,9 +387,8 @@ extension AppState {
         upsertTask(linked)
 
         // `sendPrompt` dispatches the stream on a detached task and returns as
-        // soon as it is running, so the route is restored here rather than in a
-        // `defer` — the rename wait below can take seconds and the board should
-        // already be back by then.
+        // soon as it is running. The background window keeps the stream's
+        // session context alive while the board remains on screen.
         _ = await sendPrompt(
             fullPrompt,
             displayText: displayText,
@@ -408,7 +396,6 @@ extension AppState {
             tempFilePaths: tempFilePaths,
             in: window
         )
-        window.generalRoute = routeBeforeDispatch
 
         // Link the thread from the key `sendPrompt` actually opened it under.
         // For a new chat that is a `pending-<streamId>` placeholder, which is
@@ -443,15 +430,6 @@ extension AppState {
             current.sessionKey = realSessionId
             upsertTask(current)
         }
-    }
-
-    /// Prefers a window already showing the task's project, then any window
-    /// with no project selected, then the first live window.
-    private func windowForRunningTask(projectId: UUID) -> WindowState? {
-        let windows = registeredWindows()
-        if let match = windows.first(where: { $0.selectedProject?.id == projectId }) { return match }
-        if let idle = windows.first(where: { $0.selectedProject == nil }) { return idle }
-        return windows.first
     }
 
     // MARK: - Run history

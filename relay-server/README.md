@@ -62,7 +62,23 @@ envelopes (`{v, to, from, nonce, ct}`) and a destination pubkey.
     ```
     The relay sends an FCM HTTP v1 data message. The Android app decrypts
     `enc` locally and renders the system notification itself.
-- `GET  /healthz` — liveness probe.
+- `GET  /healthz` — liveness probe. Reports `"notion": true` when Notion
+  OAuth is configured.
+- `GET  /notion/oauth/start?pubkey=<base64url X25519>&nonce=<id>` — starts
+  "Connect with Notion" for the desktop app. Signs the app's public key and
+  nonce into `state` (HMAC, 15-minute expiry) and redirects to Notion's consent
+  page.
+- `GET  /notion/oauth/callback` — Notion's redirect target. Exchanges the code
+  with the integration's client secret, encrypts the token response to the
+  app's public key (ephemeral X25519 → HKDF-SHA256 → AES-256-GCM), and
+  redirects to `rxcode://notion-callback?n=…&epk=…&iv=…&ct=…`. Denials and
+  failures redirect with `error=…` instead. The token never appears in
+  plaintext in a URL, and the relay keeps no state between the two requests.
+- `POST /notion/oauth/refresh` — body `{"refresh_token": "…"}`; returns new
+  `access_token` / `refresh_token`.
+
+  All three answer `503` unless `NOTION_CLIENT_ID` and `NOTION_CLIENT_SECRET`
+  are set.
 
 ## Run locally
 
@@ -70,6 +86,12 @@ envelopes (`{v, to, from, nonce, ct}`) and a destination pubkey.
 go mod tidy
 go run . -addr :8787
 ```
+
+To try Notion sign-in locally, set `NOTION_CLIENT_ID` and
+`NOTION_CLIENT_SECRET` (e.g. in `.env`), leave `NOTION_REDIRECT_URI` unset,
+and add `http://localhost:8787/notion/oauth/callback` as a redirect URI on the
+Notion integration. Then add `ws://localhost:8787` as a relay in the app's
+Settings → Mobile and pick it when connecting.
 
 ## Configuration
 
@@ -96,6 +118,9 @@ missing file is non-fatal — the relay just uses whatever's in the process env.
 | *(none)*            | `FCM_SERVICE_ACCOUNT_JSON` | Raw Firebase service-account JSON. |
 | *(none)*            | `FCM_SERVICE_ACCOUNT_B64` | Base64-encoded Firebase service-account JSON, preferred for container secrets. |
 | `-redis-url`        | `REDIS_URL`        | Redis URL for the multi-node backplane. Empty = single-node. |
+| `-notion-client-id` | `NOTION_CLIENT_ID` | OAuth client ID of the public Notion integration. |
+| *(none)*            | `NOTION_CLIENT_SECRET` | Its client secret. Env only, so it stays out of process listings. |
+| `-notion-redirect-uri` | `NOTION_REDIRECT_URI` | Pins the redirect URI. Empty (default) uses this relay's own `/notion/oauth/callback` as reached by the client, e.g. `http://localhost:8787/notion/oauth/callback` locally; honours `X-Forwarded-Proto` behind a TLS proxy. Whatever it resolves to must be registered on the Notion integration. |
 
 `APNS_KEY_B64` wins over `APNS_KEY_PATH` when both are set. Both standard and
 URL-safe base64 are accepted, and embedded whitespace/newlines are stripped —

@@ -11,7 +11,7 @@ var startedAt = time.Now()
 // healthHandler returns a JSON liveness probe with current connection count
 // and APNs availability. Used by orchestrators and by the desktop "Mobile"
 // settings tab to verify the configured relay is reachable.
-func healthHandler(hub *Hub, apnsSender *PushSender, fcmSender *FCMSender) http.HandlerFunc {
+func healthHandler(hub *Hub, apnsSender *PushSender, fcmSender *FCMSender, notionOAuth bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		mode := "single-node"
 		if hub.backplane != nil {
@@ -23,6 +23,7 @@ func healthHandler(hub *Hub, apnsSender *PushSender, fcmSender *FCMSender) http.
 			"peers":      hub.ConnectedCount(),
 			"apns":       apnsSender != nil,
 			"fcm":        fcmSender != nil,
+			"notion":     notionOAuth,
 			"mode":       mode,
 			"version":    version,
 		}

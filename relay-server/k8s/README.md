@@ -58,6 +58,13 @@ kubectl apply -f secrets.yaml
 The relay only sends FCM pushes when `FCM_SERVICE_ACCOUNT_B64` is non-empty;
 leave it blank to disable Android push delivery while keeping APNs working.
 
+For "Connect with Notion", create a **public** integration at
+notion.so/profile/integrations with the redirect URI
+`https://relaycode.rxlab.app/notion/oauth/callback`, then add its
+`NOTION_CLIENT_ID` and `NOTION_CLIENT_SECRET` to `secrets.yaml`. Without them
+the `/notion/oauth/*` endpoints answer 503 and the app falls back to pasted
+integration tokens.
+
 ### 2. Deploy
 
 ```bash

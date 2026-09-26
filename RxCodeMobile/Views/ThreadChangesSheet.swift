@@ -143,7 +143,7 @@ struct ThreadChangesSheet: View {
                         path: edit.path,
                         badge: edit.containsWrite ? "W" : "M",
                         badgeColor: edit.containsWrite ? .blue : .orange,
-                        stat: turnStat(edit)
+                        stat: edit.diffStat
                     )
                 }
             }
@@ -176,21 +176,6 @@ struct ThreadChangesSheet: View {
             edit.hunks.map {
                 PreviewFile.EditHunk(oldString: $0.oldString, newString: $0.newString)
             })
-    }
-
-    /// Sidebar `+/-` count. Prefers a fresh snapshot-pair diff when both
-    /// snapshots are present so the row's numbers match what the detail page
-    /// renders; falls back to hunk-newline counting for legacy edits or when
-    /// the snapshot pair collapsed to zero (race-loss on the original capture).
-    private func turnStat(_ edit: SyncFileEdit) -> (added: Int, removed: Int) {
-        if let modified = edit.modifiedContent {
-            let stat = ChangeDiffView.snapshotStat(
-                original: edit.originalContent ?? "", modified: modified)
-            if stat.added > 0 || stat.removed > 0 {
-                return stat
-            }
-        }
-        return hunkStat(edit.hunks)
     }
 
     // MARK: - Uncommitted
@@ -295,20 +280,6 @@ struct ThreadChangesSheet: View {
         }
     }
 
-    private func hunkStat(_ hunks: [SyncEditHunk]) -> (added: Int, removed: Int) {
-        var added = 0
-        var removed = 0
-        for hunk in hunks {
-            if !hunk.oldString.isEmpty {
-                removed += hunk.oldString.components(separatedBy: "\n").count
-            }
-            if !hunk.newString.isEmpty {
-                added += hunk.newString.components(separatedBy: "\n").count
-            }
-        }
-        return (added, removed)
-    }
-
     private func unifiedStat(_ diff: String) -> (added: Int, removed: Int) {
         var added = 0
         var removed = 0
@@ -317,6 +288,33 @@ struct ThreadChangesSheet: View {
                 added += 1
             } else if line.hasPrefix("-"), !line.hasPrefix("---") {
                 removed += 1
+            }
+        }
+        return (added, removed)
+    }
+}
+
+extension SyncFileEdit {
+    /// Sidebar `+/-` count. Prefers a fresh snapshot-pair diff when both
+    /// snapshots are present so the row's numbers match what the detail page
+    /// renders; falls back to hunk-newline counting for legacy edits or when
+    /// the snapshot pair collapsed to zero (race-loss on the original capture).
+    var diffStat: (added: Int, removed: Int) {
+        if let modifiedContent {
+            let stat = ChangeDiffView.snapshotStat(
+                original: originalContent ?? "", modified: modifiedContent)
+            if stat.added > 0 || stat.removed > 0 {
+                return stat
+            }
+        }
+        var added = 0
+        var removed = 0
+        for hunk in hunks {
+            if !hunk.oldString.isEmpty {
+                removed += hunk.oldString.components(separatedBy: "\n").count
+            }
+            if !hunk.newString.isEmpty {
+                added += hunk.newString.components(separatedBy: "\n").count
             }
         }
         return (added, removed)

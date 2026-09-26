@@ -86,12 +86,24 @@ struct TasksSettingsTab: View {
             } footer: {
                 Text("This model powers quick add and the task and story forms' title and Auto-fill buttons. ACP client suggestions run in a separate session.")
             }
+
+            notionSection
         }
         .formStyle(.grouped)
         .onAppear {
             configured = appState.configuredDefaultTaskAgent()
             suggestionAgent = appState.configuredTaskSuggestionAgent()
             autoClassify = appState.autoClassifiesQuickAddedTasks
+        }
+    }
+
+    private var notionSection: some View {
+        Section {
+            NotionConnectionView()
+        } header: {
+            Text("Notion")
+        } footer: {
+            Text("Used to sync project task status to a Notion database and import its pages as tasks. Connect with Notion signs in through the chosen relay server — one from Settings → Mobile or a hosted relay — which must have Notion sign-in configured. The token is stored in the Keychain.")
         }
     }
 

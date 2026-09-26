@@ -1142,6 +1142,8 @@ final class AppState {
         return liveWindowRefs.compactMap(\.window)
     }
     var mobileSnapshotBroadcastTask: Task<Void, Never>?
+    /// Pending debounced `taskBoardUpdate` pushes, one per project.
+    var mobileTaskBoardBroadcastTasks: [UUID: Task<Void, Never>] = [:]
     var lastBroadcastRunTaskSnapshots: [UUID: MobileRunTaskSnapshot] = [:]
 
     /// Worktrees freshly created by a mobile "create branch" request, keyed by
@@ -1165,6 +1167,21 @@ final class AppState {
     var classifyingTaskIds: Set<UUID> = []
     /// Task checks currently running in a linked verification chat.
     var verifyingTaskIds: Set<UUID> = []
+    /// Projects with a Notion push or import in flight.
+    var notionSyncingProjectIds: Set<UUID> = []
+    /// The last Notion sync failure per project, cleared by the next success.
+    var notionSyncErrors: [UUID: String] = [:]
+    /// Whether a Notion credential (OAuth or pasted token) is in the Keychain. Refreshed when
+    /// Notion UI appears rather than at launch, to keep Keychain reads lazy.
+    var hasNotionToken = false
+    /// The workspace an OAuth connection was granted in; `nil` for a pasted
+    /// integration token.
+    var notionWorkspaceName: String?
+    /// HTTP base of the relay an OAuth connection was made through.
+    var notionRelayURL: String?
+    @ObservationIgnored let notion = NotionService()
+    /// Pending debounced auto-sync per project.
+    @ObservationIgnored var notionAutoSyncTasks: [UUID: Task<Void, Never>] = [:]
 
     // MARK: - Run Profiles
 

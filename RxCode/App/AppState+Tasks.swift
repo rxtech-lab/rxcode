@@ -69,14 +69,25 @@ extension AppState {
     // MARK: - Persisting
 
     /// Replaces a project's board in memory and writes it back atomically.
-    func setTaskBoard(_ board: TaskBoard, for projectId: UUID) {
+    func setTaskBoard(_ incoming: TaskBoard, for projectId: UUID) {
+        let previous = taskBoards[projectId]
+        var board = incoming
+        let newlyFinished = board.newlyFinishedTaskIDs(comparedTo: previous)
+        let childrenToDispatch = board.advanceChildren(of: newlyFinished)
         taskBoards[projectId] = board
+        if board.notion?.autoSync == true, let previous, board.notionContentDiffers(from: previous) {
+            scheduleNotionAutoSync(projectId: projectId)
+        }
+        scheduleMobileTaskBoardBroadcast(for: projectId)
         Task { [persistence] in
             do {
                 try await persistence.saveTaskBoard(board, projectId: projectId)
             } catch {
                 logger.error("Failed to save task board: \(error.localizedDescription, privacy: .public)")
             }
+        }
+        for child in childrenToDispatch where child.agent.isAssigned {
+            Task { await startTask(child) }
         }
     }
 
@@ -92,6 +103,7 @@ extension AppState {
     /// Drops a deleted project's board from memory and disk.
     func deleteTaskBoard(for projectId: UUID) {
         taskBoards.removeValue(forKey: projectId)
+        notionAutoSyncTasks.removeValue(forKey: projectId)?.cancel()
         Task { [persistence] in
             do {
                 try await persistence.deleteTaskBoard(projectId: projectId)
@@ -273,7 +285,12 @@ extension AppState {
     func upsertTask(_ task: ProjectTask) {
         var stamped = task
         stamped.updatedAt = Date()
-        let previousStatus = taskBoard(for: task.projectId).tasks.first { $0.id == task.id }?.status
+        let currentBoard = taskBoard(for: task.projectId)
+        let stored = currentBoard.tasks.first { $0.id == task.id }
+        if let parentID = stamped.parentTaskId, !currentBoard.canLinkTask(stamped.id, to: parentID) {
+            stamped.parentTaskId = stored?.parentTaskId
+        }
+        let previousStatus = stored?.status
         let dispatches = shouldDispatchTask(stamped, from: previousStatus)
         if dispatches {
             stamped.attentionReason = nil
@@ -310,6 +327,9 @@ extension AppState {
     func deleteTask(_ task: ProjectTask) {
         updateBoard(task.projectId) { board in
             board.tasks.removeAll { $0.id == task.id }
+            for index in board.tasks.indices where board.tasks[index].parentTaskId == task.id {
+                board.tasks[index].parentTaskId = nil
+            }
         }
     }
 
@@ -832,10 +852,4 @@ extension AppState {
             }
         }
     }
-}
-
-extension ProjectTask {
-    /// The description is what the agent was prompted with, so it is frozen
-    /// once the task has been dispatched.
-    var isDescriptionLocked: Bool { sessionKey != nil }
 }

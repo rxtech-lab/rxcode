@@ -296,6 +296,63 @@ extension MobileChatView {
         .accessibilityLabel("\(planBannerText). Tap to review.")
     }
 
+    // MARK: - Diff banner
+
+    /// Compact pill above the input bar shown whenever this thread has edited
+    /// files. Tapping it opens the thread's changes sheet.
+    var diffBanner: some View {
+        let edits = diffBannerEdits
+        let stats = edits.map(\.diffStat)
+        let added = stats.reduce(0) { $0 + $1.added }
+        let removed = stats.reduce(0) { $0 + $1.removed }
+        let fileText = edits.count == 1 ? "1 file changed" : "\(edits.count) files changed"
+
+        return Button {
+            showingChanges = true
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "plusminus.circle")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.secondary)
+
+                Text(fileText)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.primary)
+
+                HStack(spacing: 6) {
+                    if added > 0 {
+                        Text("+\(added)").foregroundStyle(.green)
+                    }
+                    if removed > 0 {
+                        Text("−\(removed)").foregroundStyle(.red)
+                    }
+                }
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+
+                Spacer(minLength: 8)
+
+                Text("View Diff")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 5)
+                    .background(Color.secondary.opacity(0.15), in: Capsule())
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(.regularMaterial)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.secondary.opacity(0.15), lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(fileText), \(added) lines added, \(removed) removed. Tap to view the diff.")
+    }
+
     var planBannerText: String {
         let count = pendingPlans.count
         return count == 1 ? "Plan ready to review" : "\(count) plans ready to review"

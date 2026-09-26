@@ -14,7 +14,8 @@ final class iPadNavigationUITests: XCTestCase {
     func testBriefingSplitKeepsListVisible() throws {
         let r = try UITestRunner.launch(.pad, on: self).robot
 
-        // The iPad briefing split view is shown at launch.
+        // The app opens on Tasks; switch the sidebar to Briefing.
+        r.tap(r.sidebarBriefingItem, "Briefing item in the sidebar")
         r.tap(r.anyBriefingListCard, "a briefing card in the list column")
         r.assertExists(r.briefingDetailScreen, "briefing detail screen")
 
@@ -34,6 +35,7 @@ final class iPadNavigationUITests: XCTestCase {
     func testNewThreadFromBriefingSplitOpensChat() throws {
         let r = try UITestRunner.launch(.pad, on: self).robot
 
+        r.tap(r.sidebarBriefingItem, "Briefing item in the sidebar")
         r.tap(r.anyBriefingListCard, "a briefing card in the list column")
         r.assertExists(r.briefingDetailScreen, "briefing detail screen")
 

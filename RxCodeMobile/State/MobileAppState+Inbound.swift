@@ -283,6 +283,12 @@ extension MobileAppState {
             if let continuation = pendingAutopilotRequests.removeValue(forKey: result.clientRequestID) {
                 continuation.resume(returning: result)
             }
+        case .taskBoardResult(let result):
+            guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "task_board_result") else { return }
+            applyTaskBoardResult(result)
+        case .taskBoardUpdate(let update):
+            guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "task_board_update") else { return }
+            taskBoardsByProject[update.snapshot.projectID] = update.snapshot
         case .ping:
             guard pairedDesktops.contains(where: { $0.pubkeyHex == inbound.fromHex }) else { return }
             Task { try? await self.client.send(.pong(PongPayload()), toHex: inbound.fromHex) }

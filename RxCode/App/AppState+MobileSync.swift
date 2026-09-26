@@ -443,6 +443,20 @@ extension AppState {
         }
         mobileSyncObservers.append(autopilotObserver)
 
+        let taskBoardObserver = center.addObserver(
+            forName: .mobileSyncTaskBoardRequested,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let fromHex = notification.userInfo?["from"] as? String,
+                  let request = notification.userInfo?["payload"] as? TaskBoardRequestPayload
+            else { return }
+            Task { @MainActor [weak self] in
+                await self?.handleMobileTaskBoardRequest(request, fromHex: fromHex)
+            }
+        }
+        mobileSyncObservers.append(taskBoardObserver)
+
         observeMobileSnapshotInputs()
     }
 

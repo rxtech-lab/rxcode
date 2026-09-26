@@ -451,6 +451,14 @@ extension MobileSyncService {
                 object: nil,
                 userInfo: ["from": inbound.fromHex, "payload": req]
             )
+        case .taskBoardRequest(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "task_board_request") else { return }
+            logger.info("[MobileSync] task board requested operation=\(req.operation.rawValue, privacy: .public) project=\(req.projectID.uuidString, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+            NotificationCenter.default.post(
+                name: .mobileSyncTaskBoardRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": req]
+            )
         case .ping:
             guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "ping") else { return }
             Task { try? await activeClient.send(.pong(PongPayload()), toHex: inbound.fromHex) }

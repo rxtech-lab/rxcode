@@ -3664,7 +3664,13 @@
         }
       }
     },
+    "Choose a Notion database for this project first." : {
+
+    },
     "Choose a published stable npm or PyPI release. RxCode will pin and verify it before saving." : {
+
+    },
+    "Choose a relay server, connect with Notion, and pick the pages and databases RxCode may access. With an internal integration token instead, share your database with the integration from its ••• → Connections menu." : {
 
     },
     "Choose an existing value" : {
@@ -4688,6 +4694,9 @@
         }
       }
     },
+    "Connect Notion in Settings → Tasks first." : {
+
+    },
     "Connect the mobile companion" : {
       "localizations" : {
         "ko" : {
@@ -4735,6 +4744,9 @@
           }
         }
       }
+    },
+    "Connect with Notion" : {
+
     },
     "Connect your rxlab account to enable autopilot." : {
       "localizations" : {
@@ -4789,6 +4801,12 @@
           }
         }
       }
+    },
+    "Connected to %@" : {
+
+    },
+    "Connected with an integration token" : {
+
     },
     "Connecting…" : {
       "localizations" : {
@@ -6506,6 +6524,9 @@
           }
         }
       }
+    },
+    "Disconnect" : {
+
     },
     "Disconnected" : {
       "localizations" : {
@@ -8654,6 +8675,9 @@
         }
       }
     },
+    "Hide token" : {
+
+    },
     "History" : {
       "localizations" : {
         "en" : {
@@ -8971,6 +8995,9 @@
         }
       }
     },
+    "Import from Notion" : {
+
+    },
     "Import JSON…" : {
       "localizations" : {
         "ko" : {
@@ -8999,6 +9026,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "导入仓库"
+          }
+        }
+      }
+    },
+    "Imported %lld tasks and %lld stories; %lld already on the board." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Imported %1$lld tasks and %2$lld stories; %3$lld already on the board."
           }
         }
       }
@@ -9458,6 +9495,9 @@
         }
       }
     },
+    "Internal integration token" : {
+
+    },
     "It was moved here by hand, or its thread was deleted." : {
       "localizations" : {
         "zh-Hans" : {
@@ -9610,6 +9650,9 @@
         }
       }
     },
+    "Last synced" : {
+
+    },
     "Last used" : {
       "localizations" : {
         "zh-Hans" : {
@@ -9707,6 +9750,12 @@
         }
       }
     },
+    "Link" : {
+
+    },
+    "Link this project to a Notion database to sync task status or import pages" : {
+
+    },
     "Linked task: %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -9716,6 +9765,9 @@
           }
         }
       }
+    },
+    "Linked Tasks" : {
+
     },
     "Live channel only" : {
       "localizations" : {
@@ -10400,6 +10452,9 @@
         }
       }
     },
+    "Mapped fields" : {
+
+    },
     "Markdown content" : {
       "localizations" : {
         "ko" : {
@@ -10832,6 +10887,9 @@
           }
         }
       }
+    },
+    "Move this task to In Progress when the linked task is finished" : {
+
     },
     "Move To" : {
       "localizations" : {
@@ -11525,6 +11583,9 @@
           }
         }
       }
+    },
+    "No databases are shared with RxCode yet. Reconnect and select a database, or share one from its ••• → Connections menu." : {
+
     },
     "No destinations found" : {
       "localizations" : {
@@ -12521,6 +12582,30 @@
         }
       }
     },
+    "Notion" : {
+
+    },
+    "Notion Account" : {
+
+    },
+    "Notion database" : {
+
+    },
+    "Notion didn't return the new page's id." : {
+
+    },
+    "Notion rejected the saved sign-in. Connect Notion again." : {
+
+    },
+    "Notion returned an unexpected database response." : {
+
+    },
+    "Notion Settings…" : {
+
+    },
+    "Notion sync failed: %@" : {
+
+    },
     "npx" : {
       "localizations" : {
         "ko" : {
@@ -12616,6 +12701,9 @@
           }
         }
       }
+    },
+    "Only databases shared with RxCode are listed. Properties are matched by name: Status, Priority, Tags, Version, Milestone, Type, Story and Description. Sync adds any that are missing." : {
+
     },
     "Only send when a condition is met" : {
       "localizations" : {
@@ -13005,6 +13093,9 @@
           }
         }
       }
+    },
+    "Open this thread's changes" : {
+
     },
     "OpenAI-Compatible Endpoint" : {
       "localizations" : {
@@ -13855,6 +13946,9 @@
         }
       }
     },
+    "Project not found on desktop." : {
+
+    },
     "Project-specific override is set" : {
       "localizations" : {
         "ko" : {
@@ -14410,6 +14504,9 @@
         }
       }
     },
+    "Relay servers from Settings → Mobile and RxLab's hosted relays. The relay must have Notion sign-in configured." : {
+
+    },
     "Relay:" : {
       "localizations" : {
         "ko" : {
@@ -14505,6 +14602,9 @@
           }
         }
       }
+    },
+    "Reload databases shared with RxCode" : {
+
     },
     "Remote" : {
       "localizations" : {
@@ -14633,6 +14733,9 @@
           }
         }
       }
+    },
+    "Remove Tag" : {
+
     },
     "Remove task" : {
 
@@ -17623,6 +17726,9 @@
         }
       }
     },
+    "Starts after" : {
+
+    },
     "Status" : {
       "localizations" : {
         "zh-Hans" : {
@@ -17775,6 +17881,9 @@
           }
         }
       }
+    },
+    "Story not found on desktop." : {
+
     },
     "Story title" : {
       "localizations" : {
@@ -17983,6 +18092,53 @@
         }
       }
     },
+    "Sync" : {
+
+    },
+    "Sync a project's task status to Notion, or import a Notion database into a project" : {
+
+    },
+    "Sync Automatically" : {
+
+    },
+    "Sync status automatically" : {
+
+    },
+    "Sync task status to “%@”" : {
+
+    },
+    "Sync to Notion" : {
+
+    },
+    "Sync writes every task as a page with all its fields, adding missing properties to the database, and moves pages of deleted tasks to the Notion trash. A column without a same-named status option uses the status group it falls in: Done → Complete, agent columns and later → In progress, the rest → To-do. Import adds pages not yet on the board." : {
+
+    },
+    "Synced to “%@” %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Synced to “%1$@” %2$@"
+          }
+        }
+      }
+    },
+    "Synced: %lld created, %lld updated, %lld archived." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Synced: %1$lld created, %2$lld updated, %3$lld archived."
+          }
+        }
+      }
+    },
+    "Syncing…" : {
+
+    },
+    "Tag" : {
+
+    },
     "Tags" : {
       "localizations" : {
         "zh-Hans" : {
@@ -18062,6 +18218,9 @@
           }
         }
       }
+    },
+    "Task not found on desktop." : {
+
     },
     "Task title" : {
 
@@ -18246,6 +18405,9 @@
         }
       }
     },
+    "The follow-up could not be sent to the task's chat." : {
+
+    },
     "The milestone is cleared from every story and task that uses it." : {
       "localizations" : {
         "zh-Hans" : {
@@ -18288,6 +18450,12 @@
         }
       }
     },
+    "The Notion database has no title property." : {
+
+    },
+    "The relay “%@” doesn't offer Notion sign-in. Choose another relay or use an integration token." : {
+
+    },
     "The release CI authenticates to GitHub with a RELEASE_TOKEN secret. Paste a GitHub token (a PAT with contents:write) and RxCode installs it as the repository's GitHub Actions secret for you — no terminal needed." : {
       "localizations" : {
         "ko" : {
@@ -18303,6 +18471,9 @@
           }
         }
       }
+    },
+    "The request is missing %@." : {
+
     },
     "The run ended with an error. Open the chat for details." : {
       "localizations" : {
@@ -18476,6 +18647,9 @@
       }
     },
     "This client has a binary distribution only. The registry supplies a download for its current release." : {
+
+    },
+    "This database has no title property." : {
 
     },
     "This form couldn't be rendered. Edit the raw template JSON instead (name, enabled, mergeSettings)." : {
@@ -19189,6 +19363,9 @@
         }
       }
     },
+    "Use a token instead" : {
+
+    },
     "Use default Makefile lookup" : {
       "localizations" : {
         "ko" : {
@@ -19350,6 +19527,9 @@
           }
         }
       }
+    },
+    "Used to sync project task status to a Notion database and import its pages as tasks. Connect with Notion signs in through the chosen relay server — one from Settings → Mobile or a hosted relay — which must have Notion sign-in configured. The token is stored in the Keychain." : {
+
     },
     "User Guide" : {
       "localizations" : {
@@ -19552,6 +19732,9 @@
         }
       }
     },
+    "Via %@" : {
+
+    },
     "Via:" : {
       "localizations" : {
         "ko" : {
@@ -19619,6 +19802,9 @@
           }
         }
       }
+    },
+    "View Diff" : {
+
     },
     "View options" : {
       "localizations" : {

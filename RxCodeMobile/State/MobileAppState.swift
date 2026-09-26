@@ -182,6 +182,16 @@ final class MobileAppState: ObservableObject {
     /// Cached rxlab account status from the active desktop, shown on the
     /// Autopilot screen header. `nil` until first loaded.
     @Published var autopilotAccount: AutopilotAccountStatus?
+
+    // MARK: - Remote desktop: Task boards
+
+    /// Per-project task boards mirrored from the active desktop.
+    @Published var taskBoardsByProject: [UUID: MobileTaskBoardSnapshot] = [:]
+    /// Projects whose board fetch is in flight.
+    @Published var loadingTaskBoardProjects: Set<UUID> = []
+    /// Outstanding task-board requests keyed by `clientRequestID`; resolved by
+    /// the matching `.taskBoardResult`, a timeout, or a desktop switch.
+    var pendingTaskBoardRequests: [UUID: CheckedContinuation<TaskBoardResultPayload, Error>] = [:]
     /// Derives and caches the passkey PRF KEK so secrets are decrypted/encrypted
     /// on-device — the desktop only relays opaque ciphertext.
     let secretsKeyVault = MobileSecretsKeyVault()

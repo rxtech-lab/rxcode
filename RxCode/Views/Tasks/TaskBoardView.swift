@@ -95,6 +95,7 @@ struct TaskOverviewView: View {
     @State private var keyword = ""
     /// The story whose task sheet is open.
     @State private var storySheet: ProjectStory?
+    @State private var notionSheet: NotionSyncPayload?
 
     /// How many stories each project group shows before "View all".
     static let previewLimit = 10
@@ -154,6 +155,10 @@ struct TaskOverviewView: View {
                 .environment(appState)
                 .environment(windowState)
         }
+        .sheet(item: $notionSheet) { payload in
+            NotionSyncSheet(projectId: payload.projectId)
+                .environment(appState)
+        }
     }
 
     /// A soft accent wash behind the cards so the glass has something to
@@ -196,6 +201,15 @@ struct TaskOverviewView: View {
             }
 
             Spacer()
+
+            Button {
+                notionSheet = NotionSyncPayload(projectId: newItemProjectId)
+            } label: {
+                Label("Notion", systemImage: "arrow.triangle.2.circlepath")
+            }
+            .buttonStyle(.bordered)
+            .help("Sync a project's task status to Notion, or import a Notion database into a project")
+            .accessibilityIdentifier("task-board-notion")
 
             Menu {
                 TaskCreationMenuItems(

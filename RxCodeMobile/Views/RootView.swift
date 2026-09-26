@@ -16,6 +16,9 @@ private enum MobileRootTab: Hashable {
 /// Mobile app root. iPad / wide screens use NavigationSplitView; iPhone uses
 /// bottom navigation with independent NavigationStack tabs.
 struct RootView: View {
+    @Environment(MobileCloudState.self) private var cloud
+    @State private var showOfflineTasksSheet = false
+    @State private var showOfflineTasksFullScreen = false
     @Environment(\.horizontalSizeClass) private var compactClass
     @EnvironmentObject private var state: MobileAppState
     @State private var selectedProject: UUID?
@@ -36,11 +39,37 @@ struct RootView: View {
 
     var body: some View {
         Group {
-            if state.isPaired {
-                paired
+            // Signing in is required before pairing. UI-test launches drive
+            // pairing against a mock relay without an account.
+            if UITestSupport.isActive || cloud.isSignedIn {
+                if state.isPaired {
+                    paired
+                } else {
+                    OnboardingView(onViewTasks: openOfflineTasks)
+                }
+            } else if cloud.isRestoring {
+                MobileRestoringSessionView()
             } else {
-                OnboardingView()
+                MobileSignInView()
             }
+        }
+        .animation(.smooth(duration: 0.3), value: cloud.isSignedIn)
+        .onReceive(NotificationCenter.default.publisher(for: .rxAuthSessionExpired)) { _ in
+            Task { await cloud.signOut() }
+        }
+        .onChange(of: cloud.isSignedIn) { _, signedIn in
+            if !signedIn {
+                state.clearCloudTasks()
+                showOfflineTasksSheet = false
+                showOfflineTasksFullScreen = false
+            }
+        }
+        .sheet(isPresented: $showOfflineTasksSheet, onDismiss: { state.usesCloudTasks = false }) {
+            offlineTasks
+                .mobileSheetPresentation([.large])
+        }
+        .fullScreenCover(isPresented: $showOfflineTasksFullScreen, onDismiss: { state.usesCloudTasks = false }) {
+            offlineTasks
         }
         .sheet(item: $state.pendingPermission) { req in
             PermissionApprovalSheet(request: req)
@@ -65,23 +94,55 @@ struct RootView: View {
         .mobileDismissesKeyboardOnScroll()
     }
 
+    private func openOfflineTasks() {
+        if state.isDesktopTaskSyncReady {
+            selectedTab = .tasks
+            showingTasks = true
+            return
+        }
+        state.usesCloudTasks = true
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            showOfflineTasksFullScreen = true
+        } else {
+            showOfflineTasksSheet = true
+        }
+    }
+
+    private var offlineTasks: some View {
+        NavigationStack {
+            MobileTasksDashboardView(onOpenChat: { _ in })
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") {
+                            showOfflineTasksSheet = false
+                            showOfflineTasksFullScreen = false
+                        }
+                    }
+                }
+        }
+        .environmentObject(state)
+        .environment(cloud)
+    }
+
     /// Whether the loading splash should be dismissed (data loaded AND minimum time elapsed, but NOT timed out)
     private var shouldShowContent: Bool {
-        let result = state.hasReceivedInitialSnapshot && minimumLoadingTimeElapsed && !connectionTimedOut
+        let result = state.isDesktopTaskSyncReady && minimumLoadingTimeElapsed && !connectionTimedOut
         logger.debug("shouldShowContent: \(result) (hasSnapshot: \(state.hasReceivedInitialSnapshot), minTimeElapsed: \(minimumLoadingTimeElapsed), timedOut: \(connectionTimedOut))")
         return result
     }
 
     private var paired: some View {
         ZStack {
-            // Main content - always present but may be hidden
-            mainContent
-                .opacity(shouldShowContent ? 1 : 0)
+            // Mount the desktop workspace only when it is reachable. Hidden
+            // task views must not issue requests or present alerts behind the cloud sheet.
+            if shouldShowContent {
+                mainContent
+            }
 
             // Loading splash - shown until first snapshot AND minimum 2 seconds
             if !shouldShowContent {
                 SyncLoadingView(
-                    isTimedOut: connectionTimedOut,
+                    isTimedOut: connectionTimedOut || state.desktopTaskUnavailable,
                     pairedDesktops: state.pairedDesktops,
                     activeDesktopID: state.activePairedDesktop?.id,
                     onRetry: {
@@ -100,7 +161,8 @@ struct RootView: View {
                     },
                     onPairNewDesktop: {
                         showPairingSheet = true
-                    }
+                    },
+                    onViewTasks: openOfflineTasks
                 )
                 .transition(.splashTransition)
                 .zIndex(1)
@@ -109,6 +171,12 @@ struct RootView: View {
         .animation(.easeInOut(duration: 0.5), value: shouldShowContent)
         .task {
             await initialLoad()
+        }
+        .onChange(of: state.isDesktopTaskSyncReady) { _, ready in
+            if ready {
+                connectionTimedOut = false
+                minimumLoadingTimeElapsed = true
+            }
         }
         .onChange(of: state.activeSessionID) { _, newValue in
             openActiveSession(newValue)
@@ -143,7 +211,7 @@ struct RootView: View {
         let maxPolls = (timeoutSeconds * 1000) / Int(pollIntervalMs)
 
         var pollCount = 0
-        while !state.hasReceivedInitialSnapshot && pollCount < maxPolls {
+        while !state.isDesktopTaskSyncReady && pollCount < maxPolls {
             try? await Task.sleep(for: .milliseconds(pollIntervalMs))
             pollCount += 1
             if pollCount % 50 == 0 { // Log every 5 seconds
@@ -151,7 +219,7 @@ struct RootView: View {
             }
         }
 
-        let hasSnapshot = state.hasReceivedInitialSnapshot
+        let hasSnapshot = state.isDesktopTaskSyncReady
         logger.info("Wait completed: hasSnapshot=\(hasSnapshot), polls=\(pollCount)/\(maxPolls)")
 
         // Ensure minimum 2 second display time for smooth UX
@@ -387,6 +455,7 @@ struct RootView: View {
                     Button { showSettings = true } label: {
                         Image(systemName: "gear")
                     }
+                    .accessibilityIdentifier("open-settings")
                 }
             }
     }

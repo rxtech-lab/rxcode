@@ -1,3 +1,4 @@
+import RxCodeChatKit
 import RxCodeCore
 import SwiftUI
 import UniformTypeIdentifiers
@@ -20,10 +21,9 @@ struct TaskFormSheet: View {
 
     let payload: TaskBoardSheet
     let defaultProjectId: UUID
-    /// How a new record is written. `nil` keeps the per-kind default:
-    /// stories are usually outlined from a description, tasks written directly.
-    var initialMode: TaskCreationMode?
 
+    @State private var cloudDevices: [CloudDevice] = []
+    @State private var cloudDeviceError: String?
     @State var isStory = false
     @State var task = ProjectTask(projectId: UUID(), title: "")
     @State var story = ProjectStory(projectId: UUID(), title: "")
@@ -45,6 +45,8 @@ struct TaskFormSheet: View {
     /// The free-form description the AI flow drafts from.
     @State var draftPrompt = ""
     @State var storyTaskDrafts: [StoryTaskDraft] = []
+    /// The model every task of a drafted story is assigned to.
+    @State var storyDraftAgent = TaskAgentConfig()
     /// A generated story task being added or edited in its own sheet.
     @State var editingStoryTaskDraft: StoryTaskDraft?
     /// A task draft has been generated and is waiting to be reviewed. Tracked
@@ -146,6 +148,16 @@ struct TaskFormSheet: View {
                 .padding(.bottom, 4)
             }
 
+            // Read from the stored task: the draft is a copy taken on open and
+            // wouldn't pick up a verification that fails while the sheet is up.
+            // The Run tab shows it as the transcript's last message instead.
+            if isExistingRecord, !isStory, !(showsRunTab && tab == .run),
+               let reason = appState.task(id: task.id)?.attentionReason {
+                TaskAttentionBanner(reason: reason)
+                    .padding(.horizontal, 20)
+                    .padding(.top, showsRunTab ? 8 : 16)
+            }
+
             if isComposing {
                 draftComposer
             } else if showsRunTab, tab == .run {
@@ -176,8 +188,8 @@ struct TaskFormSheet: View {
         }
         .taskDeletionConfirmation(pending: $pendingDeletion) { candidate in
             switch candidate {
-            case .task(let task): appState.deleteTask(task)
-            case .story(let story): appState.deleteStory(story)
+            case .task(let task, _): appState.deleteTask(task)
+            case .story(let story, _): appState.deleteStory(story)
             }
             dismiss()
         }
@@ -200,6 +212,22 @@ struct TaskFormSheet: View {
             classificationSection
             tagsSection
             if !isStory {
+                if appState.projects.first(where: { $0.id == currentProjectId })?.isCloud == true {
+                    Section("Assigned Mac") {
+                        Picker("Laptop", selection: $task.assignedDeviceId) {
+                            Text("Unassigned").tag(String?.none)
+                            ForEach(cloudDevices) { Text($0.name).tag(Optional($0.id)) }
+                            if let id = task.assignedDeviceId, !cloudDevices.contains(where: { $0.id == id }) {
+                                Text("Previously assigned Mac").tag(Optional(id))
+                            }
+                        }
+                        if let cloudDeviceError { Text(cloudDeviceError).foregroundStyle(.red) }
+                    }
+                    .task {
+                        do { cloudDevices = try await appState.projectCloud.listDevices() }
+                        catch { cloudDeviceError = error.localizedDescription }
+                    }
+                }
                 agentSection
                 attachmentsSection
             }
@@ -324,25 +352,67 @@ struct TaskFormSheet: View {
                     Text(project.name).tag(project.id)
                 }
             }
+            // A saved story moves between projects by sharing, so each linked
+            // board keeps its copy and tasks instead of being duplicated.
+            .disabled(isStory && isExistingRecord)
+            .help(isStory && isExistingRecord ? "Use Shared With to add this story to other projects" : "")
+
+            if isStory, appState.projects.count > 1 {
+                sharedProjectsMenu
+            }
+        }
+    }
+
+    /// Other projects this story is shared with. Each linked project's board
+    /// shows the story, and its tasks there can join it.
+    var sharedProjectsMenu: some View {
+        let others = appState.projects.filter { $0.id != story.projectId }
+        let linked = others.filter { story.linkedProjectIds.contains($0.id) }
+        let title: String = switch linked.count {
+        case 0: String(localized: "Only this project")
+        case 1: linked[0].name
+        default: String(localized: "\(linked.count) projects")
+        }
+        return LabeledContent("Shared With") {
+            Menu {
+                ForEach(others) { project in
+                    Toggle(project.name, isOn: linkBinding(for: project.id))
+                }
+            } label: {
+                TaskBoardChipLabel(icon: "link", title: title, isActive: !linked.isEmpty)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Show this story on other projects' boards")
+            .accessibilityIdentifier("story-form-shared-projects")
         }
     }
 
     var storyTasksSection: some View {
         Section {
-            let existing = isExistingRecord
-                ? appState.taskBoard(for: story.projectId).tasks(inStory: story.id).sorted { $0.sortIndex < $1.sortIndex }
-                : []
+            // Tasks from every project the saved story is shared with.
+            let stored = isExistingRecord ? appState.taskBoard(for: story.projectId).story(id: story.id) : nil
+            let existing = stored.map { appState.tasks(inStory: $0).sorted { $0.sortIndex < $1.sortIndex } } ?? []
+            let showsProject = stored?.isShared ?? false
             ForEach(existing) { task in
+                let taskBoard = appState.taskBoard(for: task.projectId)
                 Button {
                     childTask = .task(task)
                 } label: {
                     HStack(spacing: 8) {
-                        TaskStatusIcon(status: task.status, board: board, size: 12)
+                        TaskStatusIcon(status: task.status, board: taskBoard, size: 12)
                         Text(task.title.isEmpty ? String(localized: "Untitled task") : task.title)
                             .foregroundStyle(ClaudeTheme.textPrimary)
                             .lineLimit(1)
                         Spacer()
-                        Text(board.column(for: task.status).name)
+                        if showsProject, let project = appState.projects.first(where: { $0.id == task.projectId }) {
+                            Text(project.name)
+                                .font(.system(size: ClaudeTheme.size(11)))
+                                .foregroundStyle(ClaudeTheme.textSecondary)
+                                .lineLimit(1)
+                        }
+                        Text(taskBoard.column(for: task.status).name)
                             .font(.system(size: ClaudeTheme.size(11)))
                             .foregroundStyle(ClaudeTheme.textTertiary)
                         Image(systemName: "chevron.right")
@@ -445,13 +515,8 @@ struct TaskFormSheet: View {
                     }
                 }
 
-                Picker("Starts after", selection: $task.parentTaskId) {
-                    Text("None").tag(UUID?.none)
-                    ForEach(board.tasks.filter { board.canLinkTask(task.id, to: $0.id) }) { candidate in
-                        Text(candidate.title).tag(Optional(candidate.id))
-                    }
-                }
-                .help("Move this task to In Progress when the linked task is finished")
+                TaskParentCombo(board: board, taskID: task.id, selection: $task.parentTaskId)
+                .help("Move this task to In Progress when the linked task reaches Pending Review or Done")
             }
 
             typeMenu
@@ -626,32 +691,7 @@ struct TaskFormSheet: View {
     var agentSection: some View {
         Section {
             LabeledContent("Model") {
-                Menu {
-                    Button("Unassigned") {
-                        task.agent.provider = nil
-                        task.agent.model = nil
-                    }
-                    ForEach(appState.availableAgentModelSections(), id: \.id) { section in
-                        Section(section.title) {
-                            ForEach(section.models, id: \.key) { model in
-                                Button(model.displayName) {
-                                    task.agent.provider = model.provider
-                                    task.agent.model = model.id
-                                    appState.rememberTaskAgentModel(provider: model.provider, model: model.id)
-                                }
-                            }
-                        }
-                    }
-                } label: {
-                    TaskBoardChipLabel(
-                        icon: "sparkles",
-                        title: modelMenuTitle,
-                        isActive: task.agent.isAssigned
-                    )
-                }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .fixedSize()
+                agentModelMenu($task.agent)
             }
 
             effortPicker
@@ -726,11 +766,42 @@ struct TaskFormSheet: View {
 
     // MARK: - Small builders
 
-    var modelMenuTitle: String {
-        guard let model = task.agent.model, !model.isEmpty else {
-            return task.agent.provider?.displayNameText ?? String(localized: "Unassigned")
+    /// The model chip shared by the form's agent section and the AI flow's
+    /// review step. Picking a model remembers it for the next new task.
+    func agentModelMenu(_ agent: Binding<TaskAgentConfig>) -> some View {
+        Menu {
+            Button("Unassigned") {
+                agent.wrappedValue.provider = nil
+                agent.wrappedValue.model = nil
+            }
+            ForEach(appState.availableAgentModelSections(), id: \.id) { section in
+                Section(section.title) {
+                    ForEach(section.models, id: \.key) { model in
+                        Button(model.displayName) {
+                            agent.wrappedValue.provider = model.provider
+                            agent.wrappedValue.model = model.id
+                            appState.rememberTaskAgentModel(provider: model.provider, model: model.id)
+                        }
+                    }
+                }
+            }
+        } label: {
+            TaskBoardChipLabel(
+                icon: "sparkles",
+                title: modelMenuTitle(for: agent.wrappedValue),
+                isActive: agent.wrappedValue.isAssigned
+            )
         }
-        return appState.modelDisplayLabel(model, provider: task.agent.provider ?? .claudeCode)
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+    }
+
+    func modelMenuTitle(for agent: TaskAgentConfig) -> String {
+        guard let model = agent.model, !model.isEmpty else {
+            return agent.provider?.displayNameText ?? String(localized: "Unassigned")
+        }
+        return appState.modelDisplayLabel(model, provider: agent.provider ?? .claudeCode)
     }
 
     // MARK: - Bindings
@@ -741,6 +812,7 @@ struct TaskFormSheet: View {
             set: { newValue in
                 if isStory {
                     story.projectId = newValue
+                    story.linkedProjectIds.removeAll { $0 == newValue }
                 } else {
                     task.projectId = newValue
                     // A story belongs to one project, so a project change drops
@@ -748,6 +820,16 @@ struct TaskFormSheet: View {
                     task.storyId = nil
                     task.parentTaskId = nil
                 }
+            }
+        )
+    }
+
+    func linkBinding(for projectId: UUID) -> Binding<Bool> {
+        Binding(
+            get: { story.linkedProjectIds.contains(projectId) },
+            set: { isLinked in
+                story.linkedProjectIds.removeAll { $0 == projectId }
+                if isLinked { story.linkedProjectIds.append(projectId) }
             }
         )
     }
@@ -775,5 +857,65 @@ struct TaskFormSheet: View {
 
     var permissionBinding: Binding<PermissionMode?> {
         Binding(get: { task.agent.permissionMode }, set: { task.agent.permissionMode = $0 })
+    }
+}
+
+/// The reason a task needs attention, rendered as markdown. Shown under the
+/// Details header, and as the last message of the Run transcript. Long
+/// reasons are clipped to a few lines; hover for the full text or expand in place.
+struct TaskAttentionBanner: View {
+    let reason: String
+    @State private var isExpanded = false
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: ClaudeTheme.size(12)))
+                .foregroundStyle(ClaudeTheme.statusWarning)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Needs Attention")
+                    .font(.system(size: ClaudeTheme.size(11), weight: .semibold))
+                    .foregroundStyle(ClaudeTheme.textSecondary)
+                if isExpanded {
+                    ScrollView {
+                        reasonText
+                    }
+                    .frame(maxHeight: 180)
+                } else {
+                    reasonText
+                        .frame(maxHeight: 54, alignment: .top)
+                        .clipped()
+                        .help(reason)
+                }
+            }
+            Button {
+                isExpanded.toggle()
+            } label: {
+                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                    .font(.system(size: ClaudeTheme.size(10), weight: .semibold))
+                    .foregroundStyle(ClaudeTheme.textSecondary)
+                    .frame(width: 18, height: 18)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(isExpanded ? "Show less" : "Show full error message")
+            .accessibilityLabel(isExpanded ? "Show less" : "Show full error message")
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
+                .fill(ClaudeTheme.statusWarning.opacity(0.1))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
+                .strokeBorder(ClaudeTheme.statusWarning.opacity(0.4))
+        )
+        .accessibilityIdentifier("task-form-attention-banner")
+    }
+
+    private var reasonText: some View {
+        MarkdownContentView(text: reason, style: .rxCodeCompact)
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

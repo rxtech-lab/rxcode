@@ -7,13 +7,19 @@ import SwiftUI
 /// What the board's sheet is editing. `ProjectTask` and `ProjectStory` are both
 /// `Identifiable`, but `.sheet(item:)` needs one type, so they're unified here.
 enum TaskBoardSheet: Identifiable {
-    case task(ProjectTask)
-    case story(ProjectStory)
+    case task(ProjectTask, mode: TaskCreationMode? = nil)
+    case story(ProjectStory, mode: TaskCreationMode? = nil)
+
+    var creationMode: TaskCreationMode? {
+        switch self {
+        case .task(_, let mode), .story(_, let mode): mode
+        }
+    }
 
     var id: String {
         switch self {
-        case .task(let task): return "task-\(task.id.uuidString)"
-        case .story(let story): return "story-\(story.id.uuidString)"
+        case .task(let task, _): return "task-\(task.id.uuidString)"
+        case .story(let story, _): return "story-\(story.id.uuidString)"
         }
     }
 }
@@ -884,16 +890,16 @@ private struct TaskDeletionConfirmation: ViewModifier {
 
     private var firstTitle: String {
         switch pending {
-        case .task(let task): String(localized: "Delete task “\(task.title)”?", comment: "First task deletion confirmation")
-        case .story(let story): String(localized: "Delete story “\(story.title)”?", comment: "First story deletion confirmation")
+        case .task(let task, _): String(localized: "Delete task “\(task.title)”?", comment: "First task deletion confirmation")
+        case .story(let story, _): String(localized: "Delete story “\(story.title)”?", comment: "First story deletion confirmation")
         case nil: ""
         }
     }
 
     private var finalTitle: String {
         switch finalCandidate {
-        case .task(let task): String(localized: "Confirm deleting task “\(task.title)”", comment: "Final task deletion confirmation")
-        case .story(let story): String(localized: "Confirm deleting story “\(story.title)”", comment: "Final story deletion confirmation")
+        case .task(let task, _): String(localized: "Confirm deleting task “\(task.title)”", comment: "Final task deletion confirmation")
+        case .story(let story, _): String(localized: "Confirm deleting story “\(story.title)”", comment: "Final story deletion confirmation")
         case nil: ""
         }
     }

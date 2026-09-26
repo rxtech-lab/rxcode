@@ -69,11 +69,10 @@ extension InputBarView {
         .padding(.bottom, 6)
     }
 
-    /// Attachments are never steered — the encoding differs per provider and a
-    /// silently dropped image is worse than one that waits — so a message
-    /// carrying any gets the plain interrupt button.
+    /// Attachments steer too: they travel as path lines in the prompt text,
+    /// the same encoding a normal send uses for every provider.
     func canSteer(_ queued: QueuedMessage) -> Bool {
-        chatBridge.canSteer && queued.attachments.isEmpty
+        chatBridge.canSteer
     }
 
     /// The per-message "when should this go out?" control.

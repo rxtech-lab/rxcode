@@ -5,6 +5,21 @@ import RxCodeCore
 @MainActor
 final class AppStateTests: XCTestCase {
 
+    func testUnitTestsUseTemporaryAppSupport() {
+        XCTAssertTrue(AppSupport.isUnitTesting)
+        XCTAssertNotNil(ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"])
+        XCTAssertTrue(
+            AppSupport.bundleScopedURL.path.hasPrefix(FileManager.default.temporaryDirectory.path)
+        )
+    }
+
+    func testRxAuthRestoreUsesAnEmptyTestSession() async {
+        await appState.rxAuth.restore()
+        let token = await appState.rxAuth.accessToken()
+        XCTAssertFalse(appState.rxAuth.isAuthenticated)
+        XCTAssertNil(token)
+    }
+
     private var persistence: MockAppStatePersistence!
     private var appState: AppState!
     private var window: WindowState!

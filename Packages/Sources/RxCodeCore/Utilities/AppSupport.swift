@@ -5,10 +5,25 @@ import Foundation
 /// Any other bundle id (e.g. a dev build at `com.idealapp.RxCode.dev`) maps to
 /// `RxCode.<suffix>` so alternate builds never share state with production.
 public enum AppSupport {
+    public static var isUnitTesting: Bool {
+        let environment = ProcessInfo.processInfo.environment
+        return environment["RXCODE_UNIT_TESTING"] == "1"
+            || environment["XCTestConfigurationFilePath"] != nil
+    }
+
+    public static var isTestProcess: Bool {
+        isUnitTesting || ProcessInfo.processInfo.environment["RXCODE_UI_TESTING"] == "1"
+    }
+
     public static let bundleScopedURL: URL = {
         if let override = ProcessInfo.processInfo.environment["RXCODE_APP_SUPPORT_DIR"],
            !override.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return URL(fileURLWithPath: override, isDirectory: true)
+        }
+
+        if AppSupport.isUnitTesting {
+            return FileManager.default.temporaryDirectory
+                .appendingPathComponent("RxCodeUnitTests-\(UUID().uuidString)", isDirectory: true)
         }
 
         let root = FileManager.default

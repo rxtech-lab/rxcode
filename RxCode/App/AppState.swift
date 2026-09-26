@@ -129,65 +129,6 @@ struct SessionStreamState {
     var editingFileSnapshots: [String: String?] = [:]
 }
 
-enum SummarizationProvider: String, CaseIterable, Identifiable {
-    case selectedClient
-    case openAI
-    case appleFoundationModel
-
-    var id: String { rawValue }
-
-    var displayName: LocalizedStringResource {
-        switch self {
-        case .selectedClient: return "Thread Model"
-        case .openAI: return "OpenAI-Compatible Endpoint"
-        case .appleFoundationModel: return "Apple Foundation Model"
-        }
-    }
-
-    var displayNameText: String {
-        String(localized: displayName)
-    }
-
-    /// Returns the providers that should be offered to the user right now.
-    /// Apple Foundation Model is hidden when the device doesn't support it
-    /// (non-Apple-Silicon Mac, Apple Intelligence disabled, etc.).
-    @MainActor
-    static var availableCases: [SummarizationProvider] {
-        allCases.filter { provider in
-            switch provider {
-            case .appleFoundationModel:
-                return FoundationModelSummarizationService.isAvailable
-            case .selectedClient, .openAI:
-                return true
-            }
-        }
-    }
-}
-
-enum MemoryRetrievalMode: String, CaseIterable, Identifiable {
-    case precise
-    case balanced
-    case aggressive
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .precise: return "Precise"
-        case .balanced: return "Balanced"
-        case .aggressive: return "Aggressive"
-        }
-    }
-
-    var scoreThreshold: Float {
-        switch self {
-        case .precise: return 0.65
-        case .balanced: return 0.50
-        case .aggressive: return 0.35
-        }
-    }
-}
-
 @Observable
 @MainActor
 final class AppState {
@@ -330,6 +271,9 @@ final class AppState {
     /// spawn duplicate evaluators before the first result lands.
     var menuConditionInFlight: Set<String> = []
 
+    /// Compiles + runs agent-written Swift view filters (`TaskFilterScript`).
+    let taskFilterEvaluator = TaskFilterScriptEvaluator()
+
     /// Pending permission/question prompts keyed by hook id. This mirrors the
     /// per-window queues so mobile thread rows can show the same attention state.
     var mobilePendingRequests: [String: PermissionRequest] = [:]
@@ -425,6 +369,7 @@ final class AppState {
 
     var openAISummarizationAPIKey: String = "" {
         didSet {
+            guard !AppSupport.isTestProcess else { return }
             let trimmed = openAISummarizationAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
             do {
                 if trimmed.isEmpty {
@@ -572,6 +517,22 @@ final class AppState {
 
     var rightInspectorWidth: Double = RightInspectorPanelLayout.defaultWidth {
         didSet { workspaceDefaults.set(rightInspectorWidth, for: AppStorageKeys.rightInspectorWidth) }
+    }
+
+    // MARK: - Task Board
+
+    static let defaultTaskCardRetentionDays = 3
+
+    /// Older task cards stay on the board and can be revealed in each column.
+    var taskCardRetentionDays: Int = AppState.defaultTaskCardRetentionDays {
+        didSet {
+            let clamped = max(1, min(365, taskCardRetentionDays))
+            if clamped != taskCardRetentionDays {
+                taskCardRetentionDays = clamped
+                return
+            }
+            workspaceDefaults.set(taskCardRetentionDays, for: "taskCardRetentionDays")
+        }
     }
 
     // MARK: - Archive
@@ -1073,6 +1034,8 @@ final class AppState {
     var docs: DocsService
     /// Talks to github-pm's release API (repos, workflows, dispatch, secret).
     var release: ReleaseService
+    /// Talks to Autopilot's project board API for cloud projects.
+    var projectCloud: ProjectCloudService
     /// Passkey-derived KEK cache for the secrets feature (macOS only).
     let secretsKeyVault = SecretsKeyVault()
     /// Cached enrollment status for the secrets feature: `nil` = unknown.
@@ -1167,21 +1130,28 @@ final class AppState {
     var classifyingTaskIds: Set<UUID> = []
     /// Task checks currently running in a linked verification chat.
     var verifyingTaskIds: Set<UUID> = []
-    /// Projects with a Notion push or import in flight.
-    var notionSyncingProjectIds: Set<UUID> = []
-    /// The last Notion sync failure per project, cleared by the next success.
-    var notionSyncErrors: [UUID: String] = [:]
-    /// Whether a Notion credential (OAuth or pasted token) is in the Keychain. Refreshed when
-    /// Notion UI appears rather than at launch, to keep Keychain reads lazy.
-    var hasNotionToken = false
-    /// The workspace an OAuth connection was granted in; `nil` for a pasted
-    /// integration token.
-    var notionWorkspaceName: String?
-    /// HTTP base of the relay an OAuth connection was made through.
-    var notionRelayURL: String?
-    @ObservationIgnored let notion = NotionService()
-    /// Pending debounced auto-sync per project.
-    @ObservationIgnored var notionAutoSyncTasks: [UUID: Task<Void, Never>] = [:]
+
+    // MARK: - Cloud Projects
+
+    /// Every Autopilot project on the signed-in account, including ones not
+    /// yet opened on this Mac. See `AppState+ProjectCloud.swift`.
+    var cloudProjects: [CloudProject] = []
+    /// Whether `cloudProjects` has been fetched since sign-in.
+    var hasLoadedCloudProjects = false
+    /// Cloud projects the user hid from the Tasks overview because they
+    /// have no folder on this Mac. Persisted per workspace.
+    var hiddenCloudProjectIds: Set<String> = [] {
+        didSet { workspaceDefaults.set(hiddenCloudProjectIds.sorted(), for: "hiddenCloudProjectIds") }
+    }
+    /// Local projects whose board is exchanging changes with Autopilot.
+    var cloudSyncingProjectIds: Set<UUID> = []
+    /// Live sync step for each active cloud project.
+    var cloudSyncPhaseByProjectId: [UUID: CloudProjectSyncPhase] = [:]
+    @ObservationIgnored var cloudSyncTasks: [UUID: Task<Void, Never>] = [:]
+    @ObservationIgnored var cloudSyncDebounceTasks: [UUID: Task<Void, Never>] = [:]
+    /// Projects changed again while their sync was running, so it re-runs.
+    @ObservationIgnored var cloudSyncRerunProjectIds: Set<UUID> = []
+    @ObservationIgnored var cloudSyncPollTask: Task<Void, Never>?
 
     // MARK: - Run Profiles
 
@@ -1314,6 +1284,7 @@ final class AppState {
         self.ciUpdates = CIUpdateService(rxAuth: rxAuth)
         self.docs = DocsService(rxAuth: rxAuth)
         self.release = ReleaseService(rxAuth: rxAuth)
+        self.projectCloud = ProjectCloudService(rxAuth: rxAuth)
         loadWorkspaceSettings()
         self.runService.onTasksChanged = { [weak self] in
             Task { @MainActor [weak self] in
@@ -1323,7 +1294,7 @@ final class AppState {
 
         installSDKBackendsIfEnabled()
 
-        if startBackgroundServices {
+        if startBackgroundServices && !AppSupport.isUnitTesting {
             // Bridge ACP `session/request_permission` and Codex in-band permission
             // requests into the existing PermissionServer.
             let permission = self.permission

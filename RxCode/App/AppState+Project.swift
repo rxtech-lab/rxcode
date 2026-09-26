@@ -275,10 +275,12 @@ extension AppState {
         onboardingCompleted = true
         workspaceDefaults.set(true, for: "onboardingCompleted")
         startAutopilotWarmup()
+        Task { [weak self] in await self?.refreshCloudProjectsAndBoards() }
     }
 
     func signOutRxAuth() async {
         await rxAuth.signOut()
+        clearCloudProjectState()
         repos = []
         installations = []
         hasGitHubAppInstalled = nil

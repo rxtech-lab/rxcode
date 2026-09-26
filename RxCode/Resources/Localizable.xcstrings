@@ -414,6 +414,22 @@
         }
       }
     },
+    "%@'s tasks and stories will merge with the Autopilot project's board and sync to every device signed in to your account." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@의 작업과 스토리가 Autopilot 프로젝트 보드와 병합되어 계정에 로그인한 모든 기기에 동기화됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 的任务和故事将与 Autopilot 项目的看板合并，并同步到登录你账户的所有设备。"
+          }
+        }
+      }
+    },
     "%@%%" : {
       "localizations" : {
         "ko" : {
@@ -615,6 +631,9 @@
         }
       }
     },
+    "%lld days" : {
+
+    },
     "%lld document(s)" : {
       "localizations" : {
         "ko" : {
@@ -679,6 +698,9 @@
         }
       }
     },
+    "%lld messages queued" : {
+
+    },
     "%lld of %lld agents" : {
       "localizations" : {
         "en" : {
@@ -716,6 +738,9 @@
           }
         }
       }
+    },
+    "%lld projects" : {
+
     },
     "%lld tasks" : {
       "localizations" : {
@@ -953,6 +978,9 @@
         }
       }
     },
+    "1 day" : {
+
+    },
     "5h" : {
       "localizations" : {
         "ko" : {
@@ -1045,6 +1073,7 @@
       }
     },
     "ACP error" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -1292,6 +1321,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "从 GitHub 仓库添加技能目录"
+          }
+        }
+      }
+    },
+    "Add a story" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스토리 추가"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加故事"
           }
         }
       }
@@ -2032,6 +2077,9 @@
         }
       }
     },
+    "Agent-written Swift that narrows the tasks and stories this view shows." : {
+
+    },
     "AI" : {
 
     },
@@ -2379,6 +2427,7 @@
       }
     },
     "Any story" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -2389,6 +2438,7 @@
       }
     },
     "Any version" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -2670,6 +2720,9 @@
           }
         }
       }
+    },
+    "Assigned Mac" : {
+
     },
     "Assistant" : {
       "localizations" : {
@@ -3079,6 +3132,22 @@
         }
       }
     },
+    "Autopilot project" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autopilot 프로젝트"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autopilot 项目"
+          }
+        }
+      }
+    },
     "Autopilot watches your CI, spots failures, and opens fix pull requests." : {
       "localizations" : {
         "ko" : {
@@ -3402,6 +3471,28 @@
         }
       }
     },
+    "Browse Autopilot projects" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autopilot 프로젝트 둘러보기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "浏览 Autopilot 项目"
+          }
+        }
+      }
+    },
+    "Browse parent tasks" : {
+
+    },
+    "Browse tasks by story" : {
+
+    },
     "Browse…" : {
       "localizations" : {
         "ko" : {
@@ -3417,6 +3508,9 @@
           }
         }
       }
+    },
+    "Browser" : {
+
     },
     "build" : {
       "localizations" : {
@@ -3664,13 +3758,7 @@
         }
       }
     },
-    "Choose a Notion database for this project first." : {
-
-    },
     "Choose a published stable npm or PyPI release. RxCode will pin and verify it before saving." : {
-
-    },
-    "Choose a relay server, connect with Notion, and pick the pages and databases RxCode may access. With an internal integration token instead, share your database with the integration from its ••• → Connections menu." : {
 
     },
     "Choose an existing value" : {
@@ -3684,6 +3772,9 @@
       }
     },
     "Choose File…" : {
+
+    },
+    "Choose how this client should authenticate." : {
 
     },
     "Choose one" : {
@@ -3916,6 +4007,22 @@
         }
       }
     },
+    "Clear selection" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "선택 해제"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "清除选择"
+          }
+        }
+      }
+    },
     "Clear task" : {
       "localizations" : {
         "ko" : {
@@ -4110,6 +4217,102 @@
         }
       }
     },
+    "Cloud" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "클라우드"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "云端"
+          }
+        }
+      }
+    },
+    "Cloud project: syncs through Autopilot. Click to sync now or make it local." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "클라우드 프로젝트: Autopilot을 통해 동기화됩니다. 클릭하여 지금 동기화하거나 로컬 전용으로 전환하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "云端项目：通过 Autopilot 同步。点击可立即同步或改为仅本地。"
+          }
+        }
+      }
+    },
+    "Cloud project. Last synced %@." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "클라우드 프로젝트입니다. 마지막 동기화: %@."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "云端项目。上次同步：%@。"
+          }
+        }
+      }
+    },
+    "Cloud project. Sign in to Autopilot to sync." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "클라우드 프로젝트입니다. 동기화하려면 Autopilot에 로그인하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "云端项目。登录 Autopilot 以同步。"
+          }
+        }
+      }
+    },
+    "Cloud project. Syncs through Autopilot." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "클라우드 프로젝트입니다. Autopilot을 통해 동기화됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "云端项目。通过 Autopilot 同步。"
+          }
+        }
+      }
+    },
+    "Cloud sync failed: %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "클라우드 동기화 실패: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "云端同步失败：%@"
+          }
+        }
+      }
+    },
     "Code Review" : {
       "localizations" : {
         "ko" : {
@@ -4125,6 +4328,9 @@
           }
         }
       }
+    },
+    "Code review failed. Moved back to %@." : {
+
     },
     "Code Review for %@" : {
       "extractionState" : "stale",
@@ -4481,6 +4687,9 @@
         }
       }
     },
+    "Complete sign-in in Terminal." : {
+
+    },
     "Completion could not be verified. Review the task and continue its chat." : {
 
     },
@@ -4694,9 +4903,6 @@
         }
       }
     },
-    "Connect Notion in Settings → Tasks first." : {
-
-    },
     "Connect the mobile companion" : {
       "localizations" : {
         "ko" : {
@@ -4744,9 +4950,6 @@
           }
         }
       }
-    },
-    "Connect with Notion" : {
-
     },
     "Connect your rxlab account to enable autopilot." : {
       "localizations" : {
@@ -4801,12 +5004,6 @@
           }
         }
       }
-    },
-    "Connected to %@" : {
-
-    },
-    "Connected with an integration token" : {
-
     },
     "Connecting…" : {
       "localizations" : {
@@ -5127,6 +5324,25 @@
         }
       }
     },
+    "Couldn't reach the current response — still queued, sends when it ends." : {
+
+    },
+    "Couldn't sync %@ to the cloud: %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@을(를) 클라우드에 동기화할 수 없습니다: %2$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法将 %1$@ 同步到云端：%2$@"
+          }
+        }
+      }
+    },
     "Counts as done" : {
       "localizations" : {
         "zh-Hans" : {
@@ -5165,6 +5381,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "使用模板消息创建新聊天或继续现有聊天。"
+          }
+        }
+      }
+    },
+    "Create a project on this Mac or in the cloud" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 Mac 또는 클라우드에 프로젝트 만들기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在这台 Mac 上或云端创建项目"
           }
         }
       }
@@ -5512,6 +5744,9 @@
           }
         }
       }
+    },
+    "Credentials saved." : {
+
     },
     "Current" : {
       "localizations" : {
@@ -6255,6 +6490,9 @@
         }
       }
     },
+    "Delete view “%@”?" : {
+
+    },
     "Delete Workspace" : {
       "localizations" : {
         "ko" : {
@@ -6345,6 +6583,9 @@
 
     },
     "Describe what needs doing" : {
+
+    },
+    "Describe what this view should show. An agent writes Swift that filters its tasks and stories, and it's compiled before use." : {
 
     },
     "Describe when this menu item should appear. The default model writes the Swift condition and it's compiled before use." : {
@@ -6524,9 +6765,6 @@
           }
         }
       }
-    },
-    "Disconnect" : {
-
     },
     "Disconnected" : {
       "localizations" : {
@@ -6978,6 +7216,9 @@
           }
         }
       }
+    },
+    "e.g. Unfinished bugs tagged backend, updated this week" : {
+
     },
     "Edit" : {
       "localizations" : {
@@ -7596,6 +7837,32 @@
         }
       }
     },
+    "Every Autopilot project on your account is already linked on this Mac. Use Sync to Cloud to create a new one." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "계정의 모든 Autopilot 프로젝트가 이미 이 Mac에 연결되어 있습니다. 새 프로젝트를 만들려면 클라우드에 동기화를 사용하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你账户中的所有 Autopilot 项目都已在这台 Mac 上关联。使用“同步到云端”可创建新项目。"
+          }
+        }
+      }
+    },
+    "Every task in this story is assigned to this model." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此故事中的所有任务都将分配给该模型。"
+          }
+        }
+      }
+    },
     "exit %d" : {
       "localizations" : {
         "ko" : {
@@ -7881,6 +8148,9 @@
         }
       }
     },
+    "Fetching cloud board (step 1 of 4)" : {
+
+    },
     "Fields" : {
       "localizations" : {
         "zh-Hans" : {
@@ -7982,7 +8252,27 @@
         }
       }
     },
+    "Filter stories by status" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "상태별로 스토리 필터링"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按状态筛选故事"
+          }
+        }
+      }
+    },
+    "Filtered by Swift code" : {
+
+    },
     "Filters" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -8007,6 +8297,9 @@
           }
         }
       }
+    },
+    "Finishing sync (step 4 of 4)" : {
+
     },
     "First MCP Server" : {
       "localizations" : {
@@ -8084,6 +8377,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "隐藏流式输出气泡，只在历史记录中显示已完成的回复。"
+          }
+        }
+      }
+    },
+    "Folder" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "폴더"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件夹"
           }
         }
       }
@@ -8337,6 +8646,12 @@
         }
       }
     },
+    "Generating…" : {
+
+    },
+    "Get credentials" : {
+
+    },
     "Get it on Google Play" : {
       "localizations" : {
         "ko" : {
@@ -8585,6 +8900,38 @@
         }
       }
     },
+    "Hidden (%lld)" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "숨김 (%lld)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已隐藏 (%lld)"
+          }
+        }
+      }
+    },
+    "Hide Cloud Project" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "클라우드 프로젝트 숨기기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐藏云端项目"
+          }
+        }
+      }
+    },
     "Hide code reviews" : {
       "localizations" : {
         "ko" : {
@@ -8659,6 +9006,25 @@
         }
       }
     },
+    "Hide stories" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스토리 숨기기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐藏故事"
+          }
+        }
+      }
+    },
+    "Hide task cards after" : {
+
+    },
     "Hide tasks" : {
       "localizations" : {
         "ko" : {
@@ -8675,8 +9041,21 @@
         }
       }
     },
-    "Hide token" : {
-
+    "Hide this cloud project. Show it again from the Hidden menu." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 클라우드 프로젝트를 숨깁니다. 숨김 메뉴에서 다시 표시할 수 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐藏此云端项目。可从“已隐藏”菜单中重新显示。"
+          }
+        }
+      }
     },
     "History" : {
       "localizations" : {
@@ -8995,9 +9374,6 @@
         }
       }
     },
-    "Import from Notion" : {
-
-    },
     "Import JSON…" : {
       "localizations" : {
         "ko" : {
@@ -9030,16 +9406,6 @@
         }
       }
     },
-    "Imported %lld tasks and %lld stories; %lld already on the board." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Imported %1$lld tasks and %2$lld stories; %3$lld already on the board."
-          }
-        }
-      }
-    },
     "In progress" : {
       "localizations" : {
         "ko" : {
@@ -9052,6 +9418,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "进行中"
+          }
+        }
+      }
+    },
+    "In the cloud. Open it in a folder on this Mac to see and run its tasks." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "클라우드에 있습니다. 이 Mac의 폴더에서 열면 작업을 보고 실행할 수 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "位于云端。在这台 Mac 上的文件夹中打开它，即可查看并运行其任务。"
           }
         }
       }
@@ -9168,6 +9550,9 @@
         }
       }
     },
+    "Insert Example" : {
+
+    },
     "Install" : {
       "localizations" : {
         "en" : {
@@ -9224,9 +9609,6 @@
           }
         }
       }
-    },
-    "Install ACP Client" : {
-
     },
     "Install additional ACP-compatible agents — RxCode downloads the right binary for macOS and probes the model list." : {
       "localizations" : {
@@ -9372,9 +9754,6 @@
         }
       }
     },
-    "Install Version" : {
-
-    },
     "Install Version…" : {
 
     },
@@ -9416,6 +9795,16 @@
         }
       }
     },
+    "Installed %@ %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Installed %1$@ %2$@."
+          }
+        }
+      }
+    },
     "Installed %@ on %@" : {
       "localizations" : {
         "ko" : {
@@ -9447,6 +9836,9 @@
           }
         }
       }
+    },
+    "Installing %@…" : {
+
     },
     "Installing..." : {
       "localizations" : {
@@ -9495,9 +9887,6 @@
         }
       }
     },
-    "Internal integration token" : {
-
-    },
     "It was moved here by hand, or its thread was deleted." : {
       "localizations" : {
         "zh-Hans" : {
@@ -9523,6 +9912,9 @@
           }
         }
       }
+    },
+    "Its layout and filters will be removed. Tasks are not affected." : {
+
     },
     "Jump to Project" : {
       "localizations" : {
@@ -9650,7 +10042,10 @@
         }
       }
     },
-    "Last synced" : {
+    "Laptop" : {
+
+    },
+    "Last signed in with %@" : {
 
     },
     "Last used" : {
@@ -9751,10 +10146,68 @@
       }
     },
     "Link" : {
-
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연결"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关联"
+          }
+        }
+      }
     },
-    "Link this project to a Notion database to sync task status or import pages" : {
-
+    "Link to Autopilot Project" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autopilot 프로젝트에 연결"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关联到 Autopilot 项目"
+          }
+        }
+      }
+    },
+    "Link to Autopilot Project…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autopilot 프로젝트에 연결…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关联到 Autopilot 项目…"
+          }
+        }
+      }
+    },
+    "Link to Project" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트에 연결"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关联到项目"
+          }
+        }
+      }
     },
     "Linked task: %@" : {
       "localizations" : {
@@ -9829,6 +10282,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "加载更多"
+          }
+        }
+      }
+    },
+    "Loading Autopilot projects…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autopilot 프로젝트 불러오는 중…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在加载 Autopilot 项目…"
           }
         }
       }
@@ -9931,6 +10400,9 @@
         }
       }
     },
+    "Loading sign-in methods…" : {
+
+    },
     "Loading..." : {
       "localizations" : {
         "en" : {
@@ -9992,6 +10464,38 @@
         }
       }
     },
+    "Local project: stays on this Mac. Click to sync it to the cloud or link an Autopilot project." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "로컬 프로젝트: 이 Mac에만 저장됩니다. 클릭하여 클라우드에 동기화하거나 Autopilot 프로젝트에 연결하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本地项目：仅保存在这台 Mac 上。点击可同步到云端或关联 Autopilot 项目。"
+          }
+        }
+      }
+    },
+    "Location" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "위치"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "位置"
+          }
+        }
+      }
+    },
     "Long text (200+ characters)" : {
       "localizations" : {
         "en" : {
@@ -10042,6 +10546,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Make"
+          }
+        }
+      }
+    },
+    "Make Local Only" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "로컬 전용으로 전환"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "改为仅本地"
           }
         }
       }
@@ -10109,9 +10629,6 @@
           }
         }
       }
-    },
-    "Manage ACP Version" : {
-
     },
     "Manage agents that speak the Agent Client Protocol. Detected from agentclientprotocol.com." : {
       "localizations" : {
@@ -10451,9 +10968,6 @@
           }
         }
       }
-    },
-    "Mapped fields" : {
-
     },
     "Markdown content" : {
       "localizations" : {
@@ -10888,7 +11402,7 @@
         }
       }
     },
-    "Move this task to In Progress when the linked task is finished" : {
+    "Move this task to In Progress when the linked task reaches Pending Review or Done" : {
 
     },
     "Move To" : {
@@ -11049,6 +11563,38 @@
         }
       }
     },
+    "New cloud project…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 클라우드 프로젝트…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建云端项目…"
+          }
+        }
+      }
+    },
+    "New Cloud Project…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 클라우드 프로젝트…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建云端项目…"
+          }
+        }
+      }
+    },
     "New Environment" : {
       "localizations" : {
         "ko" : {
@@ -11110,6 +11656,54 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "新建菜单项"
+          }
+        }
+      }
+    },
+    "New Project" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 프로젝트"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建项目"
+          }
+        }
+      }
+    },
+    "New project…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 프로젝트…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建项目…"
+          }
+        }
+      }
+    },
+    "New Project…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 프로젝트…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建项目…"
           }
         }
       }
@@ -11584,9 +12178,6 @@
         }
       }
     },
-    "No databases are shared with RxCode yet. Reconnect and select a database, or share one from its ••• → Connections menu." : {
-
-    },
     "No destinations found" : {
       "localizations" : {
         "ko" : {
@@ -11732,6 +12323,22 @@
         }
       }
     },
+    "No folder selected" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "선택한 폴더 없음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未选择文件夹"
+          }
+        }
+      }
+    },
     "No hooks yet" : {
       "localizations" : {
         "ko" : {
@@ -11817,6 +12424,9 @@
           }
         }
       }
+    },
+    "No milestones on this project yet." : {
+
     },
     "No milestones yet. Set one on a story or task to reuse it here." : {
       "localizations" : {
@@ -12208,6 +12818,22 @@
         }
       }
     },
+    "No stories match the status filter" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "상태 필터와 일치하는 스토리가 없습니다"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有符合状态筛选的故事"
+          }
+        }
+      }
+    },
     "No stories match." : {
       "localizations" : {
         "zh-Hans" : {
@@ -12218,6 +12844,9 @@
         }
       }
     },
+    "No stories on this project yet." : {
+
+    },
     "No stories yet." : {
       "localizations" : {
         "zh-Hans" : {
@@ -12227,6 +12856,9 @@
           }
         }
       }
+    },
+    "No Story" : {
+
     },
     "No summary yet" : {
       "localizations" : {
@@ -12243,6 +12875,9 @@
           }
         }
       }
+    },
+    "No Swift filter" : {
+
     },
     "No tags on this project yet." : {
       "localizations" : {
@@ -12341,6 +12976,25 @@
           }
         }
       }
+    },
+    "No unlinked Autopilot projects" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연결되지 않은 Autopilot 프로젝트 없음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有未关联的 Autopilot 项目"
+          }
+        }
+      }
+    },
+    "No versions on this project yet." : {
+
     },
     "No versions yet. Set one on a story or task to reuse it here." : {
       "localizations" : {
@@ -12582,30 +13236,6 @@
         }
       }
     },
-    "Notion" : {
-
-    },
-    "Notion Account" : {
-
-    },
-    "Notion database" : {
-
-    },
-    "Notion didn't return the new page's id." : {
-
-    },
-    "Notion rejected the saved sign-in. Connect Notion again." : {
-
-    },
-    "Notion returned an unexpected database response." : {
-
-    },
-    "Notion Settings…" : {
-
-    },
-    "Notion sync failed: %@" : {
-
-    },
     "npx" : {
       "localizations" : {
         "ko" : {
@@ -12702,9 +13332,6 @@
         }
       }
     },
-    "Only databases shared with RxCode are listed. Properties are matched by name: Status, Priority, Tags, Version, Milestone, Type, Story and Description. Sync adds any that are missing." : {
-
-    },
     "Only send when a condition is met" : {
       "localizations" : {
         "ko" : {
@@ -12720,6 +13347,9 @@
           }
         }
       }
+    },
+    "Only this project" : {
+
     },
     "Open" : {
       "localizations" : {
@@ -12840,6 +13470,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在 GitHub 上打开"
+          }
+        }
+      }
+    },
+    "Open on This Mac…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 Mac에서 열기…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在这台 Mac 上打开…"
           }
         }
       }
@@ -13817,6 +14463,9 @@
         }
       }
     },
+    "Previously assigned Mac" : {
+
+    },
     "Priority" : {
       "localizations" : {
         "zh-Hans" : {
@@ -13874,6 +14523,9 @@
           }
         }
       }
+    },
+    "Project Dashboard" : {
+
     },
     "Project Hooks" : {
       "localizations" : {
@@ -14135,6 +14787,12 @@
         }
       }
     },
+    "Queue a follow-up…" : {
+
+    },
+    "Queue this follow-up until the current response ends" : {
+
+    },
     "Quick Add" : {
       "localizations" : {
         "zh-Hans" : {
@@ -14205,6 +14863,15 @@
       }
     },
     "Re-sign In" : {
+
+    },
+    "Re-sign In to %@" : {
+
+    },
+    "Re-sign In…" : {
+
+    },
+    "Ready for review: %@" : {
 
     },
     "Ready to start." : {
@@ -14309,6 +14976,22 @@
         }
       }
     },
+    "Refresh Cloud Projects" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "클라우드 프로젝트 새로 고침"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "刷新云端项目"
+          }
+        }
+      }
+    },
     "Refresh installation status" : {
       "localizations" : {
         "ko" : {
@@ -14404,9 +15087,6 @@
           }
         }
       }
-    },
-    "Registry release: %@" : {
-
     },
     "Reindex all threads" : {
       "localizations" : {
@@ -14504,9 +15184,6 @@
         }
       }
     },
-    "Relay servers from Settings → Mobile and RxLab's hosted relays. The relay must have Notion sign-in configured." : {
-
-    },
     "Relay:" : {
       "localizations" : {
         "ko" : {
@@ -14603,8 +15280,21 @@
         }
       }
     },
-    "Reload databases shared with RxCode" : {
-
+    "Reload your Autopilot projects" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autopilot 프로젝트 다시 불러오기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新加载 Autopilot 项目"
+          }
+        }
+      }
     },
     "Remote" : {
       "localizations" : {
@@ -14717,6 +15407,9 @@
           }
         }
       }
+    },
+    "Remove queued message" : {
+
     },
     "Remove Release Repository" : {
       "localizations" : {
@@ -15808,6 +16501,9 @@
         }
       }
     },
+    "Saved to this client's launch environment." : {
+
+    },
     "Saving and probing…" : {
       "localizations" : {
         "ko" : {
@@ -15964,6 +16660,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "搜索智能体"
+          }
+        }
+      }
+    },
+    "Search Autopilot projects" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autopilot 프로젝트 검색"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索 Autopilot 项目"
           }
         }
       }
@@ -16214,6 +16926,9 @@
           }
         }
       }
+    },
+    "Search tasks" : {
+
     },
     "Search Threads (⌘K)" : {
       "extractionState" : "stale",
@@ -16951,6 +17666,12 @@
         }
       }
     },
+    "Shared With" : {
+
+    },
+    "Shared with %@" : {
+
+    },
     "Shortcuts" : {
       "localizations" : {
         "en" : {
@@ -16989,6 +17710,16 @@
         }
       }
     },
+    "Show %lld more older tasks (%lld hidden)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Show %1$lld more older tasks (%2$lld hidden)"
+          }
+        }
+      }
+    },
     "Show active chats" : {
       "localizations" : {
         "ko" : {
@@ -17001,6 +17732,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "显示活跃聊天"
+          }
+        }
+      }
+    },
+    "Show All" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모두 표시"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部显示"
           }
         }
       }
@@ -17071,6 +17818,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "显示已归档聊天"
+          }
+        }
+      }
+    },
+    "Show Cloud Project" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "클라우드 프로젝트 표시"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示云端项目"
+          }
+        }
+      }
+    },
+    "Show cloud projects you hid from this page" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 페이지에서 숨긴 클라우드 프로젝트 표시"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示你在此页面隐藏的云端项目"
           }
         }
       }
@@ -17250,6 +18029,38 @@
         }
       }
     },
+    "Show stories" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스토리 표시"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示故事"
+          }
+        }
+      }
+    },
+    "Show stories by status" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "상태별로 스토리 표시"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按状态显示故事"
+          }
+        }
+      }
+    },
     "Show story" : {
       "localizations" : {
         "zh-Hans" : {
@@ -17291,6 +18102,9 @@
           }
         }
       }
+    },
+    "Show this story on other projects' boards" : {
+
     },
     "Show thread summary" : {
       "localizations" : {
@@ -17384,6 +18198,41 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "登录"
+          }
+        }
+      }
+    },
+    "Sign In to %@" : {
+
+    },
+    "Sign in to Autopilot in Settings to create cloud projects." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "클라우드 프로젝트를 만들려면 설정에서 Autopilot에 로그인하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请在设置中登录 Autopilot 以创建云端项目。"
+          }
+        }
+      }
+    },
+    "Sign in to Autopilot in Settings to sync projects to the cloud." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트를 클라우드에 동기화하려면 설정에서 Autopilot에 로그인하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请在设置中登录 Autopilot，以将项目同步到云端。"
           }
         }
       }
@@ -17540,6 +18389,9 @@
         }
       }
     },
+    "Sign In…" : {
+
+    },
     "Sign Out" : {
       "localizations" : {
         "ko" : {
@@ -17573,6 +18425,12 @@
       }
     },
     "Signed In" : {
+
+    },
+    "Signed in to %@." : {
+
+    },
+    "Signing In…" : {
 
     },
     "sk-..." : {
@@ -17729,6 +18587,9 @@
     "Starts after" : {
 
     },
+    "Starts after %@, which has finished" : {
+
+    },
     "Status" : {
       "localizations" : {
         "zh-Hans" : {
@@ -17748,6 +18609,12 @@
           }
         }
       }
+    },
+    "Steer into current response" : {
+
+    },
+    "Steer now" : {
+
     },
     "Stop '%@'" : {
       "localizations" : {
@@ -17858,6 +18725,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "使用你的通行密钥对 .env 文件进行端到端加密存储。密钥在本设备上加密，绝不会以未加密形式离开本设备。"
+          }
+        }
+      }
+    },
+    "Stories" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스토리"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "故事"
           }
         }
       }
@@ -18012,6 +18895,12 @@
         }
       }
     },
+    "Swift filter" : {
+
+    },
+    "Swift Filter" : {
+
+    },
     "Switch between Claude Code, Codex, and installed ACP agents without changing the global default." : {
       "localizations" : {
         "ko" : {
@@ -18092,48 +18981,58 @@
         }
       }
     },
-    "Sync" : {
-
-    },
-    "Sync a project's task status to Notion, or import a Notion database into a project" : {
-
-    },
-    "Sync Automatically" : {
-
-    },
-    "Sync status automatically" : {
-
-    },
-    "Sync task status to “%@”" : {
-
-    },
-    "Sync to Notion" : {
-
-    },
-    "Sync writes every task as a page with all its fields, adding missing properties to the database, and moves pages of deleted tasks to the Notion trash. A column without a same-named status option uses the status group it falls in: Done → Complete, agent columns and later → In progress, the rest → To-do. Import adds pages not yet on the board." : {
-
-    },
-    "Synced to “%@” %@" : {
+    "Sync an existing project on this Mac with this cloud project" : {
       "localizations" : {
-        "en" : {
+        "ko" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Synced to “%1$@” %2$@"
+            "state" : "translated",
+            "value" : "이 Mac의 기존 프로젝트를 이 클라우드 프로젝트와 동기화"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将这台 Mac 上的现有项目与此云端项目同步"
           }
         }
       }
     },
-    "Synced: %lld created, %lld updated, %lld archived." : {
+    "Sync Now" : {
       "localizations" : {
-        "en" : {
+        "ko" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Synced: %1$lld created, %2$lld updated, %3$lld archived."
+            "state" : "translated",
+            "value" : "지금 동기화"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "立即同步"
           }
         }
       }
     },
-    "Syncing…" : {
+    "Sync to Cloud" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "클라우드에 동기화"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同步到云端"
+          }
+        }
+      }
+    },
+    "Syncing stories (step 2 of 4)" : {
+
+    },
+    "Syncing tasks (step 3 of 4)" : {
 
     },
     "Tag" : {
@@ -18209,6 +19108,9 @@
         }
       }
     },
+    "Task cards with no updates for this long are hidden from board columns. Reveal older cards 10 at a time in each column." : {
+
+    },
     "Task details" : {
       "localizations" : {
         "zh-Hans" : {
@@ -18220,6 +19122,9 @@
       }
     },
     "Task not found on desktop." : {
+
+    },
+    "Task rejected: %@" : {
 
     },
     "Task title" : {
@@ -18251,6 +19156,44 @@
         }
       }
     },
+    "Tasks and stories stay on this Mac." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "작업과 스토리는 이 Mac에만 저장됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "任务和故事仅保存在这台 Mac 上。"
+          }
+        }
+      }
+    },
+    "Tasks and stories sync through Autopilot to every device signed in to your account." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "작업과 스토리가 Autopilot을 통해 계정에 로그인한 모든 기기에 동기화됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "任务和故事会通过 Autopilot 同步到登录你账户的所有设备。"
+          }
+        }
+      }
+    },
+    "Tasks in any selected milestone." : {
+
+    },
+    "Tasks in any selected story." : {
+
+    },
     "Tasks must carry every selected tag." : {
       "localizations" : {
         "zh-Hans" : {
@@ -18260,6 +19203,9 @@
           }
         }
       }
+    },
+    "Tasks targeting any selected version." : {
+
     },
     "Templates of GitHub merge settings and an optional branch ruleset. Your default template is applied automatically to new repositories." : {
       "localizations" : {
@@ -18276,6 +19222,9 @@
           }
         }
       }
+    },
+    "Terminal" : {
+
     },
     "Test connection" : {
       "localizations" : {
@@ -18308,6 +19257,9 @@
           }
         }
       }
+    },
+    "The agent didn't return any code. Try rephrasing the filter." : {
+
     },
     "The agent is working on this task" : {
       "localizations" : {
@@ -18349,6 +19301,9 @@
           }
         }
       }
+    },
+    "The agent is writing the filter…" : {
+
     },
     "The agent run stopped before the task was completed." : {
 
@@ -18450,11 +19405,21 @@
         }
       }
     },
-    "The Notion database has no title property." : {
-
-    },
-    "The relay “%@” doesn't offer Notion sign-in. Choose another relay or use an integration token." : {
-
+    "The project was added on this Mac, but it couldn't be synced to the cloud: %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로젝트가 이 Mac에 추가되었지만 클라우드에 동기화할 수 없습니다: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目已添加到这台 Mac，但无法同步到云端：%@"
+          }
+        }
+      }
     },
     "The release CI authenticates to GitHub with a RELEASE_TOKEN secret. Paste a GitHub token (a PAT with contents:write) and RxCode installs it as the repository's GitHub Actions secret for you — no terminal needed." : {
       "localizations" : {
@@ -18529,6 +19494,9 @@
           }
         }
       }
+    },
+    "The task moved to %@." : {
+
     },
     "The type is cleared from every story and task that uses it." : {
       "localizations" : {
@@ -18646,11 +19614,27 @@
         }
       }
     },
+    "This client doesn't advertise any sign-in methods. It may use its own saved credentials or environment variables set in Edit." : {
+
+    },
     "This client has a binary distribution only. The registry supplies a download for its current release." : {
 
     },
-    "This database has no title property." : {
-
+    "This cloud project was deleted or you no longer have access to it. Choose Make Local Only to keep its tasks on this Mac." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 클라우드 프로젝트가 삭제되었거나 더 이상 접근 권한이 없습니다. 작업을 이 Mac에 유지하려면 로컬 전용으로 전환을 선택하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此云端项目已被删除，或你已无权访问。选择“改为仅本地”可将其任务保留在这台 Mac 上。"
+          }
+        }
+      }
     },
     "This form couldn't be rendered. Edit the raw template JSON instead (name, enabled, mergeSettings)." : {
       "localizations" : {
@@ -18670,6 +19654,22 @@
     },
     "This is the final confirmation." : {
 
+    },
+    "This Mac" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 Mac"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 Mac"
+          }
+        }
+      }
     },
     "This memory will be removed from future agent context." : {
       "localizations" : {
@@ -19232,6 +20232,9 @@
         }
       }
     },
+    "Untitled Story" : {
+
+    },
     "Untitled task" : {
       "localizations" : {
         "zh-Hans" : {
@@ -19258,7 +20261,10 @@
         }
       }
     },
-    "Update to %@" : {
+    "Update available: %@" : {
+
+    },
+    "Update to %@…" : {
 
     },
     "Updated %@" : {
@@ -19363,9 +20369,6 @@
         }
       }
     },
-    "Use a token instead" : {
-
-    },
     "Use default Makefile lookup" : {
       "localizations" : {
         "ko" : {
@@ -19382,6 +20385,9 @@
         }
       }
     },
+    "Use Filter" : {
+
+    },
     "Use hosted relay" : {
       "localizations" : {
         "ko" : {
@@ -19397,6 +20403,9 @@
           }
         }
       }
+    },
+    "Use Shared With to add this story to other projects" : {
+
     },
     "Use the registry to add Agent Client Protocol tools, then pick them from the thread model menu." : {
       "localizations" : {
@@ -19527,9 +20536,6 @@
           }
         }
       }
-    },
-    "Used to sync project task status to a Notion database and import its pages as tasks. Connect with Notion signs in through the chosen relay server — one from Settings → Mobile or a hosted relay — which must have Notion sign-in configured. The token is stored in the Keychain." : {
-
     },
     "User Guide" : {
       "localizations" : {
@@ -19719,9 +20725,6 @@
     "Version %@ (not pinned)" : {
 
     },
-    "Version…" : {
-
-    },
     "Versions" : {
       "localizations" : {
         "zh-Hans" : {
@@ -19731,9 +20734,6 @@
           }
         }
       }
-    },
-    "Via %@" : {
-
     },
     "Via:" : {
       "localizations" : {
@@ -19880,6 +20880,9 @@
           }
         }
       }
+    },
+    "Waits for %@ to finish before starting" : {
+
     },
     "Watch repositories, set scan schedules, and review scan history and pull requests." : {
       "localizations" : {
@@ -20226,6 +21229,9 @@
           }
         }
       }
+    },
+    "Write Filter…" : {
+
     },
     "Write the title and properties of quick-added tasks" : {
       "localizations" : {

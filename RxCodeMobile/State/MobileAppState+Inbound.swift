@@ -17,10 +17,21 @@ extension MobileAppState {
             let previous = connectionState
             connectionState = state
             triggerConnectionFeedback(from: previous, to: state)
-            if case .connected = state, isPaired {
-                Task { await self.requestSnapshot(reason: "relay_connected") }
+            switch state {
+            case .connected:
+                if isPaired { Task { await self.requestSnapshot(reason: "relay_connected") } }
+            case .connecting:
+                // Transient: keep showing the last snapshot while the socket
+                // comes back; a failed attempt reports `.reconnecting`.
+                break
+            case .disconnected where relaySuspendedForBackground:
+                // We stopped the relay ourselves on backgrounding.
+                break
+            case .disconnected, .reconnecting:
+                desktopTaskUnavailable = true
             }
         case .deliveryFailed(let toHex):
+            if toHex == pairedDesktopPubkey { desktopTaskUnavailable = true }
             logger.warning("[Relay] delivery failed to desktopKey=\(String(toHex.prefix(12)), privacy: .public)")
         case .inbound(let inbound):
             handleInbound(inbound)
@@ -158,6 +169,7 @@ extension MobileAppState {
                     activeSessionID = active
                 }
             }
+            desktopTaskUnavailable = false
             hasReceivedInitialSnapshot = true
             refreshWidgetData()
         case .moreMessages(let page):

@@ -33,7 +33,8 @@ enum UITestRunner {
     /// match `idiom`.
     static func launch(
         _ idiom: Idiom,
-        on testCase: XCTestCase
+        on testCase: XCTestCase,
+        additionalLaunchArguments: [String] = []
     ) throws -> MockAppSession {
         testCase.continueAfterFailure = false
 
@@ -61,6 +62,7 @@ enum UITestRunner {
             "-uitest-relay-url", server.relayURL,
             "-uitest-desktop-pubkey", server.desktopPublicKeyHex,
         ]
+        app.launchArguments += additionalLaunchArguments
         app.launch()
 
         // The iPad uses a three-column split view; landscape keeps the sidebar,

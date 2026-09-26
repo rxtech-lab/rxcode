@@ -24,4 +24,4 @@ Pair a mobile device from **Settings -> Mobile**. Paired devices can follow acti
 
 ## MCP and ACP
 
-MCP settings manage Model Context Protocol servers. ACP settings manage installed ACP clients and their availability.
+MCP settings manage Model Context Protocol servers. ACP settings manage installed ACP clients and their availability. Use **Manage** on an installed client to install a specific version, update to the latest registry release, or **Sign In** with one of the methods the client advertises (browser sign-in, an API key saved to the client's environment, or an interactive Terminal login).

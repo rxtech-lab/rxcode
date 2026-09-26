@@ -4,8 +4,8 @@ import SwiftUI
 
 /// A project's task board: tasks grouped by column, and stories with their
 /// rolled-up progress. On iPhone the columns are list sections; on iPad they
-/// sit side by side as a Kanban board, like the Mac. Everything is read from
-/// and written to the desktop, which owns the board and runs the agents.
+/// sit side by side as a Kanban board, like the Mac. The same board UI supports
+/// desktop-backed and direct cloud projects. Agent runs require a connected Mac.
 struct MobileTaskBoardView: View {
     enum Mode: String, CaseIterable, Identifiable {
         case tasks
@@ -44,7 +44,7 @@ struct MobileTaskBoardView: View {
     @State private var collapsedColumns: Set<TaskStatus> = []
 
     private var project: Project? {
-        state.projects.first { $0.id == projectID }
+        state.taskProjects.first { $0.id == projectID }
     }
 
     private var board: TaskBoard {
@@ -69,11 +69,11 @@ struct MobileTaskBoardView: View {
     }
 
     private var hasLoaded: Bool {
-        state.taskBoardsByProject[projectID] != nil
+        state.taskSnapshots[projectID] != nil
     }
 
     /// iPad: columns side by side, with the view picker in the toolbar.
-    private var isRegularWidth: Bool { sizeClass == .regular }
+    private var isRegularWidth: Bool { UIDevice.current.userInterfaceIdiom == .pad || sizeClass == .regular }
 
     var body: some View {
         boardContent
@@ -176,11 +176,15 @@ struct MobileTaskBoardView: View {
             .scrollBounceBehavior(.basedOnSize, axes: .vertical)
         }
         .background(Color(.systemGroupedBackground))
+        .accessibilityIdentifier("tasks-ipad-kanban")
     }
 
     private func kanbanColumn(_ column: TaskColumn, height: CGFloat) -> some View {
         let tasks = board.tasks(in: column.id).filter { currentView.matches($0) && $0.matches(keyword: searchText) }
-        return VStack(alignment: .leading, spacing: 0) {
+        return TaskKanbanColumnContent(
+            headerSpacing: 0,
+            cardInsets: EdgeInsets(top: 0, leading: 8, bottom: 8, trailing: 8)
+        ) {
             HStack(spacing: 6) {
                 Image(systemName: column.systemImage)
                     .foregroundStyle(column.tint)
@@ -196,35 +200,30 @@ struct MobileTaskBoardView: View {
             .padding(.vertical, 10)
             .accessibilityIdentifier("task-column-\(column.id.rawValue)")
 
-            ScrollView {
-                LazyVStack(spacing: 8) {
-                    ForEach(tasks) { task in
-                        NavigationLink(value: MobileTaskRoute.task(projectID: projectID, taskID: task.id)) {
-                            MobileTaskRow(task: task, board: board)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(12)
-                                .background(
-                                    Color(.secondarySystemGroupedBackground),
-                                    in: RoundedRectangle(cornerRadius: 10)
-                                )
-                                .contentShape(RoundedRectangle(cornerRadius: 10))
-                        }
-                        .buttonStyle(.plain)
-                        .modifier(MobileTaskActions(
-                            task: task,
-                            board: board,
-                            onEdit: { editingTask = task },
-                            onOpenChat: openChat,
-                            onError: { errorMessage = $0 }
-                        ))
-                        .modifier(MobileTaskDraggable(task: task, isEnabled: !board.isStatusLocked(task)))
-                        .dropDestination(for: String.self) { items, _ in
-                            drop(items, before: task, in: column.id)
-                        }
-                    }
+        } cards: {
+            ForEach(tasks) { task in
+                NavigationLink(value: MobileTaskRoute.task(projectID: projectID, taskID: task.id)) {
+                    MobileTaskRow(task: task, board: board)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(12)
+                        .background(
+                            Color(.secondarySystemGroupedBackground),
+                            in: RoundedRectangle(cornerRadius: 10)
+                        )
+                        .contentShape(RoundedRectangle(cornerRadius: 10))
                 }
-                .padding(.horizontal, 8)
-                .padding(.bottom, 8)
+                .buttonStyle(.plain)
+                .modifier(MobileTaskActions(
+                    task: task,
+                    board: board,
+                    onEdit: { editingTask = task },
+                    onOpenChat: openChat,
+                    onError: { errorMessage = $0 }
+                ))
+                .modifier(MobileTaskDraggable(task: task, isEnabled: !board.isStatusLocked(task)))
+                .dropDestination(for: String.self) { items, _ in
+                    drop(items, before: task, in: column.id)
+                }
             }
         }
         .frame(width: 300, height: height, alignment: .top)
@@ -362,7 +361,7 @@ struct MobileTaskBoardView: View {
                     ContentUnavailableView(
                         "No Tasks",
                         systemImage: "checklist",
-                        description: Text("Add a task and your Mac will run it with its assigned agent.")
+                        description: Text("Add a task to start planning your project.")
                     )
                 } else {
                     ContentUnavailableView(
@@ -435,10 +434,12 @@ struct MobileTaskBoardView: View {
                 } label: {
                     Label("New Task", systemImage: "square.and.pencil")
                 }
+                if !state.usesCloudTasks {
                 Button {
                     showingQuickAdd = true
                 } label: {
                     Label("Quick Add Task", systemImage: "sparkles")
+                }
                 }
                 Button {
                     editingStory = ProjectStory(projectId: projectID, title: "")
@@ -456,10 +457,13 @@ struct MobileTaskBoardView: View {
     // MARK: - Actions
 
     private func newTaskDraft() -> ProjectTask {
-        var draft = state.newTaskDraft(projectID: projectID, story: board.story(id: currentView.storyId))
-        draft.version = currentView.version ?? draft.version
-        draft.tags = currentView.tags
-        draft.status = currentView.visibleColumns(in: board.effectiveColumns).first?.id ?? board.firstColumn.id
+        let view = currentView
+        let storyId = view.storyIds.count == 1 ? view.storyIds.first : nil
+        var draft = state.newTaskDraft(projectID: projectID, story: board.story(id: storyId))
+        if view.versions.count == 1 { draft.version = view.versions.first }
+        if view.milestones.count == 1 { draft.milestone = view.milestones.first }
+        draft.tags = view.tags
+        draft.status = view.visibleColumns(in: board.effectiveColumns).first?.id ?? board.firstColumn.id
         return draft
     }
 
@@ -469,7 +473,7 @@ struct MobileTaskBoardView: View {
         do {
             try await state.loadTaskBoard(projectID: projectID)
         } catch {
-            errorMessage = error.localizedDescription
+            if !Task.isCancelled { errorMessage = error.localizedDescription }
         }
     }
 
@@ -542,25 +546,31 @@ private struct MobileTaskViewForm: View {
                 }
             }
 
-            Section("Filters") {
-                Picker("Story", selection: $draft.storyId) {
-                    Text("Any story").tag(UUID?.none)
-                    ForEach(board.stories) { story in
-                        Text(story.title).tag(UUID?.some(story.id))
-                    }
-                }
-                Picker("Version", selection: versionBinding) {
-                    Text("Any version").tag("")
-                    ForEach(board.allVersions, id: \.self) { version in
-                        Text(version).tag(version)
-                    }
-                }
-            }
-
-            Section("Tags") {
-                ForEach(board.allTags, id: \.self) { tag in
-                    Toggle(tag, isOn: tagBinding(tag))
-                }
+            Section {
+                filterLink(
+                    "Stories",
+                    options: board.stories.map { ($0.id, $0.title) },
+                    selection: $draft.storyIds
+                )
+                filterLink(
+                    "Versions",
+                    options: listed(board.allVersions, draft.versions),
+                    selection: $draft.versions
+                )
+                filterLink(
+                    "Milestones",
+                    options: listed(board.allMilestones, draft.milestones),
+                    selection: $draft.milestones
+                )
+                filterLink(
+                    "Tags",
+                    options: listed(board.allTags, draft.tags),
+                    selection: $draft.tags
+                )
+            } header: {
+                Text("Filters")
+            } footer: {
+                Text("Items match any selected story, version and milestone, and must carry every selected tag.")
             }
         }
         .navigationTitle("View")
@@ -589,29 +599,39 @@ private struct MobileTaskViewForm: View {
         )
     }
 
-    private func tagBinding(_ tag: String) -> Binding<Bool> {
-        Binding(
-            get: { draft.tags.contains(tag) },
-            set: { isOn in
-                if isOn {
-                    if !draft.tags.contains(tag) { draft.tags.append(tag) }
-                } else {
-                    draft.tags.removeAll { $0 == tag }
-                }
+    private func filterLink<Value: Hashable>(
+        _ title: LocalizedStringKey,
+        options: [(Value, String)],
+        selection: Binding<[Value]>
+    ) -> some View {
+        NavigationLink {
+            MobileFilterValuesList(title: title, options: options, selection: selection)
+        } label: {
+            LabeledContent(title) {
+                Text(summary(of: selection.wrappedValue, in: options))
             }
-        )
+        }
     }
 
-    private var versionBinding: Binding<String> {
-        Binding(
-            get: { draft.version ?? "" },
-            set: { draft.version = $0.isEmpty ? nil : $0 }
-        )
+    private func summary<Value: Hashable>(of selected: [Value], in options: [(Value, String)]) -> String {
+        switch selected.count {
+        case 0: return String(localized: "Any")
+        case 1: return options.first { $0.0 == selected[0] }?.1 ?? String(localized: "1 selected")
+        default: return String(localized: "\(selected.count) selected")
+        }
+    }
+
+    /// The board's values plus any selected value no item uses anymore, so a
+    /// stale selection stays visible and can be switched off.
+    private func listed(_ values: [String], _ selected: [String]) -> [(String, String)] {
+        (values + selected.filter { !values.contains($0) }).map { ($0, $0) }
     }
 
     private func save() {
         var saved = draft
         saved.name = saved.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Deleted stories can't be shown or unselected, so they don't persist.
+        saved.storyIds.removeAll { board.story(id: $0) == nil }
         guard !saved.name.isEmpty else { return }
         isSaving = true
         Task {
@@ -694,7 +714,7 @@ struct MobileTaskActions: ViewModifier {
     private var isLocked: Bool { board.isStatusLocked(task) }
 
     private var canRun: Bool {
-        task.agent.isAssigned && !board.column(for: task.status).triggersChat && board.firstChatColumn != nil
+        !state.usesCloudTasks && task.agent.isAssigned && !board.column(for: task.status).triggersChat && board.firstChatColumn != nil
     }
 
     func body(content: Content) -> some View {
@@ -784,6 +804,55 @@ extension View {
             Button("OK", role: .cancel) { message.wrappedValue = nil }
         } message: {
             Text(message.wrappedValue ?? "")
+        }
+    }
+}
+
+/// Multi-select checklist for one view filter condition.
+private struct MobileFilterValuesList<Value: Hashable>: View {
+    let title: LocalizedStringKey
+    let options: [(Value, String)]
+    @Binding var selection: [Value]
+
+    var body: some View {
+        List {
+            if options.isEmpty {
+                Text("Nothing to filter by yet.")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(options, id: \.0) { value, label in
+                    Button {
+                        toggle(value)
+                    } label: {
+                        HStack {
+                            Text(label)
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            if selection.contains(value) {
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(.tint)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if !selection.isEmpty {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Clear") { selection = [] }
+                }
+            }
+        }
+    }
+
+    private func toggle(_ value: Value) {
+        if selection.contains(value) {
+            selection.removeAll { $0 == value }
+        } else {
+            selection.append(value)
         }
     }
 }

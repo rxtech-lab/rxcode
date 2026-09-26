@@ -116,6 +116,18 @@ extension TaskFormSheet {
         } footer: {
             Text("Click a task to edit it before the story is created.")
         }
+
+        Section {
+            LabeledContent("Model") {
+                agentModelMenu($storyDraftAgent)
+                    .disabled(isGeneratingDraft)
+                    .accessibilityIdentifier("story-draft-model")
+            }
+        } header: {
+            Text("Agent")
+        } footer: {
+            Text("Every task in this story is assigned to this model.")
+        }
     }
 
     func storyTaskDraftRow(_ draft: StoryTaskDraft) -> some View {
@@ -161,6 +173,11 @@ extension TaskFormSheet {
                 .multilineTextAlignment(.leading)
                 .lineLimit(3...12)
             draftPropertyChips
+            LabeledContent("Model") {
+                agentModelMenu($task.agent)
+                    .disabled(isGeneratingDraft)
+                    .accessibilityIdentifier("task-draft-model")
+            }
         } header: {
             Text("Draft")
         } footer: {
@@ -498,7 +515,7 @@ extension TaskFormSheet {
             var task = appState.newTaskDraft(inStory: story)
             task.title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
             task.details = draft.details.trimmingCharacters(in: .whitespacesAndNewlines)
-            task.agent = appState.defaultTaskAgent()
+            task.agent = storyDraftAgent
             appState.upsertTask(task)
         }
         dismiss()

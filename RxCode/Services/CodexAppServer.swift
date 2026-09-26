@@ -8,6 +8,7 @@ actor CodexAppServer {
         case versionCheckFailed(String)
         case spawnFailed(String)
         case loginFailed(String)
+        case logoutFailed(String)
 
         var errorDescription: String? {
             switch self {
@@ -19,6 +20,8 @@ actor CodexAppServer {
                 return "Failed to spawn codex app-server: \(detail)"
             case .loginFailed(let detail):
                 return "Codex sign-in failed: \(detail)"
+            case .logoutFailed(let detail):
+                return "Codex sign-out failed: \(detail)"
             }
         }
     }

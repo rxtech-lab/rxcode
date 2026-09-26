@@ -72,6 +72,7 @@ final class WorkspaceManager {
     }
 
     private func bindMemoryMCPServer(to appState: AppState) {
+        guard !AppSupport.isUnitTesting else { return }
         let defaults = UserDefaults.standard
         let enabled = defaults.bool(forKey: IDEMCPServer.memoryAPIEnabledDefaultsKey)
         let savedPort = defaults.integer(forKey: IDEMCPServer.memoryAPIPortDefaultsKey)
@@ -91,6 +92,7 @@ final class WorkspaceManager {
     /// Hand mobile-sync ownership to `workspaceID`, tearing it down on the
     /// previous owner. Starts the (non-idempotent) mobile service once.
     private func transferMobileSyncOwnership(to workspaceID: String) {
+        guard !AppSupport.isTestProcess else { return }
         guard mobileSyncOwnerID != workspaceID else { return }
         if let previous = mobileSyncOwnerID, let previousState = appStatesByWorkspaceID[previous] {
             previousState.unbindMobileSyncOwnership()

@@ -176,6 +176,10 @@ public struct ACPClientSpec: Codable, Identifiable, Hashable, Sendable {
     public var extraEnv: [String: String]
     public var extraArgs: [String]
     public var iconURL: String?
+    /// `AuthMethodId` the user last signed in with via the agent-driven
+    /// `authenticate` flow. Replayed when `session/new` reports that
+    /// authentication is required.
+    public var authMethodId: String?
 
     public init(
         id: String = UUID().uuidString,
@@ -190,7 +194,8 @@ public struct ACPClientSpec: Codable, Identifiable, Hashable, Sendable {
         modelEnvVar: String? = nil,
         extraEnv: [String: String] = [:],
         extraArgs: [String] = [],
-        iconURL: String? = nil
+        iconURL: String? = nil,
+        authMethodId: String? = nil
     ) {
         self.id = id
         self.registryId = registryId
@@ -205,6 +210,7 @@ public struct ACPClientSpec: Codable, Identifiable, Hashable, Sendable {
         self.extraEnv = extraEnv
         self.extraArgs = extraArgs
         self.iconURL = iconURL
+        self.authMethodId = authMethodId
     }
 
     public enum LaunchKind: Codable, Hashable, Sendable {
@@ -225,6 +231,117 @@ public struct ACPClientSpec: Codable, Identifiable, Hashable, Sendable {
             case .custom: return "custom"
             }
         }
+    }
+}
+
+// MARK: - Authentication
+
+/// A sign-in method advertised in the agent's `initialize` response
+/// (`authMethods`). Mirrors the ACP `AuthMethod` schema, including the
+/// `env_var` and `terminal` method types and Zed's `terminal-auth` meta.
+public struct ACPAuthMethod: Hashable, Sendable, Identifiable {
+    public struct EnvVar: Hashable, Sendable {
+        public var name: String
+        public var label: String?
+        public var secret: Bool
+        public var optional: Bool
+
+        public init(name: String, label: String? = nil, secret: Bool = true, optional: Bool = false) {
+            self.name = name
+            self.label = label
+            self.secret = secret
+            self.optional = optional
+        }
+    }
+
+    public enum Kind: Hashable, Sendable {
+        /// The agent runs the flow itself when the client calls `authenticate`.
+        case agent
+        /// The client supplies credentials as environment variables at launch.
+        case envVar(vars: [EnvVar], link: String?)
+        /// The user signs in interactively by running the agent in a terminal.
+        /// `command == nil` means "the agent's own launch command".
+        case terminal(command: String?, args: [String], env: [String: String])
+    }
+
+    public var id: String
+    public var name: String
+    public var description: String?
+    public var kind: Kind
+
+    public init(id: String, name: String, description: String? = nil, kind: Kind = .agent) {
+        self.id = id
+        self.name = name
+        self.description = description
+        self.kind = kind
+    }
+
+    /// Parses `authMethods` from an `initialize` result. Unknown method
+    /// types are dropped so the UI never offers a flow it can't run.
+    public static func parse(initializeResult: JSONValue) -> [ACPAuthMethod] {
+        guard let methods = initializeResult["authMethods"]?.arrayValue else { return [] }
+        return methods.compactMap(parse(method:))
+    }
+
+    /// ACP permits `logout` only when the agent advertises this capability.
+    public static func supportsLogout(initializeResult: JSONValue) -> Bool {
+        initializeResult["agentCapabilities"]?["auth"]?["logout"]?.objectValue != nil
+    }
+
+    static func parse(method value: JSONValue) -> ACPAuthMethod? {
+        guard let id = value["id"]?.stringValue, !id.isEmpty else { return nil }
+        let name = value["name"]?.stringValue ?? id
+        let description = value["description"]?.stringValue
+
+        switch value["type"]?.stringValue ?? "agent" {
+        case "agent":
+            if let terminal = value["_meta"]?["terminal-auth"], terminal.objectValue != nil {
+                return ACPAuthMethod(
+                    id: id,
+                    name: terminal["label"]?.stringValue ?? name,
+                    description: description,
+                    kind: .terminal(
+                        command: terminal["command"]?.stringValue,
+                        args: stringArray(terminal["args"]),
+                        env: stringMap(terminal["env"])
+                    )
+                )
+            }
+            return ACPAuthMethod(id: id, name: name, description: description)
+        case "env_var":
+            var vars: [EnvVar] = (value["vars"]?.arrayValue ?? []).compactMap { item in
+                guard let varName = item["name"]?.stringValue, !varName.isEmpty else { return nil }
+                return EnvVar(
+                    name: varName,
+                    label: item["label"]?.stringValue,
+                    secret: item["secret"]?.boolValue ?? true,
+                    optional: item["optional"]?.boolValue ?? false
+                )
+            }
+            if vars.isEmpty, let varName = value["varName"]?.stringValue, !varName.isEmpty {
+                vars = [EnvVar(name: varName)]
+            }
+            guard !vars.isEmpty else { return nil }
+            return ACPAuthMethod(
+                id: id, name: name, description: description,
+                kind: .envVar(vars: vars, link: value["link"]?.stringValue)
+            )
+        case "terminal":
+            return ACPAuthMethod(
+                id: id, name: name, description: description,
+                kind: .terminal(command: nil, args: stringArray(value["args"]), env: stringMap(value["env"]))
+            )
+        default:
+            return nil
+        }
+    }
+
+    private static func stringArray(_ value: JSONValue?) -> [String] {
+        value?.arrayValue?.compactMap(\.stringValue) ?? []
+    }
+
+    private static func stringMap(_ value: JSONValue?) -> [String: String] {
+        (value?.objectValue ?? [:]).compactMapValues(\.stringValue)
     }
 }
 

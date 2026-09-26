@@ -239,11 +239,15 @@ final class MobileSyncService: ObservableObject {
         let stored = UserDefaults.standard.string(forKey: "mobileSync.relayURL")
         let initial = URL(string: stored ?? "ws://localhost:8787") ?? URL(string: "ws://localhost:8787")!
         self.relayURL = initial
-        do {
-            self.identity = try DeviceIdentity.loadOrCreate()
-        } catch {
-            Self.logFatalKeychain(error)
-            fatalError("Failed to load device identity: \(error)")
+        if AppSupport.isTestProcess {
+            self.identity = DeviceIdentity(privateKey: Curve25519.KeyAgreement.PrivateKey())
+        } else {
+            do {
+                self.identity = try DeviceIdentity.loadOrCreate()
+            } catch {
+                Self.logFatalKeychain(error)
+                fatalError("Failed to load device identity: \(error)")
+            }
         }
         self.client = SyncClient(identity: identity, relayURL: initial, directPathsEnabled: Self.directPathsEnabledSetting)
         loadPairedDevices()

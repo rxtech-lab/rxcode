@@ -14,10 +14,9 @@ final class NotificationService: NSObject {
     private let logger = Logger(subsystem: "com.idealapp.RxCode", category: "Notification")
     private var didRequestAuthorization = false
 
-    /// True when the app is launched as the XCTest host. Unit tests drive real
-    /// `AppState` streams, which would otherwise fire hook-driven banners (and
-    /// mobile fan-out) for fixture sessions on the developer's machine.
-    private let isRunningTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    /// Unit and UI test launches can drive real `AppState` streams. Suppress
+    /// hook-driven banners and mobile fan-out for their fixture sessions.
+    private let isRunningTests = AppSupport.isTestProcess
 
     /// Invoked on the main actor when the user clicks a notification.
     /// Parameters: projectId, sessionId
@@ -246,6 +245,49 @@ final class NotificationService: NSObject {
         default:
             let format = NSLocalizedString("%d workflows failed: %@", comment: "CI failure notification body for multiple failing workflows. %1$d is the count, %2$@ is a comma-separated list of names.")
             return String(format: format, cleaned.count, cleaned.joined(separator: ", "))
+        }
+    }
+
+    /// Post a task board notification — a task entered Pending Review, or its
+    /// work was rejected by the completion check or code review. Fans out to
+    /// mobile and (when authorized) shows a local banner. Uses a per-task
+    /// identifier so a newer update replaces the task's previous banner.
+    func postTaskUpdate(title: String, body: String, taskId: UUID, projectId: UUID, sessionId: String?) async {
+        guard !isRunningTests else { return }
+        let cleanBody = stripMarkdown(body)
+        await fanoutToMobile(.init(
+            kind: .generic,
+            title: title,
+            body: cleanBody,
+            sessionID: sessionId,
+            projectID: projectId
+        ))
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        switch settings.authorizationStatus {
+        case .authorized, .provisional:
+            break
+        default:
+            return
+        }
+
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = cleanBody
+        content.sound = .default
+        var userInfo: [String: Any] = ["projectId": projectId.uuidString]
+        if let sessionId { userInfo["sessionId"] = sessionId }
+        content.userInfo = userInfo
+
+        let request = UNNotificationRequest(
+            identifier: "task-update-\(taskId.uuidString)",
+            content: content,
+            trigger: nil
+        )
+
+        do {
+            try await UNUserNotificationCenter.current().add(request)
+        } catch {
+            logger.error("Failed to post task notification: \(error.localizedDescription)")
         }
     }
 

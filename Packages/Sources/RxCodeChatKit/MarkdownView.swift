@@ -20,6 +20,25 @@ extension MarkdownStyle {
         )
     }
 
+    /// Smaller body text for markdown shown inside compact chrome such as
+    /// banners and callouts.
+    public static var rxCodeCompact: MarkdownStyle {
+        MarkdownStyle(
+            bodyFontSize: ClaudeTheme.size(12),
+            bodyColor: ClaudeTheme.textPrimary,
+            secondaryColor: ClaudeTheme.textSecondary,
+            accentColor: ClaudeTheme.accent,
+            codeTextColor: ClaudeTheme.textPrimary,
+            codeBackground: ClaudeTheme.codeBackground,
+            codeHeaderBackground: ClaudeTheme.codeHeaderBackground,
+            borderColor: ClaudeTheme.border,
+            tableHeaderBackground: ClaudeTheme.surfaceSecondary,
+            lineSpacing: 2,
+            blockSpacing: 6,
+            cornerRadius: ClaudeTheme.cornerRadiusSmall
+        )
+    }
+
     /// Markdown styling tuned for the accent-tinted user bubble: text and
     /// inline accents derive from `userBubbleText` so they stay legible on the
     /// dark bubble background instead of using the global primary/accent colors.

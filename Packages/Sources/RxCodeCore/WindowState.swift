@@ -342,6 +342,12 @@ public final class WindowState {
     public var taskDetailProjectId: UUID?
 
     public var showMarketplace = false
+    /// Whether the New Project sheet is presented, and whether it opens with
+    /// the cloud option selected.
+    public var showNewProjectSheet = false
+    public var newProjectPrefersCloud = false
+    /// The local project whose "Link to Autopilot Project" sheet is open.
+    public var linkCloudProjectId: UUID?
     /// Whether the global thread-search overlay is presented. Toggled by the
     /// toolbar magnifier button and the Cmd+K shortcut.
     public var showGlobalSearch = false

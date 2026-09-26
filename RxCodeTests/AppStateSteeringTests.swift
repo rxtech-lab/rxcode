@@ -53,6 +53,7 @@ final class AppStateSteeringTests: XCTestCase {
             appState.sessionStates[key]?.streamTask?.cancel()
             appState.sessionStates[key]?.flushTask?.cancel()
         }
+        appState.threadStore.clearQueue(sessionKey: sessionKey)
         window = nil
         mockBackend = nil
         appState = nil
@@ -74,6 +75,27 @@ final class AppStateSteeringTests: XCTestCase {
         appState.sessionStates[sessionKey] = state
     }
 
+    private func linkedTask() -> ProjectTask {
+        let task = ProjectTask(
+            projectId: project.id,
+            title: "Finish the feature",
+            status: .inProgress,
+            agent: TaskAgentConfig(provider: .claudeCode, model: "opus"),
+            sessionKey: sessionKey
+        )
+        appState.taskBoards[project.id] = TaskBoard(tasks: [task])
+        appState.allSessionSummaries = [ChatSession.Summary(
+            id: sessionKey,
+            projectId: project.id,
+            title: task.title,
+            createdAt: Date(),
+            updatedAt: Date(),
+            isPinned: false,
+            agentProvider: .claudeCode
+        )]
+        return task
+    }
+
     // MARK: - The default: queue
 
     /// Sending mid-turn queues. Steering is an override the user reaches for on
@@ -91,6 +113,40 @@ final class AppStateSteeringTests: XCTestCase {
     }
 
     // MARK: - Steering
+
+    func testTaskSheetSteersItsQueuedMessageIntoTheRunningTurn() async {
+        await mockBackend.setAcceptsSteering(true)
+        let task = linkedTask()
+        beginStreaming(messages: [ChatMessage(role: .user, content: "initial task")])
+
+        XCTAssertTrue(appState.queueTaskFollowUp(task, text: "check the sync flow", attachments: []))
+        let queued = appState.queuedTaskMessages(for: task)
+        XCTAssertEqual(queued.map(\.text), ["check the sync flow"])
+        XCTAssertTrue(appState.canSteerTask(task))
+
+        let steered = await appState.steerQueuedTaskMessage(id: queued[0].id, for: task)
+        let prompts = await mockBackend.steeredPrompts
+
+        XCTAssertTrue(steered)
+        XCTAssertEqual(prompts, ["check the sync flow"])
+        XCTAssertTrue(appState.queuedTaskMessages(for: task).isEmpty)
+        XCTAssertEqual(appState.sessionStates[sessionKey]?.messages.map(\.content), ["initial task", "check the sync flow"])
+        XCTAssertTrue(appState.sessionStates[sessionKey]?.isStreaming ?? false)
+    }
+
+    func testDeclinedTaskSheetSteerRemainsQueued() async {
+        await mockBackend.setAcceptsSteering(false)
+        let task = linkedTask()
+        beginStreaming()
+        XCTAssertTrue(appState.queueTaskFollowUp(task, text: "send after this turn", attachments: []))
+        let queued = appState.queuedTaskMessages(for: task)
+
+        let steered = await appState.steerQueuedTaskMessage(id: queued[0].id, for: task)
+
+        XCTAssertFalse(steered)
+        XCTAssertEqual(appState.queuedTaskMessages(for: task).map(\.text), ["send after this turn"])
+        XCTAssertTrue(appState.sessionStates[sessionKey]?.isStreaming ?? false)
+    }
 
     func testSteerQueuedMessageDeliversItIntoTheRunningTurn() async {
         await mockBackend.setAcceptsSteering(true)
@@ -194,10 +250,9 @@ final class AppStateSteeringTests: XCTestCase {
         XCTAssertEqual(window.messageQueue.map(\.text), ["first", "second"])
     }
 
-    /// Both transports could carry an attachment in principle, but the encoding
-    /// differs per provider — so rather than risk dropping one mid-turn, a
-    /// message carrying attachments stays in the queue.
-    func testMessageWithAttachmentsIsNeverSteered() async {
+    /// Images travel as path lines in the prompt, the same way a normal send
+    /// carries them, so a message with an image steers like any other.
+    func testMessageWithImageIsSteeredWithItsPath() async {
         await mockBackend.setAcceptsSteering(true)
         beginStreaming()
         appState.enqueueMessage(
@@ -208,11 +263,32 @@ final class AppStateSteeringTests: XCTestCase {
 
         let steered = await appState.steerQueuedMessage(id: window.messageQueue[0].id, in: window)
 
-        XCTAssertFalse(steered)
-        XCTAssertEqual(window.messageQueue.map(\.text), ["look at this"])
-        XCTAssertEqual(window.messageQueue.first?.attachments.count, 1)
+        XCTAssertTrue(steered)
+        XCTAssertTrue(window.messageQueue.isEmpty)
         let prompts = await mockBackend.steeredPrompts
-        XCTAssertTrue(prompts.isEmpty, "A message with attachments must not be steered")
+        XCTAssertEqual(prompts.count, 1)
+        XCTAssertTrue(prompts.first?.contains("/tmp/shot.png") ?? false)
+        XCTAssertTrue(prompts.first?.contains("look at this") ?? false)
+        XCTAssertEqual(appState.sessionStates[sessionKey]?.messages.last?.attachmentPaths.count, 1)
+    }
+
+    func testTaskSheetSteersQueuedImageMessage() async {
+        await mockBackend.setAcceptsSteering(true)
+        let task = linkedTask()
+        beginStreaming()
+        XCTAssertTrue(appState.queueTaskFollowUp(
+            task,
+            text: "",
+            attachments: [Attachment(type: .image, name: "shot.png", path: "/tmp/shot.png")]
+        ))
+        let queued = appState.queuedTaskMessages(for: task)
+
+        let steered = await appState.steerQueuedTaskMessage(id: queued[0].id, for: task)
+
+        XCTAssertTrue(steered)
+        XCTAssertTrue(appState.queuedTaskMessages(for: task).isEmpty)
+        let prompts = await mockBackend.steeredPrompts
+        XCTAssertTrue(prompts.first?.contains("/tmp/shot.png") ?? false)
     }
 
     func testNothingIsSteeredWhenNoTurnIsRunning() async {

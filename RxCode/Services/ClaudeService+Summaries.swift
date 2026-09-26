@@ -239,6 +239,23 @@ extension ClaudeCodeServer {
         return text.isEmpty ? nil : text
     }
 
+    /// Runs a one-shot prompt and returns the reply verbatim — no summary
+    /// sanitizer — so generated code keeps its formatting.
+    func generateRawResponse(prompt: String, model: String) async -> String? {
+        guard let binary = await findClaudeBinary() else { return nil }
+        let emptyMCPConfigPath = writeEmptyMCPConfig()
+        var args: [String] = ["-p", prompt, "--output-format", "text", "--model", model]
+        if let emptyMCPConfigPath {
+            args.append(contentsOf: ["--strict-mcp-config", "--mcp-config", emptyMCPConfigPath])
+        }
+        do {
+            return try await runShellCommand(binary, arguments: args)
+        } catch {
+            logger.warning("Raw response generation failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
     func generatePlainSummary(prompt: String, model: String, limit: Int) async -> String? {
         guard let binary = await findClaudeBinary() else { return nil }
         let emptyMCPConfigPath = writeEmptyMCPConfig()

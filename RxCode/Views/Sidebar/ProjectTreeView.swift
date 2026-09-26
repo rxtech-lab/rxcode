@@ -520,6 +520,8 @@ private struct ProjectTreeRow: View {
                 .menuActionHandler(appState.desktopMenuActionHandler(navigatingIn: windowState))
         }
         Divider()
+        ProjectCloudMenuItems(project: project)
+        Divider()
         Button { onRename() } label: {
             Label("Rename Project", systemImage: "pencil")
         }

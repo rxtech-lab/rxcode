@@ -9,7 +9,10 @@ extension AppState {
     /// The board of `projectId` as mobile renders it, including the resolved
     /// chat thread of every dispatched task.
     func mobileTaskBoardSnapshot(for projectId: UUID) -> MobileTaskBoardSnapshot {
-        let board = taskBoard(for: projectId)
+        var board = taskBoard(for: projectId)
+        // Cloud sync bookkeeping is desktop-only and would roughly double the
+        // payload; mobile edits come back as per-item operations.
+        board.cloudSync = nil
         var sessionIDs: [String: String] = [:]
         for task in board.tasks {
             if let sessionId = chatSessionId(for: task) {

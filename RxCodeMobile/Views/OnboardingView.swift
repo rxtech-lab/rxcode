@@ -9,6 +9,7 @@ private let onboardingLogger = Logger(subsystem: "com.claudework", category: "On
 struct OnboardingView: View {
     @EnvironmentObject private var state: MobileAppState
     @Environment(\.dismiss) private var dismiss
+    let onViewTasks: (() -> Void)?
     let showsCancelButton: Bool
     let onPairingCompleted: (() -> Void)?
     @State private var showScanner = false
@@ -21,8 +22,10 @@ struct OnboardingView: View {
 
     init(
         showsCancelButton: Bool = false,
+        onViewTasks: (() -> Void)? = nil,
         onPairingCompleted: (() -> Void)? = nil
     ) {
+        self.onViewTasks = onViewTasks
         self.showsCancelButton = showsCancelButton
         self.onPairingCompleted = onPairingCompleted
     }
@@ -33,6 +36,14 @@ struct OnboardingView: View {
 
             ScrollView {
                 VStack(spacing: 28) {
+                    if let onViewTasks {
+                        Button("View Tasks", systemImage: "checklist", action: onViewTasks)
+                            .buttonStyle(.borderedProminent)
+                            .accessibilityIdentifier("view-tasks-offline")
+                        Text("Manage your cloud projects without connecting to a Mac.")
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
                     hero
                     instructions
                     deviceNameField

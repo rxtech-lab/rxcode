@@ -72,7 +72,16 @@ extension CodexAppServer {
     - `ide__get_stories` — list stories on a project's task board before \
     linking a new task to one.
     - `ide__create_story` / `ide__create_task` — record user-requested work \
-    from a chat. Pass `story_id` to place a task in an existing story.
+    from a chat, in this or any other project (`project_id`). Pass \
+    `story_id` to place a task in an existing story.
+    - `ide__link_story` — share a story with other projects so work spanning \
+    several projects is tracked under one story.
+    - `ide__get_tasks` / `ide__get_task_status` — list tasks by project, \
+    story, or column, and check a task's implementation status and latest \
+    thread messages.
+    - `ide__run_task` — start a task's agent in its project, or send a \
+    follow-up to its thread. This triggers a real agent run that may consume \
+    tokens; poll `ide__get_task_status` for progress.
     - `ide__get_threads` — list or natural-language search chat threads across \
     projects.
     - `ide__get_thread_messages` — fetch the message history of a specific \

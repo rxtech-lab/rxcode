@@ -15,6 +15,7 @@ extension MobileAppState {
     /// only need to handle errors.
     @discardableResult
     func taskBoardCall(_ payload: TaskBoardRequestPayload) async throws -> TaskBoardResultPayload {
+        if usesCloudTasks { return try await cloudTaskBoardCall(payload) }
         guard isPaired else { throw AutopilotRemoteError.notPaired }
         let desktop = pairedDesktopPubkey
         let result: TaskBoardResultPayload = try await withCheckedThrowingContinuation { continuation in
@@ -55,7 +56,12 @@ extension MobileAppState {
     /// Whether task-board requests can reach the desktop: paired, connected,
     /// and past the first snapshot (which delivers the project list).
     var isTaskSyncReady: Bool {
-        guard isPaired, hasReceivedInitialSnapshot else { return false }
+        if usesCloudTasks { return taskCloud?.isSignedIn == true }
+        return isDesktopTaskSyncReady
+    }
+
+    var isDesktopTaskSyncReady: Bool {
+        guard isPaired, hasReceivedInitialSnapshot, !desktopTaskUnavailable else { return false }
         if case .connected = connectionState { return true }
         return false
     }
@@ -65,16 +71,16 @@ extension MobileAppState {
     /// list changing. Views key their load `.task` on it, since a Tasks view
     /// can appear — as the first tab does at launch — before sync is ready.
     var taskSyncReloadKey: String {
-        "\(isTaskSyncReady)|\(pairedDesktopPubkey)|" + projects.map(\.id.uuidString).joined(separator: ",")
+        "\(usesCloudTasks)|\(isTaskSyncReady)|\(pairedDesktopPubkey)|" + taskProjects.map(\.id.uuidString).joined(separator: ",")
     }
 
     func taskBoard(for projectID: UUID) -> TaskBoard {
-        taskBoardsByProject[projectID]?.board ?? TaskBoard()
+        taskSnapshots[projectID]?.board ?? TaskBoard()
     }
 
     /// The chat thread a task was dispatched into, if it still exists.
     func taskSessionID(_ task: ProjectTask) -> String? {
-        taskBoardsByProject[task.projectId]?.sessionID(for: task.id)
+        taskSnapshots[task.projectId]?.sessionID(for: task.id)
     }
 
     /// True while the task's linked thread is mid-turn.
@@ -84,14 +90,14 @@ extension MobileAppState {
     }
 
     func isTaskClassifying(_ task: ProjectTask) -> Bool {
-        taskBoardsByProject[task.projectId]?.classifyingTaskIDs.contains(task.id) ?? false
+        taskSnapshots[task.projectId]?.classifyingTaskIDs.contains(task.id) ?? false
     }
 
     /// A blank task parented to `story` (or the board root), prefilled like
     /// the desktop's drafts: first column, the story's version and milestone,
     /// and the desktop's default agent.
     func newTaskDraft(projectID: UUID, story: ProjectStory?) -> ProjectTask {
-        let snapshot = taskBoardsByProject[projectID]
+        let snapshot = taskSnapshots[projectID]
         return ProjectTask(
             projectId: projectID,
             storyId: story?.id,
@@ -114,7 +120,11 @@ extension MobileAppState {
     /// Fetches every project's board concurrently. Returns the first error
     /// message, if any board failed to load; the others still apply.
     func loadAllTaskBoards() async -> String? {
-        let projectIDs = projects.map(\.id)
+        if usesCloudTasks {
+            do { try await refreshCloudTaskProjects() }
+            catch { return error.localizedDescription }
+        }
+        let projectIDs = taskProjects.map(\.id)
         return await withTaskGroup(of: String?.self) { group in
             for projectID in projectIDs {
                 group.addTask { @MainActor in
@@ -146,7 +156,7 @@ extension MobileAppState {
     /// cards (else the end of the column). The move is shown immediately and
     /// rolled back to the desktop's board if the desktop rejects it.
     func moveTask(_ task: ProjectTask, to status: TaskStatus, sortIndex: Double? = nil) async throws {
-        if var snapshot = taskBoardsByProject[task.projectId],
+        if !usesCloudTasks, var snapshot = taskBoardsByProject[task.projectId],
            let index = snapshot.board.tasks.firstIndex(where: { $0.id == task.id }) {
             let resolvedIndex = sortIndex ?? snapshot.board.appendSortIndex(for: status)
             snapshot.board.tasks[index].status = status
@@ -188,6 +198,7 @@ extension MobileAppState {
     /// Runs the task with its assigned agent by moving it into the board's
     /// first chat column — the same path as the desktop's "Run with Agent".
     func runTask(_ task: ProjectTask) async throws {
+        guard !usesCloudTasks else { throw AutopilotRemoteError.server("Connect to a Mac to run an agent.") }
         guard let column = taskBoard(for: task.projectId).firstChatColumn else { return }
         try await moveTask(task, to: column.id)
     }

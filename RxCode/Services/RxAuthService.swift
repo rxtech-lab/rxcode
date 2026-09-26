@@ -1,5 +1,6 @@
 import Foundation
 import RxAuthSwift
+import RxCodeCore
 import os
 
 /// Thin wrapper around `RxAuthSwift.OAuthManager` configured for the rxlab
@@ -71,7 +72,10 @@ final class RxAuthService {
             passkeyRelyingPartyIdentifier: "rxlab.app",
             keychainServiceName: keychainService
         )
-        self.manager = OAuthManager(configuration: configuration)
+        self.manager = OAuthManager(
+            configuration: configuration,
+            tokenStorage: AppSupport.isTestProcess ? InMemoryTokenStorage() : nil
+        )
     }
 
     var isAuthenticated: Bool { manager.authState == .authenticated }
@@ -92,6 +96,7 @@ final class RxAuthService {
     /// despite its name, so we gate it ourselves with the keychain `expires_at`
     /// to avoid a token rotation + userinfo round trip on every autopilot call.
     func accessToken(forceRefresh: Bool = false) async -> String? {
+        guard !AppSupport.isTestProcess else { return nil }
         // Fastest path — an in-memory, not-yet-expiring token needs no keychain
         // read at all, so concurrent callers never re-trigger the macOS keychain
         // permission prompt. Skipped on a forced refresh, where the token was

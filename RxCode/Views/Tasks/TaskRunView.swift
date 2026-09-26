@@ -18,6 +18,8 @@ struct TaskRunView: View {
     @State private var isLoading = true
     @State private var followUp = ""
     @State private var followUpAttachments: [Attachment] = []
+    @State private var queuedMessages: [QueuedMessage] = []
+    @State private var steerDeclinedIDs: Set<UUID> = []
     @State private var isSending = false
     @State private var isDropTargeted = false
     @State private var composerController = MarkdownEditorController()
@@ -51,6 +53,7 @@ struct TaskRunView: View {
         // Reload when a run starts or ends, or the task changes column.
         .task(id: "\(task?.status.rawValue ?? "")|\(isAgentRunning)|\(task?.sessionKey ?? "")") {
             await reload()
+            refreshQueue()
         }
     }
 
@@ -66,15 +69,11 @@ struct TaskRunView: View {
                 TaskPill(text: appState.taskAgentLabel(task.agent), icon: "sparkles", tint: ClaudeTheme.statusRunning)
             }
             Spacer()
-            if appState.canOpenChat(for: task) {
-                Button {
+            if let sessionId = task.sessionKey, appState.canOpenChat(for: task) {
+                ThreadDiffBanner(sessionId: sessionId, isCompact: true) {
                     dismiss()
                     appState.openChat(for: task, in: windowState)
-                } label: {
-                    Label("Open Chat", systemImage: "bubble.left")
                 }
-                .buttonStyle(.glass)
-                .controlSize(.small)
             }
         }
         .padding(.horizontal, 20)
@@ -90,6 +89,11 @@ struct TaskRunView: View {
                 .controlSize(.small)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if !hasThread {
+            if let reason = task.attentionReason {
+                TaskAttentionBanner(reason: reason)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 12)
+            }
             VStack(spacing: 6) {
                 Image(systemName: "bubble.left.and.exclamationmark.bubble.right")
                     .font(.system(size: ClaudeTheme.size(22)))
@@ -117,6 +121,11 @@ struct TaskRunView: View {
                                     }
                                 }
                                 .id(turn.id)
+                        }
+                        if turns.isEmpty, let reason = task.attentionReason {
+                            TaskAttentionBanner(reason: reason)
+                                .padding(.horizontal, 20)
+                                .padding(.top, 20)
                         }
                         // Keep the newest prompt at the top while its response is short.
                         // The space gives way to the response as the turn grows.
@@ -182,6 +191,11 @@ struct TaskRunView: View {
                         .foregroundStyle(turn.didError ? ClaudeTheme.statusError : ClaudeTheme.textTertiary)
                 }
             }
+
+            // Why the task needs attention reads as the run's last message.
+            if isLast, let reason = task?.attentionReason {
+                TaskAttentionBanner(reason: reason)
+            }
         }
     }
 
@@ -194,12 +208,16 @@ struct TaskRunView: View {
     // MARK: - Follow-up
 
     private func composer(_ task: ProjectTask) -> some View {
-        let canCompose = hasThread && !appState.isStatusLocked(task) && !isAgentRunning
+        let canCompose = hasThread && (isAgentRunning || !appState.isStatusLocked(task))
         let hasContent = !followUp.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !followUpAttachments.isEmpty
         let canSend = canCompose && !isSending && hasContent
         let shape = RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusLarge)
         return VStack(alignment: .leading, spacing: 8) {
+            if !queuedMessages.isEmpty {
+                queuedMessagePreviews(for: task)
+            }
+
             // Images are chips inside the text; the row holds everything else.
             if followUpAttachments.contains(where: { $0.type != .image }) {
                 FlowLayout(spacing: 6) {
@@ -229,7 +247,7 @@ struct TaskRunView: View {
                 .buttonStyle(.glassProminent)
                 .buttonBorderShape(.circle)
                 .disabled(!canSend)
-                .help("Send the follow-up to this task's thread")
+                .help(isAgentRunning ? "Queue this follow-up until the current response ends" : "Send the follow-up to this task's thread")
             }
         }
         .padding(.horizontal, 14)
@@ -358,7 +376,8 @@ struct TaskRunView: View {
 
     private func composerPrompt(_ task: ProjectTask) -> String {
         if !hasThread { return String(localized: "No thread to follow up in") }
-        if appState.isStatusLocked(task) || isAgentRunning { return String(localized: "Wait for the agent to finish…") }
+        if isAgentRunning { return String(localized: "Queue a follow-up…") }
+        if appState.isStatusLocked(task) { return String(localized: "Wait for the agent to finish…") }
         return String(localized: "Ask the agent for a follow-up…")
     }
 
@@ -374,12 +393,108 @@ struct TaskRunView: View {
         }
         isSending = true
         Task {
-            if await appState.sendTaskFollowUp(task, text: text, attachments: attachments) {
+            let accepted: Bool
+            if appState.isAgentRunning(for: task) {
+                accepted = appState.queueTaskFollowUp(task, text: text, attachments: attachments)
+            } else {
+                accepted = await appState.sendTaskFollowUp(task, text: text, attachments: attachments)
+            }
+            if accepted {
                 followUp = ""
                 followUpAttachments = []
             }
             isSending = false
+            refreshQueue()
             await reload()
+        }
+    }
+
+    private func refreshQueue() {
+        queuedMessages = task.map { appState.queuedTaskMessages(for: $0) } ?? []
+        steerDeclinedIDs.formIntersection(Set(queuedMessages.map(\.id)))
+    }
+
+    private func queuedMessagePreviews(for task: ProjectTask) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("\(queuedMessages.count) messages queued")
+                .font(.system(size: ClaudeTheme.size(10), weight: .medium))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+
+            // Hugs its rows; only scrolls once they outgrow the cap.
+            ViewThatFits(in: .vertical) {
+                queuedMessageRows(for: task)
+                ScrollView { queuedMessageRows(for: task) }
+            }
+            .frame(maxHeight: 120)
+        }
+    }
+
+    private func queuedMessageRows(for task: ProjectTask) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(queuedMessages) { message in
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.turn.down.right")
+                            .foregroundStyle(ClaudeTheme.textTertiary)
+                        Text(queuedDisplayText(message))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .help(message.text)
+
+                        if appState.canSteerTask(task), isAgentRunning {
+                            Button {
+                                steerQueuedMessage(message.id, for: task)
+                            } label: {
+                                Label("Steer now", systemImage: "arrow.turn.down.right")
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.mini)
+                            .help("Steer into current response")
+                            .accessibilityIdentifier("task-run-steer-queued-message")
+                        }
+
+                        Button {
+                            appState.removeQueuedTaskMessage(id: message.id, for: task)
+                            refreshQueue()
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(ClaudeTheme.textTertiary)
+                        .help("Remove queued message")
+                    }
+                    if steerDeclinedIDs.contains(message.id) {
+                        Text("Couldn't reach the current response — still queued, sends when it ends.")
+                            .foregroundStyle(ClaudeTheme.textTertiary)
+                    }
+                }
+                .font(.system(size: ClaudeTheme.size(11)))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(ClaudeTheme.inputBackground, in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
+            }
+        }
+    }
+
+    /// One line: the text, with images collapsed to a paperclip count instead
+    /// of their file names.
+    private func queuedDisplayText(_ message: QueuedMessage) -> String {
+        let text = message.text.split(whereSeparator: \.isNewline).joined(separator: " ")
+        guard !message.attachments.isEmpty else { return text }
+        let count = "📎\(message.attachments.count)"
+        return text.isEmpty ? count : "\(text)  \(count)"
+    }
+
+    private func steerQueuedMessage(_ id: UUID, for task: ProjectTask) {
+        Task {
+            let steered = await appState.steerQueuedTaskMessage(id: id, for: task)
+            refreshQueue()
+            if steered {
+                await reload()
+            } else if queuedMessages.contains(where: { $0.id == id }) {
+                steerDeclinedIDs.insert(id)
+            }
         }
     }
 

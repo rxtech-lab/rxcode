@@ -17,17 +17,18 @@ extension AppState {
     /// message undelivered and the caller owing the user either a queue entry
     /// or an interrupt-and-resend.
     ///
-    /// Attachments are not steered. Both transports can carry them in principle,
-    /// but the encoding differs per provider and an attachment silently dropped
-    /// mid-turn is worse than one that waits — so a message carrying any is
-    /// declined here and takes the fallback path intact.
+    /// Attachments ride along the same way they do on a normal send: as path
+    /// lines in front of the prompt text (`buildPromptWithAttachments`), which
+    /// every provider reads identically — so an image steers like any text.
     func steerActiveStream(text: String, attachments: [Attachment], in window: WindowState) async -> Bool {
-        let prompt = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !prompt.isEmpty, attachments.isEmpty else { return false }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty || !attachments.isEmpty else { return false }
 
         let state = streamState(in: window)
         guard state.isStreaming, let streamId = state.activeStreamId else { return false }
 
+        let resolved = AttachmentFactory.resolvingClipboardImages(attachments).resolved
+        let prompt = buildPromptWithAttachments(trimmed, attachments: resolved)
         let provider = effectiveModelSelection(in: window).provider
         guard await backend(for: provider).steer(streamId: streamId, prompt: prompt) else {
             return false
@@ -40,7 +41,7 @@ extension AppState {
         // mid-way through writing before the steer landed.
         let key = queueKey(for: window)
         updateState(key) { state in
-            state.messages.append(ChatMessage(role: .user, content: text))
+            state.messages.append(ChatMessage(role: .user, content: text, attachments: resolved))
             state.needsNewMessage = true
         }
         await saveCurrentSession(in: window)

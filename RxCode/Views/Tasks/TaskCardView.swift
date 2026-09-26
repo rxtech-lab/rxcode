@@ -83,6 +83,10 @@ struct TaskCardView: View {
                 .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
 
+            if let parent = board.tasks.first(where: { $0.id == task.parentTaskId }) {
+                TaskCardStartsAfterRow(parent: parent, board: board)
+            }
+
             TaskSummaryPreview(task: task)
 
             TaskVerifyingIndicator(taskId: task.id)
@@ -92,14 +96,12 @@ struct TaskCardView: View {
                     .font(.system(size: ClaudeTheme.size(11)))
                     .foregroundStyle(ClaudeTheme.statusWarning)
                     .lineLimit(2)
+                    .help(reason)
             }
 
             if hasPills {
                 FlowLayout(spacing: 4) {
                     TaskClassificationPills(task: task, board: board)
-                    if task.agent.isAssigned {
-                        TaskAgentPill(agent: task.agent)
-                    }
                     if task.agent.planMode {
                         TaskPill(text: String(localized: "Plan"), icon: "eye", tint: ClaudeTheme.statusWarning)
                     }
@@ -107,6 +109,11 @@ struct TaskCardView: View {
                         TaskPill(text: "\(task.attachments.count)", icon: "paperclip")
                     }
                 }
+            }
+
+            if task.agent.isAssigned {
+                ClaudeThemeDivider()
+                TaskCardModelRow(agent: task.agent)
             }
         }
         .padding(12)
@@ -124,12 +131,12 @@ struct TaskCardView: View {
             })
         }
         .taskDeletionConfirmation(pending: $pendingDeletion) { candidate in
-            if case .task(let task) = candidate { appState.deleteTask(task) }
+            if case .task(let task, _) = candidate { appState.deleteTask(task) }
         }
     }
 
     private var hasPills: Bool {
-        TaskClassificationPills(task: task, board: board).hasContent || task.agent.isAssigned
+        TaskClassificationPills(task: task, board: board).hasContent
             || task.agent.planMode || !task.attachments.isEmpty
     }
 }
@@ -142,6 +149,9 @@ struct StoryCardView: View {
     let story: ProjectStory
     let progress: StoryProgress
     var board: TaskBoard?
+    /// The story's rolled-up status, shown as a chip when the card sits
+    /// outside the board columns.
+    var column: TaskColumn?
     let isCollapsed: Bool
     let onToggleCollapse: () -> Void
     let onOpen: () -> Void
@@ -154,6 +164,11 @@ struct StoryCardView: View {
         progress.total > 0 && progress.done == progress.total
     }
 
+    private var sharedHelp: String {
+        let names = appState.projects.filter { story.linkedProjectIds.contains($0.id) }.map(\.name)
+        return String(localized: "Shared with \(names.joined(separator: ", "))")
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 5) {
@@ -163,6 +178,26 @@ struct StoryCardView: View {
                 Text("Story")
                     .font(.system(size: ClaudeTheme.size(11)))
                     .foregroundStyle(ClaudeTheme.textTertiary)
+                if let column {
+                    HStack(spacing: 3) {
+                        TaskStatusIcon(column: column, size: 9)
+                        Text(column.name)
+                            .font(.system(size: ClaudeTheme.size(10), weight: .medium))
+                            .foregroundStyle(ClaudeTheme.textSecondary)
+                            .lineLimit(1)
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(column.tint.opacity(0.12)))
+                    .accessibilityElement(children: .combine)
+                }
+                if story.isShared {
+                    Image(systemName: "link")
+                        .font(.system(size: ClaudeTheme.size(10), weight: .semibold))
+                        .foregroundStyle(ClaudeTheme.textTertiary)
+                        .help(sharedHelp)
+                        .accessibilityLabel(sharedHelp)
+                }
                 Spacer(minLength: 0)
                 if let board {
                     StoryRunningIndicator(story: story, board: board)
@@ -218,7 +253,7 @@ struct StoryCardView: View {
             }, onNewTask: onNewTask)
         }
         .taskDeletionConfirmation(pending: $pendingDeletion) { candidate in
-            if case .story(let story) = candidate { appState.deleteStory(story) }
+            if case .story(let story, _) = candidate { appState.deleteStory(story) }
         }
     }
 }
@@ -348,13 +383,95 @@ private struct TaskVerifyingIndicator: View {
     }
 }
 
-/// The "Opus · high" agent pill on a task card.
-private struct TaskAgentPill: View {
+/// "Starts after" link to the task that must finish before this one starts,
+/// with the blocking task's current column icon.
+private struct TaskCardStartsAfterRow: View {
+    let parent: ProjectTask
+    let board: TaskBoard
+
+    var body: some View {
+        let isFinished = board.column(for: parent.status).countsAsDone
+        let title = parent.title.isEmpty ? String(localized: "Untitled task") : parent.title
+        let help = isFinished
+            ? String(localized: "Starts after \(title), which has finished")
+            : String(localized: "Waits for \(title) to finish before starting")
+        let tint = isFinished ? ClaudeTheme.textTertiary : ClaudeTheme.textSecondary
+        HStack(spacing: 4) {
+            Image(systemName: "arrow.turn.down.right")
+                .font(.system(size: ClaudeTheme.size(10), weight: .semibold))
+            Text("Starts after")
+                .fixedSize()
+            HStack(spacing: 4) {
+                TaskStatusIcon(status: parent.status, board: board, size: 9)
+                Text(verbatim: title)
+                    .font(.system(size: ClaudeTheme.size(10), weight: .medium))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .strikethrough(isFinished)
+            }
+            .padding(.horizontal, 7)
+            .padding(.vertical, 2)
+            .background(Capsule().fill(tint.opacity(0.10)))
+            .overlay(Capsule().strokeBorder(tint.opacity(0.35), lineWidth: 1))
+        }
+        .font(.system(size: ClaudeTheme.size(11)))
+        .foregroundStyle(tint)
+        .help(help)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(help)
+    }
+}
+
+/// Model details sit below the tags, with the assigned provider at the far edge.
+private struct TaskCardModelRow: View {
     @Environment(AppState.self) private var appState
 
     let agent: TaskAgentConfig
 
+    private var provider: AgentProvider { agent.provider ?? .claudeCode }
+
+    private var providerLabel: String {
+        guard provider == .acp,
+              let clientId = appState.acpSelectionParts(for: agent.model)?.clientId,
+              let client = appState.acpClients.first(where: { $0.id == clientId }) else {
+            return provider.displayNameText
+        }
+        return client.displayName
+    }
+
     var body: some View {
-        TaskPill(text: appState.taskAgentLabel(agent), icon: "sparkles", tint: ClaudeTheme.statusRunning)
+        HStack(spacing: 8) {
+            Text(appState.taskAgentLabel(agent))
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: 0)
+            providerIcon
+                .frame(width: 14, height: 14)
+                .help(providerLabel)
+                .accessibilityLabel(providerLabel)
+        }
+        .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+        .foregroundStyle(ClaudeTheme.textSecondary)
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private var providerIcon: some View {
+        switch provider {
+        case .claudeCode:
+            Image("ClaudeProvider")
+                .resizable()
+                .renderingMode(.original)
+                .scaledToFit()
+        case .codex:
+            Image("CodexProvider")
+                .resizable()
+                .renderingMode(.original)
+                .scaledToFit()
+        case .acp:
+            let clientId = appState.acpSelectionParts(for: agent.model)?.clientId
+            let iconURL = appState.acpClients.first(where: { $0.id == clientId })?.iconURL
+            ACPIconView(url: iconURL, size: 14)
+        }
     }
 }

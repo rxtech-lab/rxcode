@@ -55,4 +55,33 @@ extension CodexAppServer {
         }
         throw CodexError.loginFailed("The app server closed before sign-in completed.")
     }
+
+    func signOut() async throws {
+        guard let binary = await findCodexBinary() else { throw CodexError.binaryNotFound }
+        let streamId = UUID()
+        let handles = try await spawnAppServer(binary: binary, streamId: streamId, cwd: nil)
+        defer { finalize(streamId: streamId) }
+
+        try Self.writeJSONLine(Self.request(id: 1, method: "initialize", params: initializeParams()), to: handles.stdin)
+        try Self.writeJSONLine(Self.notification(method: "initialized", params: [:]), to: handles.stdin)
+        try Self.writeJSONLine(Self.request(id: 2, method: "account/logout", params: .null), to: handles.stdin)
+
+        for try await line in handles.stdout.fileHandleForReading.bytes.lines {
+            try Task.checkCancellation()
+            guard let object = Self.decodeObject(line) else { continue }
+            if let requestId = Self.idString(object["id"]), object["method"] != nil {
+                try Self.writeJSONLine(Self.response(id: requestId, result: [:]), to: handles.stdin)
+                continue
+            }
+            guard Self.idString(object["id"]) == "2" else { continue }
+            if let message = object["error"]?.objectValue?["message"]?.stringValue {
+                throw CodexError.logoutFailed(message)
+            }
+            guard object["result"] != nil else {
+                throw CodexError.logoutFailed("The app server returned no sign-out result.")
+            }
+            return
+        }
+        throw CodexError.logoutFailed("The app server closed before sign-out completed.")
+    }
 }

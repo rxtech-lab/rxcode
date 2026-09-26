@@ -377,6 +377,112 @@ extension AppState {
         }
     }
 
+    /// Sign-in methods the client advertises in its `initialize` response.
+    func acpAuthMethods(for id: String) async throws -> [ACPAuthMethod] {
+        guard let spec = acpClients.first(where: { $0.id == id }) else { return [] }
+        return try await acp.authMethods(spec: spec, cwd: NSHomeDirectory())
+    }
+
+    func acpClientSupportsLogout(_ spec: ACPClientSpec) async -> Bool {
+        if isOpenCodeClient(spec) { return true }
+        if (try? await acp.supportsLogout(spec: spec, cwd: NSHomeDirectory())) == true { return true }
+        let methods = (try? await acp.authMethods(spec: spec, cwd: NSHomeDirectory())) ?? []
+        return !storedACPAuthVariableNames(spec: spec, methods: methods).isEmpty
+    }
+
+    /// Returns true when the user must finish provider selection in Terminal.
+    func signOutACPClient(id: String) async throws -> Bool {
+        guard let spec = acpClients.first(where: { $0.id == id }) else { return false }
+        let supportsProtocolLogout = (try? await acp.supportsLogout(spec: spec, cwd: NSHomeDirectory())) == true
+        let methods = (try? await acp.authMethods(spec: spec, cwd: NSHomeDirectory())) ?? []
+        let variableNames = storedACPAuthVariableNames(spec: spec, methods: methods)
+        guard supportsProtocolLogout || !variableNames.isEmpty || isOpenCodeClient(spec) else {
+            throw ACPError.protocolMismatch("This client does not support logout.")
+        }
+        var terminalOpened = false
+        if supportsProtocolLogout {
+            try await acp.signOut(spec: spec, cwd: NSHomeDirectory())
+        } else if isOpenCodeClient(spec) {
+            try await acp.openOpenCodeTerminalLogout(spec: spec)
+            terminalOpened = true
+        }
+        guard let idx = acpClients.firstIndex(where: { $0.id == id }) else { return false }
+        acpClients[idx].authMethodId = nil
+        for name in variableNames {
+            acpClients[idx].extraEnv[name] = nil
+        }
+        saveACPClients()
+        return terminalOpened
+    }
+
+    private func isOpenCodeClient(_ spec: ACPClientSpec) -> Bool {
+        if spec.registryId == "opencode" { return true }
+        if case .binary(let path, _, _) = spec.launch {
+            return URL(fileURLWithPath: path).lastPathComponent == "opencode"
+        }
+        return false
+    }
+
+    private func storedACPAuthVariableNames(spec: ACPClientSpec, methods: [ACPAuthMethod]) -> Set<String> {
+        Set(methods.flatMap { method -> [String] in
+            guard case .envVar(let variables, _) = method.kind else { return [] }
+            return variables.map(\.name).filter { spec.extraEnv[$0] != nil }
+        })
+    }
+
+    func isACPClientSignedIn(_ spec: ACPClientSpec) async -> Bool {
+        if isOpenCodeClient(spec), await acp.hasOpenCodeCredentials() { return true }
+        if spec.authMethodId != nil { return true }
+        let launchEnv: [String: String]
+        switch spec.launch {
+        case .npx(_, _, let env), .uvx(_, _, let env), .binary(_, _, let env), .custom(_, _, let env):
+            launchEnv = env
+        }
+        let configuredEnv = launchEnv.merging(spec.extraEnv) { _, override in override }
+        guard !configuredEnv.isEmpty,
+              let methods = try? await acp.authMethods(spec: spec, cwd: NSHomeDirectory())
+        else { return false }
+        return methods.contains { method in
+            guard case .envVar(let vars, _) = method.kind else { return false }
+            let present = vars.filter {
+                !(configuredEnv[$0.name] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }
+            return !present.isEmpty && vars.filter { !$0.optional }.allSatisfy { variable in
+                present.contains { $0.name == variable.name }
+            }
+        }
+    }
+
+    /// Runs the agent-driven `authenticate` flow, remembers the method so
+    /// turns can replay it, then re-probes models (sign-in often unlocks them).
+    func authenticateACPClient(id: String, methodId: String) async throws {
+        guard let spec = acpClients.first(where: { $0.id == id }) else { return }
+        try await acp.authenticate(spec: spec, methodId: methodId, cwd: NSHomeDirectory())
+        guard let idx = acpClients.firstIndex(where: { $0.id == id }) else { return }
+        acpClients[idx].authMethodId = methodId
+        saveACPClients()
+        await refreshACPClientModels(id: id)
+    }
+
+    /// Stores credentials for an `env_var` auth method in the client's launch
+    /// environment. Empty values remove the variable.
+    func setACPClientCredentials(id: String, values: [String: String]) async {
+        guard let idx = acpClients.firstIndex(where: { $0.id == id }) else { return }
+        for (name, value) in values {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            acpClients[idx].extraEnv[name] = trimmed.isEmpty ? nil : trimmed
+        }
+        saveACPClients()
+        await refreshACPClientModels(id: id)
+    }
+
+    func openACPTerminalLogin(id: String, method: ACPAuthMethod) async throws {
+        guard let spec = acpClients.first(where: { $0.id == id }),
+              case .terminal(let command, let args, let env) = method.kind
+        else { return }
+        try await acp.openTerminalLogin(spec: spec, command: command, args: args, env: env)
+    }
+
     /// Re-probes an installed client and persists the result. If the probe
     /// fails or the agent doesn't expose a model selector, the picker falls
     /// back to the built-in defaults for known registry agents.

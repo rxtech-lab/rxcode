@@ -7,6 +7,7 @@ import TipKit
 struct RxCodeMobileApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var state = MobileAppState()
+    @State private var cloud = MobileCloudState()
     @State private var windowState = WindowState()
     @State private var liveActivityCoordinator = MobileLiveActivityCoordinator()
     @Environment(\.scenePhase) private var scenePhase
@@ -27,8 +28,11 @@ struct RxCodeMobileApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(state)
+                .environment(cloud)
+                .task { await cloud.restore() }
                 .environment(windowState)
                 .onAppear {
+                    state.taskCloud = cloud
                     appDelegate.mobileState = state
                     liveActivityCoordinator.bind(state: state)
                     state.start()

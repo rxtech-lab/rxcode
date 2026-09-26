@@ -209,6 +209,11 @@ extension ClaudeCodeServer {
         try await runLoginProcess(binary: binary)
     }
 
+    func signOut() async throws {
+        guard let binary = await findClaudeBinary() else { throw ClaudeError.binaryNotFound }
+        _ = try await runShellCommand(binary, arguments: ["auth", "logout"])
+    }
+
     func runLoginProcess(
         binary: String,
         timeout: Duration = .seconds(90),

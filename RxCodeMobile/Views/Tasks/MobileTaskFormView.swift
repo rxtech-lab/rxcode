@@ -5,6 +5,7 @@ import SwiftUI
 /// Create or edit a task. Saving sends the whole task to the desktop, which
 /// dispatches it to its agent if it lands in a chat column.
 struct MobileTaskFormView: View {
+    @Environment(MobileCloudState.self) private var cloud
     @EnvironmentObject private var state: MobileAppState
     @Environment(\.dismiss) private var dismiss
     @State private var task: ProjectTask
@@ -12,6 +13,8 @@ struct MobileTaskFormView: View {
 
     @State private var isSaving = false
     @State private var errorMessage: String?
+    @State private var showsParentTasks = false
+    @State private var parentSearch = ""
 
     init(task: ProjectTask, isNew: Bool) {
         _task = State(initialValue: task)
@@ -53,16 +56,18 @@ struct MobileTaskFormView: View {
                             .tag(Optional(story.id))
                     }
                 }
-                Picker("Starts after", selection: $task.parentTaskId) {
-                    Text("None").tag(UUID?.none)
-                    ForEach(board.tasks.filter { board.canLinkTask(task.id, to: $0.id) }) { candidate in
-                        Text(candidate.title).tag(Optional(candidate.id))
+                Button { showsParentTasks = true } label: {
+                    LabeledContent("Starts after") {
+                        Text(board.tasks.first { $0.id == task.parentTaskId }?.title ?? String(localized: "None"))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
                 }
+                .accessibilityIdentifier("task-parent-search")
             } footer: {
                 if isStatusLocked {
                     Text("The agent is working on this task; it moves on when the turn finishes.")
-                } else if board.column(for: task.status).triggersChat, task.agent.isAssigned {
+                } else if !state.usesCloudTasks, board.column(for: task.status).triggersChat, task.agent.isAssigned {
                     Text("Saving in this column runs the assigned agent on your Mac.")
                 }
             }
@@ -76,7 +81,21 @@ struct MobileTaskFormView: View {
                 tags: $task.tags
             )
 
-            agentSection
+            if state.usesCloudTasks {
+                Section("Assigned Mac") {
+                    Picker("Laptop", selection: $task.assignedDeviceId) {
+                        Text("Unassigned").tag(String?.none)
+                        ForEach(cloud.devices) { Text($0.name).tag(Optional($0.id)) }
+                        if let id = task.assignedDeviceId, !cloud.devices.contains(where: { $0.id == id }) {
+                            Text("Previously assigned Mac").tag(Optional(id))
+                        }
+                    }
+                    .accessibilityIdentifier("task-assigned-mac")
+                    if let error = cloud.deviceError { Text(error).foregroundStyle(.red) }
+                }
+            } else {
+                agentSection
+            }
         }
         .navigationTitle(isNew ? "New Task" : "Edit Task")
         .navigationBarTitleDisplayMode(.inline)
@@ -96,6 +115,46 @@ struct MobileTaskFormView: View {
         }
         .interactiveDismissDisabled(isSaving)
         .mobileTaskErrorAlert($errorMessage)
+        .sheet(isPresented: $showsParentTasks) {
+            NavigationStack {
+                List {
+                    Button {
+                        task.parentTaskId = nil
+                        showsParentTasks = false
+                    } label: {
+                        Label("None", systemImage: task.parentTaskId == nil ? "checkmark" : "minus")
+                    }
+                    ForEach(Array(board.parentTaskGroups(for: task.id, matching: parentSearch).enumerated()), id: \.offset) { entry in
+                        let group = entry.element
+                        Section(group.story.map { $0.title.isEmpty ? String(localized: "Untitled Story") : $0.title }
+                                ?? String(localized: "No Story")) {
+                            ForEach(group.tasks) { candidate in
+                                Button {
+                                    task.parentTaskId = candidate.id
+                                    showsParentTasks = false
+                                } label: {
+                                    HStack {
+                                        Text(candidate.title)
+                                        Spacer()
+                                        if task.parentTaskId == candidate.id {
+                                            Image(systemName: "checkmark")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                .searchable(text: $parentSearch, prompt: Text("Search tasks"))
+                .navigationTitle("Starts after")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") { showsParentTasks = false }
+                    }
+                }
+            }
+            .onDisappear { parentSearch = "" }
+        }
     }
 
     private var agentSection: some View {

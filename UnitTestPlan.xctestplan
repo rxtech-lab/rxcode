@@ -4,7 +4,13 @@
       "id" : "BC843CAB-645B-4D89-BAE0-34BE9DFE9D04",
       "name" : "Configuration 1",
       "options" : {
-
+        "environmentVariableEntries" : [
+          {
+            "isEnabled" : true,
+            "key" : "RXCODE_UNIT_TESTING",
+            "value" : "1"
+          }
+        ]
       }
     }
   ],

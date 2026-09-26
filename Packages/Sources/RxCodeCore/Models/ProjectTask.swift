@@ -173,6 +173,11 @@ public struct ProjectStory: Identifiable, Codable, Sendable, Hashable {
     public var priority: TaskPriority?
     /// A `TaskItemType.id` from the owning board.
     public var typeId: UUID?
+    /// Other projects that share this story. A linked story is mirrored, under
+    /// the same id, onto every linked project's board, so each board groups
+    /// and rolls up its own tasks under it; shared fields stay in sync across
+    /// the copies.
+    public var linkedProjectIds: [UUID]
     public var createdAt: Date
     public var updatedAt: Date
 
@@ -186,6 +191,7 @@ public struct ProjectStory: Identifiable, Codable, Sendable, Hashable {
         milestone: String? = nil,
         priority: TaskPriority? = nil,
         typeId: UUID? = nil,
+        linkedProjectIds: [UUID] = [],
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -198,13 +204,14 @@ public struct ProjectStory: Identifiable, Codable, Sendable, Hashable {
         self.milestone = milestone
         self.priority = priority
         self.typeId = typeId
+        self.linkedProjectIds = linkedProjectIds.filter { $0 != projectId }
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, projectId, title, details, tags, version, milestone, priority, typeId
-        case createdAt, updatedAt
+        case linkedProjectIds, createdAt, updatedAt
     }
 
     /// Tolerant decoding: stories written before the classification fields
@@ -220,8 +227,29 @@ public struct ProjectStory: Identifiable, Codable, Sendable, Hashable {
         milestone = try c.decodeIfPresent(String.self, forKey: .milestone)
         priority = (try? c.decodeIfPresent(TaskPriority.self, forKey: .priority)) ?? nil
         typeId = try c.decodeIfPresent(UUID.self, forKey: .typeId)
+        linkedProjectIds = (try? c.decodeIfPresent([UUID].self, forKey: .linkedProjectIds)) ?? []
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
+    }
+
+    /// Every project whose board holds a copy of this story, this one first.
+    public var projectGroup: [UUID] {
+        var seen: Set<UUID> = []
+        return ([projectId] + linkedProjectIds).filter { seen.insert($0).inserted }
+    }
+
+    /// Whether the story is shared with at least one other project.
+    public var isShared: Bool { !linkedProjectIds.isEmpty }
+
+    /// This story's copy for another project in its group: the shared fields
+    /// are carried over, while the owning project, the link list, and the
+    /// board-local item type are rewritten for the target board.
+    public func mirrored(into targetProjectId: UUID, group: [UUID], typeId: UUID?) -> ProjectStory {
+        var copy = self
+        copy.projectId = targetProjectId
+        copy.linkedProjectIds = group.filter { $0 != targetProjectId }
+        copy.typeId = typeId
+        return copy
     }
 }
 
@@ -238,6 +266,8 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
     public var storyId: UUID?
     /// Task that must finish before this task starts. Links stay within a board.
     public var parentTaskId: UUID?
+    /// The Autopilot laptop assigned to this task. Nil means unassigned.
+    public var assignedDeviceId: String?
     public var title: String
     public var details: String
     public var status: TaskStatus
@@ -273,6 +303,7 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
         projectId: UUID,
         storyId: UUID? = nil,
         parentTaskId: UUID? = nil,
+        assignedDeviceId: String? = nil,
         title: String,
         details: String = "",
         status: TaskStatus = .pending,
@@ -294,6 +325,7 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
         self.projectId = projectId
         self.storyId = storyId
         self.parentTaskId = parentTaskId
+        self.assignedDeviceId = assignedDeviceId
         self.title = title
         self.details = details
         self.status = status
@@ -316,7 +348,7 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
     /// default so a board written by an older build keeps loading after new
     /// fields are added.
     private enum CodingKeys: String, CodingKey {
-        case id, projectId, storyId, parentTaskId, title, details, status, version, tags
+        case id, projectId, storyId, parentTaskId, assignedDeviceId, title, details, status, version, tags
         case milestone, priority, typeId
         case agent, attachments, sessionKey, sourceSessionKey, attentionReason, sortIndex, createdAt, updatedAt
     }
@@ -327,6 +359,7 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
         projectId = try c.decodeIfPresent(UUID.self, forKey: .projectId) ?? UUID()
         storyId = try c.decodeIfPresent(UUID.self, forKey: .storyId)
         parentTaskId = try c.decodeIfPresent(UUID.self, forKey: .parentTaskId)
+        assignedDeviceId = try c.decodeIfPresent(String.self, forKey: .assignedDeviceId)
         title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
         details = try c.decodeIfPresent(String.self, forKey: .details) ?? ""
         status = try c.decodeIfPresent(TaskStatus.self, forKey: .status) ?? .pending
@@ -531,52 +564,104 @@ public enum TaskViewLayout: String, Codable, Sendable, CaseIterable, Hashable {
 /// A customizable per-project view, shown as a tab on the project's task page
 /// (the GitHub Projects "Backlog", "Priority board", "Team items" tabs).
 ///
-/// Filters are conjunctive: a task must carry every tag, match the version,
-/// belong to the story, and sit in one of the visible statuses.
+/// Conditions are conjunctive — a task must pass every one that is set — and
+/// multi-value conditions match any of their values: a task in any selected
+/// story, targeting any selected version or milestone, and sitting in one of
+/// the visible statuses. Tags are the exception: a task must carry every
+/// selected tag.
 public struct TaskSavedView: Identifiable, Codable, Sendable, Hashable {
     public let id: UUID
     public var name: String
     public var layout: TaskViewLayout
     public var tags: [String]
-    public var version: String?
-    /// Limits the view to one story's tasks. `nil` means every story.
-    public var storyId: UUID?
+    /// Limits the view to these versions. Empty means every version.
+    public var versions: [String]
+    /// Limits the view to these milestones. Empty means every milestone.
+    public var milestones: [String]
+    /// Limits the view to these stories' tasks. Empty means every story.
+    public var storyIds: [UUID]
     /// Visible statuses — board columns, or table rows. Empty means all.
     public var statuses: [TaskStatus]
+    /// Agent-written Swift that further narrows the view; see
+    /// `TaskFilterScript`. `nil` means no script.
+    public var filterScript: String?
+    /// Statuses the board's story panel shows, matched against each story's
+    /// rolled-up status. Empty means every status the view's columns allow.
+    public var storyPanelStatuses: [TaskStatus]
 
     public init(
         id: UUID = UUID(),
         name: String,
         layout: TaskViewLayout = .board,
         tags: [String] = [],
-        version: String? = nil,
-        storyId: UUID? = nil,
-        statuses: [TaskStatus] = []
+        versions: [String] = [],
+        milestones: [String] = [],
+        storyIds: [UUID] = [],
+        statuses: [TaskStatus] = [],
+        filterScript: String? = nil,
+        storyPanelStatuses: [TaskStatus] = []
     ) {
         self.id = id
         self.name = name
         self.layout = layout
         self.tags = tags
-        self.version = version
-        self.storyId = storyId
+        self.versions = versions
+        self.milestones = milestones
+        self.storyIds = storyIds
         self.statuses = statuses
+        self.filterScript = filterScript
+        self.storyPanelStatuses = storyPanelStatuses
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, layout, tags, version, storyId, statuses
+        case id, name, layout, tags, versions, milestones, storyIds, statuses, filterScript, storyPanelStatuses
+        /// Single-value filters written before multi-select existed.
+        case version, storyId
     }
 
-    /// Tolerant decoding: views written before `layout` / `storyId` /
-    /// `statuses` existed decode as an unfiltered board.
+    /// Tolerant decoding: views written before `layout` / `statuses` existed
+    /// decode as an unfiltered board, and the legacy single `version` /
+    /// `storyId` filters become one-element lists.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
         name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
         layout = (try? c.decodeIfPresent(TaskViewLayout.self, forKey: .layout)) ?? .board
         tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
-        version = try c.decodeIfPresent(String.self, forKey: .version)
-        storyId = try c.decodeIfPresent(UUID.self, forKey: .storyId)
+        if let versions = try? c.decodeIfPresent([String].self, forKey: .versions) {
+            self.versions = versions
+        } else {
+            let legacy = (try? c.decodeIfPresent(String.self, forKey: .version)) ?? nil
+            versions = legacy.flatMap { $0.isEmpty ? nil : [$0] } ?? []
+        }
+        milestones = (try? c.decodeIfPresent([String].self, forKey: .milestones)) ?? []
+        if let storyIds = try? c.decodeIfPresent([UUID].self, forKey: .storyIds) {
+            self.storyIds = storyIds
+        } else {
+            let legacy = (try? c.decodeIfPresent(UUID.self, forKey: .storyId)) ?? nil
+            storyIds = legacy.map { [$0] } ?? []
+        }
         statuses = (try? c.decodeIfPresent([TaskStatus].self, forKey: .statuses)) ?? []
+        filterScript = try? c.decodeIfPresent(String.self, forKey: .filterScript)
+        storyPanelStatuses = (try? c.decodeIfPresent([TaskStatus].self, forKey: .storyPanelStatuses)) ?? []
+    }
+
+    /// Also writes the legacy single-value keys when a list holds exactly one
+    /// value, so an older build reading a synced view keeps that filter.
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(name, forKey: .name)
+        try c.encode(layout, forKey: .layout)
+        try c.encode(tags, forKey: .tags)
+        try c.encode(versions, forKey: .versions)
+        try c.encode(milestones, forKey: .milestones)
+        try c.encode(storyIds, forKey: .storyIds)
+        try c.encode(statuses, forKey: .statuses)
+        try c.encodeIfPresent(filterScript, forKey: .filterScript)
+        try c.encode(storyPanelStatuses, forKey: .storyPanelStatuses)
+        if versions.count == 1 { try c.encode(versions[0], forKey: .version) }
+        if storyIds.count == 1 { try c.encode(storyIds[0], forKey: .storyId) }
     }
 
     /// Stable id of the implicit view every project shows before the user
@@ -589,7 +674,7 @@ public struct TaskSavedView: Identifiable, Codable, Sendable, Hashable {
 
     /// A view with no constraints matches everything.
     public var isEmpty: Bool {
-        tags.isEmpty && (version ?? "").isEmpty && storyId == nil && statuses.isEmpty
+        tags.isEmpty && versions.isEmpty && milestones.isEmpty && storyIds.isEmpty && statuses.isEmpty
     }
 
     /// Columns the view shows, in board order. A view whose every chosen
@@ -599,20 +684,27 @@ public struct TaskSavedView: Identifiable, Codable, Sendable, Hashable {
         return statuses.isEmpty || filtered.isEmpty ? columns : filtered
     }
 
+    /// Whether the board's story panel shows a story with this rolled-up status.
+    public func storyPanelShows(_ rolledUpStatus: TaskStatus) -> Bool {
+        storyPanelStatuses.isEmpty || storyPanelStatuses.contains(rolledUpStatus)
+    }
+
     public func matches(_ task: ProjectTask) -> Bool {
-        if let version, !version.isEmpty, task.version != version { return false }
+        if !versions.isEmpty, !versions.contains(task.version ?? "") { return false }
+        if !milestones.isEmpty, !milestones.contains(task.milestone ?? "") { return false }
         if !tags.isEmpty, !tags.allSatisfy(task.tags.contains) { return false }
-        if let storyId, task.storyId != storyId { return false }
+        if !storyIds.isEmpty, !(task.storyId.map(storyIds.contains) ?? false) { return false }
         if !statuses.isEmpty, !statuses.contains(task.status) { return false }
         return true
     }
 
-    /// Stories match on their own tags and version, like tasks; their status is
-    /// the one rolled up from their children.
+    /// Stories match on their own tags, version and milestone, like tasks;
+    /// their status is the one rolled up from their children.
     public func matches(_ story: ProjectStory, rolledUpStatus: TaskStatus) -> Bool {
-        if let version, !version.isEmpty, story.version != version { return false }
+        if !versions.isEmpty, !versions.contains(story.version ?? "") { return false }
+        if !milestones.isEmpty, !milestones.contains(story.milestone ?? "") { return false }
         if !tags.isEmpty, !tags.allSatisfy(story.tags.contains) { return false }
-        if let storyId, story.id != storyId { return false }
+        if !storyIds.isEmpty, !storyIds.contains(story.id) { return false }
         if !statuses.isEmpty, !statuses.contains(rolledUpStatus) { return false }
         return true
     }
@@ -741,8 +833,8 @@ public struct TaskBoard: Codable, Sendable {
     /// Customized columns, in board order. Empty means the board still shows
     /// `TaskColumn.defaults`; see `effectiveColumns`.
     public var columns: [TaskColumn]
-    /// The Notion database this board syncs with, if linked.
-    public var notion: NotionBoardLink?
+    /// Autopilot sync bookkeeping. `nil` for a local-only project's board.
+    public var cloudSync: CloudBoardSyncState?
 
     public static let currentSchemaVersion = 1
 
@@ -754,7 +846,7 @@ public struct TaskBoard: Codable, Sendable {
         labels: [TaskLabel] = [],
         itemTypes: [TaskItemType] = [],
         columns: [TaskColumn] = [],
-        notion: NotionBoardLink? = nil
+        cloudSync: CloudBoardSyncState? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.stories = stories
@@ -763,11 +855,11 @@ public struct TaskBoard: Codable, Sendable {
         self.labels = labels
         self.itemTypes = itemTypes
         self.columns = columns
-        self.notion = notion
+        self.cloudSync = cloudSync
     }
 
     private enum CodingKeys: String, CodingKey {
-        case schemaVersion, stories, tasks, savedViews, labels, itemTypes, columns, notion
+        case schemaVersion, stories, tasks, savedViews, labels, itemTypes, columns, cloudSync
     }
 
     public init(from decoder: Decoder) throws {
@@ -779,12 +871,35 @@ public struct TaskBoard: Codable, Sendable {
         labels = try c.decodeIfPresent([TaskLabel].self, forKey: .labels) ?? []
         itemTypes = try c.decodeIfPresent([TaskItemType].self, forKey: .itemTypes) ?? []
         columns = try c.decodeIfPresent([TaskColumn].self, forKey: .columns) ?? []
-        notion = try? c.decodeIfPresent(NotionBoardLink.self, forKey: .notion)
+        cloudSync = try? c.decodeIfPresent(CloudBoardSyncState.self, forKey: .cloudSync)
     }
 
     public func story(id: UUID?) -> ProjectStory? {
         guard let id else { return nil }
         return stories.first { $0.id == id }
+    }
+
+    /// Eligible parent tasks, grouped in story order. Tasks whose story was
+    /// removed join the ungrouped tasks at the end.
+    public func parentTaskGroups(for taskID: UUID, matching search: String = "") -> [ParentTaskGroup] {
+        let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        let eligible = tasks.filter { canLinkTask(taskID, to: $0.id) }
+        let storyIDs = Set(stories.map(\.id))
+        var groups = stories.compactMap { story -> ParentTaskGroup? in
+            let matchesStory = story.title.localizedCaseInsensitiveContains(query)
+            let matches = eligible.filter {
+                $0.storyId == story.id && (query.isEmpty || matchesStory || $0.title.localizedCaseInsensitiveContains(query))
+            }
+            return matches.isEmpty ? nil : ParentTaskGroup(story: story, tasks: matches)
+        }
+        let ungrouped = eligible.filter {
+            ($0.storyId.map { !storyIDs.contains($0) } ?? true)
+                && (query.isEmpty || $0.title.localizedCaseInsensitiveContains(query))
+        }
+        if !ungrouped.isEmpty {
+            groups.append(ParentTaskGroup(story: nil, tasks: ungrouped))
+        }
+        return groups
     }
 
     /// A parent must be on this board and cannot make a dependency cycle.
@@ -800,31 +915,30 @@ public struct TaskBoard: Codable, Sendable {
         return true
     }
 
-    /// Only an existing task crossing from unfinished to finished releases children.
-    public func newlyFinishedTaskIDs(comparedTo previous: TaskBoard?) -> Set<UUID> {
-        guard let previous else { return [] }
-        let oldTasks = Dictionary(uniqueKeysWithValues: previous.tasks.map { ($0.id, $0) })
-        return Set(tasks.compactMap { task in
-            guard column(for: task.status).countsAsDone,
-                  let old = oldTasks[task.id],
-                  !previous.column(for: old.status).countsAsDone
-            else { return nil }
-            return task.id
+    /// A parent's work is ready for dependent tasks once it reaches Pending
+    /// Review or a column that counts as done. Include parents already there
+    /// so links added later and boards saved by older versions can catch up.
+    public func readyParentIDs() -> Set<UUID> {
+        Set(tasks.compactMap { task in
+            let column = column(for: task.status)
+            return column.id == .pendingReview || column.countsAsDone ? task.id : nil
         })
     }
 
-    /// Advance queued children when their parent crosses into a finished column.
+    /// Advance queued children whose parent is ready for dependent work.
     /// Returns children moved into a chat column so the app can dispatch them.
-    public mutating func advanceChildren(of newlyFinishedParentIDs: Set<UUID>) -> [ProjectTask] {
-        guard !newlyFinishedParentIDs.isEmpty,
+    public mutating func advanceChildren(of readyParentIDs: Set<UUID>) -> [ProjectTask] {
+        guard !readyParentIDs.isEmpty,
               let target = effectiveColumns.first(where: { $0.id == .inProgress }) ?? firstChatColumn
         else { return [] }
         var moved: [ProjectTask] = []
         for index in tasks.indices {
             guard let parentID = tasks[index].parentTaskId,
-                  newlyFinishedParentIDs.contains(parentID),
+                  readyParentIDs.contains(parentID),
                   tasks.contains(where: { $0.id == parentID }),
+                  tasks[index].attentionReason == nil,
                   !column(for: tasks[index].status).countsAsDone,
+                  column(for: tasks[index].status).id != .pendingReview,
                   !column(for: tasks[index].status).triggersChat
             else { continue }
             tasks[index].status = target.id
@@ -935,6 +1049,16 @@ public struct TaskBoard: Codable, Sendable {
     /// The color assigned to `tag`, or `nil` when it has none.
     public func labelColorHex(for tag: String) -> String? {
         labels.first { $0.name == tag }?.colorHex
+    }
+}
+
+public struct ParentTaskGroup: Sendable {
+    public let story: ProjectStory?
+    public let tasks: [ProjectTask]
+
+    public init(story: ProjectStory?, tasks: [ProjectTask]) {
+        self.story = story
+        self.tasks = tasks
     }
 }
 

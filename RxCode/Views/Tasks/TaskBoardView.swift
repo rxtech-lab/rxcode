@@ -13,10 +13,6 @@ struct TaskBoardView: View {
     @Environment(WindowState.self) private var windowState
 
     @State private var sheet: TaskBoardSheet?
-    /// Which tab the next new story or task opens on, set by the menu entry
-    /// that asked for it. Cleared with the sheet so a later "+" gets the
-    /// kind's own default back.
-    @State private var newItemMode: TaskCreationMode?
     @State private var isContentReady = false
 
     private var detailProject: Project? {
@@ -33,10 +29,10 @@ struct TaskBoardView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .accessibilityIdentifier(detailProject == nil ? "task-overview-loading" : "task-project-loading")
             } else if let detailProject {
-                TaskProjectDetailView(project: detailProject, sheet: $sheet, newItemMode: $newItemMode)
+                TaskProjectDetailView(project: detailProject, sheet: $sheet)
                     .id(detailProject.id)
             } else {
-                TaskOverviewView(sheet: $sheet, newItemMode: $newItemMode)
+                TaskOverviewView(sheet: $sheet)
             }
         }
         .background(ClaudeTheme.background)
@@ -47,8 +43,8 @@ struct TaskBoardView: View {
             guard !Task.isCancelled else { return }
             isContentReady = true
         }
-        .sheet(item: $sheet, onDismiss: { newItemMode = nil }) { payload in
-            TaskFormSheet(payload: payload, defaultProjectId: defaultProjectId, initialMode: newItemMode)
+        .sheet(item: $sheet) { payload in
+            TaskFormSheet(payload: payload, defaultProjectId: defaultProjectId)
                 .environment(appState)
                 .environment(windowState)
         }
@@ -75,6 +71,32 @@ struct TaskBoardView: View {
             Text("Add a project to start tracking tasks.")
                 .font(.system(size: ClaudeTheme.size(11)))
                 .foregroundStyle(ClaudeTheme.textTertiary)
+            Button {
+                windowState.newProjectPrefersCloud = false
+                windowState.showNewProjectSheet = true
+            } label: {
+                Label("New Project", systemImage: "plus.rectangle.on.folder")
+            }
+            .buttonStyle(.glass)
+            .padding(.top, 4)
+            .accessibilityIdentifier("task-board-new-project")
+
+            HiddenCloudProjectsMenu()
+                .padding(.top, 4)
+
+            let cloudProjects = appState.visibleUnopenedCloudProjects
+            if !cloudProjects.isEmpty {
+                ScrollView(.horizontal) {
+                    HStack(alignment: .top, spacing: TaskOverviewView.cardSpacing) {
+                        ForEach(cloudProjects) { cloud in
+                            CloudProjectCard(cloud: cloud)
+                                .frame(width: TaskOverviewView.cardWidth)
+                        }
+                    }
+                    .padding(16)
+                }
+                .fixedSize(horizontal: false, vertical: true)
+            }
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -91,11 +113,9 @@ struct TaskOverviewView: View {
     @Environment(WindowState.self) private var windowState
 
     @Binding var sheet: TaskBoardSheet?
-    @Binding var newItemMode: TaskCreationMode?
     @State private var keyword = ""
     /// The story whose task sheet is open.
     @State private var storySheet: ProjectStory?
-    @State private var notionSheet: NotionSyncPayload?
 
     /// How many stories each project group shows before "View all".
     static let previewLimit = 10
@@ -131,12 +151,20 @@ struct TaskOverviewView: View {
                                 project: project,
                                 keyword: keyword,
                                 sheet: $sheet,
-                                newItemMode: $newItemMode,
                                 storySheet: $storySheet
                             )
                                 .frame(width: Self.cardWidth)
                                 .frame(maxHeight: .infinity)
                                 .transition(.scale(scale: 0.96).combined(with: .opacity))
+                        }
+                        // Cloud projects from other devices that have no
+                        // folder on this Mac yet.
+                        if keyword.trimmingCharacters(in: .whitespaces).isEmpty {
+                            ForEach(appState.visibleUnopenedCloudProjects) { cloud in
+                                CloudProjectCard(cloud: cloud)
+                                    .frame(width: Self.cardWidth)
+                                    .transition(.scale(scale: 0.96).combined(with: .opacity))
+                            }
                         }
                     }
                     .padding(16)
@@ -154,10 +182,6 @@ struct TaskOverviewView: View {
             StoryTasksSheet(storyId: story.id, projectId: story.projectId)
                 .environment(appState)
                 .environment(windowState)
-        }
-        .sheet(item: $notionSheet) { payload in
-            NotionSyncSheet(projectId: payload.projectId)
-                .environment(appState)
         }
     }
 
@@ -202,14 +226,37 @@ struct TaskOverviewView: View {
 
             Spacer()
 
-            Button {
-                notionSheet = NotionSyncPayload(projectId: newItemProjectId)
+            HiddenCloudProjectsMenu()
+
+            Menu {
+                Button {
+                    windowState.newProjectPrefersCloud = false
+                    windowState.showNewProjectSheet = true
+                } label: {
+                    Label("New Project…", systemImage: "laptopcomputer")
+                }
+                Button {
+                    windowState.newProjectPrefersCloud = true
+                    windowState.showNewProjectSheet = true
+                } label: {
+                    Label("New Cloud Project…", systemImage: "icloud")
+                }
+                if appState.isSignedIn {
+                    Divider()
+                    Button {
+                        Task { await appState.refreshCloudProjectsAndBoards() }
+                    } label: {
+                        Label("Refresh Cloud Projects", systemImage: "arrow.clockwise.icloud")
+                    }
+                }
             } label: {
-                Label("Notion", systemImage: "arrow.triangle.2.circlepath")
+                Label("Project", systemImage: "folder.badge.plus")
             }
+            .menuStyle(.button)
             .buttonStyle(.bordered)
-            .help("Sync a project's task status to Notion, or import a Notion database into a project")
-            .accessibilityIdentifier("task-board-notion")
+            .fixedSize()
+            .help("Create a project on this Mac or in the cloud")
+            .accessibilityIdentifier("task-board-project-menu")
 
             Menu {
                 TaskCreationMenuItems(
@@ -238,17 +285,15 @@ struct TaskOverviewView: View {
     }
 
     private func openNewStory(mode: TaskCreationMode?) {
-        newItemMode = mode
-        sheet = .story(ProjectStory(projectId: newItemProjectId, title: ""))
+        sheet = .story(ProjectStory(projectId: newItemProjectId, title: ""), mode: mode)
     }
 
     private func openNewTask(mode: TaskCreationMode?) {
-        newItemMode = mode
         sheet = .task(ProjectTask(
             projectId: newItemProjectId,
             title: "",
             status: appState.taskBoard(for: newItemProjectId).firstColumn.id
-        ))
+        ), mode: mode)
     }
 }
 
@@ -267,7 +312,6 @@ private struct TaskProjectSection: View {
     let project: Project
     let keyword: String
     @Binding var sheet: TaskBoardSheet?
-    @Binding var newItemMode: TaskCreationMode?
     @Binding var storySheet: ProjectStory?
 
     @State private var isDropTargeted = false
@@ -343,7 +387,7 @@ private struct TaskProjectSection: View {
         } isTargeted: { isDropTargeted = $0 }
         .accessibilityIdentifier("task-project-section-\(project.id.uuidString)")
         .taskDeletionConfirmation(pending: $pendingDeletion) { candidate in
-            if case .story(let story) = candidate { appState.deleteStory(story) }
+            if case .story(let story, _) = candidate { appState.deleteStory(story) }
         }
     }
 
@@ -388,8 +432,13 @@ private struct TaskProjectSection: View {
                 statusSummary
                     .fixedSize()
             }
+            // The name takes the room it needs before the spacer and the
+            // buttons; it only truncates when it truly doesn't fit.
+            .layoutPriority(1)
 
             Spacer(minLength: 8)
+
+            ProjectCloudButton(project: project, compact: true)
 
             Menu {
                 TaskCreationMenuItems(
@@ -414,6 +463,8 @@ private struct TaskProjectSection: View {
                 )
                 Divider()
                 Button("New Chat") { appState.startNewChat(inProject: project.id, window: windowState) }
+                Divider()
+                ProjectCloudMenuItems(project: project)
             } label: {
                 Image(systemName: "ellipsis")
             }
@@ -435,6 +486,7 @@ private struct TaskProjectSection: View {
                 .font(.system(size: ClaudeTheme.size(14), weight: .semibold))
                 .foregroundStyle(ClaudeTheme.textPrimary)
                 .lineLimit(1)
+                .layoutPriority(1)
             Image(systemName: "chevron.right")
                 .font(.system(size: ClaudeTheme.size(10), weight: .semibold))
                 .foregroundStyle(ClaudeTheme.textTertiary)
@@ -471,13 +523,11 @@ private struct TaskProjectSection: View {
     }
 
     private func openNewStory(mode: TaskCreationMode?) {
-        newItemMode = mode
-        sheet = .story(ProjectStory(projectId: project.id, title: ""))
+        sheet = .story(ProjectStory(projectId: project.id, title: ""), mode: mode)
     }
 
     private func openNewTask(mode: TaskCreationMode?) {
-        newItemMode = mode
-        sheet = .task(ProjectTask(projectId: project.id, title: "", status: board.firstColumn.id))
+        sheet = .task(ProjectTask(projectId: project.id, title: "", status: board.firstColumn.id), mode: mode)
     }
 
     /// Order plus the rolled-up status and progress each story card shows.

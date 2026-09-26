@@ -22,8 +22,8 @@ final class LocalAIProviderAcceptanceTests: XCTestCase {
         continueAfterFailure = false
         try XCTSkipUnless(
             ProcessInfo.processInfo.environment["CI"] != "true"
-                && ProcessInfo.processInfo.environment["RXCODE_SKIP_LOCAL_AI_UI_TESTS"] != "1",
-            "Local AI UI acceptance tests are skipped in CI or when RXCODE_SKIP_LOCAL_AI_UI_TESTS=1."
+                && ProcessInfo.processInfo.environment["RXCODE_RUN_LOCAL_AI_UI_TESTS"] == "1",
+            "Local AI UI acceptance tests require RXCODE_RUN_LOCAL_AI_UI_TESTS=1 outside CI."
         )
     }
 

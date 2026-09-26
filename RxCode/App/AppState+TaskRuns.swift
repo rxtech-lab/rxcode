@@ -114,6 +114,12 @@ extension AppState {
     /// the assignment is copied onto its per-session override fields, then
     /// `sendPrompt` runs exactly as it would for a typed message.
     func startTask(_ task: ProjectTask) async {
+        if let assigned = task.assignedDeviceId, assigned != cloudDeviceID {
+            var waiting = task
+            waiting.attentionReason = "This task is assigned to another Mac. Reassign it to this Mac before running it here."
+            upsertTask(waiting)
+            return
+        }
         guard let project = projects.first(where: { $0.id == task.projectId }) else {
             logger.error("startTask: no project for id \(task.projectId.uuidString, privacy: .public)")
             return
@@ -231,6 +237,77 @@ extension AppState {
               let project = projects.first(where: { $0.id == summary.projectId })
         else { return nil }
         return await persistence.loadFullSession(summary: summary, cwd: project.path)?.messages
+    }
+
+    /// The task sheet uses the same persisted, session-scoped queue as chat.
+    func queuedTaskMessages(for task: ProjectTask) -> [QueuedMessage] {
+        guard let sessionId = chatSessionId(for: task) else { return [] }
+        return threadStore.loadQueue(sessionKey: sessionId)
+    }
+
+    @discardableResult
+    func queueTaskFollowUp(_ task: ProjectTask, text: String, attachments: [Attachment]) -> Bool {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty,
+              let current = self.task(id: task.id), isAgentRunning(for: current),
+              let sessionId = chatSessionId(for: current)
+        else { return false }
+
+        let message = QueuedMessage(text: text, attachments: attachments)
+        threadStore.appendQueued(sessionKey: sessionId, message: message)
+        appendToWindowQueueMirrors(sessionID: sessionId, message: message)
+        broadcastMobileSessionStatus(sessionID: sessionId)
+        return true
+    }
+
+    func removeQueuedTaskMessage(id: UUID, for task: ProjectTask) {
+        guard let sessionId = chatSessionId(for: task),
+              threadStore.loadQueue(sessionKey: sessionId).contains(where: { $0.id == id })
+        else { return }
+        threadStore.removeQueued(id: id)
+        evictFromWindowQueueMirrors(sessionID: sessionId, queuedID: id)
+        broadcastMobileSessionStatus(sessionID: sessionId)
+    }
+
+    func canSteerTask(_ task: ProjectTask) -> Bool {
+        guard let sessionId = chatSessionId(for: task) else { return false }
+        let provider = sessionStates[sessionId]?.agentProvider
+            ?? allSessionSummaries.first(where: { $0.id == sessionId })?.agentProvider
+            ?? task.agent.provider
+            ?? selectedAgentProvider
+        return backend(for: provider).supportsSteering
+    }
+
+    /// A failed steer leaves the queued entry in place for the normal flush.
+    @discardableResult
+    func steerQueuedTaskMessage(id: UUID, for task: ProjectTask) async -> Bool {
+        guard let sessionId = chatSessionId(for: task),
+              let message = threadStore.loadQueue(sessionKey: sessionId).first(where: { $0.id == id }),
+              let streamId = sessionStates[sessionId]?.activeStreamId,
+              sessionStates[sessionId]?.isStreaming == true
+        else { return false }
+
+        let text = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty || !message.attachments.isEmpty else { return false }
+        // Images travel as path lines in the prompt, exactly as on a normal send.
+        let resolved = AttachmentFactory.resolvingClipboardImages(message.attachments).resolved
+        let provider = sessionStates[sessionId]?.agentProvider
+            ?? allSessionSummaries.first(where: { $0.id == sessionId })?.agentProvider
+            ?? task.agent.provider
+            ?? selectedAgentProvider
+        guard await backend(for: provider).steer(
+            streamId: streamId,
+            prompt: buildPromptWithAttachments(text, attachments: resolved)
+        ) else {
+            return false
+        }
+
+        updateState(sessionId) { state in
+            state.messages.append(ChatMessage(role: .user, content: message.text, attachments: resolved))
+            state.needsNewMessage = true
+        }
+        await saveSession(sessionId: sessionId, projectId: task.projectId, messages: stateForSession(sessionId).messages)
+        removeQueuedTaskMessage(id: id, for: task)
+        return true
     }
 
     /// Sends a follow-up into the task's thread in the background and puts the
@@ -377,7 +454,32 @@ extension AppState {
             return true
         }
         updateTaskAttention(task.id, reason: reason)
+        if let moved = self.task(id: task.id) {
+            notifyTaskUpdate(
+                moved,
+                title: String(localized: "Task rejected: \(moved.title)"),
+                body: reason
+            )
+        }
         return true
+    }
+
+    /// Tells the desktop and paired mobile devices that a task needs the
+    /// user: it entered Pending Review, or its work was rejected. Tapping the
+    /// notification opens the task's thread.
+    func notifyTaskUpdate(_ task: ProjectTask, title: String, body: String) {
+        let projectName = projects.first(where: { $0.id == task.projectId })?.name
+        let fullTitle = projectName.map { "\(title) — \($0)" } ?? title
+        let sessionId = task.sessionKey.map { resolveCurrentSessionId($0) }
+        Task {
+            await NotificationService.shared.postTaskUpdate(
+                title: fullTitle,
+                body: body,
+                taskId: task.id,
+                projectId: task.projectId,
+                sessionId: sessionId
+            )
+        }
     }
 
     static func taskCompletionVerdict(from response: String) -> Bool? {
@@ -530,6 +632,21 @@ extension AppState {
                 board.tasks[i].updatedAt = Date()
             }
             logger.info("[Tasks] \(event.rawValue, privacy: .public) moved task \(task.id.uuidString, privacy: .public) to \(target.rawValue, privacy: .public)")
+            if event == .reviewFail {
+                let columnName = board.column(for: target).name
+                notifyTaskUpdate(
+                    task,
+                    title: String(localized: "Task rejected: \(task.title)"),
+                    body: String(localized: "Code review failed. Moved back to \(columnName).")
+                )
+            } else if target == .pendingReview, task.status != .pendingReview {
+                let columnName = board.column(for: target).name
+                notifyTaskUpdate(
+                    task,
+                    title: String(localized: "Ready for review: \(task.title)"),
+                    body: String(localized: "The task moved to \(columnName).")
+                )
+            }
             return task.id
         }
         return nil

@@ -28,10 +28,24 @@ extension AppState {
     /// decode happens inside the persistence actor so the main actor isn't
     /// blocked on file I/O.
     func loadAllTaskBoards() async {
+        await ensureAllTaskBoardsLoaded()
+        releaseInterruptedTasks()
+    }
+
+    /// Reconcile dependencies saved before Pending Review released children.
+    /// Called after startup finishes loading the project and thread state.
+    func resumeReadyTaskDependencies() {
+        for (projectId, board) in taskBoards where !board.readyParentIDs().isEmpty {
+            setTaskBoard(board, for: projectId)
+        }
+    }
+
+    /// Reads every known project's board without the launch-time release of
+    /// interrupted runs, so it is safe to call while agents are running.
+    func ensureAllTaskBoardsLoaded() async {
         for project in projects {
             await ensureTaskBoardLoaded(for: project.id)
         }
-        releaseInterruptedTasks()
     }
 
     /// Releases agent-owned tasks left in chat columns by an interrupted app
@@ -69,16 +83,18 @@ extension AppState {
     // MARK: - Persisting
 
     /// Replaces a project's board in memory and writes it back atomically.
-    func setTaskBoard(_ incoming: TaskBoard, for projectId: UUID) {
-        let previous = taskBoards[projectId]
+    ///
+    /// `fromCloud` marks a write made by cloud sync: it is not sent back to
+    /// Autopilot, and it does not dispatch dependent tasks, since the device
+    /// that moved the parent already did.
+    func setTaskBoard(_ incoming: TaskBoard, for projectId: UUID, fromCloud: Bool = false) {
         var board = incoming
-        let newlyFinished = board.newlyFinishedTaskIDs(comparedTo: previous)
-        let childrenToDispatch = board.advanceChildren(of: newlyFinished)
+        let childrenToDispatch = fromCloud ? [] : board.advanceChildren(of: board.readyParentIDs())
         taskBoards[projectId] = board
-        if board.notion?.autoSync == true, let previous, board.notionContentDiffers(from: previous) {
-            scheduleNotionAutoSync(projectId: projectId)
-        }
         scheduleMobileTaskBoardBroadcast(for: projectId)
+        if !fromCloud {
+            scheduleCloudBoardSync(for: projectId)
+        }
         Task { [persistence] in
             do {
                 try await persistence.saveTaskBoard(board, projectId: projectId)
@@ -103,7 +119,6 @@ extension AppState {
     /// Drops a deleted project's board from memory and disk.
     func deleteTaskBoard(for projectId: UUID) {
         taskBoards.removeValue(forKey: projectId)
-        notionAutoSyncTasks.removeValue(forKey: projectId)?.cancel()
         Task { [persistence] in
             do {
                 try await persistence.deleteTaskBoard(projectId: projectId)
@@ -146,6 +161,20 @@ extension AppState {
         return nil
     }
 
+    /// Reuse a recorded task when a chat describes the same work again. A
+    /// description is required so unrelated tasks with short identical titles
+    /// can still be created separately.
+    func matchingTask(projectId: UUID, title: String = "", details: String, storyId: UUID? = nil) -> ProjectTask? {
+        let description = details.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !description.isEmpty else { return nil }
+        let heading = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return taskBoard(for: projectId).tasks.first { task in
+            task.details.trimmingCharacters(in: .whitespacesAndNewlines) == description
+                && (heading.isEmpty || task.title.trimmingCharacters(in: .whitespacesAndNewlines) == heading)
+                && (storyId == nil || task.storyId == storyId)
+        }
+    }
+
     /// Distinct tags across the filtered scope, for the saved-view editor.
     func allTaskTags(projectFilter: UUID? = nil) -> [String] {
         Array(Set(allTasks(projectFilter: projectFilter).flatMap(\.tags))).sorted()
@@ -157,11 +186,15 @@ extension AppState {
             .sorted(by: >)
     }
 
+    /// Stories in scope. A shared story has a copy on every linked board, so
+    /// across all projects it is listed once.
     func stories(projectFilter: UUID? = nil) -> [ProjectStory] {
-        taskBoards
+        var seen: Set<UUID> = []
+        return taskBoards
             .filter { projectFilter == nil || $0.key == projectFilter }
             .flatMap(\.value.stories)
             .sorted { $0.createdAt < $1.createdAt }
+            .filter { seen.insert($0.id).inserted }
     }
 
     func savedViews(projectFilter: UUID? = nil) -> [TaskSavedView] {
@@ -373,25 +406,117 @@ extension AppState {
     // MARK: - Story CRUD
 
 
+    /// Inserts or replaces a story, and carries its shared fields to the copies
+    /// on every linked project's board.
+    ///
+    /// The link list is owned by `linkStory` / `unlinkStory`: an edit keeps the
+    /// stored links, so a form or an older mobile client that doesn't know
+    /// about links can't drop them.
     func upsertStory(_ story: ProjectStory) {
         var stamped = story
         stamped.updatedAt = Date()
-        updateBoard(story.projectId) { board in
-            if let idx = board.stories.firstIndex(where: { $0.id == stamped.id }) {
-                board.stories[idx] = stamped
-            } else {
-                board.stories.append(stamped)
+        if let stored = taskBoard(for: story.projectId).story(id: story.id) {
+            stamped.linkedProjectIds = stored.linkedProjectIds
+        }
+        writeStoryCopies(stamped, group: stamped.projectGroup)
+    }
+
+    /// Saves a story edited in a form, applying any change to its project
+    /// links. `upsertStory` keeps stored links, so the difference is applied
+    /// here through `linkStory` / `unlinkStory`. A new story's links are
+    /// written by `upsertStory` directly.
+    func saveStory(_ story: ProjectStory) async {
+        let stored = taskBoard(for: story.projectId).story(id: story.id)
+        upsertStory(story)
+        guard let stored else { return }
+        let removed = stored.linkedProjectIds.filter { !story.linkedProjectIds.contains($0) }
+        let added = story.linkedProjectIds.filter { !stored.linkedProjectIds.contains($0) }
+        if !removed.isEmpty {
+            unlinkStory(story.id, in: story.projectId, from: removed)
+        }
+        if !added.isEmpty {
+            await linkStory(story.id, in: story.projectId, to: added)
+        }
+    }
+
+    /// Every task in a story across all the projects it is linked to.
+    func tasks(inStory story: ProjectStory) -> [ProjectTask] {
+        story.projectGroup.flatMap { taskBoard(for: $0).tasks(inStory: story.id) }
+    }
+
+    /// Deletes a story from every board it is linked to. Its tasks are kept and
+    /// orphaned back to the board root rather than deleted — losing tracked
+    /// work to a container delete would be surprising.
+    func deleteStory(_ story: ProjectStory) {
+        let stored = taskBoard(for: story.projectId).story(id: story.id) ?? story
+        for projectId in stored.projectGroup {
+            removeStoryCopy(story.id, from: projectId)
+        }
+    }
+
+    /// Shares a story with more projects. Each newly linked board gets a copy
+    /// of the story under the same id, so tasks there can join it.
+    @discardableResult
+    func linkStory(_ storyId: UUID, in projectId: UUID, to projectIds: [UUID]) async -> ProjectStory? {
+        let known = Set(projects.map(\.id))
+        for id in projectIds where known.contains(id) {
+            await ensureTaskBoardLoaded(for: id)
+        }
+        guard var story = taskBoard(for: projectId).story(id: storyId) else { return nil }
+        let group = story.projectGroup + projectIds.filter { known.contains($0) }
+        var seen: Set<UUID> = []
+        let deduped = group.filter { seen.insert($0).inserted }
+        story.updatedAt = Date()
+        writeStoryCopies(story, group: deduped)
+        return taskBoard(for: projectId).story(id: storyId)
+    }
+
+    /// Stops sharing a story with the given projects. Their copies are removed
+    /// and their tasks orphaned; the remaining copies keep the story.
+    @discardableResult
+    func unlinkStory(_ storyId: UUID, in projectId: UUID, from projectIds: [UUID]) -> ProjectStory? {
+        guard var story = taskBoard(for: projectId).story(id: storyId) else { return nil }
+        let removed = Set(projectIds)
+        let remaining = story.projectGroup.filter { !removed.contains($0) }
+        for id in story.projectGroup where removed.contains(id) {
+            removeStoryCopy(storyId, from: id)
+        }
+        guard let anchor = remaining.first else { return nil }
+        story.updatedAt = Date()
+        writeStoryCopies(story, group: remaining)
+        return taskBoard(for: anchor).story(id: storyId)
+    }
+
+    /// Writes the story onto its own board and onto every loaded board of a
+    /// still-registered project in `group`. Unloaded boards are skipped rather
+    /// than written, which would replace them with an empty board.
+    private func writeStoryCopies(_ story: ProjectStory, group: [UUID]) {
+        let known = Set(projects.map(\.id))
+        let group = group.filter { $0 == story.projectId || (known.contains($0) && taskBoards[$0] != nil) }
+        for target in group {
+            updateBoard(target) { board in
+                let existing = board.story(id: story.id)
+                // Item types are per board, so a copy keeps its own type unless
+                // the source's type also exists on this board.
+                let typeId = target == story.projectId
+                    ? story.typeId
+                    : (board.itemType(id: story.typeId) != nil ? story.typeId : existing?.typeId)
+                var copy = story.mirrored(into: target, group: group, typeId: typeId)
+                if let existing { copy.createdAt = existing.createdAt }
+                if let idx = board.stories.firstIndex(where: { $0.id == copy.id }) {
+                    board.stories[idx] = copy
+                } else {
+                    board.stories.append(copy)
+                }
             }
         }
     }
 
-    /// Deletes a story. Its tasks are kept and orphaned back to the board root
-    /// rather than deleted — losing tracked work to a container delete would be
-    /// surprising.
-    func deleteStory(_ story: ProjectStory) {
-        updateBoard(story.projectId) { board in
-            board.stories.removeAll { $0.id == story.id }
-            for idx in board.tasks.indices where board.tasks[idx].storyId == story.id {
+    private func removeStoryCopy(_ storyId: UUID, from projectId: UUID) {
+        guard taskBoards[projectId]?.story(id: storyId) != nil else { return }
+        updateBoard(projectId) { board in
+            board.stories.removeAll { $0.id == storyId }
+            for idx in board.tasks.indices where board.tasks[idx].storyId == storyId {
                 board.tasks[idx].storyId = nil
             }
         }
@@ -497,8 +622,13 @@ extension AppState {
             for idx in board.stories.indices where board.stories[idx].version == version {
                 board.stories[idx].version = trimmed
             }
-            for idx in board.savedViews.indices where board.savedViews[idx].version == version {
-                board.savedViews[idx].version = trimmed
+            for idx in board.savedViews.indices {
+                var renamed: [String] = []
+                for existing in board.savedViews[idx].versions {
+                    let value = existing == version ? trimmed : existing
+                    if !renamed.contains(value) { renamed.append(value) }
+                }
+                board.savedViews[idx].versions = renamed
             }
         }
     }
@@ -512,8 +642,8 @@ extension AppState {
             for idx in board.stories.indices where board.stories[idx].version == version {
                 board.stories[idx].version = nil
             }
-            for idx in board.savedViews.indices where board.savedViews[idx].version == version {
-                board.savedViews[idx].version = nil
+            for idx in board.savedViews.indices {
+                board.savedViews[idx].versions.removeAll { $0 == version }
             }
         }
     }
@@ -672,6 +802,9 @@ extension AppState {
         guard !details.isEmpty,
               linkedTask(forSessionId: summary.id, projectId: summary.projectId) == nil
         else { return nil }
+        if let existing = matchingTask(projectId: summary.projectId, details: details) {
+            return existing
+        }
         let created = quickAddTask(
             text: details,
             projectId: summary.projectId,
@@ -774,11 +907,15 @@ extension AppState {
         taskBoard(for: task.projectId).story(id: task.storyId)?.title
     }
 
-    /// Runs a one-shot task prompt on the selected suggestion agent.
-    private func runTaskAgentCompletion(prompt: String, projectId: UUID) async -> String? {
+    /// Runs a one-shot task prompt on the selected suggestion agent. `verbatim`
+    /// skips Claude's summary cleanup, for replies that carry code.
+    func runTaskAgentCompletion(prompt: String, projectId: UUID, verbatim: Bool = false) async -> String? {
         let agent = taskSuggestionAgent()
         switch agent.provider ?? selectedAgentProvider {
         case .claudeCode:
+            if verbatim {
+                return await claude.generateRawResponse(prompt: prompt, model: agent.model ?? "haiku")
+            }
             return await claude.generatePlainSummary(prompt: prompt, model: agent.model ?? "haiku", limit: 2000)
         case .codex:
             return await codex.generateCodexPlainSummary(prompt: prompt, model: agent.model)
@@ -849,6 +986,7 @@ extension AppState {
             }
             for idx in board.savedViews.indices {
                 board.savedViews[idx].statuses.removeAll { $0 == column.id }
+                board.savedViews[idx].storyPanelStatuses.removeAll { $0 == column.id }
             }
         }
     }

@@ -2,28 +2,32 @@ import SwiftUI
 import RxCodeCore
 import RxCodeChatKit
 
-/// Compact pill displayed directly above the chat input bar whenever the
-/// current thread has edited files. Tapping it opens the Review inspector on
-/// the "This thread" tab. Hidden mid-turn so it doesn't flicker as edits land.
+/// File-change summary for the current chat or a task's thread. Tapping it
+/// opens that thread's changes, including while a turn is streaming.
 struct ThreadDiffBanner: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
-    @Environment(ChatBridge.self) private var chatBridge
+    var sessionId: String? = nil
+    var isCompact = false
+    var onOpen: (() -> Void)? = nil
     @State private var isHovered: Bool = false
     @State private var stat: (added: Int, removed: Int) = (0, 0)
 
     private var summaries: [FileEditSummary] {
         _ = appState.threadFileEditsRevision
+        if let sessionId {
+            return appState.threadFileEdits(sessionId: sessionId)
+        }
         return appState.threadFileEdits(in: windowState)
     }
 
     private var statKey: String {
-        "\(windowState.currentSessionId ?? windowState.newSessionKey)-\(appState.threadFileEditsRevision)"
+        "\(sessionId ?? windowState.currentSessionId ?? windowState.newSessionKey)-\(appState.threadFileEditsRevision)"
     }
 
     var body: some View {
         let summaries = summaries
-        if !summaries.isEmpty, !chatBridge.isStreaming {
+        if !summaries.isEmpty || isCompact {
             content(fileCount: summaries.count)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .task(id: statKey) {
@@ -33,40 +37,51 @@ struct ThreadDiffBanner: View {
     }
 
     private func content(fileCount: Int) -> some View {
-        let fileText = fileCount == 1 ? "1 file changed" : "\(fileCount) files changed"
+        let fileText = fileCount == 0 ? String(localized: "No changes")
+            : fileCount == 1 ? "1 file changed" : "\(fileCount) files changed"
         return Button(action: open) {
             HStack(spacing: 10) {
-                Image(systemName: "plusminus.circle")
+                Image(systemName: fileCount == 0 ? "checkmark.circle" : "plusminus.circle")
                     .font(.system(size: ClaudeTheme.size(16), weight: .semibold))
                     .foregroundStyle(ClaudeTheme.textSecondary)
 
                 Text(fileText)
                     .font(.system(size: ClaudeTheme.size(13), weight: .medium))
                     .foregroundStyle(ClaudeTheme.textPrimary)
+                    .contentTransition(.numericText(value: Double(fileCount)))
+                    .animation(.easeInOut(duration: 0.25), value: fileCount)
 
-                HStack(spacing: 6) {
-                    if stat.added > 0 {
-                        Text("+\(stat.added)")
-                            .foregroundStyle(ClaudeTheme.statusSuccess)
+                if fileCount > 0 {
+                    HStack(spacing: 6) {
+                        if stat.added > 0 {
+                            Text("+\(stat.added)")
+                                .foregroundStyle(ClaudeTheme.statusSuccess)
+                                .contentTransition(.numericText(value: Double(stat.added)))
+                        }
+                        if stat.removed > 0 {
+                            Text("−\(stat.removed)")
+                                .foregroundStyle(ClaudeTheme.statusError)
+                                .contentTransition(.numericText(value: Double(stat.removed)))
+                        }
                     }
-                    if stat.removed > 0 {
-                        Text("−\(stat.removed)")
-                            .foregroundStyle(ClaudeTheme.statusError)
-                    }
+                    .font(.system(size: ClaudeTheme.size(11), weight: .semibold, design: .monospaced))
+                    .animation(.easeInOut(duration: 0.25), value: stat.added)
+                    .animation(.easeInOut(duration: 0.25), value: stat.removed)
                 }
-                .font(.system(size: ClaudeTheme.size(11), weight: .semibold, design: .monospaced))
 
-                Spacer(minLength: 8)
+                if !isCompact {
+                    Spacer(minLength: 8)
 
-                Text("View Diff")
-                    .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
-                    .foregroundStyle(ClaudeTheme.textPrimary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 5)
-                    .background(ClaudeTheme.surfaceSecondary, in: Capsule())
+                    Text("View Diff")
+                        .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
+                        .foregroundStyle(ClaudeTheme.textPrimary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 5)
+                        .background(ClaudeTheme.surfaceSecondary, in: Capsule())
+                }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
+            .padding(.horizontal, isCompact ? 10 : 14)
+            .padding(.vertical, isCompact ? 5 : 8)
             .background(
                 RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusLarge)
                     .fill(ClaudeTheme.surfaceElevated)
@@ -80,13 +95,17 @@ struct ThreadDiffBanner: View {
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
         .pointerCursorOnHover()
-        .padding(.horizontal, 16)
-        .padding(.bottom, 6)
+        .padding(.horizontal, isCompact ? 0 : 16)
+        .padding(.bottom, isCompact ? 0 : 6)
         .animation(.easeInOut(duration: 0.12), value: isHovered)
-        .help("Open this thread's changes")
+        .help(isCompact ? String(localized: "Open Chat") : String(localized: "Open this thread's changes"))
     }
 
     private func open() {
+        if let onOpen {
+            onOpen()
+            return
+        }
         windowState.inspectorMode = .review
         windowState.inspectorReviewTab = .thisThread
         appState.showRightSidebar = true

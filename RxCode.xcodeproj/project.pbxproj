@@ -22,6 +22,12 @@
 		92E180F9B311F3C72D5DE6B7 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A9993BB72A5307039A88B729 /* Cocoa.framework */; };
 		A7C31E012FC5000000000002 /* PermissionSessionAllowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7C31E012FC5000000000001 /* PermissionSessionAllowTests.swift */; };
 		AC0A11BB22CC33DD44EE5801 /* ACPServiceSuggestionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0A11BB22CC33DD44EE5802 /* ACPServiceSuggestionTests.swift */; };
+		AC1900000000000000000100 /* RxCode/Services/RxAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1900000000000000000000 /* RxCode/Services/RxAuthService.swift */; };
+		AC1900000000000000000101 /* RxCode/Services/ProjectCloudService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1900000000000000000001 /* RxCode/Services/ProjectCloudService.swift */; };
+		AC1900000000000000000102 /* RxCode/Services/AutopilotService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1900000000000000000002 /* RxCode/Services/AutopilotService.swift */; };
+		AC1900000000000000000103 /* RxCode/Utilities/KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1900000000000000000003 /* RxCode/Utilities/KeychainHelper.swift */; };
+		AC1900000000000000000200 /* RxAuthSwift in Frameworks */ = {isa = PBXBuildFile; productRef = DF462DC82FC73FA8002D9562 /* RxAuthSwift */; };
+		AC1900000000000000000300 /* RxAuthSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = DF462DCA2FC73FA8002D9562 /* RxAuthSwiftUI */; };
 		DCA8CF4A05C959C4A6EB391F /* RxCodeCore in Frameworks */ = {isa = PBXBuildFile; productRef = CCDF9594876099576D4FD46E /* RxCodeCore */; };
 		DF06CCD12FB4CAB5005991E1 /* ViewInspector in Frameworks */ = {isa = PBXBuildFile; productRef = DF06CCD02FB4CAB5005991E1 /* ViewInspector */; };
 		DF06CCD22FCB3001005991E1 /* ViewInspector in Frameworks */ = {isa = PBXBuildFile; productRef = DF06CCD02FB4CAB5005991E1 /* ViewInspector */; };
@@ -160,6 +166,10 @@
 		A7C31E012FC5000000000001 /* PermissionSessionAllowTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PermissionSessionAllowTests.swift; sourceTree = "<group>"; };
 		A9993BB72A5307039A88B729 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
 		AC0A11BB22CC33DD44EE5802 /* ACPServiceSuggestionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ACPServiceSuggestionTests.swift; sourceTree = "<group>"; };
+		AC1900000000000000000000 /* RxCode/Services/RxAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RxCode/Services/RxAuthService.swift; sourceTree = SOURCE_ROOT; };
+		AC1900000000000000000001 /* RxCode/Services/ProjectCloudService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RxCode/Services/ProjectCloudService.swift; sourceTree = SOURCE_ROOT; };
+		AC1900000000000000000002 /* RxCode/Services/AutopilotService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RxCode/Services/AutopilotService.swift; sourceTree = SOURCE_ROOT; };
+		AC1900000000000000000003 /* RxCode/Utilities/KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RxCode/Utilities/KeychainHelper.swift; sourceTree = SOURCE_ROOT; };
 		DF06DCC62FB8552B005991E1 /* UnitTestPlan.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = UnitTestPlan.xctestplan; sourceTree = "<group>"; };
 		DF22D8262FBE025C00E3ABFD /* RxCodeWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RxCodeWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		DF22D8272FBE025C00E3ABFD /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
@@ -295,6 +305,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AC1900000000000000000200 /* RxAuthSwift in Frameworks */,
+				AC1900000000000000000300 /* RxAuthSwiftUI in Frameworks */,
 				DF230BA32FBC73BA008929A6 /* RxCodeSync in Frameworks */,
 				DF230BA12FBC73BA008929A6 /* RxCodeCore in Frameworks */,
 				DF230B9F2FBC73BA008929A6 /* RxCodeChatKit in Frameworks */,
@@ -428,6 +440,17 @@
 			path = UserMenus;
 			sourceTree = "<group>";
 		};
+		DFADB4C4306800F700A1E94D /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				AC1900000000000000000003 /* RxCode/Utilities/KeychainHelper.swift */,
+				AC1900000000000000000002 /* RxCode/Services/AutopilotService.swift */,
+				AC1900000000000000000001 /* RxCode/Services/ProjectCloudService.swift */,
+				AC1900000000000000000000 /* RxCode/Services/RxAuthService.swift */,
+			);
+			name = "Recovered References";
+			sourceTree = "<group>";
+		};
 		E673352F2F7356F600FD26C7 = {
 			isa = PBXGroup;
 			children = (
@@ -448,6 +471,7 @@
 				E67335392F7356F600FD26C7 /* Products */,
 				609E8EE085862BD7D5B4012F /* Frameworks */,
 				1525FE6BFB6F06A3F00B92D3 /* RxCodeTests */,
+				DFADB4C4306800F700A1E94D /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -555,6 +579,8 @@
 			);
 			name = RxCodeMobile;
 			packageProductDependencies = (
+				DF462DC82FC73FA8002D9562 /* RxAuthSwift */,
+				DF462DCA2FC73FA8002D9562 /* RxAuthSwiftUI */,
 				DF230B9E2FBC73BA008929A6 /* RxCodeChatKit */,
 				DF230BA02FBC73BA008929A6 /* RxCodeCore */,
 				DF230BA22FBC73BA008929A6 /* RxCodeSync */,
@@ -877,6 +903,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AC1900000000000000000103 /* RxCode/Utilities/KeychainHelper.swift in Sources */,
+				AC1900000000000000000102 /* RxCode/Services/AutopilotService.swift in Sources */,
+				AC1900000000000000000101 /* RxCode/Services/ProjectCloudService.swift in Sources */,
+				AC1900000000000000000100 /* RxCode/Services/RxAuthService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

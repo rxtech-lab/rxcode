@@ -11,7 +11,8 @@ struct TaskViewEditorPayload: Identifiable {
 }
 
 /// Create/edit sheet for a project view tab: its name, layout, visible columns
-/// and filters. Edits a draft and commits on Save.
+/// and filters, including an agent-written Swift filter. Edits a draft and
+/// commits on Save.
 struct TaskViewFormSheet: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
@@ -61,42 +62,45 @@ struct TaskViewFormSheet: View {
                     Text("Board columns, or the rows a table shows. At least one stays visible.")
                 }
 
-                Section("Filters") {
-                    Picker("Story", selection: $draft.storyId) {
-                        Text("Any story").tag(UUID?.none)
-                        ForEach(board.stories) { story in
-                            Text(story.title).tag(UUID?.some(story.id))
-                        }
-                    }
+                filterSection(
+                    "Stories",
+                    empty: "No stories on this project yet.",
+                    footer: "Tasks in any selected story.",
+                    options: board.stories.map { ($0.id, $0.title) },
+                    selection: \.storyIds
+                )
 
-                    Picker("Version", selection: versionBinding) {
-                        Text("Any version").tag("")
-                        ForEach(board.allVersions, id: \.self) { version in
-                            Text(version).tag(version)
-                        }
-                    }
-                }
+                filterSection(
+                    "Versions",
+                    empty: "No versions on this project yet.",
+                    footer: "Tasks targeting any selected version.",
+                    options: listed(board.allVersions, draft.versions),
+                    selection: \.versions
+                )
 
-                Section {
-                    if board.allTags.isEmpty {
-                        Text("No tags on this project yet.")
-                            .foregroundStyle(ClaudeTheme.textTertiary)
-                    } else {
-                        ForEach(board.allTags, id: \.self) { tag in
-                            Toggle(tag, isOn: tagBinding(tag))
-                        }
-                    }
-                } header: {
-                    Text("Tags")
-                } footer: {
-                    Text("Tasks must carry every selected tag.")
-                }
+                filterSection(
+                    "Milestones",
+                    empty: "No milestones on this project yet.",
+                    footer: "Tasks in any selected milestone.",
+                    options: listed(board.allMilestones, draft.milestones),
+                    selection: \.milestones
+                )
+
+                filterSection(
+                    "Tags",
+                    empty: "No tags on this project yet.",
+                    footer: "Tasks must carry every selected tag.",
+                    options: listed(board.allTags, draft.tags),
+                    selection: \.tags
+                )
+
+                TaskFilterScriptSection(projectId: payload.projectId, script: $draft.filterScript)
             }
             .formStyle(.grouped)
 
             footer
         }
-        .frame(width: 480, height: 560)
+        .frame(width: 480, height: 640)
         .onAppear { draft = payload.view }
     }
 
@@ -137,28 +141,57 @@ struct TaskViewFormSheet: View {
         )
     }
 
-    private func tagBinding(_ tag: String) -> Binding<Bool> {
+    /// One multi-select filter condition, matched as "any of" except tags.
+    private func filterSection<Value: Hashable>(
+        _ title: LocalizedStringKey,
+        empty: LocalizedStringKey,
+        footer: LocalizedStringKey,
+        options: [(Value, String)],
+        selection: WritableKeyPath<TaskSavedView, [Value]>
+    ) -> some View {
+        Section {
+            if options.isEmpty {
+                Text(empty)
+                    .foregroundStyle(ClaudeTheme.textTertiary)
+            } else {
+                ForEach(options, id: \.0) { value, label in
+                    Toggle(label, isOn: selectionBinding(value, in: selection))
+                }
+            }
+        } header: {
+            Text(title)
+        } footer: {
+            Text(footer)
+        }
+    }
+
+    /// The board's values plus any selected value no item uses anymore, so a
+    /// stale selection stays visible and can be switched off.
+    private func listed(_ values: [String], _ selected: [String]) -> [(String, String)] {
+        (values + selected.filter { !values.contains($0) }).map { ($0, $0) }
+    }
+
+    private func selectionBinding<Value: Hashable>(
+        _ value: Value,
+        in selection: WritableKeyPath<TaskSavedView, [Value]>
+    ) -> Binding<Bool> {
         Binding(
-            get: { draft.tags.contains(tag) },
+            get: { draft[keyPath: selection].contains(value) },
             set: { isOn in
                 if isOn {
-                    if !draft.tags.contains(tag) { draft.tags.append(tag) }
+                    if !draft[keyPath: selection].contains(value) { draft[keyPath: selection].append(value) }
                 } else {
-                    draft.tags.removeAll { $0 == tag }
+                    draft[keyPath: selection].removeAll { $0 == value }
                 }
             }
         )
     }
 
-    private var versionBinding: Binding<String> {
-        Binding(
-            get: { draft.version ?? "" },
-            set: { draft.version = $0.isEmpty ? nil : $0 }
-        )
-    }
-
     private func save() {
         draft.name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !draft.hasFilterScript { draft.filterScript = nil }
+        // Deleted stories can't be shown or unselected, so they don't persist.
+        draft.storyIds.removeAll { board.story(id: $0) == nil }
         appState.upsertSavedView(draft, projectId: payload.projectId)
         onSave(draft)
         dismiss()

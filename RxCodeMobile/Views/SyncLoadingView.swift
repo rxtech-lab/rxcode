@@ -14,6 +14,7 @@ struct SyncLoadingView: View {
     var onRetry: (() -> Void)?
     var onSelectDesktop: ((PairedDesktop) -> Void)?
     var onPairNewDesktop: (() -> Void)?
+    var onViewTasks: (() -> Void)?
 
     @State private var pulseScale: CGFloat = 1.0
     @State private var orbRotation: Double = 0
@@ -28,6 +29,42 @@ struct SyncLoadingView: View {
             timeoutView
         } else {
             loadingView
+        }
+    }
+
+    private var hasSecondaryActions: Bool {
+        onViewTasks != nil || onPairNewDesktop != nil
+    }
+
+    /// Offline escape hatches shared by the loading and timeout screens,
+    /// stacked full width so labels never truncate.
+    @ViewBuilder
+    private var secondaryActions: some View {
+        if hasSecondaryActions {
+            VStack(spacing: 10) { secondaryButtons }
+        }
+    }
+
+    @ViewBuilder
+    private var secondaryButtons: some View {
+        if let onViewTasks {
+            Button(action: onViewTasks) {
+                Label("View Tasks", systemImage: "checklist")
+                    .font(.body.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.glass)
+            .controlSize(.large)
+            .accessibilityIdentifier("view-tasks-offline")
+        }
+        if let onPairNewDesktop {
+            Button(action: onPairNewDesktop) {
+                Label("Pair New Mac", systemImage: "plus.circle")
+                    .font(.body.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.glass)
+            .controlSize(.large)
         }
     }
 
@@ -72,10 +109,11 @@ struct SyncLoadingView: View {
                     .padding(.top, 8)
                     .opacity(appeared ? 1 : 0)
 
-                pairNewDesktopButton
+                secondaryActions
+                    .frame(maxWidth: 360)
                     .opacity(appeared ? 1 : 0)
                     .offset(y: appeared ? 0 : 16)
-                    .padding(.top, 4)
+                    .padding(.top, 8)
 
                 Spacer()
                 Spacer()
@@ -133,54 +171,37 @@ struct SyncLoadingView: View {
         }
     }
 
+    /// One clear primary action (reconnect), with the offline alternatives
+    /// grouped underneath as equal-weight secondary buttons.
     private var timeoutActions: some View {
         VStack(spacing: 12) {
             Button {
                 onRetry?()
             } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 16, weight: .semibold))
-                    Text("Try Again")
-                        .font(.body.weight(.semibold))
-                }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 32)
-                .padding(.vertical, 14)
-                .background(
-                    LinearGradient(
-                        colors: [
-                            ClaudeTheme.accent,
-                            ClaudeTheme.accent.opacity(0.85)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .clipShape(Capsule())
-                .shadow(color: ClaudeTheme.accent.opacity(0.3), radius: 12, x: 0, y: 6)
-            }
-            .buttonStyle(.plain)
-
-            pairNewDesktopButton
-        }
-        .padding(.top, 8)
-    }
-
-    @ViewBuilder
-    private var pairNewDesktopButton: some View {
-        if let onPairNewDesktop {
-            Button {
-                onPairNewDesktop()
-            } label: {
-                Label("Pair New Mac", systemImage: "plus.circle")
+                Label("Try Again", systemImage: "arrow.clockwise")
                     .font(.body.weight(.semibold))
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.glass)
-            .foregroundStyle(.primary)
+            .buttonStyle(.glassProminent)
+            .tint(ClaudeTheme.accent)
+            .controlSize(.large)
+            .accessibilityIdentifier("sync-retry")
+
+            if hasSecondaryActions {
+                HStack(spacing: 12) {
+                    VStack { Divider() }
+                    Text("or")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    VStack { Divider() }
+                }
+                .padding(.vertical, 4)
+
+                secondaryActions
+            }
         }
+        .frame(maxWidth: 360)
+        .padding(.top, 8)
     }
 
     @ViewBuilder
@@ -207,7 +228,7 @@ struct SyncLoadingView: View {
                         .strokeBorder(.white.opacity(0.18))
                 }
             }
-            .frame(maxWidth: 320)
+            .frame(maxWidth: 360)
             .padding(.top, 4)
         }
     }

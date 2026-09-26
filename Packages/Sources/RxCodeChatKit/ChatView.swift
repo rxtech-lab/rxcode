@@ -35,10 +35,8 @@ public struct ChatView<InputAccessory: View, BottomAccessory: View, AboveInputAc
             } else {
                 messageScrollView
 
-                aboveInputAccessory
-
                 InputBarView(accessory: inputAccessory) {
-                    EmptyView()
+                    aboveInputAccessory
                 }
 
                 bottomAccessory
@@ -79,10 +77,8 @@ public struct ChatView<InputAccessory: View, BottomAccessory: View, AboveInputAc
                     .lineLimit(2)
                     .padding(.horizontal, 24)
 
-                aboveInputAccessory
-
                 InputBarView(accessory: inputAccessory) {
-                    EmptyView()
+                    aboveInputAccessory
                 }
 
                 bottomAccessory

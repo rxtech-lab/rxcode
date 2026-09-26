@@ -22,7 +22,13 @@ extension AppState {
     /// Returns an empty array for a not-yet-persisted (placeholder) session.
     func threadFileEdits(in window: WindowState) -> [FileEditSummary] {
         let key = window.currentSessionId ?? window.newSessionKey
-        return threadStore.fetchFileEdits(sessionId: key)
+        return threadFileEdits(sessionId: key)
+    }
+
+    /// File edits for a specific thread, including a task run opened while
+    /// another chat is selected in the window.
+    func threadFileEdits(sessionId: String) -> [FileEditSummary] {
+        threadStore.fetchFileEdits(sessionId: resolveCurrentSessionId(sessionId))
             .map { $0.toSummary() }
             .filter { !PlanLogic.isPlanFilePath($0.path) }
     }
@@ -157,7 +163,9 @@ extension AppState {
 
         // Services nothing on the critical path waits for, started first so
         // they overlap the loads below.
-        startEagerBackgroundServices()
+        if !AppSupport.isUnitTesting {
+            startEagerBackgroundServices()
+        }
 
         projects = await loadDeduplicatedProjects()
         seedUITestBriefingIfRequested()
@@ -185,6 +193,7 @@ extension AppState {
 
         // Permission request routing is handled per-window in initializeWindow's listener.
         isInitialized = true
+        resumeReadyTaskDependencies()
 
         let elapsed = ContinuousClock.now - launchStart
         let elapsedMs = Double(elapsed.components.seconds) * 1_000
@@ -193,7 +202,9 @@ extension AppState {
 
         // Hand the rest of the boot to a task so the window can finish coming
         // up (per-window init runs right after this returns).
-        Task { [weak self] in await self?.finishInitialization() }
+        if !AppSupport.isUnitTesting {
+            Task { [weak self] in await self?.finishInitialization() }
+        }
     }
 
     /// Work that has to start as early as possible but that the first frame
@@ -239,33 +250,38 @@ extension AppState {
             }
         }
 
-        Task { [weak self] in
-            guard let self else { return }
-            // Restore an existing rxauth session (token refresh runs silently).
-            // One-time migration: purge the legacy GitHub device-flow access
-            // token from the old `com.claudework.github` keychain entry so it
-            // never gets re-used. Runs off the main actor and only until it
-            // succeeds (a missing entry counts): a `SecItem` call can block for
-            // seconds on a keychain permission prompt, which froze launch.
-            let legacyTokenPurgedKey = "didPurgeLegacyGitHubAccessToken"
-            if !UserDefaults.standard.bool(forKey: legacyTokenPurgedKey) {
-                Task.detached(priority: .utility) {
-                    if (try? KeychainHelper.delete(service: "com.claudework.github", account: "access_token")) != nil {
-                        UserDefaults.standard.set(true, forKey: legacyTokenPurgedKey)
+        if !AppSupport.isTestProcess {
+            Task { [weak self] in
+                guard let self else { return }
+                // Restore an existing rxauth session (token refresh runs silently).
+                // One-time migration: purge the legacy GitHub device-flow access
+                // token from the old `com.claudework.github` keychain entry so it
+                // never gets re-used. Runs off the main actor and only until it
+                // succeeds (a missing entry counts): a `SecItem` call can block for
+                // seconds on a keychain permission prompt, which froze launch.
+                let legacyTokenPurgedKey = "didPurgeLegacyGitHubAccessToken"
+                if !UserDefaults.standard.bool(forKey: legacyTokenPurgedKey) {
+                    Task.detached(priority: .utility) {
+                        if (try? KeychainHelper.delete(service: "com.claudework.github", account: "access_token")) != nil {
+                            UserDefaults.standard.set(true, forKey: legacyTokenPurgedKey)
+                        }
                     }
                 }
+                // `OAuthManager.checkExistingAuth` refreshes the access token if it
+                // has expired and starts its own 5-minute refresh timer, so no
+                // extra scheduling is needed here.
+                await rxAuth.restore()
+                if isSignedIn {
+                    startAutopilotWarmup()
+                }
+                // Periodically pull GitHub Actions CI status for open projects
+                // (no-ops until signed in). Notifies on failure and, when enabled,
+                // auto-starts a fix thread.
+                startCIStatusPoller()
+                // Keeps cloud projects' task boards in sync with Autopilot
+                // (no-ops until signed in).
+                startCloudProjectSync()
             }
-            // `OAuthManager.checkExistingAuth` refreshes the access token if it
-            // has expired and starts its own 5-minute refresh timer, so no
-            // extra scheduling is needed here.
-            await rxAuth.restore()
-            if isSignedIn {
-                startAutopilotWarmup()
-            }
-            // Periodically pull GitHub Actions CI status for open projects
-            // (no-ops until signed in). Notifies on failure and, when enabled,
-            // auto-starts a fix thread.
-            startCIStatusPoller()
         }
     }
 

@@ -86,6 +86,21 @@ struct ProjectWindowView: View {
                 .frame(minWidth: 1000, idealWidth: 1400, maxWidth: 1920,
                        minHeight: 600, idealHeight: 1000, maxHeight: 1200)
         }
+        .sheet(isPresented: Binding(
+            get: { windowState.linkCloudProjectId != nil },
+            set: { if !$0 { windowState.linkCloudProjectId = nil } }
+        )) {
+            if let projectId = windowState.linkCloudProjectId {
+                LinkCloudProjectSheet(projectId: projectId)
+                    .environment(appState)
+                    .environment(windowState)
+            }
+        }
+        .sheet(isPresented: Bindable(windowState).showNewProjectSheet) {
+            NewProjectSheet(prefersCloud: windowState.newProjectPrefersCloud)
+                .environment(appState)
+                .environment(windowState)
+        }
         .sheet(item: Bindable(windowState).diffFile) { file in
             FileDiffView(
                 filePath: file.path,

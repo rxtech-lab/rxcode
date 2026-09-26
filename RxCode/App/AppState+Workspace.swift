@@ -53,10 +53,12 @@ extension AppState {
         }
         summarizationProvider = provider
         openAISummarizationEndpoint = workspaceDefaults.string(for: "openAISummarizationEndpoint") ?? AppState.defaultOpenAISummarizationEndpoint
-        openAISummarizationAPIKey = KeychainHelper.readString(
-            service: AppState.openAISummarizationKeychainService,
-            account: activeWorkspace.openAISummarizationKeychainAccount
-        ) ?? ""
+        if !AppSupport.isTestProcess {
+            openAISummarizationAPIKey = KeychainHelper.readString(
+                service: AppState.openAISummarizationKeychainService,
+                account: activeWorkspace.openAISummarizationKeychainAccount
+            ) ?? ""
+        }
         openAISummarizationModel = workspaceDefaults.string(for: "openAISummarizationModel") ?? ""
 
         memoryEnabled = workspaceDefaults.bool(for: "memoryEnabled", default: true)
@@ -68,10 +70,15 @@ extension AppState {
         notificationsEnabled = workspaceDefaults.bool(for: "notificationsEnabled", default: true)
         enableAutoCIFix = workspaceDefaults.bool(for: "enableAutoCIFix", default: false)
         focusMode = workspaceDefaults.bool(for: "focusMode", default: false)
+        hiddenCloudProjectIds = Set(workspaceDefaults.stringArray(for: "hiddenCloudProjectIds"))
         showRightSidebar = workspaceDefaults.bool(for: AppStorageKeys.showRightSidebar, default: false)
         rightInspectorWidth = workspaceDefaults.double(
             for: AppStorageKeys.rightInspectorWidth,
             default: RightInspectorPanelLayout.defaultWidth
+        )
+        taskCardRetentionDays = workspaceDefaults.int(
+            for: "taskCardRetentionDays",
+            default: AppState.defaultTaskCardRetentionDays
         )
         autoArchiveEnabled = workspaceDefaults.bool(for: "autoArchiveEnabled", default: true)
         archiveRetentionDays = workspaceDefaults.int(for: "archiveRetentionDays", default: AppState.defaultArchiveRetentionDays)

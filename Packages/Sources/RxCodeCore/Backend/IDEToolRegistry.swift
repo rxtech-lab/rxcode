@@ -121,7 +121,7 @@ public enum IDEToolRegistry {
         ),
         IDETool(
             name: "ide__get_stories",
-            description: "List stories on a project task board so you can choose an existing story before creating a task. Uses the current chat's project unless project_id is given.",
+            description: "List stories on a project task board so you can choose an existing story before creating a task. Each story includes linked_project_ids — the other projects it is shared with — and per-board progress. Uses the current chat's project unless project_id is given.",
             visibility: .alwaysIDEOnly,
             inputSchema: .object([
                 "type": .string("object"),
@@ -132,7 +132,7 @@ public enum IDEToolRegistry {
         ),
         IDETool(
             name: "ide__create_story",
-            description: "Create a story on a project task board when the user's chat request calls for tracking a group of work. Uses the current chat's project unless project_id is given.",
+            description: "Create a story on a project task board when the user's chat request calls for tracking a group of work. Uses the current chat's project unless project_id is given. Pass linked_project_ids to share the story with other projects so tasks in each of them can join it.",
             visibility: .alwaysIDEOnly,
             inputSchema: .object([
                 "type": .string("object"),
@@ -140,8 +140,37 @@ public enum IDEToolRegistry {
                     "project_id": .object(["type": .string("string")]),
                     "title": .object(["type": .string("string")]),
                     "details": .object(["type": .string("string")]),
+                    "linked_project_ids": .object([
+                        "type": .string("array"),
+                        "items": .object(["type": .string("string")]),
+                        "description": .string("Optional project UUIDs to share the story with."),
+                    ]),
                 ]),
                 "required": .array([.string("title")]),
+            ])
+        ),
+        IDETool(
+            name: "ide__link_story",
+            description: "Share an existing story with other projects, or stop sharing it. A linked story appears on every linked project's board under the same story_id, so ide__create_task can add tasks to it in any of those projects. Unlinking removes the story from that project's board and keeps its tasks unassigned.",
+            visibility: .alwaysIDEOnly,
+            inputSchema: .object([
+                "type": .string("object"),
+                "properties": .object([
+                    "story_id": .object(["type": .string("string")]),
+                    "project_id": .object([
+                        "type": .string("string"),
+                        "description": .string("Optional project UUID whose board holds the story. Defaults to the current chat's project, then to any board holding the story."),
+                    ]),
+                    "link_project_ids": .object([
+                        "type": .string("array"),
+                        "items": .object(["type": .string("string")]),
+                    ]),
+                    "unlink_project_ids": .object([
+                        "type": .string("array"),
+                        "items": .object(["type": .string("string")]),
+                    ]),
+                ]),
+                "required": .array([.string("story_id")]),
             ])
         ),
         IDETool(
@@ -156,6 +185,62 @@ public enum IDEToolRegistry {
                     "title": .object(["type": .string("string")]),
                     "details": .object(["type": .string("string")]),
                 ]),
+            ])
+        ),
+        IDETool(
+            name: "ide__get_tasks",
+            description: "List tasks on project task boards with their column, whether their agent is running, and their chat thread. Filter by project_id, story_id (spans every project the story is linked to), or status. With no filter, uses the current chat's project.",
+            visibility: .alwaysIDEOnly,
+            inputSchema: .object([
+                "type": .string("object"),
+                "properties": .object([
+                    "project_id": .object(["type": .string("string")]),
+                    "story_id": .object(["type": .string("string")]),
+                    "status": .object([
+                        "type": .string("string"),
+                        "description": .string("Optional column id, e.g. backlog, pending, in_progress, pending_review, done."),
+                    ]),
+                ]),
+            ])
+        ),
+        IDETool(
+            name: "ide__run_task",
+            description: "Start a task's agent run in its project: moves the task into the board's first chat column, which dispatches it to its assigned agent in a new thread. Pass prompt to send a follow-up into a task that already has a thread instead, e.g. to fix issues found while checking its status. Triggers a real agent run that may consume tokens. Returns immediately; poll ide__get_task_status to follow progress.",
+            visibility: .alwaysIDEOnly,
+            inputSchema: .object([
+                "type": .string("object"),
+                "properties": .object([
+                    "task_id": .object(["type": .string("string")]),
+                    "provider": .object([
+                        "type": .string("string"),
+                        "description": .string("Optional agent provider override (claudeCode, codex, acp). Defaults to the task's assignment, then the default task agent."),
+                    ]),
+                    "model": .object([
+                        "type": .string("string"),
+                        "description": .string("Optional model override."),
+                    ]),
+                    "prompt": .object([
+                        "type": .string("string"),
+                        "description": .string("Optional follow-up message for a task whose thread already exists."),
+                    ]),
+                ]),
+                "required": .array([.string("task_id")]),
+            ])
+        ),
+        IDETool(
+            name: "ide__get_task_status",
+            description: "Check a task's implementation status: its column, whether it counts as done, whether its agent is still running, any attention reason (for example a failed completion check), and the latest messages from its chat thread.",
+            visibility: .alwaysIDEOnly,
+            inputSchema: .object([
+                "type": .string("object"),
+                "properties": .object([
+                    "task_id": .object(["type": .string("string")]),
+                    "message_limit": .object([
+                        "type": .string("integer"),
+                        "description": .string("Most recent thread messages to include. Default 5, capped at 50. Pass 0 to skip messages."),
+                    ]),
+                ]),
+                "required": .array([.string("task_id")]),
             ])
         ),
         IDETool(

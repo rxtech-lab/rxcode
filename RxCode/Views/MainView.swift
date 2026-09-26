@@ -246,6 +246,22 @@ struct MainView: View {
                     } label: {
                         Label("Add project from remote repositories", systemImage: "square.and.arrow.down")
                     }
+
+                    Divider()
+
+                    Button {
+                        windowState.newProjectPrefersCloud = false
+                        windowState.showNewProjectSheet = true
+                    } label: {
+                        Label("New project…", systemImage: "plus.rectangle.on.folder")
+                    }
+
+                    Button {
+                        windowState.newProjectPrefersCloud = true
+                        windowState.showNewProjectSheet = true
+                    } label: {
+                        Label("New cloud project…", systemImage: "icloud")
+                    }
                 } label: {
                     Image(systemName: "plus")
                 }
@@ -297,6 +313,21 @@ struct MainView: View {
         }
         .sheet(isPresented: $showGitHubSheet) {
             AutopilotRepoSheet()
+        }
+        .sheet(isPresented: Binding(
+            get: { windowState.linkCloudProjectId != nil },
+            set: { if !$0 { windowState.linkCloudProjectId = nil } }
+        )) {
+            if let projectId = windowState.linkCloudProjectId {
+                LinkCloudProjectSheet(projectId: projectId)
+                    .environment(appState)
+                    .environment(windowState)
+            }
+        }
+        .sheet(isPresented: Bindable(windowState).showNewProjectSheet) {
+            NewProjectSheet(prefersCloud: windowState.newProjectPrefersCloud)
+                .environment(appState)
+                .environment(windowState)
         }
     }
 
@@ -531,6 +562,14 @@ struct ProjectTabButton: View {
                 Text(project.name)
                     .font(.system(size: ClaudeTheme.size(13), weight: .medium))
                     .lineLimit(1)
+                if let phase = appState.cloudSyncPhaseByProjectId[project.id] {
+                    ProgressView(value: phase.fractionCompleted)
+                        .progressViewStyle(.linear)
+                        .frame(width: 24)
+                        .help(phase.progressText)
+                        .accessibilityLabel(phase.progressText)
+                        .accessibilityIdentifier("project-tab-sync-progress-\(project.id.uuidString)")
+                }
             }
             .foregroundStyle(isSelected ? ClaudeTheme.textOnAccent : ClaudeTheme.textSecondary)
             .padding(.horizontal, 10)

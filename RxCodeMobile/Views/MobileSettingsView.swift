@@ -4,10 +4,12 @@ import SwiftUI
 import TipKit
 
 struct MobileSettingsView: View {
+    @Environment(MobileCloudState.self) private var cloud
     @EnvironmentObject private var state: MobileAppState
     @Environment(\.dismiss) private var dismiss
     let showsDoneButton: Bool
     @State private var showPairingSheet = false
+    @State private var showRemoteTasks = false
     @State private var desktopPendingRemoval: PairedDesktop?
     @State private var desktopBeingRenamed: PairedDesktop?
     @State private var renameText: String = ""
@@ -21,6 +23,29 @@ struct MobileSettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section("Autopilot Account") {
+                    if cloud.isSignedIn {
+                        Text("Signed in to Autopilot")
+                        Button("Sign Out", role: .destructive) { Task { await cloud.signOut() } }
+                    } else {
+                        Button("Sign In to Autopilot") { Task { await cloud.signIn() } }
+                            .disabled(cloud.isSigningIn)
+                        if let error = cloud.error { Text(error).foregroundStyle(.red) }
+                    }
+                }
+                Section {
+                    Button {
+                        state.usesCloudTasks = true
+                        showRemoteTasks = true
+                    } label: {
+                        Label("View Remote Tasks", systemImage: "checklist")
+                    }
+                    .accessibilityIdentifier("settings-view-remote-tasks")
+                } header: {
+                    Text("Remote Tasks")
+                } footer: {
+                    Text("Open cloud project plans and task boards.")
+                }
                 pairedMacsSection
 
                 computerStatusSection
@@ -69,6 +94,19 @@ struct MobileSettingsView: View {
                     .navigationBarTitleDisplayMode(.inline)
                 }
                 .mobileSheetPresentation()
+            }
+            .fullScreenCover(isPresented: $showRemoteTasks, onDismiss: { state.usesCloudTasks = false }) {
+                NavigationStack {
+                    MobileTasksDashboardView(onOpenChat: { _ in })
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Done") { showRemoteTasks = false }
+                                    .accessibilityIdentifier("settings-remote-tasks-done")
+                            }
+                        }
+                }
+                .environmentObject(state)
+                .environment(cloud)
             }
             .alert(
                 "Remove pairing?",

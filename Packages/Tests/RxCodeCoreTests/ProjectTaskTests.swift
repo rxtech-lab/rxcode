@@ -93,28 +93,32 @@ struct ProjectTaskTests {
         #expect(board.tasks[0].parentTaskId == nil)
     }
 
-    @Test("Finishing a linked parent starts queued children once")
+    @Test("A parent reaching Pending Review starts queued children once")
     func linkedTaskCompletion() {
         let projectID = UUID()
-        let parent = ProjectTask(projectId: projectID, title: "Parent", status: .pendingReview)
+        let parent = ProjectTask(projectId: projectID, title: "Parent", status: .inProgress)
         let child = ProjectTask(projectId: projectID, parentTaskId: parent.id, title: "Child", status: .pending)
         let finishedChild = ProjectTask(projectId: projectID, parentTaskId: parent.id, title: "Already done", status: .done)
+        let reviewingChild = ProjectTask(projectId: projectID, parentTaskId: parent.id, title: "In review", status: .pendingReview)
+        let needsAttention = ProjectTask(projectId: projectID, parentTaskId: parent.id, title: "Needs attention", status: .pending, attentionReason: "Check failed")
         let unrelated = ProjectTask(projectId: projectID, title: "Unrelated", status: .pending)
-        let previous = TaskBoard(tasks: [parent, child, finishedChild, unrelated])
-        var board = previous
-        board.tasks[0].status = .done
+        var board = TaskBoard(tasks: [parent, child, finishedChild, reviewingChild, needsAttention, unrelated])
+        #expect(!board.readyParentIDs().contains(parent.id))
+        board.tasks[0].status = .pendingReview
 
-        let completed = board.newlyFinishedTaskIDs(comparedTo: previous)
-        #expect(completed == [parent.id])
-        let dispatched = board.advanceChildren(of: completed)
+        let ready = board.readyParentIDs()
+        #expect(ready.contains(parent.id))
+        let dispatched = board.advanceChildren(of: ready)
         #expect(dispatched.map(\.id) == [child.id])
         #expect(board.tasks.first { $0.id == child.id }?.status == .inProgress)
         #expect(board.tasks.first { $0.id == finishedChild.id }?.status == .done)
+        #expect(board.tasks.first { $0.id == reviewingChild.id }?.status == .pendingReview)
+        #expect(board.tasks.first { $0.id == needsAttention.id }?.status == .pending)
         #expect(board.tasks.first { $0.id == unrelated.id }?.status == .pending)
-        #expect(board.newlyFinishedTaskIDs(comparedTo: board).isEmpty)
+        #expect(board.advanceChildren(of: ready).isEmpty)
     }
 
-    @Test("Finishing a parent restarts a pending child with an earlier session")
+    @Test("An already reviewing parent releases a pending child with an earlier session")
     func linkedTaskCompletionAfterEarlierRun() {
         let projectID = UUID()
         let parent = ProjectTask(projectId: projectID, title: "Parent", status: .pendingReview)
@@ -122,16 +126,27 @@ struct ProjectTaskTests {
             projectId: projectID, parentTaskId: parent.id, title: "Child", status: .pending,
             agent: TaskAgentConfig(provider: .codex), sessionKey: "earlier-session"
         )
-        let previous = TaskBoard(tasks: [parent, child])
-        var board = previous
-        board.tasks[0].status = .done
+        var board = TaskBoard(tasks: [parent, child])
 
-        let dispatched = board.advanceChildren(of: board.newlyFinishedTaskIDs(comparedTo: previous))
+        let ready = board.readyParentIDs()
+        let dispatched = board.advanceChildren(of: ready)
 
         #expect(dispatched.map(\.id) == [child.id])
         #expect(board.tasks[1].status == .inProgress)
         #expect(board.tasks[1].sessionKey == "earlier-session")
         #expect(board.advanceChildren(of: [parent.id]).isEmpty)
+    }
+
+    @Test("A parent in Done also releases a queued child")
+    func linkedTaskDoneFallback() {
+        let projectID = UUID()
+        let parent = ProjectTask(projectId: projectID, title: "Parent", status: .done)
+        let child = ProjectTask(projectId: projectID, parentTaskId: parent.id, title: "Child", status: .pending)
+        var board = TaskBoard(tasks: [parent, child])
+
+        let ready = board.readyParentIDs()
+        #expect(ready == [parent.id])
+        #expect(board.advanceChildren(of: ready).map(\.id) == [child.id])
     }
 
     @Test("Links reject self, missing parents, and cycles")
@@ -144,6 +159,25 @@ struct ProjectTaskTests {
         #expect(!board.canLinkTask(first.id, to: second.id))
         #expect(!board.canLinkTask(first.id, to: first.id))
         #expect(!board.canLinkTask(first.id, to: UUID()))
+    }
+
+    @Test("Parent choices group by story and search titles or story names")
+    func parentTaskGroups() {
+        let projectID = UUID()
+        let design = ProjectStory(projectId: projectID, title: "Design")
+        let build = ProjectStory(projectId: projectID, title: "Build")
+        let first = ProjectTask(projectId: projectID, storyId: design.id, title: "Draw mockups")
+        let second = ProjectTask(projectId: projectID, storyId: build.id, title: "Draw components")
+        let ungrouped = ProjectTask(projectId: projectID, title: "Publish")
+        let child = ProjectTask(projectId: projectID, parentTaskId: first.id, title: "Current task")
+        let board = TaskBoard(stories: [design, build], tasks: [first, second, ungrouped, child])
+
+        let groups = board.parentTaskGroups(for: child.id)
+        #expect(groups.map { $0.story?.title } == ["Design", "Build", nil])
+        #expect(groups.map { $0.tasks.map(\.title) } == [["Draw mockups"], ["Draw components"], ["Publish"]])
+        #expect(board.parentTaskGroups(for: child.id, matching: "design").flatMap(\.tasks).map(\.id) == [first.id])
+        #expect(board.parentTaskGroups(for: child.id, matching: "draw").flatMap(\.tasks).map(\.id) == [first.id, second.id])
+        #expect(board.parentTaskGroups(for: first.id).flatMap(\.tasks).contains { $0.id == child.id } == false)
     }
 
     @Test("Columns round-trip with their triggers")
@@ -213,6 +247,20 @@ struct ProjectTaskTests {
         #expect(board.viewOrder(moving: UUID(), to: a.id) == nil)
         // A board with no saved views still has its implicit default tab.
         #expect(TaskBoard().viewOrder(moving: TaskSavedView.defaultViewId, to: UUID()) == nil)
+    }
+
+    @Test("A view's story panel status filter round-trips and defaults to all")
+    func storyPanelStatusFilter() throws {
+        let view = TaskSavedView(name: "V", storyPanelStatuses: [.inProgress])
+        let data = try JSONEncoder().encode(view)
+        let decoded = try JSONDecoder().decode(TaskSavedView.self, from: data)
+        #expect(decoded.storyPanelStatuses == [.inProgress])
+        #expect(decoded.storyPanelShows(.inProgress))
+        #expect(!decoded.storyPanelShows(.backlog))
+
+        let legacy = try JSONDecoder().decode(TaskSavedView.self, from: Data(#"{"name":"Old"}"#.utf8))
+        #expect(legacy.storyPanelStatuses.isEmpty)
+        #expect(legacy.storyPanelShows(.backlog))
     }
 
     @Test("Story progress and roll-up follow countsAsDone")
@@ -318,7 +366,7 @@ struct ProjectTaskTests {
         let uiOther = ProjectTask(projectId: projectId, title: "ui next", version: "v2.0", tags: ["ui"])
         let backend = ProjectTask(projectId: projectId, title: "backend", version: "v1.0", tags: ["api"])
 
-        let view = TaskSavedView(name: "UI v1", tags: ["ui"], version: "v1.0")
+        let view = TaskSavedView(name: "UI v1", tags: ["ui"], versions: ["v1.0"])
         #expect(view.matches(uiRelease))
         #expect(!view.matches(uiOther))
         #expect(!view.matches(backend))
@@ -435,7 +483,7 @@ struct ProjectTaskTests {
         let inStory = ProjectTask(projectId: projectId, storyId: storyId, title: "a", status: .inProgress)
         let loose = ProjectTask(projectId: projectId, title: "b", status: .pending)
 
-        let storyView = TaskSavedView(name: "Story", storyId: storyId)
+        let storyView = TaskSavedView(name: "Story", storyIds: [storyId])
         #expect(storyView.matches(inStory))
         #expect(!storyView.matches(loose))
 
@@ -451,6 +499,56 @@ struct ProjectTaskTests {
         #expect(TaskSavedView(name: "Gone", statuses: ["deleted"]).visibleColumns(in: columns) == columns)
     }
 
+    @Test("Multi-value view conditions match any value and combine with each other")
+    func savedViewMultipleConditions() {
+        let projectId = UUID()
+        let storyA = UUID(), storyB = UUID(), storyC = UUID()
+        let a = ProjectTask(projectId: projectId, storyId: storyA, title: "a", version: "v1", milestone: "Beta")
+        let b = ProjectTask(projectId: projectId, storyId: storyB, title: "b", version: "v2", milestone: "GA")
+        let c = ProjectTask(projectId: projectId, storyId: storyC, title: "c", version: "v1", milestone: "GA")
+        let loose = ProjectTask(projectId: projectId, title: "loose", version: "v1", milestone: "Beta")
+
+        let stories = TaskSavedView(name: "AB", storyIds: [storyA, storyB])
+        #expect(stories.matches(a) && stories.matches(b))
+        #expect(!stories.matches(c) && !stories.matches(loose))
+
+        let versions = TaskSavedView(name: "v1 or v2", versions: ["v1", "v2"])
+        #expect([a, b, c, loose].allSatisfy(versions.matches))
+
+        let milestone = TaskSavedView(name: "GA", milestones: ["GA"])
+        #expect(!milestone.matches(a) && milestone.matches(b) && milestone.matches(c))
+
+        // Separate conditions are conjunctive.
+        let combined = TaskSavedView(name: "AC v1 GA", versions: ["v1"], milestones: ["GA"], storyIds: [storyA, storyC])
+        #expect(!combined.matches(a))
+        #expect(!combined.matches(b))
+        #expect(combined.matches(c))
+        #expect(!combined.isEmpty)
+
+        let story = ProjectStory(id: storyA, projectId: projectId, title: "A", version: "v1", milestone: "Beta")
+        #expect(TaskSavedView(name: "Beta", milestones: ["Beta"]).matches(story, rolledUpStatus: .pending))
+        #expect(!TaskSavedView(name: "GA", milestones: ["GA"]).matches(story, rolledUpStatus: .pending))
+        #expect(!TaskSavedView(name: "B", storyIds: [storyB]).matches(story, rolledUpStatus: .pending))
+    }
+
+    @Test("Single-value story and version filters decode as one-element lists")
+    func savedViewLegacySingleFilters() throws {
+        let storyId = UUID()
+        let json = #"{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","name":"Old","version":"v1","storyId":"\#(storyId.uuidString)"}"#
+        let view = try JSONDecoder().decode(TaskSavedView.self, from: Data(json.utf8))
+        #expect(view.versions == ["v1"])
+        #expect(view.storyIds == [storyId])
+        #expect(view.milestones.isEmpty)
+
+        // A single selection is also written under the legacy keys for older builds.
+        let encoded = try JSONEncoder().encode(TaskSavedView(name: "New", versions: ["v2"], storyIds: [storyId]))
+        let object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        #expect(object["version"] as? String == "v2")
+        #expect(object["storyId"] as? String == storyId.uuidString)
+        let roundTrip = try JSONDecoder().decode(TaskSavedView.self, from: encoded)
+        #expect(roundTrip.versions == ["v2"] && roundTrip.storyIds == [storyId])
+    }
+
     @Test("A view written before layouts existed decodes as an unfiltered board")
     func savedViewLegacyDecode() throws {
         let json = #"{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","name":"UI","tags":["ui"]}"#
@@ -458,7 +556,7 @@ struct ProjectTaskTests {
         #expect(view.name == "UI")
         #expect(view.layout == .board)
         #expect(view.tags == ["ui"])
-        #expect(view.storyId == nil)
+        #expect(view.storyIds.isEmpty)
         #expect(view.statuses.isEmpty)
     }
 
@@ -594,8 +692,8 @@ struct ProjectTaskTests {
 
         let tagged = ProjectStory(projectId: UUID(), title: "Epic", tags: ["ui"], version: "v2")
         #expect(TaskSavedView(name: "UI", tags: ["ui"]).matches(tagged, rolledUpStatus: .pending))
-        #expect(TaskSavedView(name: "v2", version: "v2").matches(tagged, rolledUpStatus: .pending))
-        #expect(!TaskSavedView(name: "v3", version: "v3").matches(tagged, rolledUpStatus: .pending))
+        #expect(TaskSavedView(name: "v2", versions: ["v2"]).matches(tagged, rolledUpStatus: .pending))
+        #expect(!TaskSavedView(name: "v3", versions: ["v3"]).matches(tagged, rolledUpStatus: .pending))
     }
 
     // MARK: - Classification fields
@@ -763,6 +861,30 @@ struct ProjectTaskTests {
         )
         #expect(prompt.contains("Story title: Projects Dashboard"))
         #expect(prompt.contains("version explicitly stated"))
+    }
+
+    @Test("A linked story decodes tolerantly and mirrors onto another board")
+    func linkedStoryMirroring() throws {
+        let owner = UUID(), other = UUID(), third = UUID()
+        let legacy = #"{"id":"\#(UUID().uuidString)","projectId":"\#(owner.uuidString)","title":"Old"}"#
+        let decoded = try JSONDecoder().decode(ProjectStory.self, from: Data(legacy.utf8))
+        #expect(decoded.linkedProjectIds.isEmpty)
+        #expect(decoded.projectGroup == [owner])
+
+        let typeId = UUID()
+        let story = ProjectStory(projectId: owner, title: "Shared", version: "v2", typeId: typeId, linkedProjectIds: [owner, other])
+        #expect(story.linkedProjectIds == [other])
+
+        let copy = story.mirrored(into: other, group: [owner, other, third], typeId: nil)
+        #expect(copy.id == story.id)
+        #expect(copy.projectId == other)
+        #expect(copy.linkedProjectIds == [owner, third])
+        #expect(copy.typeId == nil)
+        #expect(copy.version == "v2")
+        #expect(copy.projectGroup == [other, owner, third])
+
+        let roundTrip = try JSONDecoder().decode(ProjectStory.self, from: JSONEncoder().encode(copy))
+        #expect(roundTrip.linkedProjectIds == [owner, third])
     }
 
     @Test("The agent prompt carries type, priority and milestone")

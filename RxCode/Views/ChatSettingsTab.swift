@@ -159,6 +159,10 @@ struct ChatSettingsTab: View {
                 if installed {
                     Button(signedIn ? LocalizedStringKey("Re-sign In") : LocalizedStringKey("Sign In")) { signIn(runtime) }
                         .disabled(signingInRuntime != nil)
+                    if signedIn {
+                        Button("Sign Out") { signOut(runtime) }
+                            .disabled(signingInRuntime != nil)
+                    }
                 }
                 if path == AgentRuntimeInstaller.executablePath(for: runtime) {
                     Divider()
@@ -228,6 +232,29 @@ struct ChatSettingsTab: View {
                 }
                 runtimeMessage = "Sign-in completed."
                 await appState.refreshAgentSignInStatus()
+            } catch {
+                runtimeMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func signOut(_ runtime: AgentRuntimeInstaller.Runtime) {
+        signingInRuntime = runtime
+        runtimeMessage = nil
+        Task {
+            defer { signingInRuntime = nil }
+            do {
+                switch runtime {
+                case .codex:
+                    try await appState.codex.signOut()
+                case .claude:
+                    try await appState.claude.signOut()
+                }
+                await appState.refreshAgentSignInStatus()
+                let stillSignedIn = runtime == .codex ? appState.codexSignedIn : appState.claudeSignedIn
+                runtimeMessage = stillSignedIn
+                    ? "Stored sign-in cleared, but this runtime still has credentials from its environment."
+                    : "Signed out."
             } catch {
                 runtimeMessage = error.localizedDescription
             }

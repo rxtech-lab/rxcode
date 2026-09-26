@@ -399,7 +399,17 @@ extension ClaudeCodeServer {
     board before linking a new task to one.
     - `mcp__rxcode-ide__ide__create_story` / \
     `mcp__rxcode-ide__ide__create_task` — record user-requested work from a \
-    chat. Pass `story_id` to place a task in an existing story.
+    chat, in this or any other project (`project_id`). Pass `story_id` to \
+    place a task in an existing story.
+    - `mcp__rxcode-ide__ide__link_story` — share a story with other projects \
+    so work spanning several projects is tracked under one story.
+    - `mcp__rxcode-ide__ide__get_tasks` / \
+    `mcp__rxcode-ide__ide__get_task_status` — list tasks by project, story, \
+    or column, and check a task's implementation status and latest thread \
+    messages.
+    - `mcp__rxcode-ide__ide__run_task` — start a task's agent in its project, \
+    or send a follow-up to its thread. This triggers a real agent run that \
+    may consume tokens; poll `ide__get_task_status` for progress.
     - `mcp__rxcode-ide__ide__get_threads` — list or natural-language search \
     chat threads across projects (returns AI summaries, and ranked snippets \
     when a query is given).

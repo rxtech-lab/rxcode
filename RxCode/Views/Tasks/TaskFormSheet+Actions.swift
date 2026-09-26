@@ -8,7 +8,7 @@ extension TaskFormSheet {
 
     func loadDraft() {
         switch payload {
-        case .task(let incoming):
+        case .task(let incoming, _):
             isStory = false
             task = incoming
             isExistingRecord = appState.task(id: incoming.id) != nil
@@ -21,18 +21,19 @@ extension TaskFormSheet {
                 task.agent.provider = fallback.provider
                 task.agent.model = fallback.model
             }
-        case .story(let incoming):
+        case .story(let incoming, _):
             isStory = true
             story = incoming
             isExistingRecord = appState.stories().contains { $0.id == incoming.id }
             if appState.projects.allSatisfy({ $0.id != story.projectId }) {
                 story.projectId = defaultProjectId
             }
+            storyDraftAgent = appState.defaultTaskAgent()
         }
         creationMode = .resolved(
             isExistingRecord: isExistingRecord,
             isStory: isStory,
-            requested: initialMode
+            requested: payload.creationMode
         )
     }
 
@@ -163,7 +164,8 @@ extension TaskFormSheet {
                 return
             }
             story.title = story.title.trimmingCharacters(in: .whitespacesAndNewlines)
-            appState.upsertStory(story)
+            let story = story
+            Task { await appState.saveStory(story) }
         } else {
             task.title = task.title.trimmingCharacters(in: .whitespacesAndNewlines)
             appState.upsertTask(task)

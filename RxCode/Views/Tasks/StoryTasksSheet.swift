@@ -281,7 +281,7 @@ private struct StoryTaskRow: View {
             }, onOpenChat: { dismiss() })
         }
         .taskDeletionConfirmation(pending: $pendingDeletion) { candidate in
-            if case .task(let task) = candidate { appState.deleteTask(task) }
+            if case .task(let task, _) = candidate { appState.deleteTask(task) }
         }
     }
 

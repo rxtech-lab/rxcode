@@ -6,6 +6,7 @@ import SwiftUI
 /// agent was sent and its answer, with follow-ups) and Config (description,
 /// classification, agent, and the actions the desktop offers).
 struct MobileTaskDetailView: View {
+    @Environment(MobileCloudState.self) private var cloud
     enum Tab: Hashable {
         case runs
         case config
@@ -30,7 +31,7 @@ struct MobileTaskDetailView: View {
     private var task: ProjectTask? { board.tasks.first { $0.id == taskID } }
 
     private func tab(for task: ProjectTask) -> Tab {
-        selectedTab ?? (state.taskSessionID(task) != nil ? .runs : .config)
+        state.usesCloudTasks ? .config : (selectedTab ?? (state.taskSessionID(task) != nil ? .runs : .config))
     }
 
     var body: some View {
@@ -47,13 +48,13 @@ struct MobileTaskDetailView: View {
                     content(task)
                 }
             } else {
-                ContentUnavailableView("Task Not Found", systemImage: "checklist", description: Text("It may have been deleted on your Mac."))
+                ContentUnavailableView("Task Not Found", systemImage: "checklist", description: Text("It may have been deleted."))
             }
         }
         .navigationTitle("Task")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if let task {
+            if let task, !state.usesCloudTasks {
                 ToolbarItem(placement: .principal) {
                     Picker("View", selection: Binding(
                         get: { tab(for: task) },
@@ -156,6 +157,13 @@ struct MobileTaskDetailView: View {
                 }
             }
 
+            if state.usesCloudTasks {
+                if let id = task.assignedDeviceId {
+                    Section("Assigned Mac") {
+                        Text(cloud.devices.first { $0.id == id }?.name ?? "Previously assigned Mac")
+                    }
+                }
+            } else {
             Section("Agent") {
                 LabeledContent("Model", value: state.taskAgentLabel(task.agent))
                 if task.agent.planMode {
@@ -166,6 +174,7 @@ struct MobileTaskDetailView: View {
                 }
             }
 
+            }
             Section {
                 if let sessionID {
                     Button {
@@ -174,7 +183,7 @@ struct MobileTaskDetailView: View {
                         Label("Open Chat", systemImage: "bubble.left.and.text.bubble.right")
                     }
                 }
-                if task.agent.isAssigned, !column.triggersChat, board.firstChatColumn != nil {
+                if !state.usesCloudTasks, task.agent.isAssigned, !column.triggersChat, board.firstChatColumn != nil {
                     Button {
                         perform { try await state.runTask(task) }
                     } label: {
@@ -299,7 +308,7 @@ struct MobileStoryDetailView: View {
             if let story {
                 content(story)
             } else {
-                ContentUnavailableView("Story Not Found", systemImage: "rectangle.stack", description: Text("It may have been deleted on your Mac."))
+                ContentUnavailableView("Story Not Found", systemImage: "rectangle.stack", description: Text("It may have been deleted."))
             }
         }
         .navigationTitle("Story")
@@ -398,10 +407,12 @@ struct MobileStoryDetailView: View {
                     } label: {
                         Label("New Task", systemImage: "square.and.pencil")
                     }
+                    if !state.usesCloudTasks {
                     Button {
                         showingQuickAdd = true
                     } label: {
                         Label("Quick Add Task", systemImage: "sparkles")
+                    }
                     }
                     Divider()
                     Button {

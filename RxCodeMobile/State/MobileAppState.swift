@@ -186,6 +186,16 @@ final class MobileAppState: ObservableObject {
     // MARK: - Remote desktop: Task boards
 
     /// Per-project task boards mirrored from the active desktop.
+    @Published var desktopTaskUnavailable = false
+    /// Set while the relay is stopped because the app went to the background,
+    /// so that deliberate disconnect isn't mistaken for the Mac being
+    /// unreachable (which would flash the connection error on resume).
+    var relaySuspendedForBackground = false
+    @Published var usesCloudTasks = false
+    @Published var cloudTaskProjects: [Project] = []
+    @Published var cloudTaskBoards: [UUID: MobileTaskBoardSnapshot] = [:]
+    var taskCloud: MobileCloudState?
+
     @Published var taskBoardsByProject: [UUID: MobileTaskBoardSnapshot] = [:]
     /// Projects whose board fetch is in flight.
     @Published var loadingTaskBoardProjects: Set<UUID> = []
@@ -415,9 +425,11 @@ final class MobileAppState: ObservableObject {
         switch phase {
         case .background:
             logger.info("[Lifecycle] entering background — disconnecting relay")
+            relaySuspendedForBackground = true
             enqueueLifecycle(label: "background/stop") { [client] in await client.stop() }
         case .active:
             logger.info("[Lifecycle] entering foreground — reconnecting relay")
+            relaySuspendedForBackground = false
             enqueueLifecycle(label: "foreground/start") { [client] in await client.start() }
         case .inactive:
             break

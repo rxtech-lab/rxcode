@@ -8,6 +8,9 @@ public struct Project: Identifiable, Codable, Sendable, Hashable {
     public var lastSessionId: String?
     public var lastAgentProvider: AgentProvider?
     public var lastModel: String?
+    /// The Autopilot project this project's task board syncs with. `nil`
+    /// means the project is local to this Mac.
+    public var cloudId: String?
 
     public init(
         id: UUID = UUID(),
@@ -16,7 +19,8 @@ public struct Project: Identifiable, Codable, Sendable, Hashable {
         gitHubRepo: String? = nil,
         lastSessionId: String? = nil,
         lastAgentProvider: AgentProvider? = nil,
-        lastModel: String? = nil
+        lastModel: String? = nil,
+        cloudId: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -25,7 +29,11 @@ public struct Project: Identifiable, Codable, Sendable, Hashable {
         self.lastSessionId = lastSessionId
         self.lastAgentProvider = lastAgentProvider
         self.lastModel = lastModel
+        self.cloudId = cloudId
     }
+
+    /// Whether the task board syncs through Autopilot.
+    public var isCloud: Bool { cloudId != nil }
 }
 
 public extension [Project] {

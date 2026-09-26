@@ -16,7 +16,10 @@
     {
       "selectedTests" : [
         "RxCodeMobileUITests\/testLaunchesPastPairingIntoMainUI()",
+        "CloudWorkspaceUITests\/testIPadSyncFailureOpensFullScreenKanbanTasks()",
         "iPadNavigationUITests\/testBriefingSplitKeepsListVisible()",
+        "iPadNavigationUITests\/testTaskProjectsCanBeDraggedAndKeepTheirOrder()",
+        "iPadNavigationUITests\/testSettingsOpensRemoteTasksFullScreen()",
         "iPadNavigationUITests\/testProjectsSplitKeepsThreadListVisible()"
       ],
       "target" : {

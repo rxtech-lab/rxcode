@@ -11,9 +11,6 @@ struct TaskColumnView: View {
 
     let column: TaskColumn
     let tasks: [ProjectTask]
-    /// Stories whose rolled-up status is this column. Not draggable — a story
-    /// moves only as its tasks do.
-    let stories: [ProjectStory]
     let board: TaskBoard
     /// Every story's progress and column, computed once for the whole board.
     let storyRollups: [UUID: StoryRollup]
@@ -28,63 +25,54 @@ struct TaskColumnView: View {
     /// A column header was dropped on this one: the dragged column takes this
     /// column's slot in the board order.
     let onReorder: (TaskStatus) -> Void
-    @Binding var collapsedStoryIds: Set<UUID>
 
     private var status: TaskStatus { column.id }
 
     @State private var isTargeted = false
     @State private var isColumnTargeted = false
+    @State private var revealedOlderTaskCount = 0
+    @State private var currentDate = Date()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            columnHeader
+        let cutoff = currentDate.addingTimeInterval(-Double(appState.taskCardRetentionDays) * 24 * 60 * 60)
+        let recentTasks = tasks.filter { $0.updatedAt >= cutoff }
+        let olderTasks = tasks.filter { $0.updatedAt < cutoff }
+            .sorted { $0.updatedAt > $1.updatedAt }
+        let visibleTasks = recentTasks + Array(olderTasks.prefix(revealedOlderTaskCount))
+        let hiddenCount = max(0, olderTasks.count - revealedOlderTaskCount)
 
-            ScrollView {
-                LazyVStack(spacing: 8) {
-                    ForEach(stories) { story in
-                        StoryCardView(
-                            story: story,
-                            progress: storyRollups[story.id]?.progress ?? board.progress(for: story),
-                            board: board,
-                            isCollapsed: collapsedStoryIds.contains(story.id),
-                            onToggleCollapse: {
-                                if collapsedStoryIds.contains(story.id) {
-                                    collapsedStoryIds.remove(story.id)
-                                } else {
-                                    collapsedStoryIds.insert(story.id)
-                                }
-                            },
-                            onOpen: { onOpen(.story(story)) },
-                            onNewTask: { onOpen(.task($0)) }
-                        )
-                        .transition(TaskBoardMotion.card)
-                    }
-                    // Separates the story roll-ups from the column's own tasks.
-                    if !stories.isEmpty, !tasks.isEmpty {
-                        ClaudeThemeDivider()
-                            .padding(.vertical, 4)
-                            .transition(.opacity)
-                    }
-                    ForEach(tasks) { task in
-                        TaskCardView(
-                            task: task,
-                            board: board,
-                            storyRollup: task.storyId.flatMap { storyRollups[$0] }
-                        ) {
-                            onOpen(.task(task))
-                        }
-                        // A card in a chat column stays put while its agent runs.
-                        .modifier(TaskCardDrag(isLocked: board.isStatusLocked(task), task: task))
-                        .transition(TaskBoardMotion.card)
-                    }
-                    if tasks.isEmpty, stories.isEmpty {
-                        emptyHint
-                            .transition(.opacity)
-                    }
+        TaskKanbanColumnContent {
+            columnHeader
+        } cards: {
+            ForEach(visibleTasks) { task in
+                TaskCardView(
+                    task: task,
+                    board: board,
+                    storyRollup: task.storyId.flatMap { storyRollups[$0] }
+                ) {
+                    onOpen(.task(task))
                 }
-                .padding(.bottom, 8)
+                // A card in a chat column stays put while its agent runs.
+                .modifier(TaskCardDrag(isLocked: board.isStatusLocked(task), task: task))
+                .transition(TaskBoardMotion.card)
             }
-            .scrollContentBackground(.hidden)
+            if hiddenCount > 0 {
+                Button {
+                    revealedOlderTaskCount += 10
+                } label: {
+                    Text("Show \(min(10, hiddenCount)) more older tasks (\(hiddenCount) hidden)")
+                        .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(ClaudeTheme.accent)
+                .padding(.vertical, 8)
+                .accessibilityIdentifier("task-column-show-more-\(status.rawValue)")
+            }
+            if tasks.isEmpty {
+                emptyHint
+                    .transition(.opacity)
+            }
         }
         .frame(maxHeight: .infinity, alignment: .top)
         .padding(10)
@@ -110,6 +98,25 @@ struct TaskColumnView: View {
             handleDrop(items)
         } isTargeted: { isTargeted = $0 }
         .accessibilityIdentifier("task-column-\(status.rawValue)")
+        .task(id: TaskCardAgeSchedule(
+            retentionDays: appState.taskCardRetentionDays,
+            updatedDates: tasks.map(\.updatedAt)
+        )) {
+            let retentionInterval = Double(appState.taskCardRetentionDays) * 24 * 60 * 60
+            while !Task.isCancelled {
+                let now = Date()
+                currentDate = now
+                guard let nextExpiration = tasks.map({ $0.updatedAt.addingTimeInterval(retentionInterval) })
+                    .filter({ $0 >= now }).min() else { break }
+                // The cutoff uses a strict comparison, so wake just after the boundary.
+                let delay = nextExpiration.timeIntervalSince(now) + 0.01
+                do {
+                    try await Task.sleep(for: .seconds(delay))
+                } catch {
+                    break
+                }
+            }
+        }
     }
 
     // MARK: - Drop
@@ -197,7 +204,7 @@ struct TaskColumnView: View {
                 .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
                 .foregroundStyle(ClaudeTheme.textPrimary)
                 .lineLimit(1)
-            TaskCountBadge(count: tasks.count + stories.count)
+            TaskCountBadge(count: tasks.count)
             if column.triggersChat {
                 Image(systemName: "bolt.fill")
                     .font(.system(size: ClaudeTheme.size(10)))
@@ -214,6 +221,11 @@ struct TaskColumnView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
     }
+}
+
+private struct TaskCardAgeSchedule: Hashable {
+    let retentionDays: Int
+    let updatedDates: [Date]
 }
 
 // MARK: - Column drag

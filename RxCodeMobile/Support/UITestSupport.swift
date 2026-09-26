@@ -10,7 +10,7 @@ import Foundation
 enum UITestSupport {
     /// `true` when the app was launched by the UI test harness.
     static var isActive: Bool {
-        ProcessInfo.processInfo.arguments.contains("-uitest-mock")
+        ProcessInfo.processInfo.arguments.contains("-uitest-mock") || ProcessInfo.processInfo.arguments.contains("-uitest-cloud")
     }
 
     /// Value following a `-flag value` pair in the launch arguments.

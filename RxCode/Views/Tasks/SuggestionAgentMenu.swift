@@ -1,14 +1,13 @@
 import RxCodeCore
 import SwiftUI
 
-/// Picks the model that powers general AI tasks — drafting, titles, auto-fill,
-/// cron, filter scripts and context-menu conditions. The choice is saved as the
-/// Settings → Message general AI model, so every form and the settings tab stay
-/// in agreement.
+/// Picks a general AI model. Most callers save the choice in Settings; a
+/// one-off suggestion can keep its selection local to the current view.
 struct SuggestionAgentMenu: View {
     @Environment(AppState.self) private var appState
 
     @Binding var agent: GeneralAIModel
+    var persistsSelection = true
 
     var body: some View {
         Menu {
@@ -36,11 +35,11 @@ struct SuggestionAgentMenu: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .help("The model that runs general AI tasks")
+        .help(persistsSelection ? "The model that runs general AI tasks" : "The model for this suggestion")
     }
 
     private func select(_ newValue: GeneralAIModel) {
-        appState.setGeneralAIModel(newValue)
+        if persistsSelection { appState.setGeneralAIModel(newValue) }
         agent = newValue
     }
 }

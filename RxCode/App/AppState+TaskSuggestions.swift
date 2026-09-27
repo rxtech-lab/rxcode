@@ -101,15 +101,15 @@ extension AppState {
         return ScheduledTaskDraftSuggestion.parse(raw)
     }
 
-    /// A cron expression for a schedule described in natural language, from
-    /// the selected suggestion agent. `nil` when no agent answered with one
-    /// that parses.
-    func suggestCronExpression(description: String, projectId: UUID?) async -> String? {
+    /// A cron expression for a schedule described in natural language. A
+    /// one-off model overrides Settings without changing the saved selection.
+    func suggestCronExpression(description: String, projectId: UUID?, model: GeneralAIModel? = nil) async -> String? {
         let trimmed = description.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty,
               let raw = await runTaskAgentCompletion(
                   prompt: CronExpressionSuggestion.prompt(description: String(trimmed.prefix(2_000))),
                   projectId: projectId,
+                  model: model,
                   verbatim: true
               )
         else { return nil }
@@ -121,11 +121,11 @@ extension AppState {
         taskBoard(for: task.projectId).story(id: task.storyId)?.title
     }
 
-    /// Runs a one-shot task prompt on the general AI model. `verbatim`
-    /// skips Claude's summary cleanup, for replies that carry code.
-    func runTaskAgentCompletion(prompt: String, projectId: UUID?, verbatim: Bool = false) async -> String? {
+    /// Runs a one-shot task prompt on the selected or supplied general AI model.
+    /// `verbatim` skips Claude's summary cleanup for replies that carry code.
+    func runTaskAgentCompletion(prompt: String, projectId: UUID?, model: GeneralAIModel? = nil, verbatim: Bool = false) async -> String? {
         let agent: TaskAgentConfig
-        switch generalAIModel() {
+        switch model ?? generalAIModel() {
         case .appleIntelligence:
             if FoundationModelSummarizationService.isAvailable {
                 return await foundationModelSummarization.generatePlainCompletion(

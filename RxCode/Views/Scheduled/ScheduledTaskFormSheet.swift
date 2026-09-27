@@ -23,8 +23,7 @@ struct ScheduledTaskFormSheet: View {
     /// step can return to it without regenerating.
     @State private var hasGeneratedDraft = false
     @State private var suggestionAgent: GeneralAIModel = .taskAgent
-    @State private var isGeneratingCron = false
-    @State private var cronError: String?
+    @State private var isEditingSchedule = false
 
     init(
         task: ScheduledTask,
@@ -66,11 +65,6 @@ struct ScheduledTaskFormSheet: View {
         !trimmedName.isEmpty && !trimmedPrompt.isEmpty
             && projectIsValid
             && (try? parseResult.get()) != nil
-    }
-
-    /// The schedule field holds a description rather than an expression.
-    private var cronIsNaturalLanguage: Bool {
-        CronExpressionSuggestion.isNaturalLanguage(draft.cronExpression)
     }
 
     private var canGenerateDraft: Bool {
@@ -123,6 +117,12 @@ struct ScheduledTaskFormSheet: View {
             }
         }
         .frame(width: 520, height: 580)
+        .sheet(isPresented: $isEditingSchedule) {
+            CronScheduleEditorSheet(expression: draft.cronExpression, projectId: draft.projectId) {
+                draft.cronExpression = $0
+            }
+            .environment(appState)
+        }
         .onAppear { suggestionAgent = appState.generalAIModel() }
         .interactiveDismissDisabled(isProposal)
         // Settles the proposal however the sheet closes; a no-op after Add.
@@ -229,35 +229,22 @@ struct ScheduledTaskFormSheet: View {
 
             Section {
                 HStack {
-                    TextField("Cron expression", text: $draft.cronExpression, prompt: Text("0 9 * * 1-5"))
+                    Text(draft.cronExpression)
                         .font(.system(size: 13, design: .monospaced))
-                        .autocorrectionDisabled()
-                        .disabled(isGeneratingCron)
-                        .onChange(of: draft.cronExpression) { _, _ in cronError = nil }
-                    if cronIsNaturalLanguage || isGeneratingCron {
-                        Button {
-                            Task { await generateCronExpression() }
-                        } label: {
-                            HStack(spacing: 4) {
-                                if isGeneratingCron {
-                                    ProgressView().controlSize(.mini)
-                                } else {
-                                    Image(systemName: "sparkles")
-                                }
-                                Text("Generate")
-                            }
-                        }
-                        .disabled(isGeneratingCron)
-                        .help("Turn this description into a cron expression")
-                        .accessibilityIdentifier("scheduled-task-generate-cron")
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                    Spacer()
+                    Button("Edit Schedule…", systemImage: "calendar.badge.clock") {
+                        isEditingSchedule = true
                     }
-                    presetMenu
+                    .accessibilityIdentifier("scheduled-task-edit-schedule")
                 }
-                schedulePreview
+                parsedSchedulePreview
             } header: {
                 Text("Schedule")
             } footer: {
-                Text("Five fields: minute, hour, day of month, month, day of week. Times use your local time zone.")
+                Text("Times use your local time zone.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -285,24 +272,6 @@ struct ScheduledTaskFormSheet: View {
         }
         hasGeneratedDraft = true
         isDescribing = false
-    }
-
-    /// Replaces a natural-language schedule with the suggestion agent's cron
-    /// expression. The field keeps the description when no answer parses, or
-    /// when it was edited while the agent was working.
-    private func generateCronExpression() async {
-        let description = draft.cronExpression.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !isGeneratingCron, !description.isEmpty else { return }
-        isGeneratingCron = true
-        cronError = nil
-        let expression = await appState.suggestCronExpression(description: description, projectId: draft.projectId)
-        isGeneratingCron = false
-        guard draft.cronExpression.trimmingCharacters(in: .whitespacesAndNewlines) == description else { return }
-        if let expression {
-            draft.cronExpression = expression
-        } else {
-            cronError = String(localized: "Could not generate a cron expression. Try rewording the schedule or pick a preset.")
-        }
     }
 
     /// Picks the project each run's agent works in, or none.
@@ -364,38 +333,6 @@ struct ScheduledTaskFormSheet: View {
             return String(localized: "Default (\(appState.taskAgentLabel(appState.defaultTaskAgent())))")
         }
         return appState.taskAgentLabel(draft.agent)
-    }
-
-    private var presetMenu: some View {
-        Menu {
-            ForEach(CronPreset.all) { preset in
-                Button {
-                    draft.cronExpression = preset.expression
-                } label: {
-                    Text("\(Text(preset.title)) (\(preset.expression))")
-                }
-            }
-        } label: {
-            Label("Presets", systemImage: "list.bullet")
-        }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
-        .help("Pick a common schedule")
-    }
-
-    @ViewBuilder
-    private var schedulePreview: some View {
-        if let cronError {
-            Label(cronError, systemImage: "exclamationmark.triangle.fill")
-                .font(.caption)
-                .foregroundStyle(ClaudeTheme.statusError)
-        } else if cronIsNaturalLanguage || isGeneratingCron {
-            Label("Click Generate to turn this description into a cron expression.", systemImage: "sparkles")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        } else {
-            parsedSchedulePreview
-        }
     }
 
     @ViewBuilder

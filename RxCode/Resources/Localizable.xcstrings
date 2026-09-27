@@ -66,6 +66,9 @@
         }
       }
     },
+    ":" : {
+
+    },
     ".env" : {
       "localizations" : {
         "ko" : {
@@ -279,6 +282,7 @@
       }
     },
     "%@ (%@)" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -720,6 +724,9 @@
         }
       }
     },
+    "%lld hours" : {
+
+    },
     "%lld in progress" : {
       "localizations" : {
         "zh-Hans" : {
@@ -731,6 +738,9 @@
       }
     },
     "%lld messages queued" : {
+
+    },
+    "%lld minutes" : {
 
     },
     "%lld of %lld agents" : {
@@ -2917,6 +2927,9 @@
         }
       }
     },
+    "At" : {
+
+    },
     "Attachments" : {
       "localizations" : {
         "zh-Hans" : {
@@ -3690,6 +3703,9 @@
         }
       }
     },
+    "Builder" : {
+
+    },
     "Call an external API — define the method, URL, headers, and body once, with {{placeholders}} for project and branch context." : {
       "localizations" : {
         "ko" : {
@@ -3920,6 +3936,9 @@
         }
       }
     },
+    "Choose a frequency to replace this custom expression." : {
+
+    },
     "Choose a published stable npm or PyPI release. RxCode will pin and verify it before saving." : {
 
     },
@@ -3934,6 +3953,9 @@
       }
     },
     "Choose File…" : {
+
+    },
+    "Choose frequency" : {
 
     },
     "Choose how this client should authenticate." : {
@@ -4254,9 +4276,6 @@
       }
     },
     "Click a task to edit it before the story is created. A task that starts after another runs once that task finishes." : {
-
-    },
-    "Click Generate to turn this description into a cron expression." : {
 
     },
     "Click to select · Command-right-click to add or remove · Right-click for Show Diff" : {
@@ -5451,7 +5470,7 @@
         }
       }
     },
-    "Could not generate a cron expression. Try rewording the schedule or pick a preset." : {
+    "Could not generate a cron expression. Try rewording the schedule." : {
 
     },
     "Could not load published versions." : {
@@ -6183,6 +6202,9 @@
         }
       }
     },
+    "Daily" : {
+
+    },
     "Daily dependency check" : {
       "localizations" : {
         "ko" : {
@@ -6198,6 +6220,15 @@
           }
         }
       }
+    },
+    "Day" : {
+
+    },
+    "Day of month" : {
+
+    },
+    "Days" : {
+
     },
     "Debug" : {
       "localizations" : {
@@ -7655,6 +7686,12 @@
         }
       }
     },
+    "Edit Schedule" : {
+
+    },
+    "Edit Schedule…" : {
+
+    },
     "Edit scheduled task" : {
       "localizations" : {
         "ko" : {
@@ -8193,6 +8230,9 @@
         }
       }
     },
+    "Every" : {
+
+    },
     "Every 15 minutes" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -8244,7 +8284,6 @@
       }
     },
     "Every hour" : {
-      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -8259,6 +8298,9 @@
           }
         }
       }
+    },
+    "Every minute" : {
+
     },
     "Every Monday at 9:00" : {
       "extractionState" : "stale",
@@ -8276,6 +8318,12 @@
           }
         }
       }
+    },
+    "Every N hours" : {
+
+    },
+    "Every N minutes" : {
+
     },
     "Every task in this story is assigned to this model." : {
       "localizations" : {
@@ -8432,6 +8480,12 @@
           }
         }
       }
+    },
+    "Expression" : {
+
+    },
+    "Expression and next runs" : {
+
     },
     "Extra environment" : {
       "localizations" : {
@@ -8791,6 +8845,7 @@
       }
     },
     "Five fields: minute, hour, day of month, month, day of week. Times use your local time zone." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -8956,6 +9011,9 @@
         }
       }
     },
+    "For example, every weekday at 9 AM" : {
+
+    },
     "Force off" : {
       "localizations" : {
         "ko" : {
@@ -9006,6 +9064,9 @@
           }
         }
       }
+    },
+    "Frequency" : {
+
     },
     "from %@" : {
       "localizations" : {
@@ -9743,6 +9804,9 @@
         }
       }
     },
+    "Hour" : {
+
+    },
     "Hover to highlight this story's tasks" : {
       "localizations" : {
         "zh-Hans" : {
@@ -10047,6 +10111,9 @@
           }
         }
       }
+    },
+    "Input" : {
+
     },
     "Insert Example" : {
 
@@ -11805,6 +11872,9 @@
         }
       }
     },
+    "Minute" : {
+
+    },
     "Mobile" : {
       "localizations" : {
         "ko" : {
@@ -11928,6 +11998,9 @@
           }
         }
       }
+    },
+    "Monthly" : {
+
     },
     "More" : {
       "localizations" : {
@@ -14933,6 +15006,7 @@
       }
     },
     "Pick a common schedule" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -15186,6 +15260,7 @@
       }
     },
     "Presets" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -19563,6 +19638,9 @@
         }
       }
     },
+    "Specific days" : {
+
+    },
     "Standalone chat" : {
 
     },
@@ -20403,6 +20481,9 @@
         }
       }
     },
+    "The model for this suggestion" : {
+
+    },
     "The model that runs general AI tasks" : {
 
     },
@@ -21026,6 +21107,12 @@
         }
       }
     },
+    "Times use your local time zone." : {
+
+    },
+    "Times use your local time zone. Advanced cron expressions remain available in Expression mode." : {
+
+    },
     "Title" : {
       "localizations" : {
         "ko" : {
@@ -21183,9 +21270,6 @@
           }
         }
       }
-    },
-    "Turn this description into a cron expression" : {
-
     },
     "Type" : {
       "localizations" : {
@@ -22043,6 +22127,9 @@
         }
       }
     },
+    "Weekly" : {
+
+    },
     "Welcome to RxCode" : {
       "localizations" : {
         "ko" : {
@@ -22357,6 +22444,9 @@
         }
       }
     },
+    "Write a schedule with AI" : {
+
+    },
     "Write Filter…" : {
 
     },
@@ -22391,6 +22481,9 @@
           }
         }
       }
+    },
+    "Write with AI" : {
+
     },
     "Wrote %@ to the project." : {
       "localizations" : {

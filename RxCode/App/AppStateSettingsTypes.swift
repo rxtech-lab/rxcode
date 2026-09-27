@@ -1,4 +1,5 @@
 import Foundation
+import RxCodeCore
 
 enum SummarizationProvider: String, CaseIterable, Identifiable {
     case selectedClient
@@ -59,3 +60,18 @@ enum MemoryRetrievalMode: String, CaseIterable, Identifiable {
     }
 }
 
+
+/// The model that runs general AI tasks — drafting tasks and stories from
+/// natural language, form Auto-fill, cron schedules, filter scripts and
+/// context-menu conditions. Chosen in Settings → Message.
+enum GeneralAIModel: Hashable {
+    /// Follow the default task agent from Settings → Tasks.
+    case taskAgent
+    /// Apple's on-device Foundation Model.
+    case appleIntelligence
+    /// A Claude Code, Codex or ACP model.
+    case agent(TaskAgentConfig)
+
+    /// Stored in place of a provider raw value to mark Apple Intelligence.
+    static let appleIntelligenceKey = "appleIntelligence"
+}

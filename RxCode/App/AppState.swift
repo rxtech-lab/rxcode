@@ -147,6 +147,7 @@ final class AppState {
     var workspaceDefaults = WorkspaceDefaults(workspaceID: AppWorkspace.personalID)
 
     var projects: [Project] = []
+    @ObservationIgnored var projectPromptSaveTask: Task<Void, Never>?
 
     // MARK: - Per-Session State (shared — managed independently by session ID regardless of window)
 
@@ -347,6 +348,17 @@ final class AppState {
     /// Cached registry from `cdn.agentclientprotocol.com`. Refreshed hourly.
     var acpRegistry: ACPRegistry?
     var acpRegistryLoading: Bool = false
+
+    // MARK: - Scheduled Tasks
+
+    /// Cron-scheduled prompts across every project. Loaded from disk on init.
+    var scheduledTasks: [ScheduledTask] = []
+    /// Agent-proposed scheduled tasks awaiting the user's confirmation, oldest
+    /// first. `MainView` presents the first as a sheet.
+    var scheduledTaskProposals: [ScheduledTask] = []
+    /// Resumes the `ide__create_scheduled_task` call waiting on each proposal,
+    /// keyed by proposal id.
+    @ObservationIgnored var scheduledTaskProposalContinuations: [UUID: CheckedContinuation<ScheduledTask?, Never>] = [:]
 
     /// Selected default ACP client id (when `selectedAgentProvider == .acp`).
     var selectedACPClientId: String = "" {

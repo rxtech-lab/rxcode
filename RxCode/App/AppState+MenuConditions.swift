@@ -81,12 +81,13 @@ extension AppState {
     }
 
     /// Generate a condition script from a natural-language requirement using the
-    /// app's default model (falling back to the Claude default when the configured
-    /// default provider isn't Claude Code).
+    /// general AI model (Settings → Message).
     func generateMenuConditionScript(requirement: String, project: Project?) async -> String? {
-        let selection = defaultModelSelection(for: project)
-        let model = selection.provider == .claudeCode ? selection.model : "default"
-        return await claude.generateConditionScript(requirement: requirement, model: model)
+        let prompt = ClaudeService.conditionScriptPrompt(requirement: requirement)
+        guard let raw = await runTaskAgentCompletion(prompt: prompt, projectId: project?.id, verbatim: true) else {
+            return nil
+        }
+        return ClaudeService.extractGeneratedSwift(from: raw)
     }
 
     // MARK: - Helpers

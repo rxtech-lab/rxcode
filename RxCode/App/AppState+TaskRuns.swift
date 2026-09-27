@@ -195,6 +195,7 @@ extension AppState {
             logger.error("[Tasks] no session opened for task \(task.id.uuidString, privacy: .public)")
             return
         }
+        AnalyticsService.shared.log(.projectTaskRunStarted)
         if var current = self.task(id: task.id) {
             current.sessionKey = sessionKey
             upsertTask(current)

@@ -46,4 +46,12 @@ final class BranchBriefingPromptContextTests: XCTestCase {
             "Only the request."
         )
     }
+
+    func testConfiguredPromptsKeepGlobalBeforeProjectAndIgnoreBlankValues() {
+        XCTAssertEqual(
+            AppState.configuredPromptContext(global: "  Use English.  ", project: "  Follow project conventions.\n"),
+            "# Global instructions\n\nUse English.\n\n# Project instructions\n\nFollow project conventions."
+        )
+        XCTAssertEqual(AppState.configuredPromptContext(global: "  ", project: nil), "")
+    }
 }

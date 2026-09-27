@@ -146,6 +146,22 @@
         }
       }
     },
+    "\"%@\" will stop running. This can't be undone." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” 작업이 더 이상 실행되지 않습니다. 이 작업은 취소할 수 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”将停止运行。此操作无法撤销。"
+          }
+        }
+      }
+    },
     "(build only)" : {
       "localizations" : {
         "ko" : {
@@ -258,6 +274,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ · %@ · %lld 条规则%@"
+          }
+        }
+      }
+    },
+    "%@ (%@)" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ (%2$@)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@（%2$@）"
           }
         }
       }
@@ -723,6 +755,22 @@
         }
       }
     },
+    "%lld of %lld scheduled tasks active." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "예약 작업 %2$lld개 중 %1$lld개 활성화됨."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%2$lld 个定时任务中有 %1$lld 个已启用。"
+          }
+        }
+      }
+    },
     "%lld of %lld tasks done, %lld in progress" : {
       "localizations" : {
         "en" : {
@@ -977,6 +1025,9 @@
           }
         }
       }
+    },
+    "0 9 * * 1-5" : {
+
     },
     "1 day" : {
 
@@ -1234,6 +1285,22 @@
         }
       }
     },
+    "Add a project first" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "먼저 프로젝트를 추가하세요"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先添加项目"
+          }
+        }
+      }
+    },
     "Add a project to configure hooks." : {
       "localizations" : {
         "ko" : {
@@ -1249,6 +1316,9 @@
           }
         }
       }
+    },
+    "Add a project to configure its prompt." : {
+
     },
     "Add a project to start tracking tasks." : {
       "localizations" : {
@@ -1755,6 +1825,22 @@
         }
       }
     },
+    "Add Scheduled Task?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "예약 작업을 추가할까요?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加定时任务？"
+          }
+        }
+      }
+    },
     "Add Secret" : {
       "localizations" : {
         "ko" : {
@@ -2041,6 +2127,9 @@
         }
       }
     },
+    "Agent Prompts" : {
+
+    },
     "Agent Response" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2099,7 +2188,11 @@
         }
       }
     },
+    "AI model" : {
+
+    },
     "AI Suggestions" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -2110,6 +2203,7 @@
       }
     },
     "AI suggestions model" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -2393,6 +2487,22 @@
         }
       }
     },
+    "An agent proposed this scheduled task from chat. Review it, then add it or cancel." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "에이전트가 채팅에서 이 예약 작업을 제안했습니다. 검토한 후 추가하거나 취소하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "智能体在聊天中提议了此定时任务。请检查后添加或取消。"
+          }
+        }
+      }
+    },
     "An SF Symbol name shown beside the title, e.g. \"bolt\"." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -2496,6 +2606,9 @@
           }
         }
       }
+    },
+    "Apple Intelligence (On-Device)" : {
+
     },
     "Applied automatically to newly created repositories." : {
       "localizations" : {
@@ -3218,6 +3331,9 @@
         }
       }
     },
+    "Back to Draft" : {
+
+    },
     "Back up this project's secrets to Autopilot" : {
       "localizations" : {
         "ko" : {
@@ -3644,6 +3760,38 @@
         }
       }
     },
+    "Chat History" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "채팅 기록"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聊天历史"
+          }
+        }
+      }
+    },
+    "Chat in New Window" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 창에서 채팅"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在新窗口中聊天"
+          }
+        }
+      }
+    },
     "Check Again" : {
       "localizations" : {
         "en" : {
@@ -3808,6 +3956,9 @@
           }
         }
       }
+    },
+    "Choose the project, prompt, agent, and timing." : {
+
     },
     "Choose which branches to show briefings for." : {
       "localizations" : {
@@ -4080,6 +4231,9 @@
           }
         }
       }
+    },
+    "Click Generate to turn this description into a cron expression." : {
+
     },
     "Click to select · Command-right-click to add or remove · Right-click for Show Diff" : {
       "localizations" : {
@@ -5270,6 +5424,9 @@
         }
       }
     },
+    "Could not generate a cron expression. Try rewording the schedule or pick a preset." : {
+
+    },
     "Could not load published versions." : {
 
     },
@@ -5400,6 +5557,9 @@
           }
         }
       }
+    },
+    "Create a schedule with AI or fill in the form yourself." : {
+
     },
     "Create and checkout" : {
       "localizations" : {
@@ -5579,6 +5739,26 @@
         }
       }
     },
+    "Create Scheduled Task with AI" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用 AI 创建定时任务"
+          }
+        }
+      }
+    },
+    "Create Scheduled Task with Form" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用表单创建定时任务"
+          }
+        }
+      }
+    },
     "Create Story and Tasks" : {
 
     },
@@ -5747,6 +5927,22 @@
     },
     "Credentials saved." : {
 
+    },
+    "Cron expression" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cron 표현식"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cron 表达式"
+          }
+        }
+      }
     },
     "Current" : {
       "localizations" : {
@@ -5960,6 +6156,22 @@
         }
       }
     },
+    "Daily dependency check" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "일일 의존성 점검"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每日依赖检查"
+          }
+        }
+      }
+    },
     "Debug" : {
       "localizations" : {
         "ko" : {
@@ -6042,6 +6254,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "默认"
+          }
+        }
+      }
+    },
+    "Default (%@)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "默认（%@）"
           }
         }
       }
@@ -6144,6 +6366,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "默认模板"
+          }
+        }
+      }
+    },
+    "Default view" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기본 보기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "默认视图"
           }
         }
       }
@@ -6480,6 +6718,22 @@
         }
       }
     },
+    "Delete this scheduled task?" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 예약 작업을 삭제할까요?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除此定时任务？"
+          }
+        }
+      }
+    },
     "Delete View" : {
       "localizations" : {
         "zh-Hans" : {
@@ -6585,10 +6839,21 @@
     "Describe what needs doing" : {
 
     },
+    "Describe what should run and when, like \"every weekday at 9:00, check for outdated dependencies\"." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "描述要运行的内容和时间，例如“每个工作日 9:00 检查过时的依赖项”。"
+          }
+        }
+      }
+    },
     "Describe what this view should show. An agent writes Swift that filters its tasks and stories, and it's compiled before use." : {
 
     },
     "Describe when this menu item should appear. The default model writes the Swift condition and it's compiled before use." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -6603,6 +6868,9 @@
           }
         }
       }
+    },
+    "Describe when this menu item should appear. The general AI model (Settings → Message) writes the Swift condition and it's compiled before use." : {
+
     },
     "Description" : {
       "localizations" : {
@@ -7085,6 +7353,9 @@
         }
       }
     },
+    "Drafted by AI from your description." : {
+
+    },
     "Drag a card here." : {
       "localizations" : {
         "zh-Hans" : {
@@ -7344,6 +7615,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "编辑中继服务器"
+          }
+        }
+      }
+    },
+    "Edit scheduled task" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "예약 작업 편집"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑定时任务"
+          }
+        }
+      }
+    },
+    "Edit Scheduled Task" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "예약 작업 편집"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑定时任务"
           }
         }
       }
@@ -7719,6 +8022,23 @@
         }
       }
     },
+    "Enter a cron expression." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cron 표현식을 입력하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请输入 Cron 表达式。"
+          }
+        }
+      }
+    },
     "Enter a new name for this device." : {
       "localizations" : {
         "ko" : {
@@ -7837,6 +8157,23 @@
         }
       }
     },
+    "Every 15 minutes" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "15분마다"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每 15 分钟"
+          }
+        }
+      }
+    },
     "Every Autopilot project on your account is already linked on this Mac. Use Sync to Cloud to create a new one." : {
       "localizations" : {
         "ko" : {
@@ -7849,6 +8186,57 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你账户中的所有 Autopilot 项目都已在这台 Mac 上关联。使用“同步到云端”可创建新项目。"
+          }
+        }
+      }
+    },
+    "Every day at 9:00" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "매일 9:00"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每天 9:00"
+          }
+        }
+      }
+    },
+    "Every hour" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "매시간"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每小时"
+          }
+        }
+      }
+    },
+    "Every Monday at 9:00" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "매주 월요일 9:00"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每周一 9:00"
           }
         }
       }
@@ -7924,6 +8312,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "展开聊天"
+          }
+        }
+      }
+    },
+    "Expected 5 fields (minute hour day month weekday), found %lld." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "5개 필드(분 시 일 월 요일)가 필요하지만 %lld개가 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "需要 5 个字段（分 时 日 月 星期），但找到 %lld 个。"
           }
         }
       }
@@ -8301,6 +8706,23 @@
     "Finishing sync (step 4 of 4)" : {
 
     },
+    "First day of the month at 9:00" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "매월 1일 9:00"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每月 1 日 9:00"
+          }
+        }
+      }
+    },
     "First MCP Server" : {
       "localizations" : {
         "ko" : {
@@ -8313,6 +8735,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "第一个 MCP 服务器"
+          }
+        }
+      }
+    },
+    "Five fields: minute, hour, day of month, month, day of week. Times use your local time zone." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "5개 필드: 분, 시, 일, 월, 요일. 시간은 로컬 시간대를 사용합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "五个字段：分钟、小时、日、月、星期。时间使用本地时区。"
           }
         }
       }
@@ -8571,6 +9009,9 @@
           }
         }
       }
+    },
+    "General AI Tasks" : {
+
     },
     "Generate" : {
       "localizations" : {
@@ -8858,6 +9299,9 @@
         }
       }
     },
+    "Global prompt" : {
+
+    },
     "Go back and change the description" : {
       "localizations" : {
         "zh-Hans" : {
@@ -8867,6 +9311,9 @@
           }
         }
       }
+    },
+    "Go back to the description and generate a new draft" : {
+
     },
     "Got it" : {
       "localizations" : {
@@ -9887,6 +10334,39 @@
         }
       }
     },
+    "Invalid %@ field \"%@\"." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "잘못된 %1$@ 필드 \"%2$@\"입니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无效的 %1$@ 字段“%2$@”。"
+          }
+        }
+      }
+    },
+    "Invalid schedule" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "잘못된 일정"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无效的计划"
+          }
+        }
+      }
+    },
     "It was moved here by hand, or its thread was deleted." : {
       "localizations" : {
         "zh-Hans" : {
@@ -10044,6 +10524,22 @@
     },
     "Laptop" : {
 
+    },
+    "Last run %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "마지막 실행 %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上次运行 %@"
+          }
+        }
+      }
     },
     "Last signed in with %@" : {
 
@@ -11499,6 +11995,22 @@
     "Needs Attention" : {
 
     },
+    "Never runs" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실행되지 않음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "永不运行"
+          }
+        }
+      }
+    },
     "Never scanned" : {
       "localizations" : {
         "ko" : {
@@ -11704,6 +12216,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "新建项目…"
+          }
+        }
+      }
+    },
+    "New Scheduled Task" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 예약 작업"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建定时任务"
           }
         }
       }
@@ -11969,6 +12497,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "下一步"
+          }
+        }
+      }
+    },
+    "Next %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다음 실행 %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下次运行 %@"
+          }
+        }
+      }
+    },
+    "Next runs" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다음 실행"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "接下来的运行"
           }
         }
       }
@@ -12409,6 +12969,22 @@
         }
       }
     },
+    "No matching tasks" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "일치하는 작업 없음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有匹配的任务"
+          }
+        }
+      }
+    },
     "No memories" : {
       "localizations" : {
         "ko" : {
@@ -12776,6 +13352,22 @@
         }
       }
     },
+    "No Scheduled Tasks" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "예약 작업 없음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有定时任务"
+          }
+        }
+      }
+    },
     "No secrets yet. Add a .env file or enter values manually." : {
       "localizations" : {
         "ko" : {
@@ -12804,6 +13396,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "没有服务器"
+          }
+        }
+      }
+    },
+    "No stories in the default view." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기본 보기에 스토리가 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "默认视图中没有故事。"
           }
         }
       }
@@ -13393,6 +14001,9 @@
         }
       }
     },
+    "Open Chat from the sidebar to start a conversation." : {
+
+    },
     "Open in Editor" : {
       "localizations" : {
         "ko" : {
@@ -13663,6 +14274,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "开源"
+          }
+        }
+      }
+    },
+    "Open tasks that run on a cron schedule" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cron 일정으로 실행되는 작업 열기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开按 Cron 计划运行的任务"
           }
         }
       }
@@ -14060,6 +14688,57 @@
         }
       }
     },
+    "Pause" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "일시정지"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂停"
+          }
+        }
+      }
+    },
+    "Pause this schedule" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 일정 일시정지"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂停此计划"
+          }
+        }
+      }
+    },
+    "Pause, edit, or delete schedules whenever you need to." : {
+
+    },
+    "Paused" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "일시정지됨"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已暂停"
+          }
+        }
+      }
+    },
     "Per-project secrets, end-to-end encrypted and easily shared with your team." : {
       "localizations" : {
         "ko" : {
@@ -14171,6 +14850,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "权限请求"
+          }
+        }
+      }
+    },
+    "Pick a common schedule" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "자주 쓰는 일정 선택"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择常用计划"
           }
         }
       }
@@ -14297,6 +14992,9 @@
         }
       }
     },
+    "Plan recurring agent prompts for a project and manage them from one place." : {
+
+    },
     "Platform: %@ • %@" : {
       "localizations" : {
         "en" : {
@@ -14405,6 +15103,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "预设名称"
+          }
+        }
+      }
+    },
+    "Presets" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프리셋"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "预设"
           }
         }
       }
@@ -14601,6 +15315,9 @@
     "Project not found on desktop." : {
 
     },
+    "Project prompt" : {
+
+    },
     "Project-specific override is set" : {
       "localizations" : {
         "ko" : {
@@ -14693,6 +15410,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "项目看板指南"
+          }
+        }
+      }
+    },
+    "Prompt" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프롬프트"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "提示词"
           }
         }
       }
@@ -14820,7 +15553,11 @@
         }
       }
     },
+    "Quick add keeps your text as the description. When enabled, the general AI model (Settings → Message) writes a title and fills empty properties, including version and milestone." : {
+
+    },
     "Quick add keeps your text as the description. When enabled, the suggestions model writes a title and fills empty properties, including version and milestone." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -15864,6 +16601,38 @@
         }
       }
     },
+    "Resume" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "재개"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "恢复"
+          }
+        }
+      }
+    },
+    "Resume this schedule" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 일정 재개"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "恢复此计划"
+          }
+        }
+      }
+    },
     "Retrieval" : {
       "localizations" : {
         "ko" : {
@@ -15901,6 +16670,12 @@
           }
         }
       }
+    },
+    "Return to earlier conversations from Chat History." : {
+
+    },
+    "Return to the current draft without regenerating it" : {
+
     },
     "Reveal in Finder" : {
       "localizations" : {
@@ -16065,6 +16840,9 @@
           }
         }
       }
+    },
+    "Run needs attention" : {
+
     },
     "Run the agent with --permission-mode plan so it proposes a plan before editing" : {
       "localizations" : {
@@ -16580,6 +17358,101 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "计划"
+          }
+        }
+      }
+    },
+    "Schedule a prompt to run in a project on a cron expression, like every weekday at 9:00." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cron 표현식으로 프로젝트에서 프롬프트를 실행하도록 예약하세요. 예: 평일 9:00."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用 Cron 表达式定时在项目中运行提示词，例如每个工作日 9:00。"
+          }
+        }
+      }
+    },
+    "Schedule a prompt to run periodically" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프롬프트를 주기적으로 실행하도록 예약"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "定时周期性运行提示词"
+          }
+        }
+      }
+    },
+    "Schedule a prompt to run periodically, written with AI or in a form" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "定时运行提示词，可用 AI 或表单编写"
+          }
+        }
+      }
+    },
+    "Schedule a task in %@" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@에 작업 예약"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 %@ 中添加定时任务"
+          }
+        }
+      }
+    },
+    "Scheduled" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "예약 작업"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "定时任务"
+          }
+        }
+      }
+    },
+    "Scheduled tasks" : {
+
+    },
+    "Scheduled Tasks" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "예약 작업"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "定时任务"
           }
         }
       }
@@ -17436,6 +18309,22 @@
         }
       }
     },
+    "Set as Default View" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기본 보기로 설정"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设为默认视图"
+          }
+        }
+      }
+    },
     "Set the summarization model" : {
       "localizations" : {
         "ko" : {
@@ -17818,6 +18707,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "显示已归档聊天"
+          }
+        }
+      }
+    },
+    "Show chat history" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "채팅 기록 표시"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示聊天历史"
           }
         }
       }
@@ -18557,6 +19462,15 @@
           }
         }
       }
+    },
+    "Standalone chat" : {
+
+    },
+    "Start a fresh chat whenever you want a separate topic." : {
+
+    },
+    "Start an agent conversation without adding a project first." : {
+
     },
     "Start New Chat" : {
       "localizations" : {
@@ -19373,6 +20287,19 @@
         }
       }
     },
+    "The model each run of this task uses" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此任务每次运行使用的模型"
+          }
+        }
+      }
+    },
+    "The model that runs general AI tasks" : {
+
+    },
     "The new Commit & Push hook commits — and optionally pushes — your work the moment an agent session completes." : {
       "localizations" : {
         "ko" : {
@@ -19479,6 +20406,16 @@
     "The story will be removed. Its tasks will remain on the board." : {
 
     },
+    "The suggestion agent did not respond. Review the schedule before creating it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "建议代理没有响应。请在创建前检查定时任务。"
+          }
+        }
+      }
+    },
     "The suggestion agent did not respond. Review this draft before creating it." : {
 
     },
@@ -19555,6 +20492,9 @@
           }
         }
       }
+    },
+    "These instructions are included with every agent turn. Project instructions are added after the global instructions." : {
+
     },
     "Thinking Level" : {
       "localizations" : {
@@ -19688,6 +20628,7 @@
       }
     },
     "This model powers quick add and the task and story forms' title and Auto-fill buttons. ACP client suggestions run in a separate session." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -19741,6 +20682,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "这将移除该工作区及其设置。磁盘上的文件不会被删除。"
+          }
+        }
+      }
+    },
+    "This schedule never runs." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 일정은 실행되지 않습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此计划永远不会运行。"
           }
         }
       }
@@ -20115,6 +21072,9 @@
         }
       }
     },
+    "Turn this description into a cron expression" : {
+
+    },
     "Type" : {
       "localizations" : {
         "ko" : {
@@ -20205,8 +21165,24 @@
         }
       }
     },
-    "Untitled" : {
+    "Unsupported macro %@." : {
       "extractionState" : "stale",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "지원하지 않는 매크로 %@입니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不支持的宏 %@。"
+          }
+        }
+      }
+    },
+    "Untitled" : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -20521,6 +21497,9 @@
         }
       }
     },
+    "Used to auto-fill task and story forms, create tasks and stories from natural language, generate cron schedules, and write Swift filters and context-menu conditions. ACP clients run in a separate session." : {
+
+    },
     "Used to generate short session titles. The default follows each thread's model." : {
       "localizations" : {
         "ko" : {
@@ -20558,6 +21537,9 @@
           }
         }
       }
+    },
+    "Uses the default task agent from the Tasks tab (%@)." : {
+
     },
     "Uses the model picked by the current thread. No extra configuration needed." : {
       "localizations" : {
@@ -20787,6 +21769,22 @@
         }
       }
     },
+    "View Chat History" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "채팅 기록 보기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查看聊天历史"
+          }
+        }
+      }
+    },
     "View details" : {
       "localizations" : {
         "ko" : {
@@ -20912,6 +21910,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "监视仓库以进行 CI 更新"
+          }
+        }
+      }
+    },
+    "Weekdays at 9:00" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "평일 9:00"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作日 9:00"
           }
         }
       }

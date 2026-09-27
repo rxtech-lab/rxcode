@@ -170,15 +170,9 @@ extension ClaudeCodeServer {
         return await generatePlainSummary(prompt: prompt, model: model, limit: 4000)
     }
 
-    /// Generate a Swift "show condition" for a custom menu item from a natural
-    /// language requirement. Returns *only* the `checkShowMenu(context:)` function
-    /// body (markdown fences stripped) — the caller compiles it before accepting.
-    /// Unlike `generatePlainSummary`, the output is preserved verbatim (no summary
-    /// sanitizer) so code formatting/newlines survive.
-    func generateConditionScript(requirement: String, model: String) async -> String? {
-        guard let binary = await findClaudeBinary() else { return nil }
-        let emptyMCPConfigPath = writeEmptyMCPConfig()
-        let prompt = """
+    /// Prompt for a Swift "show condition" on a custom context-menu item.
+    nonisolated static func conditionScriptPrompt(requirement: String) -> String {
+        """
         You are writing a Swift "show condition" for a custom context-menu item in a macOS app.
         Output ONLY a single Swift function — no prose, no markdown, no extra declarations:
 
@@ -203,17 +197,6 @@ extension ClaudeCodeServer {
 
         Requirement: \(requirement)
         """
-        var args: [String] = ["-p", prompt, "--output-format", "text", "--model", model]
-        if let emptyMCPConfigPath {
-            args.append(contentsOf: ["--strict-mcp-config", "--mcp-config", emptyMCPConfigPath])
-        }
-        do {
-            let output = try await runShellCommand(binary, arguments: args)
-            return Self.extractGeneratedSwift(from: output)
-        } catch {
-            logger.warning("Condition script generation failed: \(error.localizedDescription)")
-            return nil
-        }
     }
 
     /// Pull the Swift source out of a model reply, stripping a single ```/```swift

@@ -125,6 +125,8 @@ struct GeneralSettingsTab: View {
                 Divider()
                 searchIndexSection
                 Divider()
+                AgentPromptsSettingsSection()
+                Divider()
                 MemorySettingsSection()
                 Divider()
                 HooksSettingsSection()
@@ -485,6 +487,80 @@ struct GeneralSettingsTab: View {
             )
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct AgentPromptsSettingsSection: View {
+    @Environment(AppState.self) private var appState
+    @AppStorage("globalAgentPrompt") private var globalPrompt = ""
+    @State private var selectedProjectId: UUID?
+
+    private var selectedProject: Project? {
+        if let selectedProjectId,
+           let project = appState.projects.first(where: { $0.id == selectedProjectId }) {
+            return project
+        }
+        return appState.projects.first(where: { $0.path == appState.activeProjectPath })
+            ?? appState.projects.first
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Agent Prompts")
+                .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
+
+            Text("These instructions are included with every agent turn. Project instructions are added after the global instructions.")
+                .font(.system(size: ClaudeTheme.size(11)))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text("Global prompt")
+                .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+            promptEditor(text: $globalPrompt, label: "Global prompt")
+
+            if appState.projects.isEmpty {
+                Text("Add a project to configure its prompt.")
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(.secondary)
+            } else {
+                HStack {
+                    Text("Project prompt")
+                        .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+                    Spacer()
+                    Picker("Project", selection: Binding(
+                        get: { selectedProject?.id },
+                        set: { selectedProjectId = $0 }
+                    )) {
+                        ForEach(appState.projects) { project in
+                            Text(project.name).tag(UUID?.some(project.id))
+                        }
+                    }
+                    .frame(width: 240)
+                }
+                if let project = selectedProject {
+                    promptEditor(
+                        text: Binding(
+                            get: { appState.projects.first(where: { $0.id == project.id })?.customPrompt ?? "" },
+                            set: { appState.setProjectPrompt($0, for: project.id) }
+                        ),
+                        label: "Project prompt"
+                    )
+                    .id(project.id)
+                }
+            }
+        }
+    }
+
+    private func promptEditor(text: Binding<String>, label: String) -> some View {
+        TextEditor(text: text)
+            .font(.system(size: ClaudeTheme.size(12)))
+            .frame(height: 88)
+            .overlay {
+                RoundedRectangle(cornerRadius: 6)
+                    .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1)
+                    .allowsHitTesting(false)
+            }
+            .accessibilityLabel(label)
     }
 }
 

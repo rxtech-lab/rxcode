@@ -45,6 +45,15 @@ struct ProjectWindowValue: Codable, Hashable {
     var workspaceID: String?
 }
 
+// MARK: - ChatWindowValue
+
+/// Identifies a detached Chat-tab window. `instanceId` lets the user open
+/// several independent chat windows for the same workspace.
+struct ChatWindowValue: Codable, Hashable {
+    let instanceId: UUID
+    var workspaceID: String?
+}
+
 // MARK: - TerminalWindowValue
 
 struct TerminalWindowValue: Codable, Hashable {
@@ -124,6 +133,18 @@ struct RxCodeApp: App {
             }
         }
         .defaultSize(width: 1000, height: 700)
+
+        // Detached chat window — opened from the sidebar Chat row's context menu.
+        WindowGroup(id: "chat-window", for: ChatWindowValue.self) { $value in
+            if let value {
+                ChatWindowRoot(
+                    workspaceManager: workspaceManager,
+                    workspaceID: value.workspaceID ?? workspaceManager.frontmostWorkspaceID
+                )
+                .focusable(false)
+            }
+        }
+        .defaultSize(width: 800, height: 700)
 
         // Detached terminal window — opened from the toolbar.
         WindowGroup(id: "terminal-window", for: TerminalWindowValue.self) { $value in
@@ -401,6 +422,71 @@ struct ProjectWindowRoot: View {
             windowState.currentSessionId = sessionId
             appState.pendingNotificationSession.removeValue(forKey: projectId)
         }
+    }
+}
+
+// MARK: - Chat Window Root
+
+/// Standalone window hosting only the global Chat tab, with its own
+/// `WindowState` so it chats independently of the main window.
+struct ChatWindowRoot: View {
+    let workspaceManager: WorkspaceManager
+    let workspaceID: String
+    @Environment(\.controlActiveState) private var controlActiveState
+    @State private var windowState = WindowState()
+    @State private var chatBridge = ChatBridge()
+
+    private var appState: AppState { workspaceManager.appState(for: workspaceID) }
+
+    var body: some View {
+        ZStack {
+            if appState.isInitialized, windowState.isInitialized {
+                GlobalChatView()
+                    .hookUI()
+                    .environment(appState)
+                    .environment(workspaceManager)
+                    .environment(windowState)
+                    .environment(chatBridge)
+                    .environment(\.openURL, OpenURLAction { url in
+                        openMarkdownLink(url, in: windowState)
+                    })
+                    .navigationTitle(navigationTitleText)
+                    .transition(.opacity)
+            } else {
+                // Plain spinner rather than `LoadingView`: the splash hides the
+                // window's title bar and traffic lights, which this short-lived
+                // loading phase could leave hidden.
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(ClaudeTheme.background)
+                    .transition(.opacity)
+            }
+        }
+        .frame(minWidth: 480, minHeight: 400)
+        .animation(.easeInOut(duration: 0.3), value: windowState.isInitialized)
+        .onAppear { workspaceManager.markFrontmost(workspaceID) }
+        .onChange(of: controlActiveState) { _, state in
+            if state == .key { workspaceManager.markFrontmost(workspaceID) }
+        }
+        .task {
+            // The main window may still be booting AppState (e.g. on state restoration).
+            while !appState.isInitialized {
+                try? await Task.sleep(nanoseconds: 50000000)
+            }
+            appState.setupChatBridge(chatBridge, for: windowState)
+            await appState.initializeWindow(windowState)
+            appState.openGlobalChat(in: windowState)
+        }
+    }
+
+    private var navigationTitleText: String {
+        if let id = windowState.currentSessionId,
+           let title = appState.allSessionSummaries.first(where: { $0.id == id })?.title,
+           !title.isEmpty {
+            return title
+        }
+        return String(localized: "Chat")
     }
 }
 

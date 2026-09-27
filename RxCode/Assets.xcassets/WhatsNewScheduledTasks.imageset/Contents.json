@@ -1,0 +1,12 @@
+{
+  "images" : [
+    {
+      "filename" : "scheduled-tasks.png",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

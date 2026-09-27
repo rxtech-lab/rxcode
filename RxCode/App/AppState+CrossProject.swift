@@ -273,7 +273,7 @@ extension AppState {
                             // case: it stops empty "New Session" rows from accumulating
                             // every time the CLI advances `session_id` mid-stream (e.g.
                             // after a `compact_boundary`).
-                            if let project = projects.first(where: { $0.id == projectId }) {
+                            if let project = sessionProject(id: projectId) {
                                 let msgs = stateForSession(sessionKey).messages
                                 let firstUser = msgs.first(where: { $0.role == .user })
                                 let action = SessionRowReconciler.decide(

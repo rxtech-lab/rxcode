@@ -53,8 +53,9 @@ struct MobileTaskBoardView: View {
 
     private var views: [TaskSavedView] { board.effectiveViews }
 
+    /// The picked view, else the project's default view.
     private var currentView: TaskSavedView {
-        views.first { $0.id == selectedViewID } ?? views.first ?? .defaultView
+        views.first { $0.id == selectedViewID } ?? board.defaultView
     }
 
     private var visibleTasks: [ProjectTask] {
@@ -78,6 +79,12 @@ struct MobileTaskBoardView: View {
     var body: some View {
         boardContent
         .navigationTitle(project?.name ?? String(localized: "Tasks"))
+        .onAppear {
+            guard let project else { return }
+            AnalyticsService.shared.log(.taskProjectBoardOpened, parameters: [
+                "project_type": project.cloudId == nil ? "local" : "cloud"
+            ])
+        }
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, prompt: Text("Filter tasks"))
         .overlay { overlayContent }
@@ -421,6 +428,12 @@ struct MobileTaskBoardView: View {
                 } label: {
                     Label("Edit View", systemImage: "pencil")
                 }
+                Button {
+                    setDefault(currentView)
+                } label: {
+                    Label("Set as Default View", systemImage: "star")
+                }
+                .disabled(currentView.id == board.defaultView.id)
             } label: {
                 Label(currentView.name, systemImage: currentView.layout.systemImage)
             }
@@ -465,6 +478,15 @@ struct MobileTaskBoardView: View {
         draft.tags = view.tags
         draft.status = view.visibleColumns(in: board.effectiveColumns).first?.id ?? board.firstColumn.id
         return draft
+    }
+
+    private func setDefault(_ view: TaskSavedView) {
+        var updated = view
+        updated.isDefault = true
+        selectedViewID = view.id
+        perform {
+            try await state.saveView(updated, projectID: projectID)
+        }
     }
 
     private func load() async {

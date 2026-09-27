@@ -2,10 +2,8 @@ import Foundation
 
 /// Low-overhead, process-wide counters for performance-sensitive paths.
 ///
-/// Hot UI code records only numeric values under fixed keys. The app drains the
-/// aggregate periodically and writes a single bounded diagnostic record, which
-/// avoids doing file I/O or constructing detailed log strings while scrolling
-/// and streaming.
+/// Hot UI code records only numeric values under fixed keys, without file I/O
+/// or constructing detailed log strings while scrolling and streaming.
 public enum PerformanceDiagnostics {
     public struct Measurement: Codable, Sendable, Equatable {
         public let count: Int64

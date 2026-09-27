@@ -58,6 +58,7 @@ struct StoryTasksSheet: View {
             if isGone { dismiss() }
         }
         .onAppear {
+            if story != nil { AnalyticsService.shared.log(.projectStoryOpened) }
             if tasks.isEmpty { isAddFieldFocused = true }
         }
     }
@@ -187,6 +188,7 @@ struct StoryTasksSheet: View {
         let text = trimmedNewText
         guard !text.isEmpty else { return }
         appState.quickAddTask(text: text, projectId: projectId, storyId: storyId)
+        AnalyticsService.shared.log(.projectTaskCreated, parameters: ["method": "quick_add"])
         newTaskText = ""
         isAddFieldFocused = true
     }

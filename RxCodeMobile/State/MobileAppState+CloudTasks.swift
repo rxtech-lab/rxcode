@@ -70,8 +70,7 @@ extension MobileAppState {
         case .upsertView:
             // Saved filters are local presentation preferences, as on the Mac.
             guard let view = request.view else { throw cloudTaskInvalidRequest() }
-            board.savedViews.removeAll { $0.id == view.id }
-            board.savedViews.append(view)
+            board.upsertSavedView(view)
             if let viewsKey {
                 UserDefaults.standard.set(try JSONEncoder().encode(board.savedViews), forKey: viewsKey)
             }

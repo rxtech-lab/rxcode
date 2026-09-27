@@ -146,11 +146,10 @@ Adopting it belongs after step 3 (collapsing the duplicate types), not before.
 
 `RxAgentUISupport.PerformanceDiagnostics` is a byte-identical copy of
 `RxCodeCore.PerformanceDiagnostics` — and a *separate* static accumulator. The
-`scroll.*` and `markdown.*` keys now land in the SDK's registry, so
-`PerformanceDiagnosticsService.drainEvents()` drains both and merges them
-through `PerformanceDiagnostics.Snapshot.merging(counters:measurements:)`. The
-record's JSON shape is unchanged. Collapse this when the duplicate types are
-retired.
+`scroll.*` and `markdown.*` keys now land in the SDK's registry. The periodic
+on-disk performance log has been removed; the two in-memory accumulators and
+`PerformanceDiagnostics.Snapshot.merging(counters:measurements:)` remain
+available for diagnostics. Collapse the duplicate types when they are retired.
 
 ## Dependency
 

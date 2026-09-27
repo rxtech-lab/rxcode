@@ -401,6 +401,9 @@ extension ClaudeCodeServer {
     `mcp__rxcode-ide__ide__create_task` — record user-requested work from a \
     chat, in this or any other project (`project_id`). Pass `story_id` to \
     place a task in an existing story.
+    - `mcp__rxcode-ide__ide__create_scheduled_task` — when the user asks for \
+    work to run periodically, propose a cron-scheduled prompt. RxCode asks the \
+    user to confirm it and the call returns whether it was added.
     - `mcp__rxcode-ide__ide__link_story` — share a story with other projects \
     so work spanning several projects is tracked under one story.
     - `mcp__rxcode-ide__ide__get_tasks` / \

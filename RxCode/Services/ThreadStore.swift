@@ -39,6 +39,27 @@ final class ThreadStore {
         return (try? context.fetch(descriptor))?.first
     }
 
+    /// Keep repository context with globally owned chats before removing a project.
+    func retainProjectContext(_ project: Project) {
+        let projectId = project.id
+        let descriptor = FetchDescriptor<ChatThread>(predicate: #Predicate { $0.projectId == projectId })
+        for row in (try? context.fetch(descriptor)) ?? [] {
+            row.retainedProjectName = project.name
+            row.retainedProjectPath = project.path
+        }
+        save()
+    }
+
+    func retainedProject(id: UUID) -> Project? {
+        var descriptor = FetchDescriptor<ChatThread>(predicate: #Predicate {
+            $0.projectId == id && $0.retainedProjectPath != nil
+        })
+        descriptor.fetchLimit = 1
+        guard let row = (try? context.fetch(descriptor))?.first,
+              let path = row.retainedProjectPath else { return nil }
+        return Project(id: id, name: row.retainedProjectName ?? URL(fileURLWithPath: path).lastPathComponent, path: path)
+    }
+
     func cliSessionId(forLocalId id: String) -> String? {
         fetch(id: id)?.cliSessionId
     }
@@ -102,7 +123,12 @@ final class ThreadStore {
     @discardableResult
     func deleteBriefingMetadata(excludingProjectIds knownProjectIds: Set<UUID>) -> (threadSummaries: Int, branchBriefings: Int) {
         let summaryRows = (try? context.fetch(FetchDescriptor<ThreadSummaryRecord>())) ?? []
-        let orphanedSummaries = summaryRows.filter { !knownProjectIds.contains($0.projectId) }
+        var threadDescriptor = FetchDescriptor<ChatThread>()
+        threadDescriptor.propertiesToFetch = [\.id]
+        let retainedThreadIds = Set(((try? context.fetch(threadDescriptor)) ?? []).map(\.id))
+        let orphanedSummaries = summaryRows.filter {
+            !knownProjectIds.contains($0.projectId) && !retainedThreadIds.contains($0.sessionId)
+        }
 
         let briefingRows = (try? context.fetch(FetchDescriptor<BranchBriefingRecord>())) ?? []
         let orphanedBriefings = briefingRows.filter { !knownProjectIds.contains($0.projectId) }

@@ -19,7 +19,13 @@
 		6E17B0012FC8000100A10001 /* LocalAIProviderAcceptanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E17B0002FC8000100A10001 /* LocalAIProviderAcceptanceTests.swift */; };
 		7A5C0001000000000000A002 /* MockAgentBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A5C0001000000000000A001 /* MockAgentBackend.swift */; };
 		7A5C0002000000000000A002 /* CrossProjectSendConcurrencyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A5C0002000000000000A001 /* CrossProjectSendConcurrencyTests.swift */; };
+		7DEB38D712E3FE9EEDC3B3CD /* MockAppStatePersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85641A3F2099521070F2BAB6 /* MockAppStatePersistence.swift */; };
+		8528C388E27CB1FCEE1DEB96 /* ScheduledTaskStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBE6CEA01FE935F6710EB5B0 /* ScheduledTaskStateTests.swift */; };
 		92E180F9B311F3C72D5DE6B7 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A9993BB72A5307039A88B729 /* Cocoa.framework */; };
+		A180BD3C246793C79C3C49BB /* ClaudeLoginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9B0483FE5385C1F0E1CFE15 /* ClaudeLoginTests.swift */; };
+		A5E1C0DE0000000000000002 /* MockAppStatePersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5E1C0DE0000000000000001 /* MockAppStatePersistence.swift */; };
+		A5E1C0DE0000000000000012 /* ClaudeLoginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5E1C0DE0000000000000011 /* ClaudeLoginTests.swift */; };
+		A5E1C0DE0000000000000022 /* GlobalSessionPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5E1C0DE0000000000000021 /* GlobalSessionPersistenceTests.swift */; };
 		A7C31E012FC5000000000002 /* PermissionSessionAllowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7C31E012FC5000000000001 /* PermissionSessionAllowTests.swift */; };
 		AC0A11BB22CC33DD44EE5801 /* ACPServiceSuggestionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0A11BB22CC33DD44EE5802 /* ACPServiceSuggestionTests.swift */; };
 		AC1900000000000000000100 /* RxCode/Services/RxAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1900000000000000000000 /* RxCode/Services/RxAuthService.swift */; };
@@ -28,6 +34,8 @@
 		AC1900000000000000000103 /* RxCode/Utilities/KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1900000000000000000003 /* RxCode/Utilities/KeychainHelper.swift */; };
 		AC1900000000000000000200 /* RxAuthSwift in Frameworks */ = {isa = PBXBuildFile; productRef = DF462DC82FC73FA8002D9562 /* RxAuthSwift */; };
 		AC1900000000000000000300 /* RxAuthSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = DF462DCA2FC73FA8002D9562 /* RxAuthSwiftUI */; };
+		BBD2456729416901FAFBD00D /* GlobalSessionPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 308E9D66FBEB0549929D9E3A /* GlobalSessionPersistenceTests.swift */; };
+		C71A00000000000000000001 /* ChatHistoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C71A00000000000000000002 /* ChatHistoryTests.swift */; };
 		DCA8CF4A05C959C4A6EB391F /* RxCodeCore in Frameworks */ = {isa = PBXBuildFile; productRef = CCDF9594876099576D4FD46E /* RxCodeCore */; };
 		DF06CCD12FB4CAB5005991E1 /* ViewInspector in Frameworks */ = {isa = PBXBuildFile; productRef = DF06CCD02FB4CAB5005991E1 /* ViewInspector */; };
 		DF06CCD22FCB3001005991E1 /* ViewInspector in Frameworks */ = {isa = PBXBuildFile; productRef = DF06CCD02FB4CAB5005991E1 /* ViewInspector */; };
@@ -77,6 +85,7 @@
 		E6D001042FA0000100000001 /* RxCodeChatKit in Frameworks */ = {isa = PBXBuildFile; productRef = E6D001022FA0000100000001 /* RxCodeChatKit */; };
 		E6D001052FA0000100000001 /* RxCodeEditor in Frameworks */ = {isa = PBXBuildFile; productRef = E6D001082FA0000100000001 /* RxCodeEditor */; };
 		E6D001072FA0000100000001 /* RxCodeSync in Frameworks */ = {isa = PBXBuildFile; productRef = E6D001062FA0000100000001 /* RxCodeSync */; };
+		E92A867810EB489390421B02 /* GlobalChatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E92A867810EB489390421B01 /* GlobalChatTests.swift */; };
 		FB0000030000000000000001 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = FB0000010000000000000001 /* FirebaseAnalytics */; };
 		FB0000040000000000000001 /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = FB0000020000000000000001 /* FirebaseCrashlytics */; };
 		FB0000070000000000000001 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = FB0000050000000000000001 /* FirebaseAnalytics */; };
@@ -150,6 +159,7 @@
 /* Begin PBXFileReference section */
 		101010102FCB100000000001 /* AppStateTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppStateTests.swift; sourceTree = "<group>"; };
 		101010112FCB100000000001 /* BranchBriefingPromptContextTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BranchBriefingPromptContextTests.swift; sourceTree = "<group>"; };
+		308E9D66FBEB0549929D9E3A /* GlobalSessionPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalSessionPersistenceTests.swift; sourceTree = "<group>"; };
 		4381E755142272EB2DAA9C96 /* AppStateProjectSwitchTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppStateProjectSwitchTests.swift; sourceTree = "<group>"; };
 		5C2222222FCB200000000001 /* BriefingThreadRowTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BriefingThreadRowTests.swift; sourceTree = "<group>"; };
 		5C3333332FCB400000000001 /* ThreadStoreThreadSummaryTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ThreadStoreThreadSummaryTests.swift; sourceTree = "<group>"; };
@@ -163,6 +173,10 @@
 		7321B5E8B81AAB1A2DC0593B /* RxCodeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RxCodeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		7A5C0001000000000000A001 /* MockAgentBackend.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MockAgentBackend.swift; sourceTree = "<group>"; };
 		7A5C0002000000000000A001 /* CrossProjectSendConcurrencyTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CrossProjectSendConcurrencyTests.swift; sourceTree = "<group>"; };
+		85641A3F2099521070F2BAB6 /* MockAppStatePersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockAppStatePersistence.swift; sourceTree = "<group>"; };
+		A5E1C0DE0000000000000001 /* MockAppStatePersistence.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MockAppStatePersistence.swift; sourceTree = "<group>"; };
+		A5E1C0DE0000000000000011 /* ClaudeLoginTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ClaudeLoginTests.swift; sourceTree = "<group>"; };
+		A5E1C0DE0000000000000021 /* GlobalSessionPersistenceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GlobalSessionPersistenceTests.swift; sourceTree = "<group>"; };
 		A7C31E012FC5000000000001 /* PermissionSessionAllowTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PermissionSessionAllowTests.swift; sourceTree = "<group>"; };
 		A9993BB72A5307039A88B729 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
 		AC0A11BB22CC33DD44EE5802 /* ACPServiceSuggestionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ACPServiceSuggestionTests.swift; sourceTree = "<group>"; };
@@ -170,6 +184,8 @@
 		AC1900000000000000000001 /* RxCode/Services/ProjectCloudService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RxCode/Services/ProjectCloudService.swift; sourceTree = SOURCE_ROOT; };
 		AC1900000000000000000002 /* RxCode/Services/AutopilotService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RxCode/Services/AutopilotService.swift; sourceTree = SOURCE_ROOT; };
 		AC1900000000000000000003 /* RxCode/Utilities/KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RxCode/Utilities/KeychainHelper.swift; sourceTree = SOURCE_ROOT; };
+		C71A00000000000000000002 /* ChatHistoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatHistoryTests.swift; sourceTree = "<group>"; };
+		C9B0483FE5385C1F0E1CFE15 /* ClaudeLoginTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeLoginTests.swift; sourceTree = "<group>"; };
 		DF06DCC62FB8552B005991E1 /* UnitTestPlan.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = UnitTestPlan.xctestplan; sourceTree = "<group>"; };
 		DF22D8262FBE025C00E3ABFD /* RxCodeWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RxCodeWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		DF22D8272FBE025C00E3ABFD /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
@@ -191,6 +207,8 @@
 		DFA9E50A0000000000000001 /* EffortSanitizationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EffortSanitizationTests.swift; sourceTree = "<group>"; };
 		E62000002FCB000100000001 /* MemoryIntentTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MemoryIntentTests.swift; sourceTree = "<group>"; };
 		E67335382F7356F600FD26C7 /* RxCode.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RxCode.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E92A867810EB489390421B01 /* GlobalChatTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GlobalChatTests.swift; sourceTree = "<group>"; };
+		FBE6CEA01FE935F6710EB5B0 /* ScheduledTaskStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduledTaskStateTests.swift; sourceTree = "<group>"; };
 		FE0A11BB22CC33DD44EE5502 /* PlanModeHookSuppressionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlanModeHookSuppressionTests.swift; sourceTree = "<group>"; };
 		FE0A11BB22CC33DD44EE5602 /* TaskBoardHookTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TaskBoardHookTests.swift; sourceTree = "<group>"; };
 		FE0A11BB22CC33DD44EE5702 /* MarkdownDescriptionEditorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MarkdownDescriptionEditorTests.swift; sourceTree = "<group>"; };
@@ -378,7 +396,15 @@
 		1525FE6BFB6F06A3F00B92D3 /* RxCodeTests */ = {
 			isa = PBXGroup;
 			children = (
+				308E9D66FBEB0549929D9E3A /* GlobalSessionPersistenceTests.swift */,
+				85641A3F2099521070F2BAB6 /* MockAppStatePersistence.swift */,
+				C9B0483FE5385C1F0E1CFE15 /* ClaudeLoginTests.swift */,
+				FBE6CEA01FE935F6710EB5B0 /* ScheduledTaskStateTests.swift */,
+				E92A867810EB489390421B01 /* GlobalChatTests.swift */,
 				101010102FCB100000000001 /* AppStateTests.swift */,
+				A5E1C0DE0000000000000021 /* GlobalSessionPersistenceTests.swift */,
+				A5E1C0DE0000000000000011 /* ClaudeLoginTests.swift */,
+				A5E1C0DE0000000000000001 /* MockAppStatePersistence.swift */,
 				101010112FCB100000000001 /* BranchBriefingPromptContextTests.swift */,
 				4381E755142272EB2DAA9C96 /* AppStateProjectSwitchTests.swift */,
 				7A5C0001000000000000A001 /* MockAgentBackend.swift */,
@@ -429,6 +455,7 @@
 			isa = PBXGroup;
 			children = (
 				6E17B0002FC8000100A10001 /* LocalAIProviderAcceptanceTests.swift */,
+				C71A00000000000000000002 /* ChatHistoryTests.swift */,
 			);
 			path = RxCodeUITests;
 			sourceTree = "<group>";
@@ -857,6 +884,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				6E17B0012FC8000100A10001 /* LocalAIProviderAcceptanceTests.swift in Sources */,
+				C71A00000000000000000001 /* ChatHistoryTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -864,7 +892,15 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BBD2456729416901FAFBD00D /* GlobalSessionPersistenceTests.swift in Sources */,
+				7DEB38D712E3FE9EEDC3B3CD /* MockAppStatePersistence.swift in Sources */,
+				A180BD3C246793C79C3C49BB /* ClaudeLoginTests.swift in Sources */,
+				8528C388E27CB1FCEE1DEB96 /* ScheduledTaskStateTests.swift in Sources */,
+				E92A867810EB489390421B02 /* GlobalChatTests.swift in Sources */,
 				101010102FCB100000000002 /* AppStateTests.swift in Sources */,
+				A5E1C0DE0000000000000022 /* GlobalSessionPersistenceTests.swift in Sources */,
+				A5E1C0DE0000000000000012 /* ClaudeLoginTests.swift in Sources */,
+				A5E1C0DE0000000000000002 /* MockAppStatePersistence.swift in Sources */,
 				101010112FCB100000000002 /* BranchBriefingPromptContextTests.swift in Sources */,
 				33993F0F87CF4DB09F2813A8 /* AppStateProjectSwitchTests.swift in Sources */,
 				7A5C0001000000000000A002 /* MockAgentBackend.swift in Sources */,

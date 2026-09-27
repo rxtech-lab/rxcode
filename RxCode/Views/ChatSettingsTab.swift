@@ -12,6 +12,7 @@ struct ChatSettingsTab: View {
     @State private var signingInRuntime: AgentRuntimeInstaller.Runtime?
     @State private var installSheetRuntime: AgentRuntimeInstaller.Runtime?
     @State private var runtimeMessage: String?
+    @State private var generalAIModel: GeneralAIModel = .taskAgent
 
     var body: some View {
         @Bindable var appState = appState
@@ -22,6 +23,8 @@ struct ChatSettingsTab: View {
                 modelSection
                 Divider()
                 summarizationSection
+                Divider()
+                generalAISection
                 Divider()
                 permissionModeSection
                 Divider()
@@ -423,6 +426,35 @@ struct ChatSettingsTab: View {
                 appleFoundationModelStatus
             }
         }
+    }
+
+    // MARK: - General AI Tasks Section
+
+    private var generalAISection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("General AI Tasks")
+                .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
+
+            Text("Used to auto-fill task and story forms, create tasks and stories from natural language, generate cron schedules, and write Swift filters and context-menu conditions. ACP clients run in a separate session.")
+                .font(.system(size: ClaudeTheme.size(11)))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            SuggestionAgentMenu(agent: $generalAIModel)
+                .accessibilityIdentifier("general-ai-model")
+
+            switch generalAIModel {
+            case .taskAgent:
+                Text("Uses the default task agent from the Tasks tab (\(appState.taskAgentLabel(appState.defaultTaskAgent()))).")
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(.secondary)
+            case .appleIntelligence:
+                appleFoundationModelStatus
+            case .agent:
+                EmptyView()
+            }
+        }
+        .onAppear { generalAIModel = appState.generalAIModel() }
     }
 
     private var appleFoundationModelStatus: some View {

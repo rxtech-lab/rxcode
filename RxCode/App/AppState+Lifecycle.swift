@@ -167,6 +167,7 @@ extension AppState {
             startEagerBackgroundServices()
         }
 
+        await persistence.migrateSessionsToGlobalStorage()
         projects = await loadDeduplicatedProjects()
         seedUITestBriefingIfRequested()
 
@@ -294,6 +295,7 @@ extension AppState {
         // Hydrate ACP state (clients + cached registry) so the model picker and
         // Settings tab don't flash empty on first open.
         await loadACPClientsFromDisk()
+        await loadScheduledTasksFromDisk()
         Task { [weak self] in await self?.refreshACPRegistry(forceRefresh: false) }
 
         await runStartupStoreMaintenance()
@@ -316,11 +318,11 @@ extension AppState {
         startMCPPeriodicProbe()
     }
 
-    /// Launch-time store sweeps: orphan rows from deleted projects, then the
+    /// Launch-time store sweeps: project briefing metadata, then the
     /// archive/delete retention policy. These write, so they run on the main
     /// store rather than the background reader's context.
-    private func runStartupStoreMaintenance() async {
-        let knownProjectIds = Set(projects.map(\.id))
+    func runStartupStoreMaintenance() async {
+        let knownProjectIds = Set(sessionProjects.map(\.id))
 
         let prunedBriefingMetadata = threadStore.deleteBriefingMetadata(
             excludingProjectIds: knownProjectIds
@@ -331,22 +333,7 @@ extension AppState {
             logger.info("Pruned orphan briefing metadata summaries=\(prunedBriefingMetadata.threadSummaries) briefings=\(prunedBriefingMetadata.branchBriefings)")
         }
 
-        // Purge threads + search chunks left behind by projects that were
-        // deleted before the cascade in `deleteProject` existed (or by any
-        // leak). This clears them from history and the search source so they
-        // never resurface as "Unknown project" results.
-        let prunedOrphanThreads = threadStore.pruneOrphanThreads(excludingProjectIds: knownProjectIds)
-        if prunedOrphanThreads > 0 {
-            logger.info("Pruned \(prunedOrphanThreads) orphan thread(s) from deleted projects")
-            // The sidebar list was published before this sweep ran — reload it
-            // so the pruned threads drop out.
-            allSessionSummaries = await threadStoreReader.loadSummaries()
-        }
-        // Keep the in-memory search index consistent too (disk is already clean
-        // above). Detached so the boot isn't blocked on the embedding actor.
-        Task.detached(priority: .utility) { [searchService] in
-            await searchService.pruneOrphans(knownProjectIds: knownProjectIds)
-        }
+        // Chats and their search entries are global and outlive their projects.
 
         autoArchiveExpiredSessionsIfNeeded()
         await autoDeleteExpiredSessionsIfNeeded()
@@ -532,7 +519,7 @@ extension AppState {
             selectProject(project, in: window)
         } else if let savedId = workspaceDefaults.string(for: "selectedProjectId"),
                   let uuid = UUID(uuidString: savedId),
-                  let project = projects.first(where: { $0.id == uuid })
+                  let project = sessionProject(id: uuid)
         {
             selectProject(project, in: window)
         } else if let first = projects.first {

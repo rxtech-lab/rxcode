@@ -150,6 +150,11 @@ extension AppState {
             logPreflight("branchBriefing", detail: "contextChars=0")
         }
 
+        let configuredPromptContext = Self.configuredPromptContext(
+            global: UserDefaults.standard.string(forKey: "globalAgentPrompt"),
+            project: projects.first(where: { $0.id == projectId })?.customPrompt
+        )
+
         // The IDE-MCP port is provider-agnostic at allocation time — the
         // bridge command is built from the port. Per-backend MCP config
         // writes still happen serially after this since they consume the
@@ -181,6 +186,7 @@ extension AppState {
         case .claudeCode:
             mcpClaudeConfigPath = await mcp.writeClaudeConfig(projectPath: cwd, bridgeCommand: bridge)
             logPreflight("claudeMCP", detail: "hasConfig=\(mcpClaudeConfigPath != nil)")
+            appendExtraSystemPrompt(configuredPromptContext)
             // Surface the accumulated briefing for the project's current branch
             // to the agent as background context via `--append-system-prompt`.
             appendExtraSystemPrompt(branchBriefingContext)
@@ -209,7 +215,7 @@ extension AppState {
             logPreflight("codexSkillOverrides", detail: "args=\(codexSkillOverrides.count)")
             mcpCodexOverrides += codexSkillOverrides
             resolvedPrompt = Self.promptWithBackgroundContext(
-                [branchBriefingContext, resolvedMemoryContext, hookStartContext],
+                [configuredPromptContext, branchBriefingContext, resolvedMemoryContext, hookStartContext],
                 prompt: resolvedPrompt
             )
             if let skillContext = await skillContextAsync {
@@ -226,7 +232,7 @@ extension AppState {
             )
             logPreflight("acpMCP", detail: "servers=\(acpMCPServers.count)")
             resolvedPrompt = Self.promptWithBackgroundContext(
-                [branchBriefingContext, resolvedMemoryContext, hookStartContext],
+                [configuredPromptContext, branchBriefingContext, resolvedMemoryContext, hookStartContext],
                 prompt: resolvedPrompt
             )
             if let skillContext = await skillContextAsync {
@@ -259,6 +265,25 @@ extension AppState {
                         isError: true, totalTurns: nil, usage: nil, contextWindow: nil
                     )))
                     c.finish()
+                }
+            }
+        }
+
+        if projectId == Project.globalChatID {
+            do {
+                try await Task.detached(priority: .userInitiated) {
+                    try FileManager.default.createDirectory(atPath: cwd, withIntermediateDirectories: true)
+                }.value
+            } catch {
+                let message = "Could not prepare the chat folder: \(error.localizedDescription)"
+                earlyStream = AsyncStream { continuation in
+                    continuation.yield(.user(UserMessage(toolUseId: nil, content: message, isError: true)))
+                    continuation.yield(.result(ResultEvent(
+                        durationMs: nil, totalCostUsd: nil,
+                        sessionId: cliSessionId ?? sessionKey,
+                        isError: true, totalTurns: nil, usage: nil, contextWindow: nil
+                    )))
+                    continuation.finish()
                 }
             }
         }

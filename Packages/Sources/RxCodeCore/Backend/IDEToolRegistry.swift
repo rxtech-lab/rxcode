@@ -188,6 +188,34 @@ public enum IDEToolRegistry {
             ])
         ),
         IDETool(
+            name: "ide__create_scheduled_task",
+            description: "Propose a scheduled task: a prompt RxCode sends to an agent in a project on a cron schedule. RxCode shows the user a confirmation dialog where they can edit, add, or cancel it; this call waits for their decision and reports whether the task was added. Uses the current chat's project unless project_id is given.",
+            visibility: .alwaysIDEOnly,
+            inputSchema: .object([
+                "type": .string("object"),
+                "properties": .object([
+                    "project_id": .object(["type": .string("string")]),
+                    "name": .object([
+                        "type": .string("string"),
+                        "description": .string("Short name shown in the Scheduled sidebar."),
+                    ]),
+                    "prompt": .object([
+                        "type": .string("string"),
+                        "description": .string("The prompt sent to the agent on each run."),
+                    ]),
+                    "cron_expression": .object([
+                        "type": .string("string"),
+                        "description": .string("Five-field cron expression (minute hour day-of-month month day-of-week) in the user's local time zone, or a macro such as @daily. Example: \"0 9 * * 1-5\" for weekdays at 9:00."),
+                    ]),
+                    "enabled": .object([
+                        "type": .string("boolean"),
+                        "description": .string("Whether the task starts enabled. Default true."),
+                    ]),
+                ]),
+                "required": .array([.string("name"), .string("prompt"), .string("cron_expression")]),
+            ])
+        ),
+        IDETool(
             name: "ide__get_tasks",
             description: "List tasks on project task boards with their column, whether their agent is running, and their chat thread. Filter by project_id, story_id (spans every project the story is linked to), or status. With no filter, uses the current chat's project.",
             visibility: .alwaysIDEOnly,

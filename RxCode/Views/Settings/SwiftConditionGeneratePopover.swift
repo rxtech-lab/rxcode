@@ -23,7 +23,7 @@ struct SwiftConditionGeneratePopover: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Generate condition with AI")
                 .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
-            Text("Describe when this menu item should appear. The default model writes the Swift condition and it's compiled before use.")
+            Text("Describe when this menu item should appear. The general AI model (Settings → Message) writes the Swift condition and it's compiled before use.")
                 .font(.system(size: ClaudeTheme.size(11)))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

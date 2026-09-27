@@ -100,6 +100,9 @@ struct TaskBoardView: View {
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear {
+            AnalyticsService.shared.log(.taskDashboardOpened)
+        }
     }
 }
 
@@ -178,6 +181,9 @@ struct TaskOverviewView: View {
             }
         }
         .background(backdrop)
+        .onAppear {
+            AnalyticsService.shared.log(.taskDashboardOpened)
+        }
         .sheet(item: $storySheet) { story in
             StoryTasksSheet(storyId: story.id, projectId: story.projectId)
                 .environment(appState)
@@ -301,7 +307,8 @@ struct TaskOverviewView: View {
 
 /// One project's card on the overview: a header that opens the project page,
 /// and up to `TaskOverviewView.previewLimit` recently active stories. Tasks
-/// show inside a story's sheet rather than on the card.
+/// show inside a story's sheet rather than on the card. The stories and counts
+/// are narrowed by the project's default view.
 ///
 /// The header doubles as a drag handle and the whole card is a drop target, so
 /// cards can be rearranged the way board columns and view tabs are.
@@ -393,10 +400,12 @@ private struct TaskProjectSection: View {
 
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(keyword.isEmpty ? "No stories yet." : "No stories match.")
+            // Stories the default view filters out still exist.
+            let hiddenByView = keyword.isEmpty && !board.stories.isEmpty
+            Text(!keyword.isEmpty ? "No stories match." : hiddenByView ? "No stories in the default view." : "No stories yet.")
                 .font(.system(size: ClaudeTheme.size(12)))
                 .foregroundStyle(ClaudeTheme.textTertiary)
-            if keyword.isEmpty {
+            if keyword.isEmpty && !hiddenByView {
                 Button {
                     openNewStory(mode: nil)
                 } label: {
@@ -493,14 +502,23 @@ private struct TaskProjectSection: View {
         }
     }
 
-    /// Per-status task counts, e.g. ○ 4  ◎ 2  ✓ 7.
+    /// Per-status task counts in the default view, e.g. ○ 4  ◎ 2  ✓ 7, led
+    /// by the view's name once the project has more than one view.
     private var statusSummary: some View {
         let board = board
+        let view = board.defaultView
         var counts: [TaskStatus: Int] = [:]
-        for task in board.tasks {
+        for task in board.tasks(matching: view) {
             counts[board.resolvedStatus(of: task), default: 0] += 1
         }
         return HStack(spacing: 8) {
+            if board.effectiveViews.count > 1 {
+                Label(view.name, systemImage: view.layout.systemImage)
+                    .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+                    .foregroundStyle(ClaudeTheme.textSecondary)
+                    .lineLimit(1)
+                    .help("Default view")
+            }
             ForEach(board.effectiveColumns) { column in
                 let count = counts[column.id, default: 0]
                 if count > 0 {

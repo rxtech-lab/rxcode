@@ -113,4 +113,28 @@ final class ThreadStoreSidebarIndexTests: XCTestCase {
             ChatTodoProgress(done: 2, total: 2, inProgress: false)
         )
     }
+
+    func testFileEditCountsBySessionMatchesPerSessionCounts() {
+        let store = makeStore()
+        store.appendFileEdit(sessionId: "session-a", path: "/tmp/one.swift", hunks: [hunk()], containsWrite: true)
+        store.appendFileEdit(sessionId: "session-a", path: "/tmp/two.swift", hunks: [hunk()], containsWrite: false)
+        store.appendFileEdit(sessionId: "session-b", path: "/tmp/three.swift", hunks: [hunk()], containsWrite: false)
+
+        let counts = store.fileEditCountsBySession()
+
+        XCTAssertEqual(counts, ["session-a": 2, "session-b": 1])
+        XCTAssertEqual(counts["session-a"], store.fileEditCount(sessionId: "session-a"))
+    }
+
+    func testLoadTodoItemsBySessionSkipsEmptySnapshots() {
+        let store = makeStore()
+        let items = [todo(1, "done", .completed), todo(2, "working", .inProgress)]
+        store.upsertTodoSnapshot(sessionId: "session-a", items: items)
+        store.upsertTodoSnapshot(sessionId: "session-empty", items: [])
+
+        let todos = store.loadTodoItemsBySession()
+
+        XCTAssertEqual(todos["session-a"], items)
+        XCTAssertNil(todos["session-empty"])
+    }
 }

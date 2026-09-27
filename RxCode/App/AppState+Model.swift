@@ -8,7 +8,7 @@ import SwiftUI
 extension AppState {
     // MARK: - Model
 
-    static let availableModels = ["default", "best", "opus", "opus[1m]", "opusplan", "sonnet", "sonnet[1m]", "haiku"]
+    static let availableModels = ["default", "best", "fable", "fable[1m]", "opus", "opus[1m]", "sonnet", "sonnet[1m]", "haiku"]
     static let fallbackCodexModels = ["gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex"]
     nonisolated static let defaultOpenAISummarizationEndpoint = "https://api.openai.com/v1"
     nonisolated static let openAISummarizationKeychainService = "com.idealapp.RxCode.openai-summarization"
@@ -150,9 +150,10 @@ extension AppState {
         switch model {
         case "default": return "Default"
         case "best": return "Best"
+        case "fable": return "Fable"
+        case "fable[1m]": return "Fable 1M"
         case "opus": return "Opus"
         case "opus[1m]": return "Opus 1M"
-        case "opusplan": return "Opus Plan"
         case "sonnet": return "Sonnet"
         case "sonnet[1m]": return "Sonnet 1M"
         case "haiku": return "Haiku"
@@ -177,9 +178,10 @@ extension AppState {
         switch model {
         case "default": key = "model.desc.default"
         case "best": key = "model.desc.best"
+        case "fable": key = "model.desc.fable"
+        case "fable[1m]": key = "model.desc.fable1m"
         case "opus": key = "model.desc.opus"
         case "opus[1m]": key = "model.desc.opus1m"
-        case "opusplan": key = "model.desc.opusplan"
         case "sonnet": key = "model.desc.sonnet"
         case "sonnet[1m]": key = "model.desc.sonnet1m"
         case "haiku": key = "model.desc.haiku"

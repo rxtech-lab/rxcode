@@ -460,7 +460,7 @@ public extension TaskBoard {
             version: task.version,
             milestone: task.milestone,
             storyId: sync.storyRemoteId(task.storyId),
-            parentTaskId: sync.taskRemoteId(task.parentTaskId),
+            parentTaskId: task.parentTaskIds.compactMap { sync.taskRemoteId($0) }.first,
             assignedDeviceId: task.assignedDeviceId,
             sortIndex: task.sortIndex
         )
@@ -486,8 +486,9 @@ public extension TaskBoard {
         return story
     }
 
-    /// Copies Autopilot's task fields onto a local task. Agent settings, runs
-    /// and attachments are device-local and left untouched.
+    /// Copies Autopilot's task fields onto a local task. Agent settings, runs,
+    /// attachments and a parent on another project's board are device-local
+    /// and left untouched.
     func applying(_ fields: CloudTaskFields, to task: ProjectTask, sync: CloudBoardSyncState, updatedAt: Date?) -> ProjectTask {
         var task = task
         task.title = fields.title
@@ -499,7 +500,16 @@ public extension TaskBoard {
         task.version = fields.version
         task.milestone = fields.milestone
         task.storyId = sync.localStoryId(forRemote: fields.storyId)
-        task.parentTaskId = sync.localTaskId(forRemote: fields.parentTaskId)
+        // Autopilot currently stores one same-board parent. Keep additional
+        // local parents and cross-project links when applying that field.
+        let localIDs = Set(tasks.map(\.id))
+        let cloudParent = sync.localTaskId(forRemote: fields.parentTaskId)
+        let retainedParents = task.parentTaskIds.enumerated().compactMap { index, id -> UUID? in
+            if id == cloudParent || (index == 0 && localIDs.contains(id)) { return nil }
+            return id
+        }
+        task.parentTaskIds = cloudParent.map { [$0] } ?? []
+        task.parentTaskIds.append(contentsOf: retainedParents)
         task.assignedDeviceId = fields.assignedDeviceId
         task.sortIndex = fields.sortIndex
         task.updatedAt = updatedAt ?? Date()

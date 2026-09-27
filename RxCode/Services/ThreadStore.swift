@@ -533,6 +533,17 @@ final class ThreadStore {
         }
     }
 
+    /// Persisted todo items for every session with at least one todo, keyed by
+    /// session id, in a single query. Backs the mobile snapshot, which otherwise
+    /// ran two `fetchTodoSnapshot` queries per session on the main actor.
+    func loadTodoItemsBySession() -> [String: [TodoItem]] {
+        let descriptor = FetchDescriptor<TodoSnapshot>(predicate: #Predicate { $0.total > 0 })
+        let rows = (try? context.fetch(descriptor)) ?? []
+        return rows.reduce(into: [:]) { result, row in
+            result[row.sessionId] = row.items
+        }
+    }
+
     func upsertTodoSnapshot(sessionId: String, items: [TodoItem]) {
         if let existing = fetchTodoSnapshot(sessionId: sessionId) {
             existing.apply(items: items)
@@ -829,6 +840,17 @@ final class ThreadStore {
         return Set(rows.map(\.sessionId))
     }
 
+    /// Edited-file count for every session, in a single query. Only `sessionId`
+    /// is fetched, for the same reason as `sessionIdsWithFileEdits()`.
+    func fileEditCountsBySession() -> [String: Int] {
+        var descriptor = FetchDescriptor<ThreadFileEdit>()
+        descriptor.propertiesToFetch = [\.sessionId]
+        let rows = (try? context.fetch(descriptor)) ?? []
+        return rows.reduce(into: [:]) { result, row in
+            result[row.sessionId, default: 0] += 1
+        }
+    }
+
     private func fetchFileEdit(sessionId: String, path: String) -> ThreadFileEdit? {
         var descriptor = FetchDescriptor<ThreadFileEdit>(
             predicate: #Predicate { $0.sessionId == sessionId && $0.path == path }
@@ -901,89 +923,6 @@ final class ThreadStore {
 
     private func deleteFileEditRows(sessionId: String) {
         for row in fetchFileEdits(sessionId: sessionId) { context.delete(row) }
-    }
-
-    // MARK: - Queued Messages
-
-    func loadQueue(sessionKey: String) -> [QueuedMessage] {
-        let descriptor = FetchDescriptor<QueuedMessageRecord>(
-            predicate: #Predicate { $0.sessionKey == sessionKey },
-            sortBy: [SortDescriptor(\.order, order: .forward)]
-        )
-        let rows = (try? context.fetch(descriptor)) ?? []
-        return rows.map { $0.toQueuedMessage() }
-    }
-
-    func loadAllQueues() -> [String: [QueuedMessage]] {
-        let descriptor = FetchDescriptor<QueuedMessageRecord>(
-            sortBy: [SortDescriptor(\.order, order: .forward)]
-        )
-        let rows = (try? context.fetch(descriptor)) ?? []
-        var grouped: [String: [QueuedMessage]] = [:]
-        for row in rows {
-            grouped[row.sessionKey, default: []].append(row.toQueuedMessage())
-        }
-        return grouped
-    }
-
-    private func nextQueueOrder(sessionKey: String) -> Int {
-        let descriptor = FetchDescriptor<QueuedMessageRecord>(
-            predicate: #Predicate { $0.sessionKey == sessionKey },
-            sortBy: [SortDescriptor(\.order, order: .reverse)]
-        )
-        var d = descriptor
-        d.fetchLimit = 1
-        let max = (try? context.fetch(d))?.first?.order ?? -1
-        return max + 1
-    }
-
-    func appendQueued(sessionKey: String, message: QueuedMessage) {
-        let record = QueuedMessageRecord(
-            id: message.id,
-            sessionKey: sessionKey,
-            order: nextQueueOrder(sessionKey: sessionKey),
-            text: message.text,
-            attachmentsData: QueuedMessageRecord.encodeAttachments(message.attachments)
-        )
-        context.insert(record)
-        save()
-    }
-
-    func removeQueued(id: UUID) {
-        var descriptor = FetchDescriptor<QueuedMessageRecord>(
-            predicate: #Predicate { $0.id == id }
-        )
-        descriptor.fetchLimit = 1
-        guard let row = (try? context.fetch(descriptor))?.first else { return }
-        context.delete(row)
-        save()
-    }
-
-    func clearQueue(sessionKey: String) {
-        let descriptor = FetchDescriptor<QueuedMessageRecord>(
-            predicate: #Predicate { $0.sessionKey == sessionKey }
-        )
-        let rows = (try? context.fetch(descriptor)) ?? []
-        for row in rows { context.delete(row) }
-        save()
-    }
-
-    func renameQueueKey(from oldKey: String, to newKey: String) {
-        guard oldKey != newKey else { return }
-        let descriptor = FetchDescriptor<QueuedMessageRecord>(
-            predicate: #Predicate { $0.sessionKey == oldKey }
-        )
-        let rows = (try? context.fetch(descriptor)) ?? []
-        for row in rows { row.sessionKey = newKey }
-        save()
-    }
-
-    private func deleteQueueRows(sessionKey: String) {
-        let descriptor = FetchDescriptor<QueuedMessageRecord>(
-            predicate: #Predicate { $0.sessionKey == sessionKey }
-        )
-        let rows = (try? context.fetch(descriptor)) ?? []
-        for row in rows { context.delete(row) }
     }
 
     func save() {

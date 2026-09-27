@@ -83,8 +83,12 @@ struct TaskCardView: View {
                 .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
 
-            if let parent = board.tasks.first(where: { $0.id == task.parentTaskId }) {
-                TaskCardStartsAfterRow(parent: parent, board: board)
+            ForEach(task.parentTaskIds, id: \.self) { parentID in
+                if let parent = board.tasks.first(where: { $0.id == parentID }) {
+                    TaskCardStartsAfterRow(parent: parent, board: board)
+                } else {
+                    TaskCardCrossProjectStartsAfterRow(parentID: parentID)
+                }
             }
 
             TaskSummaryPreview(task: task)
@@ -383,15 +387,37 @@ private struct TaskVerifyingIndicator: View {
     }
 }
 
+/// The "Starts after" row for a parent on another project's board. It reads
+/// `AppState` here rather than in `TaskCardView`, so only cards with such a
+/// link re-render when other boards change.
+private struct TaskCardCrossProjectStartsAfterRow: View {
+    @Environment(AppState.self) private var appState
+
+    let parentID: UUID
+
+    var body: some View {
+        if let parent = appState.task(id: parentID) {
+            TaskCardStartsAfterRow(
+                parent: parent,
+                board: appState.taskBoard(for: parent.projectId),
+                projectName: appState.projects.first { $0.id == parent.projectId }?.name
+            )
+        }
+    }
+}
+
 /// "Starts after" link to the task that must finish before this one starts,
-/// with the blocking task's current column icon.
+/// with the blocking task's current column icon. `projectName` is set when
+/// the parent is in another project.
 private struct TaskCardStartsAfterRow: View {
     let parent: ProjectTask
     let board: TaskBoard
+    var projectName: String?
 
     var body: some View {
         let isFinished = board.column(for: parent.status).countsAsDone
-        let title = parent.title.isEmpty ? String(localized: "Untitled task") : parent.title
+        let taskTitle = parent.title.isEmpty ? String(localized: "Untitled task") : parent.title
+        let title = projectName.map { "\($0) · \(taskTitle)" } ?? taskTitle
         let help = isFinished
             ? String(localized: "Starts after \(title), which has finished")
             : String(localized: "Waits for \(title) to finish before starting")

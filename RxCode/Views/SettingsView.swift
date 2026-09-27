@@ -493,16 +493,7 @@ struct GeneralSettingsTab: View {
 private struct AgentPromptsSettingsSection: View {
     @Environment(AppState.self) private var appState
     @AppStorage("globalAgentPrompt") private var globalPrompt = ""
-    @State private var selectedProjectId: UUID?
-
-    private var selectedProject: Project? {
-        if let selectedProjectId,
-           let project = appState.projects.first(where: { $0.id == selectedProjectId }) {
-            return project
-        }
-        return appState.projects.first(where: { $0.path == appState.activeProjectPath })
-            ?? appState.projects.first
-    }
+    @State private var showProjectPrompts = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -518,36 +509,18 @@ private struct AgentPromptsSettingsSection: View {
                 .font(.system(size: ClaudeTheme.size(12), weight: .medium))
             promptEditor(text: $globalPrompt, label: "Global prompt")
 
-            if appState.projects.isEmpty {
-                Text("Add a project to configure its prompt.")
-                    .font(.system(size: ClaudeTheme.size(11)))
-                    .foregroundStyle(.secondary)
-            } else {
-                HStack {
-                    Text("Project prompt")
-                        .font(.system(size: ClaudeTheme.size(12), weight: .medium))
-                    Spacer()
-                    Picker("Project", selection: Binding(
-                        get: { selectedProject?.id },
-                        set: { selectedProjectId = $0 }
-                    )) {
-                        ForEach(appState.projects) { project in
-                            Text(project.name).tag(UUID?.some(project.id))
-                        }
-                    }
-                    .frame(width: 240)
-                }
-                if let project = selectedProject {
-                    promptEditor(
-                        text: Binding(
-                            get: { appState.projects.first(where: { $0.id == project.id })?.customPrompt ?? "" },
-                            set: { appState.setProjectPrompt($0, for: project.id) }
-                        ),
-                        label: "Project prompt"
-                    )
-                    .id(project.id)
+            HStack {
+                Text("Project prompts")
+                    .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+                Spacer()
+                Button("Manage Project Prompts…") {
+                    showProjectPrompts = true
                 }
             }
+        }
+        .sheet(isPresented: $showProjectPrompts) {
+            ProjectPromptsSheet()
+                .environment(appState)
         }
     }
 
@@ -561,6 +534,92 @@ private struct AgentPromptsSettingsSection: View {
                     .allowsHitTesting(false)
             }
             .accessibilityLabel(label)
+    }
+}
+
+private struct ProjectPromptsSheet: View {
+    @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if appState.projects.isEmpty {
+                    ContentUnavailableView(
+                        "No Projects",
+                        systemImage: "folder",
+                        description: Text("Add a project to configure its prompt.")
+                    )
+                } else {
+                    List(appState.projects) { project in
+                        NavigationLink(value: project.id) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(project.name)
+                                Text(project.path)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                            .padding(.vertical, 3)
+                        }
+                    }
+                    .navigationDestination(for: UUID.self) { projectId in
+                        ProjectPromptDetailPage(projectId: projectId) { dismiss() }
+                    }
+                }
+            }
+            .navigationTitle("Project Prompts")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+        .frame(width: 600, height: 480)
+    }
+}
+
+private struct ProjectPromptDetailPage: View {
+    @Environment(AppState.self) private var appState
+    let projectId: UUID
+    let closeSheet: () -> Void
+
+    private var project: Project? {
+        appState.projects.first { $0.id == projectId }
+    }
+
+    var body: some View {
+        Group {
+            if let project {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Project prompt")
+                        .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
+                    Text("These instructions are included with every agent turn in this project, after the global prompt.")
+                        .font(.system(size: ClaudeTheme.size(11)))
+                        .foregroundStyle(.secondary)
+                    TextEditor(text: Binding(
+                        get: { appState.projects.first(where: { $0.id == projectId })?.customPrompt ?? "" },
+                        set: { appState.setProjectPrompt($0, for: projectId) }
+                    ))
+                    .font(.system(size: ClaudeTheme.size(12)))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 6)
+                            .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1)
+                            .allowsHitTesting(false)
+                    }
+                    .accessibilityLabel("Project prompt")
+                }
+                .padding(20)
+                .navigationTitle(project.name)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done", action: closeSheet)
+                    }
+                }
+            } else {
+                ContentUnavailableView("Project Unavailable", systemImage: "folder.badge.questionmark")
+            }
+        }
     }
 }
 

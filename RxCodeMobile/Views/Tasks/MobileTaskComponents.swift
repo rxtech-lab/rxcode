@@ -120,6 +120,7 @@ struct MobileTaskPills: View {
                 }
                 if let story {
                     TaskPill(text: story.title, icon: "rectangle.stack")
+                        .frame(maxWidth: 200, alignment: .leading)
                 }
                 if let version, !version.isEmpty {
                     TaskPill(text: version, icon: "tag")

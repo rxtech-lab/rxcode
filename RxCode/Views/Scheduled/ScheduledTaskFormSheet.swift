@@ -1,7 +1,7 @@
 import RxCodeCore
 import SwiftUI
 
-/// Creates or edits a scheduled task: project, name, model, prompt, and cron
+/// Creates or edits a scheduled task: optional project, name, model, prompt, and cron
 /// schedule, with a live preview of the next runs. Created with AI, it first
 /// asks for a description and opens the form on the suggestion agent's draft.
 struct ScheduledTaskFormSheet: View {
@@ -64,7 +64,7 @@ struct ScheduledTaskFormSheet: View {
 
     private var canSave: Bool {
         !trimmedName.isEmpty && !trimmedPrompt.isEmpty
-            && appState.projects.contains { $0.id == draft.projectId }
+            && projectIsValid
             && (try? parseResult.get()) != nil
     }
 
@@ -76,7 +76,13 @@ struct ScheduledTaskFormSheet: View {
     private var canGenerateDraft: Bool {
         !isGeneratingDraft
             && !draftPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && appState.projects.contains { $0.id == draft.projectId }
+            && projectIsValid
+    }
+
+    /// No project is a valid choice; a chosen one must still exist.
+    private var projectIsValid: Bool {
+        guard let projectId = draft.projectId else { return true }
+        return appState.projects.contains { $0.id == projectId }
     }
 
     var body: some View {
@@ -127,11 +133,9 @@ struct ScheduledTaskFormSheet: View {
     private var describeForm: some View {
         Form {
             Section {
-                Picker("Project", selection: $draft.projectId) {
-                    ForEach(appState.projects) { project in
-                        Text(project.name).tag(project.id)
-                    }
-                }
+                projectPicker
+            } footer: {
+                projectFooter
             }
 
             Section {
@@ -206,16 +210,14 @@ struct ScheduledTaskFormSheet: View {
                 }
             }
             Section {
-                Picker("Project", selection: $draft.projectId) {
-                    ForEach(appState.projects) { project in
-                        Text(project.name).tag(project.id)
-                    }
-                }
+                projectPicker
                 TextField("Name", text: $draft.name, prompt: Text("Daily dependency check"))
                 LabeledContent("Model") {
                     modelMenu
                 }
                 Toggle("Enabled", isOn: $draft.isEnabled)
+            } footer: {
+                projectFooter
             }
 
             Section("Prompt") {
@@ -301,6 +303,28 @@ struct ScheduledTaskFormSheet: View {
         } else {
             cronError = String(localized: "Could not generate a cron expression. Try rewording the schedule or pick a preset.")
         }
+    }
+
+    /// Picks the project each run's agent works in, or none.
+    private var projectPicker: some View {
+        Picker("Project", selection: $draft.projectId) {
+            Text("None").tag(UUID?.none)
+            if !appState.projects.isEmpty {
+                Divider()
+            }
+            ForEach(appState.projects) { project in
+                Text(project.name).tag(UUID?.some(project.id))
+            }
+        }
+        .accessibilityIdentifier("scheduled-task-project")
+    }
+
+    private var projectFooter: some View {
+        Text(draft.projectId == nil
+            ? "Optional. Without a project, the agent runs in Chat, outside any repository."
+            : "The agent runs in this project's folder.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
     }
 
     /// Picks the model each run uses. "Default task agent" stores no model, so

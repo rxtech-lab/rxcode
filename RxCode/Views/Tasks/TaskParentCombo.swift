@@ -1,13 +1,17 @@
 import RxCodeCore
 import SwiftUI
 
-/// A searchable task selection with story headings. A task is identified by
-/// ID, so two tasks with the same title remain distinct choices. The dropdown
-/// renders its rows lazily, so large boards stay responsive while typing.
+/// A searchable task selection with story headings. Tasks in other projects
+/// are listed after the task's own project, with the project in the heading.
+/// A task is identified by ID, so two tasks with the same title remain
+/// distinct choices. The dropdown renders its rows lazily, so large boards
+/// stay responsive while typing.
 struct TaskParentCombo: View {
-    let board: TaskBoard
+    @Environment(AppState.self) private var appState
+
+    let projectId: UUID
     let taskID: UUID
-    @Binding var selection: UUID?
+    @Binding var selection: [UUID]
     @State private var search = ""
     @State private var isOpen = false
     @State private var fieldWidth: CGFloat = 240
@@ -19,12 +23,19 @@ struct TaskParentCombo: View {
 
     var body: some View {
         LabeledContent("Starts after") {
-            HStack(spacing: 6) {
-                if let selected = board.tasks.first(where: { $0.id == selection }) {
-                    TaskRemovableChip(text: selected.title, icon: "link", tint: ClaudeTheme.accent) {
-                        selection = nil
+            VStack(alignment: .leading, spacing: 6) {
+                if !selection.isEmpty {
+                    FlowLayout(spacing: 4) {
+                        ForEach(selection, id: \.self) { id in
+                            if let selected = appState.task(id: id) {
+                                TaskRemovableChip(text: chipTitle(for: selected), icon: "link", tint: ClaudeTheme.accent) {
+                                    selection.removeAll { $0 == id }
+                                }
+                                .frame(maxWidth: 180)
+                                .help(chipTitle(for: selected))
+                            }
+                        }
                     }
-                    .frame(maxWidth: 150)
                 }
                 Button {
                     isOpen.toggle()
@@ -43,7 +54,7 @@ struct TaskParentCombo: View {
                 .popover(isPresented: $isOpen, arrowEdge: .bottom) {
                     dropdown
                 }
-                .help("Browse tasks by story")
+                .help("Browse tasks by project and story")
                 .accessibilityLabel("Browse parent tasks")
                 .accessibilityIdentifier("task-parent-search")
             }
@@ -51,8 +62,10 @@ struct TaskParentCombo: View {
     }
 
     private var dropdown: some View {
-        let groups = board.parentTaskGroups(for: taskID, matching: search)
-        let tasks = groups.flatMap(\.tasks)
+        let sections = appState.parentTaskChoices(for: taskID, in: projectId, matching: search).flatMap { choice in
+            choice.groups.map { (title: sectionTitle(for: $0, in: choice.project), tasks: $0.tasks) }
+        }
+        let tasks = sections.flatMap(\.tasks)
         return VStack(spacing: 8) {
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")
@@ -78,24 +91,24 @@ struct TaskParentCombo: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0, pinnedViews: .sectionHeaders) {
-                        if search.isEmpty, selection != nil {
-                            row(title: String(localized: "None"), isSelected: false, isHighlighted: false) {
-                                selection = nil
+                        if search.isEmpty, !selection.isEmpty {
+                            row(title: String(localized: "Clear all"), isSelected: false, isHighlighted: false) {
+                                selection = []
                                 isOpen = false
                             }
                         }
-                        ForEach(Array(groups.enumerated()), id: \.offset) { entry in
+                        ForEach(Array(sections.enumerated()), id: \.offset) { entry in
                             Section {
                                 ForEach(entry.element.tasks) { candidate in
                                     row(
                                         title: candidate.title,
-                                        isSelected: candidate.id == selection,
+                                        isSelected: selection.contains(candidate.id),
                                         isHighlighted: candidate.id == highlighted
                                     ) { pick(candidate) }
                                     .id(candidate.id)
                                 }
                             } header: {
-                                Text(storyTitle(for: entry.element))
+                                Text(entry.element.title)
                                     .font(.system(size: ClaudeTheme.size(11), weight: .semibold))
                                     .foregroundStyle(.secondary)
                                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -156,13 +169,27 @@ struct TaskParentCombo: View {
         return .handled
     }
 
-    private func storyTitle(for group: ParentTaskGroup) -> String {
-        group.story.map { $0.title.isEmpty ? String(localized: "Untitled Story") : $0.title }
+    /// The story heading, prefixed with the project for another project's tasks.
+    private func sectionTitle(for group: ParentTaskGroup, in project: Project) -> String {
+        let story = group.story.map { $0.title.isEmpty ? String(localized: "Untitled Story") : $0.title }
             ?? String(localized: "No Story")
+        return project.id == projectId ? story : "\(project.name) · \(story)"
+    }
+
+    /// The selected task's title, prefixed with its project when it is in another one.
+    private func chipTitle(for task: ProjectTask) -> String {
+        let title = task.title.isEmpty ? String(localized: "Untitled task") : task.title
+        guard task.projectId != projectId,
+              let project = appState.projects.first(where: { $0.id == task.projectId })
+        else { return title }
+        return "\(project.name) · \(title)"
     }
 
     private func pick(_ task: ProjectTask) {
-        selection = task.id
-        isOpen = false
+        if selection.contains(task.id) {
+            selection.removeAll { $0 == task.id }
+        } else {
+            selection.append(task.id)
+        }
     }
 }

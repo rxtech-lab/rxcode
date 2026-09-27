@@ -2,7 +2,7 @@ import RxCodeCore
 import SwiftUI
 
 /// The sidebar's "Scheduled" route: every cron-scheduled task, grouped by
-/// project, with its schedule, next run, and an enable switch.
+/// project (tasks without one first), with its schedule, next run, and an enable switch.
 struct ScheduledTasksView: View {
     @Environment(AppState.self) private var appState
 
@@ -18,16 +18,19 @@ struct ScheduledTasksView: View {
     }
 
     private struct ProjectGroup: Identifiable {
-        let project: Project
+        /// `nil` for tasks that run outside any project.
+        let project: Project?
         let tasks: [ScheduledTask]
-        var id: UUID { project.id }
+        var id: UUID? { project?.id }
     }
 
-    /// Projects in sidebar order, each with its scheduled tasks by name.
+    /// Tasks without a project, then projects in sidebar order, each with its
+    /// scheduled tasks by name.
     private var groups: [ProjectGroup] {
         let byProject = Dictionary(grouping: appState.scheduledTasks, by: \.projectId)
-        return appState.projects.compactMap { project in
-            guard let tasks = byProject[project.id], !tasks.isEmpty else { return nil }
+        let sections: [Project?] = [nil] + appState.projects.map(Optional.some)
+        return sections.compactMap { project in
+            guard let tasks = byProject[project?.id], !tasks.isEmpty else { return nil }
             let sorted = tasks.sorted {
                 $0.name.localizedStandardCompare($1.name) == .orderedAscending
             }
@@ -137,8 +140,7 @@ struct ScheduledTasksView: View {
         .menuStyle(.button)
         .buttonStyle(.borderedProminent)
         .fixedSize()
-        .disabled(appState.projects.isEmpty)
-        .help(appState.projects.isEmpty ? "Add a project first" : "Schedule a prompt to run periodically, written with AI or in a form")
+        .help("Schedule a prompt to run periodically, written with AI or in a form")
         .accessibilityIdentifier("scheduled-task-add")
     }
 
@@ -157,7 +159,6 @@ struct ScheduledTasksView: View {
     }
 
     private func startNewTask(projectId: UUID? = nil, mode: TaskCreationMode) {
-        guard let projectId = projectId ?? appState.projects.first?.id else { return }
         editing = EditingTask(
             task: ScheduledTask(
                 projectId: projectId,
@@ -174,14 +175,14 @@ struct ScheduledTasksView: View {
     private func projectSection(_ group: ProjectGroup, now: Date) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                Image(systemName: "folder")
+                Image(systemName: group.project == nil ? "bubble.left.and.bubble.right" : "folder")
                     .font(.system(size: 11, weight: .semibold))
-                Text(group.project.name)
+                Text(group.project?.name ?? String(localized: "No Project"))
                     .font(.system(size: 12, weight: .semibold))
                     .textCase(.uppercase)
                 Spacer(minLength: 0)
                 Menu {
-                    newTaskMenuItems(projectId: group.project.id)
+                    newTaskMenuItems(projectId: group.project?.id)
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 11, weight: .semibold))
@@ -189,7 +190,8 @@ struct ScheduledTasksView: View {
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
                 .fixedSize()
-                .help("Schedule a task in \(group.project.name)")
+                .help(group.project.map { String(localized: "Schedule a task in \($0.name)") }
+                    ?? String(localized: "Schedule a task without a project"))
             }
             .foregroundStyle(ClaudeTheme.textTertiary)
             .padding(.horizontal, 4)
@@ -233,7 +235,7 @@ struct ScheduledTasksView: View {
             Text("No Scheduled Tasks")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(ClaudeTheme.textPrimary)
-            Text("Schedule a prompt to run in a project on a cron expression, like every weekday at 9:00.")
+            Text("Schedule a prompt to run on a cron expression, like every weekday at 9:00, optionally in a project.")
                 .font(.system(size: 13))
                 .foregroundStyle(ClaudeTheme.textSecondary)
                 .multilineTextAlignment(.center)

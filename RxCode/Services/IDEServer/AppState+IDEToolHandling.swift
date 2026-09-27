@@ -263,6 +263,27 @@ extension AppState: IDEToolHandling {
         } else {
             storyId = nil
         }
+        let parentTaskIds: [UUID]
+        let requestedParents: [String]
+        if let entries = arguments["starts_after_task_ids"]?.arrayValue {
+            guard entries.allSatisfy({ $0.stringValue != nil }) else {
+                throw IDEToolError.invalidArguments("starts_after_task_ids must contain task id strings.")
+            }
+            requestedParents = entries.compactMap(\.stringValue)
+        } else {
+            requestedParents = arguments["starts_after_task_id"]?.stringValue.map { [$0] } ?? []
+        }
+        if !requestedParents.isEmpty {
+            await ensureAllTaskBoardsLoaded()
+            parentTaskIds = try requestedParents.map { raw in
+                guard let id = UUID(uuidString: raw), self.task(id: id) != nil else {
+                    throw IDEToolError.invalidArguments("Each starts_after_task_ids entry must identify an existing task. Call ide__get_tasks first.")
+                }
+                return id
+            }
+        } else {
+            parentTaskIds = []
+        }
         // A task's own chat identifies its card even when a follow-up describes
         // the work differently. Content matching also covers a separate chat
         // recording the same request again.
@@ -281,12 +302,14 @@ extension AppState: IDEToolHandling {
         }
         let task: ProjectTask
         if title.isEmpty {
-            task = quickAddTask(text: details, projectId: projectId, storyId: storyId, sourceSessionKey: sessionKey)
+            task = quickAddTask(text: details, projectId: projectId, storyId: storyId,
+                                parentTaskIds: parentTaskIds, sourceSessionKey: sessionKey)
         } else {
             let story = taskBoard(for: projectId).story(id: storyId)
             task = ProjectTask(
                 projectId: projectId,
                 storyId: storyId,
+                parentTaskIds: parentTaskIds,
                 title: title,
                 details: details,
                 status: taskBoard(for: projectId).firstColumn.id,
@@ -301,46 +324,9 @@ extension AppState: IDEToolHandling {
             "id": .string(task.id.uuidString),
             "project_id": .string(projectId.uuidString),
             "story_id": storyId.map { .string($0.uuidString) } ?? .null,
+            "starts_after_task_id": (self.task(id: task.id)?.parentTaskId).map { .string($0.uuidString) } ?? .null,
+            "starts_after_task_ids": .array((self.task(id: task.id)?.parentTaskIds ?? []).map { .string($0.uuidString) }),
             "title": .string(task.title),
-        ]))
-    }
-
-    @MainActor
-    private func handleCreateScheduledTask(arguments: JSONValue, sessionKey: String) async throws -> JSONValue {
-        let projectId = try taskToolProjectId(arguments: arguments, sessionKey: sessionKey)
-        let name = arguments["name"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let prompt = arguments["prompt"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let cron = arguments["cron_expression"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !name.isEmpty, !prompt.isEmpty else {
-            throw IDEToolError.invalidArguments("A nonempty name and prompt are required.")
-        }
-        do {
-            _ = try CronExpression(cron)
-        } catch {
-            throw IDEToolError.invalidArguments("Invalid cron_expression: \(error.localizedDescription)")
-        }
-        let proposal = ScheduledTask(
-            projectId: projectId,
-            name: name,
-            prompt: prompt,
-            cronExpression: cron,
-            isEnabled: arguments["enabled"]?.boolValue ?? true
-        )
-        guard let added = await confirmScheduledTaskProposal(proposal) else {
-            return jsonTextResult(.object([
-                "added": .bool(false),
-                "message": .string("The user cancelled the scheduled task. Do not retry unless they ask."),
-            ]))
-        }
-        return jsonTextResult(.object([
-            "added": .bool(true),
-            "id": .string(added.id.uuidString),
-            "project_id": .string(added.projectId.uuidString),
-            "name": .string(added.name),
-            "prompt": .string(added.prompt),
-            "cron_expression": .string(added.cronExpression),
-            "enabled": .bool(added.isEnabled),
-            "next_run_at": added.nextRunDate().map { .string(ISO8601DateFormatter().string(from: $0)) } ?? .null,
         ]))
     }
 
@@ -363,6 +349,7 @@ extension AppState: IDEToolHandling {
             "project_name": projects.first(where: { $0.id == task.projectId }).map { .string($0.name) } ?? .null,
             "story_id": task.storyId.map { .string($0.uuidString) } ?? .null,
             "parent_task_id": task.parentTaskId.map { .string($0.uuidString) } ?? .null,
+            "parent_task_ids": .array(task.parentTaskIds.map { .string($0.uuidString) }),
             "title": .string(task.title),
             "status": .string(column.id.rawValue),
             "column": .string(column.name),
@@ -621,7 +608,7 @@ extension AppState: IDEToolHandling {
         }
     }
 
-    private func parseOptionalProjectId(_ raw: String?) throws -> UUID? {
+    func parseOptionalProjectId(_ raw: String?) throws -> UUID? {
         guard let raw, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         guard let id = UUID(uuidString: raw) else {
             throw IDEToolError.invalidArguments("'project_id' is not a valid UUID: \(raw)")

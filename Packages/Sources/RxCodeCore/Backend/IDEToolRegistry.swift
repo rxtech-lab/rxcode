@@ -175,7 +175,7 @@ public enum IDEToolRegistry {
         ),
         IDETool(
             name: "ide__create_task",
-            description: "Create a task from the user's chat request. Pass story_id to add it to an existing story found with ide__get_stories; omit it for an independent task. Uses the current chat's project unless project_id is given. If title is omitted, RxCode derives one from details.",
+            description: "Create a task from the user's chat request. Pass story_id to add it to an existing story found with ide__get_stories; omit it for an independent task. Uses the current chat's project unless project_id is given. If title is omitted, RxCode derives one from details. Pass starts_after_task_ids when the task must wait for several existing tasks; create prerequisite tasks first and use their returned ids.",
             visibility: .alwaysIDEOnly,
             inputSchema: .object([
                 "type": .string("object"),
@@ -184,17 +184,29 @@ public enum IDEToolRegistry {
                     "story_id": .object(["type": .string("string")]),
                     "title": .object(["type": .string("string")]),
                     "details": .object(["type": .string("string")]),
+                    "starts_after_task_id": .object([
+                        "type": .string("string"),
+                        "description": .string("Optional id of a task, in this or any other project, that must finish before this task starts. The task is started automatically once that task is ready for review or done."),
+                    ]),
+                    "starts_after_task_ids": .object([
+                        "type": .string("array"),
+                        "items": .object(["type": .string("string")]),
+                        "description": .string("Optional ids of tasks, in any project. The task starts once all of them are ready for review or done. Takes precedence over starts_after_task_id."),
+                    ]),
                 ]),
             ])
         ),
         IDETool(
             name: "ide__create_scheduled_task",
-            description: "Propose a scheduled task: a prompt RxCode sends to an agent in a project on a cron schedule. RxCode shows the user a confirmation dialog where they can edit, add, or cancel it; this call waits for their decision and reports whether the task was added. Uses the current chat's project unless project_id is given.",
+            description: "Propose a scheduled task: a prompt RxCode sends to an agent on a cron schedule, optionally in a project. RxCode shows the user a confirmation dialog where they can edit, add, or cancel it; this call waits for their decision and reports whether the task was added. Uses project_id when given, else the current chat's project; from a chat outside any project, the task has no project.",
             visibility: .alwaysIDEOnly,
             inputSchema: .object([
                 "type": .string("object"),
                 "properties": .object([
-                    "project_id": .object(["type": .string("string")]),
+                    "project_id": .object([
+                        "type": .string("string"),
+                        "description": .string("Optional project the agent runs in. Omit to use the current chat's project, if any."),
+                    ]),
                     "name": .object([
                         "type": .string("string"),
                         "description": .string("Short name shown in the Scheduled sidebar."),

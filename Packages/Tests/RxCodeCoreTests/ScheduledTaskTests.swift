@@ -27,4 +27,23 @@ struct ScheduledTaskTests {
         let decoded = try JSONDecoder().decode(ScheduledTask.self, from: Data(json.utf8))
         #expect(!decoded.agent.isAssigned)
     }
+
+    @Test("A task without a project survives a round trip")
+    func missingProjectRoundTrips() throws {
+        let task = ScheduledTask(name: "Morning", prompt: "Summarize my day", cronExpression: "0 9 * * *")
+        let data = try JSONEncoder().encode(task)
+        let decoded = try JSONDecoder().decode(ScheduledTask.self, from: data)
+        #expect(decoded.projectId == nil)
+        #expect(decoded.id == task.id)
+    }
+
+    @Test("Records with a project keep it")
+    func projectDecodes() throws {
+        let projectId = UUID()
+        let json = """
+        {"id":"\(UUID().uuidString)","projectId":"\(projectId.uuidString)","name":"Old","prompt":"p","cronExpression":"* * * * *"}
+        """
+        let decoded = try JSONDecoder().decode(ScheduledTask.self, from: Data(json.utf8))
+        #expect(decoded.projectId == projectId)
+    }
 }

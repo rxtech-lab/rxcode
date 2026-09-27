@@ -25,7 +25,8 @@ struct MobileTaskFormView: View {
     private var isStatusLocked: Bool { !isNew && board.isStatusLocked(task) }
 
     private var canSave: Bool {
-        !task.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSaving
+        !task.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !isSaving && (!state.usesCloudTasks || task.parentTaskIds.count <= 1)
     }
 
     var body: some View {
@@ -58,7 +59,7 @@ struct MobileTaskFormView: View {
                 }
                 Button { showsParentTasks = true } label: {
                     LabeledContent("Starts after") {
-                        Text(board.tasks.first { $0.id == task.parentTaskId }?.title ?? String(localized: "None"))
+                        Text(task.parentTaskIds.isEmpty ? String(localized: "None") : "\(task.parentTaskIds.count) tasks")
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
@@ -67,6 +68,8 @@ struct MobileTaskFormView: View {
             } footer: {
                 if isStatusLocked {
                     Text("The agent is working on this task; it moves on when the turn finishes.")
+                } else if state.usesCloudTasks && task.parentTaskIds.count > 1 {
+                    Text("Autopilot currently syncs one Starts after task per cloud task. Select one to save this task.")
                 } else if !state.usesCloudTasks, board.column(for: task.status).triggersChat, task.agent.isAssigned {
                     Text("Saving in this column runs the assigned agent on your Mac.")
                 }
@@ -119,10 +122,9 @@ struct MobileTaskFormView: View {
             NavigationStack {
                 List {
                     Button {
-                        task.parentTaskId = nil
-                        showsParentTasks = false
+                        task.parentTaskIds = []
                     } label: {
-                        Label("None", systemImage: task.parentTaskId == nil ? "checkmark" : "minus")
+                        Label("Clear all", systemImage: task.parentTaskIds.isEmpty ? "checkmark" : "minus")
                     }
                     ForEach(Array(board.parentTaskGroups(for: task.id, matching: parentSearch).enumerated()), id: \.offset) { entry in
                         let group = entry.element
@@ -130,13 +132,18 @@ struct MobileTaskFormView: View {
                                 ?? String(localized: "No Story")) {
                             ForEach(group.tasks) { candidate in
                                 Button {
-                                    task.parentTaskId = candidate.id
-                                    showsParentTasks = false
+                                    if state.usesCloudTasks {
+                                        task.parentTaskIds = task.parentTaskIds == [candidate.id] ? [] : [candidate.id]
+                                    } else if task.parentTaskIds.contains(candidate.id) {
+                                        task.parentTaskIds.removeAll { $0 == candidate.id }
+                                    } else {
+                                        task.parentTaskIds.append(candidate.id)
+                                    }
                                 } label: {
                                     HStack {
                                         Text(candidate.title)
                                         Spacer()
-                                        if task.parentTaskId == candidate.id {
+                                        if task.parentTaskIds.contains(candidate.id) {
                                             Image(systemName: "checkmark")
                                         }
                                     }
@@ -147,6 +154,14 @@ struct MobileTaskFormView: View {
                 }
                 .searchable(text: $parentSearch, prompt: Text("Search tasks"))
                 .navigationTitle("Starts after")
+                .safeAreaInset(edge: .bottom) {
+                    if state.usesCloudTasks {
+                        Text("Autopilot currently syncs one Starts after task per cloud task.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding()
+                    }
+                }
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Done") { showsParentTasks = false }

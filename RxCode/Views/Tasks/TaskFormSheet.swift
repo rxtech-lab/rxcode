@@ -31,6 +31,10 @@ struct TaskFormSheet: View {
     @State var showingAttachmentPicker = false
     @State var isExistingRecord = false
     @State var tab: Tab = .details
+    @State var followUpDraft = ""
+    @State var followUpAttachments: [Attachment] = []
+    @State private var pendingExit: ExitAction?
+    @State private var showingDiscardFollowUpConfirmation = false
     /// A task opened from a story's Tasks section, edited in a nested form.
     @State var childTask: TaskBoardSheet?
     /// The fields manager, opened scrolled to one section.
@@ -64,10 +68,17 @@ struct TaskFormSheet: View {
         let id = UUID()
         var title: String
         var details: String
+        /// The draft that must finish before this one starts, saved as the
+        /// created task's "Starts after" link.
+        var startsAfter: UUID?
     }
 
     enum Tab: Hashable {
         case details, run
+    }
+
+    private enum ExitAction {
+        case cancel, save, openChat, jumpToProject
     }
 
     enum DraftStep {
@@ -142,25 +153,27 @@ struct TaskFormSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             if showsRunTab {
-                Picker("View", selection: $tab) {
-                    Text("Details").tag(Tab.details)
-                    Text("Run").tag(Tab.run)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(width: 220)
-                // Badge the Run segment: the attention reason lives in the
-                // Run transcript, not on the Details tab.
-                .overlay(alignment: .topTrailing) {
+                ZStack(alignment: .topLeading) {
+                    Picker("View", selection: $tab) {
+                        Text("Details").tag(Tab.details)
+                        Text("Run").tag(Tab.run)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 220)
+
+                    // Keep the badge beside the Run label, inside its segment.
                     if storedAttentionReason != nil {
                         Circle()
                             .fill(ClaudeTheme.statusWarning)
                             .frame(width: 8, height: 8)
-                            .offset(x: 3, y: -3)
+                            .offset(x: 184, y: 5)
+                            .allowsHitTesting(false)
                             .accessibilityLabel("Run needs attention")
                             .accessibilityIdentifier("task-form-run-attention-badge")
                     }
                 }
+                .frame(width: 220)
                 .padding(.top, 16)
                 .padding(.bottom, 4)
             }
@@ -178,7 +191,12 @@ struct TaskFormSheet: View {
             if isComposing {
                 draftComposer
             } else if showsRunTab, tab == .run {
-                TaskRunView(taskId: task.id)
+                TaskRunView(
+                    taskId: task.id,
+                    followUp: $followUpDraft,
+                    followUpAttachments: $followUpAttachments,
+                    onOpenChat: { requestExit(.openChat) }
+                )
                     .frame(maxHeight: .infinity)
             } else {
                 detailsForm
@@ -191,6 +209,19 @@ struct TaskFormSheet: View {
             }
         }
         .frame(width: 560, height: 680)
+        .confirmationDialog(
+            "Discard follow-up?",
+            isPresented: $showingDiscardFollowUpConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Discard Follow-up", role: .destructive) {
+                if let pendingExit { performExit(pendingExit) }
+                pendingExit = nil
+            }
+            Button("Keep Editing", role: .cancel) { pendingExit = nil }
+        } message: {
+            Text("There is unsent content in the follow-up field. Are you sure you want to discard it?")
+        }
         .sheet(item: $childTask) { payload in
             TaskFormSheet(payload: payload, defaultProjectId: currentProjectId)
                 .environment(appState)
@@ -226,7 +257,7 @@ struct TaskFormSheet: View {
             detailsSection
             if isStory {
                 storyTasksSection
-            } else if isExistingRecord && board.tasks.contains(where: { $0.parentTaskId == task.id }) {
+            } else if isExistingRecord && !linkedChildren.isEmpty {
                 linkedTasksSection
             }
             classificationSection
@@ -293,17 +324,12 @@ struct TaskFormSheet: View {
                 }
             }
             if isExistingRecord, !isStory, appState.canOpenChat(for: task) {
-                Button("Open Chat") {
-                    dismiss()
-                    appState.openChat(for: task, in: windowState)
-                }
+                Button("Open Chat") { requestExit(.openChat) }
                 .help("Open the thread this task ran in")
             }
-            if isExistingRecord, !isStory, let savedTask = appState.task(id: task.id) {
+            if isExistingRecord, !isStory, appState.task(id: task.id) != nil {
                 Button {
-                    dismiss()
-                    windowState.taskDetailProjectId = savedTask.projectId
-                    windowState.generalRoute = .tasks
+                    requestExit(.jumpToProject)
                 } label: {
                     Label("Jump to Project", systemImage: "folder")
                 }
@@ -311,15 +337,46 @@ struct TaskFormSheet: View {
                 .accessibilityIdentifier("task-form-jump-to-project")
             }
             Spacer()
-            Button("Cancel") { dismiss() }
+            Button("Cancel") { requestExit(.cancel) }
                 .keyboardShortcut(.cancelAction)
-            Button("Save") { save() }
+            Button("Save") { requestExit(.save) }
                 .buttonStyle(.borderedProminent)
                 .disabled(!canSave)
                 .keyboardShortcut(.defaultAction)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
+    }
+
+    private var hasUnsentFollowUp: Bool {
+        !followUpDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !followUpAttachments.isEmpty
+    }
+
+    private func requestExit(_ action: ExitAction) {
+        guard hasUnsentFollowUp else {
+            performExit(action)
+            return
+        }
+        pendingExit = action
+        showingDiscardFollowUpConfirmation = true
+    }
+
+    private func performExit(_ action: ExitAction) {
+        switch action {
+        case .cancel:
+            dismiss()
+        case .save:
+            save()
+        case .openChat:
+            dismiss()
+            appState.openChat(for: task, in: windowState)
+        case .jumpToProject:
+            guard let savedTask = appState.task(id: task.id) else { return }
+            dismiss()
+            windowState.taskDetailProjectId = savedTask.projectId
+            windowState.generalRoute = .tasks
+        }
     }
 
     // MARK: - Sections
@@ -460,12 +517,12 @@ struct TaskFormSheet: View {
 
     var linkedTasksSection: some View {
         Section("Linked Tasks") {
-            ForEach(board.tasks.filter { $0.parentTaskId == task.id }) { child in
+            ForEach(linkedChildren) { child in
                 Button {
                     childTask = .task(child)
                 } label: {
                     HStack {
-                        TaskStatusIcon(status: child.status, board: board, size: 12)
+                        TaskStatusIcon(status: child.status, board: appState.taskBoard(for: child.projectId), size: 12)
                         Text(child.title)
                         Spacer()
                         Image(systemName: "chevron.right")
@@ -474,6 +531,11 @@ struct TaskFormSheet: View {
                 .buttonStyle(.plain)
             }
         }
+    }
+
+    /// Tasks in any project that start after this one.
+    var linkedChildren: [ProjectTask] {
+        appState.allTasks().filter { $0.parentTaskIds.contains(task.id) }
     }
 
     var currentProjectId: UUID { isStory ? story.projectId : task.projectId }
@@ -514,8 +576,8 @@ struct TaskFormSheet: View {
                     }
                 }
 
-                TaskParentCombo(board: board, taskID: task.id, selection: $task.parentTaskId)
-                .help("Move this task to In Progress when the linked task reaches Pending Review or Done")
+                TaskParentCombo(projectId: task.projectId, taskID: task.id, selection: $task.parentTaskIds)
+                .help("Move this task to In Progress when every linked task reaches Pending Review or Done")
             }
 
             typeMenu
@@ -647,6 +709,15 @@ struct TaskFormSheet: View {
         let tags = isStory ? story.tags : task.tags
         let unused = board.allTags.filter { !tags.contains($0) }
         return Section {
+            if !tags.isEmpty {
+                FlowLayout(spacing: 4) {
+                    ForEach(tags, id: \.self) { tag in
+                        TaskRemovableChip(text: tag, tint: board.tint(forTag: tag)) {
+                            removeTag(tag)
+                        }
+                    }
+                }
+            }
             HStack(spacing: 6) {
                 TaskComboField(
                     title: "Add a tag",
@@ -661,15 +732,6 @@ struct TaskFormSheet: View {
                 )
                 Button("Add", action: addTag)
                     .disabled(tagInput.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-            if !tags.isEmpty {
-                FlowLayout(spacing: 4) {
-                    ForEach(tags, id: \.self) { tag in
-                        TaskRemovableChip(text: tag, tint: board.tint(forTag: tag)) {
-                            removeTag(tag)
-                        }
-                    }
-                }
             }
         } header: {
             HStack {
@@ -815,9 +877,8 @@ struct TaskFormSheet: View {
                 } else {
                     task.projectId = newValue
                     // A story belongs to one project, so a project change drops
-                    // a parent that no longer exists in scope.
+                    // it. A parent may be in any project, so it stays.
                     task.storyId = nil
-                    task.parentTaskId = nil
                 }
             }
         )
@@ -856,65 +917,5 @@ struct TaskFormSheet: View {
 
     var permissionBinding: Binding<PermissionMode?> {
         Binding(get: { task.agent.permissionMode }, set: { task.agent.permissionMode = $0 })
-    }
-}
-
-/// The reason a task needs attention, rendered as markdown. Shown under the
-/// Details header, and as the last message of the Run transcript. Long
-/// reasons are clipped to a few lines; hover for the full text or expand in place.
-struct TaskAttentionBanner: View {
-    let reason: String
-    @State private var isExpanded = false
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: ClaudeTheme.size(12)))
-                .foregroundStyle(ClaudeTheme.statusWarning)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Needs Attention")
-                    .font(.system(size: ClaudeTheme.size(11), weight: .semibold))
-                    .foregroundStyle(ClaudeTheme.textSecondary)
-                if isExpanded {
-                    ScrollView {
-                        reasonText
-                    }
-                    .frame(maxHeight: 180)
-                } else {
-                    reasonText
-                        .frame(maxHeight: 54, alignment: .top)
-                        .clipped()
-                        .help(reason)
-                }
-            }
-            Button {
-                isExpanded.toggle()
-            } label: {
-                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                    .font(.system(size: ClaudeTheme.size(10), weight: .semibold))
-                    .foregroundStyle(ClaudeTheme.textSecondary)
-                    .frame(width: 18, height: 18)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help(isExpanded ? "Show less" : "Show full error message")
-            .accessibilityLabel(isExpanded ? "Show less" : "Show full error message")
-        }
-        .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
-                .fill(ClaudeTheme.statusWarning.opacity(0.1))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
-                .strokeBorder(ClaudeTheme.statusWarning.opacity(0.4))
-        )
-        .accessibilityIdentifier("task-form-attention-banner")
-    }
-
-    private var reasonText: some View {
-        MarkdownContentView(text: reason, style: .rxCodeCompact)
-            .textSelection(.enabled)
-            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

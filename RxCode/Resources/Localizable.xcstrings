@@ -771,6 +771,16 @@
         }
       }
     },
+    "%lld of %lld tasks" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld tasks"
+          }
+        }
+      }
+    },
     "%lld of %lld tasks done, %lld in progress" : {
       "localizations" : {
         "en" : {
@@ -1286,6 +1296,7 @@
       }
     },
     "Add a project first" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -2536,6 +2547,9 @@
         }
       }
     },
+    "Any" : {
+
+    },
     "Any story" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -3606,7 +3620,7 @@
     "Browse parent tasks" : {
 
     },
-    "Browse tasks by story" : {
+    "Browse tasks by project and story" : {
 
     },
     "Browse…" : {
@@ -4132,6 +4146,12 @@
         }
       }
     },
+    "Clear all" : {
+
+    },
+    "Clear All" : {
+
+    },
     "Clear destination — pick again from the toolbar" : {
       "localizations" : {
         "ko" : {
@@ -4223,6 +4243,7 @@
       }
     },
     "Click a task to edit it before the story is created." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -4231,6 +4252,9 @@
           }
         }
       }
+    },
+    "Click a task to edit it before the story is created. A task that starts after another runs once that task finishes." : {
+
     },
     "Click Generate to turn this description into a cron expression." : {
 
@@ -5191,6 +5215,9 @@
           }
         }
       }
+    },
+    "Contains…" : {
+
     },
     "Context memories: %lld" : {
       "localizations" : {
@@ -6872,6 +6899,9 @@
     "Describe when this menu item should appear. The general AI model (Settings → Message) writes the Swift condition and it's compiled before use." : {
 
     },
+    "Describe which stories this card should show. An agent writes Swift that filters stories, and it's compiled before use." : {
+
+    },
     "Description" : {
       "localizations" : {
         "zh-Hans" : {
@@ -7033,6 +7063,12 @@
           }
         }
       }
+    },
+    "Discard Follow-up" : {
+
+    },
+    "Discard follow-up?" : {
+
     },
     "Disconnected" : {
       "localizations" : {
@@ -8657,6 +8693,12 @@
         }
       }
     },
+    "Filter Columns" : {
+
+    },
+    "Filter stories" : {
+
+    },
     "Filter stories by status" : {
       "localizations" : {
         "ko" : {
@@ -8673,6 +8715,12 @@
         }
       }
     },
+    "Filter stories shown on this card" : {
+
+    },
+    "Filter the table by any column" : {
+
+    },
     "Filtered by Swift code" : {
 
     },
@@ -8686,6 +8734,9 @@
           }
         }
       }
+    },
+    "Find stories" : {
+
     },
     "Finished installing? Tap Refresh." : {
       "localizations" : {
@@ -10416,6 +10467,9 @@
         }
       }
     },
+    "Keep Editing" : {
+
+    },
     "Keep RxCode running while another MCP client uses this server. Ports 19847–19946 are reserved for chat sessions." : {
       "localizations" : {
         "zh-Hans" : {
@@ -11281,6 +11335,9 @@
         }
       }
     },
+    "Manage Project Prompts…" : {
+
+    },
     "Manage release repositories, select release workflows, and create releases." : {
       "localizations" : {
         "ko" : {
@@ -11898,7 +11955,7 @@
         }
       }
     },
-    "Move this task to In Progress when the linked task reaches Pending Review or Done" : {
+    "Move this task to In Progress when every linked task reaches Pending Review or Done" : {
 
     },
     "Move To" : {
@@ -12969,6 +13026,9 @@
         }
       }
     },
+    "No matching stories" : {
+
+    },
     "No matching tasks" : {
       "localizations" : {
         "ko" : {
@@ -13077,6 +13137,12 @@
           }
         }
       }
+    },
+    "No Project" : {
+
+    },
+    "No Projects" : {
+
     },
     "No projects yet" : {
       "localizations" : {
@@ -13442,6 +13508,9 @@
         }
       }
     },
+    "No stories match this filter." : {
+
+    },
     "No stories match." : {
       "localizations" : {
         "zh-Hans" : {
@@ -13485,6 +13554,9 @@
       }
     },
     "No Swift filter" : {
+
+    },
+    "No tags in this view." : {
 
     },
     "No tags on this project yet." : {
@@ -14413,6 +14485,9 @@
         }
       }
     },
+    "Optional. Without a project, the agent runs in Chat, outside any repository." : {
+
+    },
     "Opus 4.6 only" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -14494,6 +14569,9 @@
           }
         }
       }
+    },
+    "Overview" : {
+
     },
     "Overwrite" : {
       "localizations" : {
@@ -15316,6 +15394,15 @@
 
     },
     "Project prompt" : {
+
+    },
+    "Project prompts" : {
+
+    },
+    "Project Prompts" : {
+
+    },
+    "Project Unavailable" : {
 
     },
     "Project-specific override is set" : {
@@ -17363,6 +17450,7 @@
       }
     },
     "Schedule a prompt to run in a project on a cron expression, like every weekday at 9:00." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -17377,6 +17465,9 @@
           }
         }
       }
+    },
+    "Schedule a prompt to run on a cron expression, like every weekday at 9:00, optionally in a project." : {
+
     },
     "Schedule a prompt to run periodically" : {
       "extractionState" : "stale",
@@ -17420,6 +17511,9 @@
           }
         }
       }
+    },
+    "Schedule a task without a project" : {
+
     },
     "Scheduled" : {
       "extractionState" : "stale",
@@ -17520,6 +17614,9 @@
           }
         }
       }
+    },
+    "Search" : {
+
     },
     "Search agents" : {
       "localizations" : {
@@ -19091,6 +19188,9 @@
         }
       }
     },
+    "Shows tasks with any selected tag. Active filters are combined." : {
+
+    },
     "Sign In" : {
       "localizations" : {
         "ko" : {
@@ -19499,6 +19599,9 @@
       }
     },
     "Starts after" : {
+
+    },
+    "Starts after %@" : {
 
     },
     "Starts after %@, which has finished" : {
@@ -20222,6 +20325,9 @@
     "The agent run stopped before the task was completed." : {
 
     },
+    "The agent runs in this project's folder." : {
+
+    },
     "The agent wants to run a command in this project." : {
       "localizations" : {
         "ko" : {
@@ -20492,6 +20598,12 @@
           }
         }
       }
+    },
+    "There is unsent content in the follow-up field. Are you sure you want to discard it?" : {
+
+    },
+    "These instructions are included with every agent turn in this project, after the global prompt." : {
+
     },
     "These instructions are included with every agent turn. Project instructions are added after the global instructions." : {
 

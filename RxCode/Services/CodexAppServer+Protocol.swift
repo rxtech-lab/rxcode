@@ -73,7 +73,8 @@ extension CodexAppServer {
     linking a new task to one.
     - `ide__create_story` / `ide__create_task` — record user-requested work \
     from a chat, in this or any other project (`project_id`). Pass \
-    `story_id` to place a task in an existing story.
+    `story_id` to place a task in an existing story, and \
+    `starts_after_task_ids` to run a task only after every listed task is ready.
     - `ide__create_scheduled_task` — when the user asks for work to run \
     periodically, propose a cron-scheduled prompt. RxCode asks the user to \
     confirm it and the call returns whether it was added.

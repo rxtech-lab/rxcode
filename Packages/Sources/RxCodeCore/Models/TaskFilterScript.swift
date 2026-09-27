@@ -33,6 +33,7 @@ public enum TaskFilterScript {
         public var storyId: String?
         public var storyTitle: String?
         public var parentTaskId: String?
+        public var parentTaskIds: [String]
         public var hasAgent: Bool
         public var needsAttention: Bool
         public var createdAt: Date
@@ -103,6 +104,7 @@ public enum TaskFilterScript {
                 storyId: task.storyId?.uuidString,
                 storyTitle: board.story(id: task.storyId)?.title,
                 parentTaskId: task.parentTaskId?.uuidString,
+                parentTaskIds: task.parentTaskIds.map(\.uuidString),
                 hasAgent: task.agent.isAssigned,
                 needsAttention: task.attentionReason != nil,
                 createdAt: task.createdAt,
@@ -161,6 +163,7 @@ public enum TaskFilterScript {
         let storyId: String?
         let storyTitle: String?
         let parentTaskId: String?
+        let parentTaskIds: [String]
         let hasAgent: Bool          // an agent is assigned to run the task
         let needsAttention: Bool    // flagged as needing attention
         let createdAt: Date

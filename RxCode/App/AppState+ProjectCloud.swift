@@ -465,10 +465,11 @@ extension AppState {
                 sync.tasks[localId] = nil
                 editCloudBoard(projectId, cloudId: cloudId, sync: sync) { board in
                     board.tasks.removeAll { $0.id == localId }
-                    for index in board.tasks.indices where board.tasks[index].parentTaskId == localId {
-                        board.tasks[index].parentTaskId = nil
+                    for index in board.tasks.indices {
+                        board.tasks[index].parentTaskIds.removeAll { $0 == localId }
                     }
                 }
+                clearParentLinks(to: [localId], outside: projectId)
             } else if !exists {
                 try await projectCloud.deleteTask(projectId: cloudId, taskId: link.remoteId)
                 sync.tasks[localId] = nil

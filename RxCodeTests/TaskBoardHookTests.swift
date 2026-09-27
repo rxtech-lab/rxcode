@@ -453,6 +453,69 @@ final class TaskBoardHookTests: XCTestCase {
         XCTAssertTrue(resultText.contains("already_exists"))
     }
 
+    func testParentInAnotherProjectStartsDependentAndDeletionClearsLink() async throws {
+        let other = Project(name: "Q", path: "/tmp/q", gitHubRepo: nil)
+        appState.projects = [project, other]
+        var parent = ProjectTask(projectId: project.id, title: "API", status: .pending)
+        appState.taskBoards[project.id] = TaskBoard(tasks: [parent])
+        appState.taskBoards[other.id] = TaskBoard()
+
+        let result = try await appState.ideHandleToolCall(
+            name: "ide__create_task",
+            arguments: .object([
+                "project_id": .string(other.id.uuidString),
+                "title": .string("Client"),
+                "details": .string("Call the new API"),
+                "starts_after_task_id": .string(parent.id.uuidString),
+            ]),
+            sessionKey: "chat-1"
+        )
+        XCTAssertTrue(try XCTUnwrap(toolResultText(result)).contains(parent.id.uuidString))
+        let child = try XCTUnwrap(appState.taskBoard(for: other.id).tasks.first)
+        XCTAssertEqual(child.parentTaskId, parent.id)
+        XCTAssertFalse(appState.canLinkTask(parent.id, to: child.id))
+        XCTAssertEqual(
+            appState.parentTaskChoices(for: parent.id, in: project.id).flatMap { $0.groups.flatMap(\.tasks) }.map(\.id),
+            []
+        )
+
+        parent.status = .pendingReview
+        appState.upsertTask(parent)
+        XCTAssertEqual(appState.task(id: child.id)?.status, .inProgress)
+
+        appState.deleteTask(parent)
+        XCTAssertNil(appState.task(id: child.id)?.parentTaskId)
+    }
+
+    func testIDECreateTaskWaitsForAllParentsAcrossProjects() async throws {
+        let other = Project(name: "Q", path: "/tmp/q", gitHubRepo: nil)
+        appState.projects = [project, other]
+        var first = ProjectTask(projectId: project.id, title: "API", status: .pending)
+        var second = ProjectTask(projectId: other.id, title: "Design", status: .pending)
+        appState.taskBoards[project.id] = TaskBoard(tasks: [first])
+        appState.taskBoards[other.id] = TaskBoard(tasks: [second])
+
+        _ = try await appState.ideHandleToolCall(
+            name: "ide__create_task",
+            arguments: .object([
+                "project_id": .string(other.id.uuidString),
+                "title": .string("Client"),
+                "starts_after_task_ids": .array([.string(first.id.uuidString), .string(second.id.uuidString)]),
+            ]),
+            sessionKey: "multi-parent-chat"
+        )
+        let child = try XCTUnwrap(appState.taskBoard(for: other.id).tasks.first { $0.title == "Client" })
+        XCTAssertEqual(child.parentTaskIds, [first.id, second.id])
+
+        first.status = .pendingReview
+        appState.upsertTask(first)
+        XCTAssertEqual(appState.task(id: child.id)?.status, .backlog)
+
+        second.status = .pendingReview
+        appState.upsertTask(second)
+        XCTAssertEqual(appState.task(id: child.id)?.status, .inProgress)
+    }
+
     func testChatAgentCanShareStoryAcrossProjectsAndTrackTasks() async throws {
         let other = Project(name: "Q", path: "/tmp/q", gitHubRepo: nil)
         appState.projects = [project, other]
@@ -803,6 +866,38 @@ final class TaskBoardHookTests: XCTestCase {
         XCTAssertTrue(text.contains("\"added\" : false"), text)
         XCTAssertTrue(appState.scheduledTasks.isEmpty)
         XCTAssertTrue(appState.scheduledTaskProposals.isEmpty)
+    }
+
+    func testScheduledTaskToolProposesNoProjectOutsideProjectChats() async throws {
+        let (call, proposal) = try await proposeScheduledTask([
+            "name": .string("Morning summary"),
+            "prompt": .string("Summarize my day."),
+            "cron_expression": .string("0 9 * * *"),
+        ])
+        XCTAssertNil(proposal.projectId, "An unsaved chat has no project, so the task has none")
+        appState.resolveScheduledTaskProposal(id: proposal.id, with: proposal)
+
+        let text = resultText(try await call.value)
+        XCTAssertTrue(text.contains("\"project_id\" : null"), text)
+        XCTAssertEqual(appState.scheduledTasks.map(\.projectId), [nil])
+    }
+
+    func testScheduledTaskToolRejectsUnknownProject() async throws {
+        do {
+            _ = try await appState.ideHandleToolCall(
+                name: "ide__create_scheduled_task",
+                arguments: .object([
+                    "project_id": .string(UUID().uuidString),
+                    "name": .string("Elsewhere"),
+                    "prompt": .string("Do it."),
+                    "cron_expression": .string("@daily"),
+                ]),
+                sessionKey: "chat-1"
+            )
+            XCTFail("An unknown project_id must be rejected")
+        } catch {
+            XCTAssertTrue(appState.scheduledTaskProposals.isEmpty)
+        }
     }
 
     func testScheduledTaskToolRejectsInvalidCronWithoutPrompting() async throws {

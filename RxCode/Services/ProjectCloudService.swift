@@ -80,8 +80,13 @@ final class ProjectCloudService {
 
     // MARK: - Board
 
+    /// The board payload can hold hundreds of tasks, so it is decoded off the
+    /// main actor — decoding it inline stalled scrolling on every sync.
     func board(projectId: String) async throws -> CloudRemoteBoard {
-        try await request("GET", url: projectURL(projectId).appendingPathComponent("tasks"))
+        let data = try await performData(method: "GET", url: projectURL(projectId).appendingPathComponent("tasks"), body: nil)
+        return try await Task.detached(priority: .userInitiated) {
+            try Self.decode(CloudRemoteBoard.self, from: data)
+        }.value
     }
 
     func createStory(projectId: String, fields: CloudStoryFields) async throws -> CloudRemoteStory {
@@ -143,6 +148,20 @@ final class ProjectCloudService {
     /// Signs the request with the current bearer and retries once after a
     /// forced refresh on 401, like `AutopilotService`.
     private func perform<T: Decodable>(method: String, url: URL, body: Data?) async throws -> T {
+        let data = try await performData(method: method, url: url, body: body)
+        if T.self == Ignored.self { return Ignored() as! T }
+        return try Self.decode(T.self, from: data)
+    }
+
+    private nonisolated static func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
+        do {
+            return try JSONDecoder().decode(type, from: data)
+        } catch {
+            throw AutopilotService.ServiceError.decodingError(error.localizedDescription)
+        }
+    }
+
+    private func performData(method: String, url: URL, body: Data?) async throws -> Data {
         func build(_ token: String) -> URLRequest {
             var request = URLRequest(url: url)
             request.httpMethod = method
@@ -178,12 +197,7 @@ final class ProjectCloudService {
             logger.error("\(method, privacy: .public) \(url.path, privacy: .public) failed: \(http.statusCode)")
             throw AutopilotService.ServiceError.apiError(http.statusCode, detail)
         }
-        if T.self == Ignored.self { return Ignored() as! T }
-        do {
-            return try JSONDecoder().decode(T.self, from: data)
-        } catch {
-            throw AutopilotService.ServiceError.decodingError(error.localizedDescription)
-        }
+        return data
     }
 
     /// Autopilot errors are `{ "error": "…" }`.

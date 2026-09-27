@@ -386,7 +386,7 @@ struct TaskSingleValueCombo: View {
 
     var body: some View {
         LabeledContent(title) {
-            HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: 6) {
                 if let value, !value.isEmpty {
                     TaskRemovableChip(text: value, icon: icon, tint: tint) {
                         self.value = nil
@@ -408,6 +408,7 @@ struct TaskSingleValueCombo: View {
                     onManage: onManage
                 )
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 

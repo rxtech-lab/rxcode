@@ -11,6 +11,9 @@ public struct TaskClassification: Codable, Sendable, Hashable {
     public var milestone: String?
     /// Title of the story a task belongs to. Never asked for a story.
     public var story: String?
+    /// Title of the existing task that must finish before this one starts.
+    /// Only asked for a task without one.
+    public var startsAfter: String?
 
     public init(
         type: String? = nil,
@@ -18,7 +21,8 @@ public struct TaskClassification: Codable, Sendable, Hashable {
         tags: [String]? = nil,
         version: String? = nil,
         milestone: String? = nil,
-        story: String? = nil
+        story: String? = nil,
+        startsAfter: String? = nil
     ) {
         self.type = type
         self.priority = priority
@@ -26,10 +30,12 @@ public struct TaskClassification: Codable, Sendable, Hashable {
         self.version = version
         self.milestone = milestone
         self.story = story
+        self.startsAfter = startsAfter
     }
 
     private enum CodingKeys: String, CodingKey {
         case type, priority, tags, version, milestone, story
+        case startsAfter = "starts_after"
     }
 
     /// Decodes each field on its own so one malformed value — a numeric
@@ -47,6 +53,7 @@ public struct TaskClassification: Codable, Sendable, Hashable {
         version = text(.version)
         milestone = text(.milestone)
         story = text(.story)
+        startsAfter = text(.startsAfter)
         if let list = try? container.decodeIfPresent([String].self, forKey: .tags) {
             tags = list
         } else {
@@ -58,6 +65,27 @@ public struct TaskClassification: Codable, Sendable, Hashable {
     /// the card in labels.
     public static let maxTags = 3
 
+    /// Caps how many existing tasks are offered as a "starts after" link, so
+    /// a large board doesn't blow up the prompt.
+    public static let maxStartsAfterCandidates = 30
+
+    /// Existing tasks `task` could start after: unfinished tasks it can link
+    /// to without a cycle — its story's tasks when it has a story, otherwise
+    /// the board's most recently updated ones. Empty once the task already
+    /// has a link, so a user's choice is never second-guessed.
+    public static func startsAfterCandidates(for task: ProjectTask, board: TaskBoard) -> [ProjectTask] {
+        guard task.parentTaskId == nil else { return [] }
+        let eligible = board.tasks.filter {
+            $0.id != task.id
+                && $0.projectId == task.projectId
+                && !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && !board.column(for: board.resolvedStatus(of: $0)).countsAsDone
+                && board.canLinkTask(task.id, to: $0.id)
+        }
+        let scoped = task.storyId.map { storyId in eligible.filter { $0.storyId == storyId } } ?? eligible
+        return Array(scoped.sorted { $0.updatedAt > $1.updatedAt }.prefix(maxStartsAfterCandidates))
+    }
+
     // MARK: - Prompt
 
     /// The one-shot prompt. Existing tags, versions and milestones are listed
@@ -68,7 +96,8 @@ public struct TaskClassification: Codable, Sendable, Hashable {
         details: String,
         storyTitle: String?,
         board: TaskBoard,
-        isStory: Bool = false
+        isStory: Bool = false,
+        startsAfterCandidates: [String] = []
     ) -> String {
         func list(_ values: [String]) -> String {
             values.isEmpty ? "(none yet)" : values.joined(separator: ", ")
@@ -77,11 +106,13 @@ public struct TaskClassification: Codable, Sendable, Hashable {
         // Only a task without a parent is asked to pick one.
         let choosesStory = !isStory && (storyTitle ?? "").isEmpty && !board.stories.isEmpty
         let storyKey = choosesStory ? #", "story": string|null"# : ""
+        let choosesParent = !isStory && !startsAfterCandidates.isEmpty
+        let parentKey = choosesParent ? #", "starts_after": string|null"# : ""
 
         var lines: [String] = [
             isStory ? "You classify a software story on a project board." : "You classify a software task on a project board.",
             "Reply with ONLY a JSON object, no prose and no markdown fences, with these keys:",
-            #"{"type": string|null, "priority": string|null, "tags": [string], "version": string|null, "milestone": string|null"# + storyKey + "}",
+            #"{"type": string|null, "priority": string|null, "tags": [string], "version": string|null, "milestone": string|null"# + storyKey + parentKey + "}",
             "",
             "Rules:",
             "- type: exactly one of [\(board.effectiveTypes.map(\.name).joined(separator: ", "))], or null.",
@@ -93,6 +124,10 @@ public struct TaskClassification: Codable, Sendable, Hashable {
         if choosesStory {
             let titles = board.stories.map { "\"\($0.title)\"" }.joined(separator: ", ")
             lines.append("- story: the exact title of the existing story this task is part of, from [\(titles)]. Use null unless the task clearly belongs to one; never invent a story.")
+        }
+        if choosesParent {
+            let titles = startsAfterCandidates.map { "\"\($0)\"" }.joined(separator: ", ")
+            lines.append("- starts_after: the exact title of the existing task that must finish before this task can start because it builds on that work, from [\(titles)]. Use null when the task does not depend on one; never invent a task.")
         }
         lines += [
             "",
@@ -145,6 +180,15 @@ public struct TaskClassification: Codable, Sendable, Hashable {
     /// filtered view — wins. Types and priorities that don't match the board
     /// are dropped rather than created.
     public func apply(to task: inout ProjectTask, board: TaskBoard) {
+        // Matched against the candidates the prompt was built from, before
+        // the story below can change them.
+        if let title = Self.clean(startsAfter),
+           let parent = Self.startsAfterCandidates(for: task, board: board).first(where: {
+               $0.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                   .compare(title, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+           }) {
+            task.parentTaskId = parent.id
+        }
         // The story goes first so its version and milestone are inherited,
         // like quick add in a story, before the model's own guesses.
         if task.storyId == nil, let title = Self.clean(story),

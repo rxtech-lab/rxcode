@@ -4,7 +4,9 @@ import Foundation
 /// the sidebar's "Scheduled" route and persisted app-wide.
 public struct ScheduledTask: Identifiable, Codable, Sendable, Hashable {
     public var id: UUID
-    public var projectId: UUID
+    /// The project each run's agent works in. `nil` runs it outside any
+    /// project, in the general Chat.
+    public var projectId: UUID?
     public var name: String
     /// The prompt sent to the agent on each run.
     public var prompt: String
@@ -21,7 +23,7 @@ public struct ScheduledTask: Identifiable, Codable, Sendable, Hashable {
 
     public init(
         id: UUID = UUID(),
-        projectId: UUID,
+        projectId: UUID? = nil,
         name: String,
         prompt: String,
         cronExpression: String,
@@ -52,7 +54,7 @@ public struct ScheduledTask: Identifiable, Codable, Sendable, Hashable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
-        projectId = try c.decode(UUID.self, forKey: .projectId)
+        projectId = try? c.decodeIfPresent(UUID.self, forKey: .projectId)
         name = (try? c.decodeIfPresent(String.self, forKey: .name)) ?? ""
         prompt = (try? c.decodeIfPresent(String.self, forKey: .prompt)) ?? ""
         cronExpression = (try? c.decodeIfPresent(String.self, forKey: .cronExpression)) ?? ""

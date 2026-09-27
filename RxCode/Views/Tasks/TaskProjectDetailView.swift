@@ -239,22 +239,26 @@ struct TaskProjectDetailView: View {
     private var content: some View {
         let view = currentView
         let selection = scriptFilterSelection
+        let storyRollups = board.storyRollups()
         let tasks = board.tasks
             .filter {
                 view.matches($0) && $0.matches(keyword: keyword)
                     && (selection?.taskIds.contains($0.id) ?? true)
             }
+        let stories = board.stories.filter {
+            view.matches($0, rolledUpStatus: storyRollups[$0.id]?.status ?? board.firstColumn.id)
+                && $0.matches(keyword: keyword)
+                && (selection?.storyIds.contains($0.id) ?? true)
+        }
         switch view.layout {
         case .board:
             TaskBoardLayoutView(
                 board: board,
                 view: view,
                 tasks: tasks,
+                storyRollups: storyRollups,
                 keyword: $keyword,
-                stories: board.stories.filter {
-                    view.matches($0, rolledUpStatus: board.rolledUpStatus(for: $0)) && $0.matches(keyword: keyword)
-                        && (selection?.storyIds.contains($0.id) ?? true)
-                },
+                stories: stories,
                 onOpen: { sheet = $0 },
                 onAddTask: { status, mode in
                     sheet = .task(newTask(status: status), mode: mode)
@@ -276,13 +280,19 @@ struct TaskProjectDetailView: View {
         case .table:
             TaskTableLayoutView(
                 board: board,
+                view: view,
                 tasks: tasks.sorted {
                     let lhs = board.columnIndex(of: board.resolvedStatus(of: $0))
                     let rhs = board.columnIndex(of: board.resolvedStatus(of: $1))
                     return lhs == rhs ? $0.sortIndex < $1.sortIndex : lhs < rhs
                 },
-                onOpen: { sheet = $0 }
+                stories: stories,
+                storyRollups: storyRollups,
+                onOpen: { sheet = $0 },
+                onAddStory: { openNewStory(mode: $0) },
+                onChangeStoryPanelStatuses: { setStoryPanelStatuses($0, in: view) }
             )
+            .id(view.id)
             .padding(.top, 12)
         }
     }
@@ -595,6 +605,7 @@ struct TaskBoardLayoutView: View {
     let board: TaskBoard
     let view: TaskSavedView
     let tasks: [ProjectTask]
+    let storyRollups: [UUID: StoryRollup]
     @Binding var keyword: String
     let stories: [ProjectStory]
     let onOpen: (TaskBoardSheet) -> Void
@@ -651,7 +662,7 @@ struct TaskBoardLayoutView: View {
     var body: some View {
         // Board-wide derived state, computed once per update and handed down,
         // instead of every column and card re-deriving it from the whole board.
-        let rollups = board.storyRollups()
+        let rollups = storyRollups
         let completedStoryIds = Self.completedStoryIds(in: rollups)
         let columns = view.visibleColumns(in: board.effectiveColumns)
         let taskStatus = { (task: ProjectTask) in board.resolvedStatus(of: task) }
@@ -752,114 +763,6 @@ struct TaskBoardLayoutView: View {
         .environment(hoverState)
         .onChange(of: completedStoryIds) { _, completed in
             collapsedStoryIds.formIntersection(completed)
-        }
-    }
-}
-
-// MARK: - Table layout
-
-/// Spreadsheet-style list of tasks — GitHub's table layout.
-struct TaskTableLayoutView: View {
-    @Environment(AppState.self) private var appState
-
-    let board: TaskBoard
-    let tasks: [ProjectTask]
-    let onOpen: (TaskBoardSheet) -> Void
-
-    @State private var selection = Set<UUID>()
-    @State private var pendingDeletion: TaskBoardSheet?
-
-    var body: some View {
-        Table(tasks, selection: $selection) {
-            TableColumn("Title") { task in
-                HStack(spacing: 6) {
-                    TaskStatusIcon(status: task.status, board: board)
-                    Text(task.title.isEmpty ? String(localized: "Untitled task") : task.title)
-                        .lineLimit(1)
-                }
-            }
-            .width(min: 200, ideal: 320)
-
-            TableColumn("Status") { task in
-                Text(board.column(for: task.status).name)
-                    .foregroundStyle(board.column(for: task.status).tint)
-            }
-            .width(min: 90, ideal: 110)
-
-            TableColumn("Type") { task in
-                if let type = board.itemType(id: task.typeId) {
-                    TaskPill(text: type.name, icon: "circle.fill", tint: type.tint)
-                }
-            }
-            .width(min: 60, ideal: 90)
-
-            TableColumn("Priority") { task in
-                if let priority = task.priority {
-                    Label {
-                        Text(priority.displayName)
-                    } icon: {
-                        Image(systemName: priority.systemImage)
-                    }
-                    .foregroundStyle(priority.tint)
-                }
-            }
-            .width(min: 60, ideal: 90)
-
-            TableColumn("Story") { task in
-                Text(board.story(id: task.storyId)?.title ?? "")
-                    .foregroundStyle(ClaudeTheme.textSecondary)
-                    .lineLimit(1)
-            }
-            .width(min: 80, ideal: 160)
-
-            TableColumn("Version") { task in
-                if let version = task.version, !version.isEmpty {
-                    TaskPill(text: version, icon: "tag", tint: ClaudeTheme.accent)
-                }
-            }
-            .width(min: 60, ideal: 90)
-
-            TableColumn("Milestone") { task in
-                if let milestone = task.milestone, !milestone.isEmpty {
-                    TaskPill(text: milestone, icon: "flag", tint: ClaudeTheme.statusSuccess)
-                }
-            }
-            .width(min: 60, ideal: 100)
-
-            TableColumn("Tags") { task in
-                HStack(spacing: 4) {
-                    ForEach(task.tags, id: \.self) { TaskPill(text: $0, tint: board.tint(forTag: $0)) }
-                }
-            }
-            .width(min: 80, ideal: 180)
-
-            TableColumn("Agent") { task in
-                Text(appState.taskAgentLabel(task.agent))
-                    .foregroundStyle(ClaudeTheme.textSecondary)
-                    .lineLimit(1)
-            }
-            .width(min: 80, ideal: 140)
-        }
-        .scrollContentBackground(.hidden)
-        .contextMenu(forSelectionType: UUID.self) { ids in
-            if ids.count == 1, let id = ids.first, let task = tasks.first(where: { $0.id == id }) {
-                TaskContextMenuItems(task: task, onEdit: { onOpen(.task(task)) }, onDelete: {
-                    pendingDeletion = .task(task)
-                })
-            }
-        } primaryAction: { ids in
-            guard let id = ids.first, let task = tasks.first(where: { $0.id == id }) else { return }
-            onOpen(.task(task))
-        }
-        .overlay {
-            if tasks.isEmpty {
-                Text("No tasks match this view.")
-                    .font(.system(size: ClaudeTheme.size(12)))
-                    .foregroundStyle(ClaudeTheme.textTertiary)
-            }
-        }
-        .taskDeletionConfirmation(pending: $pendingDeletion) { candidate in
-            if case .task(let task, _) = candidate { appState.deleteTask(task) }
         }
     }
 }

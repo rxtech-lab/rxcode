@@ -28,6 +28,10 @@ extension CodexAppServer {
             var turnStarted = false
             var turnCompleted = false
             var finalUsage: UsageInfo?
+            // Thread-cumulative usage before this turn's first request, and the
+            // latest cumulative snapshot. Their difference is this turn's usage.
+            var usageBaseline: UsageInfo?
+            var latestTotalUsage: UsageInfo?
             let startedAt = Date()
             // Captured per turn so we can synthesize an `ExitPlanMode` tool call when a
             // plan-mode turn completes. Codex never emits ExitPlanMode itself — its plan
@@ -112,6 +116,14 @@ extension CodexAppServer {
                             if let text = Self.firstString(in: params, keys: ["delta", "text", "content"]) {
                                 assistantTextBuffer += text
                             }
+                        case "thread/tokenUsage/updated":
+                            if let breakdowns = Self.tokenUsageBreakdowns(from: params) {
+                                if usageBaseline == nil {
+                                    usageBaseline = Self.usageDelta(from: breakdowns.last, to: breakdowns.total)
+                                        ?? UsageInfo(inputTokens: 0, outputTokens: 0, cacheCreationInputTokens: 0, cacheReadInputTokens: 0)
+                                }
+                                latestTotalUsage = breakdowns.total
+                            }
                         default:
                             break
                         }
@@ -131,6 +143,10 @@ extension CodexAppServer {
                         }
                     }
                 }
+            }
+
+            if finalUsage == nil, let usageBaseline, let latestTotalUsage {
+                finalUsage = Self.usageDelta(from: usageBaseline, to: latestTotalUsage)
             }
 
             let sid = activeThreadId ?? threadId ?? UUID().uuidString

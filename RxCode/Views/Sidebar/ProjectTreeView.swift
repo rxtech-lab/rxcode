@@ -261,6 +261,19 @@ struct ProjectTreeView: View {
                         } label: {
                             Label("Chat in New Window", systemImage: "macwindow.badge.plus")
                         }
+                    } else {
+                        Button {
+                            openWindow(
+                                id: "route-window",
+                                value: GeneralRouteWindowValue(
+                                    route: route,
+                                    instanceId: UUID(),
+                                    workspaceID: appState.activeWorkspace.id
+                                )
+                            )
+                        } label: {
+                            Label("Open in New Window", systemImage: "macwindow.badge.plus")
+                        }
                     }
                 }
             }

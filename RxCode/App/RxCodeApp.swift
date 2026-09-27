@@ -54,6 +54,17 @@ struct ChatWindowValue: Codable, Hashable {
     var workspaceID: String?
 }
 
+// MARK: - GeneralRouteWindowValue
+
+/// Identifies a detached General-route window (Projects, Briefing, Scheduled)
+/// opened from the sidebar row's context menu. `instanceId` lets the user open
+/// several independent windows for the same route.
+struct GeneralRouteWindowValue: Codable, Hashable {
+    let route: GeneralRoute
+    let instanceId: UUID
+    var workspaceID: String?
+}
+
 // MARK: - TerminalWindowValue
 
 struct TerminalWindowValue: Codable, Hashable {
@@ -152,6 +163,21 @@ struct RxCodeApp: App {
         }
         .defaultSize(width: 800, height: 700)
 
+        // Detached General-route window — opened from the sidebar Projects,
+        // Briefing, and Scheduled rows' context menus.
+        WindowGroup(id: "route-window", for: GeneralRouteWindowValue.self) { $value in
+            if let value {
+                GeneralRouteWindowRoot(
+                    workspaceManager: workspaceManager,
+                    workspaceID: value.workspaceID ?? workspaceManager.frontmostWorkspaceID,
+                    route: value.route
+                )
+                .focusable(false)
+                .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
+            }
+        }
+        .defaultSize(width: 1000, height: 700)
+
         // Detached terminal window — opened from the toolbar.
         WindowGroup(id: "terminal-window", for: TerminalWindowValue.self) { $value in
             TerminalWindowRoot(path: value?.path ?? "")
@@ -215,25 +241,7 @@ struct MainWindowRoot: View {
                     .environment(workspaceManager)
                     .environment(windowState)
                     .environment(chatBridge)
-                    .environment(\.openURL, OpenURLAction { url in
-                        if let docs = DocsDeepLink.parse(url), docs.action == .setup {
-                            appState.docsSetupRequest = DocsSetupRequest(repoFullName: docs.repoFullName)
-                            return .handled
-                        }
-                        if let release = ReleaseDeepLink.parse(url), release.action == .setup {
-                            appState.releaseSetupRequest = ReleaseSetupRequest(repoFullName: release.repoFullName)
-                            return .handled
-                        }
-                        if let request = SecretsDeepLink.parse(url) {
-                            appState.secretsSetupRequest = request
-                            return .handled
-                        }
-                        if let request = CIUpdateDeepLink.parse(url) {
-                            appState.ciSetupRequest = request
-                            return .handled
-                        }
-                        return openMarkdownLink(url, in: windowState)
-                    })
+                    .environment(\.openURL, workspaceOpenURLAction(appState: appState, windowState: windowState))
                     .transition(.opacity)
             } else {
                 LoadingView()
@@ -267,6 +275,31 @@ struct MainWindowRoot: View {
                 appState.handleNotificationTap(projectId: projectId, sessionId: sessionId, mainWindow: windowState)
             }
         }
+    }
+}
+
+/// `openURL` handler shared by full workspace windows: routes RxCode setup
+/// deep links to the matching sheet and everything else to `openMarkdownLink`.
+@MainActor
+func workspaceOpenURLAction(appState: AppState, windowState: WindowState) -> OpenURLAction {
+    OpenURLAction { url in
+        if let docs = DocsDeepLink.parse(url), docs.action == .setup {
+            appState.docsSetupRequest = DocsSetupRequest(repoFullName: docs.repoFullName)
+            return .handled
+        }
+        if let release = ReleaseDeepLink.parse(url), release.action == .setup {
+            appState.releaseSetupRequest = ReleaseSetupRequest(repoFullName: release.repoFullName)
+            return .handled
+        }
+        if let request = SecretsDeepLink.parse(url) {
+            appState.secretsSetupRequest = request
+            return .handled
+        }
+        if let request = CIUpdateDeepLink.parse(url) {
+            appState.ciSetupRequest = request
+            return .handled
+        }
+        return openMarkdownLink(url, in: windowState)
     }
 }
 
@@ -378,25 +411,7 @@ struct ProjectWindowRoot: View {
                     .environment(workspaceManager)
                     .environment(windowState)
                     .environment(chatBridge)
-                    .environment(\.openURL, OpenURLAction { url in
-                        if let docs = DocsDeepLink.parse(url), docs.action == .setup {
-                            appState.docsSetupRequest = DocsSetupRequest(repoFullName: docs.repoFullName)
-                            return .handled
-                        }
-                        if let release = ReleaseDeepLink.parse(url), release.action == .setup {
-                            appState.releaseSetupRequest = ReleaseSetupRequest(repoFullName: release.repoFullName)
-                            return .handled
-                        }
-                        if let request = SecretsDeepLink.parse(url) {
-                            appState.secretsSetupRequest = request
-                            return .handled
-                        }
-                        if let request = CIUpdateDeepLink.parse(url) {
-                            appState.ciSetupRequest = request
-                            return .handled
-                        }
-                        return openMarkdownLink(url, in: windowState)
-                    })
+                    .environment(\.openURL, workspaceOpenURLAction(appState: appState, windowState: windowState))
                     .transition(.opacity)
             } else {
                 LoadingView()

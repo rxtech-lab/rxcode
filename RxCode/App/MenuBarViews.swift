@@ -162,12 +162,14 @@ struct MenuBarContentView: View {
             agentPicker
 
             VStack(alignment: .leading, spacing: 12) {
-                MenuBarUsageBar(
-                    label: "5-hour limit",
-                    percent: selectedUsage?.fiveHourPercent,
-                    resetsAt: selectedUsage?.fiveHourResetsAt,
-                    emptyText: emptyUsageText
-                )
+                if selectedUsage?.hasFiveHourLimit ?? true {
+                    MenuBarUsageBar(
+                        label: "5-hour limit",
+                        percent: selectedUsage?.fiveHourPercent,
+                        resetsAt: selectedUsage?.fiveHourResetsAt,
+                        emptyText: emptyUsageText
+                    )
+                }
 
                 MenuBarUsageBar(
                     label: secondaryLimitLabel,

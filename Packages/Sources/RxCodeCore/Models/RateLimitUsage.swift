@@ -26,4 +26,14 @@ public struct RateLimitUsage: Sendable, Codable, Equatable {
         self.sevenDayResetsAt = sevenDayResetsAt
         self.twentyFourHourResetsAt = twentyFourHourResetsAt
     }
+
+    /// False when the plan has no separate 5-hour limit. Such plans report a
+    /// single window, which shows up as identical 5-hour and 7-day readings
+    /// that reset at the same time.
+    public var hasFiveHourLimit: Bool {
+        guard fiveHourPercent == sevenDayPercent,
+              let fiveHourResetsAt, let sevenDayResetsAt
+        else { return true }
+        return abs(fiveHourResetsAt.timeIntervalSince(sevenDayResetsAt)) > 60
+    }
 }

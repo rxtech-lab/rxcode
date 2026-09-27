@@ -34,6 +34,10 @@ extension AppState {
         }
 
         var sessionKey = internalSessionKey
+        // Measures how much of the provider's usage limits each finished
+        // span on this stream consumed.
+        var rateLimitMeasurement = beginRateLimitMeasurement(for: agentProvider)
+        defer { endRateLimitMeasurement(rateLimitMeasurement) }
 
         // Resolve per-backend send-request fields (MCP injection, ACP client
         // spec, model split, background context) concurrently before dispatching
@@ -149,6 +153,15 @@ extension AppState {
                             agentProvider: agentProvider,
                             model: usageModel(sessionKey),
                             projectId: projectId
+                        )
+                        recordRateLimitTaskCost(
+                            &rateLimitMeasurement,
+                            model: usageModel(sessionKey),
+                            projectId: projectId,
+                            threadId: sessionKey,
+                            prompt: prompt,
+                            tokens: Self.rateLimitTaskTokens(resultEvent.usage),
+                            startedAt: usageSpanStart
                         )
                         usageSpanStart = Date()
                         await finalizeAgentStream(agentProvider: agentProvider, streamId: streamId)
@@ -500,6 +513,15 @@ extension AppState {
                         agentProvider: agentProvider,
                         model: usageModel(sessionKey),
                         projectId: projectId
+                    )
+                    recordRateLimitTaskCost(
+                        &rateLimitMeasurement,
+                        model: usageModel(sessionKey),
+                        projectId: projectId,
+                        threadId: sessionKey,
+                        prompt: prompt,
+                        tokens: Self.rateLimitTaskTokens(resultEvent.usage),
+                        startedAt: usageSpanStart
                     )
                     usageSpanStart = Date()
 

@@ -36,6 +36,9 @@ struct BriefingUsageStatsView: View {
                 modelTile
                 sessionTimeTile
                 tokensTile
+                // Claude Code / Codex usage limits share this panel's window
+                // picker and wrap in the same row as the usage tiles.
+                BriefingRateLimitStatsView(range: range)
             }
         }
         .task(id: ReloadKey(range: range, revision: appState.usageStatsRevision, projectIds: projectIds)) {
@@ -58,42 +61,12 @@ struct BriefingUsageStatsView: View {
     /// Dropdown button for the time window, styled like the briefing hero's
     /// Autopilot menu.
     private var rangeMenu: some View {
-        Menu {
-            ForEach(UsageStatsRange.allCases) { option in
-                Button {
-                    rangeRaw = option.rawValue
-                } label: {
-                    if option == range {
-                        Label(option.longTitle, systemImage: "checkmark")
-                    } else {
-                        Text(option.longTitle)
-                    }
-                }
-            }
-        } label: {
-            HStack(spacing: 4) {
-                Text(range.longTitle)
-                    .font(.system(size: 11, weight: .medium))
-                    .lineLimit(1)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .semibold))
-            }
-            .foregroundStyle(ClaudeTheme.textSecondary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(ClaudeTheme.surfaceSecondary)
-            )
-            .overlay(
-                Capsule(style: .continuous)
-                    .strokeBorder(ClaudeTheme.border.opacity(0.6), lineWidth: 0.5)
-            )
-        }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .help("Choose the time window for usage statistics.")
+        BriefingPanelMenu(
+            options: UsageStatsRange.allCases,
+            selection: range,
+            title: \.localizedLongTitle,
+            help: "Choose the time window for usage statistics."
+        ) { rangeRaw = $0.rawValue }
     }
 
     // MARK: - Tiles
@@ -103,8 +76,6 @@ struct BriefingUsageStatsView: View {
         case sessionTime
         case tokens
     }
-
-    private static let tileMinHeight: CGFloat = 116
 
     private var modelTile: some View {
         let top = summary.topModel
@@ -117,21 +88,21 @@ struct BriefingUsageStatsView: View {
                 value: top.map { modelName($0) } ?? "—",
                 detail: top.map { usage in
                     let providerLabel = AgentProvider(rawValue: usage.providerRaw)?.displayNameText ?? usage.providerRaw
-                    return "\(providerLabel) · \(share(usage.turns)) of turns"
-                } ?? "No agent turns yet",
+                    return String(localized: "\(providerLabel) · \(share(usage.turns)) of turns")
+                } ?? String(localized: "No agent turns yet"),
                 footnote: providerName.map { name in
-                    "Top provider: \(name) (\(share(provider?.turns ?? 0)))"
+                    String(localized: "Top provider: \(name) (\(share(provider?.turns ?? 0)))")
                 },
                 isInteractive: !summary.isEmpty,
                 help: "Show the model and provider breakdown."
             )
         } popover: {
             UsageBreakdownPopover(
-                title: "Model usage",
-                subtitle: "\(range.longTitle) · share of \(summary.turns) \(summary.turns == 1 ? "turn" : "turns")",
+                title: String(localized: "Model usage"),
+                subtitle: String(localized: "\(range.localizedLongTitle) · share of \(Self.formatTurns(summary.turns))"),
                 charts: [
-                    .init(title: "By model", unit: "turns", slices: modelSlices),
-                    .init(title: "By provider", unit: "turns", slices: providerSlices),
+                    .init(title: String(localized: "By model"), unit: String(localized: "turns"), slices: modelSlices),
+                    .init(title: String(localized: "By provider"), unit: String(localized: "turns"), slices: providerSlices),
                 ]
             )
         }
@@ -144,21 +115,21 @@ struct BriefingUsageStatsView: View {
                 title: "Session time",
                 value: summary.isEmpty ? "—" : Self.formatDuration(summary.sessionSeconds),
                 detail: summary.isEmpty
-                    ? "No agent turns yet"
-                    : "\(summary.turns) \(summary.turns == 1 ? "turn" : "turns")",
+                    ? String(localized: "No agent turns yet")
+                    : Self.formatTurns(summary.turns),
                 footnote: summary.isEmpty
                     ? nil
-                    : "Avg \(Self.formatDuration(summary.sessionSeconds / Double(summary.turns))) per turn",
+                    : String(localized: "Avg \(Self.formatDuration(summary.sessionSeconds / Double(summary.turns))) per turn"),
                 isInteractive: !summary.isEmpty,
                 help: "Show session time by provider and model."
             )
         } popover: {
             UsageBreakdownPopover(
-                title: "Session time",
-                subtitle: "\(range.longTitle) · \(Self.formatDuration(summary.sessionSeconds)) of agent work",
+                title: String(localized: "Session time"),
+                subtitle: String(localized: "\(range.localizedLongTitle) · \(Self.formatDuration(summary.sessionSeconds)) of agent work"),
                 charts: [
-                    .init(title: "By provider", unit: "time", slices: providerTimeSlices, format: Self.formatDuration),
-                    .init(title: "By model", unit: "time", slices: modelTimeSlices, format: Self.formatDuration),
+                    .init(title: String(localized: "By provider"), unit: String(localized: "time"), slices: providerTimeSlices, format: Self.formatDuration),
+                    .init(title: String(localized: "By model"), unit: String(localized: "time"), slices: modelTimeSlices, format: Self.formatDuration),
                 ]
             )
         }
@@ -171,21 +142,21 @@ struct BriefingUsageStatsView: View {
                 title: "Tokens burned",
                 value: summary.isEmpty ? "—" : Self.formatTokens(summary.totalTokens),
                 detail: summary.isEmpty
-                    ? "No agent turns yet"
-                    : "\(Self.formatTokens(summary.inputTokens)) in · \(Self.formatTokens(summary.outputTokens)) out",
+                    ? String(localized: "No agent turns yet")
+                    : String(localized: "\(Self.formatTokens(summary.inputTokens)) in · \(Self.formatTokens(summary.outputTokens)) out"),
                 footnote: summary.isEmpty
                     ? nil
-                    : "\(Self.formatTokens(summary.cacheReadTokens + summary.cacheCreationTokens)) cache",
+                    : String(localized: "\(Self.formatTokens(summary.cacheReadTokens + summary.cacheCreationTokens)) cache"),
                 isInteractive: !summary.isEmpty,
                 help: "Show the token breakdown."
             )
         } popover: {
             UsageBreakdownPopover(
-                title: "Token usage",
-                subtitle: "\(range.longTitle) · \(summary.totalTokens.formatted()) tokens",
+                title: String(localized: "Token usage"),
+                subtitle: String(localized: "\(range.localizedLongTitle) · \(summary.totalTokens.formatted()) tokens"),
                 charts: [
-                    .init(title: "By type", unit: "tokens", slices: tokenTypeSlices),
-                    .init(title: "By model", unit: "tokens", slices: modelTokenSlices),
+                    .init(title: String(localized: "By type"), unit: String(localized: "tokens"), slices: tokenTypeSlices),
+                    .init(title: String(localized: "By model"), unit: String(localized: "tokens"), slices: modelTokenSlices),
                 ]
             )
         }
@@ -217,57 +188,22 @@ struct BriefingUsageStatsView: View {
 
     private func tile(
         icon: String,
-        title: String,
+        title: LocalizedStringKey,
         value: String,
         detail: String,
         footnote: String?,
         isInteractive: Bool,
-        help: String
+        help: LocalizedStringKey
     ) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(ClaudeTheme.accent)
-                Text(title)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(ClaudeTheme.textSecondary)
-                Spacer(minLength: 0)
-                if isInteractive {
-                    Image(systemName: "chart.pie")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(ClaudeTheme.textTertiary)
-                }
-            }
-            Text(value)
-                .font(.system(size: 20, weight: .semibold).monospacedDigit())
-                .foregroundStyle(ClaudeTheme.textPrimary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .contentTransition(.numericText())
-            Text(detail)
-                .font(.system(size: 11))
-                .foregroundStyle(ClaudeTheme.textTertiary)
-                .lineLimit(1)
-            // Always reserve the footnote line so every tile has the same height.
-            Text(footnote ?? " ")
-                .font(.system(size: 10.5))
-                .foregroundStyle(ClaudeTheme.textTertiary)
-                .lineLimit(1)
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, minHeight: Self.tileMinHeight, alignment: .topLeading)
-        .background(
-            RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusLarge, style: .continuous)
-                .fill(ClaudeTheme.surfacePrimary)
+        BriefingStatTile(
+            icon: icon,
+            title: title,
+            value: value,
+            detail: detail,
+            footnote: footnote,
+            accessoryIcon: isInteractive ? "chart.pie" : nil,
+            help: help
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusLarge, style: .continuous)
-                .strokeBorder(ClaudeTheme.border.opacity(0.6), lineWidth: 0.5)
-        )
-        .contentShape(RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusLarge, style: .continuous))
-        .help(help)
-        .animation(.easeInOut(duration: 0.2), value: value)
     }
 
     // MARK: - Breakdown slices
@@ -304,10 +240,10 @@ struct BriefingUsageStatsView: View {
 
     private var tokenTypeSlices: [UsageBreakdownPopover.Slice] {
         UsageBreakdownPopover.Slice.folded([
-            (id: "input", label: "Input", detail: nil, value: Double(summary.inputTokens)),
-            (id: "output", label: "Output", detail: nil, value: Double(summary.outputTokens)),
-            (id: "cacheRead", label: "Cache read", detail: nil, value: Double(summary.cacheReadTokens)),
-            (id: "cacheWrite", label: "Cache write", detail: nil, value: Double(summary.cacheCreationTokens)),
+            (id: "input", label: String(localized: "Input"), detail: nil, value: Double(summary.inputTokens)),
+            (id: "output", label: String(localized: "Output"), detail: nil, value: Double(summary.outputTokens)),
+            (id: "cacheRead", label: String(localized: "Cache read"), detail: nil, value: Double(summary.cacheReadTokens)),
+            (id: "cacheWrite", label: String(localized: "Cache write"), detail: nil, value: Double(summary.cacheCreationTokens)),
         ], sorted: false)
     }
 
@@ -331,6 +267,10 @@ struct BriefingUsageStatsView: View {
         return (Double(turns) / Double(summary.turns)).formatted(.percent.precision(.fractionLength(0)))
     }
 
+    static func formatTurns(_ count: Int) -> String {
+        count == 1 ? String(localized: "1 turn") : String(localized: "\(count) turns")
+    }
+
     static func formatDuration(_ seconds: Double) -> String {
         let formatter = DateComponentsFormatter()
         formatter.unitsStyle = .abbreviated
@@ -341,5 +281,17 @@ struct BriefingUsageStatsView: View {
 
     static func formatTokens(_ count: Int) -> String {
         count.formatted(.number.notation(.compactName).precision(.fractionLength(0...1)))
+    }
+}
+
+extension UsageStatsRange {
+    /// `longTitle` localized for display; the core package only has English.
+    var localizedLongTitle: String {
+        switch self {
+        case .day: String(localized: "Last 24 hours")
+        case .week: String(localized: "Last 7 days")
+        case .month: String(localized: "Last 30 days")
+        case .year: String(localized: "Last 365 days")
+        }
     }
 }

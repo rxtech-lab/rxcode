@@ -313,6 +313,7 @@ extension AppState {
             await self?.refreshRateLimitUsage()
             await self?.refreshCodexRateLimitUsage()
         }
+        startRateLimitSampling()
 
         // Recurring probe so disconnected MCP servers surface promptly even
         // when the user isn't actively interacting with the Settings tab.
@@ -673,6 +674,10 @@ extension AppState {
                 bridge.agentProvider = provider
                 bridge.canSteer = self.canSteer(in: window)
                 bridge.modelDisplayName = modelDisplayName(for: currentModel, provider: provider, in: window)
+                let advice = rateLimitAdvice(for: provider, model: currentModel)
+                if bridge.rateLimitAdvice != advice {
+                    bridge.rateLimitAdvice = advice
+                }
                 bridge.sessionStats = ChatSessionStats(
                     costUsd: state.costUsd,
                     inputTokens: state.inputTokens,

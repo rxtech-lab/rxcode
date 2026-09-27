@@ -41,8 +41,8 @@ struct UsageBreakdownPopover: View {
             if !rest.isEmpty {
                 slices.append(Slice(
                     id: "other",
-                    label: "Other",
-                    detail: "\(rest.count) more",
+                    label: String(localized: "Other"),
+                    detail: String(localized: "\(rest.count) more"),
                     value: rest.reduce(0) { $0 + $1.value },
                     color: otherColor
                 ))

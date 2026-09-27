@@ -202,6 +202,73 @@ final class AppStateSteeringTests: XCTestCase {
         )
     }
 
+    /// A steer that lands after the turn's last tool call is run by Claude
+    /// Code as a turn of its own, after the first turn's `result`. That
+    /// `result` must not end the stream — finalizing there kills the CLI
+    /// before it answers the steer, and the task board then judges (and moves)
+    /// a task on a turn that never saw the follow-up.
+    func testResultBeforeASteerIsTakenKeepsTheTurnRunning() async throws {
+        await mockBackend.setAcceptsSteering(true)
+        await mockBackend.enqueueScript(
+            [
+                .systemInit(sessionId: sessionKey),
+                .userReplay("finish the feature"),
+                MockAgentBackend.Step(delay: 0.01, event: .textDelta("Done with the feature.")),
+                .result(sessionId: sessionKey, delay: 0.8),
+                .systemInit(sessionId: sessionKey, delay: 0.6),
+                .userReplay("also say PINEAPPLE"),
+                MockAgentBackend.Step(delay: 0.01, event: .textDelta("PINEAPPLE")),
+                .result(sessionId: sessionKey),
+            ],
+            forCwd: project.path
+        )
+
+        let maybeStreamId = await appState.sendPrompt("finish the feature", in: window)
+        let streamId = try XCTUnwrap(maybeStreamId)
+        try await Task.sleep(nanoseconds: 400_000_000)
+        let steered = await appState.steerActiveStream(text: "also say PINEAPPLE", attachments: [], in: window)
+        XCTAssertTrue(steered)
+
+        // Between the two results: the first one only yielded.
+        try await Task.sleep(nanoseconds: 700_000_000)
+        XCTAssertTrue(appState.stateForSession(sessionKey).isStreaming, "The first result must not end a turn with a steer still pending")
+        XCTAssertEqual(appState.stateForSession(sessionKey).activeStreamId, streamId)
+
+        _ = await appState.awaitStreamCompletion(streamId: streamId, timeout: 5, acceptsPartial: false)
+        let state = appState.stateForSession(sessionKey)
+        XCTAssertFalse(state.isStreaming)
+        XCTAssertEqual(state.unconsumedSteerCount, 0)
+        XCTAssertEqual(state.messages.last?.role, .assistant)
+        XCTAssertEqual(state.messages.last?.content, "PINEAPPLE", "The steered turn's reply opens its own bubble")
+    }
+
+    /// A steer the CLI folded into the running turn is echoed before that
+    /// turn's `result`, which then ends the stream as usual.
+    func testResultAfterTheSteerIsTakenEndsTheTurn() async throws {
+        await mockBackend.setAcceptsSteering(true)
+        await mockBackend.enqueueScript(
+            [
+                .systemInit(sessionId: sessionKey),
+                .userReplay("finish the feature"),
+                .userReplay("also say PINEAPPLE", delay: 0.5),
+                .assistantText("Done. PINEAPPLE"),
+                .result(sessionId: sessionKey),
+            ],
+            forCwd: project.path
+        )
+
+        let maybeStreamId = await appState.sendPrompt("finish the feature", in: window)
+        let streamId = try XCTUnwrap(maybeStreamId)
+        try await Task.sleep(nanoseconds: 200_000_000)
+        let steered = await appState.steerActiveStream(text: "also say PINEAPPLE", attachments: [], in: window)
+        XCTAssertTrue(steered)
+
+        _ = await appState.awaitStreamCompletion(streamId: streamId, timeout: 5, acceptsPartial: false)
+        let state = appState.stateForSession(sessionKey)
+        XCTAssertFalse(state.isStreaming)
+        XCTAssertEqual(state.unconsumedSteerCount, 0)
+    }
+
     func testSteerAllQueuedAsOneJoinsTheQueueIntoOneSteer() async {
         await mockBackend.setAcceptsSteering(true)
         beginStreaming()

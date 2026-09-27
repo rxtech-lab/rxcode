@@ -106,6 +106,17 @@ extension AppState {
 
         var eventCount = 0
         var lastEventTime = Date()
+        // Start of the span the next `result` accounts for in the persisted
+        // usage stats; advanced on each result so background follow-up
+        // results on the same stream are not double counted.
+        var usageSpanStart = streamStart
+        let fallbackUsageModel = preflight.resolvedModel ?? model
+        func usageModel(_ key: String) -> String? {
+            stateForSession(key).activeModelName ?? fallbackUsageModel
+        }
+        // The CLI reads stdin in order, so the first replayed user frame is
+        // this turn's own prompt; every later one is a steer being taken.
+        var sawPromptReplay = false
         logger.info("[Stream:UI] entering for-await session=\(sessionKey, privacy: .public) stream=\(streamId) cwd=\(cwd, privacy: .public)")
 
         do {
@@ -132,6 +143,14 @@ extension AppState {
                 if !ownsSession {
                     if case .result(let resultEvent) = event {
                         logger.info("[Stream:UI] event #\(eventCount) .result received after losing ownership — saving to disk")
+                        recordUsageStats(
+                            resultEvent: resultEvent,
+                            since: usageSpanStart,
+                            agentProvider: agentProvider,
+                            model: usageModel(sessionKey),
+                            projectId: projectId
+                        )
+                        usageSpanStart = Date()
                         await finalizeAgentStream(agentProvider: agentProvider, streamId: streamId)
                         if sessionKey != resultEvent.sessionId,
                            providerOwnsThreadId(agentProvider, threadId: sessionKey) {
@@ -456,6 +475,13 @@ extension AppState {
 
                 case .user(let userMessage):
                     logger.debug("[Stream:UI] event #\(eventCount) .user (gap=\(String(format: "%.1f", gap))s, toolUseId=\(userMessage.toolUseId ?? "none"))")
+                    if userMessage.isReplay {
+                        if sawPromptReplay {
+                            updateState(sessionKey) { $0.unconsumedSteerCount = max(0, $0.unconsumedSteerCount - 1) }
+                        }
+                        sawPromptReplay = true
+                        break
+                    }
                     updateState(sessionKey) { state in
                         guard let toolUseId = userMessage.toolUseId else { return }
                         state.pendingToolResults.append((toolUseId, userMessage.content, userMessage.isError))
@@ -468,6 +494,14 @@ extension AppState {
                         let totalElapsed = Date().timeIntervalSince(streamStart)
                         logger.info("\(debugLogPrefix, privacy: .public) phase=resultEvent stream=\(streamId) eventCount=\(eventCount, privacy: .public) total=\(String(format: "%.2f", totalElapsed), privacy: .public)s gap=\(String(format: "%.1f", gap), privacy: .public)s isError=\(resultEvent.isError, privacy: .public) session=\(resultEvent.sessionId, privacy: .public)")
                     }
+                    recordUsageStats(
+                        resultEvent: resultEvent,
+                        since: usageSpanStart,
+                        agentProvider: agentProvider,
+                        model: usageModel(sessionKey),
+                        projectId: projectId
+                    )
+                    usageSpanStart = Date()
 
                     // Recent Claude Code runs long tasks (background shells, subagents) as
                     // "backend agents". The turn that spawns one ends with a normal `result`
@@ -480,10 +514,25 @@ extension AppState {
                     // alive and the UI "in progress"; only fold in this result's (real) cost.
                     // The follow-up result arrives once tasks drain (set now empty) and takes
                     // the normal end-of-turn path below.
-                    if !stateForSession(sessionKey).liveBackgroundTaskIds.isEmpty {
+                    //
+                    // A steer the CLI has not taken yet is the same shape: it
+                    // arrived after the turn's last tool call, so the CLI runs
+                    // it as its own turn after this `result`. Tearing down here
+                    // would kill that turn, leaving the steer unanswered and the
+                    // session-end hooks judging a turn that never saw it.
+                    let pendingSteers = agentProvider == .claudeCode
+                        ? stateForSession(sessionKey).unconsumedSteerCount
+                        : 0
+                    if !stateForSession(sessionKey).liveBackgroundTaskIds.isEmpty || pendingSteers > 0 {
                         let live = stateForSession(sessionKey).liveBackgroundTaskIds.count
-                        logger.info("[Stream:UI] event #\(eventCount) .result yields with \(live) live background task(s); keeping turn in progress (origin=\(resultEvent.originKind ?? "none", privacy: .public))")
+                        logger.info("[Stream:UI] event #\(eventCount) .result yields with \(live) live background task(s), \(pendingSteers) pending steer(s); keeping turn in progress (origin=\(resultEvent.originKind ?? "none", privacy: .public))")
+                        // This turn is over; commit its text so the steered
+                        // turn's reply opens its own bubble after it.
+                        if pendingSteers > 0 {
+                            flushPendingUpdates(for: sessionKey, forceText: true)
+                        }
                         updateState(sessionKey) { state in
+                            if pendingSteers > 0 { state.needsNewMessage = true }
                             if let cost = resultEvent.totalCostUsd { state.costUsd = cost }
                             if let duration = resultEvent.durationMs { state.durationMs += duration }
                             if let turns = resultEvent.totalTurns { state.turns += turns }

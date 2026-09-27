@@ -73,7 +73,8 @@ extension CodexAppServer {
     linking a new task to one.
     - `ide__create_story` / `ide__create_task` — record user-requested work \
     from a chat, in this or any other project (`project_id`). Pass \
-    `story_id` to place a task in an existing story.
+    `story_id` to place a task in an existing story, and \
+    `starts_after_task_ids` to run a task only after every listed task is ready.
     - `ide__create_scheduled_task` — when the user asks for work to run \
     periodically, propose a cron-scheduled prompt. RxCode asks the user to \
     confirm it and the call returns whether it was added.
@@ -115,6 +116,20 @@ extension CodexAppServer {
     - `ide__memory_update` — when saved information changes, update the \
     existing entry by `id` rather than adding a duplicate.
     - `ide__memory_delete` — remove a memory by `id` when it is no longer valid.
+
+    When the user asks for a report or briefing, write it as a document \
+    briefing: `ide__briefing_create` (Markdown or HTML, starts as a draft), \
+    `ide__briefing_add_file` / `ide__briefing_delete_file` for images, \
+    videos, and files, `ide__briefing_update` to edit, and \
+    `ide__briefing_publish` to show it on the briefing timeline. Use \
+    `ide__briefing_list` / `ide__briefing_get` to find and read existing \
+    briefings, and `ide__briefing_delete` only when the user asks. The \
+    briefing title is shown above its content, so do not repeat the title as \
+    a heading in the content.
+    Published briefings may be emailed to the user automatically after your \
+    run. Call `ide__send_notification` only when the user or a \
+    scheduled task's prompt asks to be notified or emailed (pass \
+    `briefing_id` to send a briefing).
 
     Do not store completed work, build results, files changed, available \
     tools, routine requests, or other transient task details.

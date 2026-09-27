@@ -264,8 +264,14 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
     public let id: UUID
     public var projectId: UUID
     public var storyId: UUID?
-    /// Task that must finish before this task starts. Links stay within a board.
-    public var parentTaskId: UUID?
+    /// Every task that must be ready before this task starts. Parents may
+    /// belong to other projects.
+    public var parentTaskIds: [UUID]
+    /// Compatibility for single-parent callers and older cloud payloads.
+    public var parentTaskId: UUID? {
+        get { parentTaskIds.first }
+        set { parentTaskIds = newValue.map { [$0] } ?? [] }
+    }
     /// The Autopilot laptop assigned to this task. Nil means unassigned.
     public var assignedDeviceId: String?
     public var title: String
@@ -292,6 +298,10 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
     /// Why the last run needs a person's attention before review. Cleared when
     /// a later completion check passes or the task is run again.
     public var attentionReason: String?
+    /// Waiting in a chat column for a free run slot: the column already runs
+    /// as many tasks as its `TaskColumn.concurrencyLimit` allows. Queued tasks
+    /// start in `sortIndex` order as running ones leave.
+    public var isQueued: Bool
     /// Ordering within a column. A `Double` so a drop between two neighbours is
     /// their midpoint and no renumbering pass is needed.
     public var sortIndex: Double
@@ -303,6 +313,7 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
         projectId: UUID,
         storyId: UUID? = nil,
         parentTaskId: UUID? = nil,
+        parentTaskIds: [UUID]? = nil,
         assignedDeviceId: String? = nil,
         title: String,
         details: String = "",
@@ -317,6 +328,7 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
         sessionKey: String? = nil,
         sourceSessionKey: String? = nil,
         attentionReason: String? = nil,
+        isQueued: Bool = false,
         sortIndex: Double = 0,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
@@ -324,7 +336,7 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
         self.id = id
         self.projectId = projectId
         self.storyId = storyId
-        self.parentTaskId = parentTaskId
+        self.parentTaskIds = Self.uniqueParentIDs(parentTaskIds ?? parentTaskId.map { [$0] } ?? [])
         self.assignedDeviceId = assignedDeviceId
         self.title = title
         self.details = details
@@ -339,6 +351,7 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
         self.sessionKey = sessionKey
         self.sourceSessionKey = sourceSessionKey
         self.attentionReason = attentionReason
+        self.isQueued = isQueued
         self.sortIndex = sortIndex
         self.createdAt = createdAt
         self.updatedAt = updatedAt
@@ -348,9 +361,9 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
     /// default so a board written by an older build keeps loading after new
     /// fields are added.
     private enum CodingKeys: String, CodingKey {
-        case id, projectId, storyId, parentTaskId, assignedDeviceId, title, details, status, version, tags
+        case id, projectId, storyId, parentTaskId, parentTaskIds, assignedDeviceId, title, details, status, version, tags
         case milestone, priority, typeId
-        case agent, attachments, sessionKey, sourceSessionKey, attentionReason, sortIndex, createdAt, updatedAt
+        case agent, attachments, sessionKey, sourceSessionKey, attentionReason, isQueued, sortIndex, createdAt, updatedAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -358,7 +371,9 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
         projectId = try c.decodeIfPresent(UUID.self, forKey: .projectId) ?? UUID()
         storyId = try c.decodeIfPresent(UUID.self, forKey: .storyId)
-        parentTaskId = try c.decodeIfPresent(UUID.self, forKey: .parentTaskId)
+        let legacyParent = try c.decodeIfPresent(UUID.self, forKey: .parentTaskId)
+        let savedParents = try c.decodeIfPresent([UUID].self, forKey: .parentTaskIds)
+        parentTaskIds = Self.uniqueParentIDs(savedParents ?? legacyParent.map { [$0] } ?? [])
         assignedDeviceId = try c.decodeIfPresent(String.self, forKey: .assignedDeviceId)
         title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
         details = try c.decodeIfPresent(String.self, forKey: .details) ?? ""
@@ -373,9 +388,42 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
         sessionKey = try c.decodeIfPresent(String.self, forKey: .sessionKey)
         sourceSessionKey = try c.decodeIfPresent(String.self, forKey: .sourceSessionKey)
         attentionReason = try c.decodeIfPresent(String.self, forKey: .attentionReason)
+        isQueued = try c.decodeIfPresent(Bool.self, forKey: .isQueued) ?? false
         sortIndex = try c.decodeIfPresent(Double.self, forKey: .sortIndex) ?? 0
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
+    }
+
+    private static func uniqueParentIDs(_ ids: [UUID]) -> [UUID] {
+        var seen = Set<UUID>()
+        return ids.filter { seen.insert($0).inserted }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(projectId, forKey: .projectId)
+        try c.encodeIfPresent(storyId, forKey: .storyId)
+        try c.encodeIfPresent(parentTaskId, forKey: .parentTaskId)
+        try c.encode(parentTaskIds, forKey: .parentTaskIds)
+        try c.encodeIfPresent(assignedDeviceId, forKey: .assignedDeviceId)
+        try c.encode(title, forKey: .title)
+        try c.encode(details, forKey: .details)
+        try c.encode(status, forKey: .status)
+        try c.encodeIfPresent(version, forKey: .version)
+        try c.encode(tags, forKey: .tags)
+        try c.encodeIfPresent(milestone, forKey: .milestone)
+        try c.encodeIfPresent(priority, forKey: .priority)
+        try c.encodeIfPresent(typeId, forKey: .typeId)
+        try c.encode(agent, forKey: .agent)
+        try c.encode(attachments, forKey: .attachments)
+        try c.encodeIfPresent(sessionKey, forKey: .sessionKey)
+        try c.encodeIfPresent(sourceSessionKey, forKey: .sourceSessionKey)
+        try c.encodeIfPresent(attentionReason, forKey: .attentionReason)
+        if isQueued { try c.encode(isQueued, forKey: .isQueued) }
+        try c.encode(sortIndex, forKey: .sortIndex)
+        try c.encode(createdAt, forKey: .createdAt)
+        try c.encode(updatedAt, forKey: .updatedAt)
     }
 
     /// The description is what the agent was prompted with, so it is frozen
@@ -884,76 +932,6 @@ public struct TaskBoard: Codable, Sendable {
     public func story(id: UUID?) -> ProjectStory? {
         guard let id else { return nil }
         return stories.first { $0.id == id }
-    }
-
-    /// Eligible parent tasks, grouped in story order. Tasks whose story was
-    /// removed join the ungrouped tasks at the end.
-    public func parentTaskGroups(for taskID: UUID, matching search: String = "") -> [ParentTaskGroup] {
-        let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
-        let eligible = tasks.filter { canLinkTask(taskID, to: $0.id) }
-        let storyIDs = Set(stories.map(\.id))
-        var groups = stories.compactMap { story -> ParentTaskGroup? in
-            let matchesStory = story.title.localizedCaseInsensitiveContains(query)
-            let matches = eligible.filter {
-                $0.storyId == story.id && (query.isEmpty || matchesStory || $0.title.localizedCaseInsensitiveContains(query))
-            }
-            return matches.isEmpty ? nil : ParentTaskGroup(story: story, tasks: matches)
-        }
-        let ungrouped = eligible.filter {
-            ($0.storyId.map { !storyIDs.contains($0) } ?? true)
-                && (query.isEmpty || $0.title.localizedCaseInsensitiveContains(query))
-        }
-        if !ungrouped.isEmpty {
-            groups.append(ParentTaskGroup(story: nil, tasks: ungrouped))
-        }
-        return groups
-    }
-
-    /// A parent must be on this board and cannot make a dependency cycle.
-    public func canLinkTask(_ taskID: UUID, to parentID: UUID) -> Bool {
-        var visited: Set<UUID> = [taskID]
-        var current: UUID? = parentID
-        while let id = current {
-            guard visited.insert(id).inserted,
-                  let parent = tasks.first(where: { $0.id == id })
-            else { return false }
-            current = parent.parentTaskId
-        }
-        return true
-    }
-
-    /// A parent's work is ready for dependent tasks once it reaches Pending
-    /// Review or a column that counts as done. Include parents already there
-    /// so links added later and boards saved by older versions can catch up.
-    public func readyParentIDs() -> Set<UUID> {
-        Set(tasks.compactMap { task in
-            let column = column(for: task.status)
-            return column.id == .pendingReview || column.countsAsDone ? task.id : nil
-        })
-    }
-
-    /// Advance queued children whose parent is ready for dependent work.
-    /// Returns children moved into a chat column so the app can dispatch them.
-    public mutating func advanceChildren(of readyParentIDs: Set<UUID>) -> [ProjectTask] {
-        guard !readyParentIDs.isEmpty,
-              let target = effectiveColumns.first(where: { $0.id == .inProgress }) ?? firstChatColumn
-        else { return [] }
-        var moved: [ProjectTask] = []
-        for index in tasks.indices {
-            guard let parentID = tasks[index].parentTaskId,
-                  readyParentIDs.contains(parentID),
-                  tasks.contains(where: { $0.id == parentID }),
-                  tasks[index].attentionReason == nil,
-                  !column(for: tasks[index].status).countsAsDone,
-                  column(for: tasks[index].status).id != .pendingReview,
-                  !column(for: tasks[index].status).triggersChat
-            else { continue }
-            tasks[index].status = target.id
-            tasks[index].sortIndex = appendSortIndex(for: target.id)
-            tasks[index].updatedAt = Date()
-            moved.append(tasks[index])
-        }
-        return target.triggersChat ? moved : []
     }
 
     /// Tasks in one column, in board order. Tasks whose column was deleted

@@ -28,7 +28,11 @@ extension AppState {
     /// Conventional-Commit title + markdown body from the branch briefing, and
     /// ask autopilot to open the PR (base = repo default branch, resolved
     /// server-side). Refreshes CI/PR status on success and returns the PR URL.
-    func createPullRequestForBranch(project: Project, branch: String) async throws -> URL {
+    ///
+    /// `model` picks the agent model that writes the title + body; `nil` uses
+    /// the last model picked from the "Create with Model" menu, falling back to
+    /// the summarization settings when none was picked.
+    func createPullRequestForBranch(project: Project, branch: String, model: AgentModel? = nil) async throws -> URL {
         guard let slug = project.gitHubRepo else { throw PullRequestError.noGitHubRepo }
         let parts = slug.split(separator: "/", maxSplits: 1).map(String.init)
         guard parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty else {
@@ -52,7 +56,11 @@ extension AppState {
         let briefing = threadStore.allBranchBriefingItems()
             .first(where: { $0.projectId == project.id && $0.branch == branch })?
             .briefing ?? ""
-        let (title, body) = await generateValidatedPullRequestContent(briefing: briefing, branch: branch)
+        let (title, body) = await generateValidatedPullRequestContent(
+            briefing: briefing,
+            branch: branch,
+            model: model ?? rememberedPullRequestModel
+        )
 
         // 3. Open the PR via autopilot.
         let response: CreatePullRequestResponse
@@ -90,12 +98,47 @@ extension AppState {
         return try await createPullRequestForBranch(project: project, branch: branch)
     }
 
+    // MARK: - PR model selection
+
+    /// Model sections offered by the "Create with Model" menu. ACP clients are
+    /// left out because they have no one-shot generation path.
+    func pullRequestModelSections() -> [(id: String, title: String, provider: AgentProvider, iconURL: String?, models: [AgentModel])] {
+        availableAgentModelSections().filter { $0.provider != .acp }
+    }
+
+    /// The model last picked for PR generation, or `nil` when the user hasn't
+    /// picked one (or it's no longer available) — callers then use the
+    /// summarization settings.
+    var rememberedPullRequestModel: AgentModel? {
+        guard !pullRequestModelKey.isEmpty else { return nil }
+        return pullRequestModelSections()
+            .flatMap(\.models)
+            .first { $0.key == pullRequestModelKey }
+    }
+
+    /// Remember `model` for the next PR; `nil` resets to the summarization settings.
+    func rememberPullRequestModel(_ model: AgentModel?) {
+        pullRequestModelKey = model?.key ?? ""
+    }
+
     // MARK: - Title / body generation
 
     /// Generate raw PR text (title on the first line, blank line, then a markdown
-    /// body) from a branch briefing. Routes through the configured
-    /// `summarizationProvider`, mirroring `generateCommitMessage`.
-    func generatePullRequestContent(briefing: String, branch: String) async -> String? {
+    /// body) from a branch briefing. Uses `model` when given; otherwise routes
+    /// through the configured `summarizationProvider`, mirroring
+    /// `generateCommitMessage`.
+    func generatePullRequestContent(briefing: String, branch: String, model: AgentModel? = nil) async -> String? {
+        if let model {
+            switch model.provider {
+            case .claudeCode:
+                return await claude.generatePullRequestContent(briefing: briefing, branch: branch, model: model.id)
+            case .codex:
+                let prompt = OpenAISummarizationService.pullRequestPrompt(briefing: briefing, branch: branch)
+                return await codex.generateCodexPlainSummary(prompt: prompt, model: model.id)
+            case .acp:
+                break // ACP has no one-shot; fall through to the summarization settings.
+            }
+        }
         switch summarizationProvider {
         case .appleFoundationModel:
             return await foundationModelSummarization.generatePullRequestContent(
@@ -138,11 +181,12 @@ extension AppState {
     func generateValidatedPullRequestContent(
         briefing: String,
         branch: String,
+        model: AgentModel? = nil,
         maxAttempts: Int = 3
     ) async -> (title: String, body: String) {
         var lastBody = ""
         for attempt in 1...maxAttempts {
-            let raw = await generatePullRequestContent(briefing: briefing, branch: branch)
+            let raw = await generatePullRequestContent(briefing: briefing, branch: branch, model: model)
             let (title, body) = Self.parsePullRequestContent(raw, branch: branch)
             if Self.isConventionalCommitTitle(title) {
                 return (title, body)

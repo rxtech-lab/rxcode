@@ -144,14 +144,17 @@ struct MobileTaskDetailView: View {
                 }
             }
 
-            if let parentID = task.parentTaskId,
-               let parent = board.tasks.first(where: { $0.id == parentID }) {
+            if !task.parentTaskIds.isEmpty {
                 Section("Starts After") {
-                    Button(parent.title) { editingTask = parent }
+                    ForEach(task.parentTaskIds, id: \.self) { parentID in
+                        if let parent = board.tasks.first(where: { $0.id == parentID }) {
+                            Button(parent.title) { editingTask = parent }
+                        }
+                    }
                 }
             }
 
-            let linkedChildren = board.tasks.filter { $0.parentTaskId == task.id }
+            let linkedChildren = board.tasks.filter { $0.parentTaskIds.contains(task.id) }
             if !linkedChildren.isEmpty {
                 Section("Linked Tasks") {
                     ForEach(linkedChildren) { child in

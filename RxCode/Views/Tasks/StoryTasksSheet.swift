@@ -37,9 +37,19 @@ struct StoryTasksSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             if let story {
-                header(story)
+                titleBar(story)
                 ClaudeThemeDivider()
-                taskList
+                // Long story descriptions scroll together with the tasks so
+                // neither can push the other off the sheet.
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        storyOverview(story)
+                        ClaudeThemeDivider()
+                        taskList
+                    }
+                }
+                .scrollContentBackground(.hidden)
+                .frame(maxHeight: .infinity)
                 ClaudeThemeDivider()
                 addField
             } else {
@@ -65,34 +75,38 @@ struct StoryTasksSheet: View {
 
     // MARK: - Header
 
-    private func header(_ story: ProjectStory) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Image(systemName: "square.stack.3d.up")
-                    .font(.system(size: ClaudeTheme.size(14), weight: .semibold))
-                    .foregroundStyle(story.tint)
-                Text(story.title.isEmpty ? String(localized: "Untitled story") : story.title)
-                    .font(.system(size: ClaudeTheme.size(17), weight: .semibold))
-                    .foregroundStyle(ClaudeTheme.textPrimary)
-                    .lineLimit(2)
-                TaskStatusIcon(status: board.rolledUpStatus(for: story), board: board, size: 13)
+    private func titleBar(_ story: ProjectStory) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: "square.stack.3d.up")
+                .font(.system(size: ClaudeTheme.size(14), weight: .semibold))
+                .foregroundStyle(story.tint)
+            Text(story.title.isEmpty ? String(localized: "Untitled story") : story.title)
+                .font(.system(size: ClaudeTheme.size(17), weight: .semibold))
+                .foregroundStyle(ClaudeTheme.textPrimary)
+                .lineLimit(2)
+            TaskStatusIcon(status: board.rolledUpStatus(for: story), board: board, size: 13)
 
-                Spacer(minLength: 8)
+            Spacer(minLength: 8)
 
-                Button {
-                    editing = .story(story)
-                } label: {
-                    Label("Edit Story", systemImage: "pencil")
-                }
-                .buttonStyle(.glass)
-                .controlSize(.small)
-
-                Button("Done") { dismiss() }
-                    .buttonStyle(.glassProminent)
-                    .controlSize(.small)
-                    .keyboardShortcut(.cancelAction)
+            Button {
+                editing = .story(story)
+            } label: {
+                Label("Edit Story", systemImage: "pencil")
             }
+            .buttonStyle(.glass)
+            .controlSize(.small)
 
+            Button("Done") { dismiss() }
+                .buttonStyle(.glassProminent)
+                .controlSize(.small)
+                .keyboardShortcut(.cancelAction)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
+    }
+
+    private func storyOverview(_ story: ProjectStory) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
             let details = story.details.trimmingCharacters(in: .whitespacesAndNewlines)
             if !details.isEmpty {
                 MarkdownContentView(text: details)
@@ -106,6 +120,7 @@ struct StoryTasksSheet: View {
 
             StoryProgressBar(story: story, board: board)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(20)
     }
 
@@ -126,20 +141,17 @@ struct StoryTasksSheet: View {
                     .font(.system(size: ClaudeTheme.size(11)))
                     .foregroundStyle(ClaudeTheme.textTertiary)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 40)
         } else {
-            ScrollView {
-                GlassEffectContainer(spacing: 8) {
-                    LazyVStack(spacing: 8) {
-                        ForEach(tasks) { task in
-                            StoryTaskRow(task: task) { editing = .task(task) }
-                        }
+            GlassEffectContainer(spacing: 8) {
+                LazyVStack(spacing: 8) {
+                    ForEach(tasks) { task in
+                        StoryTaskRow(task: task) { editing = .task(task) }
                     }
-                    .padding(16)
                 }
+                .padding(16)
             }
-            .scrollContentBackground(.hidden)
-            .frame(maxHeight: .infinity)
         }
     }
 

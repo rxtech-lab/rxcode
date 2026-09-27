@@ -16,6 +16,9 @@ struct TaskCardView: View {
     /// board by `TaskBoard.storyRollups()`. `nil` falls back to computing it
     /// here.
     var storyRollup: StoryRollup?
+    /// 1-based place in its chat column's run queue, when the column view
+    /// knows it. A queued card without one just reads "Queued".
+    var queuePosition: Int? = nil
     let onOpen: () -> Void
     @State private var pendingDeletion: TaskBoardSheet?
     @State private var showsAttentionReason = false
@@ -83,8 +86,12 @@ struct TaskCardView: View {
                 .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
 
-            if let parent = board.tasks.first(where: { $0.id == task.parentTaskId }) {
-                TaskCardStartsAfterRow(parent: parent, board: board)
+            ForEach(task.parentTaskIds, id: \.self) { parentID in
+                if let parent = board.tasks.first(where: { $0.id == parentID }) {
+                    TaskCardStartsAfterRow(parent: parent, board: board)
+                } else {
+                    TaskCardCrossProjectStartsAfterRow(parentID: parentID)
+                }
             }
 
             TaskSummaryPreview(task: task)
@@ -101,6 +108,14 @@ struct TaskCardView: View {
 
             if hasPills {
                 FlowLayout(spacing: 4) {
+                    if task.isQueued {
+                        TaskPill(
+                            text: queuePosition.map { String(localized: "Queued #\($0)") } ?? String(localized: "Queued"),
+                            icon: "hourglass",
+                            tint: ClaudeTheme.textSecondary
+                        )
+                        .help("Waiting for a free run slot in this column. Drag queued cards to change their order.")
+                    }
                     TaskClassificationPills(task: task, board: board)
                     if task.agent.planMode {
                         TaskPill(text: String(localized: "Plan"), icon: "eye", tint: ClaudeTheme.statusWarning)
@@ -137,7 +152,7 @@ struct TaskCardView: View {
 
     private var hasPills: Bool {
         TaskClassificationPills(task: task, board: board).hasContent
-            || task.agent.planMode || !task.attachments.isEmpty
+            || task.isQueued || task.agent.planMode || !task.attachments.isEmpty
     }
 }
 
@@ -383,15 +398,37 @@ private struct TaskVerifyingIndicator: View {
     }
 }
 
+/// The "Starts after" row for a parent on another project's board. It reads
+/// `AppState` here rather than in `TaskCardView`, so only cards with such a
+/// link re-render when other boards change.
+private struct TaskCardCrossProjectStartsAfterRow: View {
+    @Environment(AppState.self) private var appState
+
+    let parentID: UUID
+
+    var body: some View {
+        if let parent = appState.task(id: parentID) {
+            TaskCardStartsAfterRow(
+                parent: parent,
+                board: appState.taskBoard(for: parent.projectId),
+                projectName: appState.projects.first { $0.id == parent.projectId }?.name
+            )
+        }
+    }
+}
+
 /// "Starts after" link to the task that must finish before this one starts,
-/// with the blocking task's current column icon.
+/// with the blocking task's current column icon. `projectName` is set when
+/// the parent is in another project.
 private struct TaskCardStartsAfterRow: View {
     let parent: ProjectTask
     let board: TaskBoard
+    var projectName: String?
 
     var body: some View {
         let isFinished = board.column(for: parent.status).countsAsDone
-        let title = parent.title.isEmpty ? String(localized: "Untitled task") : parent.title
+        let taskTitle = parent.title.isEmpty ? String(localized: "Untitled task") : parent.title
+        let title = projectName.map { "\($0) · \(taskTitle)" } ?? taskTitle
         let help = isFinished
             ? String(localized: "Starts after \(title), which has finished")
             : String(localized: "Waits for \(title) to finish before starting")

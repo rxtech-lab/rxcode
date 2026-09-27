@@ -400,7 +400,8 @@ extension ClaudeCodeServer {
     - `mcp__rxcode-ide__ide__create_story` / \
     `mcp__rxcode-ide__ide__create_task` — record user-requested work from a \
     chat, in this or any other project (`project_id`). Pass `story_id` to \
-    place a task in an existing story.
+    place a task in an existing story, and `starts_after_task_ids` to run a \
+    task only after every listed task is ready.
     - `mcp__rxcode-ide__ide__create_scheduled_task` — when the user asks for \
     work to run periodically, propose a cron-scheduled prompt. RxCode asks the \
     user to confirm it and the call returns whether it was added.
@@ -448,6 +449,20 @@ extension ClaudeCodeServer {
     - `mcp__rxcode-ide__ide__memory_delete` — remove a memory by `id` when it \
     is no longer valid.
 
+    When the user asks for a report or briefing, write it as a document \
+    briefing: `mcp__rxcode-ide__ide__briefing_create` (Markdown or HTML, \
+    starts as a draft), `ide__briefing_add_file` / `ide__briefing_delete_file` \
+    for images, videos, and files, `ide__briefing_update` to edit, and \
+    `ide__briefing_publish` to show it on the briefing timeline. Use \
+    `ide__briefing_list` / `ide__briefing_get` to find and read existing \
+    briefings, and `ide__briefing_delete` only when the user asks. The \
+    briefing title is shown above its content, so do not repeat the title as \
+    a heading in the content.
+    Published briefings may be emailed to the user automatically after your \
+    run. Call `mcp__rxcode-ide__ide__send_notification` only when the user or a \
+    scheduled task's prompt asks to be notified or emailed (pass \
+    `briefing_id` to send a briefing).
+
     Do not store completed work, build results, files changed, available \
     tools, routine requests, or other transient task details.
     """
@@ -472,6 +487,12 @@ extension ClaudeCodeServer {
             "--output-format", "stream-json",
             "--verbose",
             "--include-partial-messages",
+            // Echoes each stdin user frame as the CLI takes it, so a steer
+            // that lands after the turn's last tool call — which the CLI runs
+            // as a new turn after this one's `result` — can be told apart
+            // from one it folded in. See the `.result` handler in
+            // `processStream`.
+            "--replay-user-messages",
         ]
 
         if permissionMode != .default {

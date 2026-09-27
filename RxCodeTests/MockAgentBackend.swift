@@ -38,6 +38,16 @@ actor MockAgentBackend: AgentBackend {
             )))
         }
 
+        /// Claude Code's `--replay-user-messages` echo of a stdin user frame.
+        static func userReplay(_ text: String, delay: TimeInterval = 0.01) -> Step {
+            Step(delay: delay, event: .user(UserMessage(
+                toolUseId: nil,
+                content: text,
+                isError: false,
+                isReplay: true
+            )))
+        }
+
         static func result(sessionId: String, isError: Bool = false, delay: TimeInterval = 0.01) -> Step {
             Step(delay: delay, event: .result(ResultEvent(
                 durationMs: 10,

@@ -296,6 +296,13 @@ extension MobileSyncService {
                 object: nil,
                 userInfo: ["from": inbound.fromHex, "payload": req]
             )
+        case .briefingContentRequest(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "briefing_content_request") else { return }
+            NotificationCenter.default.post(
+                name: .mobileSyncBriefingContentRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": req]
+            )
         case .subscribeSession(let sub):
             guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "subscribe_session") else { return }
             subscribedSessions[inbound.fromHex] = sub.sessionID ?? ""

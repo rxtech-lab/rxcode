@@ -208,14 +208,14 @@ struct CreateBranchSheet: View {
 
         var id: String { rawValue }
 
-        var label: String {
+        var label: LocalizedStringKey {
             switch self {
             case .worktree: "New worktree"
             case .checkout: "Branch + checkout"
             }
         }
 
-        var hint: String {
+        var hint: LocalizedStringKey {
             switch self {
             case .worktree:
                 "Creates an isolated worktree so this chat works without touching the main checkout."
@@ -238,7 +238,7 @@ struct CreateBranchSheet: View {
     @State private var errorMessage: String?
     @FocusState private var isFocused: Bool
 
-    private var validationError: String? {
+    private var validationError: LocalizedStringKey? {
         let trimmed = branchText.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return "Branch name is required." }
         if trimmed.hasSuffix("/") { return "Branch name cannot end with “/”." }

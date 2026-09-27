@@ -8,6 +8,78 @@ import SwiftUI
 import UIKit
 import os.log
 extension MobileAppState {
+    func requestBriefingContent(id: UUID, assetPath: String? = nil) async {
+        let requestID = UUID()
+        guard isPaired else {
+            briefingContentResult = BriefingContentResultPayload(
+                clientRequestID: requestID, briefingID: id, assetPath: assetPath,
+                ok: false, errorMessage: String(localized: "Not connected to your Mac.")
+            )
+            return
+        }
+        pendingBriefingContentID = requestID
+        briefingContentResult = nil
+        isLoadingBriefingContent = true
+        briefingAssetWriteHandle?.closeFile()
+        briefingAssetWriteHandle = nil
+        briefingAssetPendingURL = nil
+        briefingAssetFileURL = nil
+        briefingAssetBytesReceived = 0
+        if let assetPath {
+            do {
+                let url = FileManager.default.temporaryDirectory
+                    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+                    .appendingPathComponent(URL(fileURLWithPath: assetPath).lastPathComponent)
+                try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+                FileManager.default.createFile(atPath: url.path, contents: nil)
+                briefingAssetWriteHandle = try FileHandle(forWritingTo: url)
+                briefingAssetPendingURL = url
+            } catch {
+                pendingBriefingContentID = nil
+                isLoadingBriefingContent = false
+                briefingContentResult = BriefingContentResultPayload(
+                    clientRequestID: requestID, briefingID: id, assetPath: assetPath,
+                    ok: false, errorMessage: error.localizedDescription
+                )
+                return
+            }
+        }
+        do {
+            try await client.send(.briefingContentRequest(BriefingContentRequestPayload(
+                clientRequestID: requestID, briefingID: id, assetPath: assetPath
+            )), toHex: pairedDesktopPubkey)
+        } catch {
+            guard pendingBriefingContentID == requestID else { return }
+            pendingBriefingContentID = nil
+            isLoadingBriefingContent = false
+            briefingAssetWriteHandle?.closeFile()
+            briefingAssetWriteHandle = nil
+            briefingContentResult = BriefingContentResultPayload(
+                clientRequestID: requestID, briefingID: id, assetPath: assetPath,
+                ok: false, errorMessage: error.localizedDescription
+            )
+        }
+    }
+
+    func requestNextBriefingAssetChunk(id: UUID, path: String, offset: Int64, requestID: UUID) async {
+        guard pendingBriefingContentID == requestID else { return }
+        do {
+            try await client.send(.briefingContentRequest(BriefingContentRequestPayload(
+                clientRequestID: requestID, briefingID: id,
+                assetPath: path, assetOffset: offset
+            )), toHex: pairedDesktopPubkey)
+        } catch {
+            pendingBriefingContentID = nil
+            isLoadingBriefingContent = false
+            briefingAssetWriteHandle?.closeFile()
+            briefingAssetWriteHandle = nil
+            briefingContentResult = BriefingContentResultPayload(
+                clientRequestID: requestID, briefingID: id, assetPath: path,
+                ok: false, errorMessage: error.localizedDescription
+            )
+        }
+    }
+
     // MARK: - Message paging
 
     /// Ask the desktop for the page of messages immediately older than the
@@ -458,6 +530,15 @@ extension MobileAppState {
         projects = []
         sessions = []
         branchBriefings = []
+        briefingDocuments = []
+        briefingContentResult = nil
+        pendingBriefingContentID = nil
+        isLoadingBriefingContent = false
+        briefingAssetWriteHandle?.closeFile()
+        briefingAssetWriteHandle = nil
+        briefingAssetPendingURL = nil
+        briefingAssetFileURL = nil
+        briefingAssetBytesReceived = 0
         threadSummaries = []
         ciStatusByProject = [:]
         desktopSettings = nil

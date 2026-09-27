@@ -127,6 +127,11 @@ actor ThreadSearchService {
         await start(threadStore: threadStore, reader: reader)
     }
 
+    func clearCachedIndex() {
+        index.removeAll()
+        workspaceDefaults.set(nil as String?, for: backfillKey)
+    }
+
     // MARK: - Indexing
 
     /// Index a thread's content. Replaces any prior chunks for that thread.

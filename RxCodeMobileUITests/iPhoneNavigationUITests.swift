@@ -6,6 +6,16 @@ import XCTest
 /// pushes a detail screen and navigates back with the navigation-bar back button.
 final class iPhoneNavigationUITests: XCTestCase {
 
+    @MainActor
+    func testPublishedDocumentAppearsBesideProjectBriefings() throws {
+        let r = try UITestRunner.launch(.phone, on: self).robot
+
+        r.tap(r.briefingTab, "Briefing tab")
+        r.assertExists(r.anyBriefingCard, "project briefing card")
+        r.tap(r.anyBriefingDocumentCard, "published document briefing card")
+        r.assertExists(r.briefingDocumentDetail, "published document detail")
+    }
+
     /// Case 1: Briefing tab → briefing detail → thread → messages → back →
     /// briefing detail is shown again.
     @MainActor

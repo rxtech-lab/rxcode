@@ -72,6 +72,7 @@ struct TaskFilterScriptPopover: View {
     @Binding var script: String?
     @Binding var isGenerating: Bool
     let onClose: () -> Void
+    var storyOnly = false
 
     @State private var requirement = ""
     @State private var code = ""
@@ -81,7 +82,7 @@ struct TaskFilterScriptPopover: View {
     private let placeholderProvider = PredefinedAutocompleteProvider.placeholders([
         "includeTask", "includeStory", "FilterTask", "FilterStory",
         "title", "details", "status", "isDone", "tags", "version", "milestone",
-        "priority", "type", "storyId", "storyTitle", "parentTaskId", "hasAgent",
+        "priority", "type", "storyId", "storyTitle", "parentTaskId", "parentTaskIds", "hasAgent",
         "needsAttention", "taskCount", "doneTaskCount", "createdAt", "updatedAt",
     ])
 
@@ -94,7 +95,9 @@ struct TaskFilterScriptPopover: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Swift filter")
                     .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
-                Text("Describe what this view should show. An agent writes Swift that filters its tasks and stories, and it's compiled before use.")
+                Text(storyOnly
+                    ? "Describe which stories this card should show. An agent writes Swift that filters stories, and it's compiled before use."
+                    : "Describe what this view should show. An agent writes Swift that filters its tasks and stories, and it's compiled before use.")
                     .font(.system(size: ClaudeTheme.size(11)))
                     .foregroundStyle(ClaudeTheme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -200,7 +203,10 @@ struct TaskFilterScriptPopover: View {
         isGenerating = true
         diagnostics = nil
         Task {
-            let generated = await appState.generateTaskFilterScript(requirement: requirement, projectId: projectId)
+            let scopedRequirement = storyOnly
+                ? "This filter controls the overview story card. Implement includeStory to choose visible stories. \(requirement)"
+                : requirement
+            let generated = await appState.generateTaskFilterScript(requirement: scopedRequirement, projectId: projectId)
             isGenerating = false
             guard let generated else {
                 diagnostics = String(localized: "The agent didn't return any code. Try rephrasing the filter.")

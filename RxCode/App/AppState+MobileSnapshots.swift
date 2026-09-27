@@ -149,6 +149,12 @@ extension AppState {
         let runProfiles = await mobileRunProfiles()
         let runTasks = mobileRunTaskSnapshots()
         let webProxy = await localWebProxy.proxyInfo()
+        let documentBriefings = await briefingStore.list()
+            .filter(\.isPublished)
+            .map { MobileBriefingDocument(
+                id: $0.id, title: $0.title, format: $0.format.rawValue,
+                projectId: $0.projectId, createdAt: $0.createdAt, updatedAt: $0.updatedAt
+            ) }
         if let webProxy {
             logger.info("[WebBrowserSync] snapshot includes web proxy host=\(webProxy.host, privacy: .public) port=\(webProxy.port, privacy: .public) to mobileKey=\(String(hex.prefix(12)), privacy: .public)")
         } else {
@@ -158,6 +164,7 @@ extension AppState {
             projects: projects,
             sessions: mobileSessionSummaries(),
             branchBriefings: mobileBranchBriefings(),
+            briefingDocuments: documentBriefings,
             threadSummaries: mobileThreadSummaries(),
             ciStatuses: mobileCIStatuses(),
             settings: mobileSettingsSnapshot(),
@@ -189,14 +196,24 @@ extension AppState {
 
     func mobileSessionSummaries() -> [RxCodeSync.SessionSummary] {
         let knownProjectIds = Set(projects.map(\.id))
+        // One query per table for the whole snapshot — per-session fetches ran
+        // ~4 SQLite queries per thread on the main actor and stalled scrolling.
+        let persistedTodos = threadStore.loadTodoItemsBySession()
+        let queues = threadStore.loadAllQueues()
+        let fileEditCounts = threadStore.fileEditCountsBySession()
         return allSessionSummaries
             .filter { knownProjectIds.contains($0.projectId) }
             .sorted { lhs, rhs in
                 if lhs.isPinned != rhs.isPinned { return lhs.isPinned && !rhs.isPinned }
                 return lhs.updatedAt > rhs.updatedAt
             }
-            .map {
-                mobileSessionSummary(from: $0)
+            .map { summary in
+                mobileSessionSummary(
+                    from: summary,
+                    todos: liveTodoItems(forSessionId: summary.id) ?? persistedTodos[summary.id],
+                    queued: queues[summary.id] ?? [],
+                    changedFileCount: fileEditCounts[summary.id] ?? 0
+                )
             }
     }
 
@@ -277,12 +294,21 @@ extension AppState {
     }
 
     func mobileSessionSummary(from summary: ChatSession.Summary) -> RxCodeSync.SessionSummary {
-        let todos = mobileTodoItems(forSessionId: summary.id)
-        let progress = mobileProgressSnapshot(forSessionId: summary.id)
-        let queued = threadStore.loadQueue(sessionKey: summary.id).map {
-            QueuedUserMessage(id: $0.id, text: $0.text)
-        }
-        return RxCodeSync.SessionSummary(
+        mobileSessionSummary(
+            from: summary,
+            todos: mobileTodoItems(forSessionId: summary.id),
+            queued: threadStore.loadQueue(sessionKey: summary.id),
+            changedFileCount: threadStore.fileEditCount(sessionId: summary.id)
+        )
+    }
+
+    private func mobileSessionSummary(
+        from summary: ChatSession.Summary,
+        todos: [TodoItem]?,
+        queued: [QueuedMessage],
+        changedFileCount: Int
+    ) -> RxCodeSync.SessionSummary {
+        RxCodeSync.SessionSummary(
             id: summary.id,
             projectId: summary.projectId,
             title: summary.title,
@@ -291,32 +317,36 @@ extension AppState {
             isArchived: summary.isArchived,
             isStreaming: sessionStates[summary.id]?.isStreaming ?? false,
             attention: mobileAttentionKind(forSessionId: summary.id),
-            progress: progress,
+            progress: todos.map(mobileProgressSnapshot(for:)),
             todos: todos,
-            queuedMessages: queued,
+            queuedMessages: queued.map { QueuedUserMessage(id: $0.id, text: $0.text) },
             hasUncheckedCompletion: sessionStates[summary.id]?.hasUncheckedCompletion ?? false,
             parentThreadId: summary.parentThreadId,
             threadLabel: summary.threadLabel,
-            changedFileCount: threadStore.fileEditCount(sessionId: summary.id)
+            changedFileCount: changedFileCount
         )
     }
 
     func mobileProgressSnapshot(forSessionId id: String) -> SessionProgressSnapshot? {
-        if let todos = mobileTodoItems(forSessionId: id) {
-            return SessionProgressSnapshot(
-                done: todos.filter { $0.status == .completed }.count,
-                total: todos.count,
-                inProgress: todos.contains { $0.status == .inProgress }
-            )
-        }
+        mobileTodoItems(forSessionId: id).map(mobileProgressSnapshot(for:))
+    }
 
-        return nil
+    private func mobileProgressSnapshot(for todos: [TodoItem]) -> SessionProgressSnapshot {
+        SessionProgressSnapshot(
+            done: todos.filter { $0.status == .completed }.count,
+            total: todos.count,
+            inProgress: todos.contains { $0.status == .inProgress }
+        )
+    }
+
+    /// Todos from the session's in-memory transcript, when it is loaded.
+    private func liveTodoItems(forSessionId id: String) -> [TodoItem]? {
+        guard let messages = sessionStates[id]?.messages else { return nil }
+        return TodoExtractor.latest(in: messages)
     }
 
     func mobileTodoItems(forSessionId id: String) -> [TodoItem]? {
-        if let messages = sessionStates[id]?.messages,
-           let todos = TodoExtractor.latest(in: messages)
-        {
+        if let todos = liveTodoItems(forSessionId: id) {
             return todos
         }
 
@@ -436,7 +466,8 @@ extension AppState {
                     projectId: $0.projectId,
                     branch: $0.branch,
                     briefing: $0.briefing,
-                    updatedAt: $0.updatedAt
+                    updatedAt: $0.updatedAt,
+                    createdAt: $0.createdAt
                 )
             }
     }

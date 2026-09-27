@@ -489,12 +489,15 @@ public struct MobileBranchBriefing: Codable, Sendable, Identifiable, Equatable {
     public let branch: String
     public let briefing: String
     public let updatedAt: Date
+    /// First generation time. Older desktops omit it; mobile falls back to updatedAt.
+    public let createdAt: Date?
 
-    public init(projectId: UUID, branch: String, briefing: String, updatedAt: Date) {
+    public init(projectId: UUID, branch: String, briefing: String, updatedAt: Date, createdAt: Date? = nil) {
         self.projectId = projectId
         self.branch = branch
         self.briefing = briefing
         self.updatedAt = updatedAt
+        self.createdAt = createdAt
     }
 }
 

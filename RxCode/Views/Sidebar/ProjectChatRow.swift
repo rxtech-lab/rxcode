@@ -413,8 +413,8 @@ private struct CompactSessionProgressView: View {
     }
 
     private var helpText: String {
-        guard let progress, progress.total > 0 else { return "Response in progress" }
-        return "Todos \(progress.done)/\(progress.total)"
+        guard let progress, progress.total > 0 else { return String(localized: "Response in progress") }
+        return String(format: String(localized: "Todos %lld/%lld"), progress.done, progress.total)
     }
 
     var body: some View {

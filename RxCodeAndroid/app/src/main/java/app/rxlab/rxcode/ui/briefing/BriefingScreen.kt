@@ -38,6 +38,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -55,6 +56,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.PopupProperties
 import app.rxlab.rxcode.proto.Project
+import app.rxlab.rxcode.proto.MobileBriefingDocument
 import app.rxlab.rxcode.state.MobileAppState
 import app.rxlab.rxcode.state.MobileState
 import app.rxlab.rxcode.ui.util.HapticEvent
@@ -88,6 +90,7 @@ fun BriefingScreen(
     var showAllBranches by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     var refreshing by remember { mutableStateOf(false) }
+    var selectedDocument by remember { mutableStateOf<MobileBriefingDocument?>(null) }
 
     val projectsById by remember(state.projects) {
         derivedStateOf { state.projects.associateBy { it.id } }
@@ -124,13 +127,16 @@ fun BriefingScreen(
             }
         }
     }
-    val projectsWithData by remember(allGroups, state.projects) {
+    val visibleDocuments = state.briefingDocuments
+        .filter { selectedProjectIds.isEmpty() || it.projectId in selectedProjectIds }
+        .sortedByDescending { it.createdAt }
+    val projectsWithData by remember(allGroups, state.projects, state.briefingDocuments) {
         derivedStateOf {
-            val ids = allGroups.map { it.projectId }.toSet()
+            val ids = (allGroups.map { it.projectId } + state.briefingDocuments.mapNotNull { it.projectId }).toSet()
             state.projects.filter { it.id in ids }
         }
     }
-    val hasAnyData = state.branchBriefings.isNotEmpty() || state.threadSummaries.isNotEmpty()
+    val hasAnyData = state.branchBriefings.isNotEmpty() || state.threadSummaries.isNotEmpty() || state.briefingDocuments.isNotEmpty()
     val isFilterActive = showAllBranches || selectedProjectIds.isNotEmpty()
 
     Scaffold(
@@ -194,7 +200,7 @@ fun BriefingScreen(
                 .fillMaxSize()
                 .padding(padding),
         ) {
-            if (visibleGroups.isEmpty()) {
+            if (visibleGroups.isEmpty() && visibleDocuments.isEmpty()) {
                 BriefingEmptyState(
                     hasAnyData = hasAnyData,
                     showAllBranches = showAllBranches,
@@ -210,6 +216,15 @@ fun BriefingScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
+                    items(visibleDocuments, key = { "document:${it.id}" }) { document ->
+                        ElevatedCard(onClick = { selectedDocument = document }) {
+                            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("Document", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(document.title, style = MaterialTheme.typography.titleMedium)
+                                Text(relativeTime(document.createdAt), style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
                     items(visibleGroups, key = { it.id }) { group ->
                         BriefingCard(
                             group = group,
@@ -224,6 +239,11 @@ fun BriefingScreen(
                     }
                 }
             }
+        }
+    }
+    selectedDocument?.let { document ->
+        ModalBottomSheet(onDismissRequest = { selectedDocument = null }) {
+            BriefingDocumentSheet(document = document, state = state, viewModel = viewModel)
         }
     }
 }

@@ -141,6 +141,7 @@ extension ContentBlock: Decodable {
 extension UserMessage: Decodable {
     private enum CodingKeys: String, CodingKey {
         case message
+        case isReplay
     }
 
     private enum MessageCodingKeys: String, CodingKey {
@@ -168,6 +169,7 @@ extension UserMessage: Decodable {
             forKey: .message
         )
         self.isError = try messageContainer.decodeIfPresent(Bool.self, forKey: .isError) ?? false
+        self.isReplay = try container.decodeIfPresent(Bool.self, forKey: .isReplay) ?? false
 
         var blockToolUseId: String?
         if let stringContent = try? messageContainer.decode(String.self, forKey: .content) {

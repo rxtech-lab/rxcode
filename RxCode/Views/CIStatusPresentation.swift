@@ -22,7 +22,7 @@ extension CIOverallState {
         }
     }
 
-    var label: String {
+    var label: LocalizedStringKey {
         switch self {
         case .success: return "Passing"
         case .failure: return "Failing"

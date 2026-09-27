@@ -43,7 +43,7 @@ extension MobileAppState {
             try await cloud.loadBoard(remoteID)
         case .upsertTask:
             guard var task = request.task else { throw cloudTaskInvalidRequest() }
-            if let parent = task.parentTaskId, !board.canLinkTask(task.id, to: parent) {
+            if task.parentTaskIds.contains(where: { !board.canLinkTask(task.id, to: $0) }) {
                 throw AutopilotRemoteError.server("This parent would create a task dependency cycle.")
             }
             if !board.tasks.contains(where: { $0.id == task.id }) {

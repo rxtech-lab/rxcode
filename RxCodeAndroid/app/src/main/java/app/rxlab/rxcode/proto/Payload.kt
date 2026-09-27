@@ -136,6 +136,12 @@ sealed class Payload {
     data class ThreadChangesResult(val data: ThreadChangesResultPayload) : Payload() {
         override val type = "thread_changes_result"
     }
+    data class BriefingContentRequest(val data: BriefingContentRequestPayload) : Payload() {
+        override val type = "briefing_content_request"
+    }
+    data class BriefingContentResult(val data: BriefingContentResultPayload) : Payload() {
+        override val type = "briefing_content_result"
+    }
     data class AutopilotRequest(val data: AutopilotRequestPayload) : Payload() {
         override val type = "autopilot_request"
     }
@@ -229,6 +235,7 @@ data class SnapshotPayload(
     val projects: List<Project> = emptyList(),
     val sessions: List<SessionSummary> = emptyList(),
     val branchBriefings: List<MobileBranchBriefing>? = null,
+    val briefingDocuments: List<MobileBriefingDocument>? = null,
     val threadSummaries: List<MobileThreadSummary>? = null,
     val projectBranches: List<ProjectBranchInfo>? = null,
     val ciStatuses: List<MobileProjectCIStatus>? = null,
@@ -575,6 +582,28 @@ data class PongPayload(
 
 // MARK: - Polymorphic serializer
 
+@Serializable
+data class BriefingContentRequestPayload(
+    @Serializable(with = UuidSerializer::class) val clientRequestID: UUID,
+    @Serializable(with = UuidSerializer::class) val briefingID: UUID,
+    val assetPath: String? = null,
+    val assetOffset: Long? = null,
+)
+
+@Serializable
+data class BriefingContentResultPayload(
+    @Serializable(with = UuidSerializer::class) val clientRequestID: UUID,
+    @Serializable(with = UuidSerializer::class) val briefingID: UUID,
+    val assetPath: String? = null,
+    val ok: Boolean,
+    val errorMessage: String? = null,
+    val content: String? = null,
+    val assets: List<MobileBriefingAsset>? = null,
+    val assetBase64: String? = null,
+    val assetOffset: Long? = null,
+    val assetTotalBytes: Long? = null,
+)
+
 /**
  * Encodes/decodes Swift's `{ "type": ..., "data": ... }` tag-then-payload
  * shape. Unknown `type` values become [Payload.Unknown] so newer payloads
@@ -629,6 +658,8 @@ object PayloadSerializer : KSerializer<Payload> {
             "run_task_update" -> Payload.RunTaskUpdate(json.decodeFromJsonElement(RunTaskUpdatePayload.serializer(), data))
             "thread_changes_request" -> Payload.ThreadChangesRequest(json.decodeFromJsonElement(ThreadChangesRequestPayload.serializer(), data))
             "thread_changes_result" -> Payload.ThreadChangesResult(json.decodeFromJsonElement(ThreadChangesResultPayload.serializer(), data))
+            "briefing_content_request" -> Payload.BriefingContentRequest(json.decodeFromJsonElement(BriefingContentRequestPayload.serializer(), data))
+            "briefing_content_result" -> Payload.BriefingContentResult(json.decodeFromJsonElement(BriefingContentResultPayload.serializer(), data))
             "autopilot_request" -> Payload.AutopilotRequest(json.decodeFromJsonElement(AutopilotRequestPayload.serializer(), data))
             "autopilot_result" -> Payload.AutopilotResult(json.decodeFromJsonElement(AutopilotResultPayload.serializer(), data))
             "skill_catalog_request" -> Payload.SkillCatalogRequest(json.decodeFromJsonElement(SkillCatalogRequestPayload.serializer(), data))
@@ -690,6 +721,8 @@ object PayloadSerializer : KSerializer<Payload> {
             is Payload.RunTaskUpdate -> value.type to json.encodeToJsonElement(RunTaskUpdatePayload.serializer(), value.data)
             is Payload.ThreadChangesRequest -> value.type to json.encodeToJsonElement(ThreadChangesRequestPayload.serializer(), value.data)
             is Payload.ThreadChangesResult -> value.type to json.encodeToJsonElement(ThreadChangesResultPayload.serializer(), value.data)
+            is Payload.BriefingContentRequest -> value.type to json.encodeToJsonElement(BriefingContentRequestPayload.serializer(), value.data)
+            is Payload.BriefingContentResult -> value.type to json.encodeToJsonElement(BriefingContentResultPayload.serializer(), value.data)
             is Payload.AutopilotRequest -> value.type to json.encodeToJsonElement(AutopilotRequestPayload.serializer(), value.data)
             is Payload.AutopilotResult -> value.type to json.encodeToJsonElement(AutopilotResultPayload.serializer(), value.data)
             is Payload.SkillCatalogRequest -> value.type to json.encodeToJsonElement(SkillCatalogRequestPayload.serializer(), value.data)

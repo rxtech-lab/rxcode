@@ -5,6 +5,50 @@ import RxCodeCore
 
 @Suite("Mobile sync payloads")
 struct PayloadTests {
+    @Test("document briefings and on-demand content round trip")
+    func documentBriefingSyncRoundTrip() throws {
+        let id = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!
+        let document = MobileBriefingDocument(
+            id: id, title: "Release notes", format: "markdown", projectId: nil,
+            createdAt: .now, updatedAt: .now
+        )
+        let snapshot = Payload.snapshot(SnapshotPayload(
+            projects: [], sessions: [], briefingDocuments: [document]
+        ))
+        let decodedSnapshot = try JSONDecoder().decode(Payload.self, from: JSONEncoder().encode(snapshot))
+        guard case .snapshot(let value) = decodedSnapshot else {
+            Issue.record("Expected snapshot")
+            return
+        }
+        #expect(value.briefingDocuments?.first?.id == id)
+
+        let requestID = UUID()
+        let result = Payload.briefingContentResult(BriefingContentResultPayload(
+            clientRequestID: requestID, briefingID: id, ok: true,
+            content: "# Release notes", assets: [MobileBriefingAsset(path: "images/chart.png", byteCount: 42)]
+        ))
+        let decodedResult = try JSONDecoder().decode(Payload.self, from: JSONEncoder().encode(result))
+        guard case .briefingContentResult(let value) = decodedResult else {
+            Issue.record("Expected briefing content result")
+            return
+        }
+        #expect(value.clientRequestID == requestID)
+        #expect(value.content == "# Release notes")
+        #expect(value.assets?.first?.path == "images/chart.png")
+
+        let chunk = Payload.briefingContentResult(BriefingContentResultPayload(
+            clientRequestID: requestID, briefingID: id, assetPath: "images/chart.png",
+            ok: true, assetBase64: "AQID", assetOffset: 512, assetTotalBytes: 1_024
+        ))
+        let decodedChunk = try JSONDecoder().decode(Payload.self, from: JSONEncoder().encode(chunk))
+        guard case .briefingContentResult(let file) = decodedChunk else {
+            Issue.record("Expected briefing file chunk")
+            return
+        }
+        #expect(file.assetOffset == 512)
+        #expect(file.assetTotalBytes == 1_024)
+    }
+
     @Test("thread changes carry optional full-file diff")
     func threadChangesCarryFullFileDiff() throws {
         let payload = Payload.threadChangesResult(
@@ -123,7 +167,8 @@ struct PayloadTests {
                         projectId: projectId,
                         branch: "main",
                         briefing: "Current work summary",
-                        updatedAt: Date(timeIntervalSince1970: 10)
+                        updatedAt: Date(timeIntervalSince1970: 10),
+                        createdAt: Date(timeIntervalSince1970: 5)
                     )
                 ],
                 threadSummaries: [
@@ -172,6 +217,7 @@ struct PayloadTests {
         }
 
         #expect(snapshot.branchBriefings?.first?.briefing == "Current work summary")
+        #expect(snapshot.branchBriefings?.first?.createdAt == Date(timeIntervalSince1970: 5))
         #expect(snapshot.threadSummaries?.first?.title == "Fix sync")
         #expect(snapshot.ciStatuses?.first?.status.overallState == .failure)
         #expect(snapshot.ciStatuses?.first?.status.prNumber == 42)

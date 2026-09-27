@@ -144,9 +144,23 @@ data class MobileBranchBriefing(
     val branch: String,
     val briefing: String,
     @Serializable(with = SwiftDateSerializer::class) val updatedAt: Instant,
+    @Serializable(with = SwiftDateSerializer::class) val createdAt: Instant? = null,
 ) {
     val id: String get() = "$projectId::$branch"
 }
+
+@Serializable
+data class MobileBriefingDocument(
+    @Serializable(with = UuidSerializer::class) val id: UUID,
+    val title: String,
+    val format: String,
+    @Serializable(with = UuidSerializer::class) val projectId: UUID? = null,
+    @Serializable(with = SwiftDateSerializer::class) val createdAt: Instant,
+    @Serializable(with = SwiftDateSerializer::class) val updatedAt: Instant,
+)
+
+@Serializable
+data class MobileBriefingAsset(val path: String, val byteCount: Long)
 
 /**
  * Per-thread summary shown inside a briefing card. Mirrors

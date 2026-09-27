@@ -105,11 +105,15 @@ public struct UserMessage: Sendable {
     public let toolUseId: String?
     public let content: String
     public let isError: Bool
+    /// Claude Code's `--replay-user-messages` echo of a stdin user frame,
+    /// emitted when the CLI takes that input into a turn.
+    public let isReplay: Bool
 
-    public init(toolUseId: String?, content: String, isError: Bool) {
+    public init(toolUseId: String?, content: String, isError: Bool, isReplay: Bool = false) {
         self.toolUseId = toolUseId
         self.content = content
         self.isError = isError
+        self.isReplay = isReplay
     }
 }
 

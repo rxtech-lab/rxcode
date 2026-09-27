@@ -454,11 +454,11 @@ struct ThreadChangeDetailView: View {
     }
 
     private var changePositionText: String {
-        guard navigationState.changeCount > 0 else { return "No changes" }
+        guard navigationState.changeCount > 0 else { return String(localized: "No changes") }
         guard let currentIndex = navigationState.currentIndex else {
             return "\(navigationState.changeCount)"
         }
-        return "\(currentIndex + 1) of \(navigationState.changeCount)"
+        return String(format: String(localized: "%lld of %lld"), currentIndex + 1, navigationState.changeCount)
     }
 
     private var changePositionPill: some View {

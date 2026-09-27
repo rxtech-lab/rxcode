@@ -119,4 +119,21 @@ struct CronExpressionTests {
             #expect(CronExpression.isValid(preset.expression))
         }
     }
+
+    @Test("Visual schedules preserve supported frequencies", arguments: [
+        "* * * * *", "*/7 * * * *", "0 * * * *", "0 */6 * * *",
+        "30 8 * * *", "30 8 * * 1-5", "0 9 * * 0", "15 10 28 * *",
+    ])
+    func visualScheduleRoundTrip(_ expression: String) {
+        let visual = CronVisualSchedule.parse(expression)
+        #expect(visual.frequency != .custom)
+        #expect(visual.expression == expression)
+    }
+
+    @Test("Visual schedules leave advanced expressions in text mode", arguments: [
+        "@daily", "0 9 * jan *", "0,30 9 * * *", "0 9 1 * mon", "0 9 * * mon-fri",
+    ])
+    func advancedVisualSchedule(_ expression: String) {
+        #expect(CronVisualSchedule.parse(expression).frequency == .custom)
+    }
 }

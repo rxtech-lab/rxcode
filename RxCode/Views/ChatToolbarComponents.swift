@@ -10,11 +10,11 @@ import UniformTypeIdentifiers
 
 func effortDisplayName(_ effort: String) -> String {
     switch effort {
-    case "low": return "Low"
-    case "medium": return "Medium"
-    case "high": return "High"
-    case "xhigh": return "XHigh"
-    case "max": return "Max"
+    case "low": return String(localized: "Low")
+    case "medium": return String(localized: "Medium")
+    case "high": return String(localized: "High")
+    case "xhigh": return String(localized: "XHigh")
+    case "max": return String(localized: "Max")
     default: return effort.capitalized
     }
 }
@@ -66,7 +66,7 @@ struct ChatToolbarControls: View {
     /// report, so a stale session setting still reads as itself rather than
     /// silently showing the resting label.
     private var effortLabel: String {
-        guard let effort = windowState.sessionEffort else { return "Thinking" }
+        guard let effort = windowState.sessionEffort else { return String(localized: "Thinking") }
         return reasoningLevels.first { $0.id == effort }?.displayName ?? effortDisplayName(effort)
     }
 

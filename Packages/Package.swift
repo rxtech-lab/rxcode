@@ -15,10 +15,14 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/nalexn/ViewInspector", from: "0.10.0"),
         .package(url: "https://github.com/rxtech-lab/RxAgentSDK.git", .upToNextMinor(from: "1.0.4")),
+        .package(url: "https://github.com/SDWebImage/libwebp-Xcode", from: "1.5.0"),
     ],
     targets: [
         .target(
             name: "RxCodeCore",
+            dependencies: [
+                .product(name: "libwebp", package: "libwebp-Xcode"),
+            ],
             path: "Sources/RxCodeCore"
         ),
         .target(

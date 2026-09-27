@@ -18,7 +18,8 @@ extension TaskFormSheet {
         .sheet(item: $editingStoryTaskDraft) { draft in
             StoryTaskDraftSheet(
                 draft: draft,
-                isNew: !storyTaskDrafts.contains { $0.id == draft.id }
+                isNew: !storyTaskDrafts.contains { $0.id == draft.id },
+                startsAfterOptions: storyTaskDraftParentOptions(for: draft)
             ) { saved in
                 if let index = storyTaskDrafts.firstIndex(where: { $0.id == saved.id }) {
                     storyTaskDrafts[index] = saved
@@ -123,7 +124,7 @@ extension TaskFormSheet {
         } header: {
             Text("Tasks")
         } footer: {
-            Text("Click a task to edit it before the story is created.")
+            Text("Click a task to edit it before the story is created. A task that starts after another runs once that task finishes.")
         }
 
         Section {
@@ -154,6 +155,16 @@ extension TaskFormSheet {
                             .foregroundStyle(ClaudeTheme.textTertiary)
                             .lineLimit(2)
                     }
+                    if let parent = storyTaskDrafts.first(where: { $0.id == draft.startsAfter }) {
+                        Label {
+                            Text("Starts after \(parent.title.isEmpty ? String(localized: "Untitled task") : parent.title)")
+                        } icon: {
+                            Image(systemName: "link")
+                        }
+                        .font(.system(size: ClaudeTheme.size(11)))
+                        .foregroundStyle(ClaudeTheme.accent)
+                        .lineLimit(1)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
@@ -161,13 +172,36 @@ extension TaskFormSheet {
             .buttonStyle(.plain)
 
             Button {
-                storyTaskDrafts.removeAll { $0.id == draft.id }
+                removeStoryTaskDraft(draft)
             } label: {
                 Image(systemName: "xmark.circle.fill")
                     .foregroundStyle(ClaudeTheme.textTertiary)
             }
             .buttonStyle(.borderless)
             .help("Remove task")
+        }
+    }
+
+    /// Drafts `draft` can start after: any other draft whose own chain of
+    /// "starts after" links doesn't lead back to `draft`.
+    func storyTaskDraftParentOptions(for draft: StoryTaskDraft) -> [StoryTaskDraft] {
+        storyTaskDrafts.filter { candidate in
+            var visited: Set<UUID> = [draft.id]
+            var current: UUID? = candidate.id
+            while let id = current {
+                guard visited.insert(id).inserted else { return false }
+                current = storyTaskDrafts.first { $0.id == id }?.startsAfter
+            }
+            return true
+        }
+    }
+
+    /// Removing a draft hands its dependents its own "starts after", so the
+    /// chain around it stays in order.
+    func removeStoryTaskDraft(_ draft: StoryTaskDraft) {
+        storyTaskDrafts.removeAll { $0.id == draft.id }
+        for index in storyTaskDrafts.indices where storyTaskDrafts[index].startsAfter == draft.id {
+            storyTaskDrafts[index].startsAfter = draft.startsAfter
         }
     }
 
@@ -449,10 +483,18 @@ extension TaskFormSheet {
         }
         story.title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
         story.details = source
-        storyTaskDrafts = draft.tasks.prefix(12).map {
+        var drafts = draft.tasks.prefix(12).map {
             StoryTaskDraft(title: $0.title.trimmingCharacters(in: .whitespacesAndNewlines),
                            details: $0.details.trimmingCharacters(in: .whitespacesAndNewlines))
         }
+        // Parsed links always point at an earlier task, so they stay inside
+        // the kept prefix and can't form a cycle.
+        for (index, suggested) in draft.tasks.prefix(drafts.count).enumerated() {
+            if let parent = suggested.startsAfter, parent < index {
+                drafts[index].startsAfter = drafts[parent].id
+            }
+        }
+        storyTaskDrafts = drafts
     }
 
     /// Turns the description into a reviewable task: the source stays the
@@ -523,14 +565,28 @@ extension TaskFormSheet {
         if !isExistingRecord {
             AnalyticsService.shared.log(.projectStoryCreated, parameters: ["method": "ai_composed"])
         }
+        // IDs are assigned up front so each "starts after" link can name its
+        // task, and a task is saved only after the one it starts after, since
+        // `upsertTask` drops links to tasks not yet on the board.
+        var tasksByDraft: [UUID: ProjectTask] = [:]
         for draft in storyTaskDrafts {
             var task = appState.newTaskDraft(inStory: story)
             task.title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
             task.details = draft.details.trimmingCharacters(in: .whitespacesAndNewlines)
             task.agent = storyDraftAgent
+            tasksByDraft[draft.id] = task
+        }
+        var saved: Set<UUID> = []
+        func saveTask(_ draft: StoryTaskDraft) {
+            guard saved.insert(draft.id).inserted, var task = tasksByDraft[draft.id] else { return }
+            if let parentDraft = storyTaskDrafts.first(where: { $0.id == draft.startsAfter }) {
+                saveTask(parentDraft)
+                task.parentTaskId = tasksByDraft[parentDraft.id]?.id
+            }
             appState.upsertTask(task)
             AnalyticsService.shared.log(.projectTaskCreated, parameters: ["method": "ai_composed"])
         }
+        storyTaskDrafts.forEach(saveTask)
         dismiss()
     }
 }
@@ -542,6 +598,8 @@ private struct StoryTaskDraftSheet: View {
 
     @State var draft: TaskFormSheet.StoryTaskDraft
     let isNew: Bool
+    /// Other drafts this one may start after without making a cycle.
+    let startsAfterOptions: [TaskFormSheet.StoryTaskDraft]
     let onSave: (TaskFormSheet.StoryTaskDraft) -> Void
 
     private var canSave: Bool {
@@ -559,6 +617,16 @@ private struct StoryTaskDraftSheet: View {
                         .multilineTextAlignment(.leading)
                         .lineLimit(4...12)
                         .accessibilityIdentifier("story-draft-task-details")
+                    if !startsAfterOptions.isEmpty {
+                        Picker("Starts after", selection: $draft.startsAfter) {
+                            Text("None").tag(UUID?.none)
+                            ForEach(startsAfterOptions) { option in
+                                Text(option.title.isEmpty ? String(localized: "Untitled task") : option.title)
+                                    .tag(UUID?.some(option.id))
+                            }
+                        }
+                        .accessibilityIdentifier("story-draft-task-starts-after")
+                    }
                 }
             }
             .formStyle(.grouped)
@@ -581,7 +649,7 @@ private struct StoryTaskDraftSheet: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
         }
-        .frame(width: 460, height: 360)
+        .frame(width: 460, height: 400)
     }
 }
 

@@ -35,9 +35,11 @@ extension AppState {
     /// Reconcile dependencies saved before Pending Review released children.
     /// Called after startup finishes loading the project and thread state.
     func resumeReadyTaskDependencies() {
-        for (projectId, board) in taskBoards where !board.readyParentIDs().isEmpty {
+        for (projectId, board) in taskBoards where !readyParentIDs(for: board, in: projectId).isEmpty {
             setTaskBoard(board, for: projectId)
         }
+        isTaskQueueDispatchEnabled = true
+        dispatchAllQueuedTasks()
     }
 
     /// Reads every known project's board without the launch-time release of
@@ -89,7 +91,14 @@ extension AppState {
     /// that moved the parent already did.
     func setTaskBoard(_ incoming: TaskBoard, for projectId: UUID, fromCloud: Bool = false) {
         var board = incoming
-        let childrenToDispatch = fromCloud ? [] : board.advanceChildren(of: board.readyParentIDs())
+        // A queue only exists in a chat column; a card moved out of one, or a
+        // column that stopped triggering chats, releases its queued tasks.
+        for idx in board.tasks.indices where board.tasks[idx].isQueued
+            && !board.column(for: board.tasks[idx].status).triggersChat {
+            board.tasks[idx].isQueued = false
+        }
+        let childrenToDispatch = fromCloud ? [] : board.advanceChildren(of: readyParentIDs(for: board, in: projectId))
+        let previousReady = taskBoards[projectId]?.readyParentIDs() ?? []
         taskBoards[projectId] = board
         scheduleMobileTaskBoardBroadcast(for: projectId)
         if !fromCloud {
@@ -105,6 +114,87 @@ extension AppState {
         for child in childrenToDispatch where child.agent.isAssigned {
             Task { await startTask(child) }
         }
+        if !fromCloud {
+            advanceDependents(of: board.readyParentIDs().subtracting(previousReady), outside: projectId)
+        }
+        dispatchQueuedTasks(in: projectId)
+    }
+
+    // MARK: - Cross-project links
+
+    /// Every loaded task keyed by id. A task's parent may be on any board.
+    var allTasksByID: [UUID: ProjectTask] {
+        var byID: [UUID: ProjectTask] = [:]
+        for board in taskBoards.values {
+            for task in board.tasks { byID[task.id] = task }
+        }
+        return byID
+    }
+
+    /// Whether `taskID` may start after `parentID`: the parent exists on some
+    /// board and the link makes no cycle across projects.
+    func canLinkTask(_ taskID: UUID, to parentID: UUID) -> Bool {
+        TaskBoard.canLinkTask(taskID, to: parentID, in: allTasksByID)
+    }
+
+    /// Parents ready for dependent work that `board`'s children wait on:
+    /// the board's own, plus parents on other boards, which only count when
+    /// they are ready by their own board's columns.
+    func readyParentIDs(for board: TaskBoard, in projectId: UUID) -> Set<UUID> {
+        var ready = board.readyParentIDs()
+        let local = Set(board.tasks.map(\.id))
+        var external = Set(board.tasks.flatMap(\.parentTaskIds)).subtracting(local)
+        guard !external.isEmpty else { return ready }
+        for (id, other) in taskBoards where id != projectId {
+            for task in other.tasks where external.contains(task.id) {
+                external.remove(task.id)
+                if other.isReadyParent(task) { ready.insert(task.id) }
+            }
+            if external.isEmpty { break }
+        }
+        return ready
+    }
+
+    /// Re-saves other boards holding children of parents that just became
+    /// ready, so those children advance and dispatch like same-board ones.
+    private func advanceDependents(of newlyReady: Set<UUID>, outside projectId: UUID) {
+        guard !newlyReady.isEmpty else { return }
+        let dependentBoards = taskBoards.filter { id, other in
+            id != projectId && other.tasks.contains { !$0.parentTaskIds.filter(newlyReady.contains).isEmpty }
+        }
+        for (id, other) in dependentBoards {
+            setTaskBoard(other, for: id)
+        }
+    }
+
+    /// Eligible parents for a task in `projectId`, by project: its own project
+    /// first, then the others in sidebar order. A search matching a project's
+    /// name lists all of that project's eligible tasks.
+    func parentTaskChoices(for taskID: UUID, in projectId: UUID, matching search: String = "") -> [(project: Project, groups: [ParentTaskGroup])] {
+        let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lookup = allTasksByID
+        let ordered = projects.filter { $0.id == projectId } + projects.filter { $0.id != projectId }
+        return ordered.compactMap { project in
+            guard let board = taskBoards[project.id], !board.tasks.isEmpty else { return nil }
+            let matchesProject = !query.isEmpty && project.name.localizedCaseInsensitiveContains(query)
+            let groups = board.parentTaskGroups(for: taskID, matching: matchesProject ? "" : query, linkingAcross: lookup)
+            return groups.isEmpty ? nil : (project, groups)
+        }
+    }
+
+    /// Clears links on other boards that point at removed tasks.
+    func clearParentLinks(to removedIDs: Set<UUID>, outside projectId: UUID) {
+        guard !removedIDs.isEmpty else { return }
+        let affected = taskBoards.filter { id, other in
+            id != projectId && other.tasks.contains { !$0.parentTaskIds.filter(removedIDs.contains).isEmpty }
+        }
+        for (id, _) in affected {
+            updateBoard(id) { board in
+                for index in board.tasks.indices {
+                    board.tasks[index].parentTaskIds.removeAll { removedIDs.contains($0) }
+                }
+            }
+        }
     }
 
     /// Mutates a project's board in place and persists the result.
@@ -118,7 +208,8 @@ extension AppState {
 
     /// Drops a deleted project's board from memory and disk.
     func deleteTaskBoard(for projectId: UUID) {
-        taskBoards.removeValue(forKey: projectId)
+        let removedIDs = Set(taskBoards.removeValue(forKey: projectId)?.tasks.map(\.id) ?? [])
+        clearParentLinks(to: removedIDs, outside: projectId)
         Task { [persistence] in
             do {
                 try await persistence.deleteTaskBoard(projectId: projectId)
@@ -344,10 +435,14 @@ extension AppState {
         stamped.updatedAt = Date()
         let currentBoard = taskBoard(for: task.projectId)
         let stored = currentBoard.tasks.first { $0.id == task.id }
-        if let parentID = stamped.parentTaskId, !currentBoard.canLinkTask(stamped.id, to: parentID) {
-            stamped.parentTaskId = stored?.parentTaskId
+        var seenParents = Set<UUID>()
+        stamped.parentTaskIds = stamped.parentTaskIds.filter {
+            seenParents.insert($0).inserted && canLinkTask(stamped.id, to: $0)
         }
         let previousStatus = stored?.status
+        if !currentBoard.column(for: stamped.status).triggersChat || !stamped.agent.isAssigned {
+            stamped.isQueued = false
+        }
         let dispatches = shouldDispatchTask(stamped, from: previousStatus)
         if dispatches {
             stamped.attentionReason = nil
@@ -384,10 +479,11 @@ extension AppState {
     func deleteTask(_ task: ProjectTask) {
         updateBoard(task.projectId) { board in
             board.tasks.removeAll { $0.id == task.id }
-            for index in board.tasks.indices where board.tasks[index].parentTaskId == task.id {
-                board.tasks[index].parentTaskId = nil
+            for index in board.tasks.indices {
+                board.tasks[index].parentTaskIds.removeAll { $0 == task.id }
             }
         }
+        clearParentLinks(to: [task.id], outside: task.projectId)
     }
 
     /// Moves a task to a different column (or reorders it within one).
@@ -407,6 +503,9 @@ extension AppState {
         var moved = task
         moved.status = status
         moved.updatedAt = Date()
+        if board.resolvedStatus(of: stored) != status {
+            moved.isQueued = false
+        }
         let dispatches = shouldDispatchTask(moved, from: stored.status)
         if dispatches {
             moved.attentionReason = nil
@@ -758,6 +857,8 @@ extension AppState {
         text: String,
         projectId: UUID,
         storyId: UUID?,
+        parentTaskId: UUID? = nil,
+        parentTaskIds: [UUID]? = nil,
         sourceSessionKey: String? = nil,
         classifyInBackground: Bool = true
     ) -> ProjectTask {
@@ -767,6 +868,8 @@ extension AppState {
         let task = ProjectTask(
             projectId: projectId,
             storyId: storyId,
+            parentTaskId: parentTaskId,
+            parentTaskIds: parentTaskIds,
             title: provisionalTitle,
             details: details,
             status: taskBoard(for: projectId).firstColumn.id,
@@ -837,166 +940,33 @@ extension AppState {
         )
         classifyingTaskIds.insert(created.id)
         await enrichTask(id: created.id, provisionalTitle: created.title)
+        adoptRunningChat(summary.id, forTask: created.id)
         return task(id: created.id)
     }
 
-    /// Asks the selected suggestion agent for a title and for the task's properties, and
-    /// fills in the ones still empty. The task is re-read after the (slow)
-    /// calls, so edits made meanwhile are kept and a deleted task is left
-    /// alone; the title is only replaced while it is still the placeholder
-    /// quick add derived, never once the user has typed their own.
-    func enrichTask(id: UUID, provisionalTitle: String?) async {
-        defer { classifyingTaskIds.remove(id) }
-        guard let task = task(id: id) else { return }
-        // Independent prompts: run them together rather than paying for two
-        // round trips in a row while the card sits under a spinner.
-        async let title = suggestTitle(details: task.details, storyTitle: storyTitle(for: task), projectId: task.projectId)
-        async let classification = suggestClassification(for: task)
-        let (suggestedTitle, suggestion) = await (title, classification)
-
-        guard var current = self.task(id: id) else { return }
-        let before = current
-        if let suggestedTitle, current.title.isEmpty || current.title == provisionalTitle {
-            current.title = suggestedTitle
-        }
-        suggestion?.apply(to: &current, board: taskBoard(for: current.projectId))
-        if current != before {
-            upsertTask(current)
-        }
-    }
-
-    /// The selected model's suggested properties for `task`, which may be an
-    /// unsaved draft. `nil` when no agent could answer.
-    func suggestClassification(for task: ProjectTask) async -> TaskClassification? {
-        let board = taskBoard(for: task.projectId)
-        let prompt = TaskClassification.prompt(
-            title: task.title,
-            details: task.details,
-            storyTitle: board.story(id: task.storyId)?.title,
-            board: board
-        )
-        return await parseTaskClassification(prompt: prompt, projectId: task.projectId)
-    }
-
-    func suggestClassification(for story: ProjectStory) async -> TaskClassification? {
-        let prompt = TaskClassification.prompt(
-            title: story.title,
-            details: story.details,
-            storyTitle: nil,
-            board: taskBoard(for: story.projectId),
-            isStory: true
-        )
-        return await parseTaskClassification(prompt: prompt, projectId: story.projectId)
-    }
-
-    private func parseTaskClassification(prompt: String, projectId: UUID) async -> TaskClassification? {
-        guard let raw = await runTaskAgentCompletion(prompt: prompt, projectId: projectId) else {
-            logger.warning("[Tasks] no classification response")
-            return nil
-        }
-        guard let suggestion = TaskClassification.parse(raw) else {
-            logger.warning("[Tasks] unparseable classification response")
-            return nil
-        }
-        return suggestion
-    }
-
-    /// A one-line title summarizing `details`, from the selected suggestion agent.
-    /// Takes the text rather than a record so an unsaved draft — and a story
-    /// as much as a task — can ask for one. `nil` when the description is
-    /// empty or no agent could answer.
-    func suggestTitle(details: String, storyTitle: String?, projectId: UUID) async -> String? {
-        let trimmed = details.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        let prompt = TaskTitleSuggestion.prompt(details: trimmed, storyTitle: storyTitle)
-        guard let raw = await runTaskAgentCompletion(prompt: prompt, projectId: projectId) else {
-            logger.warning("[Tasks] no title response")
-            return nil
-        }
-        return TaskTitleSuggestion.parse(raw)
-    }
-
-    /// Produces an unsaved story and task outline for the creation preview.
-    func suggestStoryDraft(source: String, projectId: UUID) async -> StoryDraftSuggestion? {
-        guard let raw = await runTaskAgentCompletion(
-            prompt: StoryDraftSuggestion.prompt(source: source),
-            projectId: projectId
-        ) else { return nil }
-        return StoryDraftSuggestion.parse(raw)
-    }
-
-    /// Produces an unsaved scheduled task — name, prompt, cron — from a
-    /// free-form description, for the scheduled task creation preview.
-    func suggestScheduledTaskDraft(source: String, projectId: UUID) async -> ScheduledTaskDraftSuggestion? {
-        guard let raw = await runTaskAgentCompletion(
-            prompt: ScheduledTaskDraftSuggestion.prompt(source: source),
-            projectId: projectId
-        ) else { return nil }
-        return ScheduledTaskDraftSuggestion.parse(raw)
-    }
-
-    /// A cron expression for a schedule described in natural language, from
-    /// the selected suggestion agent. `nil` when no agent answered with one
-    /// that parses.
-    func suggestCronExpression(description: String, projectId: UUID) async -> String? {
-        let trimmed = description.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty,
-              let raw = await runTaskAgentCompletion(
-                  prompt: CronExpressionSuggestion.prompt(description: String(trimmed.prefix(2_000))),
-                  projectId: projectId,
-                  verbatim: true
-              )
-        else { return nil }
-        return CronExpressionSuggestion.parse(raw)
-    }
-
-    /// The title of the story a task belongs to, if any.
-    private func storyTitle(for task: ProjectTask) -> String? {
-        taskBoard(for: task.projectId).story(id: task.storyId)?.title
-    }
-
-    /// Runs a one-shot task prompt on the general AI model. `verbatim`
-    /// skips Claude's summary cleanup, for replies that carry code.
-    func runTaskAgentCompletion(prompt: String, projectId: UUID?, verbatim: Bool = false) async -> String? {
-        let agent: TaskAgentConfig
-        switch generalAIModel() {
-        case .appleIntelligence:
-            if FoundationModelSummarizationService.isAvailable {
-                return await foundationModelSummarization.generatePlainCompletion(
-                    instructions: "You are a precise assistant inside a developer tool. Follow the requested output format exactly.",
-                    prompt: prompt
-                )
+    /// Links a task created from a chat whose turn is still running to that
+    /// chat and places it in the board's first chat column, as if the task
+    /// had started it. The board is written directly rather than through
+    /// `upsertTask` / `moveTask`, since entering a chat column there would
+    /// dispatch a second run. The chat's session-stop trigger then moves the
+    /// card on like any other task run.
+    func adoptRunningChat(_ sessionId: String, forTask taskId: UUID) {
+        let resolved = resolveCurrentSessionId(sessionId)
+        guard sessionActivity[resolved]?.isStreaming == true,
+              let task = task(id: taskId),
+              task.sessionKey == nil,
+              let chatColumn = taskBoard(for: task.projectId).firstChatColumn
+        else { return }
+        updateBoard(task.projectId) { board in
+            guard let idx = board.tasks.firstIndex(where: { $0.id == taskId }) else { return }
+            if board.tasks[idx].status != chatColumn.id {
+                board.tasks[idx].status = chatColumn.id
+                board.tasks[idx].sortIndex = board.appendSortIndex(for: chatColumn.id)
             }
-            logger.warning("[Tasks] Apple Intelligence is unavailable; using the default task agent")
-            agent = defaultTaskAgent()
-        case .taskAgent:
-            agent = defaultTaskAgent()
-        case .agent(let configured):
-            agent = configured
-        }
-        switch agent.provider ?? selectedAgentProvider {
-        case .claudeCode:
-            if verbatim {
-                return await claude.generateRawResponse(prompt: prompt, model: agent.model ?? "haiku")
-            }
-            return await claude.generatePlainSummary(prompt: prompt, model: agent.model ?? "haiku", limit: 2000)
-        case .codex:
-            return await codex.generateCodexPlainSummary(prompt: prompt, model: agent.model)
-        case .acp:
-            guard let parts = acpSelectionParts(for: agent.model),
-                  let spec = acpClients.first(where: { $0.id == parts.clientId && $0.enabled })
-            else {
-                logger.warning("[Tasks] selected ACP suggestion client is unavailable")
-                return nil
-            }
-            let cwd = projects.first(where: { $0.id == projectId })?.path
-                ?? FileManager.default.homeDirectoryForCurrentUser.path
-            return await acp.generatePlainResponse(
-                prompt: prompt,
-                model: parts.model.isEmpty ? nil : parts.model,
-                spec: spec,
-                cwd: cwd
-            )
+            board.tasks[idx].sessionKey = resolved
+            board.tasks[idx].isQueued = false
+            board.tasks[idx].attentionReason = nil
+            board.tasks[idx].updatedAt = Date()
         }
     }
 

@@ -43,6 +43,13 @@ struct SessionStreamState {
     /// progress" instead of tearing the turn down on that yield `result`.
     var liveBackgroundTaskIds: Set<String> = []
 
+    /// Steers delivered to the running Claude turn that the CLI has not yet
+    /// echoed back (`--replay-user-messages`). A steer that arrives after the
+    /// turn's last tool call is run by the CLI as a turn of its own after this
+    /// one's `result`, so while this is non-zero that `result` only yields and
+    /// the process is kept alive for the steered turn.
+    var unconsumedSteerCount = 0
+
     /// Last time any stream event (system / assistant / tool result / etc.) arrived
     /// for the active stream. Updated in `processStream` and polled by the
     /// inactivity watchdog so a CLI that goes silent without exiting (broken pipe
@@ -406,11 +413,33 @@ final class AppState {
         didSet { workspaceDefaults.set(openAISummarizationModel, for: "openAISummarizationModel") }
     }
 
+    /// Last model picked from the briefing card's "Create PR › Create with
+    /// Model" submenu, as an `AgentModel.key` (`<provider>:<modelId>`). Empty
+    /// means "use the summarization settings", which is the default.
+    var pullRequestModelKey: String = "" {
+        didSet { workspaceDefaults.set(pullRequestModelKey, for: "pullRequestModelKey") }
+    }
+
     var openAISummarizationModels: [String] = []
     var openAISummarizationModelsError: String?
     var isLoadingOpenAISummarizationModels = false
     var threadSummaryRevision = 0
     var branchBriefingRevision = 0
+    /// Bumped whenever a finished turn is folded into the persisted usage
+    /// buckets, so the briefing statistics panel re-reads its summary.
+    var usageStatsRevision = 0
+    /// Agent-written document briefings from `briefingStore`, newest first.
+    /// Loaded lazily by the briefing tab via `reloadBriefingDocuments()`.
+    var briefingDocuments: [BriefingDocument] = []
+    /// Settings for sending published briefings as Autopilot notifications,
+    /// mirrored from `notificationStore`.
+    var briefingNotificationSettings = BriefingNotificationSettings()
+    /// Briefings whose notification is being decided or sent, so a quick
+    /// re-publish doesn't start a second attempt.
+    @ObservationIgnored var briefingNotificationsInFlight: Set<UUID> = []
+    /// Scheduled runs started this launch that handle their own notification,
+    /// keyed by the session key the run opened.
+    @ObservationIgnored var scheduledRunNotificationSessions: [String: ScheduledTaskNotification] = [:]
 
     // MARK: - Memory
 
@@ -1048,6 +1077,8 @@ final class AppState {
     var release: ReleaseService
     /// Talks to Autopilot's project board API for cloud projects.
     var projectCloud: ProjectCloudService
+    /// Talks to Autopilot's notification API (send, attachments, trusted emails).
+    var autopilotNotifications: AutopilotNotificationService
     /// Passkey-derived KEK cache for the secrets feature (macOS only).
     let secretsKeyVault = SecretsKeyVault()
     /// Cached enrollment status for the secrets feature: `nil` = unknown.
@@ -1083,6 +1114,11 @@ final class AppState {
     /// task, so constructing it here on the main actor costs nothing and binds
     /// nothing to this executor.
     let threadStoreReader: ThreadStoreReader
+    /// File-backed store for document briefings, scoped to this workspace.
+    let briefingStore: BriefingStore
+    /// Briefing notification settings and the local history of notifications
+    /// sent through Autopilot, scoped to this workspace.
+    let notificationStore: NotificationStore
     var searchService = ThreadSearchService()
     var memoryService = MemoryService()
     /// Live progress for a user-triggered full reindex. `nil` when idle.
@@ -1142,6 +1178,13 @@ final class AppState {
     var classifyingTaskIds: Set<UUID> = []
     /// Task checks currently running in a linked verification chat.
     var verifyingTaskIds: Set<UUID> = []
+    /// Tasks between run admission and their thread going live. They hold a
+    /// run slot in their chat column so a burst of drops can't overshoot the
+    /// column's concurrency limit before any stream reports as running.
+    var dispatchingTaskIds: Set<UUID> = []
+    /// Set once startup has loaded projects and threads; queued tasks are not
+    /// started before then.
+    var isTaskQueueDispatchEnabled = false
 
     // MARK: - Cloud Projects
 
@@ -1289,6 +1332,9 @@ final class AppState {
         let threadStore = ThreadStore.make(baseURL: active.storageURL)
         self.threadStore = threadStore
         self.threadStoreReader = ThreadStoreReader(container: threadStore.container)
+        self.briefingStore = BriefingStore(
+            baseURL: active.storageURL.appendingPathComponent("briefings", isDirectory: true)
+        )
         let rxAuth = RxAuthService(keychainService: active.rxAuthKeychainService)
         self.rxAuth = rxAuth
         self.autopilot = AutopilotService(rxAuth: rxAuth)
@@ -1297,6 +1343,10 @@ final class AppState {
         self.docs = DocsService(rxAuth: rxAuth)
         self.release = ReleaseService(rxAuth: rxAuth)
         self.projectCloud = ProjectCloudService(rxAuth: rxAuth)
+        self.autopilotNotifications = AutopilotNotificationService(rxAuth: rxAuth)
+        self.notificationStore = NotificationStore(
+            baseURL: active.storageURL.appendingPathComponent("notifications", isDirectory: true)
+        )
         loadWorkspaceSettings()
         self.runService.onTasksChanged = { [weak self] in
             Task { @MainActor [weak self] in

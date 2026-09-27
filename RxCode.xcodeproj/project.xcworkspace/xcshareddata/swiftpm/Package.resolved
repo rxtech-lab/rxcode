@@ -1,5 +1,5 @@
 {
-  "originHash" : "5617ce898e5428453f5feecb7ea12fbcc2176df7ccd5bdf923fbdc8083b1a8b0",
+  "originHash" : "e73c5b2694d1cf3b654f3cc6a6f55b376d74867f988b09742b57b5b437ee62c5",
   "pins" : [
     {
       "identity" : "abseil-cpp-binary",
@@ -110,6 +110,15 @@
       }
     },
     {
+      "identity" : "libwebp-xcode",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/SDWebImage/libwebp-Xcode",
+      "state" : {
+        "revision" : "2b5256c29ff4e20f2a0d5ee863b62b1a22144434",
+        "version" : "1.6.0"
+      }
+    },
+    {
       "identity" : "nanopb",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/firebase/nanopb.git",
@@ -132,8 +141,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/rxtech-lab/RxAgentSDK.git",
       "state" : {
-        "revision" : "cfce1abf52f4f54b79477fa162e7d87836bdeb48",
-        "version" : "1.0.6"
+        "revision" : "3d8882c020eb2b19379ea0aa6ac9facc28863c27",
+        "version" : "1.0.7"
       }
     },
     {
@@ -141,8 +150,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/rxtech-lab/RxAuthSwift",
       "state" : {
-        "revision" : "9559a5fbd74d44f63e17e881946526ea12d806fb",
-        "version" : "1.3.0"
+        "revision" : "c917e47df83292b9f4d6d03a80218d33da8f4886",
+        "version" : "1.3.1"
       }
     },
     {

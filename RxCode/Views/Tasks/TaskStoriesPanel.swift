@@ -24,9 +24,11 @@ struct TaskStoriesPanel: View {
 
     static let expandedWidth: CGFloat = 280
     static let collapsedWidth: CGFloat = 40
+    private static let storyPageSize = 30
 
     @AppStorage("taskBoardStoriesPanelExpanded") private var isExpanded = true
     @State private var isFilterPresented = false
+    @State private var visibleStoryCount = storyPageSize
 
     /// Statuses the filter currently shows, limited to the offered columns.
     /// An empty or stale saved filter shows them all.
@@ -59,13 +61,19 @@ struct TaskStoriesPanel: View {
                 .frame(width: 1)
         }
         .taskBoardAnimation(value: isExpanded)
+        .onChange(of: stories.map(\.id)) { _, _ in
+            visibleStoryCount = Self.storyPageSize
+        }
         .accessibilityIdentifier("task-stories-panel")
     }
 
     // MARK: - Expanded
 
     private var expanded: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let visibleStories = Array(stories.prefix(visibleStoryCount))
+        let lastVisibleStoryId = visibleStories.last?.id
+
+        return VStack(alignment: .leading, spacing: 10) {
             header
                 .padding(.horizontal, 12)
                 .padding(.top, 16)
@@ -83,7 +91,7 @@ struct TaskStoriesPanel: View {
 
             ScrollView {
                 LazyVStack(spacing: 8) {
-                    ForEach(stories) { story in
+                    ForEach(visibleStories) { story in
                         let status = storyRollups[story.id]?.status ?? board.rolledUpStatus(for: story)
                         StoryCardView(
                             story: story,
@@ -96,6 +104,11 @@ struct TaskStoriesPanel: View {
                             onNewTask: { onOpen(.task($0)) }
                         )
                         .transition(TaskBoardMotion.card)
+                        .onAppear {
+                            if story.id == lastVisibleStoryId && visibleStoryCount < stories.count {
+                                visibleStoryCount = min(visibleStoryCount + Self.storyPageSize, stories.count)
+                            }
+                        }
                     }
                 }
                 .padding(.horizontal, 12)

@@ -370,11 +370,10 @@ struct AutopilotRepoSheet: View {
     /// they don't keep scrolling waiting for more.
     private var repoFooterLabel: String {
         let count = appState.repos.count
-        let noun = count == 1 ? "repo" : "repos"
         if appState.repoHasMoreRepos {
-            return "\(count) \(noun)"
+            return String(format: String(localized: "%lld repos"), count)
         }
-        return "\(count) of \(count) \(noun)"
+        return String(format: String(localized: "%lld of %lld repos"), count, count)
     }
 
     private func repoRow(_ repo: AutopilotRepo) -> some View {

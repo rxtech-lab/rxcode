@@ -8,16 +8,15 @@ import SwiftUI
 /// continues the same thread, and accepts pasted or dropped images and files.
 struct TaskRunView: View {
     @Environment(AppState.self) private var appState
-    @Environment(WindowState.self) private var windowState
-    @Environment(\.dismiss) private var dismiss
 
     let taskId: UUID
+    @Binding var followUp: String
+    @Binding var followUpAttachments: [Attachment]
+    let onOpenChat: () -> Void
 
     @State private var turns: [TaskRunTurn] = []
     @State private var hasThread = true
     @State private var isLoading = true
-    @State private var followUp = ""
-    @State private var followUpAttachments: [Attachment] = []
     @State private var queuedMessages: [QueuedMessage] = []
     @State private var steerDeclinedIDs: Set<UUID> = []
     @State private var isSending = false
@@ -70,10 +69,7 @@ struct TaskRunView: View {
             }
             Spacer()
             if let sessionId = task.sessionKey, appState.canOpenChat(for: task) {
-                ThreadDiffBanner(sessionId: sessionId, isCompact: true) {
-                    dismiss()
-                    appState.openChat(for: task, in: windowState)
-                }
+                ThreadDiffBanner(sessionId: sessionId, isCompact: true, onOpen: onOpenChat)
             }
         }
         .padding(.horizontal, 20)

@@ -34,8 +34,10 @@
 		AC1900000000000000000103 /* RxCode/Utilities/KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1900000000000000000003 /* RxCode/Utilities/KeychainHelper.swift */; };
 		AC1900000000000000000200 /* RxAuthSwift in Frameworks */ = {isa = PBXBuildFile; productRef = DF462DC82FC73FA8002D9562 /* RxAuthSwift */; };
 		AC1900000000000000000300 /* RxAuthSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = DF462DCA2FC73FA8002D9562 /* RxAuthSwiftUI */; };
+		BA0E00012FCB400000000002 /* BriefingNotificationStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA0E00012FCB400000000001 /* BriefingNotificationStateTests.swift */; };
 		BBD2456729416901FAFBD00D /* GlobalSessionPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 308E9D66FBEB0549929D9E3A /* GlobalSessionPersistenceTests.swift */; };
 		C71A00000000000000000001 /* ChatHistoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C71A00000000000000000002 /* ChatHistoryTests.swift */; };
+		CA5E00012FCB400000000002 /* CacheStorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA5E00012FCB400000000001 /* CacheStorageTests.swift */; };
 		DCA8CF4A05C959C4A6EB391F /* RxCodeCore in Frameworks */ = {isa = PBXBuildFile; productRef = CCDF9594876099576D4FD46E /* RxCodeCore */; };
 		DF06CCD12FB4CAB5005991E1 /* ViewInspector in Frameworks */ = {isa = PBXBuildFile; productRef = DF06CCD02FB4CAB5005991E1 /* ViewInspector */; };
 		DF06CCD22FCB3001005991E1 /* ViewInspector in Frameworks */ = {isa = PBXBuildFile; productRef = DF06CCD02FB4CAB5005991E1 /* ViewInspector */; };
@@ -53,8 +55,6 @@
 		DF230BB42FBC9001008929A6 /* RxCodeMobileNotificationService.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = DF230BAB2FBC9001008929A6 /* RxCodeMobileNotificationService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		DF23F7362FB8C3EC008929A6 /* icon.icon in Resources */ = {isa = PBXBuildFile; fileRef = DF23F7352FB8C3EC008929A6 /* icon.icon */; };
 		DF23FF1D2FBB42F7008929A6 /* WaterfallGrid in Frameworks */ = {isa = PBXBuildFile; productRef = DF23FF1C2FBB42F7008929A6 /* WaterfallGrid */; };
-		DF2CBCE430650E1000BDB861 /* RxAgentSDK in Frameworks */ = {isa = PBXBuildFile; productRef = DFA9E5020000000000000001 /* RxAgentSDK */; };
-		DF2CC5C3306549D600BDB861 /* RxAgentSDK in Frameworks */ = {isa = PBXBuildFile; productRef = DFA9E5030000000000000001 /* RxAgentSDK */; };
 		DF31D3DC2FBC8143005D518E /* icon.icon in Resources */ = {isa = PBXBuildFile; fileRef = DF23F7352FB8C3EC008929A6 /* icon.icon */; };
 		DF4628922FC611E6002D9562 /* RxAuthSwift in Frameworks */ = {isa = PBXBuildFile; productRef = DF4628912FC611E6002D9562 /* RxAuthSwift */; };
 		DF4628942FC611E6002D9562 /* RxAuthSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = DF4628932FC611E6002D9562 /* RxAuthSwiftUI */; };
@@ -78,6 +78,9 @@
 		DFA9E50B0000000000000001 /* EffortSanitizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA9E50A0000000000000001 /* EffortSanitizationTests.swift */; };
 		DFAA00012FCD34B3002D9562 /* JSONSchema in Frameworks */ = {isa = PBXBuildFile; productRef = DFAA00022FCD34B3002D9562 /* JSONSchema */; };
 		DFAA01102FCD34B3002D9562 /* JSONSchema in Frameworks */ = {isa = PBXBuildFile; productRef = DFAA01112FCD34B3002D9562 /* JSONSchema */; };
+		DFADD4013068CF9F00A1E94D /* RxAgentSDK in Frameworks */ = {isa = PBXBuildFile; productRef = DFADD4003068CF9F00A1E94D /* RxAgentSDK */; };
+		DFADD4043068D1A500A1E94D /* RxAgentSDK in Frameworks */ = {isa = PBXBuildFile; productRef = DFADD4033068D1A500A1E94D /* RxAgentSDK */; };
+		DFADD4143068F4A400A1E94D /* RxAgentSDK in Frameworks */ = {isa = PBXBuildFile; productRef = DFADD4133068F4A400A1E94D /* RxAgentSDK */; };
 		E62000012FCB000100000001 /* MemoryIntentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E62000002FCB000100000001 /* MemoryIntentTests.swift */; };
 		E6821AC12F7CEE7200829FC9 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = E6A001012F8A000100000001 /* SwiftTerm */; };
 		E6C001022F9B000100000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = E6C001012F9B000100000001 /* Sparkle */; };
@@ -92,6 +95,7 @@
 		FB0000080000000000000001 /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = FB0000060000000000000001 /* FirebaseCrashlytics */; };
 		FE0A11BB22CC33DD44EE5501 /* PlanModeHookSuppressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0A11BB22CC33DD44EE5502 /* PlanModeHookSuppressionTests.swift */; };
 		FE0A11BB22CC33DD44EE5601 /* TaskBoardHookTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0A11BB22CC33DD44EE5602 /* TaskBoardHookTests.swift */; };
+		36596E0C1F1F03A76E8EAC44 /* TaskRunQueueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82AB0A9F0F420072B6D65917 /* TaskRunQueueTests.swift */; };
 		FE0A11BB22CC33DD44EE5701 /* MarkdownDescriptionEditorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0A11BB22CC33DD44EE5702 /* MarkdownDescriptionEditorTests.swift */; };
 		FE0A11BB22CC33DD44EE5901 /* TaskCreationModeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0A11BB22CC33DD44EE5902 /* TaskCreationModeTests.swift */; };
 /* End PBXBuildFile section */
@@ -184,8 +188,10 @@
 		AC1900000000000000000001 /* RxCode/Services/ProjectCloudService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RxCode/Services/ProjectCloudService.swift; sourceTree = SOURCE_ROOT; };
 		AC1900000000000000000002 /* RxCode/Services/AutopilotService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RxCode/Services/AutopilotService.swift; sourceTree = SOURCE_ROOT; };
 		AC1900000000000000000003 /* RxCode/Utilities/KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RxCode/Utilities/KeychainHelper.swift; sourceTree = SOURCE_ROOT; };
+		BA0E00012FCB400000000001 /* BriefingNotificationStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefingNotificationStateTests.swift; sourceTree = "<group>"; };
 		C71A00000000000000000002 /* ChatHistoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatHistoryTests.swift; sourceTree = "<group>"; };
 		C9B0483FE5385C1F0E1CFE15 /* ClaudeLoginTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeLoginTests.swift; sourceTree = "<group>"; };
+		CA5E00012FCB400000000001 /* CacheStorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CacheStorageTests.swift; sourceTree = "<group>"; };
 		DF06DCC62FB8552B005991E1 /* UnitTestPlan.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = UnitTestPlan.xctestplan; sourceTree = "<group>"; };
 		DF22D8262FBE025C00E3ABFD /* RxCodeWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RxCodeWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		DF22D8272FBE025C00E3ABFD /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
@@ -211,6 +217,7 @@
 		FBE6CEA01FE935F6710EB5B0 /* ScheduledTaskStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduledTaskStateTests.swift; sourceTree = "<group>"; };
 		FE0A11BB22CC33DD44EE5502 /* PlanModeHookSuppressionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlanModeHookSuppressionTests.swift; sourceTree = "<group>"; };
 		FE0A11BB22CC33DD44EE5602 /* TaskBoardHookTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TaskBoardHookTests.swift; sourceTree = "<group>"; };
+		82AB0A9F0F420072B6D65917 /* TaskRunQueueTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TaskRunQueueTests.swift; sourceTree = "<group>"; };
 		FE0A11BB22CC33DD44EE5702 /* MarkdownDescriptionEditorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MarkdownDescriptionEditorTests.swift; sourceTree = "<group>"; };
 		FE0A11BB22CC33DD44EE5902 /* TaskCreationModeTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TaskCreationModeTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -295,7 +302,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				DF2CC5C3306549D600BDB861 /* RxAgentSDK in Frameworks */,
+				DFADD4143068F4A400A1E94D /* RxAgentSDK in Frameworks */,
 				92E180F9B311F3C72D5DE6B7 /* Cocoa.framework in Frameworks */,
 				DCA8CF4A05C959C4A6EB391F /* RxCodeCore in Frameworks */,
 				DFA0CCD42FB4CC01005991E1 /* RxCodeChatKit in Frameworks */,
@@ -367,16 +374,17 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				DF2CBCE430650E1000BDB861 /* RxAgentSDK in Frameworks */,
 				E6821AC12F7CEE7200829FC9 /* SwiftTerm in Frameworks */,
 				DF4628922FC611E6002D9562 /* RxAuthSwift in Frameworks */,
 				E6C001022F9B000100000001 /* Sparkle in Frameworks */,
 				E6D001032FA0000100000001 /* RxCodeCore in Frameworks */,
 				DF46526A2FCD34B3002D9562 /* JSONSchemaValidator in Frameworks */,
+				DFADD4013068CF9F00A1E94D /* RxAgentSDK in Frameworks */,
 				DFAA00012FCD34B3002D9562 /* JSONSchema in Frameworks */,
 				DF462A622FC6EDCE002D9562 /* RxAuthSwiftUI in Frameworks */,
 				DF4652682FCD34B3002D9562 /* JSONSchemaForm in Frameworks */,
 				E6D001042FA0000100000001 /* RxCodeChatKit in Frameworks */,
+				DFADD4043068D1A500A1E94D /* RxAgentSDK in Frameworks */,
 				E6D001052FA0000100000001 /* RxCodeEditor in Frameworks */,
 				DF462DCB2FC73FA8002D9562 /* RxAuthSwiftUI in Frameworks */,
 				E6D001072FA0000100000001 /* RxCodeSync in Frameworks */,
@@ -413,6 +421,7 @@
 				A7C31E012FC5000000000001 /* PermissionSessionAllowTests.swift */,
 				FE0A11BB22CC33DD44EE5502 /* PlanModeHookSuppressionTests.swift */,
 				FE0A11BB22CC33DD44EE5602 /* TaskBoardHookTests.swift */,
+				82AB0A9F0F420072B6D65917 /* TaskRunQueueTests.swift */,
 				FE0A11BB22CC33DD44EE5902 /* TaskCreationModeTests.swift */,
 				AC0A11BB22CC33DD44EE5802 /* ACPServiceSuggestionTests.swift */,
 				FE0A11BB22CC33DD44EE5702 /* MarkdownDescriptionEditorTests.swift */,
@@ -420,6 +429,8 @@
 				DFA0CCD52FB4CC02005991E1 /* HistoryListArchiveFilterTests.swift */,
 				5C2222222FCB200000000001 /* BriefingThreadRowTests.swift */,
 				5C3333332FCB400000000001 /* ThreadStoreThreadSummaryTests.swift */,
+				CA5E00012FCB400000000001 /* CacheStorageTests.swift */,
+				BA0E00012FCB400000000001 /* BriefingNotificationStateTests.swift */,
 				5C3333332FCB400000000003 /* ThreadStoreHookCardTests.swift */,
 				5C3333332FCB400000000005 /* ThreadStoreSidebarIndexTests.swift */,
 				DFA9E5040000000000000001 /* AgentEventBridgeTests.swift */,
@@ -538,7 +549,7 @@
 				CCDF9594876099576D4FD46E /* RxCodeCore */,
 				DFA0CCC32FB4CC01005991E1 /* RxCodeChatKit */,
 				DF06CCD02FB4CAB5005991E1 /* ViewInspector */,
-				DFA9E5030000000000000001 /* RxAgentSDK */,
+				DFADD4133068F4A400A1E94D /* RxAgentSDK */,
 			);
 			productName = RxCodeTests;
 			productReference = 7321B5E8B81AAB1A2DC0593B /* RxCodeTests.xctest */;
@@ -731,7 +742,8 @@
 				DF4652692FCD34B3002D9562 /* JSONSchemaValidator */,
 				DFAA00022FCD34B3002D9562 /* JSONSchema */,
 				DF98F2363004F38B00BBB638 /* MCP */,
-				DFA9E5020000000000000001 /* RxAgentSDK */,
+				DFADD4003068CF9F00A1E94D /* RxAgentSDK */,
+				DFADD4033068D1A500A1E94D /* RxAgentSDK */,
 			);
 			productName = RxCode;
 			productReference = E67335382F7356F600FD26C7 /* RxCode.app */;
@@ -797,7 +809,7 @@
 				DFAA00032FCD34B3002D9562 /* XCRemoteSwiftPackageReference "swift-json-schema" */,
 				DFA8E3B22FD1A27F00F33E7F /* XCRemoteSwiftPackageReference "SDWebImageSVGCoder" */,
 				DF98F2353004F38B00BBB638 /* XCRemoteSwiftPackageReference "swift-sdk" */,
-				DFA9E5010000000000000001 /* XCRemoteSwiftPackageReference "RxAgentSDK" */,
+				DFADD4023068D1A500A1E94D /* XCRemoteSwiftPackageReference "RxAgentSDK" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = E67335392F7356F600FD26C7 /* Products */;
@@ -909,6 +921,7 @@
 				A7C31E012FC5000000000002 /* PermissionSessionAllowTests.swift in Sources */,
 				FE0A11BB22CC33DD44EE5501 /* PlanModeHookSuppressionTests.swift in Sources */,
 				FE0A11BB22CC33DD44EE5601 /* TaskBoardHookTests.swift in Sources */,
+				36596E0C1F1F03A76E8EAC44 /* TaskRunQueueTests.swift in Sources */,
 				FE0A11BB22CC33DD44EE5901 /* TaskCreationModeTests.swift in Sources */,
 				AC0A11BB22CC33DD44EE5801 /* ACPServiceSuggestionTests.swift in Sources */,
 				FE0A11BB22CC33DD44EE5701 /* MarkdownDescriptionEditorTests.swift in Sources */,
@@ -916,6 +929,8 @@
 				DFA0CCE12FB4CC02005991E1 /* HistoryListArchiveFilterTests.swift in Sources */,
 				5C2222222FCB200000000002 /* BriefingThreadRowTests.swift in Sources */,
 				5C3333332FCB400000000002 /* ThreadStoreThreadSummaryTests.swift in Sources */,
+				CA5E00012FCB400000000002 /* CacheStorageTests.swift in Sources */,
+				BA0E00012FCB400000000002 /* BriefingNotificationStateTests.swift in Sources */,
 				5C3333332FCB400000000004 /* ThreadStoreHookCardTests.swift in Sources */,
 				5C3333332FCB400000000006 /* ThreadStoreSidebarIndexTests.swift in Sources */,
 				DFA9E5050000000000000001 /* AgentEventBridgeTests.swift in Sources */,
@@ -1678,7 +1693,7 @@
 			repositoryURL = "https://github.com/rxtech-lab/RxAuthSwift";
 			requirement = {
 				kind = exactVersion;
-				version = 1.3.0;
+				version = 1.3.1;
 			};
 		};
 		DF4652662FCD34B3002D9562 /* XCRemoteSwiftPackageReference "swift-jsonschema-form" */ = {
@@ -1705,20 +1720,20 @@
 				minimumVersion = 1.8.0;
 			};
 		};
-		DFA9E5010000000000000001 /* XCRemoteSwiftPackageReference "RxAgentSDK" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/rxtech-lab/RxAgentSDK.git";
-			requirement = {
-				kind = upToNextMinorVersion;
-				minimumVersion = 1.0.6;
-			};
-		};
 		DFAA00032FCD34B3002D9562 /* XCRemoteSwiftPackageReference "swift-json-schema" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/sirily11/swift-json-schema";
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 1.0.2;
+			};
+		};
+		DFADD4023068D1A500A1E94D /* XCRemoteSwiftPackageReference "RxAgentSDK" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/rxtech-lab/RxAgentSDK";
+			requirement = {
+				kind = exactVersion;
+				version = 1.0.7;
 			};
 		};
 		E6A001002F8A000100000001 /* XCRemoteSwiftPackageReference "SwiftTerm" */ = {
@@ -1857,16 +1872,6 @@
 			package = DFA8E3B22FD1A27F00F33E7F /* XCRemoteSwiftPackageReference "SDWebImageSVGCoder" */;
 			productName = SDWebImageSVGCoder;
 		};
-		DFA9E5020000000000000001 /* RxAgentSDK */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = DFA9E5010000000000000001 /* XCRemoteSwiftPackageReference "RxAgentSDK" */;
-			productName = RxAgentSDK;
-		};
-		DFA9E5030000000000000001 /* RxAgentSDK */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = DFA9E5010000000000000001 /* XCRemoteSwiftPackageReference "RxAgentSDK" */;
-			productName = RxAgentSDK;
-		};
 		DFAA00022FCD34B3002D9562 /* JSONSchema */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = DFAA00032FCD34B3002D9562 /* XCRemoteSwiftPackageReference "swift-json-schema" */;
@@ -1876,6 +1881,20 @@
 			isa = XCSwiftPackageProductDependency;
 			package = DFAA00032FCD34B3002D9562 /* XCRemoteSwiftPackageReference "swift-json-schema" */;
 			productName = JSONSchema;
+		};
+		DFADD4003068CF9F00A1E94D /* RxAgentSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = RxAgentSDK;
+		};
+		DFADD4033068D1A500A1E94D /* RxAgentSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DFADD4023068D1A500A1E94D /* XCRemoteSwiftPackageReference "RxAgentSDK" */;
+			productName = RxAgentSDK;
+		};
+		DFADD4133068F4A400A1E94D /* RxAgentSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DFADD4023068D1A500A1E94D /* XCRemoteSwiftPackageReference "RxAgentSDK" */;
+			productName = RxAgentSDK;
 		};
 		E6A001012F8A000100000001 /* SwiftTerm */ = {
 			isa = XCSwiftPackageProductDependency;

@@ -95,6 +95,9 @@ public struct TaskColumn: Identifiable, Codable, Sendable, Hashable {
     /// UI describes the column's triggers instead.
     public var details: String
     public var triggersChat: Bool
+    /// For a chat column: how many of its tasks may run at once. Tasks dropped
+    /// in beyond the limit wait as queued (`ProjectTask.isQueued`).
+    public var concurrencyLimit: Int
     /// Cards here count as finished for story progress and roll-up.
     public var countsAsDone: Bool
     public var onSessionStop: TaskStatus?
@@ -109,6 +112,7 @@ public struct TaskColumn: Identifiable, Codable, Sendable, Hashable {
         systemImage: String = "circle",
         details: String = "",
         triggersChat: Bool = false,
+        concurrencyLimit: Int = TaskColumn.defaultConcurrencyLimit,
         countsAsDone: Bool = false,
         onSessionStop: TaskStatus? = nil,
         onReviewStart: TaskStatus? = nil,
@@ -121,6 +125,7 @@ public struct TaskColumn: Identifiable, Codable, Sendable, Hashable {
         self.systemImage = systemImage
         self.details = details
         self.triggersChat = triggersChat
+        self.concurrencyLimit = max(1, concurrencyLimit)
         self.countsAsDone = countsAsDone
         self.onSessionStop = onSessionStop
         self.onReviewStart = onReviewStart
@@ -129,7 +134,7 @@ public struct TaskColumn: Identifiable, Codable, Sendable, Hashable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, colorHex, systemImage, details, triggersChat, countsAsDone
+        case id, name, colorHex, systemImage, details, triggersChat, concurrencyLimit, countsAsDone
         case onSessionStop, onReviewStart, onReviewPass, onReviewFail
     }
 
@@ -143,12 +148,18 @@ public struct TaskColumn: Identifiable, Codable, Sendable, Hashable {
         systemImage = try c.decodeIfPresent(String.self, forKey: .systemImage) ?? "circle"
         details = try c.decodeIfPresent(String.self, forKey: .details) ?? ""
         triggersChat = try c.decodeIfPresent(Bool.self, forKey: .triggersChat) ?? false
+        concurrencyLimit = max(1, try c.decodeIfPresent(Int.self, forKey: .concurrencyLimit) ?? Self.defaultConcurrencyLimit)
         countsAsDone = try c.decodeIfPresent(Bool.self, forKey: .countsAsDone) ?? false
         onSessionStop = try c.decodeIfPresent(TaskStatus.self, forKey: .onSessionStop)
         onReviewStart = try c.decodeIfPresent(TaskStatus.self, forKey: .onReviewStart)
         onReviewPass = try c.decodeIfPresent(TaskStatus.self, forKey: .onReviewPass)
         onReviewFail = try c.decodeIfPresent(TaskStatus.self, forKey: .onReviewFail)
     }
+
+    /// Run slots a chat column starts with.
+    public static let defaultConcurrencyLimit = 4
+    /// The largest limit the UI offers.
+    public static let maxConcurrencyLimit = 32
 
     /// Where a card in this column goes when `event` fires; `nil` stays put.
     public func target(for event: TaskTriggerEvent) -> TaskStatus? {
@@ -265,6 +276,11 @@ public extension TaskBoard {
         return order
     }
 
+    /// Queued tasks in a column, in the order they will start.
+    func queuedTasks(in status: TaskStatus) -> [ProjectTask] {
+        tasks(in: status).filter(\.isQueued)
+    }
+
     /// The first column that starts a chat — where "Run with Agent" and
     /// follow-ups put a card.
     var firstChatColumn: TaskColumn? {
@@ -282,7 +298,7 @@ public extension TaskBoard {
     /// task placed in such a column by hand (no thread), or flagged after a
     /// failed run, stays movable.
     func isStatusLocked(_ task: ProjectTask) -> Bool {
-        task.sessionKey != nil && task.attentionReason == nil && column(for: task.status).triggersChat
+        !task.isQueued && task.sessionKey != nil && task.attentionReason == nil && column(for: task.status).triggersChat
     }
 
     /// Where `task` should move when `event` fires, or `nil` to stay put. A

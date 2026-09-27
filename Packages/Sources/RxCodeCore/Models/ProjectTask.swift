@@ -298,6 +298,10 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
     /// Why the last run needs a person's attention before review. Cleared when
     /// a later completion check passes or the task is run again.
     public var attentionReason: String?
+    /// Waiting in a chat column for a free run slot: the column already runs
+    /// as many tasks as its `TaskColumn.concurrencyLimit` allows. Queued tasks
+    /// start in `sortIndex` order as running ones leave.
+    public var isQueued: Bool
     /// Ordering within a column. A `Double` so a drop between two neighbours is
     /// their midpoint and no renumbering pass is needed.
     public var sortIndex: Double
@@ -324,6 +328,7 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
         sessionKey: String? = nil,
         sourceSessionKey: String? = nil,
         attentionReason: String? = nil,
+        isQueued: Bool = false,
         sortIndex: Double = 0,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
@@ -346,6 +351,7 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
         self.sessionKey = sessionKey
         self.sourceSessionKey = sourceSessionKey
         self.attentionReason = attentionReason
+        self.isQueued = isQueued
         self.sortIndex = sortIndex
         self.createdAt = createdAt
         self.updatedAt = updatedAt
@@ -357,7 +363,7 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
     private enum CodingKeys: String, CodingKey {
         case id, projectId, storyId, parentTaskId, parentTaskIds, assignedDeviceId, title, details, status, version, tags
         case milestone, priority, typeId
-        case agent, attachments, sessionKey, sourceSessionKey, attentionReason, sortIndex, createdAt, updatedAt
+        case agent, attachments, sessionKey, sourceSessionKey, attentionReason, isQueued, sortIndex, createdAt, updatedAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -382,6 +388,7 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
         sessionKey = try c.decodeIfPresent(String.self, forKey: .sessionKey)
         sourceSessionKey = try c.decodeIfPresent(String.self, forKey: .sourceSessionKey)
         attentionReason = try c.decodeIfPresent(String.self, forKey: .attentionReason)
+        isQueued = try c.decodeIfPresent(Bool.self, forKey: .isQueued) ?? false
         sortIndex = try c.decodeIfPresent(Double.self, forKey: .sortIndex) ?? 0
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
@@ -413,6 +420,7 @@ public struct ProjectTask: Identifiable, Codable, Sendable, Hashable {
         try c.encodeIfPresent(sessionKey, forKey: .sessionKey)
         try c.encodeIfPresent(sourceSessionKey, forKey: .sourceSessionKey)
         try c.encodeIfPresent(attentionReason, forKey: .attentionReason)
+        if isQueued { try c.encode(isQueued, forKey: .isQueued) }
         try c.encode(sortIndex, forKey: .sortIndex)
         try c.encode(createdAt, forKey: .createdAt)
         try c.encode(updatedAt, forKey: .updatedAt)

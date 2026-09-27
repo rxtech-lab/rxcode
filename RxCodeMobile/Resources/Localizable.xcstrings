@@ -50,7 +50,14 @@
       }
     },
     "· Agent working" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "· 智能体正在工作"
+          }
+        }
+      }
     },
     "#%lld" : {
       "localizations" : {
@@ -96,6 +103,12 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "%1$@, %2$lld lines added, %3$lld removed. Tap to view the diff."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@，新增 %lld 行，删除 %lld 行。轻点以查看差异。"
           }
         }
       }
@@ -247,6 +260,12 @@
             "state" : "new",
             "value" : "%1$lld of %2$lld tasks done"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已完成 %lld / %lld 个任务"
+          }
         }
       }
     },
@@ -305,10 +324,24 @@
       }
     },
     "%lld selected" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已选择 %lld 项"
+          }
+        }
+      }
     },
     "%lld stories" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个故事"
+          }
+        }
+      }
     },
     "%lld/%lld" : {
       "localizations" : {
@@ -403,7 +436,14 @@
       }
     },
     "1 selected" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已选择 1 项"
+          }
+        }
+      }
     },
     "5-hour limit" : {
       "localizations" : {
@@ -620,7 +660,14 @@
       }
     },
     "Add a project on your Mac to plan its tasks here." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 Mac 上添加项目后，即可在此规划任务。"
+          }
+        }
+      }
     },
     "Add a QR code" : {
       "localizations" : {
@@ -639,7 +686,14 @@
       }
     },
     "Add a task to start planning your project." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加任务以开始规划项目。"
+          }
+        }
+      }
     },
     "Add Argument" : {
       "localizations" : {
@@ -778,7 +832,14 @@
       }
     },
     "Agent" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "智能体"
+          }
+        }
+      }
     },
     "Agent Clients" : {
       "localizations" : {
@@ -803,7 +864,14 @@
       }
     },
     "Agent is working on this task" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "智能体正在处理此任务"
+          }
+        }
+      }
     },
     "Agent operation failed." : {
       "localizations" : {
@@ -828,10 +896,24 @@
       }
     },
     "Agent Response" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "智能体回复"
+          }
+        }
+      }
     },
     "Agent running" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "智能体正在运行"
+          }
+        }
+      }
     },
     "All" : {
       "localizations" : {
@@ -944,7 +1026,14 @@
       }
     },
     "Any" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "任意"
+          }
+        }
+      }
     },
     "API keys stay on the Mac and are not synced to this device." : {
       "localizations" : {
@@ -1139,13 +1228,34 @@
       }
     },
     "Ask the agent to change something…" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "让智能体修改某些内容…"
+          }
+        }
+      }
     },
     "Assign an agent in Config, then run the task." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在“配置”中分配智能体，然后运行任务。"
+          }
+        }
+      }
     },
     "Assigned Mac" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分配的 Mac"
+          }
+        }
+      }
     },
     "Assistant has a question" : {
       "localizations" : {
@@ -1246,13 +1356,34 @@
       }
     },
     "Autopilot Account" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autopilot 账户"
+          }
+        }
+      }
     },
     "Autopilot currently syncs one Starts after task per cloud task." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autopilot 目前为每个云端任务同步一个“开始时间在此之后”任务。"
+          }
+        }
+      }
     },
     "Autopilot currently syncs one Starts after task per cloud task. Select one to save this task." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autopilot 目前为每个云端任务同步一个“开始时间在此之后”任务。请选择一个以保存此任务。"
+          }
+        }
+      }
     },
     "Available in Registry" : {
       "localizations" : {
@@ -1786,7 +1917,14 @@
       }
     },
     "Classifying" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在分类"
+          }
+        }
+      }
     },
     "Claude Code Usage" : {
       "localizations" : {
@@ -1811,10 +1949,24 @@
       }
     },
     "Clear" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "清除"
+          }
+        }
+      }
     },
     "Clear all" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部清除"
+          }
+        }
+      }
     },
     "Close" : {
       "localizations" : {
@@ -2055,7 +2207,14 @@
       }
     },
     "Config" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配置"
+          }
+        }
+      }
     },
     "Configuration" : {
       "localizations" : {
@@ -2354,7 +2513,14 @@
       }
     },
     "Continues the task's existing chat and moves it back into progress." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "继续此任务现有的聊天，并将任务移回“进行中”。"
+          }
+        }
+      }
     },
     "Control desktop summaries" : {
       "localizations" : {
@@ -2487,7 +2653,14 @@
       }
     },
     "Couldn't load tasks. Pull to refresh." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法加载任务。下拉以刷新。"
+          }
+        }
+      }
     },
     "Couldn't load the selected image." : {
       "localizations" : {
@@ -2622,7 +2795,14 @@
       }
     },
     "Create a project to plan its tasks here." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建项目后，即可在此规划任务。"
+          }
+        }
+      }
     },
     "Create branch" : {
       "localizations" : {
@@ -2701,10 +2881,24 @@
       }
     },
     "Created" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建时间"
+          }
+        }
+      }
     },
     "Created %@" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建时间：%@"
+          }
+        }
+      }
     },
     "Created from %@" : {
       "localizations" : {
@@ -3151,16 +3345,44 @@
       }
     },
     "Delete Story" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除故事"
+          }
+        }
+      }
     },
     "Delete Story?" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要删除故事吗？"
+          }
+        }
+      }
     },
     "Delete Task" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除任务"
+          }
+        }
+      }
     },
     "Delete Task?" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要删除任务吗？"
+          }
+        }
+      }
     },
     "Delete template?" : {
       "localizations" : {
@@ -3299,7 +3521,14 @@
       }
     },
     "Description" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "描述"
+          }
+        }
+      }
     },
     "design/overview" : {
       "localizations" : {
@@ -3406,7 +3635,14 @@
       }
     },
     "Details" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "详情"
+          }
+        }
+      }
     },
     "Detected · Make" : {
       "localizations" : {
@@ -3575,7 +3811,14 @@
       }
     },
     "Document" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文档"
+          }
+        }
+      }
     },
     "Document ID (slug)" : {
       "localizations" : {
@@ -3746,10 +3989,24 @@
       }
     },
     "Edit Story" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑故事"
+          }
+        }
+      }
     },
     "Edit Task" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑任务"
+          }
+        }
+      }
     },
     "Edit Template" : {
       "localizations" : {
@@ -3768,7 +4025,14 @@
       }
     },
     "Edit View" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑视图"
+          }
+        }
+      }
     },
     "Empty Folder" : {
       "localizations" : {
@@ -4507,7 +4771,14 @@
       }
     },
     "Filling in details…" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在填写详情…"
+          }
+        }
+      }
     },
     "Filter Skills" : {
       "localizations" : {
@@ -4532,16 +4803,44 @@
       }
     },
     "Filter stories" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "筛选故事"
+          }
+        }
+      }
     },
     "Filter tasks" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "筛选任务"
+          }
+        }
+      }
     },
     "Filters" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "筛选条件"
+          }
+        }
+      }
     },
     "Fix Check Error" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "修复检查错误"
+          }
+        }
+      }
     },
     "Focus mode" : {
       "localizations" : {
@@ -4610,10 +4909,24 @@
       }
     },
     "Follow Up" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "后续跟进"
+          }
+        }
+      }
     },
     "Follow-up" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "后续消息"
+          }
+        }
+      }
     },
     "Form couldn't be rendered — edit raw JSON." : {
       "localizations" : {
@@ -5153,10 +5466,24 @@
       }
     },
     "It may have been deleted." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "它可能已被删除。"
+          }
+        }
+      }
     },
     "Items match any selected story, version and milestone, and must carry every selected tag." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目需符合任一所选故事、版本和里程碑，并带有所有所选标签。"
+          }
+        }
+      }
     },
     "Key" : {
       "localizations" : {
@@ -5181,7 +5508,14 @@
       }
     },
     "Laptop" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "笔记本电脑"
+          }
+        }
+      }
     },
     "Latest: %@" : {
       "localizations" : {
@@ -5200,10 +5534,24 @@
       }
     },
     "Layout" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "布局"
+          }
+        }
+      }
     },
     "Linked Tasks" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关联的任务"
+          }
+        }
+      }
     },
     "Live" : {
       "localizations" : {
@@ -5358,7 +5706,14 @@
       }
     },
     "Loading tasks…" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在加载任务…"
+          }
+        }
+      }
     },
     "Loading thread" : {
       "localizations" : {
@@ -5415,7 +5770,14 @@
       }
     },
     "Locked once the task has run, so it keeps matching what the agent was asked to do." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "任务运行后会锁定，以确保内容始终与交给智能体的要求一致。"
+          }
+        }
+      }
     },
     "Long text" : {
       "localizations" : {
@@ -5664,7 +6026,14 @@
       }
     },
     "Manage your cloud projects without connecting to a Mac." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无需连接 Mac，即可管理云端项目。"
+          }
+        }
+      }
     },
     "Markdown" : {
       "localizations" : {
@@ -5869,10 +6238,24 @@
       }
     },
     "Milestone" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "里程碑"
+          }
+        }
+      }
     },
     "Milestones" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "里程碑"
+          }
+        }
+      }
     },
     "Mints a DOCS_UPLOAD_TOKEN and installs it as the repo's GitHub Actions secret so CI can publish docs automatically." : {
       "localizations" : {
@@ -5929,10 +6312,24 @@
       }
     },
     "Move To" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移动到"
+          }
+        }
+      }
     },
     "Moving this task into a chat column runs the assigned agent in a new thread on your Mac." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将此任务移入聊天列，会在 Mac 上的新线程中运行分配的智能体。"
+          }
+        }
+      }
     },
     "Name" : {
       "localizations" : {
@@ -5973,7 +6370,14 @@
       }
     },
     "Needs Attention" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "需要关注"
+          }
+        }
+      }
     },
     "New" : {
       "localizations" : {
@@ -6014,16 +6418,44 @@
       }
     },
     "New Project" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建项目"
+          }
+        }
+      }
     },
     "New Story" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建故事"
+          }
+        }
+      }
     },
     "New tag" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建标签"
+          }
+        }
+      }
     },
     "New Task" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建任务"
+          }
+        }
+      }
     },
     "New Template" : {
       "localizations" : {
@@ -6064,10 +6496,24 @@
       }
     },
     "New view" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建视图"
+          }
+        }
+      }
     },
     "New View" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建视图"
+          }
+        }
+      }
     },
     "New worktree" : {
       "localizations" : {
@@ -6256,7 +6702,14 @@
       }
     },
     "No description" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有描述"
+          }
+        }
+      }
     },
     "No diff content available." : {
       "localizations" : {
@@ -6383,13 +6836,34 @@
       }
     },
     "No matches" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有匹配项"
+          }
+        }
+      }
     },
     "No Matching Stories" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有匹配的故事"
+          }
+        }
+      }
     },
     "No Matching Tasks" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有匹配的任务"
+          }
+        }
+      }
     },
     "No MCP servers configured. Tap + to add one." : {
       "localizations" : {
@@ -6560,7 +7034,14 @@
       }
     },
     "No response text." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有回复文本。"
+          }
+        }
+      }
     },
     "No Run Profiles" : {
       "localizations" : {
@@ -6585,7 +7066,14 @@
       }
     },
     "No Runs Yet" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚无运行记录"
+          }
+        }
+      }
     },
     "No scans yet." : {
       "localizations" : {
@@ -6680,13 +7168,34 @@
       }
     },
     "No Stories" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有故事"
+          }
+        }
+      }
     },
     "No stories yet" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还没有故事"
+          }
+        }
+      }
     },
     "No Story" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无故事"
+          }
+        }
+      }
     },
     "No summary available yet" : {
       "localizations" : {
@@ -6749,13 +7258,34 @@
       }
     },
     "No tasks" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有任务"
+          }
+        }
+      }
     },
     "No Tasks" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有任务"
+          }
+        }
+      }
     },
     "No tasks in this story yet." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此故事还没有任务。"
+          }
+        }
+      }
     },
     "No templates yet. Tap + to create one." : {
       "localizations" : {
@@ -6898,7 +7428,14 @@
       }
     },
     "None" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无"
+          }
+        }
+      }
     },
     "Normal" : {
       "localizations" : {
@@ -6955,7 +7492,14 @@
       }
     },
     "Nothing to filter by yet." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目前没有可用于筛选的内容。"
+          }
+        }
+      }
     },
     "Nothing to Show" : {
       "localizations" : {
@@ -7106,10 +7650,24 @@
       }
     },
     "Open Chat" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开聊天"
+          }
+        }
+      }
     },
     "Open cloud project plans and task boards." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开云端项目计划和任务看板。"
+          }
+        }
+      }
     },
     "Open failing CI run" : {
       "localizations" : {
@@ -7226,7 +7784,14 @@
       }
     },
     "or" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "或"
+          }
+        }
+      }
     },
     "Overwrite existing files" : {
       "localizations" : {
@@ -7557,10 +8122,24 @@
       }
     },
     "Previously assigned Mac" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "之前分配的 Mac"
+          }
+        }
+      }
     },
     "Priority" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "优先级"
+          }
+        }
+      }
     },
     "Privacy Report" : {
       "localizations" : {
@@ -7639,7 +8218,14 @@
       }
     },
     "Project name" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目名称"
+          }
+        }
+      }
     },
     "Project root" : {
       "localizations" : {
@@ -7756,7 +8342,14 @@
       }
     },
     "Quick Add Task" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "快速添加任务"
+          }
+        }
+      }
     },
     "Reconnecting in %llds" : {
       "localizations" : {
@@ -7883,7 +8476,14 @@
       }
     },
     "Remote Tasks" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "远程任务"
+          }
+        }
+      }
     },
     "Remove" : {
       "localizations" : {
@@ -8272,10 +8872,24 @@
       }
     },
     "Run" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运行"
+          }
+        }
+      }
     },
     "Run actions" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运行操作"
+          }
+        }
+      }
     },
     "Run Profile Error" : {
       "localizations" : {
@@ -8344,10 +8958,24 @@
       }
     },
     "Run the task with its agent to see what it was asked and what it answered." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用智能体运行任务，查看交给它的要求以及它的回复。"
+          }
+        }
+      }
     },
     "Run with Agent" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用智能体运行"
+          }
+        }
+      }
     },
     "Running" : {
       "localizations" : {
@@ -8464,7 +9092,14 @@
       }
     },
     "Saving in this column runs the assigned agent on your Mac." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在此列中保存会在 Mac 上运行分配的智能体。"
+          }
+        }
+      }
     },
     "Scan" : {
       "localizations" : {
@@ -8799,7 +9434,14 @@
       }
     },
     "Search tasks" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索任务"
+          }
+        }
+      }
     },
     "Search threads and docs" : {
       "localizations" : {
@@ -9003,10 +9645,24 @@
       }
     },
     "Send" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发送"
+          }
+        }
+      }
     },
     "Send Follow-up" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发送后续消息"
+          }
+        }
+      }
     },
     "Serious" : {
       "localizations" : {
@@ -9155,10 +9811,24 @@
       }
     },
     "Sign In" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登录"
+          }
+        }
+      }
     },
     "Sign In to Autopilot" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登录 Autopilot"
+          }
+        }
+      }
     },
     "Sign in to Claude Code or Codex on your Mac to see usage." : {
       "localizations" : {
@@ -9183,7 +9853,14 @@
       }
     },
     "Sign in to manage your cloud projects while your Mac is offline." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登录后，即使 Mac 离线也能管理云端项目。"
+          }
+        }
+      }
     },
     "Sign in with rxlab on your Mac to enable Autopilot." : {
       "localizations" : {
@@ -9218,10 +9895,24 @@
       }
     },
     "Sign Out" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "退出登录"
+          }
+        }
+      }
     },
     "Signed in to Autopilot" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已登录 Autopilot"
+          }
+        }
+      }
     },
     "Skill operation failed." : {
       "localizations" : {
@@ -9448,16 +10139,44 @@
       }
     },
     "Starts after" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开始时间在此之后"
+          }
+        }
+      }
     },
     "Starts After" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开始时间在此之后"
+          }
+        }
+      }
     },
     "Status" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "状态"
+          }
+        }
+      }
     },
     "Statuses" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "状态"
+          }
+        }
+      }
     },
     "stdio" : {
       "localizations" : {
@@ -9514,19 +10233,54 @@
       }
     },
     "Stories" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "故事"
+          }
+        }
+      }
     },
     "Stories and tasks across projects" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跨项目的故事和任务"
+          }
+        }
+      }
     },
     "Stories group related tasks and roll up their progress." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "故事将相关任务归组，并汇总其进度。"
+          }
+        }
+      }
     },
     "Story" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "故事"
+          }
+        }
+      }
     },
     "Story Not Found" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "找不到故事"
+          }
+        }
+      }
     },
     "Success" : {
       "localizations" : {
@@ -9709,7 +10463,14 @@
       }
     },
     "Tags" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "标签"
+          }
+        }
+      }
     },
     "Target" : {
       "localizations" : {
@@ -9734,19 +10495,54 @@
       }
     },
     "Task" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "任务"
+          }
+        }
+      }
     },
     "Task Board Error" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "任务看板错误"
+          }
+        }
+      }
     },
     "Task Not Found" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "找不到任务"
+          }
+        }
+      }
     },
     "Tasks" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "任务"
+          }
+        }
+      }
     },
     "Tasks in this story are kept and moved to the board root." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此故事中的任务会保留，并移至看板根目录。"
+          }
+        }
+      }
     },
     "Template" : {
       "localizations" : {
@@ -9781,13 +10577,34 @@
       }
     },
     "The agent is working on this task; it moves on when the turn finishes." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "智能体正在处理此任务；本轮结束后将继续。"
+          }
+        }
+      }
     },
     "The agent is working…" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "智能体正在工作…"
+          }
+        }
+      }
     },
     "The description is locked once a task has run, so it keeps matching what the agent was asked to do." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "任务运行后，描述会被锁定，以确保内容始终与交给智能体的要求一致。"
+          }
+        }
+      }
     },
     "The desktop sent an AskUserQuestion call this app could not parse." : {
       "localizations" : {
@@ -9972,7 +10789,14 @@
       }
     },
     "The run ended with an error. Open the chat for details." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运行出错。打开聊天查看详情。"
+          }
+        }
+      }
     },
     "Thermal" : {
       "localizations" : {
@@ -10415,7 +11239,14 @@
       }
     },
     "Title" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "标题"
+          }
+        }
+      }
     },
     "Todos" : {
       "localizations" : {
@@ -10532,7 +11363,14 @@
       }
     },
     "Try another view or search." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请尝试其他视图或搜索。"
+          }
+        }
+      }
     },
     "Type" : {
       "localizations" : {
@@ -10623,10 +11461,24 @@
       }
     },
     "Unable to Load Briefing" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法加载简报"
+          }
+        }
+      }
     },
     "Unable to Load File" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法加载文件"
+          }
+        }
+      }
     },
     "Unable to Load Folder" : {
       "localizations" : {
@@ -10651,7 +11503,14 @@
       }
     },
     "Unassigned" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未分配"
+          }
+        }
+      }
     },
     "Uncommitted" : {
       "localizations" : {
@@ -10764,16 +11623,44 @@
       }
     },
     "Untitled Story" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无标题故事"
+          }
+        }
+      }
     },
     "Untitled Task" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无标题任务"
+          }
+        }
+      }
     },
     "Updated" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更新时间"
+          }
+        }
+      }
     },
     "Updated %@" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更新时间：%@"
+          }
+        }
+      }
     },
     "Updated %@. Pull to refresh." : {
       "localizations" : {
@@ -10918,7 +11805,14 @@
       }
     },
     "Use Share to open this file." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用“共享”打开此文件。"
+          }
+        }
+      }
     },
     "Use Workspace" : {
       "localizations" : {
@@ -10959,13 +11853,34 @@
       }
     },
     "Version" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "版本"
+          }
+        }
+      }
     },
     "Versions" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "版本"
+          }
+        }
+      }
     },
     "View" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "视图"
+          }
+        }
+      }
     },
     "View Changes" : {
       "localizations" : {
@@ -10990,7 +11905,14 @@
       }
     },
     "View Diff" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查看差异"
+          }
+        }
+      }
     },
     "View pull request" : {
       "localizations" : {
@@ -11009,10 +11931,24 @@
       }
     },
     "View Remote Tasks" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查看远程任务"
+          }
+        }
+      }
     },
     "View Tasks" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查看任务"
+          }
+        }
+      }
     },
     "View values" : {
       "localizations" : {
@@ -11063,7 +11999,14 @@
       }
     },
     "What needs to be done?" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "需要完成什么？"
+          }
+        }
+      }
     },
     "What should we build in %@?" : {
       "localizations" : {
@@ -11284,10 +12227,94 @@
       }
     },
     "Your Mac titles and classifies the task in the background." : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的 Mac 会在后台为任务命名并分类。"
+          }
+        }
+      }
     },
     "Your Tasks" : {
-
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的任务"
+          }
+        }
+      }
+    },
+    "Docs" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文档"
+          }
+        }
+      }
+    },
+    "Thread" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "线程"
+          }
+        }
+      }
+    },
+    "%@ (%lld)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@（%lld）"
+          }
+        }
+      }
+    },
+    "XHigh" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "超高"
+          }
+        }
+      }
+    },
+    "No changes" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有更改"
+          }
+        }
+      }
+    },
+    "%lld of %lld" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld / %lld"
+          }
+        }
+      }
+    },
+    "Question %lld" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "问题 %lld"
+          }
+        }
+      }
     }
   },
   "version" : "1.1"

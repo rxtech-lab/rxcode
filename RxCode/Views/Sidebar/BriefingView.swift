@@ -33,7 +33,7 @@ struct BriefingView: View {
     enum KindFilter: CaseIterable {
         case all, project, document
 
-        var title: String {
+        var title: LocalizedStringKey {
             switch self {
             case .all: "All briefings"
             case .project: "Project summaries"
@@ -405,6 +405,7 @@ struct BriefingView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     hero(entries: entries)
                     filterBar
+                    BriefingUsageStatsView(projectIds: selectedProjectIds)
 
                     if isResolvingBranches && !showAllBranches && kindFilter != .document {
                         ProgressView("Loading current branches…")

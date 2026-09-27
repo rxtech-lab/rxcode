@@ -43,6 +43,13 @@ struct SessionStreamState {
     /// progress" instead of tearing the turn down on that yield `result`.
     var liveBackgroundTaskIds: Set<String> = []
 
+    /// Steers delivered to the running Claude turn that the CLI has not yet
+    /// echoed back (`--replay-user-messages`). A steer that arrives after the
+    /// turn's last tool call is run by the CLI as a turn of its own after this
+    /// one's `result`, so while this is non-zero that `result` only yields and
+    /// the process is kept alive for the steered turn.
+    var unconsumedSteerCount = 0
+
     /// Last time any stream event (system / assistant / tool result / etc.) arrived
     /// for the active stream. Updated in `processStream` and polled by the
     /// inactivity watchdog so a CLI that goes silent without exiting (broken pipe
@@ -406,11 +413,21 @@ final class AppState {
         didSet { workspaceDefaults.set(openAISummarizationModel, for: "openAISummarizationModel") }
     }
 
+    /// Last model picked from the briefing card's "Create PR › Create with
+    /// Model" submenu, as an `AgentModel.key` (`<provider>:<modelId>`). Empty
+    /// means "use the summarization settings", which is the default.
+    var pullRequestModelKey: String = "" {
+        didSet { workspaceDefaults.set(pullRequestModelKey, for: "pullRequestModelKey") }
+    }
+
     var openAISummarizationModels: [String] = []
     var openAISummarizationModelsError: String?
     var isLoadingOpenAISummarizationModels = false
     var threadSummaryRevision = 0
     var branchBriefingRevision = 0
+    /// Bumped whenever a finished turn is folded into the persisted usage
+    /// buckets, so the briefing statistics panel re-reads its summary.
+    var usageStatsRevision = 0
     /// Agent-written document briefings from `briefingStore`, newest first.
     /// Loaded lazily by the briefing tab via `reloadBriefingDocuments()`.
     var briefingDocuments: [BriefingDocument] = []
@@ -1161,6 +1178,13 @@ final class AppState {
     var classifyingTaskIds: Set<UUID> = []
     /// Task checks currently running in a linked verification chat.
     var verifyingTaskIds: Set<UUID> = []
+    /// Tasks between run admission and their thread going live. They hold a
+    /// run slot in their chat column so a burst of drops can't overshoot the
+    /// column's concurrency limit before any stream reports as running.
+    var dispatchingTaskIds: Set<UUID> = []
+    /// Set once startup has loaded projects and threads; queued tasks are not
+    /// started before then.
+    var isTaskQueueDispatchEnabled = false
 
     // MARK: - Cloud Projects
 

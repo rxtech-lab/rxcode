@@ -164,14 +164,23 @@ extension BriefingView {
         }
     }
 
+    @ViewBuilder
+    func menuSelectionLabel(_ title: LocalizedStringKey, isSelected: Bool) -> some View {
+        if isSelected {
+            Label(title, systemImage: "checkmark")
+        } else {
+            Text(title)
+        }
+    }
+
     func filterMenuLabel(projects: [Project]) -> String {
         if selectedProjectIds.isEmpty {
-            return "All projects"
+            return String(localized: "All projects")
         }
         if selectedProjectIds.count == 1, let id = selectedProjectIds.first {
-            return projectsById[id]?.name ?? "1 project"
+            return projectsById[id]?.name ?? String(localized: "1 project")
         }
-        return "\(selectedProjectIds.count) projects"
+        return String(localized: "\(selectedProjectIds.count) projects")
     }
 
     func toggleProject(_ id: UUID) {

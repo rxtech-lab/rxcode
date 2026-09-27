@@ -206,7 +206,7 @@ private extension MobileQuestionSheet {
             let title = question.header ?? question.question
             return title.count > 22 ? String(title.prefix(20)) + "…" : title
         }
-        return "Q\(index + 1)"
+        return String(format: String(localized: "Question %lld"), index + 1)
     }
 
     func pillColor(isActive: Bool, answered: Bool) -> Color {

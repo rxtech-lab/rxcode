@@ -496,6 +496,7 @@ extension AppState {
             state.pendingToolResults.removeAll()
             state.lastStreamEventDate = nil
             state.liveBackgroundTaskIds.removeAll()
+            state.unconsumedSteerCount = 0
             if let idx = state.messages.indices.reversed().first(where: {
                 state.messages[$0].role == .assistant && state.messages[$0].isStreaming
             }) {

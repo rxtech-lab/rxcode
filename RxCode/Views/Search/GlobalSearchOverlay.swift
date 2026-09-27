@@ -27,7 +27,7 @@ struct GlobalSearchOverlay: View {
 
         var id: String { rawValue }
 
-        var title: String {
+        var title: LocalizedStringKey {
             switch self {
             case .all: return "All"
             case .threads: return "Threads"
@@ -303,7 +303,7 @@ struct GlobalSearchOverlay: View {
         }
     }
 
-    private var sectionHeader: String {
+    private var sectionHeader: LocalizedStringKey {
         if let title = currentThreadTitle, !title.isEmpty {
             return "In this thread · \(title)"
         }
@@ -387,7 +387,7 @@ struct GlobalSearchOverlay: View {
                 Image(systemName: "folder.fill")
                     .font(.system(size: ClaudeTheme.size(11)))
                     .foregroundStyle(ClaudeTheme.textTertiary)
-                Text(project?.name ?? "Unknown project")
+                Text(project?.name ?? String(localized: "Unknown project"))
                     .font(.system(size: ClaudeTheme.size(11), weight: .semibold))
                     .foregroundStyle(ClaudeTheme.textTertiary)
                     .textCase(.uppercase)
@@ -405,7 +405,7 @@ struct GlobalSearchOverlay: View {
 
     private func resultRow(hit: ThreadSearchService.Hit) -> some View {
         let summary = appState.allSessionSummaries.first(where: { $0.id == hit.threadId })
-        let title = summary?.title ?? "Untitled thread"
+        let title = summary?.title ?? String(localized: "Untitled thread")
         let snippet = displaySnippet(hit: hit, title: title)
         let threadSummary = appState.threadStore.threadSummaryItem(sessionId: hit.threadId)?.summary
             .trimmingCharacters(in: .whitespacesAndNewlines)

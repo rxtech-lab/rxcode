@@ -245,7 +245,7 @@ private struct MCPServerRow: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                    Text(verbatim: scopeDescription)
+                    Text(scopeDescription)
                         .font(.system(size: ClaudeTheme.size(10)))
                         .foregroundStyle(.tertiary)
                 }
@@ -351,17 +351,19 @@ private struct MCPServerRow: View {
 
     private var scopeDescription: String {
         guard inProject else {
-            return server.isGloballyEnabled ? "Global default · On" : "Global default · Off"
+            return server.isGloballyEnabled
+                ? String(localized: "Global default · On")
+                : String(localized: "Global default · Off")
         }
         switch server.projectOverride {
         case .inherit:
             return server.isGloballyEnabled
-                ? "Inherits global default (On)"
-                : "Inherits global default (Off)"
+                ? String(localized: "Inherits global default (On)")
+                : String(localized: "Inherits global default (Off)")
         case .enabled:
-            return "Forced on for this project"
+            return String(localized: "Forced on for this project")
         case .disabled:
-            return "Forced off for this project"
+            return String(localized: "Forced off for this project")
         }
     }
 

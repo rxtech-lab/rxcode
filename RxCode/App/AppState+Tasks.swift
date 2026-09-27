@@ -38,6 +38,8 @@ extension AppState {
         for (projectId, board) in taskBoards where !readyParentIDs(for: board, in: projectId).isEmpty {
             setTaskBoard(board, for: projectId)
         }
+        isTaskQueueDispatchEnabled = true
+        dispatchAllQueuedTasks()
     }
 
     /// Reads every known project's board without the launch-time release of
@@ -89,6 +91,12 @@ extension AppState {
     /// that moved the parent already did.
     func setTaskBoard(_ incoming: TaskBoard, for projectId: UUID, fromCloud: Bool = false) {
         var board = incoming
+        // A queue only exists in a chat column; a card moved out of one, or a
+        // column that stopped triggering chats, releases its queued tasks.
+        for idx in board.tasks.indices where board.tasks[idx].isQueued
+            && !board.column(for: board.tasks[idx].status).triggersChat {
+            board.tasks[idx].isQueued = false
+        }
         let childrenToDispatch = fromCloud ? [] : board.advanceChildren(of: readyParentIDs(for: board, in: projectId))
         let previousReady = taskBoards[projectId]?.readyParentIDs() ?? []
         taskBoards[projectId] = board
@@ -109,6 +117,7 @@ extension AppState {
         if !fromCloud {
             advanceDependents(of: board.readyParentIDs().subtracting(previousReady), outside: projectId)
         }
+        dispatchQueuedTasks(in: projectId)
     }
 
     // MARK: - Cross-project links
@@ -431,6 +440,9 @@ extension AppState {
             seenParents.insert($0).inserted && canLinkTask(stamped.id, to: $0)
         }
         let previousStatus = stored?.status
+        if !currentBoard.column(for: stamped.status).triggersChat || !stamped.agent.isAssigned {
+            stamped.isQueued = false
+        }
         let dispatches = shouldDispatchTask(stamped, from: previousStatus)
         if dispatches {
             stamped.attentionReason = nil
@@ -491,6 +503,9 @@ extension AppState {
         var moved = task
         moved.status = status
         moved.updatedAt = Date()
+        if board.resolvedStatus(of: stored) != status {
+            moved.isQueued = false
+        }
         let dispatches = shouldDispatchTask(moved, from: stored.status)
         if dispatches {
             moved.attentionReason = nil
@@ -925,7 +940,34 @@ extension AppState {
         )
         classifyingTaskIds.insert(created.id)
         await enrichTask(id: created.id, provisionalTitle: created.title)
+        adoptRunningChat(summary.id, forTask: created.id)
         return task(id: created.id)
+    }
+
+    /// Links a task created from a chat whose turn is still running to that
+    /// chat and places it in the board's first chat column, as if the task
+    /// had started it. The board is written directly rather than through
+    /// `upsertTask` / `moveTask`, since entering a chat column there would
+    /// dispatch a second run. The chat's session-stop trigger then moves the
+    /// card on like any other task run.
+    func adoptRunningChat(_ sessionId: String, forTask taskId: UUID) {
+        let resolved = resolveCurrentSessionId(sessionId)
+        guard sessionActivity[resolved]?.isStreaming == true,
+              let task = task(id: taskId),
+              task.sessionKey == nil,
+              let chatColumn = taskBoard(for: task.projectId).firstChatColumn
+        else { return }
+        updateBoard(task.projectId) { board in
+            guard let idx = board.tasks.firstIndex(where: { $0.id == taskId }) else { return }
+            if board.tasks[idx].status != chatColumn.id {
+                board.tasks[idx].status = chatColumn.id
+                board.tasks[idx].sortIndex = board.appendSortIndex(for: chatColumn.id)
+            }
+            board.tasks[idx].sessionKey = resolved
+            board.tasks[idx].isQueued = false
+            board.tasks[idx].attentionReason = nil
+            board.tasks[idx].updatedAt = Date()
+        }
     }
 
     // MARK: - Columns

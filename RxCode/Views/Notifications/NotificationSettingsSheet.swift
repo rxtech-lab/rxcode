@@ -169,54 +169,112 @@ private struct TrustedEmailsView: View {
     @State private var showAdd = false
     @State private var pendingRemoval: TrustedEmail?
 
+    /// Autopilot's per-account cap on trusted emails.
+    private let trustedEmailLimit = 10
+
+    private var recipient: String? { appState.briefingNotificationSettings.recipient }
+
     var body: some View {
-        List {
+        Form {
+            Section {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "envelope.badge.shield.half.filled")
+                        .font(.system(size: 22))
+                        .foregroundStyle(ClaudeTheme.accent)
+                        .frame(width: 32)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Where notifications can go")
+                            .font(.headline)
+                        Text("Notifications go to your account email unless you choose a trusted email. New addresses get a verification link that expires after 24 hours.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+
             if let errorMessage {
-                Text(errorMessage).foregroundStyle(.red).font(.callout)
+                Section {
+                    banner(errorMessage, systemImage: "exclamationmark.triangle.fill", color: .red)
+                }
+            } else if let infoMessage {
+                Section {
+                    banner(infoMessage, systemImage: "paperplane.fill", color: .accentColor)
+                }
             }
-            if let infoMessage {
-                Text(infoMessage).foregroundStyle(.secondary).font(.callout)
-            }
+
             if let accountEmail = list?.accountEmail {
                 Section("Account") {
-                    HStack(spacing: 10) {
-                        Image(systemName: "person.crop.circle").foregroundStyle(.secondary)
-                        Text(verbatim: accountEmail)
-                        Spacer()
-                        statusBadge(String(localized: "Account"), color: .secondary)
+                    EmailRow(
+                        email: accountEmail,
+                        systemImage: "person.crop.circle.fill",
+                        tint: .accentColor,
+                        detail: String(localized: "Your Autopilot account email"),
+                        isRecipient: recipient == nil
+                    ) {
+                        if recipient != nil {
+                            Button("Use for Notifications") {
+                                appState.updateBriefingNotificationSettings { $0.recipient = nil }
+                            }
+                            .buttonStyle(.borderless)
+                        }
                     }
                 }
             }
+
             Section {
-                ForEach(list?.items ?? []) { email in
-                    row(email)
-                }
                 if let list, list.items.isEmpty {
-                    Text("No trusted emails yet. Add an address to send notifications somewhere other than your account email.")
-                        .foregroundStyle(.secondary).font(.callout)
+                    VStack(spacing: 6) {
+                        Image(systemName: "tray")
+                            .font(.system(size: 24))
+                            .foregroundStyle(.tertiary)
+                        Text("No trusted emails yet")
+                            .font(.callout.weight(.medium))
+                        Text("Add a teammate's or work address to send notifications there.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                }
+                ForEach(list?.items ?? []) { email in
+                    trustedRow(email)
                 }
             } header: {
-                Text("Trusted Emails")
-            } footer: {
-                Text("Each address gets a verification link that expires after 24 hours. Notifications can only go to verified addresses.")
+                HStack {
+                    Text("Trusted Emails")
+                    Spacer()
+                    if let list {
+                        Text("\(list.items.count) of \(trustedEmailLimit)")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            Section {
+                // Toolbar items of a view pushed inside a macOS sheet aren't
+                // shown, so the add action lives in the form.
+                Button {
+                    showAdd = true
+                } label: {
+                    Label("Add Trusted Email…", systemImage: "plus.circle.fill")
+                }
+                .buttonStyle(.borderless)
+                .disabled((list?.items.count ?? 0) >= trustedEmailLimit)
+                .accessibilityIdentifier("add-trusted-email")
             }
         }
+        .formStyle(.grouped)
         .overlay {
             if isLoading, list == nil { ProgressView() }
         }
         .navigationTitle("Trusted Emails")
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    showAdd = true
-                } label: {
-                    Label("Add Email", systemImage: "plus")
-                }
-            }
-        }
         .sheet(isPresented: $showAdd) {
             AddTrustedEmailSheet(onAdded: { email in
-                infoMessage = String(localized: "Verification link sent to \(email.email).")
+                errorMessage = nil
+                infoMessage = String(localized: "Verification link sent to \(email.email). It expires in 24 hours.")
                 Task { await reload() }
             })
             .environment(appState)
@@ -236,45 +294,74 @@ private struct TrustedEmailsView: View {
         .task { await reload() }
     }
 
-    private func row(_ email: TrustedEmail) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: "envelope").foregroundStyle(.secondary)
-            Text(verbatim: email.email)
-            Spacer()
+    private func trustedRow(_ email: TrustedEmail) -> some View {
+        let isRecipient = recipient?.caseInsensitiveCompare(email.email) == .orderedSame
+        return EmailRow(
+            email: email.email,
+            systemImage: email.status.systemImage,
+            tint: email.status.color,
+            detail: statusDetail(email),
+            isRecipient: isRecipient
+        ) {
             if busyId == email.id {
                 ProgressView().controlSize(.small)
-            }
-            switch email.status {
-            case .verified:
-                statusBadge(String(localized: "Verified"), color: .green)
-            case .pending:
-                statusBadge(String(localized: "Pending"), color: .orange)
-            case .expired:
-                statusBadge(String(localized: "Expired"), color: .red)
-            }
-            Menu {
-                if email.status != .verified {
-                    Button("Resend Verification Link") { Task { await resend(email) } }
+            } else {
+                switch email.status {
+                case .verified:
+                    if !isRecipient {
+                        Button("Use for Notifications") {
+                            appState.updateBriefingNotificationSettings { $0.recipient = email.email }
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                case .pending, .expired:
+                    Button("Resend Link") { Task { await resend(email) } }
+                        .buttonStyle(.borderless)
                 }
-                Button("Remove…", role: .destructive) { pendingRemoval = email }
-            } label: {
-                Image(systemName: "ellipsis.circle")
+                Button {
+                    pendingRemoval = email
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+                .help("Remove \(email.email)")
+                .disabled(busyId != nil)
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .disabled(busyId != nil)
         }
-        .padding(.vertical, 2)
     }
 
-    private func statusBadge(_ text: String, color: Color) -> some View {
-        Text(text)
-            .font(.caption)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .foregroundStyle(color)
-            .background(color.opacity(0.12), in: Capsule())
+    private func statusDetail(_ email: TrustedEmail) -> String {
+        switch email.status {
+        case .verified:
+            if let date = Self.parseDate(email.verifiedAt) {
+                return String(localized: "Verified \(date.formatted(date: .abbreviated, time: .omitted))")
+            }
+            return String(localized: "Verified")
+        case .pending:
+            return String(localized: "Waiting for confirmation — check that inbox for the link")
+        case .expired:
+            return String(localized: "Verification link expired — resend it to try again")
+        }
+    }
+
+    private static func parseDate(_ raw: String?) -> Date? {
+        guard let raw else { return nil }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatter.date(from: raw) { return date }
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: raw)
+    }
+
+    private func banner(_ text: String, systemImage: String, color: Color) -> some View {
+        Label {
+            Text(verbatim: text)
+                .fixedSize(horizontal: false, vertical: true)
+        } icon: {
+            Image(systemName: systemImage).foregroundStyle(color)
+        }
+        .font(.callout)
     }
 
     private func reload() async {
@@ -315,6 +402,70 @@ private struct TrustedEmailsView: View {
             await reload()
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+}
+
+/// One address in the trusted emails list: a tinted icon, the address with
+/// a status line, a "Receives notifications" marker, and trailing actions.
+private struct EmailRow<Actions: View>: View {
+    let email: String
+    let systemImage: String
+    let tint: Color
+    let detail: String
+    let isRecipient: Bool
+    @ViewBuilder var actions: () -> Actions
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(tint)
+                .frame(width: 30, height: 30)
+                .background(tint.opacity(0.14), in: Circle())
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(verbatim: email)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    if isRecipient {
+                        Text("Receives notifications")
+                            .font(.caption2.weight(.medium))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .foregroundStyle(Color.accentColor)
+                            .background(Color.accentColor.opacity(0.14), in: Capsule())
+                    }
+                }
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 8)
+            HStack(spacing: 10) {
+                actions()
+            }
+            .font(.callout)
+        }
+        .padding(.vertical, 3)
+    }
+}
+
+private extension TrustedEmail.Status {
+    var systemImage: String {
+        switch self {
+        case .verified: "checkmark.seal.fill"
+        case .pending: "clock.fill"
+        case .expired: "exclamationmark.circle.fill"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .verified: .green
+        case .pending: .orange
+        case .expired: .red
         }
     }
 }
@@ -389,15 +540,12 @@ private struct NotificationHistoryView: View {
             }
             if records.isEmpty {
                 Text("No notifications yet.").foregroundStyle(.secondary)
+            } else {
+                Button("Clear History…", role: .destructive) { showClearConfirmation = true }
+                    .buttonStyle(.borderless)
             }
         }
         .navigationTitle("History")
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button("Clear History…", role: .destructive) { showClearConfirmation = true }
-                    .disabled(records.isEmpty)
-            }
-        }
         .confirmationDialog("Clear notification history?", isPresented: $showClearConfirmation, titleVisibility: .visible) {
             Button("Clear History", role: .destructive) {
                 Task { await clear() }

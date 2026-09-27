@@ -382,6 +382,7 @@ extension AppState {
             state.currentTurnOutputTokensUnkeyed = 0
         }
         broadcastMobileSessionStatus(sessionID: sessionKey, kind: .streamingStarted)
+        resumeTaskForStreamingSession(sessionKey)
 
         let basePermissionMode = window.sessionPermissionMode ?? permissionMode
         // Plan-mode boolean overrides the dropdown for the CLI `--permission-mode` flag only.
@@ -506,6 +507,7 @@ extension AppState {
             state.pendingToolResults.removeAll()
             state.lastStreamEventDate = nil
             state.liveBackgroundTaskIds.removeAll()
+            state.unconsumedSteerCount = 0
 
             extraMutations?(&state)
 

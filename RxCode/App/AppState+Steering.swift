@@ -43,6 +43,7 @@ extension AppState {
         updateState(key) { state in
             state.messages.append(ChatMessage(role: .user, content: text, attachments: resolved))
             state.needsNewMessage = true
+            state.unconsumedSteerCount += 1
         }
         await saveCurrentSession(in: window)
         return true

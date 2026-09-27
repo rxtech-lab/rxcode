@@ -261,6 +261,7 @@ struct TaskProjectDetailView: View {
         switch view.layout {
         case .board:
             TaskBoardLayoutView(
+                projectId: project.id,
                 board: board,
                 view: view,
                 tasks: tasks,
@@ -619,6 +620,7 @@ private struct TaskViewDragPreview: View {
 /// the keyword filter, beside a full-height story panel on the trailing edge. Stories stay out of the columns so they
 /// never read as tasks.
 struct TaskBoardLayoutView: View {
+    let projectId: UUID
     let board: TaskBoard
     let view: TaskSavedView
     let tasks: [ProjectTask]
@@ -667,6 +669,7 @@ struct TaskBoardLayoutView: View {
             hasher.combine(task.id)
             hasher.combine(taskStatus(task))
             hasher.combine(task.sortIndex)
+            hasher.combine(task.isQueued)
         }
         hasher.combine(stories.count)
         for story in stories {
@@ -719,6 +722,7 @@ struct TaskBoardLayoutView: View {
                     LazyHStack(alignment: .top, spacing: 12) {
                         ForEach(columns) { column in
                             TaskColumnView(
+                                projectId: projectId,
                                 column: column,
                                 tasks: (tasksByStatus[column.id] ?? []).sorted { $0.sortIndex < $1.sortIndex },
                                 board: board,

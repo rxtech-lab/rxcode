@@ -531,6 +531,7 @@ extension AppState {
             state.currentTurnOutputTokensByMessage.removeAll(keepingCapacity: true)
             state.currentTurnOutputTokensUnkeyed = 0
         }
+        resumeTaskForStreamingSession(sessionKey)
 
         let currentPermissionMode = sessionStates[sessionKey]?.permissionMode ?? permissionMode
         let projectSelection = defaultModelSelection(for: projects.first { $0.id == projectId })

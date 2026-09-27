@@ -16,6 +16,9 @@ struct TaskCardView: View {
     /// board by `TaskBoard.storyRollups()`. `nil` falls back to computing it
     /// here.
     var storyRollup: StoryRollup?
+    /// 1-based place in its chat column's run queue, when the column view
+    /// knows it. A queued card without one just reads "Queued".
+    var queuePosition: Int? = nil
     let onOpen: () -> Void
     @State private var pendingDeletion: TaskBoardSheet?
     @State private var showsAttentionReason = false
@@ -105,6 +108,14 @@ struct TaskCardView: View {
 
             if hasPills {
                 FlowLayout(spacing: 4) {
+                    if task.isQueued {
+                        TaskPill(
+                            text: queuePosition.map { String(localized: "Queued #\($0)") } ?? String(localized: "Queued"),
+                            icon: "hourglass",
+                            tint: ClaudeTheme.textSecondary
+                        )
+                        .help("Waiting for a free run slot in this column. Drag queued cards to change their order.")
+                    }
                     TaskClassificationPills(task: task, board: board)
                     if task.agent.planMode {
                         TaskPill(text: String(localized: "Plan"), icon: "eye", tint: ClaudeTheme.statusWarning)
@@ -141,7 +152,7 @@ struct TaskCardView: View {
 
     private var hasPills: Bool {
         TaskClassificationPills(task: task, board: board).hasContent
-            || task.agent.planMode || !task.attachments.isEmpty
+            || task.isQueued || task.agent.planMode || !task.attachments.isEmpty
     }
 }
 

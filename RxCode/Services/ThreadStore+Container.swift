@@ -23,7 +23,8 @@ extension ThreadStore {
             MemoryRecord.self,
             HookStatusRecord.self,
             HookCardRecord.self,
-            CustomMenuItemRecord.self
+            CustomMenuItemRecord.self,
+            UsageStatBucket.self
         ])
     }
 
@@ -48,6 +49,7 @@ extension ThreadStore {
             store.finalizeInterruptedHooks()
             store.finalizeInterruptedHookCards()
             store.finalizeInterruptedCompletionChecks()
+            store.pruneUsageBuckets()
             return store
         } catch {
             // Fall back to an in-memory container so the app still launches.

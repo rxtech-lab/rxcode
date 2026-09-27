@@ -113,9 +113,20 @@ extension AppState {
     /// Everything here reuses the normal send path through a background window:
     /// the assignment is copied onto its per-session override fields, then
     /// `sendPrompt` runs exactly as it would for a typed message.
+    ///
+    /// A chat column already running as many tasks as its concurrency limit
+    /// allows queues the task instead; `dispatchQueuedTasks` starts it later.
     func startTask(_ task: ProjectTask) async {
+        // Releases the run slot `admitTaskRun` (or `dispatchQueuedTasks`)
+        // reserved, on every exit — by then the thread is live or never will
+        // be. A run that bailed out frees its slot for the next queued task.
+        defer {
+            dispatchingTaskIds.remove(task.id)
+            dispatchQueuedTasks(in: task.projectId)
+        }
         if let assigned = task.assignedDeviceId, assigned != cloudDeviceID {
             var waiting = task
+            waiting.isQueued = false
             waiting.attentionReason = "This task is assigned to another Mac. Reassign it to this Mac before running it here."
             upsertTask(waiting)
             return
@@ -124,6 +135,7 @@ extension AppState {
             logger.error("startTask: no project for id \(task.projectId.uuidString, privacy: .public)")
             return
         }
+        guard admitTaskRun(task) else { return }
         // The stream only needs session context, not a visible window. Using
         // the board's window here briefly reveals the new chat before the
         // route can be restored, and also replaces its current chat selection.
@@ -168,6 +180,7 @@ extension AppState {
         // non-chat column ("Run with Agent") goes to the first chat column.
         var linked = task
         linked.attentionReason = nil
+        linked.isQueued = false
         if !board.column(for: task.status).triggersChat, let chatColumn = board.firstChatColumn {
             linked.status = chatColumn.id
         }
@@ -218,6 +231,116 @@ extension AppState {
             current.sessionKey = realSessionId
             upsertTask(current)
         }
+    }
+
+    // MARK: - Run queue
+
+    /// The chat column a run of `task` occupies: its own column when that
+    /// starts chats, else the board's first chat column ("Run with Agent").
+    func runColumn(for task: ProjectTask) -> TaskColumn? {
+        let board = taskBoard(for: task.projectId)
+        let current = board.column(for: task.status)
+        return current.triggersChat ? current : board.firstChatColumn
+    }
+
+    /// Whether `task` holds one of its column's run slots: it is being
+    /// dispatched, its agent is running, or its completion is being checked.
+    func isOccupyingRunSlot(_ task: ProjectTask) -> Bool {
+        !task.isQueued && (
+            dispatchingTaskIds.contains(task.id)
+                || verifyingTaskIds.contains(task.id)
+                || isAgentRunning(for: task)
+        )
+    }
+
+    /// How many tasks in `column` of `projectId`'s board hold a run slot.
+    func runningTaskCount(in column: TaskStatus, projectId: UUID) -> Int {
+        taskBoard(for: projectId).tasks(in: column).filter(isOccupyingRunSlot).count
+    }
+
+    /// Reserves a run slot for `task`, or parks it as queued in its chat
+    /// column when every slot is taken. Synchronous, so the reservation lands
+    /// before `startTask` first suspends.
+    private func admitTaskRun(_ task: ProjectTask) -> Bool {
+        guard let column = runColumn(for: task) else {
+            dispatchingTaskIds.insert(task.id)
+            return true
+        }
+        let board = taskBoard(for: task.projectId)
+        let running = board.tasks(in: column.id).filter { $0.id != task.id && isOccupyingRunSlot($0) }.count
+        if running < column.concurrencyLimit {
+            dispatchingTaskIds.insert(task.id)
+            return true
+        }
+        updateBoard(task.projectId) { board in
+            guard let idx = board.tasks.firstIndex(where: { $0.id == task.id }) else { return }
+            if board.resolvedStatus(of: board.tasks[idx]) != column.id {
+                board.tasks[idx].status = column.id
+                board.tasks[idx].sortIndex = board.appendSortIndex(for: column.id)
+            }
+            board.tasks[idx].isQueued = true
+            board.tasks[idx].attentionReason = nil
+            board.tasks[idx].updatedAt = Date()
+        }
+        logger.info("[Tasks] queued task \(task.id.uuidString, privacy: .public): \(column.name, privacy: .public) is at its limit of \(column.concurrencyLimit, privacy: .public)")
+        return false
+    }
+
+    /// Starts queued tasks, in column order, while their chat columns have
+    /// free run slots. Safe to call often: it does nothing without a free slot
+    /// and a queued task.
+    func dispatchQueuedTasks(in projectId: UUID) {
+        guard isTaskQueueDispatchEnabled else { return }
+        let board = taskBoard(for: projectId)
+        guard board.tasks.contains(where: \.isQueued) else { return }
+        for column in board.effectiveColumns where column.triggersChat {
+            let queued = board.queuedTasks(in: column.id).filter { !dispatchingTaskIds.contains($0.id) }
+            guard !queued.isEmpty else { continue }
+            let free = column.concurrencyLimit - runningTaskCount(in: column.id, projectId: projectId)
+            for task in queued.prefix(max(0, free)) {
+                // Reserve now; `startTask` re-checks the limit excluding itself.
+                dispatchingTaskIds.insert(task.id)
+                Task { await startTask(task) }
+            }
+        }
+    }
+
+    func dispatchAllQueuedTasks() {
+        for projectId in taskBoards.keys {
+            dispatchQueuedTasks(in: projectId)
+        }
+    }
+
+    /// Changes how many tasks a chat column may run at once, starting queued
+    /// tasks right away when the limit grows.
+    func setConcurrencyLimit(_ limit: Int, for columnId: TaskStatus, projectId: UUID) {
+        var column = taskBoard(for: projectId).column(for: columnId)
+        guard column.id == columnId else { return }
+        column.concurrencyLimit = min(max(1, limit), TaskColumn.maxConcurrencyLimit)
+        upsertColumn(column, projectId: projectId)
+    }
+
+    /// Moves a queued task to just before `target` in its column's queue, or
+    /// to the end of the queue when `target` is `nil`. Queue order is the
+    /// order queued tasks start in.
+    func reorderQueuedTask(_ taskId: UUID, before targetId: UUID?) {
+        guard let task = self.task(id: taskId), task.isQueued, targetId != taskId else { return }
+        let board = taskBoard(for: task.projectId)
+        let status = board.resolvedStatus(of: task)
+        let queue = board.queuedTasks(in: status).filter { $0.id != taskId }
+        let sortIndex: Double
+        if let targetId, let index = queue.firstIndex(where: { $0.id == targetId }) {
+            sortIndex = TaskBoard.sortIndex(
+                between: index > 0 ? queue[index - 1] : nil,
+                and: queue[index],
+                in: queue
+            )
+        } else if targetId == nil {
+            sortIndex = TaskBoard.sortIndex(between: queue.last, and: nil, in: queue)
+        } else {
+            return
+        }
+        moveTask(task, to: status, sortIndex: sortIndex)
     }
 
     // MARK: - Run history
@@ -305,6 +428,7 @@ extension AppState {
         updateState(sessionId) { state in
             state.messages.append(ChatMessage(role: .user, content: message.text, attachments: resolved))
             state.needsNewMessage = true
+            state.unconsumedSteerCount += 1
         }
         await saveSession(sessionId: sessionId, projectId: task.projectId, messages: stateForSession(sessionId).messages)
         removeQueuedTaskMessage(id: id, for: task)
@@ -341,6 +465,7 @@ extension AppState {
                 guard let idx = board.tasks.firstIndex(where: { $0.id == current.id }) else { return }
                 board.tasks[idx].status = chatColumn.id
                 board.tasks[idx].attentionReason = nil
+                board.tasks[idx].isQueued = false
                 board.tasks[idx].sortIndex = board.appendSortIndex(for: chatColumn.id)
                 board.tasks[idx].updatedAt = Date()
             }
@@ -373,6 +498,35 @@ extension AppState {
         }
     }
 
+    /// Puts the task linked to `sessionKey` back in the board's first chat
+    /// column when its thread starts a new turn from outside the task board —
+    /// a message typed into the chat itself, or a queued one flushed. Without
+    /// this a task the completion check sent back to Pending sits there while
+    /// its agent is working again. Written directly rather than through
+    /// `moveTask`, which would dispatch a brand-new run.
+    func resumeTaskForStreamingSession(_ sessionKey: String) {
+        let resolvedKey = resolveCurrentSessionId(sessionKey)
+        for (projectId, board) in taskBoards {
+            guard let task = board.tasks.first(where: {
+                guard let linked = $0.sessionKey else { return false }
+                return resolveCurrentSessionId(linked) == resolvedKey
+            }) else { continue }
+            guard !board.column(for: task.status).triggersChat,
+                  let chatColumn = board.firstChatColumn
+            else { return }
+            updateBoard(projectId) { board in
+                guard let idx = board.tasks.firstIndex(where: { $0.id == task.id }) else { return }
+                board.tasks[idx].status = chatColumn.id
+                board.tasks[idx].attentionReason = nil
+                board.tasks[idx].isQueued = false
+                board.tasks[idx].sortIndex = board.appendSortIndex(for: chatColumn.id)
+                board.tasks[idx].updatedAt = Date()
+            }
+            logger.info("[Tasks] resumed chat moved task \(task.id.uuidString, privacy: .public) to \(chatColumn.id.rawValue, privacy: .public)")
+            return
+        }
+    }
+
     // MARK: - Column triggers
 
     /// Check a finished task in a separate linked thread before routing it to
@@ -380,6 +534,8 @@ extension AppState {
     /// `taskCompletionCheckMaxAttempts` times; an unclear result after that is
     /// treated as needing attention.
     func advanceTaskAfterSessionEnd(_ payload: SessionEndPayload) async -> Bool {
+        // The run that ended freed a slot, whether or not the card moved.
+        defer { dispatchAllQueuedTasks() }
         let resolvedKey = resolveCurrentSessionId(payload.sessionKey)
         guard let task = taskBoards.values.flatMap(\.tasks).first(where: {
             guard let linked = $0.sessionKey else { return false }

@@ -77,10 +77,19 @@ struct TaskColumnFormSheet: View {
 
                 Section {
                     Toggle("Trigger chat", isOn: $draft.triggersChat)
+                    if draft.triggersChat {
+                        Stepper(value: $draft.concurrencyLimit, in: 1...TaskColumn.maxConcurrencyLimit) {
+                            LabeledContent("Maximum concurrent tasks", value: "\(draft.concurrencyLimit)")
+                        }
+                    }
                 } header: {
                     Text("Chat")
                 } footer: {
-                    Text("Dropping a card here starts a chat with its assigned agent. The card stays here, locked, until the chat stops.")
+                    Text("Dropping a card here starts a chat with its assigned agent. The card stays here, locked, until the chat stops. Beyond the concurrency limit, cards wait in a queue.")
+                }
+
+                if draft.triggersChat, !payload.isNew {
+                    runQueueSection
                 }
 
                 Section {
@@ -167,6 +176,53 @@ struct TaskColumnFormSheet: View {
         .padding(.vertical, 12)
     }
 
+    // MARK: - Run queue
+
+    /// Tasks holding one of this column's run slots, in board order.
+    private var runningTasks: [ProjectTask] {
+        board.tasks(in: draft.id).filter(appState.isOccupyingRunSlot)
+    }
+
+    /// Tasks waiting for a slot, in the order they will start.
+    private var queuedTasks: [ProjectTask] {
+        board.queuedTasks(in: draft.id)
+    }
+
+    /// Running tasks are listed for context and stay put; queued ones can be
+    /// dragged to change which starts next. Reordering is applied to the board
+    /// right away, since the queue keeps moving while the sheet is open.
+    private var runQueueSection: some View {
+        let running = runningTasks
+        let queued = queuedTasks
+        return Section {
+            if running.isEmpty && queued.isEmpty {
+                Text("No tasks are running or queued.")
+                    .foregroundStyle(ClaudeTheme.textTertiary)
+            }
+            ForEach(running) { task in
+                TaskRunQueueRow(task: task, systemImage: "play.circle.fill", tint: ClaudeTheme.statusSuccess)
+                    .moveDisabled(true)
+                    .help("Running tasks can't be reordered")
+            }
+            ForEach(Array(queued.enumerated()), id: \.element.id) { offset, task in
+                TaskRunQueueRow(task: task, systemImage: "\(offset + 1).circle", tint: ClaudeTheme.textSecondary)
+            }
+            .onMove { source, destination in
+                moveQueued(queued, from: source, to: destination)
+            }
+        } header: {
+            Text("Run Queue")
+        } footer: {
+            Text("Drag queued tasks to change the order they start in. Order changes apply immediately.")
+        }
+    }
+
+    private func moveQueued(_ queued: [ProjectTask], from source: IndexSet, to destination: Int) {
+        guard let from = source.first, queued.indices.contains(from) else { return }
+        let before = destination < queued.count ? queued[destination].id : nil
+        appState.reorderQueuedTask(queued[from].id, before: before)
+    }
+
     private func targetBinding(_ event: TaskTriggerEvent) -> Binding<TaskStatus?> {
         Binding(
             get: { draft.target(for: event) },
@@ -186,4 +242,21 @@ struct TaskColumnFormSheet: View {
         "bolt.circle", "hammer.circle", "flag.circle", "exclamationmark.circle",
         "pause.circle", "archivebox", "testtube.2", "shippingbox", "sparkles",
     ]
+}
+
+/// One task in the column editor's run queue list.
+private struct TaskRunQueueRow: View {
+    let task: ProjectTask
+    let systemImage: String
+    let tint: Color
+
+    var body: some View {
+        Label {
+            Text(task.title.isEmpty ? String(localized: "Untitled task") : task.title)
+                .lineLimit(1)
+        } icon: {
+            Image(systemName: systemImage)
+                .foregroundStyle(tint)
+        }
+    }
 }

@@ -95,6 +95,7 @@
 		FB0000080000000000000001 /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = FB0000060000000000000001 /* FirebaseCrashlytics */; };
 		FE0A11BB22CC33DD44EE5501 /* PlanModeHookSuppressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0A11BB22CC33DD44EE5502 /* PlanModeHookSuppressionTests.swift */; };
 		FE0A11BB22CC33DD44EE5601 /* TaskBoardHookTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0A11BB22CC33DD44EE5602 /* TaskBoardHookTests.swift */; };
+		36596E0C1F1F03A76E8EAC44 /* TaskRunQueueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82AB0A9F0F420072B6D65917 /* TaskRunQueueTests.swift */; };
 		FE0A11BB22CC33DD44EE5701 /* MarkdownDescriptionEditorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0A11BB22CC33DD44EE5702 /* MarkdownDescriptionEditorTests.swift */; };
 		FE0A11BB22CC33DD44EE5901 /* TaskCreationModeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0A11BB22CC33DD44EE5902 /* TaskCreationModeTests.swift */; };
 /* End PBXBuildFile section */
@@ -216,6 +217,7 @@
 		FBE6CEA01FE935F6710EB5B0 /* ScheduledTaskStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduledTaskStateTests.swift; sourceTree = "<group>"; };
 		FE0A11BB22CC33DD44EE5502 /* PlanModeHookSuppressionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlanModeHookSuppressionTests.swift; sourceTree = "<group>"; };
 		FE0A11BB22CC33DD44EE5602 /* TaskBoardHookTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TaskBoardHookTests.swift; sourceTree = "<group>"; };
+		82AB0A9F0F420072B6D65917 /* TaskRunQueueTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TaskRunQueueTests.swift; sourceTree = "<group>"; };
 		FE0A11BB22CC33DD44EE5702 /* MarkdownDescriptionEditorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MarkdownDescriptionEditorTests.swift; sourceTree = "<group>"; };
 		FE0A11BB22CC33DD44EE5902 /* TaskCreationModeTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TaskCreationModeTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -419,6 +421,7 @@
 				A7C31E012FC5000000000001 /* PermissionSessionAllowTests.swift */,
 				FE0A11BB22CC33DD44EE5502 /* PlanModeHookSuppressionTests.swift */,
 				FE0A11BB22CC33DD44EE5602 /* TaskBoardHookTests.swift */,
+				82AB0A9F0F420072B6D65917 /* TaskRunQueueTests.swift */,
 				FE0A11BB22CC33DD44EE5902 /* TaskCreationModeTests.swift */,
 				AC0A11BB22CC33DD44EE5802 /* ACPServiceSuggestionTests.swift */,
 				FE0A11BB22CC33DD44EE5702 /* MarkdownDescriptionEditorTests.swift */,
@@ -918,6 +921,7 @@
 				A7C31E012FC5000000000002 /* PermissionSessionAllowTests.swift in Sources */,
 				FE0A11BB22CC33DD44EE5501 /* PlanModeHookSuppressionTests.swift in Sources */,
 				FE0A11BB22CC33DD44EE5601 /* TaskBoardHookTests.swift in Sources */,
+				36596E0C1F1F03A76E8EAC44 /* TaskRunQueueTests.swift in Sources */,
 				FE0A11BB22CC33DD44EE5901 /* TaskCreationModeTests.swift in Sources */,
 				AC0A11BB22CC33DD44EE5801 /* ACPServiceSuggestionTests.swift in Sources */,
 				FE0A11BB22CC33DD44EE5701 /* MarkdownDescriptionEditorTests.swift in Sources */,
@@ -1689,7 +1693,7 @@
 			repositoryURL = "https://github.com/rxtech-lab/RxAuthSwift";
 			requirement = {
 				kind = exactVersion;
-				version = 1.3.0;
+				version = 1.3.1;
 			};
 		};
 		DF4652662FCD34B3002D9562 /* XCRemoteSwiftPackageReference "swift-jsonschema-form" */ = {

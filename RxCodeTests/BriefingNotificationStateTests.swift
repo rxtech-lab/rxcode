@@ -73,5 +73,21 @@ final class BriefingNotificationStateTests: XCTestCase {
         XCTAssertEqual(appState.scheduledRunNotification(forSessions: ["pending-2"]), .completionReport)
         XCTAssertNil(appState.scheduledRunNotification(forSessions: ["other"]))
     }
-}
 
+    func testGrantedScopesAreReadFromTheAccessToken() {
+        func jwt(_ claims: String) -> String {
+            let payload = Data(claims.utf8).base64EncodedString()
+                .replacingOccurrences(of: "=", with: "")
+                .replacingOccurrences(of: "+", with: "-")
+                .replacingOccurrences(of: "/", with: "_")
+            return "eyJhbGciOiJSUzI1NiJ9.\(payload).sig"
+        }
+        XCTAssertEqual(RxAuthService.grantedScopes(in: jwt(#"{"sub":"u","scope":"openid"}"#)), ["openid"])
+        XCTAssertEqual(
+            RxAuthService.grantedScopes(in: jwt(#"{"scope":"openid read:profile read:email"}"#)),
+            Set(RxAuthService.requestedScopes)
+        )
+        XCTAssertNil(RxAuthService.grantedScopes(in: jwt(#"{"sub":"u"}"#)))
+        XCTAssertNil(RxAuthService.grantedScopes(in: "opaque-token"))
+    }
+}

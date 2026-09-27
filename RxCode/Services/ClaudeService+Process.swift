@@ -487,6 +487,12 @@ extension ClaudeCodeServer {
             "--output-format", "stream-json",
             "--verbose",
             "--include-partial-messages",
+            // Echoes each stdin user frame as the CLI takes it, so a steer
+            // that lands after the turn's last tool call — which the CLI runs
+            // as a new turn after this one's `result` — can be told apart
+            // from one it folded in. See the `.result` handler in
+            // `processStream`.
+            "--replay-user-messages",
         ]
 
         if permissionMode != .default {

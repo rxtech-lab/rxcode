@@ -113,7 +113,7 @@ struct FullScreenSearchView: View {
         case .threads: count = threads
         case .docs: count = docs
         }
-        return "\(item.title) (\(count))"
+        return String(format: String(localized: "%@ (%lld)"), item.title, count)
     }
 }
 
@@ -173,7 +173,7 @@ struct MobileSearchContentView: View {
         case .threads: count = threads
         case .docs: count = docs
         }
-        return "\(item.title) (\(count))"
+        return String(format: String(localized: "%@ (%lld)"), item.title, count)
     }
 }
 
@@ -187,9 +187,9 @@ enum MobileSearchScope: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .all: return "All"
-        case .threads: return "Threads"
-        case .docs: return "Docs"
+        case .all: return String(localized: "All")
+        case .threads: return String(localized: "Threads")
+        case .docs: return String(localized: "Docs")
         }
     }
 }
@@ -339,7 +339,7 @@ struct SearchDocHitCard: View {
     let onOpen: () -> Void
 
     private var title: String {
-        hit.docId.isEmpty ? (hit.repositoryFullName ?? "Document") : hit.docId
+        hit.docId.isEmpty ? (hit.repositoryFullName ?? String(localized: "Document")) : hit.docId
     }
 
     private var hasSnippet: Bool {
@@ -419,4 +419,3 @@ private struct GlassDocCardButtonStyle: ButtonStyle {
         return .clear
     }
 }
-

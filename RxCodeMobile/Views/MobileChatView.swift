@@ -495,7 +495,7 @@ struct MobileChatView: View {
     }
 
     var title: String {
-        state.sessionSummary(sessionID: sessionID)?.title ?? "Thread"
+        state.sessionSummary(sessionID: sessionID)?.title ?? String(localized: "Thread")
     }
 
     /// Live todos from synced messages when available, otherwise from the

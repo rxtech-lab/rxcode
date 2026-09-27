@@ -52,6 +52,9 @@ struct MobileTaskDetailView: View {
             }
         }
         .navigationTitle("Task")
+        .onAppear {
+            if task != nil { AnalyticsService.shared.log(.projectTaskOpened) }
+        }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if let task, !state.usesCloudTasks {
@@ -312,6 +315,9 @@ struct MobileStoryDetailView: View {
             }
         }
         .navigationTitle("Story")
+        .onAppear {
+            if story != nil { AnalyticsService.shared.log(.projectStoryOpened) }
+        }
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $editingStory) { story in
             NavigationStack {

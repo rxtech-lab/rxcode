@@ -20,11 +20,10 @@ struct BriefingView: View {
     /// Group id whose copy button most recently fired; used for transient checkmark feedback.
     @State private var recentlyCopiedGroupId: String?
 
-    /// Group ids whose thread list is expanded to show all threads. Collapsed by default.
-    @State private var expandedThreadGroupIds: Set<String> = []
+    @State private var presentedBriefing: BriefingGroup?
 
-    /// Number of threads shown per group before the "Show more" toggle appears.
-    private static let defaultVisibleThreadCount = 5
+    private static let maximumSummaryPreviewHeight: CGFloat = 220
+    private static let visibleThreadCount = 3
 
     /// Container width tracked from the scroll content; drives the waterfall column count.
     @State private var availableWidth: CGFloat = 800
@@ -185,6 +184,9 @@ struct BriefingView: View {
         .sheet(isPresented: $showRepoSetup) {
             RepoSetupManageSheet()
                 .environment(appState)
+        }
+        .sheet(item: $presentedBriefing) { group in
+            briefingSheet(group)
         }
     }
 
@@ -498,12 +500,23 @@ struct BriefingView: View {
 
             if let briefing = group.briefing {
                 Divider().opacity(0.4)
-                BriefingMarkdownView(text: briefing.briefing, fontSize: 12.5)
+                BriefingSummaryPreview(
+                    text: briefing.briefing,
+                    maximumHeight: Self.maximumSummaryPreviewHeight
+                ) {
+                    presentedBriefing = group
+                }
             }
 
             if !group.threadSummaries.isEmpty {
                 Divider().opacity(0.4)
-                threadList(group.threadSummaries, groupId: group.id)
+                threadList(Array(group.threadSummaries.prefix(Self.visibleThreadCount)), totalCount: group.threadSummaries.count)
+            }
+
+            if group.threadSummaries.count > Self.visibleThreadCount {
+                BriefingShowMoreButton {
+                    presentedBriefing = group
+                }
             }
         }
         .padding(16)
@@ -517,6 +530,41 @@ struct BriefingView: View {
                 .strokeBorder(ClaudeTheme.border.opacity(0.6), lineWidth: 0.5)
         )
         .shadow(color: Color.black.opacity(0.03), radius: 2, x: 0, y: 1)
+    }
+
+    private func briefingSheet(_ group: BriefingGroup) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            groupCardHeader(group, project: projectsById[group.projectId])
+                .padding(24)
+
+            Divider()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    if let briefing = group.briefing {
+                        BriefingMarkdownView(text: briefing.briefing)
+                    }
+                    if !group.threadSummaries.isEmpty {
+                        if group.briefing != nil {
+                            Divider()
+                        }
+                        threadList(group.threadSummaries, totalCount: group.threadSummaries.count)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .padding(24)
+            }
+
+            Divider()
+            HStack {
+                Spacer()
+                Button("Done") { presentedBriefing = nil }
+                    .keyboardShortcut(.defaultAction)
+            }
+            .padding(16)
+        }
+        .frame(minWidth: 600, idealWidth: 760, minHeight: 420, idealHeight: 660)
+        .background(ClaudeTheme.background)
     }
 
     private func groupCardHeader(_ group: BriefingGroup, project: Project?) -> some View {
@@ -554,10 +602,10 @@ struct BriefingView: View {
             // Status chips wrap onto multiple lines so a narrow card never
             // truncates the branch / CI / release / PR indicators.
             FlowLayout(spacing: 6, lineSpacing: 6) {
-                chip(icon: "arrow.triangle.branch", text: group.branch, accented: true)
+                BriefingInfoChip(icon: "arrow.triangle.branch", text: group.branch, accented: true)
                 ciChip(for: group)
                 if let project, let version = appState.projectLatestReleaseVersion(project) {
-                    chip(icon: "tag.fill", text: version)
+                    BriefingInfoChip(icon: "tag.fill", text: version)
                 }
                 BriefingPRStatusView(
                     projectId: group.projectId,
@@ -785,35 +833,9 @@ struct BriefingView: View {
         )
     }
 
-    private func chip(icon: String, text: String, accented: Bool = false) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: icon)
-                .font(.system(size: 9, weight: .semibold))
-            Text(text)
-                .font(.system(size: 10.5, weight: .medium))
-                .lineLimit(1)
-                .truncationMode(.middle)
-        }
-        .foregroundStyle(accented ? ClaudeTheme.accent : ClaudeTheme.textSecondary)
-        .padding(.horizontal, 7)
-        .padding(.vertical, 2)
-        .background(
-            Capsule(style: .continuous)
-                .fill(accented ? ClaudeTheme.accent.opacity(0.12) : ClaudeTheme.surfaceSecondary)
-        )
-        .overlay(
-            Capsule(style: .continuous)
-                .strokeBorder(accented ? ClaudeTheme.accent.opacity(0.25) : ClaudeTheme.border.opacity(0.6), lineWidth: 0.5)
-        )
-    }
-
     // MARK: - Thread list (compact rows)
 
-    private func threadList(_ items: [ThreadSummaryItem], groupId: String) -> some View {
-        let isExpanded = expandedThreadGroupIds.contains(groupId)
-        let visibleItems = isExpanded ? items : Array(items.prefix(Self.defaultVisibleThreadCount))
-        let hiddenCount = max(0, items.count - visibleItems.count)
-
+    private func threadList(_ items: [ThreadSummaryItem], totalCount: Int) -> some View {
         return VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 Text("Threads")
@@ -821,7 +843,7 @@ struct BriefingView: View {
                     .foregroundStyle(ClaudeTheme.textTertiary)
                     .textCase(.uppercase)
                     .tracking(0.6)
-                Text("\(items.count)")
+                Text("\(totalCount)")
                     .font(.system(size: 10.5, weight: .semibold).monospacedDigit())
                     .foregroundStyle(ClaudeTheme.textTertiary)
                     .padding(.horizontal, 5)
@@ -831,46 +853,10 @@ struct BriefingView: View {
             }
             .padding(.bottom, 2)
 
-            ForEach(visibleItems) { item in
+            ForEach(items) { item in
                 threadRow(item)
             }
-
-            if hiddenCount > 0 || isExpanded {
-                threadLimitToggle(groupId: groupId, isExpanded: isExpanded, hiddenCount: hiddenCount)
-            }
         }
-    }
-
-    private func threadLimitToggle(groupId: String, isExpanded: Bool, hiddenCount: Int) -> some View {
-        Button {
-            withAnimation(.easeInOut(duration: 0.16)) {
-                if isExpanded {
-                    expandedThreadGroupIds.remove(groupId)
-                } else {
-                    expandedThreadGroupIds.insert(groupId)
-                }
-            }
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
-                Text(isExpanded ? "Show less" : "Show more")
-                    .font(.system(size: 11, weight: .medium))
-                if !isExpanded {
-                    Text("\(hiddenCount)")
-                        .font(.system(size: 10.5, weight: .semibold).monospacedDigit())
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(Capsule().fill(ClaudeTheme.surfaceSecondary))
-                }
-                Spacer()
-            }
-            .foregroundStyle(ClaudeTheme.textSecondary)
-            .padding(.vertical, 4)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .padding(.top, 2)
     }
 
     private func threadRow(_ item: ThreadSummaryItem) -> some View {
@@ -880,6 +866,7 @@ struct BriefingView: View {
             todoProgress: appState.todoProgress(forSessionId: item.sessionId),
             reviewPassed: appState.reviewPassedBySession[item.sessionId]
         ) {
+            presentedBriefing = nil
             appState.selectSession(id: item.sessionId, in: windowState)
         }
     }

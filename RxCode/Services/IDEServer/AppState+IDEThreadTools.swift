@@ -71,7 +71,7 @@ extension AppState {
         }
         let summary = thread.toSummary()
         let cwd = summary.worktreePath
-            ?? projects.first(where: { $0.id == summary.projectId })?.path
+            ?? sessionProject(id: summary.projectId)?.path
             ?? ""
         let requestedLimit = Int(arguments["limit"]?.numberValue ?? 200)
         let limit = max(1, min(requestedLimit, 1000))

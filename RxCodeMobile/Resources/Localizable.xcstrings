@@ -49,6 +49,22 @@
         }
       }
     },
+    "Set as Default View" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기본 보기로 설정"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设为默认视图"
+          }
+        }
+      }
+    },
     "· Agent working" : {
 
     },

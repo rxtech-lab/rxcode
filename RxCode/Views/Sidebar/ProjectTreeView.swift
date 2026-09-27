@@ -201,13 +201,19 @@ struct ProjectTreeView: View {
 
                 GeneralRouteRow(route: .briefing, help: "Open project branch briefing")
                     .popoverTip(RxCodeTips.BriefingTip(), arrowEdge: .trailing)
+
+                GeneralRouteRow(route: .chat, help: "Chat with any agent")
+
+                GeneralRouteRow(route: .scheduled, help: "Open tasks that run on a cron schedule")
             }
         }
 
         /// One "General" nav row. Both entries render identically; only the
         /// route differs, so the styling lives in one place.
         private struct GeneralRouteRow: View {
+            @Environment(AppState.self) private var appState
             @Environment(WindowState.self) private var windowState
+            @Environment(\.openWindow) private var openWindow
             let route: GeneralRoute
             let help: String
 
@@ -215,7 +221,11 @@ struct ProjectTreeView: View {
 
             var body: some View {
                 Button {
-                    windowState.generalRoute = route
+                    if route == .chat {
+                        appState.openGlobalChat(in: windowState)
+                    } else {
+                        windowState.generalRoute = route
+                    }
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: route.systemImage)
@@ -241,6 +251,18 @@ struct ProjectTreeView: View {
                 .buttonStyle(.plain)
                 .help(help)
                 .accessibilityIdentifier("general-route-\(route.rawValue)")
+                .contextMenu {
+                    if route == .chat {
+                        Button {
+                            openWindow(
+                                id: "chat-window",
+                                value: ChatWindowValue(instanceId: UUID(), workspaceID: appState.activeWorkspace.id)
+                            )
+                        } label: {
+                            Label("Chat in New Window", systemImage: "macwindow.badge.plus")
+                        }
+                    }
+                }
             }
         }
     }

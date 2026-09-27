@@ -588,6 +588,9 @@ public struct TaskSavedView: Identifiable, Codable, Sendable, Hashable {
     /// Statuses the board's story panel shows, matched against each story's
     /// rolled-up status. Empty means every status the view's columns allow.
     public var storyPanelStatuses: [TaskStatus]
+    /// The view a project opens on, and the one its dashboard card previews.
+    /// At most one view per board carries it; see `TaskBoard.defaultView`.
+    public var isDefault: Bool
 
     public init(
         id: UUID = UUID(),
@@ -599,7 +602,8 @@ public struct TaskSavedView: Identifiable, Codable, Sendable, Hashable {
         storyIds: [UUID] = [],
         statuses: [TaskStatus] = [],
         filterScript: String? = nil,
-        storyPanelStatuses: [TaskStatus] = []
+        storyPanelStatuses: [TaskStatus] = [],
+        isDefault: Bool = false
     ) {
         self.id = id
         self.name = name
@@ -611,10 +615,11 @@ public struct TaskSavedView: Identifiable, Codable, Sendable, Hashable {
         self.statuses = statuses
         self.filterScript = filterScript
         self.storyPanelStatuses = storyPanelStatuses
+        self.isDefault = isDefault
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, layout, tags, versions, milestones, storyIds, statuses, filterScript, storyPanelStatuses
+        case id, name, layout, tags, versions, milestones, storyIds, statuses, filterScript, storyPanelStatuses, isDefault
         /// Single-value filters written before multi-select existed.
         case version, storyId
     }
@@ -644,6 +649,7 @@ public struct TaskSavedView: Identifiable, Codable, Sendable, Hashable {
         statuses = (try? c.decodeIfPresent([TaskStatus].self, forKey: .statuses)) ?? []
         filterScript = try? c.decodeIfPresent(String.self, forKey: .filterScript)
         storyPanelStatuses = (try? c.decodeIfPresent([TaskStatus].self, forKey: .storyPanelStatuses)) ?? []
+        isDefault = (try? c.decodeIfPresent(Bool.self, forKey: .isDefault)) ?? false
     }
 
     /// Also writes the legacy single-value keys when a list holds exactly one
@@ -660,6 +666,7 @@ public struct TaskSavedView: Identifiable, Codable, Sendable, Hashable {
         try c.encode(statuses, forKey: .statuses)
         try c.encodeIfPresent(filterScript, forKey: .filterScript)
         try c.encode(storyPanelStatuses, forKey: .storyPanelStatuses)
+        if isDefault { try c.encode(isDefault, forKey: .isDefault) }
         if versions.count == 1 { try c.encode(versions[0], forKey: .version) }
         if storyIds.count == 1 { try c.encode(storyIds[0], forKey: .storyId) }
     }
@@ -995,26 +1002,6 @@ public struct TaskBoard: Codable, Sendable {
             )
         }
         return rollups
-    }
-
-    /// The views a project shows as tabs: its saved views, or the implicit
-    /// default board when none have been created.
-    public var effectiveViews: [TaskSavedView] {
-        savedViews.isEmpty ? [TaskSavedView.defaultView] : savedViews
-    }
-
-    /// The view-tab order after dropping `view` onto `target`'s tab: the
-    /// dragged tab takes the target's slot, like `columnOrder(moving:to:)`.
-    /// `nil` when the drop is a no-op or either id isn't a tab.
-    public func viewOrder(moving view: UUID, to target: UUID) -> [TaskSavedView]? {
-        var order = effectiveViews
-        guard view != target,
-              let from = order.firstIndex(where: { $0.id == view }),
-              let to = order.firstIndex(where: { $0.id == target })
-        else { return nil }
-        let moved = order.remove(at: from)
-        order.insert(moved, at: to)
-        return order
     }
 
     /// Every distinct tag on the board — used by a story or task, or given a

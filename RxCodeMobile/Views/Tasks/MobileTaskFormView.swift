@@ -211,6 +211,9 @@ struct MobileTaskFormView: View {
             defer { isSaving = false }
             do {
                 try await state.saveTask(toSave)
+                if isNew {
+                    AnalyticsService.shared.log(.projectTaskCreated, parameters: ["method": "form"])
+                }
                 dismiss()
             } catch {
                 errorMessage = error.localizedDescription
@@ -287,6 +290,9 @@ struct MobileStoryFormView: View {
             defer { isSaving = false }
             do {
                 try await state.saveStory(toSave)
+                if isNew {
+                    AnalyticsService.shared.log(.projectStoryCreated, parameters: ["method": "form"])
+                }
                 dismiss()
             } catch {
                 errorMessage = error.localizedDescription
@@ -365,6 +371,7 @@ struct MobileQuickAddTaskView: View {
             defer { isSaving = false }
             do {
                 try await state.quickAddTask(text: text, projectID: projectID, storyID: storyID)
+                AnalyticsService.shared.log(.projectTaskCreated, parameters: ["method": "quick_add"])
                 dismiss()
             } catch {
                 errorMessage = error.localizedDescription

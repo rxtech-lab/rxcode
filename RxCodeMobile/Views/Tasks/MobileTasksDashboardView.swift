@@ -58,6 +58,9 @@ struct MobileTasksDashboardView: View {
             }
         }
         .navigationTitle("Tasks")
+        .onAppear {
+            AnalyticsService.shared.log(.taskDashboardOpened)
+        }
         .overlay {
             if state.taskProjects.isEmpty && (!state.usesCloudTasks || cloud.isSignedIn) {
                 ContentUnavailableView(
@@ -214,16 +217,22 @@ struct MobileProjectTaskSummaryRow: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
-                    MobileStoryProgressBar(progress: progress(board))
+                    let view = board.defaultView
+                    let tasks = board.tasks(matching: view)
+                    let storyCount = board.stories(matching: view).count
+                    MobileStoryProgressBar(progress: progress(board, tasks: tasks))
                     FlowLayout(spacing: 4) {
+                        if board.effectiveViews.count > 1 {
+                            TaskPill(text: view.name, icon: view.layout.systemImage)
+                        }
                         ForEach(board.effectiveColumns) { column in
-                            let count = board.tasks(in: column.id).count
+                            let count = tasks.filter { board.resolvedStatus(of: $0) == column.id }.count
                             if count > 0 {
                                 TaskPill(text: "\(column.name) \(count)", icon: column.systemImage, tint: column.tint)
                             }
                         }
-                        if !board.stories.isEmpty {
-                            TaskPill(text: String(localized: "\(board.stories.count) stories"), icon: "rectangle.stack")
+                        if storyCount > 0 {
+                            TaskPill(text: String(localized: "\(storyCount) stories"), icon: "rectangle.stack")
                         }
                     }
                 }
@@ -244,13 +253,14 @@ struct MobileProjectTaskSummaryRow: View {
         snapshot?.board.tasks.contains { state.isTaskAgentRunning($0) } ?? false
     }
 
-    /// Whole-board progress, using the same done / started split as a story.
-    private func progress(_ board: TaskBoard) -> StoryProgress {
+    /// Progress of the default view's tasks, using the same done / started
+    /// split as a story.
+    private func progress(_ board: TaskBoard, tasks: [ProjectTask]) -> StoryProgress {
         let columns = board.effectiveColumns
         let chatStart = columns.firstIndex(where: \.triggersChat)
         var done = 0
         var active = 0
-        for task in board.tasks {
+        for task in tasks {
             let index = board.columnIndex(of: board.resolvedStatus(of: task))
             if columns[index].countsAsDone {
                 done += 1
@@ -258,13 +268,13 @@ struct MobileProjectTaskSummaryRow: View {
                 active += 1
             }
         }
-        return StoryProgress(done: done, active: active, total: board.tasks.count)
+        return StoryProgress(done: done, active: active, total: tasks.count)
     }
 }
 
 /// One project on the iPad overview, like a project card on the Mac's Tasks
-/// overview: the board summary, then the most recently active stories. The
-/// full board is one tap away.
+/// overview: the board summary, then the most recently active stories, both
+/// narrowed by the project's default view. The full board is one tap away.
 struct MobileProjectTaskCard: View {
     @EnvironmentObject private var state: MobileAppState
     let project: Project
@@ -277,14 +287,14 @@ struct MobileProjectTaskCard: View {
     private var board: TaskBoard { state.taskBoard(for: project.id) }
 
     private var stories: [ProjectStory] {
-        board.stories
+        board.stories(matching: board.defaultView)
             .filter { $0.matches(keyword: keyword) }
             .sorted { $0.updatedAt > $1.updatedAt }
     }
 
     /// Tasks outside any story, shown when the project has no stories yet.
     private var looseTasks: [ProjectTask] {
-        board.tasks
+        board.tasks(matching: board.defaultView)
             .filter { $0.storyId == nil && $0.matches(keyword: keyword) }
             .sorted { $0.updatedAt > $1.updatedAt }
     }

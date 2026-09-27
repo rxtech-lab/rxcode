@@ -381,7 +381,7 @@ struct GlobalSearchOverlay: View {
 
     @ViewBuilder
     private func projectSection(_ group: ThreadSearchService.Group) -> some View {
-        let project = appState.projects.first(where: { $0.id == group.projectId })
+        let project = appState.sessionProject(id: group.projectId)
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 Image(systemName: "folder.fill")
@@ -694,16 +694,7 @@ struct GlobalSearchOverlay: View {
             // Drop the current thread from the semantic groups when we already
             // have in-thread literal matches — same thread shouldn't appear twice.
             let currentId = inThreadHits.isEmpty ? nil : windowState.currentSessionId
-            // Hide hits that belong to a project no longer in the projects list.
-            // These are orphans from a deleted project; surfacing them as
-            // "Unknown project" is confusing, so we drop them from the results.
-            let knownProjectIds = Set(appState.projects.map(\.id))
-            groups = results.compactMap { group in
-                guard knownProjectIds.contains(group.projectId) else { return nil }
-                let filtered = group.hits.filter { $0.threadId != currentId }
-                guard !filtered.isEmpty else { return nil }
-                return ThreadSearchService.Group(projectId: group.projectId, hits: filtered)
-            }
+            groups = appState.globalSearchGroups(results, excluding: currentId)
             hasSearched = true
         }
         isSearchingThreads = false

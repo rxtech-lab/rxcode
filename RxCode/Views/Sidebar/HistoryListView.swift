@@ -4,6 +4,14 @@ import SwiftUI
 struct HistoryListView: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
+    var scopedProjectId: UUID? = nil
+    var showsWorkspaceHistory = false
+    /// Called after a row opens its thread, e.g. so a presenting sheet can dismiss.
+    var onSelectSession: (() -> Void)? = nil
+
+    private var isScoped: Bool { !showsWorkspaceHistory && (scopedProjectId != nil || windowState.isProjectWindow) }
+    private var includesAllProjects: Bool { showsWorkspaceHistory || (!isScoped && showAllProjects) }
+
     @State private var renamingSession: ChatSession?
     @State private var renameText = ""
     @AppStorage("historyShowAllProjects") private var showAllProjects = true
@@ -30,8 +38,10 @@ struct HistoryListView: View {
         .alert(showArchived ? "Delete All Archived" : "Delete All", isPresented: $showDeleteAllAlert) {
             Button("Delete", role: .destructive) {
                 let projectId: UUID?
-                if windowState.isProjectWindow {
-                    projectId = windowState.selectedProject?.id
+                if showsWorkspaceHistory {
+                    projectId = nil
+                } else if isScoped {
+                    projectId = scopedProjectId ?? windowState.selectedProject?.id
                 } else {
                     projectId = showAllProjects ? nil : windowState.selectedProject?.id
                 }
@@ -40,7 +50,7 @@ struct HistoryListView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            let isCurrentOnly = windowState.isProjectWindow || !showAllProjects
+            let isCurrentOnly = !includesAllProjects
             switch (showArchived, isCurrentOnly) {
             case (true, true):
                 Text("All archived chats in the current project will be deleted. This action cannot be undone.")
@@ -122,7 +132,7 @@ struct HistoryListView: View {
             Spacer()
 
             // No need to toggle all/current in the project window
-            if !windowState.isProjectWindow {
+            if !isScoped && !showsWorkspaceHistory {
                 Button {
                     showAllProjects.toggle()
                 } label: {
@@ -172,14 +182,15 @@ struct HistoryListView: View {
             get: { appState.currentSession(in: windowState)?.id },
             set: { id in
                 if let id {
-                    appState.selectSession(id: id, in: windowState)
+                    appState.selectSession(id: id, inChatTab: showsWorkspaceHistory, in: windowState)
+                    onSelectSession?()
                 }
             }
         )
     }
 
     private func sessionRow(_ session: DisplaySession) -> some View {
-        let projectName = (showAllProjects && !windowState.isProjectWindow) ? session.projectName : nil
+        let projectName = includesAllProjects ? session.projectName : nil
         return SessionSidebarRow(
             title: session.title,
             projectName: projectName,
@@ -189,7 +200,8 @@ struct HistoryListView: View {
         )
         .onLongPressGesture(minimumDuration: 0, maximumDistance: 10, pressing: { pressing in
             if pressing {
-                appState.selectSession(id: session.id, in: windowState)
+                appState.selectSession(id: session.id, inChatTab: showsWorkspaceHistory, in: windowState)
+                onSelectSession?()
             }
         }, perform: {})
         .contextMenu {
@@ -203,7 +215,7 @@ struct HistoryListView: View {
                     } label: {
                         Label("Jump to Task", systemImage: "link")
                     }
-                } else {
+                } else if summary.projectId != Project.globalChatID {
                     Button {
                         createTask(from: summary)
                     } label: {
@@ -308,7 +320,7 @@ struct HistoryListView: View {
     }
 
     private var sessions: [DisplaySession] {
-        if windowState.isProjectWindow || !showAllProjects {
+        if !includesAllProjects {
             return currentProjectSessions
         } else {
             return allProjectSessions
@@ -347,7 +359,7 @@ struct HistoryListView: View {
     }
 
     private var currentProjectSessions: [DisplaySession] {
-        guard let projectId = windowState.selectedProject?.id else { return [] }
+        guard let projectId = scopedProjectId ?? windowState.selectedProject?.id else { return [] }
         let streamingIds = appState.backgroundStreamingSessionIds(in: windowState)
         return Self.filteredSummaries(
             from: appState.allSessionSummaries,
@@ -368,7 +380,7 @@ struct HistoryListView: View {
 
     private var allProjectSessions: [DisplaySession] {
         let projectNames = Dictionary(
-            uniqueKeysWithValues: appState.projects.map { ($0.id, $0.name) }
+            uniqueKeysWithValues: appState.sessionProjects.map { ($0.id, $0.name) }
         )
         let streamingIds = appState.backgroundStreamingSessionIds(in: windowState)
         return Self.filteredSummaries(
@@ -383,7 +395,7 @@ struct HistoryListView: View {
                 updatedAt: summary.updatedAt,
                 isPinned: summary.isPinned,
                 isBackgroundStreaming: streamingIds.contains(summary.id),
-                projectName: projectNames[summary.projectId]
+                projectName: projectNames[summary.projectId] ?? appState.sessionProject(id: summary.projectId)?.name
             )
         }
     }

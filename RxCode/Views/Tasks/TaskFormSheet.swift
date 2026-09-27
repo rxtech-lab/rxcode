@@ -39,7 +39,7 @@ struct TaskFormSheet: View {
     @State var milestoneInput = ""
     @State var isAutoFilling = false
     @State var isGeneratingTitle = false
-    @State var suggestionAgent: TaskAgentConfig?
+    @State var suggestionAgent: GeneralAIModel = .taskAgent
     @State var pendingDeletion: TaskBoardSheet?
     @State var creationMode: TaskCreationMode = .form
     /// The free-form description the AI flow drafts from.
@@ -85,6 +85,11 @@ struct TaskFormSheet: View {
 
     /// A task that has been dispatched has a run to look at. Uses the stored
     /// task, so flipping the picker in this form doesn't swap tabs mid-edit.
+    var storedAttentionReason: String? {
+        guard isExistingRecord, !isStory else { return nil }
+        return appState.task(id: task.id)?.attentionReason
+    }
+
     var showsRunTab: Bool {
         guard isExistingRecord, !isStory, let stored = appState.task(id: task.id) else { return false }
         return stored.sessionKey != nil
@@ -144,15 +149,27 @@ struct TaskFormSheet: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .frame(width: 220)
+                // Badge the Run segment: the attention reason lives in the
+                // Run transcript, not on the Details tab.
+                .overlay(alignment: .topTrailing) {
+                    if storedAttentionReason != nil {
+                        Circle()
+                            .fill(ClaudeTheme.statusWarning)
+                            .frame(width: 8, height: 8)
+                            .offset(x: 3, y: -3)
+                            .accessibilityLabel("Run needs attention")
+                            .accessibilityIdentifier("task-form-run-attention-badge")
+                    }
+                }
                 .padding(.top, 16)
                 .padding(.bottom, 4)
             }
 
             // Read from the stored task: the draft is a copy taken on open and
             // wouldn't pick up a verification that fails while the sheet is up.
-            // The Run tab shows it as the transcript's last message instead.
-            if isExistingRecord, !isStory, !(showsRunTab && tab == .run),
-               let reason = appState.task(id: task.id)?.attentionReason {
+            // When there's a Run tab, the transcript shows it as its last
+            // message and the segment gets a badge instead.
+            if !showsRunTab, let reason = storedAttentionReason {
                 TaskAttentionBanner(reason: reason)
                     .padding(.horizontal, 20)
                     .padding(.top, showsRunTab ? 8 : 16)
@@ -181,7 +198,10 @@ struct TaskFormSheet: View {
         }
         .onAppear {
             loadDraft()
-            suggestionAgent = appState.configuredTaskSuggestionAgent()
+            if isExistingRecord {
+                AnalyticsService.shared.log(isStory ? .projectStoryOpened : .projectTaskOpened)
+            }
+            suggestionAgent = appState.generalAIModel()
             // Open on the outcome: a task that has run is usually reopened to
             // see what the agent did.
             if showsRunTab { tab = .run }
@@ -471,30 +491,9 @@ struct TaskFormSheet: View {
 
     var classificationSection: some View {
         Section {
-            LabeledContent("AI suggestions model") {
-                Menu {
-                    Button("Default task agent") { selectSuggestionAgent(nil) }
-                    Divider()
-                    ForEach(appState.availableAgentModelSections(), id: \.id) { section in
-                        Section(section.title) {
-                            ForEach(section.models, id: \.key) { model in
-                                Button(model.displayName) {
-                                    selectSuggestionAgent(TaskAgentConfig(provider: model.provider, model: model.id))
-                                }
-                            }
-                        }
-                    }
-                } label: {
-                    TaskBoardChipLabel(
-                        icon: "sparkles",
-                        title: suggestionAgent.map(appState.taskAgentLabel) ?? String(localized: "Default task agent"),
-                        isActive: suggestionAgent != nil
-                    )
-                }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .fixedSize()
-                .disabled(isAutoFilling || isGeneratingTitle)
+            LabeledContent("AI model") {
+                SuggestionAgentMenu(agent: $suggestionAgent)
+                    .disabled(isAutoFilling || isGeneratingTitle)
             }
 
             if !isStory {

@@ -145,11 +145,15 @@ public struct QueuedMessage: Identifiable, Sendable {
 public enum GeneralRoute: String, Codable, Sendable, CaseIterable, Hashable {
     case tasks
     case briefing
+    case chat
+    case scheduled
 
     public var displayName: LocalizedStringResource {
         switch self {
+        case .chat: return "Chat"
         case .tasks: return "Projects"
         case .briefing: return "Briefing"
+        case .scheduled: return "Scheduled"
         }
     }
 
@@ -159,8 +163,10 @@ public enum GeneralRoute: String, Codable, Sendable, CaseIterable, Hashable {
 
     public var systemImage: String {
         switch self {
+        case .chat: return "bubble.left.and.bubble.right"
         case .tasks: return "checklist"
         case .briefing: return "text.page"
+        case .scheduled: return "calendar.badge.clock"
         }
     }
 }

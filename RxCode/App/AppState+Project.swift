@@ -41,6 +41,23 @@ extension AppState {
         }
     }
 
+    func setProjectPrompt(_ prompt: String, for projectId: UUID) {
+        guard let index = projects.firstIndex(where: { $0.id == projectId }),
+              projects[index].customPrompt != prompt else { return }
+        projects[index].customPrompt = prompt.isEmpty ? nil : prompt
+
+        projectPromptSaveTask?.cancel()
+        projectPromptSaveTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(350))
+            guard let self, !Task.isCancelled else { return }
+            do {
+                try await persistence.saveProjects(projects)
+            } catch {
+                logger.error("Failed to save project prompt: \(error.localizedDescription)")
+            }
+        }
+    }
+
     func selectProject(_ project: Project, in window: WindowState) {
         guard window.selectedProject?.id != project.id else { return }
 
@@ -191,7 +208,7 @@ extension AppState {
 
         updateState(session.id) { $0.hasUncheckedCompletion = false }
 
-        window.showingBriefing = false
+        window.generalRoute = window.selectedProject?.isGlobalChat == true ? .chat : nil
         window.pendingWorktreePath = nil
         window.pendingWorktreeBranch = nil
         window.currentSessionId = session.id

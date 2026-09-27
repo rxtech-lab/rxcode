@@ -164,6 +164,8 @@ struct ProjectWindowView: View {
                 TaskBoardView()
             } else if windowState.showingBriefing {
                 BriefingView()
+            } else if windowState.generalRoute == .scheduled {
+                ScheduledTasksView()
             } else if windowState.selectedProject != nil {
                 VStack(spacing: 0) {
                     chatToolbarArea

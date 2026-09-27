@@ -31,7 +31,7 @@ struct WhatsNewSheet: View {
                 .padding(.top, 20)
                 .padding(.bottom, 28)
         }
-        .frame(width: 520, height: 600)
+        .frame(width: 520, height: 700)
         .background(ClaudeTheme.background)
         .onAppear {
             // Defensive: an empty batch should never present, but if it does we
@@ -96,7 +96,11 @@ struct WhatsNewSheet: View {
 
     private func featureCard(_ feature: WhatsNewFeature) -> some View {
         VStack(spacing: 18) {
-            iconTile(feature.icon)
+            Image(feature.illustration)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 150, height: 150)
+                .accessibilityHidden(true)
 
             VStack(spacing: 8) {
                 Text(feature.title)
@@ -133,22 +137,6 @@ struct WhatsNewSheet: View {
         }
         .padding(.horizontal, 32)
         .frame(maxWidth: .infinity)
-    }
-
-    private func iconTile(_ systemImage: String) -> some View {
-        Image(systemName: systemImage)
-            .font(.system(size: ClaudeTheme.size(34), weight: .semibold))
-            .foregroundStyle(.white)
-            .frame(width: 76, height: 76)
-            .background(
-                LinearGradient(
-                    colors: [ClaudeTheme.accent, ClaudeTheme.accent.opacity(0.78)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
-                in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusLarge, style: .continuous)
-            )
-            .shadow(color: ClaudeTheme.accent.opacity(0.28), radius: 14, y: 8)
     }
 
     private var pageIndicator: some View {

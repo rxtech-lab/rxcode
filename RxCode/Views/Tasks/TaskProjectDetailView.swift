@@ -27,9 +27,9 @@ struct TaskProjectDetailView: View {
     private var board: TaskBoard { appState.taskBoard(for: project.id) }
     private var views: [TaskSavedView] { appState.taskViews(for: project.id) }
 
+    /// The picked tab, else the project's default view.
     private var currentView: TaskSavedView {
-        let views = views
-        return views.first { $0.id == selectedViewId } ?? views.first ?? .defaultView
+        views.first { $0.id == selectedViewId } ?? board.defaultView
     }
 
     var body: some View {
@@ -46,6 +46,11 @@ struct TaskProjectDetailView: View {
             content
         }
         .task(id: scriptFilterKey) { await runScriptFilter() }
+        .onAppear {
+            AnalyticsService.shared.log(.taskProjectBoardOpened, parameters: [
+                "project_type": project.cloudId == nil ? "local" : "cloud"
+            ])
+        }
         .sheet(item: $viewEditor) { payload in
             TaskViewFormSheet(payload: payload) { saved in
                 selectedViewId = saved.id
@@ -186,12 +191,15 @@ struct TaskProjectDetailView: View {
                     TaskViewTab(
                         view: view,
                         isSelected: view.id == currentView.id,
+                        isDefault: view.id == board.defaultView.id,
+                        showsDefaultBadge: views.count > 1,
                         isEvaluatingScript: view.id == currentView.id && isEvaluatingScriptFilter,
                         scriptError: view.id == currentView.id ? scriptFilterError : nil,
                         canDelete: views.count > 1,
                         onSelect: { selectedViewId = view.id },
                         onEdit: { viewEditor = TaskViewEditorPayload(projectId: project.id, view: view, isNew: false) },
                         onDuplicate: { duplicate(view) },
+                        onSetDefault: { appState.setDefaultSavedView(view.id, projectId: project.id) },
                         onDelete: { pendingViewDeletion = view },
                         onReorder: { appState.reorderSavedView($0, onto: view.id, projectId: project.id) }
                     )
@@ -420,6 +428,10 @@ struct TaskProjectDetailView: View {
 private struct TaskViewTab: View {
     let view: TaskSavedView
     let isSelected: Bool
+    /// The view the project opens on and its dashboard card previews.
+    let isDefault: Bool
+    /// Marks the default tab — pointless while it is the only one.
+    let showsDefaultBadge: Bool
     /// The view's Swift filter is running.
     let isEvaluatingScript: Bool
     /// Why the view's Swift filter failed, if it did.
@@ -428,6 +440,7 @@ private struct TaskViewTab: View {
     let onSelect: () -> Void
     let onEdit: () -> Void
     let onDuplicate: () -> Void
+    let onSetDefault: () -> Void
     let onDelete: () -> Void
     /// Called with the id of a tab dropped onto this one.
     let onReorder: (UUID) -> Void
@@ -445,6 +458,13 @@ private struct TaskViewTab: View {
                 Text(view.name)
                     .font(.system(size: ClaudeTheme.size(12), weight: isSelected ? .semibold : .medium))
                     .lineLimit(1)
+                if isDefault && showsDefaultBadge {
+                    Image(systemName: "star.fill")
+                        .font(.system(size: ClaudeTheme.size(8)))
+                        .foregroundStyle(ClaudeTheme.textTertiary)
+                        .help("Default view")
+                        .accessibilityLabel("Default view")
+                }
                 if view.hasFilterScript {
                     scriptBadge
                 }
@@ -520,6 +540,8 @@ private struct TaskViewTab: View {
     private var menuItems: some View {
         Button("Edit View…", action: onEdit)
         Button("Duplicate View", action: onDuplicate)
+        Button("Set as Default View", action: onSetDefault)
+            .disabled(isDefault)
         Divider()
         Button("Delete View", role: .destructive, action: onDelete)
             .disabled(!canDelete)

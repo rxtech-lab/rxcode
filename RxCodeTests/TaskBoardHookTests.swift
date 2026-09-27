@@ -741,4 +741,85 @@ final class TaskBoardHookTests: XCTestCase {
         XCTAssertEqual(turns[1].response, "")
         XCTAssertTrue(turns[1].didError)
     }
+
+    // MARK: - Scheduled task tool
+
+    /// Starts an `ide__create_scheduled_task` call and waits until its
+    /// proposal is queued for confirmation.
+    private func proposeScheduledTask(_ arguments: [String: JSONValue]) async throws -> (Task<JSONValue, Error>, ScheduledTask) {
+        let call = Task { @MainActor in
+            try await appState.ideHandleToolCall(
+                name: "ide__create_scheduled_task",
+                arguments: .object(arguments),
+                sessionKey: "chat-1"
+            )
+        }
+        for _ in 0..<100 where appState.scheduledTaskProposals.isEmpty {
+            await Task.yield()
+        }
+        return (call, try XCTUnwrap(appState.scheduledTaskProposals.first))
+    }
+
+    private func resultText(_ result: JSONValue) -> String {
+        guard case .array(let content)? = result["content"],
+              case .string(let text)? = content.first?["text"]
+        else { return "" }
+        return text
+    }
+
+    func testScheduledTaskToolAddsTaskOnlyAfterConfirmation() async throws {
+        let (call, proposal) = try await proposeScheduledTask([
+            "project_id": .string(project.id.uuidString),
+            "name": .string("Dependency check"),
+            "prompt": .string("Check for outdated dependencies."),
+            "cron_expression": .string("0 9 * * 1-5"),
+        ])
+        XCTAssertEqual(proposal.projectId, project.id)
+        XCTAssertEqual(proposal.cronExpression, "0 9 * * 1-5")
+        XCTAssertTrue(appState.scheduledTasks.isEmpty, "Nothing is added before the user confirms")
+
+        var edited = proposal
+        edited.name = "Weekday dependency check"
+        appState.resolveScheduledTaskProposal(id: proposal.id, with: edited)
+
+        let text = resultText(try await call.value)
+        XCTAssertTrue(text.contains("\"added\" : true"), text)
+        XCTAssertEqual(appState.scheduledTasks.map(\.name), ["Weekday dependency check"])
+        XCTAssertTrue(appState.scheduledTaskProposals.isEmpty)
+    }
+
+    func testScheduledTaskToolReportsCancellation() async throws {
+        let (call, proposal) = try await proposeScheduledTask([
+            "project_id": .string(project.id.uuidString),
+            "name": .string("Nightly build"),
+            "prompt": .string("Run the build."),
+            "cron_expression": .string("@daily"),
+        ])
+        appState.resolveScheduledTaskProposal(id: proposal.id, with: nil)
+        // A second settle, as the sheet's onDisappear does, is a no-op.
+        appState.resolveScheduledTaskProposal(id: proposal.id, with: proposal)
+
+        let text = resultText(try await call.value)
+        XCTAssertTrue(text.contains("\"added\" : false"), text)
+        XCTAssertTrue(appState.scheduledTasks.isEmpty)
+        XCTAssertTrue(appState.scheduledTaskProposals.isEmpty)
+    }
+
+    func testScheduledTaskToolRejectsInvalidCronWithoutPrompting() async throws {
+        do {
+            _ = try await appState.ideHandleToolCall(
+                name: "ide__create_scheduled_task",
+                arguments: .object([
+                    "project_id": .string(project.id.uuidString),
+                    "name": .string("Broken"),
+                    "prompt": .string("Do it."),
+                    "cron_expression": .string("every day"),
+                ]),
+                sessionKey: "chat-1"
+            )
+            XCTFail("An invalid cron expression must be rejected")
+        } catch {
+            XCTAssertTrue(appState.scheduledTaskProposals.isEmpty)
+        }
+    }
 }

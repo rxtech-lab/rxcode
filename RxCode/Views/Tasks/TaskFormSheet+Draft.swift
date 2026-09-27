@@ -57,12 +57,21 @@ extension TaskFormSheet {
                 // An edited source makes the draft below stale, so it goes.
                 .onChange(of: draftPrompt) { _, _ in clearGeneratedDraft() }
 
-                Button {
-                    showingSourceFilePicker = true
-                } label: {
-                    Label("Choose File…", systemImage: "doc")
+                HStack {
+                    Button {
+                        showingSourceFilePicker = true
+                    } label: {
+                        Label("Choose File…", systemImage: "doc")
+                    }
+                    .disabled(isGeneratingDraft)
+
+                    Spacer()
+
+                    Text("AI model")
+                    SuggestionAgentMenu(agent: $suggestionAgent)
+                        .disabled(isGeneratingDraft)
+                        .accessibilityIdentifier("draft-suggestion-model")
                 }
-                .disabled(isGeneratingDraft)
             } header: {
                 Text("Description")
             } footer: {
@@ -511,12 +520,16 @@ extension TaskFormSheet {
               storyTaskDrafts.allSatisfy({ !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
         else { return }
         appState.upsertStory(story)
+        if !isExistingRecord {
+            AnalyticsService.shared.log(.projectStoryCreated, parameters: ["method": "ai_composed"])
+        }
         for draft in storyTaskDrafts {
             var task = appState.newTaskDraft(inStory: story)
             task.title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
             task.details = draft.details.trimmingCharacters(in: .whitespacesAndNewlines)
             task.agent = storyDraftAgent
             appState.upsertTask(task)
+            AnalyticsService.shared.log(.projectTaskCreated, parameters: ["method": "ai_composed"])
         }
         dismiss()
     }

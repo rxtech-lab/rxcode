@@ -213,9 +213,11 @@ extension AppState {
     /// One project's stories, most recently active first — what the
     /// all-projects overview shows. A story's activity includes its tasks, so
     /// adding or moving a child task bubbles the story up. With a keyword, a
-    /// story matches on its own text or on any child task's.
+    /// story matches on its own text or on any child task's. Only stories the
+    /// project's default view keeps are listed.
     func recentStories(for projectId: UUID, keyword: String = "") -> [ProjectStory] {
         let board = taskBoard(for: projectId)
+        let viewStories = Set(board.stories(matching: board.defaultView).map(\.id))
         let trimmed = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
         var lastTaskActivity: [UUID: Date] = [:]
         var matchingTaskStories: Set<UUID> = []
@@ -227,7 +229,8 @@ extension AppState {
             }
         }
         let matching = board.stories.filter { story in
-            trimmed.isEmpty
+            guard viewStories.contains(story.id) else { return false }
+            return trimmed.isEmpty
                 || story.matches(keyword: trimmed)
                 || matchingTaskStories.contains(story.id)
         }
@@ -278,22 +281,43 @@ extension AppState {
         workspaceDefaults.set(model, for: Self.defaultTaskModelKey)
     }
 
-    /// The model used for task and story title and property suggestions.
-    /// With no separate choice, keep using the default task agent.
-    func taskSuggestionAgent() -> TaskAgentConfig {
-        configuredTaskSuggestionAgent() ?? defaultTaskAgent()
-    }
-
-    func configuredTaskSuggestionAgent() -> TaskAgentConfig? {
+    /// The model used for general AI tasks: task and story drafts, titles and
+    /// Auto-fill, cron schedules, filter scripts and context-menu conditions.
+    /// Set in Settings → Message; with no separate choice, keep using the
+    /// default task agent.
+    func generalAIModel() -> GeneralAIModel {
+        if workspaceDefaults.string(for: Self.suggestionProviderKey) == GeneralAIModel.appleIntelligenceKey {
+            return .appleIntelligence
+        }
         guard let provider = workspaceDefaults.string(for: Self.suggestionProviderKey).flatMap(AgentProvider.init(rawValue:)),
               let model = workspaceDefaults.string(for: Self.suggestionModelKey), !model.isEmpty
-        else { return nil }
-        return TaskAgentConfig(provider: provider, model: model)
+        else { return .taskAgent }
+        return .agent(TaskAgentConfig(provider: provider, model: model))
     }
 
-    func setConfiguredTaskSuggestionAgent(_ agent: TaskAgentConfig?) {
-        workspaceDefaults.set(agent?.provider?.rawValue, for: Self.suggestionProviderKey)
-        workspaceDefaults.set(agent?.model, for: Self.suggestionModelKey)
+    func setGeneralAIModel(_ model: GeneralAIModel) {
+        switch model {
+        case .taskAgent:
+            workspaceDefaults.set(nil as String?, for: Self.suggestionProviderKey)
+            workspaceDefaults.set(nil as String?, for: Self.suggestionModelKey)
+        case .appleIntelligence:
+            workspaceDefaults.set(GeneralAIModel.appleIntelligenceKey, for: Self.suggestionProviderKey)
+            workspaceDefaults.set(nil as String?, for: Self.suggestionModelKey)
+        case .agent(let agent):
+            workspaceDefaults.set(agent.provider?.rawValue, for: Self.suggestionProviderKey)
+            workspaceDefaults.set(agent.model, for: Self.suggestionModelKey)
+        }
+    }
+
+    func generalAIModelLabel(_ model: GeneralAIModel) -> String {
+        switch model {
+        case .taskAgent:
+            return String(localized: "Default task agent")
+        case .appleIntelligence:
+            return String(localized: "Apple Intelligence (On-Device)")
+        case .agent(let agent):
+            return taskAgentLabel(agent)
+        }
     }
 
     /// Whether quick-added tasks are sent to the default agent to summarize a
@@ -526,16 +550,15 @@ extension AppState {
 
     func upsertSavedView(_ view: TaskSavedView, projectId: UUID) {
         updateBoard(projectId) { board in
-            // The implicit default tab exists only while no view is saved.
-            // Persist it before the first custom view so it doesn't vanish.
-            if board.savedViews.isEmpty, view.id != TaskSavedView.defaultViewId {
-                board.savedViews.append(.defaultView)
-            }
-            if let idx = board.savedViews.firstIndex(where: { $0.id == view.id }) {
-                board.savedViews[idx] = view
-            } else {
-                board.savedViews.append(view)
-            }
+            board.upsertSavedView(view)
+        }
+    }
+
+    /// Makes `viewId` the view the project page opens on and the dashboard
+    /// card previews.
+    func setDefaultSavedView(_ viewId: UUID, projectId: UUID) {
+        updateBoard(projectId) { board in
+            board.setDefaultView(viewId)
         }
     }
 
@@ -902,15 +925,55 @@ extension AppState {
         return StoryDraftSuggestion.parse(raw)
     }
 
+    /// Produces an unsaved scheduled task — name, prompt, cron — from a
+    /// free-form description, for the scheduled task creation preview.
+    func suggestScheduledTaskDraft(source: String, projectId: UUID) async -> ScheduledTaskDraftSuggestion? {
+        guard let raw = await runTaskAgentCompletion(
+            prompt: ScheduledTaskDraftSuggestion.prompt(source: source),
+            projectId: projectId
+        ) else { return nil }
+        return ScheduledTaskDraftSuggestion.parse(raw)
+    }
+
+    /// A cron expression for a schedule described in natural language, from
+    /// the selected suggestion agent. `nil` when no agent answered with one
+    /// that parses.
+    func suggestCronExpression(description: String, projectId: UUID) async -> String? {
+        let trimmed = description.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let raw = await runTaskAgentCompletion(
+                  prompt: CronExpressionSuggestion.prompt(description: String(trimmed.prefix(2_000))),
+                  projectId: projectId,
+                  verbatim: true
+              )
+        else { return nil }
+        return CronExpressionSuggestion.parse(raw)
+    }
+
     /// The title of the story a task belongs to, if any.
     private func storyTitle(for task: ProjectTask) -> String? {
         taskBoard(for: task.projectId).story(id: task.storyId)?.title
     }
 
-    /// Runs a one-shot task prompt on the selected suggestion agent. `verbatim`
+    /// Runs a one-shot task prompt on the general AI model. `verbatim`
     /// skips Claude's summary cleanup, for replies that carry code.
-    func runTaskAgentCompletion(prompt: String, projectId: UUID, verbatim: Bool = false) async -> String? {
-        let agent = taskSuggestionAgent()
+    func runTaskAgentCompletion(prompt: String, projectId: UUID?, verbatim: Bool = false) async -> String? {
+        let agent: TaskAgentConfig
+        switch generalAIModel() {
+        case .appleIntelligence:
+            if FoundationModelSummarizationService.isAvailable {
+                return await foundationModelSummarization.generatePlainCompletion(
+                    instructions: "You are a precise assistant inside a developer tool. Follow the requested output format exactly.",
+                    prompt: prompt
+                )
+            }
+            logger.warning("[Tasks] Apple Intelligence is unavailable; using the default task agent")
+            agent = defaultTaskAgent()
+        case .taskAgent:
+            agent = defaultTaskAgent()
+        case .agent(let configured):
+            agent = configured
+        }
         switch agent.provider ?? selectedAgentProvider {
         case .claudeCode:
             if verbatim {
@@ -921,17 +984,18 @@ extension AppState {
             return await codex.generateCodexPlainSummary(prompt: prompt, model: agent.model)
         case .acp:
             guard let parts = acpSelectionParts(for: agent.model),
-                  let spec = acpClients.first(where: { $0.id == parts.clientId && $0.enabled }),
-                  let project = projects.first(where: { $0.id == projectId })
+                  let spec = acpClients.first(where: { $0.id == parts.clientId && $0.enabled })
             else {
-                logger.warning("[Tasks] selected ACP suggestion client or project is unavailable")
+                logger.warning("[Tasks] selected ACP suggestion client is unavailable")
                 return nil
             }
+            let cwd = projects.first(where: { $0.id == projectId })?.path
+                ?? FileManager.default.homeDirectoryForCurrentUser.path
             return await acp.generatePlainResponse(
                 prompt: prompt,
                 model: parts.model.isEmpty ? nil : parts.model,
                 spec: spec,
-                cwd: project.path
+                cwd: cwd
             )
         }
     }

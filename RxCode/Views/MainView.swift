@@ -341,6 +341,10 @@ struct MainView: View {
                 TaskBoardView()
             } else if windowState.showingBriefing {
                 BriefingView()
+            } else if windowState.generalRoute == .chat {
+                GlobalChatView()
+            } else if windowState.generalRoute == .scheduled {
+                ScheduledTasksView()
             } else if windowState.selectedProject != nil {
                 VStack(spacing: 0) {
                     ChatView(inputAccessory: {
@@ -444,6 +448,16 @@ struct MainView: View {
             let prompt = "Set up release publishing\(repoText) by following the create-release skill: inspect the repo, create the `.releaserc` and the release CI workflow (ask me whether to trigger releases on branch push or manually), then register the repo and install the RELEASE_TOKEN via the `ide__setup_release` tool."
             appState.releaseSetupRequest = nil
             Task { await appState.sendPrompt(prompt, in: windowState) }
+        }
+        // The sheet settles its own proposal, so the setter has nothing to do.
+        .sheet(item: Binding(
+            get: { appState.scheduledTaskProposals.first },
+            set: { _ in }
+        )) { proposal in
+            ScheduledTaskFormSheet(task: proposal, isNew: true) { task in
+                appState.resolveScheduledTaskProposal(id: proposal.id, with: task)
+            }
+            .environment(appState)
         }
         .sheet(item: Bindable(appState).releaseCreateRequest) { project in
             ReleaseCreateSheet(

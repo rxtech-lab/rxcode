@@ -1,6 +1,11 @@
 import Foundation
 
 public struct Project: Identifiable, Codable, Sendable, Hashable {
+    /// Stable session owner for the workspace-wide Chat tab; never a user project.
+    public static let globalChatID = UUID(uuidString: "28D14445-94B0-4474-BA4D-BFAD56F93B01")!
+
+    public var isGlobalChat: Bool { id == Self.globalChatID }
+
     public let id: UUID
     public var name: String
     public var path: String
@@ -8,6 +13,8 @@ public struct Project: Identifiable, Codable, Sendable, Hashable {
     public var lastSessionId: String?
     public var lastAgentProvider: AgentProvider?
     public var lastModel: String?
+    /// Additional instructions sent with turns in this project.
+    public var customPrompt: String? = nil
     /// The Autopilot project this project's task board syncs with. `nil`
     /// means the project is local to this Mac.
     public var cloudId: String?

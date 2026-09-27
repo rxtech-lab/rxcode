@@ -109,7 +109,7 @@ extension AppState {
         let toDelete = allSessionSummaries.filter { staleIds.contains($0.id) }
         for summary in toDelete {
             let cwd = summary.worktreePath
-                ?? projects.first(where: { $0.id == summary.projectId })?.path
+                ?? sessionProject(id: summary.projectId)?.path
             do {
                 try await persistence.deleteSession(
                     projectId: summary.projectId,
@@ -362,7 +362,7 @@ extension AppState {
         case .cliBacked:
             summary.makeSession()
         case .legacyRxCode, .codexAppServer, .acpAgent:
-            persistence.loadLegacySessionSync(projectId: session.projectId, sessionId: session.id) ?? session
+            persistence.loadSessionSync(sessionId: session.id) ?? session
         }
         mutate(&updated)
         do { try await persistence.saveSession(updated, persistTitle: persistTitle) }
@@ -382,6 +382,8 @@ extension AppState {
     }
 
     func deleteProject(_ project: Project, in window: WindowState) async {
+        threadStore.retainProjectContext(project)
+
         // Switch away if the deleted project is currently selected
         if window.selectedProject?.id == project.id {
             let next = projects.first(where: { $0.id != project.id })
@@ -393,36 +395,15 @@ extension AppState {
             }
         }
 
-        // Cascade: delete each session's stored messages (CLI jsonl, meta,
-        // legacy json) before discarding the project itself. Without this the
-        // jsonls remain on disk under the project's cwd and would resurface as
-        // orphan sessions if the same path is added back as a project later.
-        let projectSummaries = allSessionSummaries.filter { $0.projectId == project.id }
-        for summary in projectSummaries {
-            let cwd = summary.worktreePath ?? project.path
-            do {
-                try await persistence.deleteSession(
-                    projectId: summary.projectId,
-                    sessionId: summary.id,
-                    origin: summary.origin,
-                    cwd: cwd
-                )
-            } catch {
-                logger.error("Failed to delete session \(summary.id) on project delete: \(error.localizedDescription)")
-            }
-            sessionStates.removeValue(forKey: summary.id)
-        }
-
-        // Remove all in-memory session summaries for this project
-        threadStore.deleteAll(projectId: project.id)
+        // Chat transcripts, thread metadata, and search entries are global.
+        // Removing a project only removes its project-specific state.
         let projectId = project.id
-        Task.detached(priority: .utility) { [searchService] in await searchService.removeProject(id: projectId) }
         Task.detached(priority: .utility) { [memoryService] in await memoryService.deleteAll(projectId: projectId) }
-        allSessionSummaries.removeAll { $0.projectId == project.id }
 
         // Cascade the task board too, so re-adding the same folder later
         // doesn't resurrect the old board.
         deleteTaskBoard(for: project.id)
+        deleteScheduledTasks(projectId: project.id)
 
         // Remove from projects list and persist
         projects.removeAll { $0.id == project.id }
@@ -449,7 +430,7 @@ extension AppState {
         // on next reload. Fall back to the project's path, then the session's.
         let cwd = summary?.worktreePath
             ?? session.worktreePath
-            ?? projects.first(where: { $0.id == session.projectId })?.path
+            ?? sessionProject(id: session.projectId)?.path
         do {
             try await persistence.deleteSession(projectId: session.projectId, sessionId: session.id, origin: origin, cwd: cwd)
         } catch {
@@ -484,7 +465,7 @@ extension AppState {
 
         for summary in toDelete {
             let cwd = summary.worktreePath
-                ?? projects.first(where: { $0.id == summary.projectId })?.path
+                ?? sessionProject(id: summary.projectId)?.path
             do {
                 try await persistence.deleteSession(
                     projectId: summary.projectId,
@@ -522,13 +503,13 @@ extension AppState {
         }
     }
 
-    func selectSession(id: String, in window: WindowState) {
+    func selectSession(id: String, inChatTab: Bool = false, in window: WindowState) {
         logger.info("[SelectSession] click sid=\(id, privacy: .public) currentSid=\(window.currentSessionId ?? "<nil>", privacy: .public) selectedProject=\(window.selectedProject?.id.uuidString ?? "<nil>", privacy: .public) summariesCount=\(self.allSessionSummaries.count)")
         guard window.currentSessionId != id else {
             // Any General route (Tasks, Briefing) covers the chat, so clicking
             // the current thread must still reveal it.
-            if window.generalRoute != nil {
-                window.generalRoute = nil
+            if window.generalRoute != nil || inChatTab {
+                window.generalRoute = inChatTab || window.selectedProject?.isGlobalChat == true ? .chat : nil
                 window.requestInputFocus = true
                 logger.info("[SelectSession] same sid, leaving general route sid=\(id, privacy: .public)")
             } else {
@@ -545,6 +526,7 @@ extension AppState {
             logger.info("[SelectSession] match in current project sid=\(id, privacy: .public) origin=\(String(describing: summary.origin), privacy: .public) title=\(summary.title, privacy: .public)")
             let session = summary.makeSession()
             switchToSession(session, in: window)
+            if inChatTab { window.generalRoute = .chat }
             window.requestInputFocus = true
             window.setSessionSwitchTask(Task {
                 guard !Task.isCancelled else { return }
@@ -555,7 +537,7 @@ extension AppState {
 
         // If it's a session from another project, switch the project as well
         guard let summary = allSessionSummaries.first(where: { $0.id == id }),
-              let project = projects.first(where: { $0.id == summary.projectId })
+              let project = sessionProject(id: summary.projectId)
         else {
             logger.error("[SelectSession] summary or project missing for sid=\(id, privacy: .public)")
             return
@@ -566,18 +548,22 @@ extension AppState {
             guard let self else { return }
             guard !Task.isCancelled else { return }
             selectProject(project, in: window)
+            if inChatTab { window.generalRoute = .chat }
             guard !Task.isCancelled else { return }
             if let s = allSessionSummaries.first(where: { $0.id == id }) {
                 let session = s.makeSession()
                 if sessionStates[session.id] == nil,
                    let full = await persistence.loadFullSession(summary: s, cwd: project.path)
                 {
+                    guard !Task.isCancelled else { return }
                     logger.info("[SelectSession] cross-project preload ok sid=\(id, privacy: .public) messages=\(full.messages.count)")
                     switchToSession(full, messages: full.messages, in: window)
                 } else {
+                    guard !Task.isCancelled else { return }
                     logger.info("[SelectSession] cross-project preload empty sid=\(id, privacy: .public)")
                     switchToSession(session, in: window)
                 }
+                if inChatTab { window.generalRoute = .chat }
                 window.requestInputFocus = true
                 await didSwitchToSession(session)
             }

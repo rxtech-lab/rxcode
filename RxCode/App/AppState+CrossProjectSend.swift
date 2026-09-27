@@ -61,7 +61,7 @@ extension AppState {
             else {
                 throw CrossProjectSendError.unknownThread(threadId)
             }
-            guard let proj = projects.first(where: { $0.id == summary.projectId }) else {
+            guard let proj = sessionProject(id: summary.projectId) else {
                 throw CrossProjectSendError.unknownProject(summary.projectId)
             }
             resolvedProject = proj

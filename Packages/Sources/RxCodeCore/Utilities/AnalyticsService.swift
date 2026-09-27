@@ -37,6 +37,15 @@ public enum AnalyticsEvent: String, Sendable {
     case threadOpened = "thread_opened"
     case threadCreated = "thread_created"
     case projectOpened = "project_opened"
+    case taskDashboardOpened = "task_dashboard_opened"
+    case taskProjectBoardOpened = "task_project_board_opened"
+    case projectTaskOpened = "project_task_opened"
+    case projectStoryOpened = "project_story_opened"
+    case projectTaskCreated = "project_task_created"
+    case projectStoryCreated = "project_story_created"
+    case projectTaskRunStarted = "project_task_run_started"
+    case scheduledTasksOpened = "scheduled_tasks_opened"
+    case scheduledTaskCreated = "scheduled_task_created"
 
     // Feature surfaces
     case diffViewOpened = "diff_view_opened"

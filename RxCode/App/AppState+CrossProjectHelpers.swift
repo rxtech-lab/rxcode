@@ -54,6 +54,17 @@ extension AppState {
         """
     }
 
+    static func configuredPromptContext(global: String?, project: String?) -> String {
+        let global = global?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let project = project?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return [
+            global.isEmpty ? nil : "# Global instructions\n\n\(global)",
+            project.isEmpty ? nil : "# Project instructions\n\n\(project)"
+        ]
+        .compactMap { $0 }
+        .joined(separator: "\n\n")
+    }
+
     nonisolated static func streamEventLogName(_ event: StreamEvent) -> String {
         switch event {
         case .system(let systemEvent):

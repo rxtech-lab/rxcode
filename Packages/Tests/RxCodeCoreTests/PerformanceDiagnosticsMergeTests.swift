@@ -3,7 +3,7 @@ import Testing
 
 /// `merging` exists because the chat transcript and markdown renderers moved to
 /// RxAgentSDK, which records into its own `PerformanceDiagnostics` accumulator.
-/// `PerformanceDiagnosticsService` drains both and folds them into one record.
+/// The merge helper folds snapshots from both accumulators into one record.
 @Suite("Performance diagnostics merge")
 struct PerformanceDiagnosticsMergeTests {
     private typealias Measurement = PerformanceDiagnostics.Measurement

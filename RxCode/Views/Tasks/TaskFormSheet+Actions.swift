@@ -44,6 +44,7 @@ extension TaskFormSheet {
         if !isExistingRecord {
             story.title = story.title.trimmingCharacters(in: .whitespacesAndNewlines)
             appState.upsertStory(story)
+            AnalyticsService.shared.log(.projectStoryCreated, parameters: ["method": "form"])
             isExistingRecord = true
         }
         childTask = .task(appState.newTaskDraft(inStory: story))
@@ -131,11 +132,6 @@ extension TaskFormSheet {
         }
     }
 
-    func selectSuggestionAgent(_ agent: TaskAgentConfig?) {
-        appState.setConfiguredTaskSuggestionAgent(agent)
-        suggestionAgent = agent
-    }
-
     func handleAttachmentImport(_ result: Result<[URL], Error>) {
         guard case .success(let urls) = result else { return }
         for url in urls {
@@ -166,9 +162,15 @@ extension TaskFormSheet {
             story.title = story.title.trimmingCharacters(in: .whitespacesAndNewlines)
             let story = story
             Task { await appState.saveStory(story) }
+            if !isExistingRecord {
+                AnalyticsService.shared.log(.projectStoryCreated, parameters: ["method": "form"])
+            }
         } else {
             task.title = task.title.trimmingCharacters(in: .whitespacesAndNewlines)
             appState.upsertTask(task)
+            if !isExistingRecord {
+                AnalyticsService.shared.log(.projectTaskCreated, parameters: ["method": "form"])
+            }
         }
         dismiss()
     }

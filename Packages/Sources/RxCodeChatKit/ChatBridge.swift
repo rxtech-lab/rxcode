@@ -30,6 +30,9 @@ public final class ChatBridge {
     /// interrupt it.
     public var canSteer: Bool = false
     public var modelDisplayName: String = ""
+    /// Usage-limit advice for the selected provider and model, e.g. "only ~2
+    /// more tasks fit in the 5-hour limit"; nil when limits need no attention.
+    public var rateLimitAdvice: RateLimitAdvice?
     public var sessionStats: ChatSessionStats = ChatSessionStats()
     public var autoPreviewSettings: AttachmentAutoPreviewSettings = AttachmentAutoPreviewSettings()
     public var appVersion: String = ""

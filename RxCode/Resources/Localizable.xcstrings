@@ -17,6 +17,17 @@
         }
       }
     },
+    " :" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : ":"
+          }
+        }
+      }
+    },
     " (copy)" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -66,15 +77,8 @@
         }
       }
     },
-    " :" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : ":"
-          }
-        }
-      }
+    ":" : {
+
     },
     ".env" : {
       "localizations" : {
@@ -288,6 +292,76 @@
         }
       }
     },
+    "%@ · %@ of agent work" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ · 智能体工作 %2$@"
+          }
+        }
+      }
+    },
+    "%@ · %@ of turns" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ · 占 %2$@ 轮次"
+          }
+        }
+      }
+    },
+    "%@ · %@ tokens" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ · %2$@ 个 token"
+          }
+        }
+      }
+    },
+    "%@ · change in each limit between a task's start and finish." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · 任务开始到结束期间各限额的变化。"
+          }
+        }
+      }
+    },
+    "%@ · share of %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ · 占 %2$@ 的比例"
+          }
+        }
+      }
+    },
+    "%@ · share of each limit used. Solid lines are 5-hour limits, dashed lines 7-day limits." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · 各限额已用比例。实线为 5 小时限额，虚线为 7 天限额。"
+          }
+        }
+      }
+    },
+    "%@ · tasks of each model's average cost that fit in what's left of each limit." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · 按各模型平均消耗，剩余限额还能容纳的任务数。"
+          }
+        }
+      }
+    },
     "%@ (%@)" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -315,6 +389,23 @@
         }
       }
     },
+    "%@ %@ · %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ %2$@ · %3$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ %2$@ · %3$@"
+          }
+        }
+      }
+    },
     "%@ actions" : {
       "localizations" : {
         "zh-Hans" : {
@@ -325,12 +416,32 @@
         }
       }
     },
+    "%@ cache" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "缓存 %@"
+          }
+        }
+      }
+    },
     "%@ copy" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ 的副本"
+          }
+        }
+      }
+    },
+    "%@ in · %@ out" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入 %1$@ · 输出 %2$@"
           }
         }
       }
@@ -403,6 +514,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "未找到 %@"
+          }
+        }
+      }
+    },
+    "%@ of 5h per 1M tokens" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每 100 万 token 消耗 5 小时限额的 %@"
           }
         }
       }
@@ -812,6 +934,16 @@
         }
       }
     },
+    "%lld more" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "另外 %lld 项"
+          }
+        }
+      }
+    },
     "%lld of %lld" : {
       "localizations" : {
         "en" : {
@@ -862,6 +994,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "今天已发送 %lld / %lld 条通知。"
+          }
+        }
+      }
+    },
+    "%lld of %lld repos" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld / %lld 个仓库"
           }
         }
       }
@@ -956,12 +1098,42 @@
         }
       }
     },
+    "%lld repos" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个仓库"
+          }
+        }
+      }
+    },
     "%lld tasks" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld 个任务"
+          }
+        }
+      }
+    },
+    "%lld tasks measured" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已测量 %lld 个任务"
+          }
+        }
+      }
+    },
+    "%lld turns" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 轮"
           }
         }
       }
@@ -1054,6 +1226,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "• %@"
+          }
+        }
+      }
+    },
+    "• %@ — %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "• %1$@ — %2$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "• %1$@ — %2$@"
           }
         }
       }
@@ -1186,6 +1374,26 @@
         }
       }
     },
+    "~%lld tasks" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "约 %lld 个任务"
+          }
+        }
+      }
+    },
+    "~1 task" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "约 1 个任务"
+          }
+        }
+      }
+    },
     "−%lld" : {
       "localizations" : {
         "ko" : {
@@ -1232,6 +1440,76 @@
         }
       }
     },
+    "1 project" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 个项目"
+          }
+        }
+      }
+    },
+    "1 task" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 个任务"
+          }
+        }
+      }
+    },
+    "1 task measured" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已测量 1 个任务"
+          }
+        }
+      }
+    },
+    "1 turn" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 轮"
+          }
+        }
+      }
+    },
+    "5-hour · 7-day used" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "5 小时 · 7 天已用"
+          }
+        }
+      }
+    },
+    "5-hour limit" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "5 小时限额"
+          }
+        }
+      }
+    },
+    "5-hour resets %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "5 小时限额%@重置"
+          }
+        }
+      }
+    },
     "5h" : {
       "localizations" : {
         "ko" : {
@@ -1244,6 +1522,157 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "5 小时"
+          }
+        }
+      }
+    },
+    "5h · 7d" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "5 小时 · 7 天"
+          }
+        }
+      }
+    },
+    "5h / task" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "5 小时 / 任务"
+          }
+        }
+      }
+    },
+    "5h %@ · 7d %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "5 小时 %1$@ · 7 天 %2$@"
+          }
+        }
+      }
+    },
+    "5h most %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "5 小时最高 %@"
+          }
+        }
+      }
+    },
+    "5h most %@ · least %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "5 小时最高 %1$@ · 最低 %2$@"
+          }
+        }
+      }
+    },
+    "5h used" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "5 小时已用"
+          }
+        }
+      }
+    },
+    "7-day limit" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "7 天限额"
+          }
+        }
+      }
+    },
+    "7-day only" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅 7 天限额"
+          }
+        }
+      }
+    },
+    "7-day resets %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "7 天限额%@重置"
+          }
+        }
+      }
+    },
+    "7d" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "7 天"
+          }
+        }
+      }
+    },
+    "7d / task" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "7 天 / 任务"
+          }
+        }
+      }
+    },
+    "7d %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "7 天 %@"
+          }
+        }
+      }
+    },
+    "7d most %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "7 天最高 %@"
+          }
+        }
+      }
+    },
+    "7d most %@ · least %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "7 天最高 %1$@ · 最低 %2$@"
+          }
+        }
+      }
+    },
+    "7d used" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "7 天已用"
           }
         }
       }
@@ -1442,6 +1871,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "添加"
+          }
+        }
+      }
+    },
+    "Add a branch name after the prefix." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请在此前缀后添加分支名称。"
           }
         }
       }
@@ -2506,6 +2945,16 @@
         }
       }
     },
+    "All" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部"
+          }
+        }
+      }
+    },
     "All archived chats in the current project will be deleted. This action cannot be undone." : {
       "localizations" : {
         "ko" : {
@@ -2550,6 +2999,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "所有分支"
+          }
+        }
+      }
+    },
+    "All briefings" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所有简报"
           }
         }
       }
@@ -3630,6 +4089,56 @@
         }
       }
     },
+    "Average of 5-hour · 7-day per task" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每个任务平均消耗 5 小时 · 7 天限额"
+          }
+        }
+      }
+    },
+    "Average share of the 5-hour limit one task of this model uses. Plans without a 5-hour limit show 7d / task instead." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该模型单个任务平均占用 5 小时限额的比例。没有 5 小时限额的套餐改为显示“7 天 / 任务”。"
+          }
+        }
+      }
+    },
+    "Average share of the 5-hour limit one task uses." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "单个任务平均占用 5 小时限额的比例。"
+          }
+        }
+      }
+    },
+    "Average share of the 7-day limit one task uses." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "单个任务平均占用 7 天限额的比例。"
+          }
+        }
+      }
+    },
+    "Avg %@ per turn" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "平均每轮 %@"
+          }
+        }
+      }
+    },
     "Awaiting check" : {
       "localizations" : {
         "ko" : {
@@ -3668,6 +4177,9 @@
         }
       }
     },
+    "Back to %@" : {
+
+    },
     "Back to Draft" : {
       "localizations" : {
         "zh-Hans" : {
@@ -3690,6 +4202,46 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "将此项目的密钥备份到 Autopilot"
+          }
+        }
+      }
+    },
+    "Based on %lld tasks" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "基于 %lld 个任务"
+          }
+        }
+      }
+    },
+    "Based on %lld tasks run alone" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "基于 %lld 个单独运行的任务"
+          }
+        }
+      }
+    },
+    "Based on 1 task" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "基于 1 个任务"
+          }
+        }
+      }
+    },
+    "Based on 1 task run alone" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "基于 1 个单独运行的任务"
           }
         }
       }
@@ -3835,6 +4387,16 @@
         }
       }
     },
+    "Branch + checkout" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建并切换分支"
+          }
+        }
+      }
+    },
     "Branch name" : {
       "localizations" : {
         "ko" : {
@@ -3847,6 +4409,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "分支名称"
+          }
+        }
+      }
+    },
+    "Branch name cannot end with “/”." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分支名称不能以“/”结尾。"
+          }
+        }
+      }
+    },
+    "Branch name is required." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "必须填写分支名称。"
           }
         }
       }
@@ -4077,6 +4659,56 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "构建器"
+          }
+        }
+      }
+    },
+    "By model" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按模型"
+          }
+        }
+      }
+    },
+    "By provider" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按提供方"
+          }
+        }
+      }
+    },
+    "By type" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按类型"
+          }
+        }
+      }
+    },
+    "Cache read" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "缓存读取"
+          }
+        }
+      }
+    },
+    "Cache write" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "缓存写入"
           }
         }
       }
@@ -4424,6 +5056,7 @@
       }
     },
     "Choose the time window for usage statistics." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -4455,6 +5088,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "选择要显示的简报类型。"
+          }
+        }
+      }
+    },
+    "Choose which providers and limits to show." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择要显示的提供方和限额。"
           }
         }
       }
@@ -5639,7 +6282,7 @@
         }
       }
     },
-    "Connect GitHub to\nimport repos instantly": {
+    "Connect GitHub to\nimport repos instantly" : {
       "extractionState" : "stale",
       "localizations" : {
         "en" : {
@@ -6186,6 +6829,16 @@
         }
       }
     },
+    "Counts input and output tokens, including cache writes. Cache reads are left out because they barely count toward limits." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "统计输入和输出 token（含缓存写入）。缓存读取几乎不占用限额，因此不计入。"
+          }
+        }
+      }
+    },
     "Create" : {
       "localizations" : {
         "ko" : {
@@ -6324,6 +6977,9 @@
           }
         }
       }
+    },
+    "Create Now (%@)" : {
+
     },
     "Create PR" : {
       "localizations" : {
@@ -6522,6 +7178,9 @@
         }
       }
     },
+    "Create with Model" : {
+
+    },
     "Create Workspace" : {
       "localizations" : {
         "ko" : {
@@ -6608,6 +7267,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "创建于 %@ · 更新于 %@"
+          }
+        }
+      }
+    },
+    "Creates an isolated worktree so this chat works without touching the main checkout." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建独立的工作树，让此聊天可以运行而不影响主工作树。"
+          }
+        }
+      }
+    },
+    "Creates the branch and checks it out in the project root, changing the main checkout." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在项目根目录创建分支并切换到该分支，这会更改主工作树。"
           }
         }
       }
@@ -8043,6 +8722,16 @@
         }
       }
     },
+    "Docs" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文档"
+          }
+        }
+      }
+    },
     "Document" : {
       "localizations" : {
         "ko" : {
@@ -8104,6 +8793,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "文档搜索 · 由文档服务提供支持"
+          }
+        }
+      }
+    },
+    "Documents" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文档"
           }
         }
       }
@@ -9201,6 +9900,26 @@
         }
       }
     },
+    "Estimates appear after tasks finish" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "任务完成后显示估算"
+          }
+        }
+      }
+    },
+    "Estimates by model" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按模型估算"
+          }
+        }
+      }
+    },
     "Every" : {
       "localizations" : {
         "zh-Hans" : {
@@ -9618,6 +10337,16 @@
         }
       }
     },
+    "Failing" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "失败"
+          }
+        }
+      }
+    },
     "Fetch" : {
       "localizations" : {
         "ko" : {
@@ -9763,6 +10492,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在填写属性…"
+          }
+        }
+      }
+    },
+    "Filter" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "筛选"
           }
         }
       }
@@ -10135,6 +10874,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "强制开启"
+          }
+        }
+      }
+    },
+    "Forced off for this project" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此项目强制关闭"
+          }
+        }
+      }
+    },
+    "Forced on for this project" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此项目强制开启"
           }
         }
       }
@@ -10523,6 +11282,26 @@
         }
       }
     },
+    "Global default · Off" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全局默认 · 关闭"
+          }
+        }
+      }
+    },
+    "Global default · On" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全局默认 · 开启"
+          }
+        }
+      }
+    },
     "Global default plus per-project override" : {
       "localizations" : {
         "ko" : {
@@ -10765,6 +11544,26 @@
         }
       }
     },
+    "High" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "高"
+          }
+        }
+      }
+    },
+    "Highest tier" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最高档"
+          }
+        }
+      }
+    },
     "History" : {
       "localizations" : {
         "en" : {
@@ -10963,12 +11762,32 @@
         }
       }
     },
+    "Hover" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "悬停"
+          }
+        }
+      }
+    },
     "Hover to highlight this story's tasks" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "悬停以高亮显示此故事中的任务"
+          }
+        }
+      }
+    },
+    "How many more tasks of that average cost fit before each limit is reached, based on what's used now." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按当前已用量，在达到各限额前还能运行多少个平均消耗的任务。"
           }
         }
       }
@@ -10985,6 +11804,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Autopilot 扫描此仓库工作流并在动作过期时创建 PR 的频率。"
+          }
+        }
+      }
+    },
+    "How to read this" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "如何解读"
           }
         }
       }
@@ -11156,6 +11985,26 @@
         }
       }
     },
+    "In this thread" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此线程中"
+          }
+        }
+      }
+    },
+    "In this thread · %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此线程中 · %@"
+          }
+        }
+      }
+    },
     "Inactive chats are moved to the archive automatically. Pinned chats are never auto-archived." : {
       "localizations" : {
         "ko" : {
@@ -11242,6 +12091,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "继承全局默认值"
+          }
+        }
+      }
+    },
+    "Inherits global default (Off)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "继承全局默认值（关闭）"
+          }
+        }
+      }
+    },
+    "Inherits global default (On)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "继承全局默认值（开启）"
           }
         }
       }
@@ -11881,6 +12750,56 @@
         }
       }
     },
+    "Last 7 days" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "过去 7 天"
+          }
+        }
+      }
+    },
+    "Last 12 weeks, regardless of the window picked above. A rising line means the same tokens cost more of the limit than before. Solid lines are 5-hour limits, dashed lines 7-day limits." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近 12 周，不受上方所选时间范围影响。折线上升表示同样的 token 比以前占用更多限额。实线为 5 小时限额，虚线为 7 天限额。"
+          }
+        }
+      }
+    },
+    "Last 24 hours" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "过去 24 小时"
+          }
+        }
+      }
+    },
+    "Last 30 days" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "过去 30 天"
+          }
+        }
+      }
+    },
+    "Last 365 days" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "过去 365 天"
+          }
+        }
+      }
+    },
     "Last run %@" : {
       "localizations" : {
         "ko" : {
@@ -11979,6 +12898,46 @@
         }
       }
     },
+    "Least" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最低"
+          }
+        }
+      }
+    },
+    "Left in 5h" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "5 小时剩余"
+          }
+        }
+      }
+    },
+    "Left in 5h · 7d" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "5 小时 · 7 天剩余"
+          }
+        }
+      }
+    },
+    "Left in 7d" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "7 天剩余"
+          }
+        }
+      }
+    },
     "Let the agent decide" : {
       "localizations" : {
         "zh-Hans" : {
@@ -12017,6 +12976,77 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "生命周期"
+          }
+        }
+      }
+    },
+    "Limit" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "限额"
+          }
+        }
+      }
+    },
+    "Limit cost per million tokens ranks models by tier: larger models use more of the limit for the same tokens. For light tasks, a model with a lower cost usually does the job and leaves more room in the limit." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每百万 token 的限额消耗反映了模型档位：同样的 token 数，更大的模型会占用更多限额。对于轻量任务，消耗更低的模型通常就能胜任，并为限额留出更多余量。"
+          }
+        }
+      }
+    },
+    "Limit cost per task" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每个任务的限额消耗"
+          }
+        }
+      }
+    },
+    "Limit used" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已用限额"
+          }
+        }
+      }
+    },
+    "Limit used per 1M tokens" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每 100 万 token 消耗的限额"
+          }
+        }
+      }
+    },
+    "Limit used per 1M tokens by week" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每周每 100 万 token 消耗的限额"
+          }
+        }
+      }
+    },
+    "Line" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "折线"
           }
         }
       }
@@ -12428,6 +13458,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "长文本（200 字符以上）"
+          }
+        }
+      }
+    },
+    "Low" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "低"
           }
         }
       }
@@ -12893,6 +13933,16 @@
         }
       }
     },
+    "Many" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "很多"
+          }
+        }
+      }
+    },
     "Markdown content" : {
       "localizations" : {
         "ko" : {
@@ -12931,6 +13981,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "按标题匹配"
+          }
+        }
+      }
+    },
+    "Max" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最高"
           }
         }
       }
@@ -13026,6 +14086,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "MCP 服务器"
+          }
+        }
+      }
+    },
+    "median %@ tokens" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "中位数 %@ 个 token"
+          }
+        }
+      }
+    },
+    "Medium" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "中"
           }
         }
       }
@@ -13292,6 +14372,16 @@
         }
       }
     },
+    "Model usage" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型使用情况"
+          }
+        }
+      }
+    },
     "Model: %@ · %@" : {
       "localizations" : {
         "en" : {
@@ -13352,6 +14442,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "更多"
+          }
+        }
+      }
+    },
+    "Most" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最高"
+          }
+        }
+      }
+    },
+    "Most · Least" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最高 · 最低"
+          }
+        }
+      }
+    },
+    "Most used model" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最常用模型"
           }
         }
       }
@@ -13997,6 +15117,16 @@
         }
       }
     },
+    "New worktree" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建工作树"
+          }
+        }
+      }
+    },
     "Next" : {
       "localizations" : {
         "ko" : {
@@ -14073,6 +15203,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "没有正在运行的任务"
+          }
+        }
+      }
+    },
+    "No agent turns yet" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂无智能体轮次"
           }
         }
       }
@@ -14523,6 +15663,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "没有匹配的任务"
+          }
+        }
+      }
+    },
+    "No measured tasks in this window yet." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此时间范围内暂无已测量的任务。"
+          }
+        }
+      }
+    },
+    "No measured tasks yet" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂无已测量的任务"
           }
         }
       }
@@ -14989,6 +16149,16 @@
         }
       }
     },
+    "No status" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无状态"
+          }
+        }
+      }
+    },
     "No stories in the default view." : {
       "localizations" : {
         "ko" : {
@@ -15251,6 +16421,16 @@
         }
       }
     },
+    "No usage-limit history in this window yet." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此时间范围内暂无用量限额历史。"
+          }
+        }
+      }
+    },
     "No versions on this project yet." : {
       "localizations" : {
         "zh-Hans" : {
@@ -15370,6 +16550,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "未编译"
+          }
+        }
+      }
+    },
+    "Not enough measured tasks to estimate." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已测量的任务不足，无法估算。"
           }
         }
       }
@@ -15558,6 +16748,33 @@
         }
       }
     },
+    "now %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前 %@"
+          }
+        }
+      }
+    },
+    "now %@ · %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "now %1$@ · %2$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前 %1$@ · %2$@"
+          }
+        }
+      }
+    },
     "npx" : {
       "localizations" : {
         "ko" : {
@@ -15634,6 +16851,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "失败时，hook 的输出会回传给 agent，agent 会持续修复直到 hook 通过（最多重试 3 次）。"
+          }
+        }
+      }
+    },
+    "One finished task: its chat, model, finish time and how long it ran." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一个已完成的任务：所属对话、模型、完成时间和运行时长。"
+          }
+        }
+      }
+    },
+    "One provider's limit. Its height is the share of that limit used at that moment; it drops when the limit resets." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "某个提供方的一项限额。高度表示当时该限额的已用比例；限额重置时会回落。"
           }
         }
       }
@@ -16227,6 +17464,16 @@
         }
       }
     },
+    "Output" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输出"
+          }
+        }
+      }
+    },
     "output added to context" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -16463,6 +17710,16 @@
         }
       }
     },
+    "Passing" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通过"
+          }
+        }
+      }
+    },
     "Pause" : {
       "localizations" : {
         "ko" : {
@@ -16521,6 +17778,16 @@
         }
       }
     },
+    "Per 1M tokens" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每 100 万 token"
+          }
+        }
+      }
+    },
     "Per-project secrets, end-to-end encrypted and easily shared with your team." : {
       "localizations" : {
         "ko" : {
@@ -16533,6 +17800,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "按项目管理的密钥，端到端加密，可轻松与团队共享。"
+          }
+        }
+      }
+    },
+    "Percentage points of the 5-hour and 7-day limits the task used, measured from its start to its finish." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "任务从开始到结束所占用的 5 小时和 7 天限额的百分点。"
+          }
+        }
+      }
+    },
+    "Percentage points of this limit the task used." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该任务占用此限额的百分点。"
           }
         }
       }
@@ -16785,6 +18072,16 @@
         }
       }
     },
+    "Plans without a separate 5-hour limit show only their 7-day line." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有单独 5 小时限额的套餐只显示 7 天折线。"
+          }
+        }
+      }
+    },
     "Platform: %@ • %@" : {
       "localizations" : {
         "en" : {
@@ -16803,6 +18100,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "平台：%1$@ • %2$@"
+          }
+        }
+      }
+    },
+    "Point at the chart to read every provider's usage at that time." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将指针移到图表上，可查看该时刻各提供方的用量。"
           }
         }
       }
@@ -17157,6 +18464,16 @@
         }
       }
     },
+    "Project summaries" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目摘要"
+          }
+        }
+      }
+    },
     "Project Unavailable" : {
       "localizations" : {
         "zh-Hans" : {
@@ -17297,6 +18614,16 @@
             "value" : "제공자"
           }
         },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "提供方"
+          }
+        }
+      }
+    },
+    "Providers" : {
+      "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -17479,6 +18806,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "退出"
+          }
+        }
+      }
+    },
+    "ran with %lld other tasks" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "与其他 %lld 个任务同时运行"
+          }
+        }
+      }
+    },
+    "ran with 1 other task" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "与其他 1 个任务同时运行"
+          }
+        }
+      }
+    },
+    "Ran with others" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同时运行"
           }
         }
       }
@@ -18782,6 +20139,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "轮换令牌并重新安装"
+          }
+        }
+      }
+    },
+    "Row" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "行"
           }
         }
       }
@@ -20453,6 +21820,16 @@
         }
       }
     },
+    "Series" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "系列"
+          }
+        }
+      }
+    },
     "Server stopped" : {
       "localizations" : {
         "zh-Hans" : {
@@ -20497,6 +21874,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "会话名称"
+          }
+        }
+      }
+    },
+    "Session time" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会话时长"
           }
         }
       }
@@ -20714,6 +22101,9 @@
         }
       }
     },
+    "Settings Default (%@)" : {
+
+    },
     "Setup templates" : {
       "localizations" : {
         "ko" : {
@@ -20743,6 +22133,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "SF Symbol"
+          }
+        }
+      }
+    },
+    "Share of each limit a million tokens uses. Tokens are input and output tokens, including cache writes; cache reads aren't counted. Larger models cost more for the same tokens; for light tasks a cheaper model usually does the job and leaves more room. 0% means the limit didn't move, which is common for the 7-day limit." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每 100 万 token 占用各限额的比例。这里的 token 指输入和输出 token（含缓存写入），不计缓存读取。同样的 token 数，更大的模型消耗更多；轻量任务通常用更便宜的模型即可胜任，并留出更多余量。0% 表示限额没有变化，这在 7 天限额中很常见。"
           }
         }
       }
@@ -21153,6 +22553,16 @@
         }
       }
     },
+    "Show session time by provider and model." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按提供方和模型显示会话时长。"
+          }
+        }
+      }
+    },
     "Show stories" : {
       "localizations" : {
         "ko" : {
@@ -21207,6 +22617,46 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "显示任务"
+          }
+        }
+      }
+    },
+    "Show the model and provider breakdown." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示模型和提供方的明细。"
+          }
+        }
+      }
+    },
+    "Show the token breakdown." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示 token 明细。"
+          }
+        }
+      }
+    },
+    "Show the usage-limit cost of each task." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示每个任务的限额消耗。"
+          }
+        }
+      }
+    },
+    "Show the usage-limit history chart." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示用量限额历史图表。"
           }
         }
       }
@@ -21432,7 +22882,7 @@
         }
       }
     },
-    "Sign in to rxlab to\nimport GitHub repos": {
+    "Sign in to rxlab to\nimport GitHub repos" : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -21448,7 +22898,7 @@
         }
       }
     },
-    "Sign in to rxlab to\nimport your GitHub repos": {
+    "Sign in to rxlab to\nimport your GitHub repos" : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -21744,6 +23194,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Slug（例如 architecture/overview）"
+          }
+        }
+      }
+    },
+    "Solid 5-hour · dashed 7-day" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实线 5 小时 · 虚线 7 天"
           }
         }
       }
@@ -22582,6 +24042,16 @@
         }
       }
     },
+    "Tasks left in 5-hour · 7-day limits" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "5 小时 · 7 天限额内剩余任务数"
+          }
+        }
+      }
+    },
     "Tasks must carry every selected tag." : {
       "localizations" : {
         "zh-Hans" : {
@@ -22592,12 +24062,83 @@
         }
       }
     },
+    "Tasks of average cost that fit in what's left of each limit. Click for estimates by model." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按平均消耗计算，各剩余限额还能容纳的任务数。点击查看按模型的估算。"
+          }
+        }
+      }
+    },
+    "Tasks of average cost that still fit in the 5-hour limit." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "5 小时限额内还能容纳的平均消耗任务数。"
+          }
+        }
+      }
+    },
+    "Tasks of average cost that still fit in the 7-day limit." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "7 天限额内还能容纳的平均消耗任务数。"
+          }
+        }
+      }
+    },
+    "Tasks remaining" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "剩余任务"
+          }
+        }
+      }
+    },
+    "Tasks running at the same time share one limit, so their costs are approximate and are left out of the averages once enough solo tasks exist." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同时运行的任务共享同一限额，因此其消耗为近似值；当单独运行的任务足够多时，不计入平均值。"
+          }
+        }
+      }
+    },
+    "Tasks so far barely moved the limit, so there's no practical cap yet." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目前的任务几乎没有消耗限额，暂无实际上限。"
+          }
+        }
+      }
+    },
     "Tasks targeting any selected version." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "目标版本为任一所选版本的任务。"
+          }
+        }
+      }
+    },
+    "Tasks that ran alongside other tasks on the same provider share its limit, so their costs are approximate and are left out of the averages once enough solo tasks exist." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "与同一提供方的其他任务同时运行的任务会共享限额，因此其消耗为近似值；当单独运行的任务足够多时，这些任务不计入平均值。"
           }
         }
       }
@@ -22853,6 +24394,36 @@
         }
       }
     },
+    "The least expensive task in this window." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此时间范围内消耗最低的任务。"
+          }
+        }
+      }
+    },
+    "The limit reset during this task, so its cost can't be measured." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该任务期间限额已重置，无法测量其消耗。"
+          }
+        }
+      }
+    },
+    "The limit reset while the task ran, so its cost can't be measured." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "任务运行期间限额已重置，无法测量其消耗。"
+          }
+        }
+      }
+    },
     "The milestone is cleared from every story and task that uses it." : {
       "localizations" : {
         "zh-Hans" : {
@@ -22889,6 +24460,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "用于运行通用 AI 任务的模型"
+          }
+        }
+      }
+    },
+    "The model that uses the most limit for the same number of tokens." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同样 token 数下消耗限额最多的模型。"
+          }
+        }
+      }
+    },
+    "The most expensive task in this window." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此时间范围内消耗最高的任务。"
           }
         }
       }
@@ -22957,6 +24548,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "通用 AI 任务智能体判断是否发送简报时，也会参考此项目设置。"
+          }
+        }
+      }
+    },
+    "The provider's most and least expensive tasks in this window." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该提供方在此时间范围内消耗最高和最低的任务。"
           }
         }
       }
@@ -23198,6 +24799,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "这些说明会附带到每轮智能体对话中。项目说明会添加在全局说明之后。"
+          }
+        }
+      }
+    },
+    "Thinking" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "思考中"
           }
         }
       }
@@ -23575,6 +25186,17 @@
         }
       }
     },
+    "Thread" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "线程"
+          }
+        }
+      }
+    },
     "Thread menu" : {
       "localizations" : {
         "ko" : {
@@ -23688,6 +25310,26 @@
         }
       }
     },
+    "time" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "时长"
+          }
+        }
+      }
+    },
+    "Time" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "时间"
+          }
+        }
+      }
+    },
     "Times use your local time zone." : {
       "localizations" : {
         "zh-Hans" : {
@@ -23756,6 +25398,16 @@
         }
       }
     },
+    "Todos %lld/%lld" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "待办事项 %lld/%lld"
+          }
+        }
+      }
+    },
     "Toggle Inspector" : {
       "localizations" : {
         "ko" : {
@@ -23772,12 +25424,52 @@
         }
       }
     },
+    "Token usage" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Token 用量"
+          }
+        }
+      }
+    },
+    "tokens" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "token"
+          }
+        }
+      }
+    },
+    "Tokens burned" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Token 消耗"
+          }
+        }
+      }
+    },
     "Tools to Expose" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "开放的工具"
+          }
+        }
+      }
+    },
+    "Top provider: %@ (%@)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最常用提供方：%1$@（%2$@）"
           }
         }
       }
@@ -23906,6 +25598,16 @@
         }
       }
     },
+    "turns" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "轮次"
+          }
+        }
+      }
+    },
     "Type" : {
       "localizations" : {
         "ko" : {
@@ -23970,6 +25672,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "未分配"
+          }
+        }
+      }
+    },
+    "Unknown project" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未知项目"
           }
         }
       }
@@ -24055,6 +25767,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无标题任务"
+          }
+        }
+      }
+    },
+    "Untitled thread" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无标题线程"
           }
         }
       }
@@ -24191,6 +25913,26 @@
         }
       }
     },
+    "Usage limits" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用量限额"
+          }
+        }
+      }
+    },
+    "Usage-limit history" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用量限额历史"
+          }
+        }
+      }
+    },
     "Use a GitHub repository that exposes .claude-plugin/marketplace.json." : {
       "localizations" : {
         "ko" : {
@@ -24269,6 +26011,16 @@
         }
       }
     },
+    "Use the filter button to hide providers or limits. Your choice is remembered." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用筛选按钮隐藏提供方或限额，选择会被记住。"
+          }
+        }
+      }
+    },
     "Use the registry to add Agent Client Protocol tools, then pick them from the thread model menu." : {
       "localizations" : {
         "ko" : {
@@ -24297,6 +26049,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "使用工作区（.xcworkspace）"
+          }
+        }
+      }
+    },
+    "Used" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已用"
           }
         }
       }
@@ -24922,6 +26684,16 @@
         }
       }
     },
+    "Week" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "周"
+          }
+        }
+      }
+    },
     "Weekdays at 9:00" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -25403,6 +27175,16 @@
         }
       }
     },
+    "XHigh" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "超高"
+          }
+        }
+      }
+    },
     "Yesterday" : {
       "localizations" : {
         "zh-Hans" : {
@@ -25451,366 +27233,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你的 Autopilot 账户邮箱"
-          }
-        }
-      }
-    },
-    "Passing" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "通过"
-          }
-        }
-      }
-    },
-    "Failing" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "失败"
-          }
-        }
-      }
-    },
-    "No status" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "无状态"
-          }
-        }
-      }
-    },
-    "All briefings" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "所有简报"
-          }
-        }
-      }
-    },
-    "Project summaries" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "项目摘要"
-          }
-        }
-      }
-    },
-    "Documents" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "文档"
-          }
-        }
-      }
-    },
-    "All" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "全部"
-          }
-        }
-      }
-    },
-    "Docs" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "文档"
-          }
-        }
-      }
-    },
-    "In this thread" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "此线程中"
-          }
-        }
-      }
-    },
-    "In this thread · %@" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "此线程中 · %@"
-          }
-        }
-      }
-    },
-    "Unknown project" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未知项目"
-          }
-        }
-      }
-    },
-    "Untitled thread" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "无标题线程"
-          }
-        }
-      }
-    },
-    "Thread" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "线程"
-          }
-        }
-      }
-    },
-    "1 project" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "1 个项目"
-          }
-        }
-      }
-    },
-    "Low" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "低"
-          }
-        }
-      }
-    },
-    "Medium" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "中"
-          }
-        }
-      }
-    },
-    "High" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "高"
-          }
-        }
-      }
-    },
-    "XHigh" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "超高"
-          }
-        }
-      }
-    },
-    "Max" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "最高"
-          }
-        }
-      }
-    },
-    "Thinking" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "思考中"
-          }
-        }
-      }
-    },
-    "New worktree" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "新建工作树"
-          }
-        }
-      }
-    },
-    "Branch + checkout" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "创建并切换分支"
-          }
-        }
-      }
-    },
-    "Creates an isolated worktree so this chat works without touching the main checkout." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "创建独立的工作树，让此聊天可以运行而不影响主工作树。"
-          }
-        }
-      }
-    },
-    "Creates the branch and checks it out in the project root, changing the main checkout." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在项目根目录创建分支并切换到该分支，这会更改主工作树。"
-          }
-        }
-      }
-    },
-    "Branch name is required." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "必须填写分支名称。"
-          }
-        }
-      }
-    },
-    "Branch name cannot end with “/”." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "分支名称不能以“/”结尾。"
-          }
-        }
-      }
-    },
-    "Add a branch name after the prefix." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "请在此前缀后添加分支名称。"
-          }
-        }
-      }
-    },
-    "Todos %lld/%lld" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "待办事项 %lld/%lld"
-          }
-        }
-      }
-    },
-    "%lld repos" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld 个仓库"
-          }
-        }
-      }
-    },
-    "%lld of %lld repos" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld / %lld 个仓库"
-          }
-        }
-      }
-    },
-    "Global default · On" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "全局默认 · 开启"
-          }
-        }
-      }
-    },
-    "Global default · Off" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "全局默认 · 关闭"
-          }
-        }
-      }
-    },
-    "Inherits global default (On)" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "继承全局默认值（开启）"
-          }
-        }
-      }
-    },
-    "Inherits global default (Off)" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "继承全局默认值（关闭）"
-          }
-        }
-      }
-    },
-    "Forced on for this project" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "此项目强制开启"
-          }
-        }
-      }
-    },
-    "Forced off for this project" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "此项目强制关闭"
           }
         }
       }

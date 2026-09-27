@@ -1,0 +1,456 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "·" : {
+
+    },
+    "%@ · ~%lld tasks left" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ · 约剩 %2$lld 个任务"
+          }
+        }
+      }
+    },
+    "%@ of 5h per task" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每个任务消耗 5 小时限额的 %@"
+          }
+        }
+      }
+    },
+    "%@ of 7d per task" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每个任务消耗 7 天限额的 %@"
+          }
+        }
+      }
+    },
+    "│" : {
+
+    },
+    "5-hour at %@, 7-day at %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "5 小时已用 %1$@，7 天已用 %2$@"
+          }
+        }
+      }
+    },
+    "7-day at %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "7 天已用 %@"
+          }
+        }
+      }
+    },
+    "Accept Edits" : {
+
+    },
+    "ACP" : {
+
+    },
+    "Amber (Yellow)" : {
+
+    },
+    "Ask" : {
+
+    },
+    "At this pace the 5-hour limit runs out about %@ before it resets." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按当前速度，5 小时限额会在重置前约 %@ 用完。"
+          }
+        }
+      }
+    },
+    "At this pace the 7-day limit runs out about %@ before it resets." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按当前速度，7 天限额会在重置前约 %@ 用完。"
+          }
+        }
+      }
+    },
+    "Auto" : {
+
+    },
+    "Available in all projects" : {
+
+    },
+    "Backlog" : {
+
+    },
+    "Board" : {
+
+    },
+    "Branch" : {
+
+    },
+    "Briefing" : {
+
+    },
+    "Bug" : {
+
+    },
+    "Bypass" : {
+
+    },
+    "Calling…" : {
+
+    },
+    "Changes" : {
+
+    },
+    "Chat" : {
+
+    },
+    "Chore" : {
+
+    },
+    "Claude Code" : {
+
+    },
+    "Codex" : {
+
+    },
+    "Creating pull request…" : {
+
+    },
+    "Done" : {
+
+    },
+    "Enter a cron expression." : {
+
+    },
+    "Every 15 minutes" : {
+
+    },
+    "Every day at 9:00" : {
+
+    },
+    "Every hour" : {
+
+    },
+    "Every Monday at 9:00" : {
+
+    },
+    "Expected 5 fields (minute hour day month weekday), found %lld." : {
+
+    },
+    "Feature" : {
+
+    },
+    "First day of the month at 9:00" : {
+
+    },
+    "Forest (Green)" : {
+
+    },
+    "High" : {
+
+    },
+    "HTTP" : {
+
+    },
+    "Ideas and work not planned yet" : {
+
+    },
+    "In Progress" : {
+
+    },
+    "Inherit" : {
+
+    },
+    "Inspector" : {
+
+    },
+    "Invalid %@ field \"%@\"." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Invalid %1$@ field \"%2$@\"."
+          }
+        }
+      }
+    },
+    "Lavender (Purple)" : {
+
+    },
+    "Local" : {
+
+    },
+    "Low" : {
+
+    },
+    "Lower limit cost per token" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每个 token 的限额消耗更低"
+          }
+        }
+      }
+    },
+    "Medium" : {
+
+    },
+    "Memo" : {
+
+    },
+    "Midnight (Indigo)" : {
+
+    },
+    "Ocean (Blue)" : {
+
+    },
+    "Off" : {
+
+    },
+    "On" : {
+
+    },
+    "On review fail" : {
+
+    },
+    "On review pass" : {
+
+    },
+    "On review start" : {
+
+    },
+    "On session stop" : {
+
+    },
+    "Only about %lld more %@ tasks fit in the 5-hour limit." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "5 小时限额内仅能再运行约 %1$lld 个 %2$@ 任务。"
+          }
+        }
+      }
+    },
+    "Only about %lld more %@ tasks fit in the 7-day limit." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "7 天限额内仅能再运行约 %1$lld 个 %2$@ 任务。"
+          }
+        }
+      }
+    },
+    "Only about 1 more %@ task fits in the 5-hour limit." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "5 小时限额内仅能再运行约 1 个 %@ 任务。"
+          }
+        }
+      }
+    },
+    "Only about 1 more %@ task fits in the 7-day limit." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "7 天限额内仅能再运行约 1 个 %@ 任务。"
+          }
+        }
+      }
+    },
+    "Pending" : {
+
+    },
+    "Pending Review" : {
+
+    },
+    "Plan" : {
+
+    },
+    "Project" : {
+
+    },
+    "Projects" : {
+
+    },
+    "Recent %@ tasks are light (median %@ tokens). A smaller model could handle them for less of the limit." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近的 %1$@ 任务都较轻量（中位数 %2$@ 个 token）。换用更小的模型即可胜任，并能节省限额。"
+          }
+        }
+      }
+    },
+    "Resets in %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@后重置"
+          }
+        }
+      }
+    },
+    "Response in progress in the background" : {
+
+    },
+    "Review" : {
+
+    },
+    "Run" : {
+
+    },
+    "Scheduled" : {
+
+    },
+    "Scheduled task finished" : {
+
+    },
+    "Send message" : {
+
+    },
+    "Shared via .mcp.json" : {
+
+    },
+    "SSE" : {
+
+    },
+    "stdio" : {
+
+    },
+    "Stop generating" : {
+
+    },
+    "Switch to %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换到 %@"
+          }
+        }
+      }
+    },
+    "Table" : {
+
+    },
+    "Terminal" : {
+
+    },
+    "Terracotta (Default)" : {
+
+    },
+    "The 5-hour limit is %@ used." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "5 小时限额已用 %@。"
+          }
+        }
+      }
+    },
+    "The 5-hour limit is nearly used up — another %@ task will likely hit it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "5 小时限额即将用完——再运行一个 %@ 任务很可能就会触顶。"
+          }
+        }
+      }
+    },
+    "The 7-day limit is %@ used." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "7 天限额已用 %@。"
+          }
+        }
+      }
+    },
+    "The 7-day limit is nearly used up — another %@ task will likely hit it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "7 天限额即将用完——再运行一个 %@ 任务很可能就会触顶。"
+          }
+        }
+      }
+    },
+    "The run finished without a final message." : {
+
+    },
+    "This has been completed" : {
+
+    },
+    "This is actively being worked on" : {
+
+    },
+    "This item hasn't been started" : {
+
+    },
+    "This item is in review" : {
+
+    },
+    "This project, this machine only" : {
+
+    },
+    "This thread" : {
+
+    },
+    "Unsupported macro %@." : {
+
+    },
+    "Urgent" : {
+
+    },
+    "User" : {
+
+    },
+    "Wait for the 5-hour reset" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等待 5 小时限额重置"
+          }
+        }
+      }
+    },
+    "Weekdays at 9:00" : {
+
+    },
+    "Working…" : {
+
+    }
+  },
+  "version" : "1.1"
+}

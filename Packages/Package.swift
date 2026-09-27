@@ -23,7 +23,10 @@ let package = Package(
             dependencies: [
                 .product(name: "libwebp", package: "libwebp-Xcode"),
             ],
-            path: "Sources/RxCodeCore"
+            path: "Sources/RxCodeCore",
+            resources: [
+                .process("Resources"),
+            ]
         ),
         .target(
             name: "RxCodeChatKit",

@@ -1228,8 +1228,6 @@
       }
     },
     "Combine every queued message and send it as a single turn" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -1740,8 +1738,6 @@
       }
     },
     "Couldn't reach the current response — still queued, sends when it ends." : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -3152,8 +3148,6 @@
       }
     },
     "Interrupt and send all now" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -3164,8 +3158,6 @@
       }
     },
     "Interrupt and send now" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -4978,8 +4970,6 @@
       }
     },
     "Send before the current response ends — steer it in, or interrupt" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -5516,8 +5506,6 @@
       }
     },
     "Steer all into current response" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -5528,8 +5516,6 @@
       }
     },
     "Steer into current response" : {
-
-
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -5598,6 +5584,12 @@
           }
         }
       }
+    },
+    "Suggestions" : {
+
+    },
+    "Switch" : {
+
     },
     "Switch to horizontal scroll" : {
       "localizations" : {
@@ -6080,6 +6072,12 @@
           }
         }
       }
+    },
+    "Usage limit running low" : {
+
+    },
+    "Usage limit tip" : {
+
     },
     "Usage:" : {
       "localizations" : {

@@ -58,6 +58,7 @@ extension AppState {
         case .acp:
             break
         }
+        recordRateLimitSample(usage, for: provider)
         // Refresh the mobile home-screen widget's usage figures.
         MobileSyncService.shared.pushWidgetUpdate()
     }

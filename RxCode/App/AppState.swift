@@ -428,6 +428,9 @@ final class AppState {
     /// Bumped whenever a finished turn is folded into the persisted usage
     /// buckets, so the briefing statistics panel re-reads its summary.
     var usageStatsRevision = 0
+    /// Bumped when a usage-limit sample or task cost is persisted, so the
+    /// briefing usage-limit panel re-reads its history.
+    var rateLimitHistoryRevision = 0
     /// Agent-written document briefings from `briefingStore`, newest first.
     /// Loaded lazily by the briefing tab via `reloadBriefingDocuments()`.
     var briefingDocuments: [BriefingDocument] = []
@@ -646,6 +649,13 @@ final class AppState {
     var latestRateLimitUsage: RateLimitUsage?
     var latestCodexRateLimitUsage: RateLimitUsage?
     @ObservationIgnored var rateLimitUsageRefreshTasks: [AgentProvider: Task<RateLimitUsage?, Never>] = [:]
+    @ObservationIgnored var rateLimitSamplingTask: Task<Void, Never>?
+    /// Agent streams currently measuring their usage-limit cost, per provider.
+    @ObservationIgnored var activeRateLimitRuns: [AgentProvider: Int] = [:]
+    /// Per-provider task costs and per-model estimates over the last week,
+    /// computed in the background. Drives rate-limit advice in the status line.
+    var rateLimitProviderStats: [AgentProvider: RateLimitTaskCostSummary] = [:]
+    @ObservationIgnored var rateLimitProviderStatsTask: Task<Void, Never>?
 
     /// Sessions currently streaming, anywhere across all windows.
     /// Reads `sessionActivity` (not `sessionStates`) so the menu bar label doesn't

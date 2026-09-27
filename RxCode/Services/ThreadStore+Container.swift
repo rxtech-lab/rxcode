@@ -24,7 +24,9 @@ extension ThreadStore {
             HookStatusRecord.self,
             HookCardRecord.self,
             CustomMenuItemRecord.self,
-            UsageStatBucket.self
+            UsageStatBucket.self,
+            RateLimitSample.self,
+            RateLimitTaskCost.self
         ])
     }
 
@@ -50,6 +52,7 @@ extension ThreadStore {
             store.finalizeInterruptedHookCards()
             store.finalizeInterruptedCompletionChecks()
             store.pruneUsageBuckets()
+            store.pruneRateLimitHistory()
             return store
         } catch {
             // Fall back to an in-memory container so the app still launches.

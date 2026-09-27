@@ -59,7 +59,8 @@ extension AppState {
         let (title, body) = await generateValidatedPullRequestContent(
             briefing: briefing,
             branch: branch,
-            model: model ?? rememberedPullRequestModel
+            model: model ?? rememberedPullRequestModel,
+            cwd: project.path
         )
 
         // 3. Open the PR via autopilot.
@@ -100,10 +101,10 @@ extension AppState {
 
     // MARK: - PR model selection
 
-    /// Model sections offered by the "Create with Model" menu. ACP clients are
-    /// left out because they have no one-shot generation path.
+    /// Model sections offered by the "Create with Model" menu: Claude Code,
+    /// Codex, and every enabled ACP client.
     func pullRequestModelSections() -> [(id: String, title: String, provider: AgentProvider, iconURL: String?, models: [AgentModel])] {
-        availableAgentModelSections().filter { $0.provider != .acp }
+        availableAgentModelSections()
     }
 
     /// The model last picked for PR generation, or `nil` when the user hasn't
@@ -126,8 +127,8 @@ extension AppState {
     /// Generate raw PR text (title on the first line, blank line, then a markdown
     /// body) from a branch briefing. Uses `model` when given; otherwise routes
     /// through the configured `summarizationProvider`, mirroring
-    /// `generateCommitMessage`.
-    func generatePullRequestContent(briefing: String, branch: String, model: AgentModel? = nil) async -> String? {
+    /// `generateCommitMessage`. `cwd` is the working directory for ACP clients.
+    func generatePullRequestContent(briefing: String, branch: String, model: AgentModel? = nil, cwd: String? = nil) async -> String? {
         if let model {
             switch model.provider {
             case .claudeCode:
@@ -136,7 +137,18 @@ extension AppState {
                 let prompt = OpenAISummarizationService.pullRequestPrompt(briefing: briefing, branch: branch)
                 return await codex.generateCodexPlainSummary(prompt: prompt, model: model.id)
             case .acp:
-                break // ACP has no one-shot; fall through to the summarization settings.
+                if let parts = acpSelectionParts(for: model.id),
+                   let spec = acpClients.first(where: { $0.id == parts.clientId && $0.enabled }) {
+                    let prompt = OpenAISummarizationService.pullRequestPrompt(briefing: briefing, branch: branch)
+                    return await acp.generatePlainResponse(
+                        prompt: prompt,
+                        model: parts.model.isEmpty ? nil : parts.model,
+                        spec: spec,
+                        cwd: cwd ?? FileManager.default.homeDirectoryForCurrentUser.path
+                    )
+                }
+                // Client disabled or removed; fall through to the summarization settings.
+                logger.warning("ACP client for PR generation is unavailable; using summarization settings")
             }
         }
         switch summarizationProvider {
@@ -182,11 +194,12 @@ extension AppState {
         briefing: String,
         branch: String,
         model: AgentModel? = nil,
+        cwd: String? = nil,
         maxAttempts: Int = 3
     ) async -> (title: String, body: String) {
         var lastBody = ""
         for attempt in 1...maxAttempts {
-            let raw = await generatePullRequestContent(briefing: briefing, branch: branch, model: model)
+            let raw = await generatePullRequestContent(briefing: briefing, branch: branch, model: model, cwd: cwd)
             let (title, body) = Self.parsePullRequestContent(raw, branch: branch)
             if Self.isConventionalCommitTitle(title) {
                 return (title, body)

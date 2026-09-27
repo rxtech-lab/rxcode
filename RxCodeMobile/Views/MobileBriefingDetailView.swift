@@ -315,9 +315,13 @@ struct MobileBriefingDetailView: View {
                         MobileCIStatusChip(status: ciStatus, linksFailingRun: true)
                     }
 
-                    // Updated time
+                    if let createdAt = group?.briefing?.createdAt {
+                        Text("Created \(createdAt.formatted(.relative(presentation: .named)))")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
                     if let updatedAt = group?.updatedAt {
-                        Text(updatedAt.formatted(.relative(presentation: .named)))
+                        Text("Updated \(updatedAt.formatted(.relative(presentation: .named)))")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                     }

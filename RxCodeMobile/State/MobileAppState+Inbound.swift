@@ -99,6 +99,7 @@ extension MobileAppState {
             projects = snap.projects
             sessions = snap.sessions
             branchBriefings = snap.branchBriefings ?? []
+            briefingDocuments = snap.briefingDocuments ?? []
             threadSummaries = snap.threadSummaries ?? []
             ciStatusByProject = Dictionary(uniqueKeysWithValues: (snap.ciStatuses ?? []).map { ($0.projectId, $0.status) })
             desktopSettings = snap.settings
@@ -212,6 +213,62 @@ extension MobileAppState {
             pendingRemoteFileID = nil
             isLoadingRemoteFile = false
             remoteFileResult = result
+        case .briefingContentResult(let result):
+            guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "briefing_content_result") else { return }
+            guard pendingBriefingContentID == result.clientRequestID else { return }
+            if let path = result.assetPath, result.ok {
+                guard let encoded = result.assetBase64,
+                      let data = Data(base64Encoded: encoded),
+                      let offset = result.assetOffset,
+                      let total = result.assetTotalBytes,
+                      offset == briefingAssetBytesReceived,
+                      total >= 0,
+                      Int64(data.count) <= total - offset,
+                      (data.count > 0 || offset == total),
+                      let handle = briefingAssetWriteHandle else {
+                    pendingBriefingContentID = nil
+                    isLoadingBriefingContent = false
+                    briefingAssetWriteHandle?.closeFile()
+                    briefingAssetWriteHandle = nil
+                    briefingContentResult = BriefingContentResultPayload(
+                        clientRequestID: result.clientRequestID, briefingID: result.briefingID,
+                        assetPath: path, ok: false, errorMessage: "The file transfer was incomplete."
+                    )
+                    return
+                }
+                do {
+                    try handle.write(contentsOf: data)
+                    briefingAssetBytesReceived += Int64(data.count)
+                } catch {
+                    pendingBriefingContentID = nil
+                    isLoadingBriefingContent = false
+                    briefingAssetWriteHandle?.closeFile()
+                    briefingAssetWriteHandle = nil
+                    briefingContentResult = BriefingContentResultPayload(
+                        clientRequestID: result.clientRequestID, briefingID: result.briefingID,
+                        assetPath: path, ok: false, errorMessage: error.localizedDescription
+                    )
+                    return
+                }
+                if briefingAssetBytesReceived < total {
+                    let nextOffset = briefingAssetBytesReceived
+                    Task { await self.requestNextBriefingAssetChunk(
+                        id: result.briefingID, path: path, offset: nextOffset,
+                        requestID: result.clientRequestID
+                    ) }
+                    return
+                }
+                handle.closeFile()
+                briefingAssetWriteHandle = nil
+                briefingAssetFileURL = briefingAssetPendingURL
+            }
+            pendingBriefingContentID = nil
+            isLoadingBriefingContent = false
+            if !result.ok {
+                briefingAssetWriteHandle?.closeFile()
+                briefingAssetWriteHandle = nil
+            }
+            briefingContentResult = result
         case .branchOpResult(let result):
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "branch_op_result") else { return }
             inFlightBranchOps.remove(result.clientRequestID)

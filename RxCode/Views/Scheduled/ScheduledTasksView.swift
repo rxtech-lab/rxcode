@@ -284,6 +284,13 @@ private struct ScheduledTaskRow: View {
                         .foregroundStyle(ClaudeTheme.textTertiary)
                         .lineLimit(1)
                         .help(task.agent.isAssigned ? "Model" : "Default task agent")
+                    if task.notification != .none {
+                        Label(task.notification.title, systemImage: "envelope")
+                            .font(.system(size: 11))
+                            .foregroundStyle(ClaudeTheme.textTertiary)
+                            .lineLimit(1)
+                            .help("Notification when a run finishes")
+                    }
                     if let lastRunAt = task.lastRunAt {
                         Text("Last run \(lastRunAt, format: .relative(presentation: .named))")
                             .font(.system(size: 11))
@@ -319,6 +326,10 @@ private struct ScheduledTaskRow: View {
         .onTapGesture(count: 2, perform: onEdit)
         .contextMenu {
             Button("Edit…", systemImage: "pencil", action: onEdit)
+            Button("Run Now", systemImage: "play.circle") {
+                Task { await appState.runScheduledTask(task) }
+            }
+            .disabled(task.projectId.map { id in !appState.projects.contains { $0.id == id } } ?? false)
             Button(task.isEnabled ? "Pause" : "Resume", systemImage: task.isEnabled ? "pause" : "play") {
                 appState.setScheduledTaskEnabled(id: task.id, !task.isEnabled)
             }

@@ -37,6 +37,24 @@ final class WorkspaceManager {
     /// Known workspaces — source of truth is the shared registry.
     var workspaces: [AppWorkspace] { core.workspaceRegistry.load().all }
 
+    /// Clears cached rows in every workspace, including unopened workspaces.
+    func clearCachedData() async throws {
+        let allWorkspaces = workspaces
+        for workspace in allWorkspaces {
+            let state = appState(for: workspace.id)
+            try state.threadStore.clearCachedRecords()
+            await state.searchService.clearCachedIndex()
+            state.branchBriefingRevision &+= 1
+        }
+        try await CacheStorageService.shared.clearFileCaches(
+            workspaceURLs: allWorkspaces.map(\.storageURL)
+        )
+        await ACPIconCache.shared.clear()
+        for workspace in allWorkspaces {
+            await appState(for: workspace.id).reloadBriefingDocuments()
+        }
+    }
+
     /// Returns the AppState bound to `workspaceID`, creating it on first use.
     /// Falls back to the registry's active workspace when the id is unknown.
     func appState(for workspaceID: String) -> AppState {

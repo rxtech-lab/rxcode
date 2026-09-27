@@ -149,6 +149,12 @@ extension AppState {
         let runProfiles = await mobileRunProfiles()
         let runTasks = mobileRunTaskSnapshots()
         let webProxy = await localWebProxy.proxyInfo()
+        let documentBriefings = await briefingStore.list()
+            .filter(\.isPublished)
+            .map { MobileBriefingDocument(
+                id: $0.id, title: $0.title, format: $0.format.rawValue,
+                projectId: $0.projectId, createdAt: $0.createdAt, updatedAt: $0.updatedAt
+            ) }
         if let webProxy {
             logger.info("[WebBrowserSync] snapshot includes web proxy host=\(webProxy.host, privacy: .public) port=\(webProxy.port, privacy: .public) to mobileKey=\(String(hex.prefix(12)), privacy: .public)")
         } else {
@@ -158,6 +164,7 @@ extension AppState {
             projects: projects,
             sessions: mobileSessionSummaries(),
             branchBriefings: mobileBranchBriefings(),
+            briefingDocuments: documentBriefings,
             threadSummaries: mobileThreadSummaries(),
             ciStatuses: mobileCIStatuses(),
             settings: mobileSettingsSnapshot(),
@@ -459,7 +466,8 @@ extension AppState {
                     projectId: $0.projectId,
                     branch: $0.branch,
                     briefing: $0.briefing,
-                    updatedAt: $0.updatedAt
+                    updatedAt: $0.updatedAt,
+                    createdAt: $0.createdAt
                 )
             }
     }

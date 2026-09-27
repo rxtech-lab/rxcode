@@ -1,6 +1,15 @@
 {
-  "originHash" : "e093c5c39dc8a5bd721034cdff1a4cf518ce7c7bb07a29f6ceccf2d8f66603e5",
+  "originHash" : "8e5837723fa63b74c2d907fed60b831efc1c1012d2dbd52125a648387ab46c79",
   "pins" : [
+    {
+      "identity" : "libwebp-xcode",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/SDWebImage/libwebp-Xcode",
+      "state" : {
+        "revision" : "2b5256c29ff4e20f2a0d5ee863b62b1a22144434",
+        "version" : "1.6.0"
+      }
+    },
     {
       "identity" : "rxagentsdk",
       "kind" : "remoteSourceControl",

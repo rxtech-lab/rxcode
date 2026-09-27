@@ -248,8 +248,41 @@ struct ScheduledTaskFormSheet: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            Section {
+                Picker("When a run finishes", selection: $draft.notification) {
+                    ForEach(ScheduledTaskNotification.allCases, id: \.self) { option in
+                        Text(option.title).tag(option)
+                    }
+                }
+                .accessibilityIdentifier("scheduled-task-notification")
+            } header: {
+                Text("Notification")
+            } footer: {
+                notificationFooter
+            }
         }
         .formStyle(.grouped)
+    }
+
+    private var notificationFooter: some View {
+        Group {
+            if draft.notification != .none, !appState.isSignedIn {
+                Text("Sign in to Autopilot under Settings → Autopilot to send email notifications.")
+                    .foregroundStyle(ClaudeTheme.statusWarning)
+            } else {
+                switch draft.notification {
+                case .none:
+                    Text("No email is sent when a run finishes.")
+                case .agentDecides:
+                    Text("The agent emails you only when the result needs your attention.")
+                case .completionReport:
+                    Text("Every run emails you its final summary as a completion report.")
+                }
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
     }
 
     /// Asks the suggestion agent for a name, prompt, and schedule, then shows
@@ -392,6 +425,16 @@ struct ScheduledTaskFormSheet: View {
             onConfirm(nil)
         } else {
             dismiss()
+        }
+    }
+}
+
+extension ScheduledTaskNotification {
+    var title: LocalizedStringKey {
+        switch self {
+        case .none: "Don't notify"
+        case .agentDecides: "Let the agent decide"
+        case .completionReport: "Send the completion report"
         }
     }
 }

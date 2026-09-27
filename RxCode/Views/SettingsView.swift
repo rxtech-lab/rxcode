@@ -103,10 +103,13 @@ struct SettingsView: View {
 
 struct GeneralSettingsTab: View {
     @Environment(AppState.self) private var appState
+    @Environment(WorkspaceManager.self) private var workspaceManager
     @Binding var showUserManual: Bool
     @Binding var showOnboarding: Bool
     @Binding var showWhatsNew: Bool
     @State private var showThemePicker = false
+    @State private var showCacheStorage = false
+    @State private var occupiedBytes: Int64?
     @AppStorage("showMenuBarExtra") private var showMenuBarExtra: Bool = true
 
     var body: some View {
@@ -125,6 +128,8 @@ struct GeneralSettingsTab: View {
                 Divider()
                 searchIndexSection
                 Divider()
+                cacheSection
+                Divider()
                 AgentPromptsSettingsSection()
                 Divider()
                 MemorySettingsSection()
@@ -142,6 +147,31 @@ struct GeneralSettingsTab: View {
             }
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .sheet(isPresented: $showCacheStorage) {
+            CacheStorageSheet(workspaceManager: workspaceManager)
+        }
+        .task { await refreshOccupiedSpace() }
+        .onChange(of: showCacheStorage) { _, isPresented in
+            if !isPresented { Task { await refreshOccupiedSpace() } }
+        }
+    }
+
+    private func refreshOccupiedSpace() async {
+        occupiedBytes = await CacheStorageService.shared.occupiedBytes()
+    }
+
+    private var cacheSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Storage and Cache")
+                .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
+            Text("View total occupied space and clear cached data across all workspaces, including briefings.")
+                .font(.system(size: ClaudeTheme.size(11)))
+                .foregroundStyle(.secondary)
+            Text("Total occupied space: \(occupiedBytes.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? "Calculating…")")
+                .font(.system(size: ClaudeTheme.size(12)))
+                .monospacedDigit()
+            Button("Clear Cached Data…") { showCacheStorage = true }
         }
     }
 
@@ -626,5 +656,6 @@ private struct ProjectPromptDetailPage: View {
 #Preview {
     SettingsView()
         .environment(AppState())
+        .environment(WorkspaceManager())
         .environment(WindowState())
 }

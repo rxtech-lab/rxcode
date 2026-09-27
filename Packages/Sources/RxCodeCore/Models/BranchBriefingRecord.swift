@@ -8,12 +8,16 @@ public struct BranchBriefingItem: Identifiable, Sendable, Equatable {
     public let branch: String
     public let briefing: String
     public let updatedAt: Date
+    /// When the briefing was first generated. Records persisted before this
+    /// was tracked fall back to `updatedAt`.
+    public let createdAt: Date
 
-    public init(projectId: UUID, branch: String, briefing: String, updatedAt: Date) {
+    public init(projectId: UUID, branch: String, briefing: String, updatedAt: Date, createdAt: Date? = nil) {
         self.projectId = projectId
         self.branch = branch
         self.briefing = briefing
         self.updatedAt = updatedAt
+        self.createdAt = createdAt ?? updatedAt
     }
 }
 
@@ -28,15 +32,20 @@ public final class BranchBriefingRecord {
     /// project, or when the briefing was regenerated). Used to garbage-collect
     /// briefings for branches that no longer exist locally or remotely.
     public var lastSeenAt: Date = Date.distantPast
+    /// When the briefing was first generated. Optional so existing stores
+    /// migrate without a value; `nil` means it predates creation tracking.
+    public var createdAt: Date?
 
     public init(
         projectId: UUID,
         branch: String,
         briefing: String,
         updatedAt: Date = .now,
-        lastSeenAt: Date = .now
+        lastSeenAt: Date = .now,
+        createdAt: Date? = nil
     ) {
         self.id = Self.makeId(projectId: projectId, branch: branch)
+        self.createdAt = createdAt ?? updatedAt
         self.projectId = projectId
         self.branch = branch
         self.briefing = briefing
@@ -65,7 +74,8 @@ public final class BranchBriefingRecord {
             projectId: projectId,
             branch: branch,
             briefing: briefing,
-            updatedAt: updatedAt
+            updatedAt: updatedAt,
+            createdAt: createdAt
         )
     }
 }

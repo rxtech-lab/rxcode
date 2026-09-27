@@ -298,6 +298,9 @@
         }
       }
     },
+    "%@ (not verified)" : {
+
+    },
     "%@ actions" : {
 
     },
@@ -569,6 +572,9 @@
         }
       }
     },
+    "%lld briefings" : {
+
+    },
     "%lld bytes" : {
       "localizations" : {
         "ko" : {
@@ -765,6 +771,16 @@
         }
       }
     },
+    "%lld of %lld notifications sent today." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld notifications sent today."
+          }
+        }
+      }
+    },
     "%lld of %lld scheduled tasks active." : {
       "localizations" : {
         "ko" : {
@@ -777,6 +793,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%2$lld 个定时任务中有 %1$lld 个已启用。"
+          }
+        }
+      }
+    },
+    "%lld of %lld sent today" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld sent today"
           }
         }
       }
@@ -960,6 +986,9 @@
         }
       }
     },
+    "^[%lld image](inflect: true) will be uploaded and embedded." : {
+
+    },
     "↑↓ Select  ↵ Confirm  esc Cancel" : {
       "localizations" : {
         "en" : {
@@ -1049,6 +1078,9 @@
     "0 9 * * 1-5" : {
 
     },
+    "1 briefing" : {
+
+    },
     "1 day" : {
 
     },
@@ -1126,6 +1158,12 @@
           }
         }
       }
+    },
+    "Account" : {
+
+    },
+    "Account email" : {
+
     },
     "ACP Clients" : {
       "localizations" : {
@@ -1531,6 +1569,9 @@
           }
         }
       }
+    },
+    "Add Email" : {
+
     },
     "Add Files…" : {
       "localizations" : {
@@ -1973,6 +2014,9 @@
           }
         }
       }
+    },
+    "Add Trusted Email" : {
+
     },
     "Add Variable" : {
       "localizations" : {
@@ -2497,6 +2541,9 @@
           }
         }
       }
+    },
+    "Always send" : {
+
     },
     "An agent is working on this story's tasks" : {
       "localizations" : {
@@ -3582,6 +3629,9 @@
         }
       }
     },
+    "Briefing notifications" : {
+
+    },
     "Briefing rolls recent thread summaries into a branch-focused project update." : {
       "localizations" : {
         "ko" : {
@@ -3598,6 +3648,9 @@
         }
       }
     },
+    "Briefing timeline" : {
+
+    },
     "Briefings" : {
       "localizations" : {
         "ko" : {
@@ -3613,6 +3666,9 @@
           }
         }
       }
+    },
+    "Briefings and other cached data will be removed from every workspace." : {
+
     },
     "Browse Autopilot projects" : {
       "localizations" : {
@@ -3779,6 +3835,9 @@
           }
         }
       }
+    },
+    "Channel" : {
+
     },
     "Chat" : {
       "localizations" : {
@@ -4012,6 +4071,9 @@
         }
       }
     },
+    "Choose which kinds of briefing to show." : {
+
+    },
     "Choose which RxCode tools are available to other local MCP clients." : {
       "localizations" : {
         "zh-Hans" : {
@@ -4174,6 +4236,18 @@
     "Clear All" : {
 
     },
+    "Clear all cached data?" : {
+
+    },
+    "Clear Cached Data" : {
+
+    },
+    "Clear Cached Data removes briefings, summaries, search embeddings, icons, and compiled caches. Attachments and chats remain. The thread database may keep allocated space after its cached records are deleted." : {
+
+    },
+    "Clear Cached Data…" : {
+
+    },
     "Clear destination — pick again from the toolbar" : {
       "localizations" : {
         "ko" : {
@@ -4199,6 +4273,15 @@
           }
         }
       }
+    },
+    "Clear History" : {
+
+    },
+    "Clear History…" : {
+
+    },
+    "Clear notification history?" : {
+
     },
     "Clear selection" : {
       "localizations" : {
@@ -4890,6 +4973,9 @@
     "Completion could not be verified. Review the task and continue its chat." : {
 
     },
+    "Completion report for the scheduled task." : {
+
+    },
     "Condition" : {
       "localizations" : {
         "ko" : {
@@ -5394,6 +5480,9 @@
           }
         }
       }
+    },
+    "Copy briefing content" : {
+
     },
     "Copy briefing text" : {
       "localizations" : {
@@ -5928,6 +6017,19 @@
         }
       }
     },
+    "Created %@" : {
+
+    },
+    "Created %@ · Updated %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Created %1$@ · Updated %2$@"
+          }
+        }
+      }
+    },
     "Creating Pull Request…" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -6358,6 +6460,9 @@
         }
       }
     },
+    "Default for projects" : {
+
+    },
     "Default Model" : {
       "localizations" : {
         "en" : {
@@ -6492,6 +6597,9 @@
         }
       }
     },
+    "Delete \"%@\"? Its content and all of its images, videos, and files will be removed." : {
+
+    },
     "Delete after" : {
       "localizations" : {
         "ko" : {
@@ -6577,6 +6685,12 @@
           }
         }
       }
+    },
+    "Delete Briefing" : {
+
+    },
+    "Delete Briefing…" : {
+
     },
     "Delete column “%@”?" : {
       "localizations" : {
@@ -6759,6 +6873,16 @@
     },
     "Delete task “%@”?" : {
       "comment" : "First task deletion confirmation"
+    },
+    "Delete the generated briefing for %@ on %@? Thread summaries will remain available." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Delete the generated briefing for %1$@ on %2$@? Thread summaries will remain available."
+          }
+        }
+      }
     },
     "Delete this document?" : {
       "localizations" : {
@@ -7256,6 +7380,9 @@
         }
       }
     },
+    "Don't notify" : {
+
+    },
     "Don't see your org repos?" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -7556,6 +7683,9 @@
       }
     },
     "e.g. Unfinished bugs tagged backend, updated this week" : {
+
+    },
+    "Each address gets a verification link that expires after 24 hours. Notifications can only go to verified addresses." : {
 
     },
     "Edit" : {
@@ -7859,6 +7989,12 @@
           }
         }
       }
+    },
+    "Email" : {
+
+    },
+    "Email address" : {
+
     },
     "Empty Bash Configuration" : {
       "localizations" : {
@@ -8323,6 +8459,9 @@
 
     },
     "Every N minutes" : {
+
+    },
+    "Every run emails you its final summary as a completion report." : {
 
     },
     "Every task in this story is assigned to this model." : {
@@ -10032,6 +10171,9 @@
         }
       }
     },
+    "Includes RxCode's Application Support and Caches data across all workspaces." : {
+
+    },
     "Index your repositories into a personalized, searchable knowledge base." : {
       "localizations" : {
         "ko" : {
@@ -10730,6 +10872,9 @@
         }
       }
     },
+    "Let the agent decide" : {
+
+    },
     "Letters, numbers, dot, dash and underscore. Max 32 characters." : {
       "localizations" : {
         "ko" : {
@@ -10940,6 +11085,9 @@
           }
         }
       }
+    },
+    "Loading current branches…" : {
+
     },
     "Loading destinations…" : {
       "localizations" : {
@@ -12041,6 +12189,26 @@
         }
       }
     },
+    "Move to Leftmost" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移到最左侧"
+          }
+        }
+      }
+    },
+    "Move to Rightmost" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移到最右侧"
+          }
+        }
+      }
+    },
     "My Relay Server" : {
       "localizations" : {
         "ko" : {
@@ -12156,6 +12324,9 @@
           }
         }
       }
+    },
+    "Never send" : {
+
     },
     "New" : {
       "localizations" : {
@@ -12965,6 +13136,9 @@
         }
       }
     },
+    "No email is sent when a run finishes." : {
+
+    },
     "No environment variables defined" : {
       "localizations" : {
         "ko" : {
@@ -13147,6 +13321,9 @@
         }
       }
     },
+    "No notifications yet." : {
+
+    },
     "No paired devices yet." : {
       "localizations" : {
         "ko" : {
@@ -13232,6 +13409,9 @@
           }
         }
       }
+    },
+    "No projects yet." : {
+
     },
     "No pull requests opened by autopilot yet." : {
       "localizations" : {
@@ -13730,6 +13910,9 @@
         }
       }
     },
+    "No trusted emails yet. Add an address to send notifications somewhere other than your account email." : {
+
+    },
     "No unlinked Autopilot projects" : {
       "localizations" : {
         "ko" : {
@@ -13897,6 +14080,9 @@
     "Not installed" : {
 
     },
+    "Not sent" : {
+
+    },
     "Not signed in" : {
       "localizations" : {
         "ko" : {
@@ -13945,6 +14131,12 @@
         }
       }
     },
+    "Notification" : {
+
+    },
+    "Notification when a run finishes" : {
+
+    },
     "Notifications" : {
       "localizations" : {
         "en" : {
@@ -13966,6 +14158,9 @@
           }
         }
       }
+    },
+    "Notifications will no longer be sent to this address." : {
+
     },
     "Notify when response completes" : {
       "localizations" : {
@@ -14120,6 +14315,9 @@
         }
       }
     },
+    "Open %@" : {
+
+    },
     "Open a project to organize tasks in board or table views with custom columns and filters." : {
       "localizations" : {
         "ko" : {
@@ -14135,6 +14333,9 @@
           }
         }
       }
+    },
+    "Open Briefing" : {
+
     },
     "Open Chat" : {
       "localizations" : {
@@ -14889,6 +15090,9 @@
           }
         }
       }
+    },
+    "Pending" : {
+
     },
     "Per-project secrets, end-to-end encrypted and easily shared with your team." : {
       "localizations" : {
@@ -16233,6 +16437,9 @@
         }
       }
     },
+    "Remove %@?" : {
+
+    },
     "Remove ACP client?" : {
       "localizations" : {
         "ko" : {
@@ -16626,6 +16833,9 @@
         }
       }
     },
+    "Resend Verification Link" : {
+
+    },
     "Reset" : {
       "localizations" : {
         "en" : {
@@ -17004,6 +17214,9 @@
       }
     },
     "Run needs attention" : {
+
+    },
+    "Run Now" : {
 
     },
     "Run the agent with --permission-mode plan so it proposes a plan before editing" : {
@@ -17606,6 +17819,9 @@
           }
         }
       }
+    },
+    "Scheduled task" : {
+
     },
     "Scheduled tasks" : {
 
@@ -18353,6 +18569,21 @@
         }
       }
     },
+    "Send" : {
+
+    },
+    "Send as notification" : {
+
+    },
+    "Send briefings as notifications" : {
+
+    },
+    "Send briefings to your email through Autopilot notifications, and manage the trusted emails notifications can be sent to." : {
+
+    },
+    "Send Link" : {
+
+    },
     "Send Message" : {
       "localizations" : {
         "ko" : {
@@ -18369,6 +18600,9 @@
         }
       }
     },
+    "Send Notification" : {
+
+    },
     "Send test notification" : {
       "localizations" : {
         "ko" : {
@@ -18384,6 +18618,9 @@
           }
         }
       }
+    },
+    "Send the completion report" : {
+
     },
     "Send the follow-up to this task's thread" : {
       "localizations" : {
@@ -18432,6 +18669,12 @@
           }
         }
       }
+    },
+    "Sent" : {
+
+    },
+    "Sent by you" : {
+
     },
     "Server stopped" : {
       "localizations" : {
@@ -19317,6 +19560,15 @@
         }
       }
     },
+    "Sign in to Autopilot to send notifications." : {
+
+    },
+    "Sign in to Autopilot under Settings → Autopilot to send email notifications." : {
+
+    },
+    "Sign in to Autopilot under Settings → Autopilot to send notifications." : {
+
+    },
     "Sign in to rxlab" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -19808,6 +20060,9 @@
         }
       }
     },
+    "Storage and Cache" : {
+
+    },
     "Store .env files end-to-end encrypted with your passkey. Secrets are encrypted on this device and never leave it unencrypted." : {
       "localizations" : {
         "ko" : {
@@ -19899,6 +20154,9 @@
           }
         }
       }
+    },
+    "Subject" : {
+
     },
     "Submit" : {
       "localizations" : {
@@ -20356,6 +20614,9 @@
     "The agent didn't return any code. Try rephrasing the filter." : {
 
     },
+    "The agent emails you only when the result needs your attention." : {
+
+    },
     "The agent is working on this task" : {
       "localizations" : {
         "zh-Hans" : {
@@ -20400,6 +20661,9 @@
     "The agent is writing the filter…" : {
 
     },
+    "The agent run already sent a notification." : {
+
+    },
     "The agent run stopped before the task was completed." : {
 
     },
@@ -20421,6 +20685,12 @@
           }
         }
       }
+    },
+    "The briefing's HTML is sent as the email body." : {
+
+    },
+    "The briefing's markdown is sent as the email body." : {
+
     },
     "The chat has no readable messages, or the AI could not generate a task description. Try again later." : {
       "localizations" : {
@@ -20459,6 +20729,9 @@
       }
     },
     "The follow-up could not be sent to the task's chat." : {
+
+    },
+    "The general AI task agent didn't return a decision." : {
 
     },
     "The milestone is cleared from every story and task that uses it." : {
@@ -20519,6 +20792,9 @@
         }
       }
     },
+    "The notification wasn't sent." : {
+
+    },
     "The project was added on this Mac, but it couldn't be synced to the cloud: %@" : {
       "localizations" : {
         "ko" : {
@@ -20534,6 +20810,9 @@
           }
         }
       }
+    },
+    "The project's setting is shared with the general AI task agent when it decides whether to send a briefing." : {
+
     },
     "The release CI authenticates to GitHub with a RELEASE_TOKEN secret. Paste a GitHub token (a PAT with contents:write) and RxCode installs it as the repository's GitHub Actions secret for you — no terminal needed." : {
       "localizations" : {
@@ -20565,6 +20844,9 @@
       }
     },
     "The run was interrupted before completion could be verified." : {
+
+    },
+    "The scheduled task handles its own notification." : {
 
     },
     "The selected file contains no readable text." : {
@@ -20731,6 +21013,12 @@
         }
       }
     },
+    "This briefing has no content yet." : {
+
+    },
+    "This briefing was already sent. Sending again delivers another email." : {
+
+    },
     "This chat will be archived. Archived chats are hidden from the active list and can be restored from Archived." : {
       "localizations" : {
         "ko" : {
@@ -20847,6 +21135,9 @@
         }
       }
     },
+    "This project always sends briefings." : {
+
+    },
     "This project isn't linked to a GitHub repository, so it has no secrets to download." : {
       "localizations" : {
         "ko" : {
@@ -20862,6 +21153,9 @@
           }
         }
       }
+    },
+    "This removes the history stored on this Mac. RxCode also uses it to avoid sending a briefing twice." : {
+
     },
     "This removes the workspace and its settings. Files on disk are not deleted." : {
       "localizations" : {
@@ -21129,6 +21423,9 @@
         }
       }
     },
+    "Today" : {
+
+    },
     "Todos (%lld/%lld)" : {
       "localizations" : {
         "en" : {
@@ -21176,6 +21473,12 @@
           }
         }
       }
+    },
+    "Total occupied space" : {
+
+    },
+    "Total occupied space: %@" : {
+
     },
     "Transport" : {
       "localizations" : {
@@ -21270,6 +21573,9 @@
           }
         }
       }
+    },
+    "Trusted Emails" : {
+
     },
     "Type" : {
       "localizations" : {
@@ -21833,6 +22139,9 @@
         }
       }
     },
+    "Verification link sent to %@." : {
+
+    },
     "Verified" : {
       "localizations" : {
         "ko" : {
@@ -22026,6 +22335,9 @@
         }
       }
     },
+    "View total occupied space and clear cached data across all workspaces, including briefings." : {
+
+    },
     "View workflow run on GitHub" : {
       "localizations" : {
         "ko" : {
@@ -22109,6 +22421,9 @@
           }
         }
       }
+    },
+    "We'll email a verification link to this address. It expires after 24 hours." : {
+
     },
     "Weekdays at 9:00" : {
       "extractionState" : "stale",
@@ -22220,6 +22535,9 @@
         }
       }
     },
+    "When a run finishes" : {
+
+    },
     "When a Swift script returns true" : {
       "localizations" : {
         "ko" : {
@@ -22235,6 +22553,9 @@
           }
         }
       }
+    },
+    "When an agent publishes a briefing, RxCode waits for its run to finish. If the run hasn't already sent a notification, the general AI task agent reads the briefing and the project's settings and decides whether to email it. Local images are uploaded as WebP attachments." : {
+
     },
     "When CI fails on a project's current branch, automatically start a thread so an agent can fix it. CI failures are always notified; this only controls the automatic fix." : {
       "localizations" : {
@@ -22532,6 +22853,9 @@
           }
         }
       }
+    },
+    "Yesterday" : {
+
     },
     "You" : {
       "localizations" : {

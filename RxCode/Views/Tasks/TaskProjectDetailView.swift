@@ -201,7 +201,15 @@ struct TaskProjectDetailView: View {
                         onDuplicate: { duplicate(view) },
                         onSetDefault: { appState.setDefaultSavedView(view.id, projectId: project.id) },
                         onDelete: { pendingViewDeletion = view },
-                        onReorder: { appState.reorderSavedView($0, onto: view.id, projectId: project.id) }
+                        onReorder: { appState.reorderSavedView($0, onto: view.id, projectId: project.id) },
+                        onMoveToLeftmost: view.id == views.first?.id ? nil : {
+                            guard let first = views.first else { return }
+                            appState.reorderSavedView(view.id, onto: first.id, projectId: project.id)
+                        },
+                        onMoveToRightmost: view.id == views.last?.id ? nil : {
+                            guard let last = views.last else { return }
+                            appState.reorderSavedView(view.id, onto: last.id, projectId: project.id)
+                        }
                     )
                     .transition(.scale(scale: 0.9).combined(with: .opacity))
                 }
@@ -454,6 +462,10 @@ private struct TaskViewTab: View {
     let onDelete: () -> Void
     /// Called with the id of a tab dropped onto this one.
     let onReorder: (UUID) -> Void
+    /// `nil` when the tab is already first.
+    let onMoveToLeftmost: (() -> Void)?
+    /// `nil` when the tab is already last.
+    let onMoveToRightmost: (() -> Void)?
 
     @State private var isHovering = false
     @State private var isDropTargeted = false
@@ -552,6 +564,11 @@ private struct TaskViewTab: View {
         Button("Duplicate View", action: onDuplicate)
         Button("Set as Default View", action: onSetDefault)
             .disabled(isDefault)
+        Divider()
+        Button("Move to Leftmost") { onMoveToLeftmost?() }
+            .disabled(onMoveToLeftmost == nil)
+        Button("Move to Rightmost") { onMoveToRightmost?() }
+            .disabled(onMoveToRightmost == nil)
         Divider()
         Button("Delete View", role: .destructive, action: onDelete)
             .disabled(!canDelete)

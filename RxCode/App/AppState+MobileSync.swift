@@ -193,6 +193,20 @@ extension AppState {
         }
         mobileSyncObservers.append(remoteFileObserver)
 
+        let briefingContentObserver = center.addObserver(
+            forName: .mobileSyncBriefingContentRequested,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let fromHex = notification.userInfo?["from"] as? String,
+                  let request = notification.userInfo?["payload"] as? BriefingContentRequestPayload
+            else { return }
+            Task { @MainActor [weak self] in
+                await self?.handleMobileBriefingContentRequest(request, fromHex: fromHex)
+            }
+        }
+        mobileSyncObservers.append(briefingContentObserver)
+
         let branchOpObserver = center.addObserver(
             forName: .mobileSyncBranchOpRequested,
             object: nil,
@@ -473,6 +487,7 @@ extension AppState {
             _ = archiveRetentionDays
             _ = autoPreviewSettings
             _ = branchBriefingRevision
+            _ = briefingDocuments
             _ = threadSummaryRevision
             _ = ciStatusRevision
             _ = projects.count

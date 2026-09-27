@@ -58,6 +58,15 @@ extension AppState {
         threadStore.touchBranchBriefing(projectId: projectId, branch: branch)
     }
 
+    /// Delete a generated briefing and refresh desktop and mobile views.
+    @discardableResult
+    func deleteBranchBriefing(projectId: UUID, branch: String) throws -> Bool {
+        guard try threadStore.deleteBranchBriefing(projectId: projectId, branch: branch) else { return false }
+        branchBriefingRevision &+= 1
+        scheduleMobileSnapshotBroadcast()
+        return true
+    }
+
     /// Delete branch briefings for branches that haven't been seen for the
     /// retention window. Run once at app launch.
     func purgeStaleBranchBriefingsIfNeeded() {

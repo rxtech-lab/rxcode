@@ -66,6 +66,7 @@ struct TerminalWindowValue: Codable, Hashable {
 struct RxCodeApp: App {
     @State private var workspaceManager = WorkspaceManager()
     @FocusedValue(\.startNewChat) private var startNewChat
+    @FocusedValue(\.showCacheStorage) private var showCacheStorage
     @AppStorage("showMenuBarExtra") private var showMenuBarExtra: Bool = true
     private let updateService = UpdateService.shared
 
@@ -90,6 +91,7 @@ struct RxCodeApp: App {
                 workspaceID: value.workspaceID
             )
             .focusable(false)
+            .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
         } defaultValue: {
             WorkspaceWindowValue(workspaceID: workspaceManager.frontmostWorkspaceID)
         }
@@ -106,6 +108,8 @@ struct RxCodeApp: App {
                 Button("Check for Updates...") {
                     updateService.checkForUpdates()
                 }
+                Button("Clear Cached Data…") { showCacheStorage?() }
+                    .disabled(showCacheStorage == nil)
             }
             CommandMenu("Theme") {
                 ForEach(AppTheme.allCases) { theme in
@@ -130,6 +134,7 @@ struct RxCodeApp: App {
                     projectId: id
                 )
                 .focusable(false)
+                .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
             }
         }
         .defaultSize(width: 1000, height: 700)
@@ -142,6 +147,7 @@ struct RxCodeApp: App {
                     workspaceID: value.workspaceID ?? workspaceManager.frontmostWorkspaceID
                 )
                 .focusable(false)
+                .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
             }
         }
         .defaultSize(width: 800, height: 700)
@@ -149,26 +155,32 @@ struct RxCodeApp: App {
         // Detached terminal window — opened from the toolbar.
         WindowGroup(id: "terminal-window", for: TerminalWindowValue.self) { $value in
             TerminalWindowRoot(path: value?.path ?? "")
+                .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
         }
         .defaultSize(width: 900, height: 600)
 
         Settings {
             SettingsWindowRoot(appState: appState)
+                .environment(workspaceManager)
+                .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
         }
 
         // Standalone Automation windows, opened from the "Automation" menu.
         Window("Autopilot", id: "autopilot-window") {
             AutopilotWindowRoot(appState: appState)
+                .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
         }
         .defaultSize(width: 720, height: 640)
 
         Window("Hooks", id: "hooks-window") {
             HooksWindowRoot(appState: appState)
+                .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
         }
         .defaultSize(width: 760, height: 620)
 
         Window("Custom Context Menus", id: "custom-menus-window") {
             CustomMenusWindowRoot(appState: appState)
+                .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
         }
         .defaultSize(width: 720, height: 620)
 

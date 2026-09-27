@@ -411,6 +411,18 @@ final class AppState {
     var isLoadingOpenAISummarizationModels = false
     var threadSummaryRevision = 0
     var branchBriefingRevision = 0
+    /// Agent-written document briefings from `briefingStore`, newest first.
+    /// Loaded lazily by the briefing tab via `reloadBriefingDocuments()`.
+    var briefingDocuments: [BriefingDocument] = []
+    /// Settings for sending published briefings as Autopilot notifications,
+    /// mirrored from `notificationStore`.
+    var briefingNotificationSettings = BriefingNotificationSettings()
+    /// Briefings whose notification is being decided or sent, so a quick
+    /// re-publish doesn't start a second attempt.
+    @ObservationIgnored var briefingNotificationsInFlight: Set<UUID> = []
+    /// Scheduled runs started this launch that handle their own notification,
+    /// keyed by the session key the run opened.
+    @ObservationIgnored var scheduledRunNotificationSessions: [String: ScheduledTaskNotification] = [:]
 
     // MARK: - Memory
 
@@ -1048,6 +1060,8 @@ final class AppState {
     var release: ReleaseService
     /// Talks to Autopilot's project board API for cloud projects.
     var projectCloud: ProjectCloudService
+    /// Talks to Autopilot's notification API (send, attachments, trusted emails).
+    var autopilotNotifications: AutopilotNotificationService
     /// Passkey-derived KEK cache for the secrets feature (macOS only).
     let secretsKeyVault = SecretsKeyVault()
     /// Cached enrollment status for the secrets feature: `nil` = unknown.
@@ -1083,6 +1097,11 @@ final class AppState {
     /// task, so constructing it here on the main actor costs nothing and binds
     /// nothing to this executor.
     let threadStoreReader: ThreadStoreReader
+    /// File-backed store for document briefings, scoped to this workspace.
+    let briefingStore: BriefingStore
+    /// Briefing notification settings and the local history of notifications
+    /// sent through Autopilot, scoped to this workspace.
+    let notificationStore: NotificationStore
     var searchService = ThreadSearchService()
     var memoryService = MemoryService()
     /// Live progress for a user-triggered full reindex. `nil` when idle.
@@ -1289,6 +1308,9 @@ final class AppState {
         let threadStore = ThreadStore.make(baseURL: active.storageURL)
         self.threadStore = threadStore
         self.threadStoreReader = ThreadStoreReader(container: threadStore.container)
+        self.briefingStore = BriefingStore(
+            baseURL: active.storageURL.appendingPathComponent("briefings", isDirectory: true)
+        )
         let rxAuth = RxAuthService(keychainService: active.rxAuthKeychainService)
         self.rxAuth = rxAuth
         self.autopilot = AutopilotService(rxAuth: rxAuth)
@@ -1297,6 +1319,10 @@ final class AppState {
         self.docs = DocsService(rxAuth: rxAuth)
         self.release = ReleaseService(rxAuth: rxAuth)
         self.projectCloud = ProjectCloudService(rxAuth: rxAuth)
+        self.autopilotNotifications = AutopilotNotificationService(rxAuth: rxAuth)
+        self.notificationStore = NotificationStore(
+            baseURL: active.storageURL.appendingPathComponent("notifications", isDirectory: true)
+        )
         loadWorkspaceSettings()
         self.runService.onTasksChanged = { [weak self] in
             Task { @MainActor [weak self] in

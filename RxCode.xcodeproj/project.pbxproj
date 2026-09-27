@@ -34,8 +34,10 @@
 		AC1900000000000000000103 /* RxCode/Utilities/KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1900000000000000000003 /* RxCode/Utilities/KeychainHelper.swift */; };
 		AC1900000000000000000200 /* RxAuthSwift in Frameworks */ = {isa = PBXBuildFile; productRef = DF462DC82FC73FA8002D9562 /* RxAuthSwift */; };
 		AC1900000000000000000300 /* RxAuthSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = DF462DCA2FC73FA8002D9562 /* RxAuthSwiftUI */; };
+		BA0E00012FCB400000000002 /* BriefingNotificationStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA0E00012FCB400000000001 /* BriefingNotificationStateTests.swift */; };
 		BBD2456729416901FAFBD00D /* GlobalSessionPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 308E9D66FBEB0549929D9E3A /* GlobalSessionPersistenceTests.swift */; };
 		C71A00000000000000000001 /* ChatHistoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C71A00000000000000000002 /* ChatHistoryTests.swift */; };
+		CA5E00012FCB400000000002 /* CacheStorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA5E00012FCB400000000001 /* CacheStorageTests.swift */; };
 		DCA8CF4A05C959C4A6EB391F /* RxCodeCore in Frameworks */ = {isa = PBXBuildFile; productRef = CCDF9594876099576D4FD46E /* RxCodeCore */; };
 		DF06CCD12FB4CAB5005991E1 /* ViewInspector in Frameworks */ = {isa = PBXBuildFile; productRef = DF06CCD02FB4CAB5005991E1 /* ViewInspector */; };
 		DF06CCD22FCB3001005991E1 /* ViewInspector in Frameworks */ = {isa = PBXBuildFile; productRef = DF06CCD02FB4CAB5005991E1 /* ViewInspector */; };
@@ -185,8 +187,10 @@
 		AC1900000000000000000001 /* RxCode/Services/ProjectCloudService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RxCode/Services/ProjectCloudService.swift; sourceTree = SOURCE_ROOT; };
 		AC1900000000000000000002 /* RxCode/Services/AutopilotService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RxCode/Services/AutopilotService.swift; sourceTree = SOURCE_ROOT; };
 		AC1900000000000000000003 /* RxCode/Utilities/KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RxCode/Utilities/KeychainHelper.swift; sourceTree = SOURCE_ROOT; };
+		BA0E00012FCB400000000001 /* BriefingNotificationStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefingNotificationStateTests.swift; sourceTree = "<group>"; };
 		C71A00000000000000000002 /* ChatHistoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatHistoryTests.swift; sourceTree = "<group>"; };
 		C9B0483FE5385C1F0E1CFE15 /* ClaudeLoginTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeLoginTests.swift; sourceTree = "<group>"; };
+		CA5E00012FCB400000000001 /* CacheStorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CacheStorageTests.swift; sourceTree = "<group>"; };
 		DF06DCC62FB8552B005991E1 /* UnitTestPlan.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = UnitTestPlan.xctestplan; sourceTree = "<group>"; };
 		DF22D8262FBE025C00E3ABFD /* RxCodeWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RxCodeWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		DF22D8272FBE025C00E3ABFD /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
@@ -422,6 +426,8 @@
 				DFA0CCD52FB4CC02005991E1 /* HistoryListArchiveFilterTests.swift */,
 				5C2222222FCB200000000001 /* BriefingThreadRowTests.swift */,
 				5C3333332FCB400000000001 /* ThreadStoreThreadSummaryTests.swift */,
+				CA5E00012FCB400000000001 /* CacheStorageTests.swift */,
+				BA0E00012FCB400000000001 /* BriefingNotificationStateTests.swift */,
 				5C3333332FCB400000000003 /* ThreadStoreHookCardTests.swift */,
 				5C3333332FCB400000000005 /* ThreadStoreSidebarIndexTests.swift */,
 				DFA9E5040000000000000001 /* AgentEventBridgeTests.swift */,
@@ -919,6 +925,8 @@
 				DFA0CCE12FB4CC02005991E1 /* HistoryListArchiveFilterTests.swift in Sources */,
 				5C2222222FCB200000000002 /* BriefingThreadRowTests.swift in Sources */,
 				5C3333332FCB400000000002 /* ThreadStoreThreadSummaryTests.swift in Sources */,
+				CA5E00012FCB400000000002 /* CacheStorageTests.swift in Sources */,
+				BA0E00012FCB400000000002 /* BriefingNotificationStateTests.swift in Sources */,
 				5C3333332FCB400000000004 /* ThreadStoreHookCardTests.swift in Sources */,
 				5C3333332FCB400000000006 /* ThreadStoreSidebarIndexTests.swift in Sources */,
 				DFA9E5050000000000000001 /* AgentEventBridgeTests.swift in Sources */,

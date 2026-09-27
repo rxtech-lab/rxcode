@@ -1,6 +1,7 @@
 package app.rxlab.rxcode.state
 
 import android.content.Context
+import android.util.Base64
 import android.os.Build
 import android.util.Log
 import androidx.lifecycle.ViewModel
@@ -13,6 +14,7 @@ import app.rxlab.rxcode.proto.AutopilotProjectStatus
 import app.rxlab.rxcode.proto.MenuActionCommand
 import app.rxlab.rxcode.proto.MenuItem
 import app.rxlab.rxcode.proto.BranchOpRequestPayload
+import app.rxlab.rxcode.proto.BriefingContentRequestPayload
 import app.rxlab.rxcode.proto.CancelStreamPayload
 import app.rxlab.rxcode.proto.CreateProjectRequestPayload
 import app.rxlab.rxcode.proto.DeleteProjectRequestPayload
@@ -46,6 +48,9 @@ import app.rxlab.rxcode.store.PairingStore
 import app.rxlab.rxcode.sync.SyncClient
 import com.google.firebase.messaging.FirebaseMessaging
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.File
+import java.io.FileOutputStream
 import javax.inject.Inject
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -70,6 +75,7 @@ import java.util.UUID
  */
 @HiltViewModel
 class MobileAppState @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val store: PairingStore,
     private val client: SyncClient,
     private val fcmTokenReporter: FcmTokenReporter,
@@ -82,6 +88,10 @@ class MobileAppState @Inject constructor(
     private var pendingFolderTreeRequestId: UUID? = null
     private var pendingCreateProjectId: UUID? = null
     private var pendingThreadChangesId: UUID? = null
+    private var pendingBriefingContentId: UUID? = null
+    private var briefingAssetOutput: FileOutputStream? = null
+    private var briefingAssetPendingFile: File? = null
+    private var briefingAssetBytesReceived: Long = 0
     private var pendingDeleteProjectId: UUID? = null
     private var searchJob: Job? = null
 
@@ -162,12 +172,23 @@ class MobileAppState @Inject constructor(
             _state.update {
                 val desktopChanged = it.activeDesktopId != activeCompositeId ||
                     it.activeDesktopPubkey != activeHex
+                if (desktopChanged) pendingBriefingContentId = null
+                if (desktopChanged) {
+                    runCatching { briefingAssetOutput?.close() }
+                    briefingAssetOutput = null
+                    briefingAssetPendingFile = null
+                    briefingAssetBytesReceived = 0
+                }
                 it.copy(
                     pairedDesktops = paired,
                     activeDesktopId = activeCompositeId,
                     activeDesktopPubkey = activeHex,
                     relayUrl = resolvedRelay,
                     hasReceivedInitialSnapshot = if (desktopChanged) false else it.hasReceivedInitialSnapshot,
+                    briefingDocuments = if (desktopChanged) emptyList() else it.briefingDocuments,
+                    briefingContentResult = if (desktopChanged) null else it.briefingContentResult,
+                    isLoadingBriefingContent = if (desktopChanged) false else it.isLoadingBriefingContent,
+                    briefingAssetFilePath = if (desktopChanged) null else it.briefingAssetFilePath,
                     acpRegistryLoading = if (desktopChanged) false else it.acpRegistryLoading,
                     skillCatalogLoading = if (desktopChanged) false else it.skillCatalogLoading,
                     acpRegistryError = if (desktopChanged) null else it.acpRegistryError,
@@ -280,6 +301,7 @@ class MobileAppState @Inject constructor(
             is Payload.RunProfileResult -> handleRunProfileResult(fromHex, payload.data)
             is Payload.RunTaskUpdate -> handleRunTaskUpdate(fromHex, payload.data.task)
             is Payload.ThreadChangesResult -> handleThreadChangesResult(fromHex, payload.data)
+            is Payload.BriefingContentResult -> handleBriefingContentResult(fromHex, payload.data)
             is Payload.AutopilotResult -> {
                 if (!isActiveDesktop(fromHex)) return
                 autopilot.handleResult(payload.data)
@@ -453,6 +475,7 @@ class MobileAppState @Inject constructor(
                     current.loadingThreadMessageSessions
                 },
                 branchBriefings = snap.data.branchBriefings ?: current.branchBriefings,
+                briefingDocuments = snap.data.briefingDocuments ?: emptyList(),
                 threadSummaries = snap.data.threadSummaries ?: current.threadSummaries,
                 projectBranches = snap.data.projectBranches
                     ?.associateBy { it.projectId }
@@ -1103,6 +1126,131 @@ class MobileAppState @Inject constructor(
                 _state.update { it.copy(isLoadingThreadChanges = false) }
             }
         }
+    }
+
+    fun requestBriefingContent(id: UUID, assetPath: String? = null) {
+        val hex = _state.value.activeDesktopPubkey
+        if (hex.isEmpty()) {
+            _state.update { it.copy(
+                isLoadingBriefingContent = false,
+                briefingContentResult = app.rxlab.rxcode.proto.BriefingContentResultPayload(
+                    clientRequestID = UUID.randomUUID(), briefingID = id, assetPath = assetPath,
+                    ok = false, errorMessage = "Not connected to your desktop.",
+                ),
+            ) }
+            return
+        }
+        val requestId = UUID.randomUUID()
+        pendingBriefingContentId = requestId
+        runCatching { briefingAssetOutput?.close() }
+        briefingAssetOutput = null
+        briefingAssetPendingFile = null
+        briefingAssetBytesReceived = 0
+        if (assetPath != null) {
+            try {
+                val extension = assetPath.substringAfterLast('.', "bin").take(12)
+                val file = File.createTempFile("briefing-", ".$extension", context.cacheDir)
+                briefingAssetOutput = FileOutputStream(file)
+                briefingAssetPendingFile = file
+            } catch (failure: Exception) {
+                pendingBriefingContentId = null
+                _state.update { it.copy(
+                    isLoadingBriefingContent = false,
+                    briefingContentResult = app.rxlab.rxcode.proto.BriefingContentResultPayload(
+                        clientRequestID = requestId, briefingID = id, assetPath = assetPath,
+                        ok = false, errorMessage = failure.localizedMessage ?: "Unable to prepare file transfer.",
+                    ),
+                ) }
+                return
+            }
+        }
+        _state.update { it.copy(
+            briefingContentResult = null, isLoadingBriefingContent = true,
+            briefingAssetFilePath = null,
+        ) }
+        viewModelScope.launch {
+            val sent = client.send(
+                Payload.BriefingContentRequest(BriefingContentRequestPayload(requestId, id, assetPath)),
+                hex,
+            )
+            if (!sent && pendingBriefingContentId == requestId) {
+                pendingBriefingContentId = null
+                runCatching { briefingAssetOutput?.close() }
+                briefingAssetOutput = null
+                _state.update { it.copy(
+                    isLoadingBriefingContent = false,
+                    briefingContentResult = app.rxlab.rxcode.proto.BriefingContentResultPayload(
+                        clientRequestID = requestId, briefingID = id, assetPath = assetPath,
+                        ok = false, errorMessage = "Unable to contact the desktop.",
+                    ),
+                ) }
+            }
+        }
+    }
+
+    private suspend fun handleBriefingContentResult(
+        fromHex: String,
+        result: app.rxlab.rxcode.proto.BriefingContentResultPayload,
+    ) {
+        if (!isActiveDesktop(fromHex) || result.clientRequestID != pendingBriefingContentId) return
+        if (result.assetPath != null && result.ok) {
+            val bytes = runCatching { Base64.decode(result.assetBase64 ?: "", Base64.DEFAULT) }.getOrNull()
+            val offset = result.assetOffset
+            val total = result.assetTotalBytes
+            val output = briefingAssetOutput
+            if (bytes == null || offset == null || total == null || output == null ||
+                offset != briefingAssetBytesReceived || total < 0 ||
+                bytes.size.toLong() > total - offset ||
+                (bytes.isEmpty() && offset < total)
+            ) {
+                pendingBriefingContentId = null
+                runCatching { output?.close() }
+                briefingAssetOutput = null
+                _state.update { it.copy(
+                    isLoadingBriefingContent = false,
+                    briefingContentResult = result.copy(ok = false, errorMessage = "The file transfer was incomplete."),
+                ) }
+                return
+            }
+            try {
+                output.write(bytes)
+                briefingAssetBytesReceived += bytes.size
+            } catch (failure: Exception) {
+                pendingBriefingContentId = null
+                runCatching { output.close() }
+                briefingAssetOutput = null
+                _state.update { it.copy(
+                    isLoadingBriefingContent = false,
+                    briefingContentResult = result.copy(ok = false, errorMessage = failure.localizedMessage),
+                ) }
+                return
+            }
+            if (briefingAssetBytesReceived < total) {
+                val sent = client.send(Payload.BriefingContentRequest(BriefingContentRequestPayload(
+                    clientRequestID = result.clientRequestID,
+                    briefingID = result.briefingID,
+                    assetPath = result.assetPath,
+                    assetOffset = briefingAssetBytesReceived,
+                )), fromHex)
+                if (sent) return
+                pendingBriefingContentId = null
+                runCatching { output.close() }
+                briefingAssetOutput = null
+                _state.update { it.copy(
+                    isLoadingBriefingContent = false,
+                    briefingContentResult = result.copy(ok = false, errorMessage = "The file transfer was interrupted."),
+                ) }
+                return
+            }
+            runCatching { output.close() }
+            briefingAssetOutput = null
+            _state.update { it.copy(briefingAssetFilePath = briefingAssetPendingFile?.absolutePath) }
+        } else if (result.assetPath != null) {
+            runCatching { briefingAssetOutput?.close() }
+            briefingAssetOutput = null
+        }
+        pendingBriefingContentId = null
+        _state.update { it.copy(briefingContentResult = result, isLoadingBriefingContent = false) }
     }
 
     private fun handleThreadChangesResult(

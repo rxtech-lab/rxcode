@@ -29,6 +29,8 @@ public enum Payload: Sendable {
     case threadChangesResult(ThreadChangesResultPayload)
     case remoteFileRequest(RemoteFileRequestPayload)
     case remoteFileResult(RemoteFileResultPayload)
+    case briefingContentRequest(BriefingContentRequestPayload)
+    case briefingContentResult(BriefingContentResultPayload)
     case searchRequest(SearchRequestPayload)
     case searchResults(SearchResultsPayload)
     case notification(NotificationPayload)
@@ -105,6 +107,8 @@ public extension Payload {
         case .threadChangesResult: return "thread_changes_result"
         case .remoteFileRequest: return "remote_file_request"
         case .remoteFileResult: return "remote_file_result"
+        case .briefingContentRequest: return "briefing_content_request"
+        case .briefingContentResult: return "briefing_content_result"
         case .searchRequest: return "search_request"
         case .searchResults: return "search_results"
         case .notification: return "notification"
@@ -351,6 +355,7 @@ public struct SnapshotPayload: Codable, Sendable {
     public let projects: [Project]
     public let sessions: [SessionSummary]
     public let branchBriefings: [MobileBranchBriefing]?
+    public let briefingDocuments: [MobileBriefingDocument]?
     public let threadSummaries: [MobileThreadSummary]?
     /// Current GitHub Actions CI status per desktop project. `nil` when the
     /// desktop predates CI-status sync.
@@ -394,6 +399,7 @@ public struct SnapshotPayload: Codable, Sendable {
         projects: [Project],
         sessions: [SessionSummary],
         branchBriefings: [MobileBranchBriefing]? = nil,
+        briefingDocuments: [MobileBriefingDocument]? = nil,
         threadSummaries: [MobileThreadSummary]? = nil,
         ciStatuses: [MobileProjectCIStatus]? = nil,
         settings: MobileSettingsSnapshot? = nil,
@@ -411,6 +417,7 @@ public struct SnapshotPayload: Codable, Sendable {
         self.projects = projects
         self.sessions = sessions
         self.branchBriefings = branchBriefings
+        self.briefingDocuments = briefingDocuments
         self.threadSummaries = threadSummaries
         self.ciStatuses = ciStatuses
         self.settings = settings
@@ -427,7 +434,7 @@ public struct SnapshotPayload: Codable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case projects, sessions, branchBriefings, threadSummaries, ciStatuses, settings
+        case projects, sessions, branchBriefings, briefingDocuments, threadSummaries, ciStatuses, settings
         case activeSessionID, activeSessionMessages, activeSessionHasMore, projectBranches
         case usage, hostMetrics, runProfiles, runTasks, webProxy, seq
     }
@@ -437,6 +444,7 @@ public struct SnapshotPayload: Codable, Sendable {
         projects = try c.decode([Project].self, forKey: .projects)
         sessions = try c.decode([SessionSummary].self, forKey: .sessions)
         branchBriefings = try c.decodeIfPresent([MobileBranchBriefing].self, forKey: .branchBriefings)
+        briefingDocuments = try c.decodeIfPresent([MobileBriefingDocument].self, forKey: .briefingDocuments)
         threadSummaries = try c.decodeIfPresent([MobileThreadSummary].self, forKey: .threadSummaries)
         ciStatuses = try c.decodeIfPresent([MobileProjectCIStatus].self, forKey: .ciStatuses)
         settings = try c.decodeIfPresent(MobileSettingsSnapshot.self, forKey: .settings)
@@ -607,6 +615,8 @@ extension Payload: Codable {
         case threadChangesResult = "thread_changes_result"
         case remoteFileRequest = "remote_file_request"
         case remoteFileResult = "remote_file_result"
+        case briefingContentRequest = "briefing_content_request"
+        case briefingContentResult = "briefing_content_result"
         case searchRequest = "search_request"
         case searchResults = "search_results"
         case notification
@@ -685,6 +695,8 @@ extension Payload: Codable {
         case .threadChangesResult: self = .threadChangesResult(try container.decode(ThreadChangesResultPayload.self, forKey: .data))
         case .remoteFileRequest: self = .remoteFileRequest(try container.decode(RemoteFileRequestPayload.self, forKey: .data))
         case .remoteFileResult: self = .remoteFileResult(try container.decode(RemoteFileResultPayload.self, forKey: .data))
+        case .briefingContentRequest: self = .briefingContentRequest(try container.decode(BriefingContentRequestPayload.self, forKey: .data))
+        case .briefingContentResult: self = .briefingContentResult(try container.decode(BriefingContentResultPayload.self, forKey: .data))
         case .searchRequest: self = .searchRequest(try container.decode(SearchRequestPayload.self, forKey: .data))
         case .searchResults: self = .searchResults(try container.decode(SearchResultsPayload.self, forKey: .data))
         case .notification: self = .notification(try container.decode(NotificationPayload.self, forKey: .data))
@@ -759,6 +771,8 @@ extension Payload: Codable {
         case .threadChangesResult(let p): try container.encode(TypeKey.threadChangesResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .remoteFileRequest(let p): try container.encode(TypeKey.remoteFileRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .remoteFileResult(let p): try container.encode(TypeKey.remoteFileResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .briefingContentRequest(let p): try container.encode(TypeKey.briefingContentRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .briefingContentResult(let p): try container.encode(TypeKey.briefingContentResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .searchRequest(let p): try container.encode(TypeKey.searchRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .searchResults(let p): try container.encode(TypeKey.searchResults.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .notification(let p): try container.encode(TypeKey.notification.rawValue, forKey: .type); try container.encode(p, forKey: .data)

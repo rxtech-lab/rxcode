@@ -120,6 +120,14 @@ final class ThreadStore {
         return ((try? context.fetch(descriptor)) ?? []).map { $0.toItem() }
     }
 
+    /// Clear derived search and briefing data while retaining chats and tasks.
+    func clearCachedRecords() throws {
+        for row in try context.fetch(FetchDescriptor<ThreadSummaryRecord>()) { context.delete(row) }
+        for row in try context.fetch(FetchDescriptor<BranchBriefingRecord>()) { context.delete(row) }
+        for row in try context.fetch(FetchDescriptor<ThreadEmbeddingChunk>()) { context.delete(row) }
+        try context.save()
+    }
+
     @discardableResult
     func deleteBriefingMetadata(excludingProjectIds knownProjectIds: Set<UUID>) -> (threadSummaries: Int, branchBriefings: Int) {
         let summaryRows = (try? context.fetch(FetchDescriptor<ThreadSummaryRecord>())) ?? []
@@ -266,6 +274,16 @@ final class ThreadStore {
             ))
         }
         save()
+    }
+
+    /// Removes only the generated branch briefing. Thread summaries remain
+    /// attached to their threads and can still be used to generate a new one.
+    @discardableResult
+    func deleteBranchBriefing(projectId: UUID, branch: String) throws -> Bool {
+        guard let row = fetchBranchBriefing(projectId: projectId, branch: branch) else { return false }
+        context.delete(row)
+        try context.save()
+        return true
     }
 
     /// Mark a branch's briefing as recently observed, resetting the TTL used by

@@ -94,6 +94,14 @@ final class MobileAppState: ObservableObject {
     @Published var projects: [Project] = []
     @Published var sessions: [SessionSummary] = []
     @Published var branchBriefings: [MobileBranchBriefing] = []
+    @Published var briefingDocuments: [MobileBriefingDocument] = []
+    @Published var briefingContentResult: BriefingContentResultPayload?
+    @Published var isLoadingBriefingContent = false
+    var pendingBriefingContentID: UUID?
+    @Published var briefingAssetFileURL: URL?
+    var briefingAssetPendingURL: URL?
+    var briefingAssetWriteHandle: FileHandle?
+    var briefingAssetBytesReceived: Int64 = 0
     @Published var threadSummaries: [MobileThreadSummary] = []
     @Published var ciStatusByProject: [UUID: ProjectCIStatus] = [:]
     @Published var desktopSettings: MobileSettingsSnapshot?

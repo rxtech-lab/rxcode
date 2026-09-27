@@ -77,6 +77,12 @@ extension AppState: IDEToolHandling {
             return try await handleSetupDocsSecret(arguments: arguments, sessionKey: sessionKey)
         case "ide__setup_release":
             return try await handleSetupRelease(arguments: arguments, sessionKey: sessionKey)
+        case "ide__briefing_list", "ide__briefing_get", "ide__briefing_create",
+             "ide__briefing_update", "ide__briefing_delete", "ide__briefing_add_file",
+             "ide__briefing_delete_file", "ide__briefing_publish":
+            return try await handleBriefingToolCall(name: name, arguments: arguments, sessionKey: sessionKey)
+        case "ide__send_notification":
+            return try await handleSendNotification(arguments: arguments, sessionKey: sessionKey)
         case "ide__ask_user":
             throw IDEToolError.notSupported("ide__ask_user polyfill not implemented yet — surface the question as plain assistant text instead.")
         default:
@@ -827,7 +833,7 @@ extension AppState: IDEToolHandling {
 
     // MARK: - Formatting helpers
 
-    fileprivate func textResult(_ text: String) -> JSONValue {
+    func textResult(_ text: String) -> JSONValue {
         .object([
             "content": .array([
                 .object([

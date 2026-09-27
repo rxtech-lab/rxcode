@@ -76,6 +76,8 @@ actor ACPIconCache {
 
     func store(_ image: NSImage, for url: URL) { cache[url] = image }
 
+    func clear() { cache.removeAll() }
+
     // MARK: - Disk Cache
 
     /// Stable cache directory inside the app's Caches container.

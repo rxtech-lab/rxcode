@@ -1,5 +1,5 @@
 {
-  "originHash" : "44ebc85e966c82ebc9594079fae8ad88d1f3caf7e56e32ce136050b581e95491",
+  "originHash" : "e73c5b2694d1cf3b654f3cc6a6f55b376d74867f988b09742b57b5b437ee62c5",
   "pins" : [
     {
       "identity" : "abseil-cpp-binary",
@@ -107,6 +107,15 @@
       "state" : {
         "revision" : "a0bc79961d7be727d258d33d5a6b2f1023270ba1",
         "version" : "1.22.5"
+      }
+    },
+    {
+      "identity" : "libwebp-xcode",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/SDWebImage/libwebp-Xcode",
+      "state" : {
+        "revision" : "2b5256c29ff4e20f2a0d5ee863b62b1a22144434",
+        "version" : "1.6.0"
       }
     },
     {

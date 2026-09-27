@@ -49,22 +49,6 @@
         }
       }
     },
-    "Set as Default View" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "기본 보기로 설정"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "设为默认视图"
-          }
-        }
-      }
-    },
     "· Agent working" : {
 
     },
@@ -1264,6 +1248,12 @@
     "Autopilot Account" : {
 
     },
+    "Autopilot currently syncs one Starts after task per cloud task." : {
+
+    },
+    "Autopilot currently syncs one Starts after task per cloud task. Select one to save this task." : {
+
+    },
     "Available in Registry" : {
       "localizations" : {
         "en" : {
@@ -1821,6 +1811,9 @@
       }
     },
     "Clear" : {
+
+    },
+    "Clear all" : {
 
     },
     "Close" : {
@@ -2710,6 +2703,9 @@
     "Created" : {
 
     },
+    "Created %@" : {
+
+    },
     "Created from %@" : {
       "localizations" : {
         "en" : {
@@ -3577,6 +3573,9 @@
           }
         }
       }
+    },
+    "Document" : {
+
     },
     "Document ID (slug)" : {
       "localizations" : {
@@ -9053,6 +9052,22 @@
         }
       }
     },
+    "Set as Default View" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기본 보기로 설정"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设为默认视图"
+          }
+        }
+      }
+    },
     "Set Up Docs" : {
       "localizations" : {
         "ko" : {
@@ -10607,6 +10622,12 @@
         }
       }
     },
+    "Unable to Load Briefing" : {
+
+    },
+    "Unable to Load File" : {
+
+    },
     "Unable to Load Folder" : {
       "localizations" : {
         "en" : {
@@ -10751,6 +10772,9 @@
     "Updated" : {
 
     },
+    "Updated %@" : {
+
+    },
     "Updated %@. Pull to refresh." : {
       "localizations" : {
         "en" : {
@@ -10892,6 +10916,9 @@
           }
         }
       }
+    },
+    "Use Share to open this file." : {
+
     },
     "Use Workspace" : {
       "localizations" : {

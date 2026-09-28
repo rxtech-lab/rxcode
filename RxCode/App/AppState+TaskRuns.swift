@@ -738,6 +738,25 @@ extension AppState {
         }
     }
 
+    /// Labels a completion-check thread from the response its run actually
+    /// finished with. The spawn only waits `timeoutSeconds`; a slow check is
+    /// labelled from partial text that has no `TASK_RESULT:` marker yet, so it
+    /// reads "Unverified" even after the run goes on to end with COMPLETE.
+    /// Called for every finished stream; a no-op for other threads and for
+    /// responses without a verdict.
+    func reconcileTaskCompletionLabel(sessionId: String, assistantText: String) {
+        let resolved = resolveCurrentSessionId(sessionId)
+        guard let summary = allSessionSummaries.first(where: { $0.id == resolved })
+                ?? threadStore.fetch(id: resolved)?.toSummary(),
+              taskCompletionCheckState(for: summary) != nil,
+              let parentThreadId = summary.parentThreadId,
+              let verified = Self.taskCompletionVerdict(from: assistantText)
+        else { return }
+        let label = verified ? Self.taskCompletionVerifiedLabel : Self.taskCompletionUnverifiedLabel
+        guard summary.threadLabel != label else { return }
+        setTaskCompletionLabel(resolved, parentThreadId: parentThreadId, verified: verified)
+    }
+
     private func updateTaskAttention(_ id: UUID, reason: String?) {
         guard let task = self.task(id: id) else { return }
         var board = taskBoard(for: task.projectId)

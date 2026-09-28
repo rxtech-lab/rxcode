@@ -174,7 +174,7 @@ actor CodexAppServer {
             try Self.writeJSONLine(Self.notification(method: "initialized", params: [:]), to: handles.stdin)
             try Self.writeJSONLine(Self.request(id: 2, method: "model/list", params: ["includeHidden": .bool(false)]), to: handles.stdin)
 
-            for try await line in handles.stdout.fileHandleForReading.bytes.lines {
+            for await line in handles.stdout.fileHandleForReading.lineStream() {
                 guard let object = Self.decodeObject(line),
                       Self.idString(object["id"]) == "2",
                       let result = object["result"] else { continue }

@@ -34,7 +34,7 @@ public struct IMETextView: NSViewRepresentable {
     var onTextViewReady: ((NSTextView) -> Void)? = nil
     /// Thumbnail for the `[ImageN]` chip with the given 1-based index. When it
     /// returns an image, the chip draws it in place of its leading bracket.
-    var chipThumbnail: ((Int) -> NSImage?)? = nil
+    var chipThumbnail: (@MainActor (Int) -> NSImage?)? = nil
 
     public init(
         text: Binding<String>,
@@ -55,7 +55,7 @@ public struct IMETextView: NSViewRepresentable {
         isEditable: Bool = true,
         accessibilityIdentifier: String = "chat-input-text-view",
         onTextViewReady: ((NSTextView) -> Void)? = nil,
-        chipThumbnail: ((Int) -> NSImage?)? = nil
+        chipThumbnail: (@MainActor (Int) -> NSImage?)? = nil
     ) {
         self._text = text
         self._isFocused = isFocused
@@ -238,7 +238,7 @@ nonisolated private func enumerateChipRanges(in text: String, _ body: (NSRange, 
 
 fileprivate final class ChipLayoutManager: NSLayoutManager, NSLayoutManagerDelegate, @unchecked Sendable {
     /// Set from the main actor; AppKit calls layout and drawing on the main thread.
-    nonisolated(unsafe) var thumbnail: ((Int) -> NSImage?)?
+    nonisolated(unsafe) var thumbnail: (@MainActor (Int) -> NSImage?)?
 
     nonisolated override init() {
         super.init()

@@ -41,7 +41,7 @@ extension CodexAppServer {
             var assistantTextBuffer = ""
             var rawLineCount = 0
 
-            for try await line in handles.stdout.fileHandleForReading.bytes.lines {
+            for await line in handles.stdout.fileHandleForReading.lineStream() {
                 guard !Task.isCancelled else { break }
                 rawLineCount += 1
                 if rawLineCount == 1 {

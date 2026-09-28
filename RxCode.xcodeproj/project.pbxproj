@@ -1737,7 +1737,7 @@
 			repositoryURL = "https://github.com/rxtech-lab/RxAgentSDK";
 			requirement = {
 				kind = exactVersion;
-				version = 1.0.7;
+				version = 1.0.8;
 			};
 		};
 		E6A001002F8A000100000001 /* XCRemoteSwiftPackageReference "SwiftTerm" */ = {

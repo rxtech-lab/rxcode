@@ -4,7 +4,7 @@ import RxCodeCore
 
 /// Shared title block for the usage-limit detail popovers. Content scrolls
 /// once it outgrows the popover's height cap.
-private struct RateLimitPopoverScaffold<Content: View>: View {
+struct RateLimitPopoverScaffold<Content: View>: View {
     let title: String
     let subtitle: String
     @ViewBuilder let content: Content
@@ -52,7 +52,7 @@ private struct CappedScrollView<Content: View>: View {
 
 /// "How to read this" block: each term shown in the table next to what it
 /// means.
-private struct RateLimitGlossary: View {
+struct RateLimitGlossary: View {
     struct Entry: Identifiable {
         let term: LocalizedStringKey
         let detail: LocalizedStringKey
@@ -94,7 +94,7 @@ private struct RateLimitGlossary: View {
 
 /// One provider's block in a popover table: colored header, then rows
 /// separated by dividers.
-private struct ProviderTableSection<Row: Identifiable, RowContent: View>: View {
+struct ProviderTableSection<Row: Identifiable, RowContent: View>: View {
     let provider: AgentProvider
     let rows: [Row]
     @ViewBuilder let row: (Row) -> RowContent
@@ -115,7 +115,7 @@ private struct ProviderTableSection<Row: Identifiable, RowContent: View>: View {
     }
 }
 
-private func emptyMessage(_ text: LocalizedStringKey) -> some View {
+func emptyMessage(_ text: LocalizedStringKey) -> some View {
     Text(text)
         .font(.system(size: 12))
         .foregroundStyle(ClaudeTheme.textTertiary)
@@ -128,7 +128,7 @@ private func providerColor(_ provider: AgentProvider) -> Color {
 
 /// False for plans without a separate 5-hour limit.
 @MainActor
-private func hasFiveHourLimit(_ provider: AgentProvider, in appState: AppState) -> Bool {
+func hasFiveHourLimit(_ provider: AgentProvider, in appState: AppState) -> Bool {
     appState.cachedRateLimitUsage(for: provider)?.hasFiveHourLimit ?? true
 }
 
@@ -408,135 +408,6 @@ struct RateLimitHistoryPopover: View {
                 hiddenRaw.wrappedValue = hidden.sorted().joined(separator: ",")
             }
         )
-    }
-}
-
-// MARK: - Task costs
-
-/// Popover listing the usage-limit cost of each measured task per provider,
-/// with each provider's most and least expensive tasks called out.
-struct RateLimitTaskCostPopover: View {
-    @Environment(AppState.self) private var appState
-
-    let providers: [AgentProvider]
-    let range: UsageStatsRange
-
-    @State private var summaries: [AgentProvider: RateLimitTaskCostSummary] = [:]
-
-    private var isEmpty: Bool {
-        summaries.values.allSatisfy(\.isEmpty)
-    }
-
-    /// Tasks ranked by 5-hour cost, unmeasurable ones last.
-    private func rankedTasks(_ summary: RateLimitTaskCostSummary) -> [RateLimitTaskCostSnapshot] {
-        summary.tasks.sorted {
-            let lhs = $0.fiveHourDelta ?? -1
-            let rhs = $1.fiveHourDelta ?? -1
-            if lhs != rhs { return lhs > rhs }
-            return $0.endedAt > $1.endedAt
-        }
-    }
-
-    var body: some View {
-        RateLimitPopoverScaffold(
-            title: String(localized: "Limit cost per task"),
-            subtitle: String(localized: "\(range.localizedLongTitle) · change in each limit between a task's start and finish.")
-        ) {
-            if isEmpty {
-                emptyMessage("No measured tasks in this window yet.")
-            } else {
-                ForEach(providers, id: \.self) { provider in
-                    let summary = summaries[provider] ?? RateLimitTaskCostSummary()
-                    if !summary.isEmpty {
-                        ProviderTableSection(provider: provider, rows: rankedTasks(summary)) { task in
-                            row(task, provider: provider, summary: summary)
-                        }
-                    }
-                }
-                RateLimitGlossary(entries: [
-                    .init(term: "Row", detail: "One finished task: its chat, model, finish time and how long it ran."),
-                    .init(term: "5h · 7d", detail: "Percentage points of the 5-hour and 7-day limits the task used, measured from its start to its finish."),
-                    .init(term: "Most · Least", detail: "The provider's most and least expensive tasks in this window."),
-                    .init(term: "—", detail: "The limit reset while the task ran, so its cost can't be measured."),
-                    .init(term: "Ran with others", detail: "Tasks running at the same time share one limit, so their costs are approximate and are left out of the averages once enough solo tasks exist."),
-                ])
-            }
-        }
-        .task(id: appState.rateLimitHistoryRevision) {
-            var result: [AgentProvider: RateLimitTaskCostSummary] = [:]
-            for provider in providers {
-                result[provider] = appState.rateLimitTaskCostSummary(for: provider, range: range)
-            }
-            summaries = result
-        }
-    }
-
-    private func row(_ task: RateLimitTaskCostSnapshot, provider: AgentProvider, summary: RateLimitTaskCostSummary) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(task.threadTitle)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(ClaudeTheme.textPrimary)
-                        .lineLimit(1)
-                    if task.id == summary.mostExpensive?.id {
-                        badge("Most")
-                            .help("The most expensive task in this window.")
-                    } else if task.id == summary.leastExpensive?.id {
-                        badge("Least")
-                            .help("The least expensive task in this window.")
-                    }
-                }
-                Text(subtitle(for: task, provider: provider))
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(ClaudeTheme.textTertiary)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 8)
-            if hasFiveHourLimit(provider, in: appState) {
-                cost("5h used", task.fiveHourDelta)
-            }
-            cost("7d used", task.sevenDayDelta)
-        }
-    }
-
-    private func subtitle(for task: RateLimitTaskCostSnapshot, provider: AgentProvider) -> String {
-        var parts: [String] = []
-        if !task.model.isEmpty {
-            parts.append(appState.usageModelDisplayName(task.model, provider: provider))
-        }
-        parts.append(task.endedAt.formatted(date: .abbreviated, time: .shortened))
-        parts.append(BriefingUsageStatsView.formatDuration(task.endedAt.timeIntervalSince(task.startedAt)))
-        if task.concurrentRuns > 0 {
-            parts.append(task.concurrentRuns == 1
-                ? String(localized: "ran with 1 other task")
-                : String(localized: "ran with \(task.concurrentRuns) other tasks"))
-        }
-        return parts.joined(separator: " · ")
-    }
-
-    private func cost(_ label: LocalizedStringKey, _ delta: Double?) -> some View {
-        VStack(alignment: .trailing, spacing: 1) {
-            Text(BriefingRateLimitStatsView.formatOptionalDelta(delta))
-                .font(.system(size: 12, weight: .semibold).monospacedDigit())
-                .foregroundStyle(ClaudeTheme.textPrimary)
-            Text(label)
-                .font(.system(size: 10))
-                .foregroundStyle(ClaudeTheme.textTertiary)
-        }
-        .frame(width: 64, alignment: .trailing)
-        .help(delta == nil
-            ? String(localized: "The limit reset during this task, so its cost can't be measured.")
-            : String(localized: "Percentage points of this limit the task used."))
-    }
-
-    private func badge(_ text: LocalizedStringKey) -> some View {
-        Text(text)
-            .font(.system(size: 9.5, weight: .semibold))
-            .foregroundStyle(ClaudeTheme.accent)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 1)
-            .background(Capsule().fill(ClaudeTheme.accent.opacity(0.12)))
     }
 }
 

@@ -233,12 +233,6 @@ struct RateLimitHistoryPopover: View {
             } else {
                 chart
                 legend
-                RateLimitGlossary(entries: [
-                    .init(term: "Line", detail: "One provider's limit. Its height is the share of that limit used at that moment; it drops when the limit resets."),
-                    .init(term: "Hover", detail: "Point at the chart to read every provider's usage at that time."),
-                    .init(term: "Filter", detail: "Use the filter button to hide providers or limits. Your choice is remembered."),
-                    .init(term: "7-day only", detail: "Plans without a separate 5-hour limit show only their 7-day line."),
-                ])
             }
         }
         .task(id: appState.rateLimitHistoryRevision) {
@@ -273,7 +267,7 @@ struct RateLimitHistoryPopover: View {
             if let selectedDate {
                 RuleMark(x: .value("Time", selectedDate))
                     .foregroundStyle(ClaudeTheme.border)
-                    .annotation(position: .top, overflowResolution: .init(x: .fit, y: .disabled)) {
+                    .annotation(position: .top, spacing: 0, overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
                         readout(at: selectedDate)
                     }
             }
@@ -296,6 +290,8 @@ struct RateLimitHistoryPopover: View {
         }
         .chartXSelection(value: $selectedDate)
         .frame(height: 260)
+        // Room for the top "100%" axis label, which the scroll view would clip.
+        .padding(.top, 8)
     }
 
     /// Each provider's reading closest to the pointer.

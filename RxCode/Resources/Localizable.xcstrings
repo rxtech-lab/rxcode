@@ -1597,6 +1597,7 @@
       }
     },
     "7-day only" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -10497,6 +10498,7 @@
       }
     },
     "Filter" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -11763,6 +11765,7 @@
       }
     },
     "Hover" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -13042,6 +13045,7 @@
       }
     },
     "Line" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -16866,6 +16870,7 @@
       }
     },
     "One provider's limit. Its height is the share of that limit used at that moment; it drops when the limit resets." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -18073,6 +18078,7 @@
       }
     },
     "Plans without a separate 5-hour limit show only their 7-day line." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -18105,6 +18111,7 @@
       }
     },
     "Point at the chart to read every provider's usage at that time." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -26012,6 +26019,7 @@
       }
     },
     "Use the filter button to hide providers or limits. Your choice is remembered." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {

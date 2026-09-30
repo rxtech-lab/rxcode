@@ -368,6 +368,27 @@ final class TaskBoardHookTests: XCTestCase {
         XCTAssertEqual(appState.threadStore.fetch(id: realId)?.threadLabel, AppState.taskCompletionVerifiedLabel)
     }
 
+    /// A check that outlived the spawn's wait was labelled from partial text;
+    /// its run finishing with a verdict has to correct the label.
+    func testLateCompletionCheckVerdictRelabelsTheThread() {
+        appState.threadStore = ThreadStore.inMemory()
+        appState.allSessionSummaries = [
+            checkThread(id: "check-late", label: AppState.taskCompletionUnverifiedLabel),
+            checkThread(id: "chat", label: nil)
+        ]
+        for summary in appState.allSessionSummaries { appState.threadStore.upsert(summary) }
+
+        appState.reconcileTaskCompletionLabel(sessionId: "check-late", assistantText: "Still checking…")
+        XCTAssertEqual(appState.allSessionSummaries[0].threadLabel, AppState.taskCompletionUnverifiedLabel)
+
+        appState.reconcileTaskCompletionLabel(sessionId: "check-late", assistantText: "All done.\nTASK_RESULT: COMPLETE")
+        XCTAssertEqual(appState.allSessionSummaries[0].threadLabel, AppState.taskCompletionVerifiedLabel)
+        XCTAssertEqual(appState.threadStore.fetch(id: "check-late")?.threadLabel, AppState.taskCompletionVerifiedLabel)
+
+        appState.reconcileTaskCompletionLabel(sessionId: "chat", assistantText: "TASK_RESULT: COMPLETE")
+        XCTAssertNil(appState.allSessionSummaries[1].threadLabel)
+    }
+
     /// A check interrupted by quitting the app has no run left to finish it, so
     /// loading the store settles it rather than leaving a perpetual "Verifying".
     func testInterruptedCompletionChecksAreFinalizedOnLoad() {

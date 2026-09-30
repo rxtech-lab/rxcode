@@ -113,7 +113,7 @@ extension ClaudeCodeServer {
 
                 var rawLineCount = 0
                 var capturedSessionId: String?
-                for await line in Self.asyncLines(from: stdout.fileHandleForReading, log: log) {
+                for await line in stdout.fileHandleForReading.lineStream() {
                     guard !line.isEmpty else { continue }
                     guard let data = line.data(using: .utf8) else { continue }
 
@@ -164,45 +164,6 @@ extension ClaudeCodeServer {
                 // race a pending callback dispatch, then close to release the FD.
                 stdout.fileHandleForReading.readabilityHandler = nil
                 stdout.fileHandleForReading.closeFile()
-            }
-        }
-    }
-
-    /// Stream lines from `handle` using a Dispatch-backed `readabilityHandler`.
-    /// We use this instead of `FileHandle.AsyncBytes.lines` because the async
-    /// iterator can wedge when multiple concurrent pipe readers exist (the
-    /// cross-project send case: one CLI is mid-tool-call while another is
-    /// just starting). Dispatch's readable source delivers each chunk via a
-    /// per-handle background callback that doesn't share global async state,
-    /// so a second simultaneous reader is unaffected by the first's progress.
-    private static func asyncLines(from handle: FileHandle, log: Logger) -> AsyncStream<String> {
-        AsyncStream { continuation in
-            // `buffer` is touched only from the readabilityHandler, which Dispatch
-            // serializes onto a single internal queue per FileHandle — no lock needed.
-            nonisolated(unsafe) var buffer = Data()
-            handle.readabilityHandler = { fh in
-                let chunk = fh.availableData
-                if chunk.isEmpty {
-                    // EOF — flush any trailing non-terminated line, then finish.
-                    if !buffer.isEmpty, let trailing = String(data: buffer, encoding: .utf8) {
-                        continuation.yield(trailing)
-                        buffer.removeAll(keepingCapacity: false)
-                    }
-                    fh.readabilityHandler = nil
-                    continuation.finish()
-                    return
-                }
-                buffer.append(chunk)
-                while let newlineIdx = buffer.firstIndex(of: 0x0A) {
-                    let lineData = buffer[buffer.startIndex..<newlineIdx]
-                    buffer.removeSubrange(buffer.startIndex...newlineIdx)
-                    if let line = String(data: lineData, encoding: .utf8) {
-                        continuation.yield(line)
-                    }
-                }
-            }
-            continuation.onTermination = { _ in
-                handle.readabilityHandler = nil
             }
         }
     }

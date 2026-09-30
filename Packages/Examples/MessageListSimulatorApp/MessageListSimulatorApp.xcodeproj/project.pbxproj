@@ -342,7 +342,7 @@
 			repositoryURL = "https://github.com/rxtech-lab/RxAgentSDK.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 1.0.4;
+				minimumVersion = 1.0.8;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

@@ -16,7 +16,7 @@ extension CodexAppServer {
             try Self.writeJSONLine(Self.notification(method: "initialized", params: [:]), to: handles.stdin)
             try Self.writeJSONLine(Self.request(id: 2, method: "account/rateLimits/read", params: .null), to: handles.stdin)
 
-            for try await line in handles.stdout.fileHandleForReading.bytes.lines {
+            for await line in handles.stdout.fileHandleForReading.lineStream() {
                 guard let object = Self.decodeObject(line) else { continue }
 
                 if let requestId = Self.idString(object["id"]), object["method"] != nil {
@@ -101,10 +101,13 @@ extension CodexAppServer {
     }
 
     func readStderr(_ stderr: Pipe, streamId: UUID) {
+        // A blocking `readDataToEndOfFile()` here would pin a cooperative
+        // thread for the whole life of the app server; with a few servers
+        // alive that starves the pool and every Codex turn stalls.
         Task.detached { [weak self] in
-            let data = stderr.fileHandleForReading.readDataToEndOfFile()
-            guard let text = String(data: data, encoding: .utf8), !text.isEmpty else { return }
-            await self?.appendStderr(text, streamId: streamId)
+            for await line in stderr.fileHandleForReading.lineStream() {
+                await self?.appendStderr(line + "\n", streamId: streamId)
+            }
         }
     }
 

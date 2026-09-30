@@ -26,7 +26,7 @@ extension CodexAppServer {
         ]), to: handles.stdin)
 
         var loginId: String?
-        for try await line in handles.stdout.fileHandleForReading.bytes.lines {
+        for await line in handles.stdout.fileHandleForReading.lineStream() {
             try Task.checkCancellation()
             guard let object = Self.decodeObject(line) else { continue }
             if let requestId = Self.idString(object["id"]), object["method"] != nil {
@@ -66,7 +66,7 @@ extension CodexAppServer {
         try Self.writeJSONLine(Self.notification(method: "initialized", params: [:]), to: handles.stdin)
         try Self.writeJSONLine(Self.request(id: 2, method: "account/logout", params: .null), to: handles.stdin)
 
-        for try await line in handles.stdout.fileHandleForReading.bytes.lines {
+        for await line in handles.stdout.fileHandleForReading.lineStream() {
             try Task.checkCancellation()
             guard let object = Self.decodeObject(line) else { continue }
             if let requestId = Self.idString(object["id"]), object["method"] != nil {

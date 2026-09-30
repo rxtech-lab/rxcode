@@ -6,8 +6,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/rxtech-lab/RxAgentSDK.git",
       "state" : {
-        "revision" : "63971d4980dcdffe9633604ad7fec5c7ab97e55d",
-        "version" : "1.0.4"
+        "revision" : "15cd2bde13eef44e9fa02e1c7197ba771ad6e53e",
+        "version" : "1.0.8"
       }
     }
   ],

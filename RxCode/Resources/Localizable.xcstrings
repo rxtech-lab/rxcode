@@ -12911,6 +12911,12 @@
         }
       }
     },
+    "Least recent" : {
+
+    },
+    "Least used" : {
+
+    },
     "Left in 5h" : {
       "localizations" : {
         "zh-Hans" : {
@@ -14469,6 +14475,12 @@
           }
         }
       }
+    },
+    "Most recent" : {
+
+    },
+    "Most used" : {
+
     },
     "Most used model" : {
       "localizations" : {
@@ -22742,6 +22754,9 @@
         }
       }
     },
+    "Showing up to %lld tasks per provider" : {
+
+    },
     "Shown only — nothing is passed back to the session." : {
       "localizations" : {
         "ko" : {
@@ -23214,6 +23229,9 @@
           }
         }
       }
+    },
+    "Sort by" : {
+
     },
     "Source" : {
       "localizations" : {

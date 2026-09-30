@@ -547,6 +547,9 @@ extension AppState {
             return
         }
         logger.info("[IDE_SEND_THREAD] record stream completion stream=\(streamId) session=\(sessionId, privacy: .public) error=\(error ?? "<nil>", privacy: .public) assistantChars=\(assistantText.count, privacy: .public)")
+        if error == nil {
+            reconcileTaskCompletionLabel(sessionId: sessionId, assistantText: assistantText)
+        }
         let completion = StreamCompletion(
             sessionId: sessionId,
             assistantText: assistantText,

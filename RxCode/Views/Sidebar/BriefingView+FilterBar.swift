@@ -9,9 +9,6 @@ extension BriefingView {
         let projects = projectsWithData
         return HStack(spacing: 8) {
             kindFilterChip
-            if kindFilter != .document {
-                branchScopeChip
-            }
             projectFilterMenu(projects: projects)
             Spacer(minLength: 0)
         }
@@ -57,51 +54,6 @@ extension BriefingView {
         .menuIndicator(.hidden)
         .fixedSize()
         .help("Choose which kinds of briefing to show.")
-    }
-
-    var branchScopeChip: some View {
-        Menu {
-            Button {
-                showAllBranches = false
-            } label: {
-                menuSelectionLabel("Current branch", isSelected: !showAllBranches)
-            }
-            Button {
-                showAllBranches = true
-            } label: {
-                menuSelectionLabel("All branches", isSelected: showAllBranches)
-            }
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: showAllBranches ? "arrow.triangle.branch" : "arrow.triangle.branch.fill")
-                    .font(.system(size: 11, weight: .semibold))
-                Text(showAllBranches ? "All branches" : "Current branch")
-                    .font(.system(size: 11, weight: .semibold))
-                    .lineLimit(1)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
-            }
-            .foregroundStyle(showAllBranches ? ClaudeTheme.textOnAccent : ClaudeTheme.textSecondary)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(showAllBranches ? ClaudeTheme.accent : ClaudeTheme.surfaceSecondary)
-            )
-            .overlay(
-                Capsule(style: .continuous)
-                    .strokeBorder(
-                        showAllBranches
-                            ? ClaudeTheme.accent.opacity(0.4)
-                            : ClaudeTheme.border.opacity(0.6),
-                        lineWidth: 0.5
-                    )
-            )
-        }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .help("Choose which branches to show briefings for.")
     }
 
     @ViewBuilder

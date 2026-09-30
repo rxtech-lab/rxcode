@@ -35,6 +35,8 @@
 		AC1900000000000000000103 /* RxCode/Utilities/KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1900000000000000000003 /* RxCode/Utilities/KeychainHelper.swift */; };
 		AC1900000000000000000200 /* RxAuthSwift in Frameworks */ = {isa = PBXBuildFile; productRef = DF462DC82FC73FA8002D9562 /* RxAuthSwift */; };
 		AC1900000000000000000300 /* RxAuthSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = DF462DCA2FC73FA8002D9562 /* RxAuthSwiftUI */; };
+		B81EF0012FD0000000000002 /* ThreadStoreBriefingDeletionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81EF0012FD0000000000001 /* ThreadStoreBriefingDeletionTests.swift */; };
+		B81EF0012FD0000000000004 /* BriefingDayGroupingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81EF0012FD0000000000003 /* BriefingDayGroupingTests.swift */; };
 		BA0E00012FCB400000000002 /* BriefingNotificationStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA0E00012FCB400000000001 /* BriefingNotificationStateTests.swift */; };
 		BBD2456729416901FAFBD00D /* GlobalSessionPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 308E9D66FBEB0549929D9E3A /* GlobalSessionPersistenceTests.swift */; };
 		C0DE70C00000000000000002 /* CodexTokenUsageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE70C00000000000000001 /* CodexTokenUsageTests.swift */; };
@@ -190,6 +192,8 @@
 		AC1900000000000000000001 /* RxCode/Services/ProjectCloudService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RxCode/Services/ProjectCloudService.swift; sourceTree = SOURCE_ROOT; };
 		AC1900000000000000000002 /* RxCode/Services/AutopilotService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RxCode/Services/AutopilotService.swift; sourceTree = SOURCE_ROOT; };
 		AC1900000000000000000003 /* RxCode/Utilities/KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RxCode/Utilities/KeychainHelper.swift; sourceTree = SOURCE_ROOT; };
+		B81EF0012FD0000000000001 /* ThreadStoreBriefingDeletionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadStoreBriefingDeletionTests.swift; sourceTree = "<group>"; };
+		B81EF0012FD0000000000003 /* BriefingDayGroupingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefingDayGroupingTests.swift; sourceTree = "<group>"; };
 		BA0E00012FCB400000000001 /* BriefingNotificationStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefingNotificationStateTests.swift; sourceTree = "<group>"; };
 		C0DE70C00000000000000001 /* CodexTokenUsageTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CodexTokenUsageTests.swift; sourceTree = "<group>"; };
 		C71A00000000000000000002 /* ChatHistoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatHistoryTests.swift; sourceTree = "<group>"; };
@@ -432,6 +436,8 @@
 				5C2222222FCB200000000001 /* BriefingThreadRowTests.swift */,
 				5C3333332FCB400000000001 /* ThreadStoreThreadSummaryTests.swift */,
 				CA5E00012FCB400000000001 /* CacheStorageTests.swift */,
+				B81EF0012FD0000000000003 /* BriefingDayGroupingTests.swift */,
+				B81EF0012FD0000000000001 /* ThreadStoreBriefingDeletionTests.swift */,
 				BA0E00012FCB400000000001 /* BriefingNotificationStateTests.swift */,
 				5C3333332FCB400000000003 /* ThreadStoreHookCardTests.swift */,
 				5C3333332FCB400000000005 /* ThreadStoreSidebarIndexTests.swift */,
@@ -933,6 +939,8 @@
 				5C2222222FCB200000000002 /* BriefingThreadRowTests.swift in Sources */,
 				5C3333332FCB400000000002 /* ThreadStoreThreadSummaryTests.swift in Sources */,
 				CA5E00012FCB400000000002 /* CacheStorageTests.swift in Sources */,
+				B81EF0012FD0000000000004 /* BriefingDayGroupingTests.swift in Sources */,
+				B81EF0012FD0000000000002 /* ThreadStoreBriefingDeletionTests.swift in Sources */,
 				BA0E00012FCB400000000002 /* BriefingNotificationStateTests.swift in Sources */,
 				5C3333332FCB400000000004 /* ThreadStoreHookCardTests.swift in Sources */,
 				5C3333332FCB400000000006 /* ThreadStoreSidebarIndexTests.swift in Sources */,

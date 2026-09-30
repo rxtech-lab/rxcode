@@ -45,9 +45,7 @@ extension AppState {
     /// mode), so no diff needs to be computed here. Returns the new thread id.
     @discardableResult
     func createCodeReviewForBranch(project: Project, branch: String) async throws -> String {
-        let briefing = threadStore.allBranchBriefingItems()
-            .first(where: { $0.projectId == project.id && $0.branch == branch })?
-            .briefing ?? ""
+        let briefing = threadStore.combinedBranchBriefing(projectId: project.id, branch: branch) ?? ""
         let summaries = threadStore.allThreadSummaryItems()
             .filter { $0.projectId == project.id && $0.branch == branch }
             .sorted { $0.updatedAt > $1.updatedAt }

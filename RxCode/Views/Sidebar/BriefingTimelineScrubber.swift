@@ -9,8 +9,8 @@ struct BriefingTimelineMarker: Identifiable, Equatable {
     let offset: CGFloat
 }
 
-/// Scroll position of the briefing timeline. Observed only by the scrubber so
-/// scroll updates don't invalidate the whole briefing list.
+/// Scroll position and day markers of the briefing timeline. Observed only by
+/// the scrubber so scroll updates don't invalidate the whole briefing list.
 @Observable
 final class BriefingTimelineScrollMetrics {
     struct Value: Equatable {
@@ -19,6 +19,15 @@ final class BriefingTimelineScrollMetrics {
     }
 
     var value = Value()
+    /// Day-section markers, ordered by their content offset (top to bottom).
+    var markers: [BriefingTimelineMarker] = []
+
+    /// Installed by the timeline table view to perform programmatic scrolls.
+    @ObservationIgnored var scrollHandler: ((CGFloat) -> Void)?
+
+    func scroll(to offset: CGFloat) {
+        scrollHandler?(offset)
+    }
 }
 
 /// Google Photos–style fast-scroll rail shown on the right of the briefing
@@ -27,10 +36,9 @@ final class BriefingTimelineScrollMetrics {
 /// date pill beside the thumb always shows the day currently in view. The pill
 /// stays inside the rail so it never covers briefing content.
 struct BriefingTimelineScrubber: View {
-    /// Day-section markers, ordered by their content offset (top to bottom).
-    let markers: [BriefingTimelineMarker]
     let metrics: BriefingTimelineScrollMetrics
-    let onScrub: (CGFloat) -> Void
+
+    private var markers: [BriefingTimelineMarker] { metrics.markers }
 
     /// Current vertical content offset of the scroll view.
     private var contentOffset: CGFloat { metrics.value.offset }
@@ -120,8 +128,8 @@ struct BriefingTimelineScrubber: View {
         .accessibilityAdjustableAction { direction in
             let step = maxOffset * 0.1
             switch direction {
-            case .increment: onScrub(min(maxOffset, contentOffset + step))
-            case .decrement: onScrub(max(0, contentOffset - step))
+            case .increment: metrics.scroll(to: min(maxOffset, contentOffset + step))
+            case .decrement: metrics.scroll(to: max(0, contentOffset - step))
             @unknown default: break
             }
         }
@@ -141,7 +149,7 @@ struct BriefingTimelineScrubber: View {
 
     private func scrub(to y: CGFloat, trackHeight: CGFloat) {
         let fraction = min(1, max(0, (y - Self.verticalInset) / trackHeight))
-        onScrub(fraction * maxOffset)
+        metrics.scroll(to: fraction * maxOffset)
     }
 
     /// The last marker whose track position is at or above `trackY`.

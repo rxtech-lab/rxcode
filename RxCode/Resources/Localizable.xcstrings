@@ -2989,6 +2989,7 @@
       }
     },
     "All branches" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -5068,6 +5069,7 @@
       }
     },
     "Choose which branches to show briefings for." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -7378,6 +7380,7 @@
       }
     },
     "Current branch" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -8222,7 +8225,18 @@
         }
       }
     },
+    "Delete the generated briefing for %@ on %@ from %@? Thread summaries will remain available." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Delete the generated briefing for %1$@ on %2$@ from %3$@? Thread summaries will remain available."
+          }
+        }
+      }
+    },
     "Delete the generated briefing for %@ on %@? Thread summaries will remain available." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -13248,6 +13262,7 @@
       }
     },
     "Loading current branches…" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {

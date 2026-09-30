@@ -27,33 +27,52 @@ extension BriefingView {
         return sections
     }
 
-    func timelineMarkers(_ sections: [BriefingDaySection]) -> [BriefingTimelineMarker] {
-        sections.compactMap { section in
-            guard let offset = sectionOffsets[section.id] else { return nil }
-            return BriefingTimelineMarker(id: section.id, date: section.day, offset: offset)
-        }
-        .sorted { $0.offset < $1.offset }
+    static func sectionTitleRowId(_ section: BriefingDaySection) -> String {
+        "title::\(section.id)"
     }
 
-    func daySection(_ section: BriefingDaySection) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(Self.sectionTitle(for: section.day))
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(ClaudeTheme.textPrimary)
-                Text(section.entries.count == 1 ? "1 briefing" : "\(section.entries.count) briefings")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(ClaudeTheme.textTertiary)
-            }
-            .accessibilityAddTraits(.isHeader)
+    /// A day title row followed by one row per line of cards. Columns are sized
+    /// to the available width, and each card row stretches its cards to the
+    /// tallest one so cards side by side share the same height.
+    func sectionRows(_ section: BriefingDaySection) -> [BriefingTimelineRow] {
+        let columnCount = max(1, min(4, Int(availableWidth / 420)))
+        let cardRows = stride(from: 0, to: section.entries.count, by: columnCount).map {
+            Array(section.entries[$0..<min($0 + columnCount, section.entries.count)])
+        }
 
-            briefingGrid(section.entries)
+        let title = BriefingTimelineRow(id: Self.sectionTitleRowId(section), estimatedHeight: 54) {
+            AnyView(
+                sectionTitle(section)
+                    .padding(.top, 24)
+                    .padding(.bottom, 12)
+                    .briefingTimelineRowInsets()
+            )
         }
-        .onGeometryChange(for: CGFloat.self) { proxy in
-            proxy.frame(in: .named(Self.timelineCoordinateSpace)).minY
-        } action: { newValue in
-            sectionOffsets[section.id] = newValue
+        return [title] + cardRows.enumerated().map { index, row in
+            BriefingTimelineRow(
+                id: "cards::\(columnCount)::" + row.map(\.id).joined(separator: "|"),
+                estimatedHeight: 320
+            ) {
+                AnyView(
+                    cardRow(row, columnCount: columnCount)
+                        .padding(.top, index == 0 ? 0 : 16)
+                        .briefingTimelineRowInsets()
+                )
+            }
         }
+    }
+
+    private func sectionTitle(_ section: BriefingDaySection) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(Self.sectionTitle(for: section.day))
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(ClaudeTheme.textPrimary)
+            Text(section.entries.count == 1 ? "1 briefing" : "\(section.entries.count) briefings")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+            Spacer(minLength: 0)
+        }
+        .accessibilityAddTraits(.isHeader)
     }
 
     static func sectionTitle(for day: Date) -> String {
@@ -66,32 +85,19 @@ extension BriefingView {
         return day.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().year())
     }
 
-    /// Render cards lazily in timeline order, with columns sized to the
-    /// available width. Each row stretches its cards to the tallest one so
-    /// cards side by side share the same height.
-    func briefingGrid(_ entries: [BriefingEntry]) -> some View {
-        let columnCount = max(1, min(4, Int(availableWidth / 420)))
-        let rows = stride(from: 0, to: entries.count, by: columnCount).map {
-            Array(entries[$0..<min($0 + columnCount, entries.count)])
-        }
-        return LazyVStack(alignment: .leading, spacing: 16) {
-            ForEach(rows, id: \.first?.id) { row in
-                HStack(alignment: .top, spacing: 16) {
-                    ForEach(row) { entry in
-                        entryCard(entry)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                            .briefingCardMotion()
-                    }
-                    // Keep a partial last row aligned to the column grid.
-                    ForEach(row.count..<columnCount, id: \.self) { _ in
-                        Color.clear.frame(maxWidth: .infinity, maxHeight: 0)
-                    }
-                }
-                .fixedSize(horizontal: false, vertical: true)
+    private func cardRow(_ row: [BriefingEntry], columnCount: Int) -> some View {
+        HStack(alignment: .top, spacing: 16) {
+            ForEach(row) { entry in
+                entryCard(entry)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .briefingCardMotion()
+            }
+            // Keep a partial last row aligned to the column grid.
+            ForEach(row.count..<columnCount, id: \.self) { _ in
+                Color.clear.frame(maxWidth: .infinity, maxHeight: 0)
             }
         }
-        // Cards slide in and out as filters change instead of popping.
-        .animation(.snappy(duration: 0.3), value: entries.map(\.id))
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     @ViewBuilder
@@ -111,14 +117,9 @@ extension BriefingView {
     }
 
     var filteredEmptyState: some View {
-        let message: String
-        if kindFilter == .document {
-            message = "No document briefings match the selected projects."
-        } else if showAllBranches {
-            message = "No briefings match the selected projects."
-        } else {
-            message = "No briefings for the current branch. Switch to All branches to see other branches."
-        }
+        let message = kindFilter == .document
+            ? "No document briefings match the selected projects."
+            : "No briefings match the selected projects."
         return emptyState(
             icon: "line.3.horizontal.decrease.circle",
             title: "Nothing to Show",
@@ -126,5 +127,14 @@ extension BriefingView {
         )
         .frame(maxWidth: .infinity)
         .padding(.top, 24)
+    }
+}
+
+extension View {
+    /// Horizontal insets and max width shared by every timeline row.
+    func briefingTimelineRowInsets() -> some View {
+        padding(.horizontal, 28)
+            .frame(maxWidth: 1400, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 }

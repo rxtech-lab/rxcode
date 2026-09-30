@@ -252,19 +252,25 @@ extension AppState {
             projectId: projectId,
             branch: branch,
             title: title,
-            summary: threadSummary
+            summary: threadSummary,
+            createdAt: summary.createdAt
         )
         threadSummaryRevision &+= 1
 
-        let allThreadSummaries = threadStore
+        // Briefings are per day: a chat belongs to the day it was created, and
+        // that day's briefing is rebuilt from the chats started on it.
+        let calendar = Calendar.current
+        let chatDay = threadStore.threadSummaryItem(sessionId: sessionId)?.createdAt ?? summary.createdAt
+        let dayThreadSummaries = threadStore
             .threadSummaryItems(projectId: projectId, branch: branch)
+            .filter { calendar.isDate($0.createdAt, inSameDayAs: chatDay) }
             .map { (title: $0.title, summary: $0.summary) }
         guard let briefing = await generateBranchBriefing(
-            threadSummaries: allThreadSummaries,
+            threadSummaries: dayThreadSummaries,
             summary: summary
         ) else { return }
 
-        threadStore.upsertBranchBriefing(projectId: projectId, branch: branch, briefing: briefing)
+        threadStore.upsertBranchBriefing(projectId: projectId, branch: branch, day: chatDay, briefing: briefing)
         branchBriefingRevision &+= 1
     }
 

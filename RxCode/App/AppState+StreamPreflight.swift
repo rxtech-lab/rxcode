@@ -139,10 +139,10 @@ extension AppState {
 
         let branchBriefingContext: String
         if let branch = await currentBranchAsync,
-           let briefing = threadStore.branchBriefingItem(projectId: projectId, branch: branch) {
+           let briefing = threadStore.combinedBranchBriefing(projectId: projectId, branch: branch) {
             branchBriefingContext = Self.branchBriefingSystemPrompt(
                 branch: branch,
-                briefing: briefing.briefing
+                briefing: briefing
             )
             logPreflight("branchBriefing", detail: "branch=\(branch) contextChars=\(branchBriefingContext.count)")
         } else {

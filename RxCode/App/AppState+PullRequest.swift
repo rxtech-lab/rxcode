@@ -53,9 +53,7 @@ extension AppState {
         }
 
         // 2. Generate the title + body from the branch briefing.
-        let briefing = threadStore.allBranchBriefingItems()
-            .first(where: { $0.projectId == project.id && $0.branch == branch })?
-            .briefing ?? ""
+        let briefing = threadStore.combinedBranchBriefing(projectId: project.id, branch: branch) ?? ""
         let (title, body) = await generateValidatedPullRequestContent(
             briefing: briefing,
             branch: branch,

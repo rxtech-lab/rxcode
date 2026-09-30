@@ -9,9 +9,7 @@ extension BriefingView {
         let projects = projectsWithData
         return HStack(spacing: 8) {
             kindFilterChip
-            if kindFilter != .document {
-                branchScopeChip
-            }
+            timeFilterChip
             projectFilterMenu(projects: projects)
             Spacer(minLength: 0)
         }
@@ -59,41 +57,43 @@ extension BriefingView {
         .help("Choose which kinds of briefing to show.")
     }
 
-    var branchScopeChip: some View {
-        Menu {
-            Button {
-                showAllBranches = false
-            } label: {
-                menuSelectionLabel("Current branch", isSelected: !showAllBranches)
+    var timeFilterChip: some View {
+        let isActive = timeFilter != .all
+        return Menu {
+            ForEach(BriefingTimeFilter.presets, id: \.self) { preset in
+                Button {
+                    timeFilter = preset
+                } label: {
+                    menuSelectionLabel(preset.title, isSelected: timeFilter == preset)
+                }
             }
+            Divider()
             Button {
-                showAllBranches = true
+                showCustomRangeSheet = true
             } label: {
-                menuSelectionLabel("All branches", isSelected: showAllBranches)
+                menuSelectionLabel(String(localized: "Custom Range…"), isSelected: timeFilter.isCustom)
             }
         } label: {
             HStack(spacing: 6) {
-                Image(systemName: showAllBranches ? "arrow.triangle.branch" : "arrow.triangle.branch.fill")
+                Image(systemName: timeFilter.icon)
                     .font(.system(size: 11, weight: .semibold))
-                Text(showAllBranches ? "All branches" : "Current branch")
+                Text(timeFilter.title)
                     .font(.system(size: 11, weight: .semibold))
                     .lineLimit(1)
                 Image(systemName: "chevron.down")
                     .font(.system(size: 9, weight: .semibold))
             }
-            .foregroundStyle(showAllBranches ? ClaudeTheme.textOnAccent : ClaudeTheme.textSecondary)
+            .foregroundStyle(isActive ? ClaudeTheme.textOnAccent : ClaudeTheme.textSecondary)
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
             .background(
                 Capsule(style: .continuous)
-                    .fill(showAllBranches ? ClaudeTheme.accent : ClaudeTheme.surfaceSecondary)
+                    .fill(isActive ? ClaudeTheme.accent : ClaudeTheme.surfaceSecondary)
             )
             .overlay(
                 Capsule(style: .continuous)
                     .strokeBorder(
-                        showAllBranches
-                            ? ClaudeTheme.accent.opacity(0.4)
-                            : ClaudeTheme.border.opacity(0.6),
+                        isActive ? ClaudeTheme.accent.opacity(0.4) : ClaudeTheme.border.opacity(0.6),
                         lineWidth: 0.5
                     )
             )
@@ -101,7 +101,16 @@ extension BriefingView {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .help("Choose which branches to show briefings for.")
+        .help("Show briefings created within a time range.")
+    }
+
+    /// Custom range picker, seeded with the current window (or the last 7 days).
+    var customRangeSheet: some View {
+        let interval = timeFilter.interval() ?? BriefingTimeFilter.last7Days.interval()!
+        let lastDay = Calendar.current.date(byAdding: .day, value: -1, to: interval.end) ?? interval.start
+        return BriefingDateRangeSheet(initialStart: interval.start, initialEnd: lastDay) { start, end in
+            timeFilter = .custom(start: start, end: end)
+        }
     }
 
     @ViewBuilder

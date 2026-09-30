@@ -10,6 +10,10 @@ public struct ThreadSummaryItem: Identifiable, Sendable, Equatable {
     public let title: String
     public let summary: String
     public let updatedAt: Date
+    /// When the chat itself was created. A chat belongs to the briefing of the
+    /// day it was started. Records persisted before this was tracked fall back
+    /// to `updatedAt`.
+    public let createdAt: Date
 
     public init(
         sessionId: String,
@@ -17,7 +21,8 @@ public struct ThreadSummaryItem: Identifiable, Sendable, Equatable {
         branch: String,
         title: String,
         summary: String,
-        updatedAt: Date
+        updatedAt: Date,
+        createdAt: Date? = nil
     ) {
         self.sessionId = sessionId
         self.projectId = projectId
@@ -25,6 +30,7 @@ public struct ThreadSummaryItem: Identifiable, Sendable, Equatable {
         self.title = title
         self.summary = summary
         self.updatedAt = updatedAt
+        self.createdAt = createdAt ?? updatedAt
     }
 
     public static func titleSeed(
@@ -51,7 +57,8 @@ public struct ThreadSummaryItem: Identifiable, Sendable, Equatable {
             branch: branch,
             title: title,
             summary: summary,
-            updatedAt: updatedAt
+            updatedAt: updatedAt,
+            createdAt: createdAt
         )
     }
 }
@@ -64,6 +71,9 @@ public final class ThreadSummaryRecord {
     public var title: String
     public var summary: String
     public var updatedAt: Date
+    /// Creation time of the chat this summary describes. Optional so existing
+    /// stores migrate without a value; backfilled from the chat on launch.
+    public var createdAt: Date?
 
     public init(
         sessionId: String,
@@ -71,8 +81,10 @@ public final class ThreadSummaryRecord {
         branch: String,
         title: String,
         summary: String,
-        updatedAt: Date = .now
+        updatedAt: Date = .now,
+        createdAt: Date? = nil
     ) {
+        self.createdAt = createdAt
         self.sessionId = sessionId
         self.projectId = projectId
         self.branch = branch
@@ -103,7 +115,8 @@ public final class ThreadSummaryRecord {
             branch: branch,
             title: title,
             summary: summary,
-            updatedAt: updatedAt
+            updatedAt: updatedAt,
+            createdAt: createdAt
         )
     }
 }

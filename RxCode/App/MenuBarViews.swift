@@ -274,7 +274,8 @@ struct MenuBarContentView: View {
                 Task { await appState.refreshSelectedAgentRateLimitUsage() }
             }
         )) {
-            ForEach(AgentProvider.allCases, id: \.self) { provider in
+            // ACP has no usage tracking, so it isn't offered in the menubar picker.
+            ForEach(AgentProvider.allCases.filter { $0 != .acp }, id: \.self) { provider in
                 Text(provider.displayName)
                     .tag(provider)
             }
@@ -290,9 +291,13 @@ struct MenuBarContentView: View {
         }
     }
 
+    /// Maximum CI rows shown in the menubar popover. `ciStatusList()` sorts
+    /// failures first, so the cap never hides a failing project behind a passing one.
+    private static let maxCIStatusRows = 5
+
     private var ciStatusRows: [(project: Project, status: ProjectCIStatus)] {
         _ = appState.ciStatusRevision
-        return appState.ciStatusList()
+        return Array(appState.ciStatusList().prefix(Self.maxCIStatusRows))
     }
 
     private var ciStatusSection: some View {

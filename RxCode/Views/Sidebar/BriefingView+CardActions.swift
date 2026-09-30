@@ -49,7 +49,8 @@ extension BriefingView {
     func renderBriefingText(_ group: BriefingGroup) -> String {
         var lines: [String] = []
         let projectName = projectsById[group.projectId]?.name ?? "Unknown project"
-        lines.append("# \(projectName) — \(group.branch)")
+        let day = group.day.formatted(date: .abbreviated, time: .omitted)
+        lines.append("# \(projectName) — \(group.branch) (\(day))")
         lines.append("")
 
         if let briefing = group.briefing {

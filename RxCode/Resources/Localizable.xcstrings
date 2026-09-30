@@ -2989,6 +2989,7 @@
       }
     },
     "All branches" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -3147,6 +3148,9 @@
           }
         }
       }
+    },
+    "All time" : {
+
     },
     "Allow" : {
       "localizations" : {
@@ -5068,6 +5072,7 @@
       }
     },
     "Choose which branches to show briefings for." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -7378,6 +7383,7 @@
       }
     },
     "Current branch" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -7499,6 +7505,12 @@
           }
         }
       }
+    },
+    "Custom Date Range" : {
+
+    },
+    "Custom Range…" : {
+
     },
     "Custom script" : {
       "localizations" : {
@@ -8222,7 +8234,18 @@
         }
       }
     },
+    "Delete the generated briefing for %@ on %@ from %@? Thread summaries will remain available." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Delete the generated briefing for %1$@ on %2$@ from %3$@? Thread summaries will remain available."
+          }
+        }
+      }
+    },
     "Delete the generated briefing for %@ on %@? Thread summaries will remain available." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -10936,6 +10959,9 @@
         }
       }
     },
+    "From" : {
+
+    },
     "from %@" : {
       "localizations" : {
         "ko" : {
@@ -13248,6 +13274,7 @@
       }
     },
     "Loading current branches…" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -22342,6 +22369,12 @@
         }
       }
     },
+    "Show briefings created between these days, inclusive." : {
+
+    },
+    "Show briefings created within a time range." : {
+
+    },
     "Show chat history" : {
       "localizations" : {
         "ko" : {
@@ -25021,6 +25054,9 @@
         }
       }
     },
+    "This month" : {
+
+    },
     "This project" : {
       "localizations" : {
         "ko" : {
@@ -25390,6 +25426,9 @@
           }
         }
       }
+    },
+    "To" : {
+
     },
     "Today" : {
       "localizations" : {

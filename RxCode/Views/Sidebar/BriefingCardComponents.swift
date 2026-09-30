@@ -94,8 +94,8 @@ struct BriefingInfoChip: View {
 
 // MARK: - Card motion
 
-/// Hover lift, scroll-edge fade, and insert/remove transitions for briefing
-/// cards. Motion is skipped when Reduce Motion is on.
+/// Hover lift for briefing cards. Skipped when Reduce Motion is on. Cards live
+/// in the AppKit timeline, so there is deliberately no per-frame scroll effect.
 struct BriefingCardMotion: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovering = false
@@ -111,20 +111,6 @@ struct BriefingCardMotion: ViewModifier {
             )
             .animation(.snappy(duration: 0.2), value: isHovering)
             .onHover { isHovering = $0 }
-            .scrollTransition(.interactive, axis: .vertical) { view, phase in
-                view
-                    .opacity(phase.isIdentity ? 1 : 0.55)
-                    .scaleEffect(phase.isIdentity || reduceMotion ? 1 : 0.97)
-                    .offset(y: reduceMotion ? 0 : phase.value * 10)
-            }
-            .transition(
-                reduceMotion
-                    ? .opacity
-                    : .asymmetric(
-                        insertion: .opacity.combined(with: .scale(scale: 0.96)).combined(with: .offset(y: 12)),
-                        removal: .opacity.combined(with: .scale(scale: 0.96))
-                    )
-            )
     }
 }
 

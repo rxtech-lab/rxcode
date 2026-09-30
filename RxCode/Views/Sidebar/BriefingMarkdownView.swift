@@ -10,7 +10,20 @@ struct BriefingMarkdownView: View {
     var fontSize: CGFloat = 13.5
 
     private var blocks: [Block] {
-        Self.parse(GeneratedTextSanitizer.cleanMarkdownDocument(text))
+        Self.blocks(for: text)
+    }
+
+    /// Parsed blocks and inline runs are cached by source text so re-rendering
+    /// a card (hover, observation updates) doesn't re-parse its markdown.
+    private static let blockCache = NSCache<NSString, CacheBox<[Block]>>()
+    private static let inlineCache = NSCache<NSString, CacheBox<AttributedString>>()
+
+    private static func blocks(for text: String) -> [Block] {
+        let key = text as NSString
+        if let cached = blockCache.object(forKey: key) { return cached.value }
+        let parsed = parse(GeneratedTextSanitizer.cleanMarkdownDocument(text))
+        blockCache.setObject(CacheBox(parsed), forKey: key)
+        return parsed
     }
 
     var body: some View {
@@ -207,6 +220,14 @@ struct BriefingMarkdownView: View {
     }
 
     private static func inline(_ content: String) -> AttributedString {
+        let key = content as NSString
+        if let cached = inlineCache.object(forKey: key) { return cached.value }
+        let rendered = renderInline(content)
+        inlineCache.setObject(CacheBox(rendered), forKey: key)
+        return rendered
+    }
+
+    private static func renderInline(_ content: String) -> AttributedString {
         if var attr = try? AttributedString(
             markdown: content,
             options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
@@ -223,5 +244,13 @@ struct BriefingMarkdownView: View {
             return attr
         }
         return AttributedString(content)
+    }
+}
+
+private final class CacheBox<Value> {
+    let value: Value
+
+    init(_ value: Value) {
+        self.value = value
     }
 }

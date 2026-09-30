@@ -483,7 +483,10 @@ public struct MCPMutationResultPayload: Codable, Sendable {
 }
 
 public struct MobileBranchBriefing: Codable, Sendable, Identifiable, Equatable {
-    public var id: String { "\(projectId.uuidString)::\(branch)" }
+    public var id: String {
+        guard let day else { return "\(projectId.uuidString)::\(branch)" }
+        return "\(projectId.uuidString)::\(branch)::\(day.timeIntervalSinceReferenceDate)"
+    }
 
     public let projectId: UUID
     public let branch: String
@@ -491,13 +494,25 @@ public struct MobileBranchBriefing: Codable, Sendable, Identifiable, Equatable {
     public let updatedAt: Date
     /// First generation time. Older desktops omit it; mobile falls back to updatedAt.
     public let createdAt: Date?
+    /// Start of the calendar day this briefing covers. Desktops split a branch
+    /// worked on across several days into one briefing per day; older
+    /// desktops omit it (one whole-branch briefing).
+    public let day: Date?
 
-    public init(projectId: UUID, branch: String, briefing: String, updatedAt: Date, createdAt: Date? = nil) {
+    public init(
+        projectId: UUID,
+        branch: String,
+        briefing: String,
+        updatedAt: Date,
+        createdAt: Date? = nil,
+        day: Date? = nil
+    ) {
         self.projectId = projectId
         self.branch = branch
         self.briefing = briefing
         self.updatedAt = updatedAt
         self.createdAt = createdAt
+        self.day = day
     }
 }
 
@@ -522,6 +537,9 @@ public struct MobileThreadSummary: Codable, Sendable, Identifiable, Equatable {
     public let title: String
     public let summary: String
     public let updatedAt: Date
+    /// When the chat was created; it belongs to that day's briefing. Older
+    /// desktops omit it.
+    public let createdAt: Date?
 
     public init(
         sessionId: String,
@@ -529,7 +547,8 @@ public struct MobileThreadSummary: Codable, Sendable, Identifiable, Equatable {
         branch: String,
         title: String,
         summary: String,
-        updatedAt: Date
+        updatedAt: Date,
+        createdAt: Date? = nil
     ) {
         self.sessionId = sessionId
         self.projectId = projectId
@@ -537,6 +556,7 @@ public struct MobileThreadSummary: Codable, Sendable, Identifiable, Equatable {
         self.title = title
         self.summary = summary
         self.updatedAt = updatedAt
+        self.createdAt = createdAt
     }
 }
 

@@ -109,8 +109,21 @@ final class ThreadStore {
         return ((try? context.fetch(descriptor)) ?? []).map { $0.toItem() }
     }
 
-    func branchBriefingItem(projectId: UUID, branch: String) -> BranchBriefingItem? {
-        fetchBranchBriefing(projectId: projectId, branch: branch)?.toItem()
+    /// The day briefing for `branch` on the day containing `day`.
+    func branchBriefingItem(projectId: UUID, branch: String, day: Date) -> BranchBriefingItem? {
+        fetchBranchBriefing(id: BranchBriefingRecord.makeId(projectId: projectId, branch: branch, day: Self.startOfDay(day)))?
+            .toItem()
+    }
+
+    /// Every briefing recorded for `branch`, one per day it was worked on.
+    func branchBriefingItems(projectId: UUID, branch: String) -> [BranchBriefingItem] {
+        fetchBranchBriefings(projectId: projectId, branch: branch).map { $0.toItem() }
+    }
+
+    /// The whole branch story: every day's briefing merged oldest first.
+    func combinedBranchBriefing(projectId: UUID, branch: String) -> String? {
+        branchBriefingItems(projectId: projectId, branch: branch)
+            .combinedBriefing(projectId: projectId, branch: branch)
     }
 
     func allBranchBriefingItems() -> [BranchBriefingItem] {
@@ -210,10 +223,14 @@ final class ThreadStore {
         branch: String,
         title: String,
         summary: String,
-        updatedAt: Date = .now
+        updatedAt: Date = .now,
+        createdAt: Date? = nil
     ) {
         if let existing = fetchThreadSummary(sessionId: sessionId) {
             existing.apply(projectId: projectId, branch: branch, title: title, summary: summary, updatedAt: updatedAt)
+            if existing.createdAt == nil {
+                existing.createdAt = createdAt ?? fetch(id: sessionId)?.createdAt ?? updatedAt
+            }
         } else {
             context.insert(ThreadSummaryRecord(
                 sessionId: sessionId,
@@ -221,7 +238,8 @@ final class ThreadStore {
                 branch: branch,
                 title: title,
                 summary: summary,
-                updatedAt: updatedAt
+                updatedAt: updatedAt,
+                createdAt: createdAt ?? fetch(id: sessionId)?.createdAt ?? updatedAt
             ))
         }
         save()
@@ -255,19 +273,31 @@ final class ThreadStore {
                 branch: seed.branch,
                 title: seed.title,
                 summary: seed.summary,
-                updatedAt: seed.updatedAt
+                updatedAt: seed.updatedAt,
+                createdAt: fetch(id: sessionId)?.createdAt ?? seed.updatedAt
             ))
         }
         save()
     }
 
-    func upsertBranchBriefing(projectId: UUID, branch: String, briefing: String, updatedAt: Date = .now) {
-        if let existing = fetchBranchBriefing(projectId: projectId, branch: branch) {
+    /// Upsert the briefing for `branch` on the calendar day containing `day`
+    /// (today by default). Each day a branch is worked on gets its own record.
+    func upsertBranchBriefing(
+        projectId: UUID,
+        branch: String,
+        day: Date = .now,
+        briefing: String,
+        updatedAt: Date = .now
+    ) {
+        let day = Self.startOfDay(day)
+        let id = BranchBriefingRecord.makeId(projectId: projectId, branch: branch, day: day)
+        if let existing = fetchBranchBriefing(id: id) {
             existing.apply(briefing: briefing, updatedAt: updatedAt)
         } else {
             context.insert(BranchBriefingRecord(
                 projectId: projectId,
                 branch: branch,
+                day: day,
                 briefing: briefing,
                 updatedAt: updatedAt,
                 lastSeenAt: updatedAt
@@ -276,21 +306,33 @@ final class ThreadStore {
         save()
     }
 
-    /// Removes only the generated branch briefing. Thread summaries remain
-    /// attached to their threads and can still be used to generate a new one.
+    /// Removes every generated briefing for the branch (all days). Thread
+    /// summaries remain attached to their threads and can still be used to
+    /// generate a new one.
     @discardableResult
     func deleteBranchBriefing(projectId: UUID, branch: String) throws -> Bool {
-        guard let row = fetchBranchBriefing(projectId: projectId, branch: branch) else { return false }
+        let rows = fetchBranchBriefings(projectId: projectId, branch: branch)
+        guard !rows.isEmpty else { return false }
+        for row in rows { context.delete(row) }
+        try context.save()
+        return true
+    }
+
+    /// Removes a single day's generated briefing.
+    @discardableResult
+    func deleteBranchBriefing(id: String) throws -> Bool {
+        guard let row = fetchBranchBriefing(id: id) else { return false }
         context.delete(row)
         try context.save()
         return true
     }
 
-    /// Mark a branch's briefing as recently observed, resetting the TTL used by
+    /// Mark a branch's briefings as recently observed, resetting the TTL used by
     /// `purgeStaleBranchBriefings`. No-op if no record exists.
     func touchBranchBriefing(projectId: UUID, branch: String, at date: Date = .now) {
-        guard let row = fetchBranchBriefing(projectId: projectId, branch: branch) else { return }
-        row.touch(at: date)
+        let rows = fetchBranchBriefings(projectId: projectId, branch: branch)
+        guard !rows.isEmpty else { return }
+        for row in rows { row.touch(at: date) }
         save()
     }
 
@@ -514,13 +556,40 @@ final class ThreadStore {
         context.delete(row)
     }
 
-    private func fetchBranchBriefing(projectId: UUID, branch: String) -> BranchBriefingRecord? {
-        let id = BranchBriefingRecord.makeId(projectId: projectId, branch: branch)
+    private func fetchBranchBriefing(id: String) -> BranchBriefingRecord? {
         var descriptor = FetchDescriptor<BranchBriefingRecord>(
             predicate: #Predicate { $0.id == id }
         )
         descriptor.fetchLimit = 1
         return (try? context.fetch(descriptor))?.first
+    }
+
+    /// Every day's briefing for a branch, newest first.
+    private func fetchBranchBriefings(projectId: UUID, branch: String) -> [BranchBriefingRecord] {
+        let descriptor = FetchDescriptor<BranchBriefingRecord>(
+            predicate: #Predicate { $0.projectId == projectId && $0.branch == branch },
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+        )
+        return (try? context.fetch(descriptor)) ?? []
+    }
+
+    static func startOfDay(_ date: Date) -> Date {
+        Calendar.current.startOfDay(for: date)
+    }
+
+    /// Fill in `createdAt` on thread summaries persisted before it was tracked,
+    /// using the chat's own creation time so each chat lands on the day it was
+    /// started. Summaries whose chat no longer exists fall back to `updatedAt`.
+    func backfillThreadSummaryCreatedAt() {
+        let descriptor = FetchDescriptor<ThreadSummaryRecord>(
+            predicate: #Predicate { $0.createdAt == nil }
+        )
+        let rows = (try? context.fetch(descriptor)) ?? []
+        guard !rows.isEmpty else { return }
+        for row in rows {
+            row.createdAt = fetch(id: row.sessionId)?.createdAt ?? row.updatedAt
+        }
+        save()
     }
 
     // MARK: - Todo Snapshots

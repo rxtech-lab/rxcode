@@ -53,6 +53,7 @@ extension ThreadStore {
             store.finalizeInterruptedCompletionChecks()
             store.pruneUsageBuckets()
             store.pruneRateLimitHistory()
+            store.backfillThreadSummaryCreatedAt()
             return store
         } catch {
             // Fall back to an in-memory container so the app still launches.

@@ -9,8 +9,8 @@ struct BriefingTimelineMarker: Identifiable, Equatable {
     let offset: CGFloat
 }
 
-/// Scroll position of the briefing timeline. Observed only by the scrubber so
-/// scroll updates don't invalidate the whole briefing list.
+/// Scroll position and day markers of the briefing timeline. Observed only by
+/// the scrubber so scroll updates don't invalidate the whole briefing list.
 @Observable
 final class BriefingTimelineScrollMetrics {
     struct Value: Equatable {
@@ -19,6 +19,15 @@ final class BriefingTimelineScrollMetrics {
     }
 
     var value = Value()
+    /// Day-section markers, ordered by their content offset (top to bottom).
+    var markers: [BriefingTimelineMarker] = []
+
+    /// Installed by the timeline table view to perform programmatic scrolls.
+    @ObservationIgnored var scrollHandler: ((CGFloat) -> Void)?
+
+    func scroll(to offset: CGFloat) {
+        scrollHandler?(offset)
+    }
 }
 
 /// Google Photos–style fast-scroll rail shown on the right of the briefing
@@ -27,18 +36,21 @@ final class BriefingTimelineScrollMetrics {
 /// date pill beside the thumb always shows the day currently in view. The pill
 /// stays inside the rail so it never covers briefing content.
 struct BriefingTimelineScrubber: View {
-    /// Day-section markers, ordered by their content offset (top to bottom).
-    let markers: [BriefingTimelineMarker]
     let metrics: BriefingTimelineScrollMetrics
-    let onScrub: (CGFloat) -> Void
+
+    private var markers: [BriefingTimelineMarker] { metrics.markers }
 
     /// Current vertical content offset of the scroll view.
     private var contentOffset: CGFloat { metrics.value.offset }
     /// Largest scrollable offset (`contentHeight - containerHeight`).
     private var maxOffset: CGFloat { metrics.value.maxOffset }
 
-    @State private var isDragging = false
+    /// Pointer y while dragging the rail. Hover events don't fire during a
+    /// drag, so the drag location drives the indicator directly.
+    @State private var dragY: CGFloat?
     @State private var hoverY: CGFloat?
+
+    private var isDragging: Bool { dragY != nil }
 
     private static let verticalInset: CGFloat = 12
     private static let thumbHeight: CGFloat = 26
@@ -59,7 +71,7 @@ struct BriefingTimelineScrubber: View {
         GeometryReader { proxy in
             let trackHeight = max(1, proxy.size.height - Self.verticalInset * 2)
             let thumbY = Self.verticalInset + progress * trackHeight
-            let indicatorY = isDragging ? thumbY : (hoverY ?? thumbY)
+            let indicatorY = dragY.map { clampedTrackY($0, trackHeight: trackHeight) } ?? hoverY ?? thumbY
             let isActive = isDragging || hoverY != nil
             let labelWidth = proxy.size.width - Self.labelTrailingInset
 
@@ -98,11 +110,14 @@ struct BriefingTimelineScrubber: View {
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
-                        isDragging = true
+                        dragY = value.location.y
                         scrub(to: value.location.y, trackHeight: trackHeight)
                     }
-                    .onEnded { _ in
-                        isDragging = false
+                    .onEnded { value in
+                        dragY = nil
+                        // The pointer is still over the rail; keep the pill
+                        // where it was released instead of the pre-drag hover.
+                        hoverY = value.location.y
                     }
             )
             .onContinuousHover { phase in
@@ -120,8 +135,8 @@ struct BriefingTimelineScrubber: View {
         .accessibilityAdjustableAction { direction in
             let step = maxOffset * 0.1
             switch direction {
-            case .increment: onScrub(min(maxOffset, contentOffset + step))
-            case .decrement: onScrub(max(0, contentOffset - step))
+            case .increment: metrics.scroll(to: min(maxOffset, contentOffset + step))
+            case .decrement: metrics.scroll(to: max(0, contentOffset - step))
             @unknown default: break
             }
         }
@@ -139,9 +154,13 @@ struct BriefingTimelineScrubber: View {
         return min(1, max(0, offset / maxOffset)) * trackHeight
     }
 
+    private func clampedTrackY(_ y: CGFloat, trackHeight: CGFloat) -> CGFloat {
+        min(Self.verticalInset + trackHeight, max(Self.verticalInset, y))
+    }
+
     private func scrub(to y: CGFloat, trackHeight: CGFloat) {
         let fraction = min(1, max(0, (y - Self.verticalInset) / trackHeight))
-        onScrub(fraction * maxOffset)
+        metrics.scroll(to: fraction * maxOffset)
     }
 
     /// The last marker whose track position is at or above `trackY`.

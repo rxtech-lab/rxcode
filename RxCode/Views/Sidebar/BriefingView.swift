@@ -10,14 +10,9 @@ struct BriefingView: View {
     /// Selected project ids for filtering. Empty = show every project.
     @State var selectedProjectIds: Set<UUID> = []
 
-    /// When false (default), only show briefings for each project's current branch.
-    @State var showAllBranches: Bool = false
-
-    /// Cached current branch per project path, refreshed when the project list changes.
+    /// Cached current branch per project path, refreshed when the project list
+    /// changes. Only drives the CI / PR chips; the timeline shows every branch.
     @State var currentBranchByProject: [UUID: String] = [:]
-    @State private var branchRefreshTask: Task<Void, Never>?
-    @State private var resolvedProjectIds: Set<UUID> = []
-    @State private var branchesResolved = false
 
     /// Group id whose copy button most recently fired; used for transient checkmark feedback.
     @State var recentlyCopiedGroupId: String?
@@ -29,6 +24,13 @@ struct BriefingView: View {
 
     /// Which kinds of briefing the tab shows.
     @State var kindFilter: KindFilter = .all
+
+    /// Time window the timeline is limited to, matched against each
+    /// briefing's creation time.
+    @State var timeFilter: BriefingTimeFilter = .all
+
+    /// Presents the custom date range picker for `timeFilter`.
+    @State var showCustomRangeSheet = false
 
     enum KindFilter: CaseIterable {
         case all, project, document
@@ -53,7 +55,7 @@ struct BriefingView: View {
     static let maximumSummaryPreviewHeight: CGFloat = 220
     private static let visibleThreadCount = 3
 
-    /// Container width tracked from the scroll content; drives the grid column count.
+    /// Timeline width reported by the table view; drives the grid column count.
     @State var availableWidth: CGFloat = 800
 
     /// Presents the account-level autopilot automation settings form.
@@ -62,27 +64,26 @@ struct BriefingView: View {
     /// Presents the account-level repo-setup template manager.
     @State private var showRepoSetup = false
 
-    /// Drives programmatic scrolling from the timeline scrubber.
-    @State private var scrollPosition = ScrollPosition()
-    /// Live scroll metrics feeding the timeline scrubber. Held in an
-    /// observable box that only the scrubber reads, so scrolling doesn't
+    /// Live scroll metrics and day markers feeding the timeline scrubber. Held
+    /// in an observable box that only the scrubber reads, so scrolling doesn't
     /// re-evaluate this view's body (and rebuild every card) each frame.
     @State private var scrollMetrics = BriefingTimelineScrollMetrics()
-    /// Content offset where each day section starts, keyed by section id.
-    @State var sectionOffsets: [String: CGFloat] = [:]
 
-    static let timelineCoordinateSpace = "briefingTimelineContent"
-
+    /// The work done on one project branch during a single calendar day. A
+    /// branch worked on across several days yields one group per day; each
+    /// chat belongs to the day it was created.
     struct BriefingGroup: Identifiable {
         let projectId: UUID
         let branch: String
+        /// Start of the calendar day this group covers.
+        let day: Date
         let briefing: BranchBriefingItem?
         let threadSummaries: [ThreadSummaryItem]
         let updatedAt: Date
-        /// When the branch briefing was first created. Falls back to the
-        /// oldest thread summary when the branch has no briefing yet.
+        /// Earliest activity recorded for this day — the day briefing's
+        /// creation or the first chat started — used for timeline order.
         let createdAt: Date
-        var id: String { "\(projectId.uuidString)::\(branch)" }
+        var id: String { BranchBriefingRecord.makeId(projectId: projectId, branch: branch, day: day) }
     }
 
     /// One card on the timeline: either a project (branch) summary or a
@@ -162,87 +163,78 @@ struct BriefingView: View {
         _ = appState.branchBriefingRevision
         _ = appState.threadSummaryRevision
 
-        // Position of each project in the sidebar order, used to break ties
-        // between briefings created at the same moment.
-        let projectOrder: [UUID: Int] = Dictionary(
-            uniqueKeysWithValues: appState.projects.enumerated().map { ($0.element.id, $0.offset) }
-        )
-
         let knownIds = knownProjectIds
-        let briefings = appState.threadStore.allBranchBriefingItems()
-            .filter { knownIds.contains($0.projectId) }
-        let summaries = visibleThreadSummaryItems()
+        return Self.dayGroups(
+            briefings: appState.threadStore.allBranchBriefingItems().filter { knownIds.contains($0.projectId) },
+            threads: visibleThreadSummaryItems()
+        )
+    }
 
+    /// Buckets briefings and chat summaries by project, branch and calendar
+    /// day. Chats go to the day they were created; day briefings to their own
+    /// day. A legacy whole-branch briefing (no day) is shown on the day it
+    /// was last updated unless that day already has its own briefing.
+    static func dayGroups(
+        briefings: [BranchBriefingItem],
+        threads: [ThreadSummaryItem],
+        calendar: Calendar = .current
+    ) -> [BriefingGroup] {
         struct Bucket {
             var projectId: UUID
             var branch: String
+            var day: Date
             var briefing: BranchBriefingItem?
-            var threads: [ThreadSummaryItem]
-            var updated: Date
+            var threads: [ThreadSummaryItem] = []
+            var updated: Date = .distantPast
             var created: Date = .distantFuture
         }
 
-        var bucket: [String: Bucket] = [:]
-        for b in briefings {
-            let key = "\(b.projectId.uuidString)::\(b.branch)"
-            var entry = bucket[key] ?? Bucket(projectId: b.projectId, branch: b.branch, briefing: nil, threads: [], updated: .distantPast)
-            entry.briefing = b
-            if b.updatedAt > entry.updated { entry.updated = b.updatedAt }
-            entry.created = b.createdAt
-            bucket[key] = entry
-        }
-        for s in summaries {
-            let key = "\(s.projectId.uuidString)::\(s.branch)"
-            var entry = bucket[key] ?? Bucket(projectId: s.projectId, branch: s.branch, briefing: nil, threads: [], updated: .distantPast)
-            entry.threads.append(s)
-            if s.updatedAt > entry.updated { entry.updated = s.updatedAt }
-            if entry.briefing == nil, s.updatedAt < entry.created { entry.created = s.updatedAt }
-            bucket[key] = entry
+        var buckets: [String: Bucket] = [:]
+        func add(projectId: UUID, branch: String, day: Date, _ update: (inout Bucket) -> Void) {
+            let key = BranchBriefingRecord.makeId(projectId: projectId, branch: branch, day: day)
+            var bucket = buckets[key] ?? Bucket(projectId: projectId, branch: branch, day: day)
+            update(&bucket)
+            buckets[key] = bucket
         }
 
-        return bucket.values
-            .map {
-                BriefingGroup(
-                    projectId: $0.projectId,
-                    branch: $0.branch,
-                    briefing: $0.briefing,
-                    threadSummaries: $0.threads.sorted { $0.updatedAt > $1.updatedAt },
-                    updatedAt: $0.updated,
-                    createdAt: $0.created == .distantFuture ? $0.updated : $0.created
-                )
-            }
-            .sorted { lhs, rhs in
-                // Timeline order: newest briefing first. Ties follow the
-                // sidebar project order, then most-recently-updated.
-                if lhs.createdAt != rhs.createdAt {
-                    return lhs.createdAt > rhs.createdAt
+        // Dated briefings first so a legacy briefing never displaces one.
+        let ordered = briefings.filter { $0.day != nil } + briefings.filter { $0.day == nil }
+        for item in ordered {
+            let day = calendar.startOfDay(for: item.day ?? item.updatedAt)
+            add(projectId: item.projectId, branch: item.branch, day: day) { bucket in
+                guard bucket.briefing == nil else { return }
+                bucket.briefing = item
+                bucket.updated = max(bucket.updated, item.updatedAt)
+                if calendar.isDate(item.createdAt, inSameDayAs: day) {
+                    bucket.created = min(bucket.created, item.createdAt)
                 }
-                let lhsOrder = projectOrder[lhs.projectId] ?? Int.max
-                let rhsOrder = projectOrder[rhs.projectId] ?? Int.max
-                if lhsOrder != rhsOrder {
-                    return lhsOrder < rhsOrder
-                }
-                return lhs.updatedAt > rhs.updatedAt
             }
+        }
+        for thread in threads {
+            let day = calendar.startOfDay(for: thread.createdAt)
+            add(projectId: thread.projectId, branch: thread.branch, day: day) { bucket in
+                bucket.threads.append(thread)
+                bucket.updated = max(bucket.updated, thread.updatedAt)
+                bucket.created = min(bucket.created, thread.createdAt)
+            }
+        }
+
+        return buckets.values.map {
+            BriefingGroup(
+                projectId: $0.projectId,
+                branch: $0.branch,
+                day: $0.day,
+                briefing: $0.briefing,
+                threadSummaries: $0.threads.sorted { $0.updatedAt > $1.updatedAt },
+                updatedAt: $0.updated == .distantPast ? $0.day : $0.updated,
+                createdAt: $0.created == .distantFuture ? $0.day : $0.created
+            )
+        }
     }
 
     private var groups: [BriefingGroup] {
-        let projectFiltered: [BriefingGroup]
-        if selectedProjectIds.isEmpty {
-            projectFiltered = allGroups
-        } else {
-            projectFiltered = allGroups.filter { selectedProjectIds.contains($0.projectId) }
-        }
-
-        if showAllBranches {
-            return projectFiltered
-        }
-        return projectFiltered.filter { group in
-            guard let branch = currentBranchByProject[group.projectId] else {
-                return false
-            }
-            return group.branch == branch
-        }
+        guard !selectedProjectIds.isEmpty else { return allGroups }
+        return allGroups.filter { selectedProjectIds.contains($0.projectId) }
     }
 
     /// Published document briefings matching the project filter. Documents
@@ -264,6 +256,9 @@ struct BriefingView: View {
         }
         if kindFilter != .project {
             result += visibleDocuments.map(BriefingEntry.document)
+        }
+        if let interval = timeFilter.interval() {
+            result = result.filter { $0.createdAt >= interval.start && $0.createdAt < interval.end }
         }
         let projectOrder: [UUID: Int] = Dictionary(
             uniqueKeysWithValues: appState.projects.enumerated().map { ($0.element.id, $0.offset) }
@@ -328,6 +323,9 @@ struct BriefingView: View {
             RepoSetupManageSheet()
                 .environment(appState)
         }
+        .sheet(isPresented: $showCustomRangeSheet) {
+            customRangeSheet
+        }
         .sheet(item: $presentedBriefing) { group in
             briefingSheet(group)
         }
@@ -347,9 +345,11 @@ struct BriefingView: View {
         }
         .sheet(item: $briefingToDelete) { group in
             DeleteBriefingSheet(
-                message: "Delete the generated briefing for \(projectsById[group.projectId]?.name ?? "Unknown project") on \(group.branch)? Thread summaries will remain available."
+                message: "Delete the generated briefing for \(projectsById[group.projectId]?.name ?? "Unknown project") on \(group.branch) from \(group.day.formatted(date: .abbreviated, time: .omitted))? Thread summaries will remain available."
             ) {
-                _ = try appState.deleteBranchBriefing(projectId: group.projectId, branch: group.branch)
+                if let briefing = group.briefing {
+                    _ = try appState.deleteBranchBriefing(briefing)
+                }
             }
         }
     }
@@ -365,14 +365,6 @@ struct BriefingView: View {
             || !visibleThreadSummaryItems().isEmpty
     }
 
-    /// Branch lookups still pending for the projects the timeline shows. The
-    /// focused project resolves first, so a scoped timeline appears quickly.
-    private var isResolvingBranches: Bool {
-        selectedProjectIds.isEmpty
-            ? !branchesResolved
-            : !selectedProjectIds.isSubset(of: resolvedProjectIds)
-    }
-
     private var projectPathsKey: String {
         appState.projects
             .map { "\($0.id.uuidString):\($0.path)" }
@@ -380,8 +372,6 @@ struct BriefingView: View {
     }
 
     private func refreshCurrentBranches() async {
-        branchesResolved = false
-        resolvedProjectIds = []
         currentBranchByProject = [:]
         let selectedId = focusedProject?.id
         let orderedProjects = appState.projects.filter { $0.id == selectedId }
@@ -392,69 +382,59 @@ struct BriefingView: View {
                 currentBranchByProject[project.id] = branch
             }
             guard !Task.isCancelled else { return }
-            resolvedProjectIds.insert(project.id)
         }
-        branchesResolved = true
     }
 
     private var content: some View {
         let entries = self.entries
         let sections = daySections(entries)
+        let showsScrubber = sections.count > 1
         return HStack(spacing: 0) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    hero(entries: entries)
-                    filterBar
-                    BriefingUsageStatsView(projectIds: selectedProjectIds)
-
-                    if isResolvingBranches && !showAllBranches && kindFilter != .document {
-                        ProgressView("Loading current branches…")
-                            .frame(maxWidth: .infinity, minHeight: 240)
-                    } else if sections.isEmpty {
-                        filteredEmptyState
-                    } else {
-                        ForEach(sections) { section in
-                            daySection(section)
-                        }
-                    }
-                }
-                .padding(.horizontal, 28)
-                .padding(.top, 24)
-                .padding(.bottom, 40)
-                .frame(maxWidth: 1400, alignment: .leading)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-                .coordinateSpace(name: Self.timelineCoordinateSpace)
-                .background(
-                    GeometryReader { proxy in
-                        Color.clear
-                            .onChange(of: proxy.size.width, initial: true) { _, newValue in
-                                availableWidth = newValue
-                            }
-                    }
-                )
-            }
-            .scrollPosition($scrollPosition)
-            .scrollIndicators(sections.count > 1 ? .hidden : .automatic)
-            .onScrollGeometryChange(for: BriefingTimelineScrollMetrics.Value.self) { geometry in
-                BriefingTimelineScrollMetrics.Value(
-                    offset: geometry.contentOffset.y + geometry.contentInsets.top,
-                    maxOffset: max(0, geometry.contentSize.height - geometry.containerSize.height
-                        + geometry.contentInsets.top + geometry.contentInsets.bottom)
-                )
-            } action: { _, newValue in
-                scrollMetrics.value = newValue
+            BriefingTimelineTableView(
+                rows: timelineRows(entries: entries, sections: sections),
+                anchors: sections.map {
+                    BriefingTimelineSectionAnchor(id: $0.id, date: $0.day, rowId: Self.sectionTitleRowId($0))
+                },
+                metrics: scrollMetrics,
+                showsScroller: !showsScrubber
+            ) { width in
+                availableWidth = width
             }
 
-            if sections.count > 1 {
-                BriefingTimelineScrubber(
-                    markers: timelineMarkers(sections),
-                    metrics: scrollMetrics
-                ) { offset in
-                    scrollPosition.scrollTo(y: offset)
-                }
-                .padding(.trailing, 8)
+            if showsScrubber {
+                BriefingTimelineScrubber(metrics: scrollMetrics)
+                    .padding(.trailing, 8)
             }
         }
+    }
+
+    /// Header, empty state, and the day sections, as full-width rows
+    /// of the AppKit timeline.
+    private func timelineRows(entries: [BriefingEntry], sections: [BriefingDaySection]) -> [BriefingTimelineRow] {
+        var rows = [
+            BriefingTimelineRow(id: "header", estimatedHeight: 300) {
+                AnyView(
+                    VStack(alignment: .leading, spacing: 24) {
+                        hero(entries: entries)
+                        filterBar
+                        BriefingUsageStatsView(projectIds: selectedProjectIds)
+                    }
+                    .padding(.top, 24)
+                    .briefingTimelineRowInsets()
+                )
+            }
+        ]
+        if sections.isEmpty {
+            rows.append(BriefingTimelineRow(id: "empty", estimatedHeight: 260) {
+                AnyView(filteredEmptyState.briefingTimelineRowInsets())
+            })
+        } else {
+            rows += sections.flatMap(sectionRows)
+        }
+        rows.append(BriefingTimelineRow(id: "footer", estimatedHeight: 40) {
+            AnyView(Color.clear.frame(height: 40))
+        })
+        return rows
     }
 
     // MARK: - Hero
@@ -537,10 +517,9 @@ struct BriefingView: View {
         let briefings = count == 1 ? "briefing" : "briefings"
         let projectCount = Set(entries.compactMap(\.projectId)).count
         let projects = projectCount == 1 ? "project" : "projects"
-        if selectedProjectIds.isEmpty {
-            return "\(count) \(briefings) across \(projectCount) \(projects)."
-        }
-        return "\(count) \(briefings) across \(projectCount) selected \(projects)."
+        let selected = selectedProjectIds.isEmpty ? "" : "selected "
+        let period = timeFilter == .all ? "" : " · \(timeFilter.title)"
+        return "\(count) \(briefings) across \(projectCount) \(selected)\(projects)\(period)."
     }
 
     // MARK: - Group card

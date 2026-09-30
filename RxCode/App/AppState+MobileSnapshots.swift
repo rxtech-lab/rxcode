@@ -467,7 +467,8 @@ extension AppState {
                     branch: $0.branch,
                     briefing: $0.briefing,
                     updatedAt: $0.updatedAt,
-                    createdAt: $0.createdAt
+                    createdAt: $0.createdAt,
+                    day: $0.day
                 )
             }
     }
@@ -485,7 +486,8 @@ extension AppState {
                     branch: $0.branch,
                     title: $0.title,
                     summary: $0.summary,
-                    updatedAt: $0.updatedAt
+                    updatedAt: $0.updatedAt,
+                    createdAt: $0.createdAt
                 )
             }
     }

@@ -700,7 +700,8 @@ func groupBriefings(
 ) -> [GroupedBriefing] {
     var buckets: [String: GroupedBriefing] = [:]
 
-    for briefing in briefings {
+    // A branch can carry one briefing per day; show the most recent one.
+    for briefing in briefings.sorted(by: { $0.updatedAt < $1.updatedAt }) {
         let key = "\(briefing.projectId.uuidString)::\(briefing.branch)"
         buckets[key] = GroupedBriefing(
             projectId: briefing.projectId,

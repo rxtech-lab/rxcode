@@ -3149,6 +3149,9 @@
         }
       }
     },
+    "All time" : {
+
+    },
     "Allow" : {
       "localizations" : {
         "en" : {
@@ -7503,6 +7506,12 @@
         }
       }
     },
+    "Custom Date Range" : {
+
+    },
+    "Custom Range…" : {
+
+    },
     "Custom script" : {
       "localizations" : {
         "ko" : {
@@ -10949,6 +10958,9 @@
           }
         }
       }
+    },
+    "From" : {
+
     },
     "from %@" : {
       "localizations" : {
@@ -22357,6 +22369,12 @@
         }
       }
     },
+    "Show briefings created between these days, inclusive." : {
+
+    },
+    "Show briefings created within a time range." : {
+
+    },
     "Show chat history" : {
       "localizations" : {
         "ko" : {
@@ -25036,6 +25054,9 @@
         }
       }
     },
+    "This month" : {
+
+    },
     "This project" : {
       "localizations" : {
         "ko" : {
@@ -25405,6 +25426,9 @@
           }
         }
       }
+    },
+    "To" : {
+
     },
     "Today" : {
       "localizations" : {

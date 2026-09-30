@@ -118,8 +118,8 @@ extension BriefingView {
 
     var filteredEmptyState: some View {
         let message = kindFilter == .document
-            ? "No document briefings match the selected projects."
-            : "No briefings match the selected projects."
+            ? "No document briefings match the selected projects and time range."
+            : "No briefings match the selected projects and time range."
         return emptyState(
             icon: "line.3.horizontal.decrease.circle",
             title: "Nothing to Show",

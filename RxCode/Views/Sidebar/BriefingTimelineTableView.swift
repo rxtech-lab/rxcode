@@ -357,6 +357,10 @@ struct BriefingTimelineTableView: NSViewRepresentable {
             let hostingView = NSHostingView(rootView: rootView(for: timelineRow))
             // The table owns the frame; the row reports its natural height itself.
             hostingView.sizingOptions = []
+            // Rows scroll under the transparent titlebar. With safe areas on, the
+            // row's insets change every scroll frame, which re-lays out the whole
+            // row (text, fixedSize, onGeometryChange) on the main thread.
+            hostingView.safeAreaRegions = []
             hostingViews[timelineRow.id] = hostingView
             return hostingView
         }

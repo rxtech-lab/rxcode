@@ -25,6 +25,13 @@ struct BriefingView: View {
     /// Which kinds of briefing the tab shows.
     @State var kindFilter: KindFilter = .all
 
+    /// Time window the timeline is limited to, matched against each
+    /// briefing's creation time.
+    @State var timeFilter: BriefingTimeFilter = .all
+
+    /// Presents the custom date range picker for `timeFilter`.
+    @State var showCustomRangeSheet = false
+
     enum KindFilter: CaseIterable {
         case all, project, document
 
@@ -250,6 +257,9 @@ struct BriefingView: View {
         if kindFilter != .project {
             result += visibleDocuments.map(BriefingEntry.document)
         }
+        if let interval = timeFilter.interval() {
+            result = result.filter { $0.createdAt >= interval.start && $0.createdAt < interval.end }
+        }
         let projectOrder: [UUID: Int] = Dictionary(
             uniqueKeysWithValues: appState.projects.enumerated().map { ($0.element.id, $0.offset) }
         )
@@ -312,6 +322,9 @@ struct BriefingView: View {
         .sheet(isPresented: $showRepoSetup) {
             RepoSetupManageSheet()
                 .environment(appState)
+        }
+        .sheet(isPresented: $showCustomRangeSheet) {
+            customRangeSheet
         }
         .sheet(item: $presentedBriefing) { group in
             briefingSheet(group)
@@ -504,10 +517,9 @@ struct BriefingView: View {
         let briefings = count == 1 ? "briefing" : "briefings"
         let projectCount = Set(entries.compactMap(\.projectId)).count
         let projects = projectCount == 1 ? "project" : "projects"
-        if selectedProjectIds.isEmpty {
-            return "\(count) \(briefings) across \(projectCount) \(projects)."
-        }
-        return "\(count) \(briefings) across \(projectCount) selected \(projects)."
+        let selected = selectedProjectIds.isEmpty ? "" : "selected "
+        let period = timeFilter == .all ? "" : " · \(timeFilter.title)"
+        return "\(count) \(briefings) across \(projectCount) \(selected)\(projects)\(period)."
     }
 
     // MARK: - Group card

@@ -9,6 +9,7 @@ extension BriefingView {
         let projects = projectsWithData
         return HStack(spacing: 8) {
             kindFilterChip
+            timeFilterChip
             projectFilterMenu(projects: projects)
             Spacer(minLength: 0)
         }
@@ -54,6 +55,62 @@ extension BriefingView {
         .menuIndicator(.hidden)
         .fixedSize()
         .help("Choose which kinds of briefing to show.")
+    }
+
+    var timeFilterChip: some View {
+        let isActive = timeFilter != .all
+        return Menu {
+            ForEach(BriefingTimeFilter.presets, id: \.self) { preset in
+                Button {
+                    timeFilter = preset
+                } label: {
+                    menuSelectionLabel(preset.title, isSelected: timeFilter == preset)
+                }
+            }
+            Divider()
+            Button {
+                showCustomRangeSheet = true
+            } label: {
+                menuSelectionLabel(String(localized: "Custom Range…"), isSelected: timeFilter.isCustom)
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: timeFilter.icon)
+                    .font(.system(size: 11, weight: .semibold))
+                Text(timeFilter.title)
+                    .font(.system(size: 11, weight: .semibold))
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+            }
+            .foregroundStyle(isActive ? ClaudeTheme.textOnAccent : ClaudeTheme.textSecondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(isActive ? ClaudeTheme.accent : ClaudeTheme.surfaceSecondary)
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .strokeBorder(
+                        isActive ? ClaudeTheme.accent.opacity(0.4) : ClaudeTheme.border.opacity(0.6),
+                        lineWidth: 0.5
+                    )
+            )
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Show briefings created within a time range.")
+    }
+
+    /// Custom range picker, seeded with the current window (or the last 7 days).
+    var customRangeSheet: some View {
+        let interval = timeFilter.interval() ?? BriefingTimeFilter.last7Days.interval()!
+        let lastDay = Calendar.current.date(byAdding: .day, value: -1, to: interval.end) ?? interval.start
+        return BriefingDateRangeSheet(initialStart: interval.start, initialEnd: lastDay) { start, end in
+            timeFilter = .custom(start: start, end: end)
+        }
     }
 
     @ViewBuilder

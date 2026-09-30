@@ -104,7 +104,12 @@ final class GlobalChatTests: XCTestCase {
             ], forCwd: cwd)
 
             let streamId = await appState.sendPrompt("Hello", includeIDEMCP: false, in: window)
-            let completion = await appState.awaitStreamCompletion(streamId: try XCTUnwrap(streamId), timeout: 10)
+            // Wait for the finalized turn, not the first partial reply: the
+            // follow-up below must resume a finished turn rather than
+            // interrupt one that is still streaming.
+            let completion = await appState.awaitStreamCompletion(
+                streamId: try XCTUnwrap(streamId), timeout: 30, acceptsPartial: false
+            )
             XCTAssertNotNil(completion, "No completion for \(provider)")
             XCTAssertNil(completion?.error)
             XCTAssertEqual(window.currentSessionId, sessionId)
@@ -114,8 +119,10 @@ final class GlobalChatTests: XCTestCase {
             XCTAssertTrue(appState.messages(in: window).contains { $0.content.contains("Hello from the agent") })
 
             let followup = await appState.sendPrompt("Continue", includeIDEMCP: false, in: window)
-            let resumed = await appState.awaitStreamCompletion(streamId: try XCTUnwrap(followup), timeout: 10)
-            XCTAssertNotNil(resumed)
+            let resumed = await appState.awaitStreamCompletion(
+                streamId: try XCTUnwrap(followup), timeout: 30, acceptsPartial: false
+            )
+            XCTAssertNotNil(resumed, "No follow-up completion for \(provider)")
             let requests = await backend.receivedRequests
             XCTAssertEqual(requests.count, 2)
             XCTAssertEqual(requests.last?.cwd, cwd)

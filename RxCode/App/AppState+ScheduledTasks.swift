@@ -61,6 +61,51 @@ extension AppState {
         task.agent.isAssigned ? task.agent : defaultTaskAgent()
     }
 
+    // MARK: - Scheduler
+
+    /// How often the scheduler checks for due tasks. Cron is minute-granular,
+    /// so a shorter tick only matters for how late within the minute a run starts.
+    static let scheduledTaskCheckInterval: Duration = .seconds(20)
+
+    /// Starts the loop that runs enabled tasks when their schedule comes due.
+    /// Fires missed while the app was closed are skipped; fires missed while
+    /// the Mac slept run once on the next check.
+    func startScheduledTaskTimer() {
+        guard scheduledTaskTimer == nil else { return }
+        scheduledTaskTimer = Task { [weak self] in
+            // Fires between one check and the next run once.
+            var lastCheck = Date.now
+            while !Task.isCancelled {
+                try? await Task.sleep(for: AppState.scheduledTaskCheckInterval)
+                guard !Task.isCancelled else { return }
+                let now = Date.now
+                self?.runDueScheduledTasks(since: lastCheck, now: now)
+                lastCheck = now
+            }
+        }
+    }
+
+    /// Runs every enabled task whose schedule fired after `since` and by `now`.
+    func runDueScheduledTasks(since: Date, now: Date) {
+        for task in dueScheduledTasks(since: since, now: now) {
+            logger.info("[Scheduled] firing task \(task.id.uuidString, privacy: .public)")
+            Task { [weak self] in
+                await self?.runScheduledTask(task, trigger: .schedule)
+            }
+        }
+    }
+
+    /// Enabled, idle tasks whose schedule fired after `since` and by `now`.
+    func dueScheduledTasks(since: Date, now: Date, calendar: Calendar = .current) -> [ScheduledTask] {
+        scheduledTasks.filter { task in
+            guard task.isEnabled,
+                  !isScheduledTaskRunning(task.id),
+                  let next = task.nextRunDate(after: since, calendar: calendar)
+            else { return false }
+            return next <= now
+        }
+    }
+
     // MARK: - Running
 
     /// Starts one run of `task` in a new chat thread of its project (or Chat

@@ -368,6 +368,8 @@ final class AppState {
     /// Resumes the `ide__create_scheduled_task` call waiting on each proposal,
     /// keyed by proposal id.
     @ObservationIgnored var scheduledTaskProposalContinuations: [UUID: CheckedContinuation<ScheduledTask?, Never>] = [:]
+    /// The loop that fires scheduled tasks when their cron schedule comes due.
+    @ObservationIgnored var scheduledTaskTimer: Task<Void, Never>?
 
     /// Selected default ACP client id (when `selectedAgentProvider == .acp`).
     var selectedACPClientId: String = "" {

@@ -296,6 +296,7 @@ extension AppState {
         // Settings tab don't flash empty on first open.
         await loadACPClientsFromDisk()
         await loadScheduledTasksFromDisk()
+        startScheduledTaskTimer()
         await loadBriefingNotificationSettings()
         Task { [weak self] in await self?.refreshACPRegistry(forceRefresh: false) }
 

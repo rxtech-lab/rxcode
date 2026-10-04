@@ -41,6 +41,24 @@ final class ScheduledTaskStateTests: XCTestCase {
         _ = try await waitForPersistedScheduledTasks { $0.isEmpty }
     }
 
+    func testDueScheduledTasksFiresOnceWhenScheduleComesDue() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        func at(_ hour: Int, _ minute: Int, _ second: Int) -> Date {
+            calendar.date(from: DateComponents(year: 2026, month: 10, day: 4, hour: hour, minute: minute, second: second))!
+        }
+        let task = ScheduledTask(name: "News", prompt: "Roundup", cronExpression: "0 7,19 * * *")
+        var paused = ScheduledTask(name: "Paused", prompt: "Roundup", cronExpression: "0 7,19 * * *")
+        paused.isEnabled = false
+        appState.scheduledTasks = [task, paused]
+
+        XCTAssertTrue(appState.dueScheduledTasks(since: at(18, 59, 40), now: at(18, 59, 59), calendar: calendar).isEmpty)
+        XCTAssertEqual(appState.dueScheduledTasks(since: at(18, 59, 50), now: at(19, 0, 10), calendar: calendar).map(\.id), [task.id])
+        XCTAssertTrue(appState.dueScheduledTasks(since: at(19, 0, 10), now: at(19, 0, 30), calendar: calendar).isEmpty)
+        // A fire missed while the Mac slept runs once on wake.
+        XCTAssertEqual(appState.dueScheduledTasks(since: at(18, 0, 0), now: at(21, 0, 0), calendar: calendar).map(\.id), [task.id])
+    }
+
     /// Scheduled-task saves run on a detached `Task`; waits for the mock to
     /// hold a list satisfying `condition`.
     private func waitForPersistedScheduledTasks(

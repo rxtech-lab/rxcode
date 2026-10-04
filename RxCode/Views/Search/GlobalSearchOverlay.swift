@@ -27,7 +27,7 @@ struct GlobalSearchOverlay: View {
 
         var id: String { rawValue }
 
-        var title: String {
+        var title: LocalizedStringKey {
             switch self {
             case .all: return "All"
             case .threads: return "Threads"
@@ -303,7 +303,7 @@ struct GlobalSearchOverlay: View {
         }
     }
 
-    private var sectionHeader: String {
+    private var sectionHeader: LocalizedStringKey {
         if let title = currentThreadTitle, !title.isEmpty {
             return "In this thread · \(title)"
         }
@@ -381,13 +381,13 @@ struct GlobalSearchOverlay: View {
 
     @ViewBuilder
     private func projectSection(_ group: ThreadSearchService.Group) -> some View {
-        let project = appState.projects.first(where: { $0.id == group.projectId })
+        let project = appState.sessionProject(id: group.projectId)
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 Image(systemName: "folder.fill")
                     .font(.system(size: ClaudeTheme.size(11)))
                     .foregroundStyle(ClaudeTheme.textTertiary)
-                Text(project?.name ?? "Unknown project")
+                Text(project?.name ?? String(localized: "Unknown project"))
                     .font(.system(size: ClaudeTheme.size(11), weight: .semibold))
                     .foregroundStyle(ClaudeTheme.textTertiary)
                     .textCase(.uppercase)
@@ -405,7 +405,7 @@ struct GlobalSearchOverlay: View {
 
     private func resultRow(hit: ThreadSearchService.Hit) -> some View {
         let summary = appState.allSessionSummaries.first(where: { $0.id == hit.threadId })
-        let title = summary?.title ?? "Untitled thread"
+        let title = summary?.title ?? String(localized: "Untitled thread")
         let snippet = displaySnippet(hit: hit, title: title)
         let threadSummary = appState.threadStore.threadSummaryItem(sessionId: hit.threadId)?.summary
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -694,16 +694,7 @@ struct GlobalSearchOverlay: View {
             // Drop the current thread from the semantic groups when we already
             // have in-thread literal matches — same thread shouldn't appear twice.
             let currentId = inThreadHits.isEmpty ? nil : windowState.currentSessionId
-            // Hide hits that belong to a project no longer in the projects list.
-            // These are orphans from a deleted project; surfacing them as
-            // "Unknown project" is confusing, so we drop them from the results.
-            let knownProjectIds = Set(appState.projects.map(\.id))
-            groups = results.compactMap { group in
-                guard knownProjectIds.contains(group.projectId) else { return nil }
-                let filtered = group.hits.filter { $0.threadId != currentId }
-                guard !filtered.isEmpty else { return nil }
-                return ThreadSearchService.Group(projectId: group.projectId, hits: filtered)
-            }
+            groups = appState.globalSearchGroups(results, excluding: currentId)
             hasSearched = true
         }
         isSearchingThreads = false

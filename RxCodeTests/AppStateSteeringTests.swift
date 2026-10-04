@@ -1,0 +1,395 @@
+import RxCodeCore
+import XCTest
+@testable import RxCode
+
+/// Covers what happens when the user sends a second message while a turn is
+/// still running.
+///
+/// The default is the queue: the message waits for the running turn to end.
+/// From there the user picks — "steer now" hands it to the turn already in
+/// flight, "send now" interrupts that turn and starts a new one. What matters
+/// in each case is that the message is never lost and the turn is never
+/// cancelled without the user asking for it.
+@MainActor
+final class AppStateSteeringTests: XCTestCase {
+
+    private var appState: AppState!
+    private var mockBackend: MockAgentBackend!
+    private var window: WindowState!
+    private var project: Project!
+    private var sessionKey: String!
+    private var defaultsSnapshot: [String: Any?] = [:]
+
+    override func setUp() async throws {
+        defaultsSnapshot = [
+            "selectedAgentProvider": UserDefaults.standard.object(forKey: "selectedAgentProvider"),
+            "selectedModel": UserDefaults.standard.object(forKey: "selectedModel"),
+        ]
+        UserDefaults.standard.set("claudeCode", forKey: "selectedAgentProvider")
+
+        appState = AppState(startBackgroundServices: false)
+        appState.selectedAgentProvider = .claudeCode
+
+        mockBackend = MockAgentBackend(provider: .claudeCode)
+        appState.agentBackendOverrides[.claudeCode] = mockBackend
+        appState.agentBackendOverrides[.codex] = mockBackend
+        appState.agentBackendOverrides[.acp] = mockBackend
+
+        project = Project(
+            name: "steering",
+            path: "/tmp/rxcode-steering-\(UUID().uuidString)",
+            gitHubRepo: nil
+        )
+        appState.projects = [project]
+
+        sessionKey = "thread-\(UUID().uuidString)"
+        window = WindowState()
+        window.selectedProject = project
+        window.currentSessionId = sessionKey
+    }
+
+    override func tearDown() async throws {
+        for key in appState.sessionStates.keys where appState.sessionStates[key]?.isStreaming == true {
+            appState.sessionStates[key]?.streamTask?.cancel()
+            appState.sessionStates[key]?.flushTask?.cancel()
+        }
+        appState.threadStore.clearQueue(sessionKey: sessionKey)
+        window = nil
+        mockBackend = nil
+        appState = nil
+        for (key, value) in defaultsSnapshot {
+            if let value {
+                UserDefaults.standard.set(value, forKey: key)
+            } else {
+                UserDefaults.standard.removeObject(forKey: key)
+            }
+        }
+    }
+
+    /// Puts the session into the state a live turn leaves it in.
+    private func beginStreaming(messages: [ChatMessage] = []) {
+        var state = SessionStreamState()
+        state.isStreaming = true
+        state.activeStreamId = UUID()
+        state.messages = messages
+        appState.sessionStates[sessionKey] = state
+    }
+
+    private func linkedTask() -> ProjectTask {
+        let task = ProjectTask(
+            projectId: project.id,
+            title: "Finish the feature",
+            status: .inProgress,
+            agent: TaskAgentConfig(provider: .claudeCode, model: "opus"),
+            sessionKey: sessionKey
+        )
+        appState.taskBoards[project.id] = TaskBoard(tasks: [task])
+        appState.allSessionSummaries = [ChatSession.Summary(
+            id: sessionKey,
+            projectId: project.id,
+            title: task.title,
+            createdAt: Date(),
+            updatedAt: Date(),
+            isPinned: false,
+            agentProvider: .claudeCode
+        )]
+        return task
+    }
+
+    // MARK: - The default: queue
+
+    /// Sending mid-turn queues. Steering is an override the user reaches for on
+    /// the queued row, not something that happens to them on send.
+    func testSendWhileStreamingQueuesAndDoesNotSteer() async {
+        await mockBackend.setAcceptsSteering(true)
+        beginStreaming()
+
+        appState.enqueueMessage(text: "also check the tests", attachments: [], in: window)
+
+        XCTAssertEqual(window.messageQueue.map(\.text), ["also check the tests"])
+        let steered = await mockBackend.steeredPrompts
+        XCTAssertTrue(steered.isEmpty, "Nothing reaches the agent until the user says when")
+        XCTAssertTrue(appState.sessionStates[sessionKey]?.isStreaming ?? false)
+    }
+
+    // MARK: - Steering
+
+    func testTaskSheetSteersItsQueuedMessageIntoTheRunningTurn() async {
+        await mockBackend.setAcceptsSteering(true)
+        let task = linkedTask()
+        beginStreaming(messages: [ChatMessage(role: .user, content: "initial task")])
+
+        XCTAssertTrue(appState.queueTaskFollowUp(task, text: "check the sync flow", attachments: []))
+        let queued = appState.queuedTaskMessages(for: task)
+        XCTAssertEqual(queued.map(\.text), ["check the sync flow"])
+        XCTAssertTrue(appState.canSteerTask(task))
+
+        let steered = await appState.steerQueuedTaskMessage(id: queued[0].id, for: task)
+        let prompts = await mockBackend.steeredPrompts
+
+        XCTAssertTrue(steered)
+        XCTAssertEqual(prompts, ["check the sync flow"])
+        XCTAssertTrue(appState.queuedTaskMessages(for: task).isEmpty)
+        XCTAssertEqual(appState.sessionStates[sessionKey]?.messages.map(\.content), ["initial task", "check the sync flow"])
+        XCTAssertTrue(appState.sessionStates[sessionKey]?.isStreaming ?? false)
+    }
+
+    func testDeclinedTaskSheetSteerRemainsQueued() async {
+        await mockBackend.setAcceptsSteering(false)
+        let task = linkedTask()
+        beginStreaming()
+        XCTAssertTrue(appState.queueTaskFollowUp(task, text: "send after this turn", attachments: []))
+        let queued = appState.queuedTaskMessages(for: task)
+
+        let steered = await appState.steerQueuedTaskMessage(id: queued[0].id, for: task)
+
+        XCTAssertFalse(steered)
+        XCTAssertEqual(appState.queuedTaskMessages(for: task).map(\.text), ["send after this turn"])
+        XCTAssertTrue(appState.sessionStates[sessionKey]?.isStreaming ?? false)
+    }
+
+    func testSteerQueuedMessageDeliversItIntoTheRunningTurn() async {
+        await mockBackend.setAcceptsSteering(true)
+        beginStreaming()
+        appState.enqueueMessage(text: "queued one", attachments: [], in: window)
+        appState.enqueueMessage(text: "queued two", attachments: [], in: window)
+        let target = window.messageQueue[0].id
+
+        let steered = await appState.steerQueuedMessage(id: target, in: window)
+
+        XCTAssertTrue(steered)
+        let prompts = await mockBackend.steeredPrompts
+        XCTAssertEqual(prompts, ["queued one"])
+        XCTAssertEqual(
+            window.messageQueue.map(\.text),
+            ["queued two"],
+            "Only the steered message leaves the queue"
+        )
+    }
+
+    /// The steered text never passes through `sendPrompt`, so nothing else
+    /// would put it in the transcript — without this the user watches their
+    /// message vanish while the agent silently acts on it.
+    func testSteeredMessageIsAppendedToTheTranscript() async {
+        await mockBackend.setAcceptsSteering(true)
+        beginStreaming(messages: [ChatMessage(role: .user, content: "first")])
+        appState.enqueueMessage(text: "and also this", attachments: [], in: window)
+
+        await appState.steerQueuedMessage(id: window.messageQueue[0].id, in: window)
+
+        let state = appState.sessionStates[sessionKey]
+        XCTAssertEqual(state?.messages.map(\.content), ["first", "and also this"])
+        XCTAssertEqual(state?.messages.last?.role, .user)
+        XCTAssertTrue(
+            state?.needsNewMessage ?? false,
+            "The agent's next delta must open a new bubble rather than extend the one it was mid-way through"
+        )
+    }
+
+    func testSteeringLeavesTheTurnRunning() async {
+        await mockBackend.setAcceptsSteering(true)
+        beginStreaming()
+        let streamId = appState.sessionStates[sessionKey]?.activeStreamId
+        appState.enqueueMessage(text: "keep going but also…", attachments: [], in: window)
+
+        await appState.steerQueuedMessage(id: window.messageQueue[0].id, in: window)
+
+        XCTAssertTrue(appState.sessionStates[sessionKey]?.isStreaming ?? false)
+        XCTAssertEqual(
+            appState.sessionStates[sessionKey]?.activeStreamId,
+            streamId,
+            "Steering must not start a new turn"
+        )
+    }
+
+    /// A steer that lands after the turn's last tool call is run by Claude
+    /// Code as a turn of its own, after the first turn's `result`. That
+    /// `result` must not end the stream — finalizing there kills the CLI
+    /// before it answers the steer, and the task board then judges (and moves)
+    /// a task on a turn that never saw the follow-up.
+    func testResultBeforeASteerIsTakenKeepsTheTurnRunning() async throws {
+        await mockBackend.setAcceptsSteering(true)
+        await mockBackend.enqueueScript(
+            [
+                .systemInit(sessionId: sessionKey),
+                .userReplay("finish the feature"),
+                MockAgentBackend.Step(delay: 0.01, event: .textDelta("Done with the feature.")),
+                .result(sessionId: sessionKey, delay: 0.8),
+                .systemInit(sessionId: sessionKey, delay: 0.6),
+                .userReplay("also say PINEAPPLE"),
+                MockAgentBackend.Step(delay: 0.01, event: .textDelta("PINEAPPLE")),
+                .result(sessionId: sessionKey),
+            ],
+            forCwd: project.path
+        )
+
+        let maybeStreamId = await appState.sendPrompt("finish the feature", in: window)
+        let streamId = try XCTUnwrap(maybeStreamId)
+        try await Task.sleep(nanoseconds: 400_000_000)
+        let steered = await appState.steerActiveStream(text: "also say PINEAPPLE", attachments: [], in: window)
+        XCTAssertTrue(steered)
+
+        // Between the two results: the first one only yielded.
+        try await Task.sleep(nanoseconds: 700_000_000)
+        XCTAssertTrue(appState.stateForSession(sessionKey).isStreaming, "The first result must not end a turn with a steer still pending")
+        XCTAssertEqual(appState.stateForSession(sessionKey).activeStreamId, streamId)
+
+        _ = await appState.awaitStreamCompletion(streamId: streamId, timeout: 5, acceptsPartial: false)
+        let state = appState.stateForSession(sessionKey)
+        XCTAssertFalse(state.isStreaming)
+        XCTAssertEqual(state.unconsumedSteerCount, 0)
+        XCTAssertEqual(state.messages.last?.role, .assistant)
+        XCTAssertEqual(state.messages.last?.content, "PINEAPPLE", "The steered turn's reply opens its own bubble")
+    }
+
+    /// A steer the CLI folded into the running turn is echoed before that
+    /// turn's `result`, which then ends the stream as usual.
+    func testResultAfterTheSteerIsTakenEndsTheTurn() async throws {
+        await mockBackend.setAcceptsSteering(true)
+        await mockBackend.enqueueScript(
+            [
+                .systemInit(sessionId: sessionKey),
+                .userReplay("finish the feature"),
+                .userReplay("also say PINEAPPLE", delay: 0.5),
+                .assistantText("Done. PINEAPPLE"),
+                .result(sessionId: sessionKey),
+            ],
+            forCwd: project.path
+        )
+
+        let maybeStreamId = await appState.sendPrompt("finish the feature", in: window)
+        let streamId = try XCTUnwrap(maybeStreamId)
+        try await Task.sleep(nanoseconds: 200_000_000)
+        let steered = await appState.steerActiveStream(text: "also say PINEAPPLE", attachments: [], in: window)
+        XCTAssertTrue(steered)
+
+        _ = await appState.awaitStreamCompletion(streamId: streamId, timeout: 5, acceptsPartial: false)
+        let state = appState.stateForSession(sessionKey)
+        XCTAssertFalse(state.isStreaming)
+        XCTAssertEqual(state.unconsumedSteerCount, 0)
+    }
+
+    func testSteerAllQueuedAsOneJoinsTheQueueIntoOneSteer() async {
+        await mockBackend.setAcceptsSteering(true)
+        beginStreaming()
+        appState.enqueueMessage(text: "first", attachments: [], in: window)
+        appState.enqueueMessage(text: "second", attachments: [], in: window)
+
+        let steered = await appState.steerAllQueuedAsOne(in: window)
+
+        XCTAssertTrue(steered)
+        let prompts = await mockBackend.steeredPrompts
+        XCTAssertEqual(prompts, ["first\n\nsecond"])
+        XCTAssertTrue(window.messageQueue.isEmpty)
+        XCTAssertTrue(appState.sessionStates[sessionKey]?.isStreaming ?? false)
+    }
+
+    // MARK: - When the turn won't take it
+
+    /// A declined steer is not a lost message: it stays queued and goes out
+    /// when the turn ends, exactly as if the user had never pressed anything.
+    func testDeclinedSteerLeavesTheMessageQueued() async {
+        await mockBackend.setAcceptsSteering(false)
+        beginStreaming()
+        appState.enqueueMessage(text: "handle this next", attachments: [], in: window)
+
+        let steered = await appState.steerQueuedMessage(id: window.messageQueue[0].id, in: window)
+
+        XCTAssertFalse(steered)
+        XCTAssertEqual(window.messageQueue.map(\.text), ["handle this next"])
+        let declined = await mockBackend.declinedSteerCount
+        XCTAssertEqual(declined, 1, "The backend should have been asked before giving up")
+        XCTAssertTrue(
+            appState.sessionStates[sessionKey]?.isStreaming ?? false,
+            "Failing to steer must not cancel the turn either"
+        )
+    }
+
+    func testDeclinedSteerAllLeavesTheWholeQueueIntact() async {
+        await mockBackend.setAcceptsSteering(false)
+        beginStreaming()
+        appState.enqueueMessage(text: "first", attachments: [], in: window)
+        appState.enqueueMessage(text: "second", attachments: [], in: window)
+
+        let steered = await appState.steerAllQueuedAsOne(in: window)
+
+        XCTAssertFalse(steered)
+        XCTAssertEqual(window.messageQueue.map(\.text), ["first", "second"])
+    }
+
+    /// Images travel as path lines in the prompt, the same way a normal send
+    /// carries them, so a message with an image steers like any other.
+    func testMessageWithImageIsSteeredWithItsPath() async {
+        await mockBackend.setAcceptsSteering(true)
+        beginStreaming()
+        appState.enqueueMessage(
+            text: "look at this",
+            attachments: [Attachment(type: .image, name: "shot.png", path: "/tmp/shot.png")],
+            in: window
+        )
+
+        let steered = await appState.steerQueuedMessage(id: window.messageQueue[0].id, in: window)
+
+        XCTAssertTrue(steered)
+        XCTAssertTrue(window.messageQueue.isEmpty)
+        let prompts = await mockBackend.steeredPrompts
+        XCTAssertEqual(prompts.count, 1)
+        XCTAssertTrue(prompts.first?.contains("/tmp/shot.png") ?? false)
+        XCTAssertTrue(prompts.first?.contains("look at this") ?? false)
+        XCTAssertEqual(appState.sessionStates[sessionKey]?.messages.last?.attachmentPaths.count, 1)
+    }
+
+    func testTaskSheetSteersQueuedImageMessage() async {
+        await mockBackend.setAcceptsSteering(true)
+        let task = linkedTask()
+        beginStreaming()
+        XCTAssertTrue(appState.queueTaskFollowUp(
+            task,
+            text: "",
+            attachments: [Attachment(type: .image, name: "shot.png", path: "/tmp/shot.png")]
+        ))
+        let queued = appState.queuedTaskMessages(for: task)
+
+        let steered = await appState.steerQueuedTaskMessage(id: queued[0].id, for: task)
+
+        XCTAssertTrue(steered)
+        XCTAssertTrue(appState.queuedTaskMessages(for: task).isEmpty)
+        let prompts = await mockBackend.steeredPrompts
+        XCTAssertTrue(prompts.first?.contains("/tmp/shot.png") ?? false)
+    }
+
+    func testNothingIsSteeredWhenNoTurnIsRunning() async {
+        await mockBackend.setAcceptsSteering(true)
+        appState.sessionStates[sessionKey] = SessionStreamState()
+
+        let steered = await appState.steerActiveStream(
+            text: "hello",
+            attachments: [],
+            in: window
+        )
+
+        XCTAssertFalse(steered)
+        let prompts = await mockBackend.steeredPrompts
+        XCTAssertTrue(prompts.isEmpty)
+    }
+
+    func testBlankTextIsNeverSteered() async {
+        await mockBackend.setAcceptsSteering(true)
+        beginStreaming()
+
+        let steered = await appState.steerActiveStream(text: "   \n ", attachments: [], in: window)
+
+        XCTAssertFalse(steered)
+        let prompts = await mockBackend.steeredPrompts
+        XCTAssertTrue(prompts.isEmpty)
+    }
+
+    // MARK: - Offering the choice
+
+    /// The queue UI only offers "steer now" when the transport can reach a
+    /// running turn at all; ACP has no equivalent, so it gets the interrupt
+    /// button instead.
+    func testCanSteerFollowsTheBackendsTransport() {
+        XCTAssertTrue(appState.canSteer(in: window), "The mock backend's transport supports steering")
+    }
+}

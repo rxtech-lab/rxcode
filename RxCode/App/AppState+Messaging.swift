@@ -89,7 +89,18 @@ extension AppState {
         case "effort":
             if parts.count > 1 {
                 let arg = String(parts[1]).trimmingCharacters(in: .whitespaces).lowercased()
-                setSessionEffort(Self.availableEfforts.contains(arg) ? arg : nil, in: window)
+                // Validated against this thread's provider, so `/effort max`
+                // on a Codex thread resets to Auto rather than setting a
+                // level codex rejects.
+                //
+                // Awaited rather than read straight from the cache: this can
+                // run before any picker has warmed it, and an unloaded
+                // provider reports no levels — which would reject every level,
+                // including valid ones.
+                let provider = effectiveModelSelection(in: window).provider
+                await loadReasoningLevels(for: provider)
+                let levels = reasoningLevels(for: provider)
+                setSessionEffort(levels.contains { $0.id == arg } ? arg : nil, in: window)
             } else {
                 window.showEffortPicker = true
             }
@@ -371,6 +382,7 @@ extension AppState {
             state.currentTurnOutputTokensUnkeyed = 0
         }
         broadcastMobileSessionStatus(sessionID: sessionKey, kind: .streamingStarted)
+        resumeTaskForStreamingSession(sessionKey)
 
         let basePermissionMode = window.sessionPermissionMode ?? permissionMode
         // Plan-mode boolean overrides the dropdown for the CLI `--permission-mode` flag only.
@@ -495,6 +507,7 @@ extension AppState {
             state.pendingToolResults.removeAll()
             state.lastStreamEventDate = nil
             state.liveBackgroundTaskIds.removeAll()
+            state.unconsumedSteerCount = 0
 
             extraMutations?(&state)
 
@@ -534,6 +547,9 @@ extension AppState {
             return
         }
         logger.info("[IDE_SEND_THREAD] record stream completion stream=\(streamId) session=\(sessionId, privacy: .public) error=\(error ?? "<nil>", privacy: .public) assistantChars=\(assistantText.count, privacy: .public)")
+        if error == nil {
+            reconcileTaskCompletionLabel(sessionId: sessionId, assistantText: assistantText)
+        }
         let completion = StreamCompletion(
             sessionId: sessionId,
             assistantText: assistantText,

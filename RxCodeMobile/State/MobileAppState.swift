@@ -94,6 +94,14 @@ final class MobileAppState: ObservableObject {
     @Published var projects: [Project] = []
     @Published var sessions: [SessionSummary] = []
     @Published var branchBriefings: [MobileBranchBriefing] = []
+    @Published var briefingDocuments: [MobileBriefingDocument] = []
+    @Published var briefingContentResult: BriefingContentResultPayload?
+    @Published var isLoadingBriefingContent = false
+    var pendingBriefingContentID: UUID?
+    @Published var briefingAssetFileURL: URL?
+    var briefingAssetPendingURL: URL?
+    var briefingAssetWriteHandle: FileHandle?
+    var briefingAssetBytesReceived: Int64 = 0
     @Published var threadSummaries: [MobileThreadSummary] = []
     @Published var ciStatusByProject: [UUID: ProjectCIStatus] = [:]
     @Published var desktopSettings: MobileSettingsSnapshot?
@@ -182,6 +190,26 @@ final class MobileAppState: ObservableObject {
     /// Cached rxlab account status from the active desktop, shown on the
     /// Autopilot screen header. `nil` until first loaded.
     @Published var autopilotAccount: AutopilotAccountStatus?
+
+    // MARK: - Remote desktop: Task boards
+
+    /// Per-project task boards mirrored from the active desktop.
+    @Published var desktopTaskUnavailable = false
+    /// Set while the relay is stopped because the app went to the background,
+    /// so that deliberate disconnect isn't mistaken for the Mac being
+    /// unreachable (which would flash the connection error on resume).
+    var relaySuspendedForBackground = false
+    @Published var usesCloudTasks = false
+    @Published var cloudTaskProjects: [Project] = []
+    @Published var cloudTaskBoards: [UUID: MobileTaskBoardSnapshot] = [:]
+    var taskCloud: MobileCloudState?
+
+    @Published var taskBoardsByProject: [UUID: MobileTaskBoardSnapshot] = [:]
+    /// Projects whose board fetch is in flight.
+    @Published var loadingTaskBoardProjects: Set<UUID> = []
+    /// Outstanding task-board requests keyed by `clientRequestID`; resolved by
+    /// the matching `.taskBoardResult`, a timeout, or a desktop switch.
+    var pendingTaskBoardRequests: [UUID: CheckedContinuation<TaskBoardResultPayload, Error>] = [:]
     /// Derives and caches the passkey PRF KEK so secrets are decrypted/encrypted
     /// on-device — the desktop only relays opaque ciphertext.
     let secretsKeyVault = MobileSecretsKeyVault()
@@ -405,9 +433,11 @@ final class MobileAppState: ObservableObject {
         switch phase {
         case .background:
             logger.info("[Lifecycle] entering background — disconnecting relay")
+            relaySuspendedForBackground = true
             enqueueLifecycle(label: "background/stop") { [client] in await client.stop() }
         case .active:
             logger.info("[Lifecycle] entering foreground — reconnecting relay")
+            relaySuspendedForBackground = false
             enqueueLifecycle(label: "foreground/start") { [client] in await client.start() }
         case .inactive:
             break

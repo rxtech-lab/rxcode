@@ -28,6 +28,10 @@ extension CodexAppServer {
             var turnStarted = false
             var turnCompleted = false
             var finalUsage: UsageInfo?
+            // Thread-cumulative usage before this turn's first request, and the
+            // latest cumulative snapshot. Their difference is this turn's usage.
+            var usageBaseline: UsageInfo?
+            var latestTotalUsage: UsageInfo?
             let startedAt = Date()
             // Captured per turn so we can synthesize an `ExitPlanMode` tool call when a
             // plan-mode turn completes. Codex never emits ExitPlanMode itself — its plan
@@ -37,7 +41,7 @@ extension CodexAppServer {
             var assistantTextBuffer = ""
             var rawLineCount = 0
 
-            for try await line in handles.stdout.fileHandleForReading.bytes.lines {
+            for await line in handles.stdout.fileHandleForReading.lineStream() {
                 guard !Task.isCancelled else { break }
                 rawLineCount += 1
                 if rawLineCount == 1 {
@@ -93,6 +97,17 @@ extension CodexAppServer {
                     } else {
                         let params = object["params"]?.objectValue ?? [:]
                         switch method {
+                        case "turn/started":
+                            // `turn/steer` requires the live turn id as a
+                            // precondition, and this notification is the only
+                            // place the app server reports it.
+                            if let activeThreadId, let turnId = Self.startedTurnId(from: params) {
+                                await setActiveTurn(
+                                    streamId: streamId,
+                                    threadId: activeThreadId,
+                                    turnId: turnId
+                                )
+                            }
                         case "turn/plan/updated":
                             if let items = TodoExtractor.parseCodexPlanUpdate(params: params) {
                                 planItems = items
@@ -101,11 +116,20 @@ extension CodexAppServer {
                             if let text = Self.firstString(in: params, keys: ["delta", "text", "content"]) {
                                 assistantTextBuffer += text
                             }
+                        case "thread/tokenUsage/updated":
+                            if let breakdowns = Self.tokenUsageBreakdowns(from: params) {
+                                if usageBaseline == nil {
+                                    usageBaseline = Self.usageDelta(from: breakdowns.last, to: breakdowns.total)
+                                        ?? UsageInfo(inputTokens: 0, outputTokens: 0, cacheCreationInputTokens: 0, cacheReadInputTokens: 0)
+                                }
+                                latestTotalUsage = breakdowns.total
+                            }
                         default:
                             break
                         }
                         await handleNotification(method: method, object: object, activeThreadId: activeThreadId, continuation: continuation)
                         if method == "turn/completed" || method == "turn/failed" {
+                            await clearActiveTurn(streamId: streamId)
                             finalUsage = Self.usageInfo(from: object) ?? finalUsage
                             turnCompleted = method == "turn/completed"
                             if turnCompleted, planMode {
@@ -119,6 +143,10 @@ extension CodexAppServer {
                         }
                     }
                 }
+            }
+
+            if finalUsage == nil, let usageBaseline, let latestTotalUsage {
+                finalUsage = Self.usageDelta(from: usageBaseline, to: latestTotalUsage)
             }
 
             let sid = activeThreadId ?? threadId ?? UUID().uuidString

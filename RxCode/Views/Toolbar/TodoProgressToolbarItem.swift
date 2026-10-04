@@ -18,8 +18,7 @@ struct TodoProgressToolbarItem: View {
     }
 
     private var todos: [TodoItem]? {
-        if let messages = appState.sessionStates[sessionKey]?.messages,
-           let live = TodoExtractor.latest(in: messages) {
+        if let live = appState.liveTodos(forSessionId: sessionKey) {
             return live
         }
         // Touch the revision so SwiftUI re-runs this fetch when a new snapshot

@@ -1,6 +1,6 @@
 import SwiftUI
 import RxCodeCore
-import RxCodeMarkdown
+import AgentMarkdownUI
 
 extension MarkdownStyle {
     public static var rxCodeChat: MarkdownStyle {
@@ -16,6 +16,25 @@ extension MarkdownStyle {
             tableHeaderBackground: ClaudeTheme.surfaceSecondary,
             lineSpacing: 3,
             blockSpacing: 8,
+            cornerRadius: ClaudeTheme.cornerRadiusSmall
+        )
+    }
+
+    /// Smaller body text for markdown shown inside compact chrome such as
+    /// banners and callouts.
+    public static var rxCodeCompact: MarkdownStyle {
+        MarkdownStyle(
+            bodyFontSize: ClaudeTheme.size(12),
+            bodyColor: ClaudeTheme.textPrimary,
+            secondaryColor: ClaudeTheme.textSecondary,
+            accentColor: ClaudeTheme.accent,
+            codeTextColor: ClaudeTheme.textPrimary,
+            codeBackground: ClaudeTheme.codeBackground,
+            codeHeaderBackground: ClaudeTheme.codeHeaderBackground,
+            borderColor: ClaudeTheme.border,
+            tableHeaderBackground: ClaudeTheme.surfaceSecondary,
+            lineSpacing: 2,
+            blockSpacing: 6,
             cornerRadius: ClaudeTheme.cornerRadiusSmall
         )
     }

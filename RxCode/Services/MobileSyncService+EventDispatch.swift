@@ -296,6 +296,13 @@ extension MobileSyncService {
                 object: nil,
                 userInfo: ["from": inbound.fromHex, "payload": req]
             )
+        case .briefingContentRequest(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "briefing_content_request") else { return }
+            NotificationCenter.default.post(
+                name: .mobileSyncBriefingContentRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": req]
+            )
         case .subscribeSession(let sub):
             guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "subscribe_session") else { return }
             subscribedSessions[inbound.fromHex] = sub.sessionID ?? ""
@@ -448,6 +455,14 @@ extension MobileSyncService {
             logger.info("[MobileSync] autopilot requested domain=\(req.domain, privacy: .public) op=\(req.operation, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
             NotificationCenter.default.post(
                 name: .mobileSyncAutopilotRequested,
+                object: nil,
+                userInfo: ["from": inbound.fromHex, "payload": req]
+            )
+        case .taskBoardRequest(let req):
+            guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "task_board_request") else { return }
+            logger.info("[MobileSync] task board requested operation=\(req.operation.rawValue, privacy: .public) project=\(req.projectID.uuidString, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+            NotificationCenter.default.post(
+                name: .mobileSyncTaskBoardRequested,
                 object: nil,
                 userInfo: ["from": inbound.fromHex, "payload": req]
             )

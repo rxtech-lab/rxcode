@@ -17,7 +17,8 @@ extension ACPService {
         spec: ACPClientSpec,
         permissionMode: PermissionMode,
         clientSessionKey: String,
-        mcpServers: [JSONValue] = []
+        mcpServers: [JSONValue] = [],
+        isEphemeral: Bool = false
     ) -> AsyncStream<StreamEvent> {
         logger.info("[ACP] send streamId=\(streamId.uuidString, privacy: .public) client=\(spec.displayName, privacy: .public) launch=\(spec.launch.displayKind, privacy: .public) model=\(model ?? "<default>", privacy: .public) sessionId=\(sessionId ?? "<new>", privacy: .public) mode=\(String(describing: permissionMode), privacy: .public) cwd=\(cwd, privacy: .public) clientKey=\(clientSessionKey, privacy: .public) mcpServers=\(mcpServers.count) promptLen=\(prompt.count)")
         return AsyncStream<StreamEvent> { continuation in
@@ -32,6 +33,7 @@ extension ACPService {
                     permissionMode: permissionMode,
                     clientSessionKey: clientSessionKey,
                     mcpServers: mcpServers,
+                    isEphemeral: isEphemeral,
                     continuation: continuation
                 )
             }
@@ -39,6 +41,65 @@ extension ACPService {
                 task.cancel()
                 Task { await self.handleStreamTermination(streamId: streamId) }
             }
+        }
+    }
+
+    /// Runs a standalone text request without adding a chat thread or keeping
+    /// the ACP process in the session pool. Used for task board suggestions.
+    func generatePlainResponse(
+        prompt: String,
+        model: String?,
+        spec: ACPClientSpec,
+        cwd: String
+    ) async -> String? {
+        let streamId = UUID()
+        let timeout = Task {
+            try? await Task.sleep(for: .seconds(90))
+            if !Task.isCancelled { cancel(streamId: streamId) }
+        }
+        defer { timeout.cancel() }
+
+        return await withTaskCancellationHandler {
+            let stream = send(
+                streamId: streamId,
+                prompt: prompt,
+                cwd: cwd,
+                sessionId: nil,
+                model: model,
+                spec: spec,
+                permissionMode: .default,
+                clientSessionKey: "suggestion-\(streamId.uuidString)",
+                isEphemeral: true
+            )
+            var response = ""
+            var completed = false
+            for await event in stream {
+                switch event {
+                case .unknown(let raw):
+                    if let data = raw.data(using: .utf8),
+                       let frame = try? JSONDecoder().decode(JSONValue.self, from: data),
+                       frame.objectValue?["type"]?.stringValue == "content_block_delta",
+                       frame.objectValue?["delta"]?.objectValue?["type"]?.stringValue == "text_delta",
+                       let text = frame.objectValue?["delta"]?.objectValue?["text"]?.stringValue {
+                        response += text
+                    }
+                case .textDelta(let text):
+                    response += text
+                case .assistant(let message):
+                    for block in message.content {
+                        if case .text(let text) = block { response += text }
+                    }
+                case .result(let result):
+                    if result.isError { return nil }
+                    completed = true
+                default:
+                    break
+                }
+            }
+            let trimmed = response.trimmingCharacters(in: .whitespacesAndNewlines)
+            return completed && !trimmed.isEmpty ? trimmed : nil
+        } onCancel: {
+            Task { await self.cancel(streamId: streamId) }
         }
     }
 
@@ -57,14 +118,33 @@ extension ACPService {
     func probeModels(
         spec: ACPClientSpec,
         cwd: String,
-        timeout: Duration = .seconds(20)
+        timeout: Duration = .seconds(20),
+        allowSessionFailure: Bool = false
     ) async throws -> ACPModelConfig? {
+        try await withEphemeralAgent(spec: spec, cwd: cwd, label: "probe", timeout: timeout) { key in
+            try await self.runProbeSequence(
+                key: key, spec: spec, cwd: cwd,
+                allowSessionFailure: allowSessionFailure
+            )
+        }
+    }
+
+    /// Spawns a throwaway agent process, runs `body` against it, then tears
+    /// the process down. Bounded by `timeout` so a hung agent can't wedge the
+    /// caller.
+    func withEphemeralAgent<T: Sendable>(
+        spec: ACPClientSpec,
+        cwd: String,
+        label: String,
+        timeout: Duration,
+        body: @escaping @Sendable (String) async throws -> T
+    ) async throws -> T {
         let streamId = UUID()
-        let key = "probe-\(streamId.uuidString)"
-        logger.info("[ACP] probe start: \(spec.displayName, privacy: .public) (launch=\(spec.launch.displayKind, privacy: .public)) cwd=\(cwd, privacy: .public)")
+        let key = "\(label)-\(streamId.uuidString)"
+        logger.info("[ACP] \(label, privacy: .public) start: \(spec.displayName, privacy: .public) (launch=\(spec.launch.displayKind, privacy: .public)) cwd=\(cwd, privacy: .public)")
 
         let (process, stdin, stdout, stderr) = try await spawn(spec: spec, model: nil, cwd: cwd)
-        logger.info("[ACP] probe spawned pid=\(process.processIdentifier) for \(spec.displayName, privacy: .public)")
+        logger.info("[ACP] \(label, privacy: .public) spawned pid=\(process.processIdentifier) for \(spec.displayName, privacy: .public)")
 
         var entry = SessionEntry(
             process: process,
@@ -85,31 +165,27 @@ extension ACPService {
             Task.detached { await self?.handleProcessExit(key: key) }
         }
 
+        defer {
+            readerTask.cancel()
+            killSession(key: key)
+            streamToKey.removeValue(forKey: streamId)
+        }
         do {
-            let result = try await withThrowingTaskGroup(of: ACPModelConfig?.self) { group in
-                group.addTask {
-                    try await self.runProbeSequence(key: key, spec: spec, cwd: cwd)
-                }
+            return try await withThrowingTaskGroup(of: T.self) { group in
+                group.addTask { try await body(key) }
                 group.addTask {
                     try await Task.sleep(for: timeout)
                     throw ACPError.probeTimeout(seconds: Int(timeout.components.seconds))
                 }
-                let value = try await group.next() ?? nil
+                guard let value = try await group.next() else { throw ACPError.streamClosed }
                 group.cancelAll()
                 return value
             }
-            readerTask.cancel()
-            killSession(key: key)
-            streamToKey.removeValue(forKey: streamId)
-            return result
         } catch {
             let stderrSnapshot = sessions[key]?.stderr.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             if !stderrSnapshot.isEmpty {
-                logger.error("[ACP] probe stderr for \(spec.displayName, privacy: .public): \(stderrSnapshot, privacy: .public)")
+                logger.error("[ACP] \(label, privacy: .public) stderr for \(spec.displayName, privacy: .public): \(stderrSnapshot, privacy: .public)")
             }
-            readerTask.cancel()
-            killSession(key: key)
-            streamToKey.removeValue(forKey: streamId)
             throw error
         }
     }
@@ -117,33 +193,33 @@ extension ACPService {
     func runProbeSequence(
         key: String,
         spec: ACPClientSpec,
-        cwd: String
+        cwd: String,
+        allowSessionFailure: Bool = false
     ) async throws -> ACPModelConfig? {
         logger.info("[ACP] probe → initialize \(spec.displayName, privacy: .public)")
         _ = try await sendRequest(
             key: key,
             method: "initialize",
-            params: [
-                "protocolVersion": .number(1),
-                "clientCapabilities": .object([
-                    "fs": .object([
-                        "readTextFile": .bool(true),
-                        "writeTextFile": .bool(true)
-                    ])
-                ])
-            ]
+            params: Self.initializeParams
         )
         logger.info("[ACP] probe ← initialize ok \(spec.displayName, privacy: .public)")
 
         logger.info("[ACP] probe → session/new \(spec.displayName, privacy: .public)")
-        let newResult = try await sendRequest(
-            key: key,
-            method: "session/new",
-            params: [
-                "cwd": .string(cwd),
-                "mcpServers": .array([])
-            ]
-        )
+        let newResult: JSONValue
+        do {
+            newResult = try await sendRequest(
+                key: key,
+                method: "session/new",
+                params: [
+                    "cwd": .string(cwd),
+                    "mcpServers": .array([])
+                ]
+            )
+        } catch {
+            guard allowSessionFailure else { throw error }
+            logger.info("[ACP] package launched but session/new failed for \(spec.displayName, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
         let optionCount = newResult.objectValue?["configOptions"]?.arrayValue?.count ?? 0
         logger.info("[ACP] probe ← session/new ok \(spec.displayName, privacy: .public) configOptions=\(optionCount)")
 
@@ -168,6 +244,7 @@ extension ACPService {
         permissionMode: PermissionMode,
         clientSessionKey: String,
         mcpServers: [JSONValue] = [],
+        isEphemeral: Bool = false,
         continuation: AsyncStream<StreamEvent>.Continuation
     ) async {
         do {
@@ -212,6 +289,7 @@ extension ACPService {
                 spec: spec,
                 permissionMode: permissionMode,
                 mcpServers: mcpServers,
+                isEphemeral: isEphemeral,
                 continuation: continuation
             )
         } catch {
@@ -262,6 +340,7 @@ extension ACPService {
         spec: ACPClientSpec,
         permissionMode: PermissionMode,
         mcpServers: [JSONValue] = [],
+        isEphemeral: Bool = false,
         continuation: AsyncStream<StreamEvent>.Continuation
     ) async throws {
         let (process, stdin, stdout, stderr) = try await spawn(spec: spec, model: model, cwd: cwd)
@@ -271,7 +350,7 @@ extension ACPService {
             spec: spec,
             cwd: cwd,
             canonicalKey: bootstrapKey,
-            isEphemeral: false
+            isEphemeral: isEphemeral
         )
         entry.continuation = continuation
         entry.currentStreamId = streamId
@@ -305,15 +384,7 @@ extension ACPService {
         let initResult = try await sendRequest(
             key: bootstrapKey,
             method: "initialize",
-            params: [
-                "protocolVersion": .number(1),
-                "clientCapabilities": .object([
-                    "fs": .object([
-                        "readTextFile": .bool(true),
-                        "writeTextFile": .bool(true)
-                    ])
-                ])
-            ]
+            params: Self.initializeParams
         )
         heartbeat.cancel()
         logger.info("[ACP] initialize ok for \(spec.displayName, privacy: .public): \(initResult.shortDescription, privacy: .public)")
@@ -340,7 +411,23 @@ extension ACPService {
             "cwd": .string(cwd),
             "mcpServers": .array(filteredMCPServers)
         ]
-        let newResult = try await sendRequest(key: bootstrapKey, method: "session/new", params: newParams)
+        let newResult: JSONValue
+        do {
+            newResult = try await sendRequest(key: bootstrapKey, method: "session/new", params: newParams)
+        } catch ACPError.agentError(let code, _) where code == ACPError.authRequiredCode {
+            // Replay the method the user signed in with; the agent may keep
+            // credentials per process rather than persisting them.
+            guard let methodId = spec.authMethodId,
+                  ACPAuthMethod.parse(initializeResult: initResult).contains(where: { $0.id == methodId })
+            else { throw ACPError.authRequired(clientName: spec.displayName) }
+            logger.info("[ACP] session/new requires auth; replaying authenticate methodId=\(methodId, privacy: .public)")
+            _ = try await sendRequest(key: bootstrapKey, method: "authenticate", params: ["methodId": .string(methodId)])
+            do {
+                newResult = try await sendRequest(key: bootstrapKey, method: "session/new", params: newParams)
+            } catch ACPError.agentError(let code, _) where code == ACPError.authRequiredCode {
+                throw ACPError.authRequired(clientName: spec.displayName)
+            }
+        }
         guard let agentSessionId = newResult.objectValue?["sessionId"]?.stringValue else {
             throw ACPError.protocolMismatch("session/new returned no sessionId")
         }

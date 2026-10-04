@@ -5,6 +5,21 @@ import RxCodeCore
 @MainActor
 final class AppStateTests: XCTestCase {
 
+    func testUnitTestsUseTemporaryAppSupport() {
+        XCTAssertTrue(AppSupport.isUnitTesting)
+        XCTAssertNotNil(ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"])
+        XCTAssertTrue(
+            AppSupport.bundleScopedURL.path.hasPrefix(FileManager.default.temporaryDirectory.path)
+        )
+    }
+
+    func testRxAuthRestoreUsesAnEmptyTestSession() async {
+        await appState.rxAuth.restore()
+        let token = await appState.rxAuth.accessToken()
+        XCTAssertFalse(appState.rxAuth.isAuthenticated)
+        XCTAssertNil(token)
+    }
+
     private var persistence: MockAppStatePersistence!
     private var appState: AppState!
     private var window: WindowState!
@@ -104,6 +119,91 @@ final class AppStateTests: XCTestCase {
         appState.sessionStates[window.newSessionKey] = state
 
         XCTAssertEqual(appState.messages(in: window).map(\.content), ["Draft thread"])
+    }
+
+    // MARK: - Task board chat activity
+
+    func testRecentStoriesUsesLatestChildActivityAndMatchesChildKeywords() {
+        let projectId = UUID()
+        let older = ProjectStory(projectId: projectId, title: "Older", updatedAt: Date(timeIntervalSince1970: 10))
+        let newer = ProjectStory(projectId: projectId, title: "Newer", updatedAt: Date(timeIntervalSince1970: 20))
+        let child = ProjectTask(
+            projectId: projectId,
+            storyId: older.id,
+            title: "Find this child",
+            updatedAt: Date(timeIntervalSince1970: 30)
+        )
+        appState.taskBoards[projectId] = TaskBoard(stories: [newer, older], tasks: [child])
+
+        XCTAssertEqual(appState.recentStories(for: projectId).map(\.id), [older.id, newer.id])
+        XCTAssertEqual(appState.recentStories(for: projectId, keyword: "Find this").map(\.id), [older.id])
+    }
+
+    func testIsAgentRunningIsFalseWithoutALinkedThread() {
+        let task = ProjectTask(projectId: UUID(), title: "No thread", sessionKey: nil)
+        appState.sessionStates = ["sess-1": streamState(isStreaming: true)]
+
+        XCTAssertFalse(appState.isAgentRunning(for: task))
+    }
+
+    func testIsAgentRunningFollowsTheLinkedThreadsStreamingState() {
+        let task = ProjectTask(projectId: UUID(), title: "Linked", sessionKey: "sess-1")
+
+        XCTAssertFalse(appState.isAgentRunning(for: task), "no state yet means nothing is streaming")
+
+        appState.sessionStates = ["sess-1": streamState(isStreaming: true)]
+        XCTAssertTrue(appState.isAgentRunning(for: task))
+
+        appState.sessionStates = ["sess-1": streamState(isStreaming: false)]
+        XCTAssertFalse(appState.isAgentRunning(for: task))
+    }
+
+    func testIsAgentRunningResolvesARenamedSessionId() {
+        // A task dispatched this launch is still linked to the `pending-…` key
+        // the stream opened under; the CLI rename lives in the redirect table.
+        let task = ProjectTask(projectId: UUID(), title: "Pending link", sessionKey: "pending-1")
+        appState.sessionIdRedirect = ["pending-1": "real-1"]
+        appState.sessionStates = ["real-1": streamState(isStreaming: true)]
+
+        XCTAssertTrue(appState.isAgentRunning(for: task))
+    }
+
+    func testLinkedTaskFindsRenamedThreadOnlyInItsProject() {
+        let project = makeProject("Chat")
+        let otherProject = makeProject("Other")
+        let task = ProjectTask(projectId: project.id, title: "Linked", sessionKey: "pending-1")
+        let sourceTask = ProjectTask(projectId: project.id, title: "From chat", sourceSessionKey: "source-1")
+        appState.setTaskBoard(TaskBoard(tasks: [task, sourceTask]), for: project.id)
+        appState.sessionIdRedirect = ["pending-1": "real-1"]
+
+        XCTAssertEqual(appState.linkedTask(forSessionId: "real-1", projectId: project.id)?.id, task.id)
+        XCTAssertEqual(appState.linkedTask(forSessionId: "source-1", projectId: project.id)?.id, sourceTask.id)
+        XCTAssertFalse(sourceTask.isDescriptionLocked)
+        XCTAssertNil(appState.linkedTask(forSessionId: "real-1", projectId: otherProject.id))
+        XCTAssertNil(appState.linkedTask(forSessionId: "unlinked", projectId: project.id))
+    }
+
+    func testIsAgentRunningForStoryIsTrueWhileAnyChildTaskStreams() {
+        let project = makeProject("Board")
+        let story = ProjectStory(projectId: project.id, title: "Projects Dashboard")
+        let idle = ProjectTask(projectId: project.id, storyId: story.id, title: "Idle", sessionKey: "sess-idle")
+        let live = ProjectTask(projectId: project.id, storyId: story.id, title: "Live", sessionKey: "sess-live")
+        let other = ProjectTask(projectId: project.id, title: "Unparented", sessionKey: "sess-other")
+        let board = TaskBoard(stories: [story], tasks: [idle, live, other])
+
+        appState.sessionStates = [
+            "sess-idle": streamState(isStreaming: false),
+            "sess-live": streamState(isStreaming: true),
+        ]
+        XCTAssertTrue(appState.isAgentRunning(forStory: story, in: board))
+
+        appState.sessionStates = [
+            "sess-idle": streamState(isStreaming: false),
+            "sess-live": streamState(isStreaming: false),
+            // A task outside the story must not light the story card up.
+            "sess-other": streamState(isStreaming: true),
+        ]
+        XCTAssertFalse(appState.isAgentRunning(forStory: story, in: board))
     }
 
     // MARK: - Drafts and queues
@@ -346,6 +446,42 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(acpSections.first?.models.map(\.id), ["enabled::model-a"])
     }
 
+    func testACPExactVersionUsesPackageInsteadOfCurrentRegistryBinary() async throws {
+        let agent = try JSONDecoder().decode(ACPRegistryAgent.self, from: Data(#"""
+        {
+          "id": "example", "name": "Example", "version": "2.0.0", "description": "Example",
+          "distribution": {
+            "npx": {"package": "@example/agent@2.0.0"},
+            "binary": {"darwin-aarch64": {"archive": "https://example.com/agent-2.0.0.zip", "cmd": "agent"}}
+          }
+        }
+        """#.utf8))
+
+        let launch = try await appState.resolveLaunch(for: agent, version: "1.2.3")
+        guard case .npx(let package, _, _) = launch else {
+            return XCTFail("Expected the exact package release")
+        }
+        XCTAssertEqual(package, "@example/agent@1.2.3")
+    }
+
+    func testACPBinaryOnlyClientRejectsUnavailableExactVersion() async throws {
+        let agent = try JSONDecoder().decode(ACPRegistryAgent.self, from: Data(#"""
+        {
+          "id": "example", "name": "Example", "version": "2.0.0", "description": "Example",
+          "distribution": {
+            "binary": {"darwin-aarch64": {"archive": "https://example.com/agent-2.0.0.zip", "cmd": "agent"}}
+          }
+        }
+        """#.utf8))
+
+        do {
+            _ = try await appState.resolveLaunch(for: agent, version: "1.2.3")
+            XCTFail("Expected an unavailable version error")
+        } catch ACPInstallError.historicalBinaryUnavailable(let version) {
+            XCTAssertEqual(version, "1.2.3")
+        }
+    }
+
     // MARK: - Project and session persistence
 
     func testAddProjectPersistsNewProjectAndSkipsDuplicatePath() async {
@@ -355,6 +491,34 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(appState.projects.map(\.name), ["A"])
         let saveCount = await persistence.savedProjectsSnapshots().count
         XCTAssertEqual(saveCount, 1)
+    }
+
+    func testAddingProjectFromFolderKeepsProjectsPageOpen() async {
+        let currentProject = makeProject("Current")
+        appState.projects = [currentProject]
+        window.selectedProject = currentProject
+        window.taskDetailProjectId = currentProject.id
+        window.generalRoute = .tasks
+
+        await appState.addProjectFromFolder(URL(fileURLWithPath: "/tmp/new-dashboard-project"), in: window)
+
+        XCTAssertEqual(appState.projects.map(\.name), ["Current", "new-dashboard-project"])
+        XCTAssertEqual(window.generalRoute, .tasks)
+        XCTAssertEqual(window.taskDetailProjectId, currentProject.id)
+        XCTAssertEqual(window.selectedProject?.id, currentProject.id)
+        XCTAssertNil(window.currentSessionId)
+    }
+
+    func testAddingProjectFromChatSelectsNewProject() async {
+        let currentProject = makeProject("Current")
+        appState.projects = [currentProject]
+        window.selectedProject = currentProject
+        window.generalRoute = nil
+
+        await appState.addProjectFromFolder(URL(fileURLWithPath: "/tmp/new-chat-project"), in: window)
+
+        XCTAssertEqual(window.selectedProject?.name, "new-chat-project")
+        XCTAssertNil(window.generalRoute)
     }
 
     func testSaveSessionSkipsEmptyMessages() async {
@@ -477,6 +641,18 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(appState.projects.first?.name, "Old")
         let savedProjects = await persistence.savedProjectsSnapshots()
         XCTAssertTrue(savedProjects.isEmpty)
+    }
+
+    func testProjectPromptPersistsLatestEdit() async {
+        let project = makeProject("Prompt")
+        appState.projects = [project]
+
+        appState.setProjectPrompt("First draft", for: project.id)
+        appState.setProjectPrompt("Final instructions", for: project.id)
+        await appState.projectPromptSaveTask?.value
+
+        let savedPrompt = await persistence.savedProjectsSnapshots().last?.first?.customPrompt
+        XCTAssertEqual(savedPrompt, "Final instructions")
     }
 
     // MARK: - Notifications and settings
@@ -633,104 +809,4 @@ final class AppStateTests: XCTestCase {
         state.isStreaming = isStreaming
         return state
     }
-}
-
-private actor MockAppStatePersistence: AppStatePersistenceService {
-    private var projectSnapshots: [[Project]] = []
-    private var sessionSaves: [(session: ChatSession, persistTitle: Bool)] = []
-    private var deletedSessions: [(projectId: UUID, sessionId: String, origin: SessionOrigin, cwd: String?)] = []
-    private var runProfiles: [UUID: [RunProfile]] = [:]
-    private var hookProfiles: [UUID: [HookProfile]] = [:]
-    private var acpClients: [ACPClientSpec] = []
-    private var fullSessions: [String: ChatSession] = [:]
-    private var legacySessions: [String: ChatSession] = [:]
-
-    func savedProjectsSnapshots() -> [[Project]] {
-        projectSnapshots
-    }
-
-    func savedSessions() -> [(session: ChatSession, persistTitle: Bool)] {
-        sessionSaves
-    }
-
-    func deletedSessionRecords() -> [(projectId: UUID, sessionId: String, origin: SessionOrigin, cwd: String?)] {
-        deletedSessions
-    }
-
-    func stubFullSession(_ session: ChatSession) {
-        fullSessions[session.id] = session
-    }
-
-    func stubLegacySession(_ session: ChatSession) {
-        legacySessions[session.id] = session
-    }
-
-    func saveProjects(_ projects: [Project]) throws {
-        projectSnapshots.append(projects)
-    }
-
-    func loadProjects() -> [Project] {
-        projectSnapshots.last ?? []
-    }
-
-    func saveSession(_ session: ChatSession, persistTitle: Bool) async throws {
-        sessionSaves.append((session, persistTitle))
-    }
-
-    func loadLegacySessions(for projectId: UUID) -> [ChatSession.Summary] {
-        legacySessions.values
-            .filter { $0.projectId == projectId }
-            .map(\.summary)
-            .sorted { $0.updatedAt > $1.updatedAt }
-    }
-
-    func loadAllLegacySessionSummaries() -> [ChatSession.Summary] {
-        legacySessions.values.map(\.summary).sorted { $0.updatedAt > $1.updatedAt }
-    }
-
-    func deleteSession(projectId: UUID, sessionId: String, origin: SessionOrigin, cwd: String?) async throws {
-        deletedSessions.append((projectId, sessionId, origin, cwd))
-    }
-
-    func loadFullSession(summary: ChatSession.Summary, cwd: String) async -> ChatSession? {
-        fullSessions[summary.id]
-    }
-
-    nonisolated func legacySessionURL(projectId: UUID, sessionId: String) -> URL {
-        URL(fileURLWithPath: "/tmp/\(projectId.uuidString)/\(sessionId).json")
-    }
-
-    nonisolated func loadLegacySessionSync(projectId: UUID, sessionId: String) -> ChatSession? {
-        nil
-    }
-
-    func saveRunProfiles(_ profiles: [RunProfile], projectId: UUID) throws {
-        runProfiles[projectId] = profiles
-    }
-
-    func loadRunProfiles(projectId: UUID) -> [RunProfile] {
-        runProfiles[projectId] ?? []
-    }
-
-    func saveHookProfiles(_ profiles: [HookProfile], projectId: UUID) throws {
-        hookProfiles[projectId] = profiles
-    }
-
-    func loadHookProfiles(projectId: UUID) -> [HookProfile] {
-        hookProfiles[projectId] ?? []
-    }
-
-    func saveACPClients(_ clients: [ACPClientSpec]) throws {
-        acpClients = clients
-    }
-
-    func loadACPClients() -> [ACPClientSpec] {
-        acpClients
-    }
-
-    nonisolated func acpRegistrySnapshotURL() -> URL {
-        URL(fileURLWithPath: "/tmp/acp_registry.json")
-    }
-
-
 }

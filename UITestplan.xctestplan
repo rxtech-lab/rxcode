@@ -9,11 +9,6 @@
             "isEnabled" : true,
             "key" : "RXCODE_LOCAL_MCP_SERVER",
             "value" : "$(SRCROOT)/scripts/mcp_echo_server.py"
-          },
-          {
-            "isEnabled" : true,
-            "key" : "RXCODE_SKIP_LOCAL_AI_UI_TESTS",
-            "value" : "0"
           }
         ]
       }

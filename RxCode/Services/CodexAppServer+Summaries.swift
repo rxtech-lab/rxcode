@@ -25,7 +25,7 @@ extension CodexAppServer {
             var activeThreadId: String?
             var turnStarted = false
 
-            for try await line in handles.stdout.fileHandleForReading.bytes.lines {
+            for await line in handles.stdout.fileHandleForReading.lineStream() {
                 guard let object = Self.decodeObject(line) else { continue }
 
                 if let id = Self.idString(object["id"]), object["method"] == nil {
@@ -93,7 +93,7 @@ extension CodexAppServer {
             var activeThreadId: String?
             var turnStarted = false
 
-            for try await line in handles.stdout.fileHandleForReading.bytes.lines {
+            for await line in handles.stdout.fileHandleForReading.lineStream() {
                 guard let object = Self.decodeObject(line) else { continue }
 
                 if let id = Self.idString(object["id"]), object["method"] == nil {
@@ -202,7 +202,7 @@ extension CodexAppServer {
             var activeThreadId: String?
             var turnStarted = false
 
-            for try await line in handles.stdout.fileHandleForReading.bytes.lines {
+            for await line in handles.stdout.fileHandleForReading.lineStream() {
                 guard let object = Self.decodeObject(line) else { continue }
 
                 if let id = Self.idString(object["id"]), object["method"] == nil {

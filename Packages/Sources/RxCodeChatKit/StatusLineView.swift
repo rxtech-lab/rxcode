@@ -7,6 +7,7 @@ struct StatusLineView: View {
     @State private var showFiveHourPopover = false
     @State private var showSevenDayPopover = false
     @State private var showContextPopover = false
+    @State private var showAdvicePopover = false
 
     private var totalResponseDuration: Double {
         chatBridge.messages
@@ -27,6 +28,8 @@ struct StatusLineView: View {
             Divider().frame(height: 12)
 
             usageSegments()
+
+            rateLimitAdviceSegment()
 
             Divider().frame(height: 12)
 
@@ -160,15 +163,19 @@ struct StatusLineView: View {
                 body: "Tracks usage against Anthropic's rolling 7-day limit. Resets gradually as older requests age out."
             )
         case .codex:
-            rateLimitSegment(
-                label: String(localized: "5h", bundle: .module),
-                icon: "clock",
-                percent: rateLimit?.fiveHourPercent,
-                resetsAt: rateLimit?.fiveHourResetsAt,
-                isPresented: $showFiveHourPopover,
-                title: "5-hour rate limit",
-                body: "Tracks usage against Codex's rolling 5-hour limit. Resets gradually as older requests age out."
-            )
+            // Plans without a separate 5-hour limit report it as a copy of the
+            // 7-day window; only show the real one.
+            if rateLimit?.hasFiveHourLimit ?? true {
+                rateLimitSegment(
+                    label: String(localized: "5h", bundle: .module),
+                    icon: "clock",
+                    percent: rateLimit?.fiveHourPercent,
+                    resetsAt: rateLimit?.fiveHourResetsAt,
+                    isPresented: $showFiveHourPopover,
+                    title: "5-hour rate limit",
+                    body: "Tracks usage against Codex's rolling 5-hour limit. Resets gradually as older requests age out."
+                )
+            }
             rateLimitSegment(
                 label: String(localized: "7d", bundle: .module),
                 icon: "calendar",
@@ -180,6 +187,31 @@ struct StatusLineView: View {
             )
         case .acp:
             EmptyView()
+        }
+    }
+
+    // MARK: - Rate Limit Advice
+
+    /// Warning shown when the selected model is close to (or burning through)
+    /// its usage limits, with cheaper models and providers to switch to.
+    @ViewBuilder
+    private func rateLimitAdviceSegment() -> some View {
+        if let advice = chatBridge.rateLimitAdvice {
+            Image(systemName: advice.severity == .warning ? "exclamationmark.triangle.fill" : "lightbulb")
+                .font(.system(size: ClaudeTheme.size(10)))
+                .foregroundStyle(advice.severity == .warning ? ClaudeTheme.statusWarning : ClaudeTheme.textTertiary)
+                .contentShape(Rectangle())
+                .help(advice.tooltip)
+                .onTapGesture { showAdvicePopover.toggle() }
+                .popover(isPresented: $showAdvicePopover, arrowEdge: .top) {
+                    RateLimitAdvicePopover(advice: advice) { providerRaw in
+                        showAdvicePopover = false
+                        if let provider = AgentProvider(rawValue: providerRaw) {
+                            chatBridge.setSessionProvider(provider)
+                        }
+                    }
+                }
+                .accessibilityLabel(Text(advice.headline))
         }
     }
 

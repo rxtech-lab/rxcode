@@ -27,11 +27,20 @@ swift test --package-path Packages
 | `RxCodeSync` | `Packages/Sources/RxCodeSync/` | End-to-end encrypted sync protocol, pairing, APNs alert payloads, and mobile/desktop transport data structures. |
 
 Additional UI helper sources live alongside under `Packages/Sources/`
-(`DiffView`, `MessageList`).
+(`DiffView`).
+
+The transcript list and the markdown renderer are no longer local. They live in
+RxAgentSDK as `AgentMessageListUI` and `AgentMarkdownUI`, which `RxCodeChatKit`
+depends on through the `RxAgentSDK` product — see
+[RxAgentSDK Migration](rxagentsdk-migration).
 
 ## Boundary rules
 
 - Put chat-specific SwiftUI components in `RxCodeChatKit`, not `RxCodeCore`.
+- Before writing a generic chat UI primitive, check whether RxAgentSDK already
+  ships it. `AgentMessageListUI` and `AgentMarkdownUI` are safe to import
+  anywhere because they depend only on `RxAgentUISupport`. `AgentChatUI` is not:
+  it pulls in `RxAgentCore`, whose type names collide with `RxCodeCore`.
 - Put sync protocol code in `RxCodeSync`; keep transport types
   forward/backward compatible because paired desktop and mobile versions differ.
 - Keep app orchestration (`AppState`, services) in the `RxCode/` app target, not

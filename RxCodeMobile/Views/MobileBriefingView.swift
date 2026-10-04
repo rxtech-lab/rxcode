@@ -39,7 +39,7 @@ struct MobileBriefingView: View {
         GeometryReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    if groups.isEmpty {
+                    if groups.isEmpty && documents.isEmpty {
                         emptyState
                             .frame(maxWidth: .infinity, minHeight: 320)
                     } else {
@@ -49,6 +49,13 @@ struct MobileBriefingView: View {
                                 alignment: .leading,
                                 spacing: 16
                             ) {
+                                ForEach(documents) { document in
+                                    NavigationLink(value: document.id) {
+                                        MobileDocumentBriefingCard(document: document)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityIdentifier("briefing-document-card-\(document.id.uuidString)")
+                                }
                                 ForEach(groups) { group in
                                     NavigationLink(value: group.key) {
                                         BriefingCard(
@@ -90,6 +97,11 @@ struct MobileBriefingView: View {
         }
         .navigationDestination(for: BriefingGroupKey.self) { key in
             MobileBriefingDetailView(groupKey: key, onOpenSession: onOpenSession)
+        }
+        .navigationDestination(for: UUID.self) { id in
+            if let document = state.briefingDocuments.first(where: { $0.id == id }) {
+                MobileDocumentBriefingDetailView(document: document)
+            }
         }
         .navigationDestination(for: String.self) { sessionID in
             MobileChatView(sessionID: sessionID, onClose: onCloseChat)
@@ -155,6 +167,12 @@ struct MobileBriefingView: View {
             .sortedByProjectOrder(state.projects)
     }
 
+    private var documents: [MobileBriefingDocument] {
+        state.briefingDocuments.filter {
+            selectedProjectIds.isEmpty || ($0.projectId.map(selectedProjectIds.contains) ?? false)
+        }.sorted { $0.createdAt > $1.createdAt }
+    }
+
     /// Briefing groups after applying the active project and branch filters.
     private var groups: [GroupedBriefing] {
         let projectFiltered: [GroupedBriefing]
@@ -179,12 +197,12 @@ struct MobileBriefingView: View {
 
     /// True when at least one briefing or summary exists, regardless of filters.
     private var hasAnyData: Bool {
-        !state.branchBriefings.isEmpty || !state.threadSummaries.isEmpty
+        !state.branchBriefings.isEmpty || !state.threadSummaries.isEmpty || !state.briefingDocuments.isEmpty
     }
 
     /// Projects that actually have at least one briefing or summary recorded.
     private var projectsWithData: [Project] {
-        let ids = Set(allGroups.map(\.projectId))
+        let ids = Set(allGroups.map(\.projectId) + state.briefingDocuments.compactMap(\.projectId))
         return state.projects.filter { ids.contains($0.id) }
     }
 
@@ -288,6 +306,7 @@ struct BriefingListView: View {
     @EnvironmentObject private var state: MobileAppState
     @Binding var selectedGroup: BriefingGroupKey?
     @Namespace private var glassNamespace
+    @State private var selectedDocument: MobileBriefingDocument?
 
     /// Selected project ids for filtering. Empty = show every project.
     @State private var selectedProjectIds: Set<UUID> = []
@@ -298,11 +317,18 @@ struct BriefingListView: View {
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 12) {
-                if groups.isEmpty {
+                if groups.isEmpty && documents.isEmpty {
                     emptyState
                         .frame(maxWidth: .infinity, minHeight: 200)
                 } else {
                     GlassEffectContainer(spacing: 12) {
+                        ForEach(documents) { document in
+                            Button { selectedDocument = document } label: {
+                                MobileDocumentBriefingCard(document: document)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("briefing-document-card-\(document.id.uuidString)")
+                        }
                         ForEach(groups) { group in
                             Button {
                                 selectedGroup = group.key
@@ -340,6 +366,16 @@ struct BriefingListView: View {
         .refreshable {
             await state.refreshSnapshot()
         }
+        .sheet(item: $selectedDocument) { document in
+            NavigationStack {
+                MobileDocumentBriefingDetailView(document: document)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { selectedDocument = nil }
+                        }
+                    }
+            }
+        }
     }
 
     // MARK: - Data
@@ -359,6 +395,12 @@ struct BriefingListView: View {
     private var allGroups: [GroupedBriefing] {
         groupBriefings(briefings: state.branchBriefings, threads: state.threadSummaries)
             .sortedByProjectOrder(state.projects)
+    }
+
+    private var documents: [MobileBriefingDocument] {
+        state.briefingDocuments.filter {
+            selectedProjectIds.isEmpty || ($0.projectId.map(selectedProjectIds.contains) ?? false)
+        }.sorted { $0.createdAt > $1.createdAt }
     }
 
     private var groups: [GroupedBriefing] {
@@ -381,11 +423,11 @@ struct BriefingListView: View {
     }
 
     private var hasAnyData: Bool {
-        !state.branchBriefings.isEmpty || !state.threadSummaries.isEmpty
+        !state.branchBriefings.isEmpty || !state.threadSummaries.isEmpty || !state.briefingDocuments.isEmpty
     }
 
     private var projectsWithData: [Project] {
-        let ids = Set(allGroups.map(\.projectId))
+        let ids = Set(allGroups.map(\.projectId) + state.briefingDocuments.compactMap(\.projectId))
         return state.projects.filter { ids.contains($0.id) }
     }
 
@@ -484,147 +526,6 @@ struct BriefingListView: View {
                 systemImage: "doc.text.magnifyingglass",
                 description: Text("Briefings appear here after threads finish on your Mac.")
             )
-        }
-    }
-}
-
-// MARK: - Briefing List Card (Compact for Content Column)
-
-private struct BriefingListCard: View {
-    let group: GroupedBriefing
-    let projectName: String
-    let activeJobCount: Int
-    let ciStatus: ProjectCIStatus?
-    let isSelected: Bool
-    let namespace: Namespace.ID
-
-    private var threadCount: Int { group.threads.count }
-
-    var body: some View {
-        HStack(spacing: 12) {
-            // Project icon
-            ZStack {
-                Circle()
-                    .fill(accentGradient.opacity(0.15))
-                    .frame(width: 40, height: 40)
-
-                Image(systemName: "folder.fill")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(accentGradient)
-            }
-
-            // Content
-            VStack(alignment: .leading, spacing: 4) {
-                Text(projectName)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-
-                HStack(spacing: 6) {
-                    Image(systemName: group.branch.lowercased() == "unknown" ? "plus.circle" : "arrow.triangle.branch")
-                        .font(.system(size: 9, weight: .medium))
-                    Text(group.branch.lowercased() == "unknown" ? "Initialize Git" : group.branch)
-                        .font(.system(size: 12))
-                        .lineLimit(1)
-                }
-                .foregroundStyle(.secondary)
-
-                // Metadata
-                BriefingFlowLayout(spacing: 8) {
-                    if threadCount > 0 {
-                        HStack(spacing: 4) {
-                            Image(systemName: "bubble.left.and.bubble.right")
-                                .font(.system(size: 9, weight: .medium))
-                            Text("\(threadCount)")
-                                .font(.system(size: 11, weight: .medium))
-                        }
-                        .foregroundStyle(.secondary)
-                    }
-
-                    if activeJobCount > 0 {
-                        HStack(spacing: 4) {
-                            Circle()
-                                .fill(.green)
-                                .frame(width: 5, height: 5)
-                            Text("\(activeJobCount) active", tableName: "Localizable")
-                                .font(.system(size: 11, weight: .medium))
-                        }
-                        .foregroundStyle(.green)
-                    }
-
-                    if let ciStatus {
-                        MobileCIStatusChip(status: ciStatus, compact: true)
-                    }
-
-                    HStack(spacing: 4) {
-                        Image(systemName: "clock")
-                            .font(.system(size: 9))
-                        Text(group.updatedAt.formatted(.relative(presentation: .named)))
-                            .font(.system(size: 11))
-                    }
-                    .foregroundStyle(.tertiary)
-                }
-            }
-
-            Spacer(minLength: 0)
-
-            Image(systemName: "chevron.right")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.tertiary)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .contentShape(Rectangle())
-    }
-
-    private var accentGradient: LinearGradient {
-        LinearGradient(
-            colors: [
-                Color(red: 0.95, green: 0.6, blue: 0.4),
-                Color(red: 0.85, green: 0.5, blue: 0.55)
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-}
-
-// MARK: - Briefing List Card Button Style
-
-private struct BriefingListCardButtonStyle: ButtonStyle {
-    let isSelected: Bool
-    @Environment(\.colorScheme) private var colorScheme
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .background {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(backgroundColor(isPressed: configuration.isPressed))
-            }
-            .glassEffect(
-                glassConfig(isPressed: configuration.isPressed),
-                in: .rect(cornerRadius: 14)
-            )
-            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
-            .animation(.spring(duration: 0.2), value: configuration.isPressed)
-    }
-
-    private func backgroundColor(isPressed: Bool) -> Color {
-        if isSelected {
-            return ClaudeTheme.accent.opacity(0.15)
-        } else if isPressed {
-            return Color.primary.opacity(0.05)
-        } else {
-            return .clear
-        }
-    }
-
-    private func glassConfig(isPressed: Bool) -> Glass {
-        if isSelected {
-            return .regular.tint(ClaudeTheme.accent.opacity(0.3)).interactive()
-        } else {
-            return .regular.interactive()
         }
     }
 }
@@ -799,7 +700,8 @@ func groupBriefings(
 ) -> [GroupedBriefing] {
     var buckets: [String: GroupedBriefing] = [:]
 
-    for briefing in briefings {
+    // A branch can carry one briefing per day; show the most recent one.
+    for briefing in briefings.sorted(by: { $0.updatedAt < $1.updatedAt }) {
         let key = "\(briefing.projectId.uuidString)::\(briefing.branch)"
         buckets[key] = GroupedBriefing(
             projectId: briefing.projectId,

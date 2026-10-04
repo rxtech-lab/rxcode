@@ -1,0 +1,687 @@
+import PDFKit
+import RxCodeCore
+import SwiftUI
+
+/// The AI flow of `TaskFormSheet`: describe a task or story once and review
+/// what the suggestion agent drafts from it.
+extension TaskFormSheet {
+    // MARK: - AI flow
+
+    var draftComposer: some View {
+        Form {
+            switch draftStep {
+            case .describe: describeSections
+            case .review: reviewSections
+            }
+        }
+        .formStyle(.grouped)
+        .sheet(item: $editingStoryTaskDraft) { draft in
+            StoryTaskDraftSheet(
+                draft: draft,
+                isNew: !storyTaskDrafts.contains { $0.id == draft.id },
+                startsAfterOptions: storyTaskDraftParentOptions(for: draft)
+            ) { saved in
+                if let index = storyTaskDrafts.firstIndex(where: { $0.id == saved.id }) {
+                    storyTaskDrafts[index] = saved
+                } else {
+                    storyTaskDrafts.append(saved)
+                }
+            }
+        }
+    }
+
+    /// Step one: what to draft from.
+    @ViewBuilder
+    var describeSections: some View {
+            Section(isStory ? "Create Story with Tasks" : "Create Task") {
+                Picker("Project", selection: projectBinding) {
+                    ForEach(appState.projects) { project in
+                        Text(project.name).tag(project.id)
+                    }
+                }
+            }
+
+            Section {
+                // The same editor the form uses, so the source description
+                // takes pasted and dropped images here too. A task keeps them
+                // in its attachment list; a story has none, so they stay
+                // Markdown links in the text the draft is generated from.
+                MarkdownDescriptionEditor(
+                    text: $draftPrompt,
+                    attachments: isStory ? nil : $task.attachments,
+                    placeholder: isStory
+                        ? String(localized: "Describe the story and the tasks it needs")
+                        : String(localized: "Describe what needs doing"),
+                    height: 130,
+                    identifierPrefix: "story-create-prompt"
+                )
+                // An edited source makes the draft below stale, so it goes.
+                .onChange(of: draftPrompt) { _, _ in clearGeneratedDraft() }
+
+                HStack {
+                    Button {
+                        showingSourceFilePicker = true
+                    } label: {
+                        Label("Choose File…", systemImage: "doc")
+                    }
+                    .disabled(isGeneratingDraft)
+
+                    Spacer()
+
+                    Text("AI model")
+                    SuggestionAgentMenu(agent: $suggestionAgent)
+                        .disabled(isGeneratingDraft)
+                        .accessibilityIdentifier("draft-suggestion-model")
+                }
+            } header: {
+                Text("Description")
+            } footer: {
+                if let draftError {
+                    Text(draftError)
+                        .foregroundStyle(.red)
+                } else {
+                    Text(isStory
+                        ? "Describe the story and tasks, or choose a text or PDF file."
+                        : "Describe the task, or choose a text or PDF file.")
+                }
+            }
+    }
+
+    /// Step two: the model's draft, editable before it is created.
+    @ViewBuilder
+    var reviewSections: some View {
+        if isStory {
+            storyDraftSections
+        } else {
+            taskDraftSection
+        }
+    }
+
+    @ViewBuilder
+    var storyDraftSections: some View {
+        Section {
+            TextField("Title", text: $story.title, prompt: Text("Story title"))
+                .multilineTextAlignment(.leading)
+                .accessibilityIdentifier("story-create-title")
+        } header: {
+            Text("Story")
+        } footer: {
+            if let draftError {
+                Text(draftError).foregroundStyle(.red)
+            }
+        }
+
+        Section {
+            ForEach(storyTaskDrafts) { draft in
+                storyTaskDraftRow(draft)
+            }
+            Button {
+                editingStoryTaskDraft = StoryTaskDraft(title: "", details: "")
+            } label: {
+                Label("Add Task…", systemImage: "plus")
+            }
+            .accessibilityIdentifier("story-create-add-task")
+        } header: {
+            Text("Tasks")
+        } footer: {
+            Text("Click a task to edit it before the story is created. A task that starts after another runs once that task finishes.")
+        }
+
+        Section {
+            LabeledContent("Model") {
+                agentModelMenu($storyDraftAgent)
+                    .disabled(isGeneratingDraft)
+                    .accessibilityIdentifier("story-draft-model")
+            }
+        } header: {
+            Text("Agent")
+        } footer: {
+            Text("Every task in this story is assigned to this model.")
+        }
+    }
+
+    func storyTaskDraftRow(_ draft: StoryTaskDraft) -> some View {
+        HStack(spacing: 8) {
+            Button {
+                editingStoryTaskDraft = draft
+            } label: {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(draft.title.isEmpty ? String(localized: "Untitled task") : draft.title)
+                        .foregroundStyle(draft.title.isEmpty ? ClaudeTheme.textTertiary : ClaudeTheme.textPrimary)
+                        .lineLimit(1)
+                    if !draft.details.isEmpty {
+                        Text(draft.details)
+                            .font(.system(size: ClaudeTheme.size(11)))
+                            .foregroundStyle(ClaudeTheme.textTertiary)
+                            .lineLimit(2)
+                    }
+                    if let parent = storyTaskDrafts.first(where: { $0.id == draft.startsAfter }) {
+                        Label {
+                            Text("Starts after \(parent.title.isEmpty ? String(localized: "Untitled task") : parent.title)")
+                        } icon: {
+                            Image(systemName: "link")
+                        }
+                        .font(.system(size: ClaudeTheme.size(11)))
+                        .foregroundStyle(ClaudeTheme.accent)
+                        .lineLimit(1)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                removeStoryTaskDraft(draft)
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(ClaudeTheme.textTertiary)
+            }
+            .buttonStyle(.borderless)
+            .help("Remove task")
+        }
+    }
+
+    /// Drafts `draft` can start after: any other draft whose own chain of
+    /// "starts after" links doesn't lead back to `draft`.
+    func storyTaskDraftParentOptions(for draft: StoryTaskDraft) -> [StoryTaskDraft] {
+        storyTaskDrafts.filter { candidate in
+            var visited: Set<UUID> = [draft.id]
+            var current: UUID? = candidate.id
+            while let id = current {
+                guard visited.insert(id).inserted else { return false }
+                current = storyTaskDrafts.first { $0.id == id }?.startsAfter
+            }
+            return true
+        }
+    }
+
+    /// Removing a draft hands its dependents its own "starts after", so the
+    /// chain around it stays in order.
+    func removeStoryTaskDraft(_ draft: StoryTaskDraft) {
+        storyTaskDrafts.removeAll { $0.id == draft.id }
+        for index in storyTaskDrafts.indices where storyTaskDrafts[index].startsAfter == draft.id {
+            storyTaskDrafts[index].startsAfter = draft.startsAfter
+        }
+    }
+
+    /// The generated task, editable before it is saved. Only the fields worth
+    /// correcting in place are here; the rest can be changed once it exists.
+    var taskDraftSection: some View {
+        Section {
+            TextField("Title", text: $task.title, prompt: Text("Task title"))
+                .multilineTextAlignment(.leading)
+                .accessibilityIdentifier("task-create-title")
+            TextField("Details", text: $task.details, prompt: Text("Task details"), axis: .vertical)
+                .multilineTextAlignment(.leading)
+                .lineLimit(3...12)
+            draftPropertyChips
+            LabeledContent("Model") {
+                agentModelMenu($task.agent)
+                    .disabled(isGeneratingDraft)
+                    .accessibilityIdentifier("task-draft-model")
+            }
+        } header: {
+            Text("Draft")
+        } footer: {
+            if let draftError {
+                Text(draftError).foregroundStyle(.red)
+            }
+        }
+    }
+
+    /// What the model filled in, as chips that each open a menu, so a wrong
+    /// guess is corrected in place. Unset properties show as dimmed chips so
+    /// they can be filled in too.
+    var draftPropertyChips: some View {
+        LabeledContent("Suggested properties") {
+            FlowLayout(spacing: 4) {
+                draftTypeChip
+                draftPriorityChip
+                draftStoryChip
+                draftValueChip(
+                    icon: "tag",
+                    placeholder: String(localized: "Version"),
+                    value: $task.version,
+                    options: board.allVersions
+                )
+                draftValueChip(
+                    icon: "flag",
+                    placeholder: String(localized: "Milestone"),
+                    value: $task.milestone,
+                    options: board.allMilestones
+                )
+                ForEach(task.tags, id: \.self) { tag in
+                    draftChipMenu(icon: "number", title: tag, isActive: true) {
+                        Button("Remove Tag", role: .destructive) {
+                            task.tags.removeAll { $0 == tag }
+                        }
+                    }
+                }
+                draftAddTagChip
+            }
+        }
+    }
+
+    var draftTypeChip: some View {
+        let selected = board.itemType(id: task.typeId)
+        return draftChipMenu(
+            icon: "circle.fill",
+            title: selected?.name ?? String(localized: "Type"),
+            isActive: selected != nil
+        ) {
+            draftNoneButton(isSelected: selected == nil) { task.typeId = nil }
+            Divider()
+            ForEach(board.effectiveTypes) { type in
+                Button {
+                    task.typeId = type.id
+                } label: {
+                    Label {
+                        Text(type.name)
+                    } icon: {
+                        Image(systemName: type.id == selected?.id ? "checkmark.circle.fill" : "circle.fill")
+                            .foregroundStyle(type.tint)
+                    }
+                }
+            }
+        }
+        .accessibilityIdentifier("task-draft-type")
+    }
+
+    var draftPriorityChip: some View {
+        draftChipMenu(
+            icon: task.priority?.systemImage ?? "equal",
+            title: task.priority.map { String(localized: $0.displayName) } ?? String(localized: "Priority"),
+            isActive: task.priority != nil
+        ) {
+            draftNoneButton(isSelected: task.priority == nil) { task.priority = nil }
+            Divider()
+            ForEach(TaskPriority.allCases, id: \.self) { priority in
+                Button {
+                    task.priority = priority
+                } label: {
+                    if task.priority == priority {
+                        Label(String(localized: priority.displayName), systemImage: "checkmark")
+                    } else {
+                        Text(priority.displayName)
+                    }
+                }
+            }
+        }
+        .accessibilityIdentifier("task-draft-priority")
+    }
+
+    var draftStoryChip: some View {
+        let parent = board.story(id: task.storyId)
+        return draftChipMenu(
+            icon: "square.stack.3d.up",
+            title: parent?.title ?? String(localized: "Story"),
+            isActive: parent != nil
+        ) {
+            draftNoneButton(isSelected: parent == nil) { task.storyId = nil }
+            Divider()
+            ForEach(appState.stories(projectFilter: task.projectId)) { story in
+                Button {
+                    task.storyId = story.id
+                } label: {
+                    if story.id == parent?.id {
+                        Label(story.title, systemImage: "checkmark")
+                    } else {
+                        Text(story.title)
+                    }
+                }
+            }
+        }
+        .accessibilityIdentifier("task-draft-story")
+    }
+
+    /// Version and milestone: pick an existing value, or clear it. New values
+    /// are created from the full form once the task exists.
+    func draftValueChip(
+        icon: String,
+        placeholder: String,
+        value: Binding<String?>,
+        options: [String]
+    ) -> some View {
+        let current = value.wrappedValue.flatMap { $0.isEmpty ? nil : $0 }
+        // A suggested value the board doesn't know yet still shows as picked.
+        let choices = current.map { options.contains($0) ? options : [$0] + options } ?? options
+        return draftChipMenu(icon: icon, title: current ?? placeholder, isActive: current != nil) {
+            draftNoneButton(isSelected: current == nil) { value.wrappedValue = nil }
+            if !choices.isEmpty { Divider() }
+            ForEach(choices, id: \.self) { option in
+                Button {
+                    value.wrappedValue = option
+                } label: {
+                    if option == current {
+                        Label(option, systemImage: "checkmark")
+                    } else {
+                        Text(option)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    var draftAddTagChip: some View {
+        let unused = board.allTags.filter { !task.tags.contains($0) }
+        if !unused.isEmpty {
+            draftChipMenu(icon: "plus", title: String(localized: "Tag"), isActive: false) {
+                ForEach(unused, id: \.self) { tag in
+                    Button(tag) { task.tags.append(tag) }
+                }
+            }
+            .accessibilityIdentifier("task-draft-add-tag")
+        }
+    }
+
+    func draftChipMenu<Content: View>(
+        icon: String,
+        title: String,
+        isActive: Bool,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        Menu {
+            content()
+        } label: {
+            TaskBoardChipLabel(icon: icon, title: title, isActive: isActive)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .disabled(isGeneratingDraft)
+    }
+
+    func draftNoneButton(isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            if isSelected {
+                Label("None", systemImage: "checkmark")
+            } else {
+                Text("None")
+            }
+        }
+    }
+
+    var draftComposerFooter: some View {
+        HStack {
+            if draftStep == .review {
+                Button {
+                    draftError = nil
+                    draftStep = .describe
+                } label: {
+                    Label("Revise", systemImage: "chevron.left")
+                }
+                .help("Go back and change the description")
+                .accessibilityIdentifier("draft-revise")
+            }
+            Spacer()
+            Button("Cancel") { dismiss() }
+                .keyboardShortcut(.cancelAction)
+            switch draftStep {
+            case .describe:
+                Button {
+                    Task { await generateDraft() }
+                } label: {
+                    HStack(spacing: 6) {
+                        if isGeneratingDraft {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Image(systemName: "sparkles")
+                        }
+                        Text("Generate Draft")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!canGenerateDraft)
+                .keyboardShortcut(.defaultAction)
+                .accessibilityIdentifier("story-create-generate")
+            case .review:
+                Button(isStory ? "Create Story and Tasks" : "Create Task") {
+                    if isStory { saveComposedStory() } else { save() }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!canCreateFromDraft)
+                .keyboardShortcut(.defaultAction)
+                .accessibilityIdentifier(isStory ? "story-create-save" : "task-create-save")
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+    }
+
+    // MARK: - AI flow actions
+
+    func generateDraft() async {
+        guard canGenerateDraft else { return }
+        if isStory {
+            await generateStoryDraft()
+        } else {
+            await generateTaskDraft()
+        }
+        // A stale result is discarded, so only move on when one landed.
+        if hasGeneratedDraft { draftStep = .review }
+    }
+
+    func generateStoryDraft() async {
+        let source = draftPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !source.isEmpty else { return }
+        let projectId = story.projectId
+        isGeneratingDraft = true
+        draftError = nil
+        defer { isGeneratingDraft = false }
+        let draft = await appState.suggestStoryDraft(source: String(source.prefix(30_000)), projectId: projectId)
+        guard isStory, draftPrompt.trimmingCharacters(in: .whitespacesAndNewlines) == source,
+              story.projectId == projectId else { return }
+        guard let draft else {
+            let title = TaskTitleSuggestion.fallback(from: source)
+            story.title = title
+            story.details = source
+            storyTaskDrafts = [StoryTaskDraft(title: title, details: source)]
+            draftError = String(localized: "The suggestion agent did not respond. Review this single-task draft before creating it.")
+            return
+        }
+        story.title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        story.details = source
+        var drafts = draft.tasks.prefix(12).map {
+            StoryTaskDraft(title: $0.title.trimmingCharacters(in: .whitespacesAndNewlines),
+                           details: $0.details.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        // Parsed links always point at an earlier task, so they stay inside
+        // the kept prefix and can't form a cycle.
+        for (index, suggested) in draft.tasks.prefix(drafts.count).enumerated() {
+            if let parent = suggested.startsAfter, parent < index {
+                drafts[index].startsAfter = drafts[parent].id
+            }
+        }
+        storyTaskDrafts = drafts
+    }
+
+    /// Turns the description into a reviewable task: the source stays the
+    /// description — it is what the agent is eventually asked to do — and the
+    /// model writes the title and fills the empty properties, the same two
+    /// calls quick add makes in the background.
+    func generateTaskDraft() async {
+        let source = String(draftPrompt.trimmingCharacters(in: .whitespacesAndNewlines).prefix(30_000))
+        guard !source.isEmpty else { return }
+        let projectId = task.projectId
+        isGeneratingDraft = true
+        draftError = nil
+        defer { isGeneratingDraft = false }
+
+        var candidate = task
+        candidate.details = source
+        candidate.title = ""
+        // Independent prompts: run them together rather than paying for two
+        // round trips in a row.
+        async let suggestedTitle = appState.suggestTitle(details: source, storyTitle: nil, projectId: projectId)
+        async let classification = appState.suggestClassification(for: candidate)
+        let (title, suggestion) = await (suggestedTitle, classification)
+
+        guard !isStory, draftPrompt.trimmingCharacters(in: .whitespacesAndNewlines).prefix(30_000) == source,
+              task.projectId == projectId else { return }
+        task.details = source
+        task.title = title ?? TaskTitleSuggestion.fallback(from: source)
+        suggestion?.apply(to: &task, board: board)
+        hasTaskDraft = true
+        if title == nil, suggestion == nil {
+            draftError = String(localized: "The suggestion agent did not respond. Review this draft before creating it.")
+        }
+    }
+
+    /// Drops what the model produced, keeping the source text: the outline
+    /// belongs to the description it was generated from.
+    func clearGeneratedDraft() {
+        storyTaskDrafts = []
+        hasTaskDraft = false
+        draftError = nil
+    }
+
+    func importSourceFile(_ result: Result<URL, Error>) {
+        guard case .success(let url) = result else {
+            if case .failure(let error) = result { draftError = error.localizedDescription }
+            return
+        }
+        Task {
+            do {
+                let content = try await Task.detached(priority: .userInitiated) {
+                    try DraftSourceFile.read(url)
+                }.value
+                let heading = "# \(url.lastPathComponent)\n\n"
+                draftPrompt += (draftPrompt.isEmpty ? "" : "\n\n") + heading + content
+            } catch {
+                draftError = error.localizedDescription
+            }
+        }
+    }
+
+    func saveComposedStory() {
+        guard !storyTaskDrafts.isEmpty else { return }
+        story.title = story.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !story.title.isEmpty,
+              storyTaskDrafts.allSatisfy({ !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+        else { return }
+        appState.upsertStory(story)
+        if !isExistingRecord {
+            AnalyticsService.shared.log(.projectStoryCreated, parameters: ["method": "ai_composed"])
+        }
+        // IDs are assigned up front so each "starts after" link can name its
+        // task, and a task is saved only after the one it starts after, since
+        // `upsertTask` drops links to tasks not yet on the board.
+        var tasksByDraft: [UUID: ProjectTask] = [:]
+        for draft in storyTaskDrafts {
+            var task = appState.newTaskDraft(inStory: story)
+            task.title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            task.details = draft.details.trimmingCharacters(in: .whitespacesAndNewlines)
+            task.agent = storyDraftAgent
+            tasksByDraft[draft.id] = task
+        }
+        var saved: Set<UUID> = []
+        func saveTask(_ draft: StoryTaskDraft) {
+            guard saved.insert(draft.id).inserted, var task = tasksByDraft[draft.id] else { return }
+            if let parentDraft = storyTaskDrafts.first(where: { $0.id == draft.startsAfter }) {
+                saveTask(parentDraft)
+                task.parentTaskId = tasksByDraft[parentDraft.id]?.id
+            }
+            appState.upsertTask(task)
+            AnalyticsService.shared.log(.projectTaskCreated, parameters: ["method": "ai_composed"])
+        }
+        storyTaskDrafts.forEach(saveTask)
+        dismiss()
+    }
+}
+
+/// Adds or edits one task of a generated story outline. Works on a copy, so
+/// Cancel leaves the outline as it was.
+private struct StoryTaskDraftSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    @State var draft: TaskFormSheet.StoryTaskDraft
+    let isNew: Bool
+    /// Other drafts this one may start after without making a cycle.
+    let startsAfterOptions: [TaskFormSheet.StoryTaskDraft]
+    let onSave: (TaskFormSheet.StoryTaskDraft) -> Void
+
+    private var canSave: Bool {
+        !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Form {
+                Section(isNew ? "New Task" : "Edit Task") {
+                    TextField("Title", text: $draft.title, prompt: Text("What needs doing?"))
+                        .multilineTextAlignment(.leading)
+                        .accessibilityIdentifier("story-draft-task-title")
+                    TextField("Details", text: $draft.details, prompt: Text("Task details"), axis: .vertical)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(4...12)
+                        .accessibilityIdentifier("story-draft-task-details")
+                    if !startsAfterOptions.isEmpty {
+                        Picker("Starts after", selection: $draft.startsAfter) {
+                            Text("None").tag(UUID?.none)
+                            ForEach(startsAfterOptions) { option in
+                                Text(option.title.isEmpty ? String(localized: "Untitled task") : option.title)
+                                    .tag(UUID?.some(option.id))
+                            }
+                        }
+                        .accessibilityIdentifier("story-draft-task-starts-after")
+                    }
+                }
+            }
+            .formStyle(.grouped)
+
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button(isNew ? "Add" : "Save") {
+                    draft.title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                    draft.details = draft.details.trimmingCharacters(in: .whitespacesAndNewlines)
+                    onSave(draft)
+                    dismiss()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!canSave)
+                .keyboardShortcut(.defaultAction)
+                .accessibilityIdentifier("story-draft-task-save")
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+        }
+        .frame(width: 460, height: 400)
+    }
+}
+
+private enum DraftSourceFile {
+    nonisolated static func read(_ url: URL) throws -> String {
+        let accessed = url.startAccessingSecurityScopedResource()
+        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+        let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+        guard size <= 20_000_000 else {
+            throw DraftSourceFileError.tooLarge
+        }
+        let content: String
+        if url.pathExtension.lowercased() == "pdf" {
+            guard let document = PDFDocument(url: url) else { throw DraftSourceFileError.unreadable }
+            content = document.string ?? ""
+        } else {
+            content = try String(contentsOf: url, encoding: .utf8)
+        }
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw DraftSourceFileError.empty }
+        return String(trimmed.prefix(30_000))
+    }
+}
+
+private enum DraftSourceFileError: LocalizedError {
+    case tooLarge, unreadable, empty
+
+    var errorDescription: String? {
+        switch self {
+        case .tooLarge: String(localized: "The selected file is too large (20 MB maximum).")
+        case .unreadable: String(localized: "Could not read the selected file.")
+        case .empty: String(localized: "The selected file contains no readable text.")
+        }
+    }
+}

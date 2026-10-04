@@ -112,10 +112,23 @@ struct EffortPickerSheet: View {
     @State private var selectedIndex: Int = 0
     @FocusState private var isFocused: Bool
 
-    // 0 = Auto (nil), 1...n = availableEfforts
-    let items: [String?] = [nil] + AppState.availableEfforts.map { Optional($0) }
+    private var provider: AgentProvider { appState.effectiveModelSelection(in: windowState).provider }
+
+    /// This thread's provider's levels, not the union — the same list the
+    /// composer's picker shows. 0 = Auto (nil), 1...n = the provider's levels.
+    private var levels: [ReasoningLevel] { appState.reasoningLevels(for: provider) }
+
+    private var items: [String?] { [nil] + levels.map { Optional($0.id) } }
 
     var effectiveEffort: String? { windowState.sessionEffort }
+
+    private func displayName(_ effort: String?) -> String {
+        // The clearing row names what it falls back to, the same way the
+        // composer's menu does — "Auto" read as "the agent decides", which is
+        // not what an unpinned session sends.
+        guard let effort else { return appState.defaultEffortTitle(for: provider) }
+        return levels.first { $0.id == effort }?.displayName ?? effortDisplayName(effort)
+    }
 
     var body: some View {
         VStack(spacing: 16) {
@@ -128,10 +141,15 @@ struct EffortPickerSheet: View {
                     let effort = items[index]
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(effort.map { effortDisplayName($0) } ?? "Auto")
+                            Text(displayName(effort))
                                 .foregroundStyle(ClaudeTheme.textPrimary)
-                            if effort == "max" {
-                                Text("Opus 4.6 only")
+                            // The backend's own one-liner for the level,
+                            // replacing a subtitle that was hardcoded for a
+                            // single Claude model.
+                            if let detail = effort.flatMap({ id in
+                                levels.first { $0.id == id }?.levelDescription
+                            }) {
+                                Text(detail)
                                     .font(.caption2)
                                     .foregroundStyle(ClaudeTheme.textTertiary)
                             }
@@ -182,6 +200,12 @@ struct EffortPickerSheet: View {
         .onAppear {
             selectedIndex = items.firstIndex(where: { $0 == effectiveEffort }) ?? 0
             DispatchQueue.main.async { isFocused = true }
+        }
+        // The sheet can be opened (⌘-shortcut, `/effort`) before the composer
+        // has ever asked, so it fetches rather than assuming the cache is warm.
+        .task {
+            await appState.loadReasoningLevels(for: provider)
+            selectedIndex = items.firstIndex(where: { $0 == effectiveEffort }) ?? 0
         }
     }
 }

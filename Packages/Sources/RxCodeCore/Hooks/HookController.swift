@@ -306,6 +306,27 @@ public protocol HookController: AnyObject {
     func requestReleaseCreate(project: Project)
     func requestCISetup(project: Project)
 
+    // MARK: Project task board
+
+    /// Move the task linked to `sessionKey` to the column its current column
+    /// routes `event` to. No-op when the thread owns no task or the column has
+    /// no target for the event. `sessionContinues` says whether the thread will
+    /// keep running (e.g. a review-fix turn was started); without it a card is
+    /// never routed into a chat column, where it would stay agent-locked with
+    /// nothing left to release it. Returns true when a task moved.
+    @discardableResult
+    func applyTaskTrigger(_ event: TaskTriggerEvent, sessionKey: String, sessionContinues: Bool) -> Bool
+
+    /// Verify the linked task with a separate agent before routing a stopped
+    /// run into review. Incomplete or unverified work is marked for attention.
+    func advanceTaskAfterSessionEnd(_ payload: SessionEndPayload) async -> Bool
+
+    /// Fan a code-review start out to every hook's `onReviewStart`.
+    func notifyReviewStarted(_ payload: ReviewEventPayload)
+
+    /// Fan a code-review stop out to every hook's `onReviewStop`.
+    func notifyReviewStopped(_ payload: ReviewEventPayload)
+
     // MARK: Setup-session tracking
 
     /// Record that `sessionKey` belongs to a setup chat of the given `kind` (e.g.

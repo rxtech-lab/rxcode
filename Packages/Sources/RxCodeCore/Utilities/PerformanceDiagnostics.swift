@@ -2,17 +2,15 @@ import Foundation
 
 /// Low-overhead, process-wide counters for performance-sensitive paths.
 ///
-/// Hot UI code records only numeric values under fixed keys. The app drains the
-/// aggregate periodically and writes a single bounded diagnostic record, which
-/// avoids doing file I/O or constructing detailed log strings while scrolling
-/// and streaming.
+/// Hot UI code records only numeric values under fixed keys, without file I/O
+/// or constructing detailed log strings while scrolling and streaming.
 public enum PerformanceDiagnostics {
     public struct Measurement: Codable, Sendable, Equatable {
         public let count: Int64
         public let total: Double
         public let maximum: Double
 
-        fileprivate init(count: Int64, total: Double, maximum: Double) {
+        public init(count: Int64, total: Double, maximum: Double) {
             self.count = count
             self.total = total
             self.maximum = maximum
@@ -23,7 +21,7 @@ public enum PerformanceDiagnostics {
         public let counters: [String: Int64]
         public let measurements: [String: Measurement]
 
-        fileprivate init(
+        public init(
             counters: [String: Int64],
             measurements: [String: Measurement]
         ) {
@@ -88,5 +86,39 @@ public enum PerformanceDiagnostics {
     /// Returns and resets the current interval's aggregate values.
     public static func drain() -> Snapshot {
         accumulator.drain()
+    }
+}
+
+public extension PerformanceDiagnostics.Snapshot {
+    /// Folds a second accumulator's interval into this one.
+    ///
+    /// The chat transcript and markdown renderers moved to RxAgentSDK, which
+    /// records into its own `RxAgentUISupport.PerformanceDiagnostics` registry.
+    /// Without this merge the `scroll.*` and `markdown.*` keys would simply
+    /// stop appearing in the diagnostic record. Counters add; measurements add
+    /// their count and total and keep the larger maximum.
+    func merging(
+        counters otherCounters: [String: Int64],
+        measurements otherMeasurements: [String: PerformanceDiagnostics.Measurement]
+    ) -> Self {
+        var mergedCounters = counters
+        for (key, value) in otherCounters {
+            mergedCounters[key, default: 0] += value
+        }
+
+        var mergedMeasurements = measurements
+        for (key, value) in otherMeasurements {
+            guard let existing = mergedMeasurements[key] else {
+                mergedMeasurements[key] = value
+                continue
+            }
+            mergedMeasurements[key] = PerformanceDiagnostics.Measurement(
+                count: existing.count + value.count,
+                total: existing.total + value.total,
+                maximum: max(existing.maximum, value.maximum)
+            )
+        }
+
+        return Self(counters: mergedCounters, measurements: mergedMeasurements)
     }
 }

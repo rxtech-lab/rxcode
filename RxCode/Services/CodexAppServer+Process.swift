@@ -16,7 +16,7 @@ extension CodexAppServer {
             try Self.writeJSONLine(Self.notification(method: "initialized", params: [:]), to: handles.stdin)
             try Self.writeJSONLine(Self.request(id: 2, method: "account/rateLimits/read", params: .null), to: handles.stdin)
 
-            for try await line in handles.stdout.fileHandleForReading.bytes.lines {
+            for await line in handles.stdout.fileHandleForReading.lineStream() {
                 guard let object = Self.decodeObject(line) else { continue }
 
                 if let requestId = Self.idString(object["id"]), object["method"] != nil {
@@ -101,10 +101,13 @@ extension CodexAppServer {
     }
 
     func readStderr(_ stderr: Pipe, streamId: UUID) {
+        // A blocking `readDataToEndOfFile()` here would pin a cooperative
+        // thread for the whole life of the app server; with a few servers
+        // alive that starves the pool and every Codex turn stalls.
         Task.detached { [weak self] in
-            let data = stderr.fileHandleForReading.readDataToEndOfFile()
-            guard let text = String(data: data, encoding: .utf8), !text.isEmpty else { return }
-            await self?.appendStderr(text, streamId: streamId)
+            for await line in stderr.fileHandleForReading.lineStream() {
+                await self?.appendStderr(line + "\n", streamId: streamId)
+            }
         }
     }
 
@@ -116,7 +119,9 @@ extension CodexAppServer {
     /// execution when the `code_mode_host` feature is on) can be located. Mirrors
     /// how Codex resolves it: the `CODEX_CODE_MODE_HOST_PATH` env override, a
     /// sibling of the `codex` binary (and of its symlink target — the Homebrew
-    /// symlink dir differs from the Caskroom target dir), or the shell `PATH`.
+    /// symlink dir differs from the Caskroom target dir), the native binary dir
+    /// of an npm install, or the shell `PATH`. A false negative is costly: newer
+    /// Codex refuses every tool call with "code-mode host is disabled".
     static func codeModeHostAvailable(binary: String, path: String?) -> Bool {
         let fm = FileManager.default
         let hostName = "codex-code-mode-host"
@@ -134,6 +139,12 @@ extension CodexAppServer {
             }
         }
 
+        for dir in npmVendorBinDirs(resolvedCodexDir: resolvedDir) {
+            if fm.isExecutableFile(atPath: (dir as NSString).appendingPathComponent(hostName)) {
+                return true
+            }
+        }
+
         if let path, !path.isEmpty {
             for dir in path.split(separator: ":") where !dir.isEmpty {
                 if fm.isExecutableFile(atPath: (String(dir) as NSString).appendingPathComponent(hostName)) {
@@ -143,6 +154,35 @@ extension CodexAppServer {
         }
 
         return false
+    }
+
+    /// Native `bin` dirs of an npm-installed Codex. There `codex` resolves to the
+    /// `@openai/codex/bin/codex.js` launcher, while the real binary and its
+    /// sidecar live in a platform package's `vendor/<target-triple>/bin` — either
+    /// inside `@openai/codex` itself, nested under its `node_modules`, or hoisted
+    /// as a sibling (`@openai/codex-darwin-arm64`).
+    static func npmVendorBinDirs(resolvedCodexDir: String) -> [String] {
+        let fm = FileManager.default
+        let packageRoot = (resolvedCodexDir as NSString).deletingLastPathComponent
+        let scopeDir = (packageRoot as NSString).deletingLastPathComponent
+        guard (scopeDir as NSString).lastPathComponent == "@openai" else { return [] }
+
+        func packages(in dir: String) -> [String] {
+            let names = (try? fm.contentsOfDirectory(atPath: dir)) ?? []
+            return names.filter { $0.hasPrefix("codex") }.map { (dir as NSString).appendingPathComponent($0) }
+        }
+
+        let packageDirs = [packageRoot]
+            + packages(in: (packageRoot as NSString).appendingPathComponent("node_modules/@openai"))
+            + packages(in: scopeDir)
+        var result: [String] = []
+        for package in packageDirs {
+            let vendor = (package as NSString).appendingPathComponent("vendor")
+            for triple in (try? fm.contentsOfDirectory(atPath: vendor)) ?? [] {
+                result.append(((vendor as NSString).appendingPathComponent(triple) as NSString).appendingPathComponent("bin"))
+            }
+        }
+        return result
     }
 
     func findNvmCodexBinary(root: String) -> String? {
@@ -158,16 +198,15 @@ extension CodexAppServer {
         return nil
     }
 
+    /// The environment for spawned `codex` processes: the GUI environment with
+    /// the login-shell `PATH`.
+    ///
+    /// The resolver owns the caching (shared with the other backends, and
+    /// remembered across launches), so asking it every time costs an actor hop
+    /// and picks up a re-probed PATH without a relaunch.
     func resolvedEnvironment() async -> [String: String] {
         var env = ProcessInfo.processInfo.environment
-        if let cachedShellPath {
-            env["PATH"] = cachedShellPath
-            return env
-        }
-        let rawShellPath = try? await runShellCommand("/bin/zsh", arguments: ["-ilc", "print -rn -- $PATH"], injectPath: false)
-        let shellPath = rawShellPath?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let shellPath, !shellPath.isEmpty {
-            cachedShellPath = shellPath
+        if let shellPath = await ShellPathResolver.shared.current(), !shellPath.isEmpty {
             env["PATH"] = shellPath
         }
         return env
@@ -190,13 +229,29 @@ extension CodexAppServer {
         let stderr = Pipe()
         process.standardOutput = stdout
         process.standardError = stderr
+
+        // Wait for exit asynchronously. `waitUntilExit()` parked this actor — and
+        // a cooperative thread — for the whole spawn, which on a cold launch is
+        // seconds of an agent CLI starting up.
+        let exited = Self.terminationSignal(for: process)
         try process.run()
-        process.waitUntilExit()
+        await exited.value
+
         let out = String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
         if process.terminationStatus != 0 {
             let err = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
             throw CodexError.versionCheckFailed(err.isEmpty ? out : err)
         }
         return out
+    }
+
+    /// Install a termination handler on `process` and return a task that
+    /// completes once it exits. Call this *before* `run()`: a process that exits
+    /// immediately would otherwise finish before anyone is listening. The stream
+    /// buffers the finish, so an early exit still wakes the awaiting caller.
+    nonisolated static func terminationSignal(for process: Process) -> Task<Void, Never> {
+        let (stream, continuation) = AsyncStream<Void>.makeStream()
+        process.terminationHandler = { _ in continuation.finish() }
+        return Task { for await _ in stream {} }
     }
 }

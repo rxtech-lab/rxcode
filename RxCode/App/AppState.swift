@@ -43,6 +43,13 @@ struct SessionStreamState {
     /// progress" instead of tearing the turn down on that yield `result`.
     var liveBackgroundTaskIds: Set<String> = []
 
+    /// Steers delivered to the running Claude turn that the CLI has not yet
+    /// echoed back (`--replay-user-messages`). A steer that arrives after the
+    /// turn's last tool call is run by the CLI as a turn of its own after this
+    /// one's `result`, so while this is non-zero that `result` only yields and
+    /// the process is kept alive for the steered turn.
+    var unconsumedSteerCount = 0
+
     /// Last time any stream event (system / assistant / tool result / etc.) arrived
     /// for the active stream. Updated in `processStream` and polled by the
     /// inactivity watchdog so a CLI that goes silent without exiting (broken pipe
@@ -129,65 +136,6 @@ struct SessionStreamState {
     var editingFileSnapshots: [String: String?] = [:]
 }
 
-enum SummarizationProvider: String, CaseIterable, Identifiable {
-    case selectedClient
-    case openAI
-    case appleFoundationModel
-
-    var id: String { rawValue }
-
-    var displayName: LocalizedStringResource {
-        switch self {
-        case .selectedClient: return "Thread Model"
-        case .openAI: return "OpenAI-Compatible Endpoint"
-        case .appleFoundationModel: return "Apple Foundation Model"
-        }
-    }
-
-    var displayNameText: String {
-        String(localized: displayName)
-    }
-
-    /// Returns the providers that should be offered to the user right now.
-    /// Apple Foundation Model is hidden when the device doesn't support it
-    /// (non-Apple-Silicon Mac, Apple Intelligence disabled, etc.).
-    @MainActor
-    static var availableCases: [SummarizationProvider] {
-        allCases.filter { provider in
-            switch provider {
-            case .appleFoundationModel:
-                return FoundationModelSummarizationService.isAvailable
-            case .selectedClient, .openAI:
-                return true
-            }
-        }
-    }
-}
-
-enum MemoryRetrievalMode: String, CaseIterable, Identifiable {
-    case precise
-    case balanced
-    case aggressive
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .precise: return "Precise"
-        case .balanced: return "Balanced"
-        case .aggressive: return "Aggressive"
-        }
-    }
-
-    var scoreThreshold: Float {
-        switch self {
-        case .precise: return 0.65
-        case .balanced: return 0.50
-        case .aggressive: return 0.35
-        }
-    }
-}
-
 @Observable
 @MainActor
 final class AppState {
@@ -206,12 +154,28 @@ final class AppState {
     var workspaceDefaults = WorkspaceDefaults(workspaceID: AppWorkspace.personalID)
 
     var projects: [Project] = []
+    @ObservationIgnored var projectPromptSaveTask: Task<Void, Never>?
 
     // MARK: - Per-Session State (shared — managed independently by session ID regardless of window)
 
     /// Independent state for all active sessions. Key: sessionId
     /// `internal` (not private) — read access required from WindowState / extensions
-    var sessionStates: [String: SessionStreamState] = [:]
+    ///
+    /// Every mutation here — down to a single text-delta flush — invalidates
+    /// every view that read this dictionary. Views that only need per-session
+    /// status (sidebar rows, menu bar, toolbar) must read `sessionActivity`
+    /// instead; see `AppState+SessionActivity.swift`.
+    var sessionStates: [String: SessionStreamState] = [:] {
+        didSet { sessionStatesDidChange() }
+    }
+
+    /// Coarse, equality-gated projection of `sessionStates` (streaming flag,
+    /// unchecked-completion flag, live todos). Only published when a value
+    /// actually changes, so views reading it don't re-render per stream event.
+    var sessionActivity: [String: SessionActivity] = [:]
+
+    @ObservationIgnored var sessionActivityTodoFingerprints: [String: SessionActivity.TodoFingerprint] = [:]
+    @ObservationIgnored var sessionActivityTodoRefreshTask: Task<Void, Never>?
 
     /// Maps a stale session id (a `pending-...` placeholder, or a sid that was
     /// advanced by `compact_boundary`) to the current sid it was swapped to.
@@ -268,14 +232,29 @@ final class AppState {
     /// Bumped each time a thread file-edit row is appended in SwiftData. The
     /// "This thread" inspector reads this so SwiftUI observation re-runs the
     /// `threadFileEdits(in:)` fetch after a new Edit/Write tool call lands.
-    var threadFileEditsRevision: Int = 0
+    var threadFileEditsRevision: Int = 0 {
+        didSet { refreshThreadFileEditIndex() }
+    }
+
+    /// Session ids known to have recorded file edits. Kept in sync with
+    /// `threadFileEditsRevision` so `threadHasFileChanges(sessionId:)` — called
+    /// once per sidebar row per view update — is a pure in-memory lookup instead
+    /// of a SwiftData count query.
+    var sessionIdsWithFileEdits: Set<String> = []
 
     /// Bumped each time a todo snapshot row is upserted in SwiftData (MCP
     /// `ide__set_todos`, Codex `.todoSnapshot` events, in-message TodoWrite
     /// persistence). The toolbar's `TodoProgressToolbarItem` reads this so
     /// SwiftUI re-runs the `fetchTodoSnapshot` method when the snapshot
     /// changes without an accompanying observable property mutation.
-    var todoSnapshotsRevision: Int = 0
+    var todoSnapshotsRevision: Int = 0 {
+        didSet { refreshTodoSnapshotIndex() }
+    }
+
+    /// Persisted todo progress by session id. Kept in sync with
+    /// `todoSnapshotsRevision` so the sidebar's per-row progress ring reads from
+    /// memory rather than fetching a snapshot per row per view update.
+    var todoProgressBySession: [String: ChatTodoProgress] = [:]
 
     /// Bumped each time a custom context-menu item is created, edited, toggled,
     /// or removed (`CustomMenuItemRecord` in SwiftData). The sidebar's project /
@@ -283,6 +262,11 @@ final class AppState {
     /// re-runs the `customMenuItems(...)` fetch and the new item appears without
     /// an app restart.
     var customMenuItemsRevision: Int = 0
+
+    /// Enabled custom menu rows, cached per `customMenuItemsRevision`. Menu
+    /// content is built eagerly inside row `body`s, so without this every
+    /// sidebar re-render ran a SwiftData fetch per project/thread row.
+    @ObservationIgnored var customMenuItemsCache: (revision: Int, rows: [CustomMenuItemRecord])?
 
     /// Compiles + runs user-authored Swift "show condition" scripts for custom
     /// menu items. Shared across windows; results land in `menuConditionResults`.
@@ -294,6 +278,9 @@ final class AppState {
     /// Keys with an evaluation currently in flight, so repeated menu opens don't
     /// spawn duplicate evaluators before the first result lands.
     var menuConditionInFlight: Set<String> = []
+
+    /// Compiles + runs agent-written Swift view filters (`TaskFilterScript`).
+    let taskFilterEvaluator = TaskFilterScriptEvaluator()
 
     /// Pending permission/question prompts keyed by hook id. This mirrors the
     /// per-window queues so mobile thread rows can show the same attention state.
@@ -369,6 +356,17 @@ final class AppState {
     var acpRegistry: ACPRegistry?
     var acpRegistryLoading: Bool = false
 
+    // MARK: - Scheduled Tasks
+
+    /// Cron-scheduled prompts across every project. Loaded from disk on init.
+    var scheduledTasks: [ScheduledTask] = []
+    /// Agent-proposed scheduled tasks awaiting the user's confirmation, oldest
+    /// first. `MainView` presents the first as a sheet.
+    var scheduledTaskProposals: [ScheduledTask] = []
+    /// Resumes the `ide__create_scheduled_task` call waiting on each proposal,
+    /// keyed by proposal id.
+    @ObservationIgnored var scheduledTaskProposalContinuations: [UUID: CheckedContinuation<ScheduledTask?, Never>] = [:]
+
     /// Selected default ACP client id (when `selectedAgentProvider == .acp`).
     var selectedACPClientId: String = "" {
         didSet { workspaceDefaults.set(selectedACPClientId, for: "selectedACPClientId") }
@@ -390,6 +388,7 @@ final class AppState {
 
     var openAISummarizationAPIKey: String = "" {
         didSet {
+            guard !AppSupport.isTestProcess else { return }
             let trimmed = openAISummarizationAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
             do {
                 if trimmed.isEmpty {
@@ -414,11 +413,36 @@ final class AppState {
         didSet { workspaceDefaults.set(openAISummarizationModel, for: "openAISummarizationModel") }
     }
 
+    /// Last model picked from the briefing card's "Create PR › Create with
+    /// Model" submenu, as an `AgentModel.key` (`<provider>:<modelId>`). Empty
+    /// means "use the summarization settings", which is the default.
+    var pullRequestModelKey: String = "" {
+        didSet { workspaceDefaults.set(pullRequestModelKey, for: "pullRequestModelKey") }
+    }
+
     var openAISummarizationModels: [String] = []
     var openAISummarizationModelsError: String?
     var isLoadingOpenAISummarizationModels = false
     var threadSummaryRevision = 0
     var branchBriefingRevision = 0
+    /// Bumped whenever a finished turn is folded into the persisted usage
+    /// buckets, so the briefing statistics panel re-reads its summary.
+    var usageStatsRevision = 0
+    /// Bumped when a usage-limit sample or task cost is persisted, so the
+    /// briefing usage-limit panel re-reads its history.
+    var rateLimitHistoryRevision = 0
+    /// Agent-written document briefings from `briefingStore`, newest first.
+    /// Loaded lazily by the briefing tab via `reloadBriefingDocuments()`.
+    var briefingDocuments: [BriefingDocument] = []
+    /// Settings for sending published briefings as Autopilot notifications,
+    /// mirrored from `notificationStore`.
+    var briefingNotificationSettings = BriefingNotificationSettings()
+    /// Briefings whose notification is being decided or sent, so a quick
+    /// re-publish doesn't start a second attempt.
+    @ObservationIgnored var briefingNotificationsInFlight: Set<UUID> = []
+    /// Scheduled runs started this launch that handle their own notification,
+    /// keyed by the session key the run opened.
+    @ObservationIgnored var scheduledRunNotificationSessions: [String: ScheduledTaskNotification] = [:]
 
     // MARK: - Memory
 
@@ -539,6 +563,22 @@ final class AppState {
         didSet { workspaceDefaults.set(rightInspectorWidth, for: AppStorageKeys.rightInspectorWidth) }
     }
 
+    // MARK: - Task Board
+
+    static let defaultTaskCardRetentionDays = 3
+
+    /// Older task cards stay on the board and can be revealed in each column.
+    var taskCardRetentionDays: Int = AppState.defaultTaskCardRetentionDays {
+        didSet {
+            let clamped = max(1, min(365, taskCardRetentionDays))
+            if clamped != taskCardRetentionDays {
+                taskCardRetentionDays = clamped
+                return
+            }
+            workspaceDefaults.set(taskCardRetentionDays, for: "taskCardRetentionDays")
+        }
+    }
+
     // MARK: - Archive
 
     /// Auto-archive chats whose `updatedAt` is older than this many days. Pinned
@@ -609,16 +649,25 @@ final class AppState {
     var latestRateLimitUsage: RateLimitUsage?
     var latestCodexRateLimitUsage: RateLimitUsage?
     @ObservationIgnored var rateLimitUsageRefreshTasks: [AgentProvider: Task<RateLimitUsage?, Never>] = [:]
+    @ObservationIgnored var rateLimitSamplingTask: Task<Void, Never>?
+    /// Agent streams currently measuring their usage-limit cost, per provider.
+    @ObservationIgnored var activeRateLimitRuns: [AgentProvider: Int] = [:]
+    /// Per-provider task costs and per-model estimates over the last week,
+    /// computed in the background. Drives rate-limit advice in the status line.
+    var rateLimitProviderStats: [AgentProvider: RateLimitTaskCostSummary] = [:]
+    @ObservationIgnored var rateLimitProviderStatsTask: Task<Void, Never>?
 
     /// Sessions currently streaming, anywhere across all windows.
+    /// Reads `sessionActivity` (not `sessionStates`) so the menu bar label doesn't
+    /// re-render its image on every stream event.
     var inProgressSessionCount: Int {
-        sessionStates.values.reduce(0) { $0 + ($1.isStreaming ? 1 : 0) }
+        sessionActivity.values.reduce(0) { $0 + ($1.isStreaming ? 1 : 0) }
     }
 
     /// Sessions whose stream finished but the user hasn't selected since. Cleared
     /// on session select via `hasUncheckedCompletion`.
     var uncheckedFinishedSessionCount: Int {
-        sessionStates.values.reduce(0) { $0 + ($1.hasUncheckedCompletion ? 1 : 0) }
+        sessionActivity.values.reduce(0) { $0 + ($1.hasUncheckedCompletion ? 1 : 0) }
     }
 
     func setDefaultAgentProvider(_ provider: AgentProvider) {
@@ -914,6 +963,8 @@ final class AppState {
 
     var claudeInstalled = false
     var codexInstalled = false
+    var claudeSignedIn = false
+    var codexSignedIn = false
     var onboardingCompleted = false
 
     // MARK: - What's New
@@ -1034,6 +1085,10 @@ final class AppState {
     var docs: DocsService
     /// Talks to github-pm's release API (repos, workflows, dispatch, secret).
     var release: ReleaseService
+    /// Talks to Autopilot's project board API for cloud projects.
+    var projectCloud: ProjectCloudService
+    /// Talks to Autopilot's notification API (send, attachments, trusted emails).
+    var autopilotNotifications: AutopilotNotificationService
     /// Passkey-derived KEK cache for the secrets feature (macOS only).
     let secretsKeyVault = SecretsKeyVault()
     /// Cached enrollment status for the secrets feature: `nil` = unknown.
@@ -1050,6 +1105,11 @@ final class AppState {
     /// returns the override if one is registered, otherwise falls through to
     /// the real service. Production code never writes to this dictionary.
     var agentBackendOverrides: [AgentProvider: any AgentBackend] = [:]
+
+    /// What each provider's backend reported for `availableReasoningLevels()`.
+    /// A property of the agent binary rather than of any thread, so it is
+    /// fetched once per provider and read by the composer's effort picker.
+    var reasoningLevelsByProvider: [AgentProvider: [ReasoningLevel]] = [:]
     let acpRegistryService = ACPRegistryService()
     let openAISummarization = OpenAISummarizationService()
     let foundationModelSummarization = FoundationModelSummarizationService()
@@ -1058,6 +1118,17 @@ final class AppState {
     var marketplaceStateRevision = 0
     var mcp: MCPService
     var threadStore: ThreadStore
+    /// Background reader over the same store as `threadStore`, for whole-table
+    /// reads (launch indexes) that would otherwise run on the main thread. It
+    /// is a `Sendable` value that opens its context inside each read's detached
+    /// task, so constructing it here on the main actor costs nothing and binds
+    /// nothing to this executor.
+    let threadStoreReader: ThreadStoreReader
+    /// File-backed store for document briefings, scoped to this workspace.
+    let briefingStore: BriefingStore
+    /// Briefing notification settings and the local history of notifications
+    /// sent through Autopilot, scoped to this workspace.
+    let notificationStore: NotificationStore
     var searchService = ThreadSearchService()
     var memoryService = MemoryService()
     /// Live progress for a user-triggered full reindex. `nil` when idle.
@@ -1092,6 +1163,8 @@ final class AppState {
         return liveWindowRefs.compactMap(\.window)
     }
     var mobileSnapshotBroadcastTask: Task<Void, Never>?
+    /// Pending debounced `taskBoardUpdate` pushes, one per project.
+    var mobileTaskBoardBroadcastTasks: [UUID: Task<Void, Never>] = [:]
     var lastBroadcastRunTaskSnapshots: [UUID: MobileRunTaskSnapshot] = [:]
 
     /// Worktrees freshly created by a mobile "create branch" request, keyed by
@@ -1102,6 +1175,48 @@ final class AppState {
         let branch: String
     }
     var mobilePendingWorktrees: [UUID: MobilePendingWorktree] = [:]
+
+    // MARK: - Task Board
+
+    /// One `TaskBoard` per project, loaded lazily. Keyed by `Project.id`, and a
+    /// non-nil entry means "already read from disk" — same convention as
+    /// `runProfilesByProject` below. The global board rendered by
+    /// `TaskBoardView` is an aggregation of these.
+    var taskBoards: [UUID: TaskBoard] = [:]
+    /// Quick-added tasks whose properties the default agent is still filling
+    /// in, so their rows can show progress.
+    var classifyingTaskIds: Set<UUID> = []
+    /// Task checks currently running in a linked verification chat.
+    var verifyingTaskIds: Set<UUID> = []
+    /// Tasks between run admission and their thread going live. They hold a
+    /// run slot in their chat column so a burst of drops can't overshoot the
+    /// column's concurrency limit before any stream reports as running.
+    var dispatchingTaskIds: Set<UUID> = []
+    /// Set once startup has loaded projects and threads; queued tasks are not
+    /// started before then.
+    var isTaskQueueDispatchEnabled = false
+
+    // MARK: - Cloud Projects
+
+    /// Every Autopilot project on the signed-in account, including ones not
+    /// yet opened on this Mac. See `AppState+ProjectCloud.swift`.
+    var cloudProjects: [CloudProject] = []
+    /// Whether `cloudProjects` has been fetched since sign-in.
+    var hasLoadedCloudProjects = false
+    /// Cloud projects the user hid from the Tasks overview because they
+    /// have no folder on this Mac. Persisted per workspace.
+    var hiddenCloudProjectIds: Set<String> = [] {
+        didSet { workspaceDefaults.set(hiddenCloudProjectIds.sorted(), for: "hiddenCloudProjectIds") }
+    }
+    /// Local projects whose board is exchanging changes with Autopilot.
+    var cloudSyncingProjectIds: Set<UUID> = []
+    /// Live sync step for each active cloud project.
+    var cloudSyncPhaseByProjectId: [UUID: CloudProjectSyncPhase] = [:]
+    @ObservationIgnored var cloudSyncTasks: [UUID: Task<Void, Never>] = [:]
+    @ObservationIgnored var cloudSyncDebounceTasks: [UUID: Task<Void, Never>] = [:]
+    /// Projects changed again while their sync was running, so it re-runs.
+    @ObservationIgnored var cloudSyncRerunProjectIds: Set<UUID> = []
+    @ObservationIgnored var cloudSyncPollTask: Task<Void, Never>?
 
     // MARK: - Run Profiles
 
@@ -1224,7 +1339,12 @@ final class AppState {
         self.persistence = injectedPersistence ?? PersistenceService(metaStore: metaStore, cliStore: cliStore, baseURL: active.storageURL)
         self.marketplace = MarketplaceService(baseURL: active.storageURL)
         self.mcp = MCPService(baseURL: active.storageURL, claudeService: claude)
-        self.threadStore = ThreadStore.make(baseURL: active.storageURL)
+        let threadStore = ThreadStore.make(baseURL: active.storageURL)
+        self.threadStore = threadStore
+        self.threadStoreReader = ThreadStoreReader(container: threadStore.container)
+        self.briefingStore = BriefingStore(
+            baseURL: active.storageURL.appendingPathComponent("briefings", isDirectory: true)
+        )
         let rxAuth = RxAuthService(keychainService: active.rxAuthKeychainService)
         self.rxAuth = rxAuth
         self.autopilot = AutopilotService(rxAuth: rxAuth)
@@ -1232,6 +1352,11 @@ final class AppState {
         self.ciUpdates = CIUpdateService(rxAuth: rxAuth)
         self.docs = DocsService(rxAuth: rxAuth)
         self.release = ReleaseService(rxAuth: rxAuth)
+        self.projectCloud = ProjectCloudService(rxAuth: rxAuth)
+        self.autopilotNotifications = AutopilotNotificationService(rxAuth: rxAuth)
+        self.notificationStore = NotificationStore(
+            baseURL: active.storageURL.appendingPathComponent("notifications", isDirectory: true)
+        )
         loadWorkspaceSettings()
         self.runService.onTasksChanged = { [weak self] in
             Task { @MainActor [weak self] in
@@ -1239,7 +1364,9 @@ final class AppState {
             }
         }
 
-        if startBackgroundServices {
+        installSDKBackendsIfEnabled()
+
+        if startBackgroundServices && !AppSupport.isUnitTesting {
             // Bridge ACP `session/request_permission` and Codex in-band permission
             // requests into the existing PermissionServer.
             let permission = self.permission
@@ -1257,14 +1384,15 @@ final class AppState {
             let searchService = self.searchService
             let memoryService = self.memoryService
             let threadStore = self.threadStore
+            let threadStoreReader = self.threadStoreReader
             let persistence = self.persistence
             let workspaceDefaults = self.workspaceDefaults
             Task.detached(priority: .utility) { [weak self] in
                 await searchService.setWorkspaceDefaults(workspaceDefaults)
-                await searchService.start(threadStore: threadStore)
+                await searchService.start(threadStore: threadStore, reader: threadStoreReader)
                 await memoryService.start(threadStore: threadStore)
                 await searchService.backfillIfNeeded(
-                    loadAll: { @MainActor in threadStore.loadAllSummaries() },
+                    loadAll: { await threadStoreReader.loadSummaries() },
                     loadFull: { @MainActor summary -> ChatSession? in
                         let cwd = self?.projects.first(where: { $0.id == summary.projectId })?.path ?? ""
                         return await persistence.loadFullSession(summary: summary, cwd: cwd)
@@ -1307,6 +1435,10 @@ final class AppState {
         hookManager.register(AutopilotReleaseHook())
         hookManager.register(CIUpdateHook())
         #endif
+        // The task board moves a card on session stop before any review starts:
+        // it only edits the board, and a card must already sit in its
+        // post-stop column when CodeReviewHook fires the review-start trigger.
+        hookManager.register(TaskBoardHook())
         // Registered last so their (potentially long) after-stop work runs after
         // the response-complete notification has already fired. CodeReviewHook
         // must come before CommitPushHook so the commit gate sees the verdict.
@@ -1341,24 +1473,5 @@ final class AppState {
         mobileSnapshotSeq &+= 1
         if mobileSnapshotSeq == 0 { mobileSnapshotSeq = 1 } // skip wraparound zero
         return mobileSnapshotSeq
-    }
-}
-
-// MARK: - App Errors
-
-enum AppError: LocalizedError {
-    case noProjectSelected
-    case claudeNotInstalled
-    case streamFailed(String)
-
-    var errorDescription: String? {
-        switch self {
-        case .noProjectSelected:
-            return "No project selected. Please select or add a project first."
-        case .claudeNotInstalled:
-            return "Claude CLI binary not found. Please install it first."
-        case .streamFailed(let message):
-            return message
-        }
     }
 }

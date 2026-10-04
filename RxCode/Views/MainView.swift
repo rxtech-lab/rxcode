@@ -21,6 +21,7 @@ struct MainView: View {
     @State private var projectToRename: Project? = nil
     @State private var renameText: String = ""
     @State private var memoAnchor: Bool = false
+    @State private var showAllWhatsNew = false
 
     // Kept for backward compatibility with `ClaudeSegmentedControl` and `SidebarTabShortcuts`.
     enum SidebarTab: String, CaseIterable {
@@ -59,8 +60,8 @@ struct MainView: View {
     }
 
     private var navigationTitleText: String {
-        if windowState.showingBriefing {
-            return "Briefing"
+        if let route = windowState.generalRoute {
+            return route.displayNameText
         }
         if let id = windowState.currentSessionId,
            let title = appState.allSessionSummaries.first(where: { $0.id == id })?.title,
@@ -117,6 +118,9 @@ struct MainView: View {
                 }
             }
             .hookUI()
+            .focusedSceneValue(\.showWhatsNew) {
+                showAllWhatsNew = true
+            }
             .task(id: appState.isInitialized) {
                 guard appState.isInitialized else { return }
                 if appState.wasOnboardedAtLaunch {
@@ -135,6 +139,12 @@ struct MainView: View {
             .sheet(isPresented: Bindable(appState).showWhatsNewSheet) {
                 WhatsNewSheet(features: appState.whatsNewBatch) {
                     appState.showWhatsNewSheet = false
+                }
+                .environment(appState)
+            }
+            .sheet(isPresented: $showAllWhatsNew) {
+                WhatsNewSheet(features: WhatsNewFeature.all) {
+                    showAllWhatsNew = false
                 }
                 .environment(appState)
             }
@@ -236,6 +246,22 @@ struct MainView: View {
                     } label: {
                         Label("Add project from remote repositories", systemImage: "square.and.arrow.down")
                     }
+
+                    Divider()
+
+                    Button {
+                        windowState.newProjectPrefersCloud = false
+                        windowState.showNewProjectSheet = true
+                    } label: {
+                        Label("New project…", systemImage: "plus.rectangle.on.folder")
+                    }
+
+                    Button {
+                        windowState.newProjectPrefersCloud = true
+                        windowState.showNewProjectSheet = true
+                    } label: {
+                        Label("New cloud project…", systemImage: "icloud")
+                    }
                 } label: {
                     Image(systemName: "plus")
                 }
@@ -288,6 +314,21 @@ struct MainView: View {
         .sheet(isPresented: $showGitHubSheet) {
             AutopilotRepoSheet()
         }
+        .sheet(isPresented: Binding(
+            get: { windowState.linkCloudProjectId != nil },
+            set: { if !$0 { windowState.linkCloudProjectId = nil } }
+        )) {
+            if let projectId = windowState.linkCloudProjectId {
+                LinkCloudProjectSheet(projectId: projectId)
+                    .environment(appState)
+                    .environment(windowState)
+            }
+        }
+        .sheet(isPresented: Bindable(windowState).showNewProjectSheet) {
+            NewProjectSheet(prefersCloud: windowState.newProjectPrefersCloud)
+                .environment(appState)
+                .environment(windowState)
+        }
     }
 
     // MARK: - Detail
@@ -296,8 +337,14 @@ struct MainView: View {
 
     private var detailContent: some View {
         Group {
-            if windowState.showingBriefing {
+            if windowState.showingTasks {
+                TaskBoardView()
+            } else if windowState.showingBriefing {
                 BriefingView()
+            } else if windowState.generalRoute == .chat {
+                GlobalChatView()
+            } else if windowState.generalRoute == .scheduled {
+                ScheduledTasksView()
             } else if windowState.selectedProject != nil {
                 VStack(spacing: 0) {
                     ChatView(inputAccessory: {
@@ -310,6 +357,7 @@ struct MainView: View {
                     }, aboveInputAccessory: {
                         VStack(spacing: 8) {
                             PermissionQueueBanner()
+                            ThreadDiffBanner()
                             HookBannerHost(surface: .newProject, position: .aboveInputBox)
                         }
                     })
@@ -400,6 +448,16 @@ struct MainView: View {
             let prompt = "Set up release publishing\(repoText) by following the create-release skill: inspect the repo, create the `.releaserc` and the release CI workflow (ask me whether to trigger releases on branch push or manually), then register the repo and install the RELEASE_TOKEN via the `ide__setup_release` tool."
             appState.releaseSetupRequest = nil
             Task { await appState.sendPrompt(prompt, in: windowState) }
+        }
+        // The sheet settles its own proposal, so the setter has nothing to do.
+        .sheet(item: Binding(
+            get: { appState.scheduledTaskProposals.first },
+            set: { _ in }
+        )) { proposal in
+            ScheduledTaskFormSheet(task: proposal, isNew: true) { task in
+                appState.resolveScheduledTaskProposal(id: proposal.id, with: task)
+            }
+            .environment(appState)
         }
         .sheet(item: Bindable(appState).releaseCreateRequest) { project in
             ReleaseCreateSheet(
@@ -518,6 +576,14 @@ struct ProjectTabButton: View {
                 Text(project.name)
                     .font(.system(size: ClaudeTheme.size(13), weight: .medium))
                     .lineLimit(1)
+                if let phase = appState.cloudSyncPhaseByProjectId[project.id] {
+                    ProgressView(value: phase.fractionCompleted)
+                        .progressViewStyle(.linear)
+                        .frame(width: 24)
+                        .help(phase.progressText)
+                        .accessibilityLabel(phase.progressText)
+                        .accessibilityIdentifier("project-tab-sync-progress-\(project.id.uuidString)")
+                }
             }
             .foregroundStyle(isSelected ? ClaudeTheme.textOnAccent : ClaudeTheme.textSecondary)
             .padding(.horizontal, 10)

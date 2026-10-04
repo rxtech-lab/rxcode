@@ -1,4 +1,4 @@
-import MessageList
+import AgentMessageListUI
 import SwiftUI
 
 @main

@@ -5,6 +5,9 @@ import SwiftData
 public final class ChatThread {
     @Attribute(.unique) public var id: String
     public var projectId: UUID
+    /// Execution context retained when a project is removed from the workspace.
+    public var retainedProjectName: String? = nil
+    public var retainedProjectPath: String? = nil
     public var title: String
     public var createdAt: Date
     public var updatedAt: Date

@@ -1,6 +1,24 @@
 {
-  "originHash" : "b101d76c29aab052484573baab03434736d3a84ba21abcc8daa6c7fb36cf1473",
+  "originHash" : "ca568b6f8d3295750a13825a306b766d046c4d763552c1a5a8c3797d2bdd705a",
   "pins" : [
+    {
+      "identity" : "libwebp-xcode",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/SDWebImage/libwebp-Xcode",
+      "state" : {
+        "revision" : "2b5256c29ff4e20f2a0d5ee863b62b1a22144434",
+        "version" : "1.6.0"
+      }
+    },
+    {
+      "identity" : "rxagentsdk",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/rxtech-lab/RxAgentSDK.git",
+      "state" : {
+        "revision" : "15cd2bde13eef44e9fa02e1c7197ba771ad6e53e",
+        "version" : "1.0.8"
+      }
+    },
     {
       "identity" : "viewinspector",
       "kind" : "remoteSourceControl",

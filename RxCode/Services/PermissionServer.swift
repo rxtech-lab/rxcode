@@ -46,6 +46,9 @@ actor PermissionServer {
         var continuations: [CheckedContinuation<DecisionOutcome, Never>]
         let sessionId: String?
         let toolName: String
+        /// Kept so a broad grant (session tool / Bash allowlist) can resolve sibling
+        /// requests that were already queued when the user made the decision.
+        let toolInput: [String: JSONValue]
         /// Populated by `respondAskUserQuestion` so the hook response can carry back
         /// the user's answer as `updatedInput`.
         var updatedInput: JSONValue?
@@ -181,10 +184,15 @@ actor PermissionServer {
     }
 
     /// Called by the UI when the user makes a decision.
-    func respond(toolUseId: String, decision: PermissionDecision) async {
+    ///
+    /// Returns the ids of *other* pending requests that the decision also resolved —
+    /// e.g. "Allow this tool for the session" approves every queued call of that tool
+    /// in the same session, so the UI must drop them from its queue instead of asking again.
+    @discardableResult
+    func respond(toolUseId: String, decision: PermissionDecision) async -> [String] {
         guard var entry = pending.removeValue(forKey: toolUseId) else {
             logger.warning("No pending continuation for toolUseId \(toolUseId)")
-            return
+            return []
         }
 
         let resolved: PermissionDecision
@@ -236,6 +244,30 @@ actor PermissionServer {
         for continuation in entry.continuations {
             continuation.resume(returning: outcome)
         }
+
+        guard resolved == .allow, decision != .allow else { return [] }
+        return await resolveNewlyAutoApprovedPending()
+    }
+
+    /// After a broad grant, approve every still-pending request the grant now covers.
+    private func resolveNewlyAutoApprovedPending() async -> [String] {
+        var resolvedIds: [String] = []
+        for (id, entry) in pending {
+            guard let reason = await autoApproveReason(
+                sessionId: entry.sessionId,
+                toolName: entry.toolName,
+                toolInput: entry.toolInput
+            ) else { continue }
+            // Re-check: the entry may have been resolved while awaiting the allowlist load.
+            guard let entry = pending.removeValue(forKey: id) else { continue }
+            logger.info("Auto-resolving queued \(entry.toolName) \(id): \(reason)")
+            let outcome = DecisionOutcome(decision: .allow, updatedInput: entry.updatedInput, reasonOverride: nil)
+            for continuation in entry.continuations {
+                continuation.resume(returning: outcome)
+            }
+            resolvedIds.append(id)
+        }
+        return resolvedIds
     }
 
     /// Reuses the same permission UI/decision queue for non-Claude transports
@@ -247,6 +279,14 @@ actor PermissionServer {
         toolInput: [String: JSONValue],
         mode: PermissionMode?
     ) async -> PermissionDecision {
+        // Honor grants the user already made ("Allow this tool for the session",
+        // "Always allow this command", auto mode) so non-Claude transports don't
+        // re-prompt for every call.
+        if pending[toolUseId] == nil,
+           let reason = await autoApproveReason(sessionId: sessionId, toolName: toolName, toolInput: toolInput) {
+            logger.info("Auto-approved \(toolName) \(toolUseId): \(reason)")
+            return .allow
+        }
         let request = PermissionRequest(
             id: toolUseId,
             toolName: toolName,
@@ -259,6 +299,7 @@ actor PermissionServer {
             toolUseId: toolUseId,
             sessionId: sessionId,
             toolName: toolName,
+            toolInput: toolInput,
             emit: request
         )
         return outcome.decision
@@ -273,32 +314,32 @@ actor PermissionServer {
     // MARK: - Auto-approve
 
     /// Determines whether the request should be auto-approved. Returns a reason string if approved, or nil otherwise.
-    private func autoApproveReason(for req: HookRequestBody) async -> String? {
+    private func autoApproveReason(sessionId: String?, toolName: String, toolInput: [String: JSONValue]) async -> String? {
         // Auto mode short-circuit: when the session is registered as `.auto`, resolve every hook
         // as allow without surfacing UI. This is the contract for "Auto" in the permission dropdown
         // and for the plan-card "Accept + auto-approve" button.
         // ExitPlanMode and AskUserQuestion are excluded so the user always sees the plan card
         // / question card and makes a choice — auto-approving AskUserQuestion would let the CLI
         // proceed with no answer injected, defeating the tool's purpose.
-        if let sid = req.sessionId,
+        if let sid = sessionId,
            sessionRegistry[sid]?.mode == .auto,
-           !Self.isExitPlanModeTool(req.toolName),
-           req.toolName != "AskUserQuestion" {
+           !Self.isExitPlanModeTool(toolName),
+           toolName != "AskUserQuestion" {
             return "Auto-approve mode"
         }
 
-        if let sid = req.sessionId,
-           sessionToolAllows.contains(Self.sessionToolKey(sid: sid, tool: req.toolName)) {
+        if let sid = sessionId,
+           sessionToolAllows.contains(Self.sessionToolKey(sid: sid, tool: toolName)) {
             return "Tool allowed for session by user"
         }
 
-        if req.toolName == "Bash",
-           let command = req.toolInput["command"]?.stringValue {
+        if toolName == "Bash",
+           let command = toolInput["command"]?.stringValue {
             if BashSafety.isSafeReadOnly(command: command) {
                 return "Safe read-only command"
             }
             await loadBashAllowlistIfNeeded()
-            if let sid = req.sessionId,
+            if let sid = sessionId,
                let projectKey = sessionRegistry[sid]?.projectKey,
                bashCmdAllows?[projectKey]?.contains(command) == true {
                 return "Bash command allowlisted for this project"
@@ -392,7 +433,11 @@ actor PermissionServer {
 
                 let hookRequest = try JSONDecoder().decode(HookRequestBody.self, from: bodyData)
 
-                if let autoReason = await autoApproveReason(for: hookRequest) {
+                if let autoReason = await autoApproveReason(
+                    sessionId: hookRequest.sessionId,
+                    toolName: hookRequest.toolName,
+                    toolInput: hookRequest.toolInput
+                ) {
                     try await sendHookResponse(connection, decision: "allow", reason: autoReason)
                     return
                 }
@@ -411,6 +456,7 @@ actor PermissionServer {
                     toolUseId: hookRequest.toolUseId,
                     sessionId: hookRequest.sessionId,
                     toolName: hookRequest.toolName,
+                    toolInput: hookRequest.toolInput,
                     emit: permissionRequest
                 )
 
@@ -441,6 +487,7 @@ actor PermissionServer {
         toolUseId: String,
         sessionId: String?,
         toolName: String,
+        toolInput: [String: JSONValue],
         emit request: PermissionRequest
     ) async -> DecisionOutcome {
         let isFirst = pending[toolUseId] == nil
@@ -461,6 +508,7 @@ actor PermissionServer {
                     continuations: [continuation],
                     sessionId: sessionId,
                     toolName: toolName,
+                    toolInput: toolInput,
                     updatedInput: nil,
                     reasonOverride: nil
                 )

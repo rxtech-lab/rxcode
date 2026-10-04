@@ -101,4 +101,47 @@ struct MessageBubbleTests {
             #expect(!s.contains("[Attached image:"), "displayed Text leaked the attachment marker: \(s)")
         }
     }
+
+    // MARK: - Task messages
+
+    private var taskMessageContent: String {
+        """
+        **Task:** Parse task message in the chat message list like run tab
+
+        Parse and render the task message using the same style as task tab
+
+        - **Story:** Projects Dashboard
+        - **Priority:** Medium
+        - **Tags:** ui, chat
+        - **Target version:** v1.18.0
+        """
+    }
+
+    @Test("A dispatched task message renders the shared task card")
+    func taskMessageRendersTaskPromptView() throws {
+        let msg = ChatMessage(role: .user, content: taskMessageContent)
+        let inspected = try host(msg).inspect()
+
+        #expect(throws: Never.self) { try inspected.find(TaskPromptView.self) }
+
+        // The card splits the message up: the title loses its `**Task:**`
+        // marker and each context line becomes a labeled field row.
+        let texts = inspected.findAll(ViewType.Text.self).compactMap { try? $0.string() }
+        #expect(texts.contains("Parse task message in the chat message list like run tab"))
+        #expect(texts.contains("Projects Dashboard"))
+        #expect(texts.contains("v1.18.0"))
+        // Tags become pills rather than one comma-joined value.
+        #expect(texts.contains("ui"))
+        #expect(texts.contains("chat"))
+        for text in texts {
+            #expect(!text.contains("**Task:**"), "task card leaked raw Markdown: \(text)")
+        }
+    }
+
+    @Test("A typed user message keeps plain Markdown rendering")
+    func plainMessageSkipsTaskPromptView() throws {
+        let msg = ChatMessage(role: .user, content: "Please also add tests\n\n- a list")
+        let inspected = try host(msg).inspect()
+        #expect(throws: (any Error).self) { try inspected.find(TaskPromptView.self) }
+    }
 }

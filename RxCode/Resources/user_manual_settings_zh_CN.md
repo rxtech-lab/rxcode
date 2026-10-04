@@ -24,4 +24,4 @@ Commands 标签用于管理斜杠命令和保存的快捷项。可以通过 JSON
 
 ## MCP 和 ACP
 
-MCP 设置用于管理 Model Context Protocol 服务器。ACP 设置用于管理已安装的 ACP 客户端及其可用状态。
+MCP 设置用于管理 Model Context Protocol 服务器。ACP 设置用于管理已安装的 ACP 客户端及其可用状态。在已安装客户端上点击 **管理**，可以安装指定版本、更新到注册表的最新版本，或使用客户端提供的方式 **登录**（浏览器登录、保存到客户端环境变量中的 API Key，或在终端中交互式登录）。

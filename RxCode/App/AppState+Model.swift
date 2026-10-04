@@ -8,7 +8,7 @@ import SwiftUI
 extension AppState {
     // MARK: - Model
 
-    static let availableModels = ["default", "best", "opus", "opus[1m]", "opusplan", "sonnet", "sonnet[1m]", "haiku"]
+    static let availableModels = ["default", "best", "fable", "fable[1m]", "opus", "opus[1m]", "sonnet", "sonnet[1m]", "haiku"]
     static let fallbackCodexModels = ["gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex"]
     nonisolated static let defaultOpenAISummarizationEndpoint = "https://api.openai.com/v1"
     nonisolated static let openAISummarizationKeychainService = "com.idealapp.RxCode.openai-summarization"
@@ -150,9 +150,10 @@ extension AppState {
         switch model {
         case "default": return "Default"
         case "best": return "Best"
+        case "fable": return "Fable"
+        case "fable[1m]": return "Fable 1M"
         case "opus": return "Opus"
         case "opus[1m]": return "Opus 1M"
-        case "opusplan": return "Opus Plan"
         case "sonnet": return "Sonnet"
         case "sonnet[1m]": return "Sonnet 1M"
         case "haiku": return "Haiku"
@@ -177,9 +178,10 @@ extension AppState {
         switch model {
         case "default": key = "model.desc.default"
         case "best": key = "model.desc.best"
+        case "fable": key = "model.desc.fable"
+        case "fable[1m]": key = "model.desc.fable1m"
         case "opus": key = "model.desc.opus"
         case "opus[1m]": key = "model.desc.opus1m"
-        case "opusplan": key = "model.desc.opusplan"
         case "sonnet": key = "model.desc.sonnet"
         case "sonnet[1m]": key = "model.desc.sonnet1m"
         case "haiku": key = "model.desc.haiku"
@@ -188,7 +190,17 @@ extension AppState {
         return NSLocalizedString(key, comment: "")
     }
 
-    static let availableEfforts = ["low", "medium", "high", "xhigh", "max"]
+    /// Every level any provider accepts, deduplicated in ascending order.
+    ///
+    /// Only for the *global default* in Settings, which is chosen before a
+    /// provider is known. Anything scoped to a thread asks that thread's
+    /// backend via `reasoningLevels(for:)` — Claude and Codex do not accept the
+    /// same values, so the union is wrong for both individually.
+    static let availableEfforts: [String] = {
+        let ordered = [ReasoningLevel].codexEfforts + [ReasoningLevel].claudeCodeEfforts
+        var seen: Set<String> = []
+        return ordered.map(\.id).filter { seen.insert($0).inserted }
+    }()
 
     static func permissionModeDescription(_ mode: PermissionMode) -> String {
         let key: String

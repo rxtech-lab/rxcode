@@ -34,6 +34,10 @@ extension AppState {
         }
 
         var sessionKey = internalSessionKey
+        // Measures how much of the provider's usage limits each finished
+        // span on this stream consumed.
+        var rateLimitMeasurement = beginRateLimitMeasurement(for: agentProvider)
+        defer { endRateLimitMeasurement(rateLimitMeasurement) }
 
         // Resolve per-backend send-request fields (MCP injection, ACP client
         // spec, model split, background context) concurrently before dispatching
@@ -46,6 +50,7 @@ extension AppState {
             sessionKey: sessionKey,
             agentProvider: agentProvider,
             model: model,
+            effort: effort,
             permissionMode: permissionMode,
             registerMode: registerMode,
             projectId: projectId,
@@ -68,7 +73,7 @@ extension AppState {
                 cwd: cwd,
                 sessionId: cliSessionId,
                 model: preflight.resolvedModel,
-                effort: effort,
+                effort: preflight.resolvedEffort,
                 permissionMode: preflight.resolvedSendMode,
                 planMode: permissionMode == .plan,
                 hookSettingsPath: hookSettingsPath,
@@ -77,7 +82,9 @@ extension AppState {
                 mcpCodexOverrides: preflight.mcpCodexOverrides,
                 acpMCPServers: preflight.acpMCPServers,
                 acpSpec: preflight.acpSpec,
-                clientSessionKey: sessionKey
+                clientSessionKey: sessionKey,
+                mcpServers: preflight.mcpRecords,
+                ideBridgeCommand: preflight.ideBridgeCommand
             )
             stream = await backend(for: agentProvider).send(request)
             let backendReturnedElapsed = Date().timeIntervalSince(streamStart)
@@ -103,6 +110,17 @@ extension AppState {
 
         var eventCount = 0
         var lastEventTime = Date()
+        // Start of the span the next `result` accounts for in the persisted
+        // usage stats; advanced on each result so background follow-up
+        // results on the same stream are not double counted.
+        var usageSpanStart = streamStart
+        let fallbackUsageModel = preflight.resolvedModel ?? model
+        func usageModel(_ key: String) -> String? {
+            stateForSession(key).activeModelName ?? fallbackUsageModel
+        }
+        // The CLI reads stdin in order, so the first replayed user frame is
+        // this turn's own prompt; every later one is a steer being taken.
+        var sawPromptReplay = false
         logger.info("[Stream:UI] entering for-await session=\(sessionKey, privacy: .public) stream=\(streamId) cwd=\(cwd, privacy: .public)")
 
         do {
@@ -129,6 +147,23 @@ extension AppState {
                 if !ownsSession {
                     if case .result(let resultEvent) = event {
                         logger.info("[Stream:UI] event #\(eventCount) .result received after losing ownership — saving to disk")
+                        recordUsageStats(
+                            resultEvent: resultEvent,
+                            since: usageSpanStart,
+                            agentProvider: agentProvider,
+                            model: usageModel(sessionKey),
+                            projectId: projectId
+                        )
+                        recordRateLimitTaskCost(
+                            &rateLimitMeasurement,
+                            model: usageModel(sessionKey),
+                            projectId: projectId,
+                            threadId: sessionKey,
+                            prompt: prompt,
+                            tokens: Self.rateLimitTaskTokens(resultEvent.usage),
+                            startedAt: usageSpanStart
+                        )
+                        usageSpanStart = Date()
                         await finalizeAgentStream(agentProvider: agentProvider, streamId: streamId)
                         if sessionKey != resultEvent.sessionId,
                            providerOwnsThreadId(agentProvider, threadId: sessionKey) {
@@ -270,7 +305,7 @@ extension AppState {
                             // case: it stops empty "New Session" rows from accumulating
                             // every time the CLI advances `session_id` mid-stream (e.g.
                             // after a `compact_boundary`).
-                            if let project = projects.first(where: { $0.id == projectId }) {
+                            if let project = sessionProject(id: projectId) {
                                 let msgs = stateForSession(sessionKey).messages
                                 let firstUser = msgs.first(where: { $0.role == .user })
                                 let action = SessionRowReconciler.decide(
@@ -453,6 +488,13 @@ extension AppState {
 
                 case .user(let userMessage):
                     logger.debug("[Stream:UI] event #\(eventCount) .user (gap=\(String(format: "%.1f", gap))s, toolUseId=\(userMessage.toolUseId ?? "none"))")
+                    if userMessage.isReplay {
+                        if sawPromptReplay {
+                            updateState(sessionKey) { $0.unconsumedSteerCount = max(0, $0.unconsumedSteerCount - 1) }
+                        }
+                        sawPromptReplay = true
+                        break
+                    }
                     updateState(sessionKey) { state in
                         guard let toolUseId = userMessage.toolUseId else { return }
                         state.pendingToolResults.append((toolUseId, userMessage.content, userMessage.isError))
@@ -465,6 +507,23 @@ extension AppState {
                         let totalElapsed = Date().timeIntervalSince(streamStart)
                         logger.info("\(debugLogPrefix, privacy: .public) phase=resultEvent stream=\(streamId) eventCount=\(eventCount, privacy: .public) total=\(String(format: "%.2f", totalElapsed), privacy: .public)s gap=\(String(format: "%.1f", gap), privacy: .public)s isError=\(resultEvent.isError, privacy: .public) session=\(resultEvent.sessionId, privacy: .public)")
                     }
+                    recordUsageStats(
+                        resultEvent: resultEvent,
+                        since: usageSpanStart,
+                        agentProvider: agentProvider,
+                        model: usageModel(sessionKey),
+                        projectId: projectId
+                    )
+                    recordRateLimitTaskCost(
+                        &rateLimitMeasurement,
+                        model: usageModel(sessionKey),
+                        projectId: projectId,
+                        threadId: sessionKey,
+                        prompt: prompt,
+                        tokens: Self.rateLimitTaskTokens(resultEvent.usage),
+                        startedAt: usageSpanStart
+                    )
+                    usageSpanStart = Date()
 
                     // Recent Claude Code runs long tasks (background shells, subagents) as
                     // "backend agents". The turn that spawns one ends with a normal `result`
@@ -477,10 +536,25 @@ extension AppState {
                     // alive and the UI "in progress"; only fold in this result's (real) cost.
                     // The follow-up result arrives once tasks drain (set now empty) and takes
                     // the normal end-of-turn path below.
-                    if !stateForSession(sessionKey).liveBackgroundTaskIds.isEmpty {
+                    //
+                    // A steer the CLI has not taken yet is the same shape: it
+                    // arrived after the turn's last tool call, so the CLI runs
+                    // it as its own turn after this `result`. Tearing down here
+                    // would kill that turn, leaving the steer unanswered and the
+                    // session-end hooks judging a turn that never saw it.
+                    let pendingSteers = agentProvider == .claudeCode
+                        ? stateForSession(sessionKey).unconsumedSteerCount
+                        : 0
+                    if !stateForSession(sessionKey).liveBackgroundTaskIds.isEmpty || pendingSteers > 0 {
                         let live = stateForSession(sessionKey).liveBackgroundTaskIds.count
-                        logger.info("[Stream:UI] event #\(eventCount) .result yields with \(live) live background task(s); keeping turn in progress (origin=\(resultEvent.originKind ?? "none", privacy: .public))")
+                        logger.info("[Stream:UI] event #\(eventCount) .result yields with \(live) live background task(s), \(pendingSteers) pending steer(s); keeping turn in progress (origin=\(resultEvent.originKind ?? "none", privacy: .public))")
+                        // This turn is over; commit its text so the steered
+                        // turn's reply opens its own bubble after it.
+                        if pendingSteers > 0 {
+                            flushPendingUpdates(for: sessionKey, forceText: true)
+                        }
                         updateState(sessionKey) { state in
+                            if pendingSteers > 0 { state.needsNewMessage = true }
                             if let cost = resultEvent.totalCostUsd { state.costUsd = cost }
                             if let duration = resultEvent.durationMs { state.durationMs += duration }
                             if let turns = resultEvent.totalTurns { state.turns += turns }
@@ -742,6 +816,25 @@ extension AppState {
                 case .acpModelsDiscovered(let event):
                     logger.info("[Stream:UI] event #\(eventCount) .acpModelsDiscovered clientId=\(event.clientId, privacy: .public) configId=\(event.config.configId, privacy: .public) models=\(event.config.options.count) [\(Self.acpModelListDescription(event.config.options), privacy: .public)]")
                     applyDiscoveredACPModels(clientId: event.clientId, config: event.config)
+
+                // The four cases below are the decoded equivalents of the raw
+                // `content_block_*` frames that arrive as `.unknown`. Backends
+                // built on RxAgentSDK emit these directly; both paths converge
+                // on the same `apply…` helpers in `AppState+Stream.swift`.
+                case .textDelta(let text):
+                    applyTextDelta(text, for: sessionKey)
+                    recordStreamPartialResponseIfNeeded(streamId: streamId, sessionId: sessionKey)
+
+                case .thinkingDelta:
+                    applyThinkingDelta(for: sessionKey)
+
+                case .toolCallStarted(let id, let name):
+                    logger.debug("[Stream:UI] event #\(eventCount) .toolCallStarted \(name, privacy: .public) id=\(id, privacy: .public)")
+                    beginToolCall(id: id, name: name, for: sessionKey)
+
+                case .toolCallInput(let id, let input):
+                    applyToolCallInput(id: id, input: input, for: sessionKey)
+                    recordStreamPartialResponseIfNeeded(streamId: streamId, sessionId: sessionKey)
 
                 case .unknown(let raw):
                     if eventCount <= 5 || eventCount % 100 == 0 {

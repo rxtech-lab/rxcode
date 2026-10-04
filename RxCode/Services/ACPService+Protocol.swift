@@ -393,6 +393,10 @@ extension ACPService {
     }
 
     func handleFsWriteTextFile(key: String, id: JSONValue, params: JSONValue) async {
+        if sessions[key]?.isEphemeral == true {
+            sendError(key: key, id: id, code: -32000, message: "Task suggestions cannot write files")
+            return
+        }
         guard let path = params.objectValue?["path"]?.stringValue,
               let content = params.objectValue?["content"]?.stringValue else {
             sendError(key: key, id: id, code: -32602, message: "Missing path or content")
@@ -410,6 +414,24 @@ extension ACPService {
         guard let entry = sessions[key] else {
             logger.warning("[ACP] permission request arrived for closed session")
             sendError(key: key, id: id, code: -32000, message: "Session closed")
+            return
+        }
+        if entry.isEphemeral {
+            let reject = params.objectValue?["options"]?.arrayValue?
+                .first { $0.objectValue?["kind"]?.stringValue == "reject_once" }?
+                .objectValue?["optionId"]?.stringValue
+            if let reject {
+                sendResult(key: key, id: id, result: .object([
+                    "outcome": .object([
+                        "outcome": .string("selected"),
+                        "optionId": .string(reject)
+                    ])
+                ]))
+            } else {
+                sendResult(key: key, id: id, result: .object([
+                    "outcome": .object(["outcome": .string("cancelled")])
+                ]))
+            }
             return
         }
         let toolCall = params.objectValue?["toolCall"]?.objectValue ?? [:]
@@ -444,12 +466,18 @@ extension ACPService {
         let options = params.objectValue?["options"]?.arrayValue ?? []
         let wantKind: String
         switch decision {
-        case .allow, .allowSessionTool, .allowAlwaysCommand, .allowAndSetMode:
+        case .allowSessionTool, .allowAlwaysCommand:
+            // Broad grants map to the agent's own "always" option so it stops asking.
+            wantKind = "allow_always"
+        case .allow, .allowAndSetMode:
             wantKind = "allow_once"
         case .deny, .denyWithReason:
             wantKind = "reject_once"
         }
         let chosen = options.first { $0.objectValue?["kind"]?.stringValue == wantKind }
+            ?? (wantKind == "allow_always"
+                ? options.first { $0.objectValue?["kind"]?.stringValue == "allow_once" }
+                : nil)
             ?? options.first
         let optionId = chosen?.objectValue?["optionId"]?.stringValue ?? wantKind
         logger.info("[ACP] permission reply wantKind=\(wantKind, privacy: .public) optionId=\(optionId, privacy: .public)")

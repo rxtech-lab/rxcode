@@ -330,15 +330,157 @@ extension AppState {
     /// then falls back to whatever else the registry declares (`npx`/`uvx`).
     /// After install, probes the agent (`initialize` + `session/new`) to
     /// populate the model picker from its advertised `configOptions`.
-    func installACPClient(from agent: ACPRegistryAgent) async throws -> ACPClientSpec {
-        let launch = try await resolveLaunch(for: agent)
+    func installACPClient(from agent: ACPRegistryAgent, version: String? = nil) async throws -> ACPClientSpec {
+        let selectedVersion = version ?? agent.version
+        let launch = try await resolveLaunch(for: agent, version: selectedVersion)
         let spec = ACPClientSpec(
             registryId: agent.id,
+            installedVersion: selectedVersion,
             displayName: agent.name,
             launch: launch,
             iconURL: agent.icon
         )
-        return await probedSpec(spec, agentId: agent.id)
+        return try await preparedInstalledSpec(spec, agentId: agent.id)
+    }
+
+    /// Install a newer registry release while retaining the user's client
+    /// identity, enablement, model override, arguments, and environment.
+    func updateACPClient(id: String, from agent: ACPRegistryAgent, version: String? = nil) async throws {
+        guard let current = acpClients.first(where: { $0.id == id }),
+              current.registryId == agent.id else { return }
+        let selectedVersion = version ?? agent.version
+        let launch = try await resolveLaunch(for: agent, version: selectedVersion)
+        var updated = current
+        updated.launch = launch
+        updated.installedVersion = selectedVersion
+        updated.iconURL = agent.icon
+        updated = try await preparedInstalledSpec(updated, agentId: agent.id)
+        updateACPClient(updated)
+    }
+
+    /// A package launch must actually start the selected release before its
+    /// version is recorded. A missing model selector is still a valid probe.
+    func preparedInstalledSpec(_ spec: ACPClientSpec, agentId: String) async throws -> ACPClientSpec {
+        switch spec.launch {
+        case .npx, .uvx:
+            var result = spec
+            let config = try await acp.probeModels(
+                spec: spec, cwd: NSHomeDirectory(),
+                timeout: .seconds(90), allowSessionFailure: true
+            )
+            result.modelConfigId = config?.configId
+            result.models = config?.options.map(\.value) ?? []
+            result.modelOptions = config?.options
+            return result
+        case .binary, .custom:
+            return await probedSpec(spec, agentId: agentId)
+        }
+    }
+
+    /// Sign-in methods the client advertises in its `initialize` response.
+    func acpAuthMethods(for id: String) async throws -> [ACPAuthMethod] {
+        guard let spec = acpClients.first(where: { $0.id == id }) else { return [] }
+        return try await acp.authMethods(spec: spec, cwd: NSHomeDirectory())
+    }
+
+    func acpClientSupportsLogout(_ spec: ACPClientSpec) async -> Bool {
+        if isOpenCodeClient(spec) { return true }
+        if (try? await acp.supportsLogout(spec: spec, cwd: NSHomeDirectory())) == true { return true }
+        let methods = (try? await acp.authMethods(spec: spec, cwd: NSHomeDirectory())) ?? []
+        return !storedACPAuthVariableNames(spec: spec, methods: methods).isEmpty
+    }
+
+    /// Returns true when the user must finish provider selection in Terminal.
+    func signOutACPClient(id: String) async throws -> Bool {
+        guard let spec = acpClients.first(where: { $0.id == id }) else { return false }
+        let supportsProtocolLogout = (try? await acp.supportsLogout(spec: spec, cwd: NSHomeDirectory())) == true
+        let methods = (try? await acp.authMethods(spec: spec, cwd: NSHomeDirectory())) ?? []
+        let variableNames = storedACPAuthVariableNames(spec: spec, methods: methods)
+        guard supportsProtocolLogout || !variableNames.isEmpty || isOpenCodeClient(spec) else {
+            throw ACPError.protocolMismatch("This client does not support logout.")
+        }
+        var terminalOpened = false
+        if supportsProtocolLogout {
+            try await acp.signOut(spec: spec, cwd: NSHomeDirectory())
+        } else if isOpenCodeClient(spec) {
+            try await acp.openOpenCodeTerminalLogout(spec: spec)
+            terminalOpened = true
+        }
+        guard let idx = acpClients.firstIndex(where: { $0.id == id }) else { return false }
+        acpClients[idx].authMethodId = nil
+        for name in variableNames {
+            acpClients[idx].extraEnv[name] = nil
+        }
+        saveACPClients()
+        return terminalOpened
+    }
+
+    private func isOpenCodeClient(_ spec: ACPClientSpec) -> Bool {
+        if spec.registryId == "opencode" { return true }
+        if case .binary(let path, _, _) = spec.launch {
+            return URL(fileURLWithPath: path).lastPathComponent == "opencode"
+        }
+        return false
+    }
+
+    private func storedACPAuthVariableNames(spec: ACPClientSpec, methods: [ACPAuthMethod]) -> Set<String> {
+        Set(methods.flatMap { method -> [String] in
+            guard case .envVar(let variables, _) = method.kind else { return [] }
+            return variables.map(\.name).filter { spec.extraEnv[$0] != nil }
+        })
+    }
+
+    func isACPClientSignedIn(_ spec: ACPClientSpec) async -> Bool {
+        if isOpenCodeClient(spec), await acp.hasOpenCodeCredentials() { return true }
+        if spec.authMethodId != nil { return true }
+        let launchEnv: [String: String]
+        switch spec.launch {
+        case .npx(_, _, let env), .uvx(_, _, let env), .binary(_, _, let env), .custom(_, _, let env):
+            launchEnv = env
+        }
+        let configuredEnv = launchEnv.merging(spec.extraEnv) { _, override in override }
+        guard !configuredEnv.isEmpty,
+              let methods = try? await acp.authMethods(spec: spec, cwd: NSHomeDirectory())
+        else { return false }
+        return methods.contains { method in
+            guard case .envVar(let vars, _) = method.kind else { return false }
+            let present = vars.filter {
+                !(configuredEnv[$0.name] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }
+            return !present.isEmpty && vars.filter { !$0.optional }.allSatisfy { variable in
+                present.contains { $0.name == variable.name }
+            }
+        }
+    }
+
+    /// Runs the agent-driven `authenticate` flow, remembers the method so
+    /// turns can replay it, then re-probes models (sign-in often unlocks them).
+    func authenticateACPClient(id: String, methodId: String) async throws {
+        guard let spec = acpClients.first(where: { $0.id == id }) else { return }
+        try await acp.authenticate(spec: spec, methodId: methodId, cwd: NSHomeDirectory())
+        guard let idx = acpClients.firstIndex(where: { $0.id == id }) else { return }
+        acpClients[idx].authMethodId = methodId
+        saveACPClients()
+        await refreshACPClientModels(id: id)
+    }
+
+    /// Stores credentials for an `env_var` auth method in the client's launch
+    /// environment. Empty values remove the variable.
+    func setACPClientCredentials(id: String, values: [String: String]) async {
+        guard let idx = acpClients.firstIndex(where: { $0.id == id }) else { return }
+        for (name, value) in values {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            acpClients[idx].extraEnv[name] = trimmed.isEmpty ? nil : trimmed
+        }
+        saveACPClients()
+        await refreshACPClientModels(id: id)
+    }
+
+    func openACPTerminalLogin(id: String, method: ACPAuthMethod) async throws {
+        guard let spec = acpClients.first(where: { $0.id == id }),
+              case .terminal(let command, let args, let env) = method.kind
+        else { return }
+        try await acp.openTerminalLogin(spec: spec, command: command, args: args, env: env)
     }
 
     /// Re-probes an installed client and persists the result. If the probe
@@ -405,7 +547,25 @@ extension AppState {
         }.joined(separator: ", ")
     }
 
-    func resolveLaunch(for agent: ACPRegistryAgent) async throws -> ACPClientSpec.LaunchKind {
+    func resolveLaunch(for agent: ACPRegistryAgent, version: String) async throws -> ACPClientSpec.LaunchKind {
+        guard ACPPackageVersion.isValid(version) else {
+            throw ACPInstallError.invalidPackageVersion(package: agent.id, version: version)
+        }
+        if version != agent.version {
+            if let npx = agent.distribution.npx {
+                guard let package = ACPPackageVersion.npx(npx.package, version: version) else {
+                    throw ACPInstallError.invalidPackageVersion(package: npx.package, version: version)
+                }
+                return .npx(package: package, args: npx.args ?? [], env: npx.env ?? [:])
+            }
+            if let uvx = agent.distribution.uvx {
+                guard let package = ACPPackageVersion.uvx(uvx.package, version: version) else {
+                    throw ACPInstallError.invalidPackageVersion(package: uvx.package, version: version)
+                }
+                return .uvx(package: package, args: uvx.args ?? [], env: uvx.env ?? [:])
+            }
+            throw ACPInstallError.historicalBinaryUnavailable(version: version)
+        }
         // Prefer the platform binary; on download/extract failure, fall through.
         if let bin = agent.distribution.binary?[ACPPlatform.current] {
             do {
@@ -415,19 +575,31 @@ extension AppState {
                 return .binary(path: path, args: bin.args ?? [], env: bin.env ?? [:])
             } catch {
                 if let npx = agent.distribution.npx {
-                    return .npx(package: npx.package, args: npx.args ?? [], env: npx.env ?? [:])
+                    guard let package = ACPPackageVersion.npx(npx.package, version: agent.version) else {
+                        throw ACPInstallError.invalidPackageVersion(package: npx.package, version: agent.version)
+                    }
+                    return .npx(package: package, args: npx.args ?? [], env: npx.env ?? [:])
                 }
                 if let uvx = agent.distribution.uvx {
-                    return .uvx(package: uvx.package, args: uvx.args ?? [], env: uvx.env ?? [:])
+                    guard let package = ACPPackageVersion.uvx(uvx.package, version: agent.version) else {
+                        throw ACPInstallError.invalidPackageVersion(package: uvx.package, version: agent.version)
+                    }
+                    return .uvx(package: package, args: uvx.args ?? [], env: uvx.env ?? [:])
                 }
                 throw error
             }
         }
         if let npx = agent.distribution.npx {
-            return .npx(package: npx.package, args: npx.args ?? [], env: npx.env ?? [:])
+            guard let package = ACPPackageVersion.npx(npx.package, version: agent.version) else {
+                throw ACPInstallError.invalidPackageVersion(package: npx.package, version: agent.version)
+            }
+            return .npx(package: package, args: npx.args ?? [], env: npx.env ?? [:])
         }
         if let uvx = agent.distribution.uvx {
-            return .uvx(package: uvx.package, args: uvx.args ?? [], env: uvx.env ?? [:])
+            guard let package = ACPPackageVersion.uvx(uvx.package, version: agent.version) else {
+                throw ACPInstallError.invalidPackageVersion(package: uvx.package, version: agent.version)
+            }
+            return .uvx(package: package, args: uvx.args ?? [], env: uvx.env ?? [:])
         }
         throw ACPInstallError.noCompatibleDistribution
     }

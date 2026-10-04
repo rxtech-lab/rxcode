@@ -166,6 +166,7 @@ fun BriefingDetailScreen(
                     isUnknownBranch = isUnknownBranch,
                     isInitializingGit = isInitializingGit,
                     updatedAt = group?.updatedAt,
+                    createdAt = group?.briefing?.createdAt,
                     onInitializeGit = {
                         haptics.play(HapticEvent.LightTap)
                         viewModel.initProjectGit(groupKey.projectId)
@@ -227,6 +228,7 @@ private fun HeaderCard(
     isUnknownBranch: Boolean,
     isInitializingGit: Boolean,
     updatedAt: java.time.Instant?,
+    createdAt: java.time.Instant?,
     onInitializeGit: () -> Unit,
 ) {
     ElevatedCard(
@@ -311,7 +313,7 @@ private fun HeaderCard(
                                 tint = MaterialTheme.colorScheme.outline,
                             )
                             Text(
-                                relativeTime(it),
+                                if (createdAt != null) "Created ${relativeTime(createdAt)} · Updated ${relativeTime(it)}" else relativeTime(it),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.outline,
                             )

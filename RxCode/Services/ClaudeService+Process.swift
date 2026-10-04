@@ -113,7 +113,7 @@ extension ClaudeCodeServer {
 
                 var rawLineCount = 0
                 var capturedSessionId: String?
-                for await line in Self.asyncLines(from: stdout.fileHandleForReading, log: log) {
+                for await line in stdout.fileHandleForReading.lineStream() {
                     guard !line.isEmpty else { continue }
                     guard let data = line.data(using: .utf8) else { continue }
 
@@ -164,45 +164,6 @@ extension ClaudeCodeServer {
                 // race a pending callback dispatch, then close to release the FD.
                 stdout.fileHandleForReading.readabilityHandler = nil
                 stdout.fileHandleForReading.closeFile()
-            }
-        }
-    }
-
-    /// Stream lines from `handle` using a Dispatch-backed `readabilityHandler`.
-    /// We use this instead of `FileHandle.AsyncBytes.lines` because the async
-    /// iterator can wedge when multiple concurrent pipe readers exist (the
-    /// cross-project send case: one CLI is mid-tool-call while another is
-    /// just starting). Dispatch's readable source delivers each chunk via a
-    /// per-handle background callback that doesn't share global async state,
-    /// so a second simultaneous reader is unaffected by the first's progress.
-    private static func asyncLines(from handle: FileHandle, log: Logger) -> AsyncStream<String> {
-        AsyncStream { continuation in
-            // `buffer` is touched only from the readabilityHandler, which Dispatch
-            // serializes onto a single internal queue per FileHandle — no lock needed.
-            nonisolated(unsafe) var buffer = Data()
-            handle.readabilityHandler = { fh in
-                let chunk = fh.availableData
-                if chunk.isEmpty {
-                    // EOF — flush any trailing non-terminated line, then finish.
-                    if !buffer.isEmpty, let trailing = String(data: buffer, encoding: .utf8) {
-                        continuation.yield(trailing)
-                        buffer.removeAll(keepingCapacity: false)
-                    }
-                    fh.readabilityHandler = nil
-                    continuation.finish()
-                    return
-                }
-                buffer.append(chunk)
-                while let newlineIdx = buffer.firstIndex(of: 0x0A) {
-                    let lineData = buffer[buffer.startIndex..<newlineIdx]
-                    buffer.removeSubrange(buffer.startIndex...newlineIdx)
-                    if let line = String(data: lineData, encoding: .utf8) {
-                        continuation.yield(line)
-                    }
-                }
-            }
-            continuation.onTermination = { _ in
-                handle.readabilityHandler = nil
             }
         }
     }
@@ -395,6 +356,25 @@ extension ClaudeCodeServer {
 
     - `mcp__rxcode-ide__ide__get_projects` — list every project registered in \
     RxCode, so you can discover sibling projects to read or message.
+    - `mcp__rxcode-ide__ide__get_stories` — list stories on a project's task \
+    board before linking a new task to one.
+    - `mcp__rxcode-ide__ide__create_story` / \
+    `mcp__rxcode-ide__ide__create_task` — record user-requested work from a \
+    chat, in this or any other project (`project_id`). Pass `story_id` to \
+    place a task in an existing story, and `starts_after_task_ids` to run a \
+    task only after every listed task is ready.
+    - `mcp__rxcode-ide__ide__create_scheduled_task` — when the user asks for \
+    work to run periodically, propose a cron-scheduled prompt. RxCode asks the \
+    user to confirm it and the call returns whether it was added.
+    - `mcp__rxcode-ide__ide__link_story` — share a story with other projects \
+    so work spanning several projects is tracked under one story.
+    - `mcp__rxcode-ide__ide__get_tasks` / \
+    `mcp__rxcode-ide__ide__get_task_status` — list tasks by project, story, \
+    or column, and check a task's implementation status and latest thread \
+    messages.
+    - `mcp__rxcode-ide__ide__run_task` — start a task's agent in its project, \
+    or send a follow-up to its thread. This triggers a real agent run that \
+    may consume tokens; poll `ide__get_task_status` for progress.
     - `mcp__rxcode-ide__ide__get_threads` — list or natural-language search \
     chat threads across projects (returns AI summaries, and ranked snippets \
     when a query is given).
@@ -430,6 +410,20 @@ extension ClaudeCodeServer {
     - `mcp__rxcode-ide__ide__memory_delete` — remove a memory by `id` when it \
     is no longer valid.
 
+    When the user asks for a report or briefing, write it as a document \
+    briefing: `mcp__rxcode-ide__ide__briefing_create` (Markdown or HTML, \
+    starts as a draft), `ide__briefing_add_file` / `ide__briefing_delete_file` \
+    for images, videos, and files, `ide__briefing_update` to edit, and \
+    `ide__briefing_publish` to show it on the briefing timeline. Use \
+    `ide__briefing_list` / `ide__briefing_get` to find and read existing \
+    briefings, and `ide__briefing_delete` only when the user asks. The \
+    briefing title is shown above its content, so do not repeat the title as \
+    a heading in the content.
+    Published briefings may be emailed to the user automatically after your \
+    run. Call `mcp__rxcode-ide__ide__send_notification` only when the user or a \
+    scheduled task's prompt asks to be notified or emailed (pass \
+    `briefing_id` to send a briefing).
+
     Do not store completed work, build results, files changed, available \
     tools, routine requests, or other transient task details.
     """
@@ -454,6 +448,12 @@ extension ClaudeCodeServer {
             "--output-format", "stream-json",
             "--verbose",
             "--include-partial-messages",
+            // Echoes each stdin user frame as the CLI takes it, so a steer
+            // that lands after the turn's last tool call — which the CLI runs
+            // as a new turn after this one's `result` — can be told apart
+            // from one it folded in. See the `.result` handler in
+            // `processStream`.
+            "--replay-user-messages",
         ]
 
         if permissionMode != .default {
@@ -677,7 +677,13 @@ extension ClaudeCodeServer {
         // is preserved across reparenting, so we can locate descendants via getsid()
         // even after an intermediate parent has died and orphans were reparented to
         // launchd. Pure SETPGROUP would not survive reparenting on its own.
-        _ = posix_spawnattr_setflags(&attr, Int16(POSIX_SPAWN_SETSID))
+        //
+        // CLOEXEC_DEFAULT closes every descriptor except the dup2'd stdio in the child.
+        // Without it the CLI inherits all of the app's open fds (sockets, files, and the
+        // pipes of other concurrent streams), which can exhaust the child's fd table so
+        // it dies at startup with "possibly due to low max file descriptors", and keeps
+        // other streams' pipe write ends open so their EOF never arrives.
+        _ = posix_spawnattr_setflags(&attr, Int16(POSIX_SPAWN_SETSID | POSIX_SPAWN_CLOEXEC_DEFAULT))
 
         var argv: [UnsafeMutablePointer<CChar>?] = ([executable] + arguments).map { strdup($0) }
         argv.append(nil)
@@ -713,6 +719,43 @@ extension ClaudeCodeServer {
         let data = try JSONSerialization.data(withJSONObject: object, options: [])
         try handle.write(contentsOf: data)
         try handle.write(contentsOf: Data([0x0A])) // newline
+    }
+
+    /// Deliver extra user input to a turn that is still running.
+    ///
+    /// This is the same NDJSON `user` frame the initial prompt is written as —
+    /// `--input-format stream-json` keeps stdin open for exactly this, and the
+    /// CLI folds the message into the turn at its next agent loop boundary. So
+    /// steering needs no new transport, only the handle we were already holding
+    /// open until `closeStdin(streamId:)`.
+    ///
+    /// Returns `false` once stdin is gone, which is how a turn that has already
+    /// reported its `result` is distinguished from one still running.
+    func steer(streamId: UUID, prompt: String) -> Bool {
+        guard let handle = stdinHandles[streamId] else {
+            logger.info("[Claude] steer declined, stdin already closed stream=\(streamId)")
+            return false
+        }
+        let userMessage: [String: Any] = [
+            "type": "user",
+            "message": [
+                "role": "user",
+                "content": [
+                    ["type": "text", "text": prompt]
+                ]
+            ]
+        ]
+        do {
+            try Self.writeJSONLine(userMessage, to: handle)
+            logger.info("[Claude] steered stream=\(streamId) promptLen=\(prompt.count)")
+            return true
+        } catch {
+            // A broken pipe here means the CLI exited between the handle lookup
+            // and the write. Treat it as "could not steer" so the caller still
+            // delivers the message as its own turn.
+            logger.warning("[Claude] steer failed stream=\(streamId): \(error.localizedDescription)")
+            return false
+        }
     }
 
     /// Close stdin for an active stream. Call this after receiving the `result` event

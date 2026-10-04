@@ -8,6 +8,9 @@ struct ProjectsSidebar: View {
     @Binding var selected: UUID?
     @Binding var showingBriefing: Bool
     var showsBriefingItem = true
+    /// Selection binding for the Tasks sidebar item (iPad); the item is
+    /// hidden when `nil`.
+    var showingTasks: Binding<Bool>?
     /// When true, uses Button with selection callback (iPad split view).
     /// When false, uses NavigationLink for stack-based navigation (iPhone).
     var usesSelection = true
@@ -100,17 +103,51 @@ struct ProjectsSidebar: View {
     private var defaultContent: some View {
         ScrollView {
             LazyVStack(spacing: 12) {
-                // Briefing Card
-                if showsBriefingItem {
-                    BriefingNavigationCard(
-                        isSelected: showingBriefing,
-                        usesNavigationLink: false, // Briefing always uses callback
+                if let showingTasks {
+                    SidebarNavigationCard(
+                        title: "Tasks",
+                        subtitle: "Stories and tasks across projects",
+                        systemImage: "checklist",
+                        gradientColors: [
+                            Color(red: 0.3, green: 0.75, blue: 0.55),
+                            Color(red: 0.2, green: 0.6, blue: 0.8),
+                        ],
+                        glassID: "tasks",
+                        isSelected: showingTasks.wrappedValue,
                         namespace: glassNamespace
                     ) {
                         selected = nil
+                        showingBriefing = false
+                        showingTasks.wrappedValue = true
+                    }
+                    .accessibilityIdentifier("sidebar-tasks")
+                }
+
+                // Briefing Card
+                if showsBriefingItem {
+                    SidebarNavigationCard(
+                        title: "Briefing",
+                        subtitle: "Daily summary of your projects",
+                        systemImage: "doc.text.fill",
+                        gradientColors: [
+                            Color(red: 0.4, green: 0.6, blue: 0.9),
+                            Color(red: 0.5, green: 0.4, blue: 0.85),
+                        ],
+                        glassID: "briefing",
+                        isSelected: showingBriefing,
+                        namespace: glassNamespace
+                    ) {
+                        selected = nil
+                        showingTasks?.wrappedValue = false
                         showingBriefing = true
                     }
                     .popoverTip(MobileTips.BriefingTip(), arrowEdge: .trailing)
+                    .accessibilityIdentifier("sidebar-briefing")
+
+                    if showingTasks != nil {
+                        Divider()
+                            .padding(.horizontal, 4)
+                    }
                 }
 
                 // Projects Section
@@ -356,44 +393,42 @@ private struct ProjectSidebarSearchTipModifier: ViewModifier {
 
 // MARK: - Briefing Navigation Card
 
-private struct BriefingNavigationCard: View {
+/// A full-width glass card for a top-level sidebar destination (Briefing,
+/// Tasks) above the project list.
+private struct SidebarNavigationCard: View {
+    let title: LocalizedStringKey
+    let subtitle: LocalizedStringKey
+    let systemImage: String
+    let gradientColors: [Color]
+    let glassID: String
     let isSelected: Bool
-    var usesNavigationLink: Bool = false
     let namespace: Namespace.ID
     var onSelect: (() -> Void)?
 
     var body: some View {
-        if usesNavigationLink {
-            // Not used for briefing, but keeping pattern consistent
-            Button { onSelect?() } label: { cardContent }
-                .buttonStyle(GlassProjectCardButtonStyle(isSelected: isSelected))
-                .glassEffectID("briefing", in: namespace)
-        } else {
-            Button { onSelect?() } label: { cardContent }
-                .buttonStyle(GlassProjectCardButtonStyle(isSelected: isSelected))
-                .glassEffectID("briefing", in: namespace)
-        }
+        Button { onSelect?() } label: { cardContent }
+            .buttonStyle(GlassProjectCardButtonStyle(isSelected: isSelected))
+            .glassEffectID(glassID, in: namespace)
     }
 
     private var cardContent: some View {
         HStack(spacing: 14) {
-            // Icon
             ZStack {
                 Circle()
-                    .fill(briefingGradient.opacity(0.15))
+                    .fill(gradient.opacity(0.15))
                     .frame(width: 44, height: 44)
 
-                Image(systemName: "doc.text.fill")
+                Image(systemName: systemImage)
                     .font(.system(size: 18, weight: .medium))
-                    .foregroundStyle(briefingGradient)
+                    .foregroundStyle(gradient)
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("Briefing")
+                Text(title)
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(.primary)
 
-                Text("Daily summary of your projects")
+                Text(subtitle)
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
             }
@@ -410,15 +445,8 @@ private struct BriefingNavigationCard: View {
         .contentShape(Rectangle())
     }
 
-    private var briefingGradient: LinearGradient {
-        LinearGradient(
-            colors: [
-                Color(red: 0.4, green: 0.6, blue: 0.9),
-                Color(red: 0.5, green: 0.4, blue: 0.85)
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
+    private var gradient: LinearGradient {
+        LinearGradient(colors: gradientColors, startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 }
 
@@ -488,7 +516,7 @@ private struct GlassProjectCard: View {
                     .lineLimit(1)
 
                 // Metadata row - uses FlowLayout to wrap gracefully on narrow sidebars
-                FlowLayout(spacing: 8) {
+                FlowLayout(spacing: 8, lineSpacing: 8) {
                     // Thread count
                     if threadCount > 0 {
                         HStack(spacing: 4) {
@@ -683,55 +711,6 @@ private struct GlassProjectCardButtonStyle: ButtonStyle {
         } else {
             return .regular.interactive()
         }
-    }
-}
-
-// MARK: - Flow Layout
-
-/// A layout that arranges views horizontally and wraps to the next line when needed.
-/// Used for metadata rows that need to adapt to narrow sidebar widths on iPad.
-private struct FlowLayout: Layout {
-    var spacing: CGFloat = 8
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
-        return layout(sizes: sizes, containerWidth: proposal.width ?? .infinity).size
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
-        let offsets = layout(sizes: sizes, containerWidth: bounds.width).offsets
-
-        for (index, subview) in subviews.enumerated() {
-            subview.place(
-                at: CGPoint(x: bounds.minX + offsets[index].x, y: bounds.minY + offsets[index].y),
-                proposal: ProposedViewSize(sizes[index])
-            )
-        }
-    }
-
-    private func layout(sizes: [CGSize], containerWidth: CGFloat) -> (offsets: [CGPoint], size: CGSize) {
-        var offsets: [CGPoint] = []
-        var currentX: CGFloat = 0
-        var currentY: CGFloat = 0
-        var lineHeight: CGFloat = 0
-        var maxWidth: CGFloat = 0
-
-        for size in sizes {
-            if currentX + size.width > containerWidth && currentX > 0 {
-                // Wrap to next line
-                currentX = 0
-                currentY += lineHeight + spacing
-                lineHeight = 0
-            }
-
-            offsets.append(CGPoint(x: currentX, y: currentY))
-            lineHeight = max(lineHeight, size.height)
-            currentX += size.width + spacing
-            maxWidth = max(maxWidth, currentX - spacing)
-        }
-
-        return (offsets, CGSize(width: maxWidth, height: currentY + lineHeight))
     }
 }
 

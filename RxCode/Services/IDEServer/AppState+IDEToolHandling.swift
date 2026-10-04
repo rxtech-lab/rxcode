@@ -39,6 +39,22 @@ extension AppState: IDEToolHandling {
             throw IDEToolError.notSupported("ide__get_job_output is not yet implemented")
         case "ide__get_projects":
             return handleGetProjects()
+        case "ide__get_stories":
+            return try await handleGetStories(arguments: arguments, sessionKey: sessionKey)
+        case "ide__create_story":
+            return try await handleCreateStory(arguments: arguments, sessionKey: sessionKey)
+        case "ide__create_task":
+            return try await handleCreateTask(arguments: arguments, sessionKey: sessionKey)
+        case "ide__link_story":
+            return try await handleLinkStory(arguments: arguments, sessionKey: sessionKey)
+        case "ide__create_scheduled_task":
+            return try await handleCreateScheduledTask(arguments: arguments, sessionKey: sessionKey)
+        case "ide__get_tasks":
+            return try await handleGetTasks(arguments: arguments, sessionKey: sessionKey)
+        case "ide__run_task":
+            return try await handleRunTask(arguments: arguments)
+        case "ide__get_task_status":
+            return try await handleGetTaskStatus(arguments: arguments)
         case "ide__get_threads":
             return await handleGetThreads(arguments: arguments)
         case "ide__get_thread_messages", "ide__get_thread_detail":
@@ -61,6 +77,12 @@ extension AppState: IDEToolHandling {
             return try await handleSetupDocsSecret(arguments: arguments, sessionKey: sessionKey)
         case "ide__setup_release":
             return try await handleSetupRelease(arguments: arguments, sessionKey: sessionKey)
+        case "ide__briefing_list", "ide__briefing_get", "ide__briefing_create",
+             "ide__briefing_update", "ide__briefing_delete", "ide__briefing_add_file",
+             "ide__briefing_delete_file", "ide__briefing_publish":
+            return try await handleBriefingToolCall(name: name, arguments: arguments, sessionKey: sessionKey)
+        case "ide__send_notification":
+            return try await handleSendNotification(arguments: arguments, sessionKey: sessionKey)
         case "ide__ask_user":
             throw IDEToolError.notSupported("ide__ask_user polyfill not implemented yet — surface the question as plain assistant text instead.")
         default:
@@ -121,130 +143,351 @@ extension AppState: IDEToolHandling {
     }
 
     @MainActor
-    private func handleGetThreads(arguments: JSONValue) async -> JSONValue {
-        let projectFilter: UUID? = {
-            if let s = arguments["project_id"]?.stringValue { return UUID(uuidString: s) }
-            return nil
-        }()
-        let query = arguments["query"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let requestedLimit = Int(arguments["limit"]?.numberValue ?? 50)
-        let limit = max(1, min(requestedLimit, 200))
-
-        let summaries = threadStore.loadAllSummaries()
-        let byId = Dictionary(uniqueKeysWithValues: summaries.map { ($0.id, $0) })
-        let iso = ISO8601DateFormatter()
-
-        func emit(summary: ChatSession.Summary, score: Float?, snippet: String?) -> JSONValue {
-            let storedSummary = threadStore.fetchThreadSummary(sessionId: summary.id)?.summary ?? ""
-            var obj: [String: JSONValue] = [
-                "id": .string(summary.id),
-                "title": .string(summary.title),
-                "project_id": .string(summary.projectId.uuidString),
-                "updated_at": .string(iso.string(from: summary.updatedAt)),
-                "agent_provider": .string(summary.agentProvider.rawValue),
-                "summary": .string(storedSummary),
-                "branch": summary.worktreeBranch.map { .string($0) } ?? .null,
-                "is_archived": .bool(summary.isArchived),
-                "worktree_branch": summary.worktreeBranch.map { .string($0) } ?? .null,
-            ]
-            if let score { obj["score"] = .number(Double(score)) }
-            if let snippet { obj["snippet"] = .string(snippet) }
-            return .object(obj)
+    private func taskToolProjectId(arguments: JSONValue, sessionKey: String) throws -> UUID {
+        let explicit = try parseOptionalProjectId(arguments["project_id"]?.stringValue)
+        guard let id = explicit ?? threadStore.fetch(id: sessionKey)?.projectId
+                ?? allSessionSummaries.first(where: { $0.id == resolveCurrentSessionId(sessionKey) })?.projectId,
+              projects.contains(where: { $0.id == id })
+        else {
+            throw IDEToolError.invalidArguments("Pass a valid project_id or call from a saved project chat.")
         }
+        return id
+    }
 
-        if let query, !query.isEmpty {
-            // Semantic search via the same on-device embedding pipeline that
-            // powers the global search overlay. Flatten the project groups so
-            // we can apply an optional project filter while preserving rank.
-            let groups = await searchService.search(query, limit: limit)
-            let flat = groups.flatMap { $0.hits }
-            let filtered = flat.filter { hit in
-                guard let pid = projectFilter else { return true }
-                return hit.projectId == pid
+    @MainActor
+    private func handleGetStories(arguments: JSONValue, sessionKey: String) async throws -> JSONValue {
+        let projectId = try taskToolProjectId(arguments: arguments, sessionKey: sessionKey)
+        await ensureTaskBoardLoaded(for: projectId)
+        let board = taskBoard(for: projectId)
+        let rollups = board.storyRollups()
+        return jsonTextResult(.array(board.stories.map { story in
+            var obj = storyJSON(story)
+            if let rollup = rollups[story.id] {
+                obj["status"] = .string(rollup.status.rawValue)
+                obj["tasks_done"] = .number(Double(rollup.progress.done))
+                obj["tasks_total"] = .number(Double(rollup.progress.total))
             }
-            let entries: [JSONValue] = filtered.prefix(limit).compactMap { hit in
-                guard let summary = byId[hit.threadId] else { return nil }
-                if summary.isArchived { return nil }
-                return emit(summary: summary, score: hit.score, snippet: hit.snippet)
+            return .object(obj)
+        }))
+    }
+
+    private func storyJSON(_ story: ProjectStory) -> [String: JSONValue] {
+        [
+            "id": .string(story.id.uuidString),
+            "project_id": .string(story.projectId.uuidString),
+            "title": .string(story.title),
+            "details": .string(story.details),
+            "linked_project_ids": .array(story.linkedProjectIds.map { .string($0.uuidString) }),
+        ]
+    }
+
+    private func parseProjectIdList(_ value: JSONValue?, field: String) throws -> [UUID] {
+        guard let value else { return [] }
+        guard let array = value.arrayValue else {
+            throw IDEToolError.invalidArguments("\(field) must be an array of project UUIDs.")
+        }
+        return try array.map { entry in
+            guard let raw = entry.stringValue, let id = UUID(uuidString: raw),
+                  projects.contains(where: { $0.id == id })
+            else {
+                throw IDEToolError.invalidArguments("\(field) contains an unknown project id. Call ide__get_projects first.")
             }
-            return jsonTextResult(.array(entries))
-        } else {
-            let filtered = summaries
-                .filter { projectFilter == nil || $0.projectId == projectFilter }
-                .filter { !$0.isArchived }
-                .sorted { $0.updatedAt > $1.updatedAt }
-                .prefix(limit)
-            let entries: [JSONValue] = filtered.map { emit(summary: $0, score: nil, snippet: nil) }
-            return jsonTextResult(.array(entries))
+            return id
         }
     }
 
     @MainActor
-    private func handleGetThreadMessages(arguments: JSONValue) async throws -> JSONValue {
-        guard let id = arguments["thread_id"]?.stringValue else {
-            throw IDEToolError.invalidArguments("missing 'thread_id'")
+    private func handleCreateStory(arguments: JSONValue, sessionKey: String) async throws -> JSONValue {
+        let projectId = try taskToolProjectId(arguments: arguments, sessionKey: sessionKey)
+        guard let title = arguments["title"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !title.isEmpty else {
+            throw IDEToolError.invalidArguments("A nonempty title is required.")
         }
-        guard let thread = threadStore.fetch(id: id) else {
-            throw IDEToolError.handlerFailed("No thread with id \(id)")
+        let linked = try parseProjectIdList(arguments["linked_project_ids"], field: "linked_project_ids")
+        await ensureTaskBoardLoaded(for: projectId)
+        let story = ProjectStory(projectId: projectId, title: title, details: arguments["details"]?.stringValue ?? "")
+        upsertStory(story)
+        let result = linked.isEmpty
+            ? story
+            : await linkStory(story.id, in: projectId, to: linked) ?? story
+        return jsonTextResult(.object(storyJSON(result)))
+    }
+
+    @MainActor
+    private func handleLinkStory(arguments: JSONValue, sessionKey: String) async throws -> JSONValue {
+        guard let raw = arguments["story_id"]?.stringValue, let storyId = UUID(uuidString: raw) else {
+            throw IDEToolError.invalidArguments("A valid story_id is required.")
         }
-        let summary = thread.toSummary()
-        let cwd = summary.worktreePath
-            ?? projects.first(where: { $0.id == summary.projectId })?.path
-            ?? ""
-        let requestedLimit = Int(arguments["limit"]?.numberValue ?? 200)
-        let limit = max(1, min(requestedLimit, 1000))
-        let includeToolCalls = arguments["include_tool_calls"]?.boolValue ?? false
+        let link = try parseProjectIdList(arguments["link_project_ids"], field: "link_project_ids")
+        let unlink = try parseProjectIdList(arguments["unlink_project_ids"], field: "unlink_project_ids")
+        guard !link.isEmpty || !unlink.isEmpty else {
+            throw IDEToolError.invalidArguments("Pass link_project_ids or unlink_project_ids.")
+        }
+        guard Set(link).isDisjoint(with: unlink) else {
+            throw IDEToolError.invalidArguments("A project cannot be both linked and unlinked.")
+        }
+        await ensureAllTaskBoardsLoaded()
+        // The story's own board: the explicit or current project when it holds
+        // the story, otherwise any board that does.
+        let preferred = try? taskToolProjectId(arguments: arguments, sessionKey: sessionKey)
+        guard let projectId = [preferred].compactMap({ $0 }).first(where: { taskBoard(for: $0).story(id: storyId) != nil })
+                ?? taskBoards.first(where: { $0.value.story(id: storyId) != nil })?.key
+        else {
+            throw IDEToolError.invalidArguments("story_id must identify an existing story.")
+        }
 
-        let session = await persistence.loadFullSession(summary: summary, cwd: cwd)
-        let allMessages = session?.messages ?? []
-        // Most-recent N — preserve chronological order in the output.
-        let tail = Array(allMessages.suffix(limit))
-        let iso = ISO8601DateFormatter()
+        var story = taskBoard(for: projectId).story(id: storyId)
+        if !link.isEmpty {
+            story = await linkStory(storyId, in: projectId, to: link)
+        }
+        if !unlink.isEmpty {
+            // Unlinking the anchor board itself still leaves the story on the
+            // remaining boards, so read the result back from one of those.
+            story = unlinkStory(storyId, in: projectId, from: unlink)
+        }
+        guard let story else {
+            return textResult("Story \(storyId.uuidString) is no longer on any project board.")
+        }
+        return jsonTextResult(.object(storyJSON(story)))
+    }
 
-        let messageEntries: [JSONValue] = tail.compactMap { msg in
-            // Concatenate text blocks; optionally append a one-line summary for
-            // each tool call so a reader can tell what happened without the
-            // full result payload.
-            var pieces: [String] = []
-            for block in msg.blocks {
-                if let text = block.text, !text.isEmpty {
-                    pieces.append(text)
-                } else if let call = block.toolCall, includeToolCalls {
-                    let resultPreview = call.result.map { $0.prefix(200) }.map(String.init) ?? ""
-                    pieces.append("[tool: \(call.name)\(call.isError ? " (error)" : "")] \(resultPreview)")
+    @MainActor
+    private func handleCreateTask(arguments: JSONValue, sessionKey: String) async throws -> JSONValue {
+        let projectId = try taskToolProjectId(arguments: arguments, sessionKey: sessionKey)
+        let title = arguments["title"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let details = arguments["details"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !title.isEmpty || !details.isEmpty else {
+            throw IDEToolError.invalidArguments("A nonempty title or details is required.")
+        }
+        await ensureTaskBoardLoaded(for: projectId)
+        let storyId: UUID?
+        if let raw = arguments["story_id"]?.stringValue {
+            guard let id = UUID(uuidString: raw), taskBoard(for: projectId).story(id: id) != nil else {
+                throw IDEToolError.invalidArguments("story_id must identify a story in this project.")
+            }
+            storyId = id
+        } else {
+            storyId = nil
+        }
+        let parentTaskIds: [UUID]
+        let requestedParents: [String]
+        if let entries = arguments["starts_after_task_ids"]?.arrayValue {
+            guard entries.allSatisfy({ $0.stringValue != nil }) else {
+                throw IDEToolError.invalidArguments("starts_after_task_ids must contain task id strings.")
+            }
+            requestedParents = entries.compactMap(\.stringValue)
+        } else {
+            requestedParents = arguments["starts_after_task_id"]?.stringValue.map { [$0] } ?? []
+        }
+        if !requestedParents.isEmpty {
+            await ensureAllTaskBoardsLoaded()
+            parentTaskIds = try requestedParents.map { raw in
+                guard let id = UUID(uuidString: raw), self.task(id: id) != nil else {
+                    throw IDEToolError.invalidArguments("Each starts_after_task_ids entry must identify an existing task. Call ide__get_tasks first.")
                 }
+                return id
             }
-            let text = pieces.joined(separator: "\n\n")
-            if text.isEmpty && !msg.isError { return nil }
-            var obj: [String: JSONValue] = [
-                "role": .string(msg.role.rawValue),
-                "text": .string(text),
-                "timestamp": .string(iso.string(from: msg.timestamp)),
-            ]
-            if msg.isError { obj["is_error"] = .bool(true) }
-            if !msg.attachmentPaths.isEmpty {
-                obj["attachments"] = .array(msg.attachmentPaths.map { att in
-                    .object([
-                        "name": .string(att.name),
-                        "path": .string(att.path),
-                        "type": .string(att.type),
-                    ])
-                })
+        } else {
+            parentTaskIds = []
+        }
+        // A task's own chat identifies its card even when a follow-up describes
+        // the work differently. Content matching also covers a separate chat
+        // recording the same request again.
+        let resolvedSession = resolveCurrentSessionId(sessionKey)
+        let threadTask = taskBoard(for: projectId).tasks.first { task in
+            task.sessionKey.map { resolveCurrentSessionId($0) == resolvedSession } ?? false
+        }
+        if let existing = threadTask ?? matchingTask(projectId: projectId, title: title, details: details, storyId: storyId) {
+            return jsonTextResult(.object([
+                "id": .string(existing.id.uuidString),
+                "project_id": .string(projectId.uuidString),
+                "story_id": existing.storyId.map { .string($0.uuidString) } ?? .null,
+                "title": .string(existing.title),
+                "already_exists": .bool(true),
+            ]))
+        }
+        let task: ProjectTask
+        if title.isEmpty {
+            task = quickAddTask(text: details, projectId: projectId, storyId: storyId,
+                                parentTaskIds: parentTaskIds, sourceSessionKey: sessionKey)
+        } else {
+            let story = taskBoard(for: projectId).story(id: storyId)
+            task = ProjectTask(
+                projectId: projectId,
+                storyId: storyId,
+                parentTaskIds: parentTaskIds,
+                title: title,
+                details: details,
+                status: taskBoard(for: projectId).firstColumn.id,
+                version: story?.version,
+                milestone: story?.milestone,
+                agent: defaultTaskAgent(),
+                sourceSessionKey: sessionKey
+            )
+            upsertTask(task)
+        }
+        return jsonTextResult(.object([
+            "id": .string(task.id.uuidString),
+            "project_id": .string(projectId.uuidString),
+            "story_id": storyId.map { .string($0.uuidString) } ?? .null,
+            "starts_after_task_id": (self.task(id: task.id)?.parentTaskId).map { .string($0.uuidString) } ?? .null,
+            "starts_after_task_ids": .array((self.task(id: task.id)?.parentTaskIds ?? []).map { .string($0.uuidString) }),
+            "title": .string(task.title),
+        ]))
+    }
+
+    private func parseTaskId(_ arguments: JSONValue) throws -> ProjectTask {
+        guard let raw = arguments["task_id"]?.stringValue, let id = UUID(uuidString: raw) else {
+            throw IDEToolError.invalidArguments("A valid task_id is required.")
+        }
+        guard let task = task(id: id) else {
+            throw IDEToolError.invalidArguments("No task with id \(raw). Call ide__get_tasks first.")
+        }
+        return task
+    }
+
+    private func taskJSON(_ task: ProjectTask) -> [String: JSONValue] {
+        let board = taskBoard(for: task.projectId)
+        let column = board.column(for: task.status)
+        return [
+            "id": .string(task.id.uuidString),
+            "project_id": .string(task.projectId.uuidString),
+            "project_name": projects.first(where: { $0.id == task.projectId }).map { .string($0.name) } ?? .null,
+            "story_id": task.storyId.map { .string($0.uuidString) } ?? .null,
+            "parent_task_id": task.parentTaskId.map { .string($0.uuidString) } ?? .null,
+            "parent_task_ids": .array(task.parentTaskIds.map { .string($0.uuidString) }),
+            "title": .string(task.title),
+            "status": .string(column.id.rawValue),
+            "column": .string(column.name),
+            "is_done": .bool(column.countsAsDone),
+            "is_running": .bool(isAgentRunning(for: task)),
+            "thread_id": chatSessionId(for: task).map { .string($0) } ?? .null,
+            "agent_provider": task.agent.provider.map { .string($0.rawValue) } ?? .null,
+            "agent_model": task.agent.model.map { .string($0) } ?? .null,
+            "attention_reason": task.attentionReason.map { .string($0) } ?? .null,
+            "updated_at": .string(ISO8601DateFormatter().string(from: task.updatedAt)),
+        ]
+    }
+
+    @MainActor
+    private func handleGetTasks(arguments: JSONValue, sessionKey: String) async throws -> JSONValue {
+        let storyId: UUID?
+        if let raw = arguments["story_id"]?.stringValue {
+            guard let id = UUID(uuidString: raw) else {
+                throw IDEToolError.invalidArguments("story_id must be a UUID.")
             }
-            return .object(obj)
+            storyId = id
+        } else {
+            storyId = nil
+        }
+        let projectIds: [UUID]
+        if storyId != nil, try parseOptionalProjectId(arguments["project_id"]?.stringValue) == nil {
+            // A linked story spans several boards; read all of them.
+            await ensureAllTaskBoardsLoaded()
+            projectIds = Array(taskBoards.keys)
+        } else {
+            projectIds = [try taskToolProjectId(arguments: arguments, sessionKey: sessionKey)]
+        }
+        let status = arguments["status"]?.stringValue.map { TaskStatus(rawValue: $0) }
+
+        var tasks: [ProjectTask] = []
+        for projectId in projectIds {
+            await ensureTaskBoardLoaded(for: projectId)
+            let board = taskBoard(for: projectId)
+            tasks += board.tasks.filter { task in
+                (storyId == nil || task.storyId == storyId)
+                    && (status == nil || board.resolvedStatus(of: task) == status)
+            }
+        }
+        tasks.sort { ($0.projectId.uuidString, $0.sortIndex) < ($1.projectId.uuidString, $1.sortIndex) }
+        return jsonTextResult(.array(tasks.map { .object(taskJSON($0)) }))
+    }
+
+    @MainActor
+    private func handleRunTask(arguments: JSONValue) async throws -> JSONValue {
+        var task = try parseTaskId(arguments)
+        if isAgentRunning(for: task) {
+            throw IDEToolError.handlerFailed("The task's agent is already running. Poll ide__get_task_status instead.")
+        }
+        let board = taskBoard(for: task.projectId)
+
+        if let prompt = arguments["prompt"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !prompt.isEmpty {
+            guard chatSessionId(for: task) != nil else {
+                throw IDEToolError.invalidArguments("prompt needs a task that already has a thread. Omit prompt to start its first run.")
+            }
+            guard await sendTaskFollowUp(task, text: prompt) else {
+                throw IDEToolError.handlerFailed("Could not send the follow-up to the task's thread.")
+            }
+            return jsonTextResult(.object(taskJSON(self.task(id: task.id) ?? task)))
         }
 
-        return jsonTextResult(.object([
-            "id": .string(thread.id),
-            "title": .string(thread.title),
-            "project_id": .string(thread.projectId.uuidString),
-            "created_at": .string(iso.string(from: thread.createdAt)),
-            "updated_at": .string(iso.string(from: thread.updatedAt)),
-            "model": thread.model.map { .string($0) } ?? .null,
-            "agent_provider": thread.agentProviderRaw.map { .string($0) } ?? .null,
-            "summary": .string(threadStore.fetchThreadSummary(sessionId: thread.id)?.summary ?? ""),
-            "messages": .array(messageEntries),
-        ]))
+        guard let chatColumn = board.firstChatColumn else {
+            throw IDEToolError.handlerFailed("This project's board has no column that starts a chat.")
+        }
+        if board.isStatusLocked(task) {
+            throw IDEToolError.handlerFailed("The task is owned by its running agent.")
+        }
+
+        let providerOverride: AgentProvider?
+        if let raw = arguments["provider"]?.stringValue {
+            guard let provider = AgentProvider(rawValue: raw) else {
+                throw IDEToolError.invalidArguments("provider must be one of: \(AgentProvider.allCases.map(\.rawValue).joined(separator: ", ")).")
+            }
+            providerOverride = provider
+        } else {
+            providerOverride = nil
+        }
+        let modelOverride = arguments["model"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if providerOverride != nil || !(modelOverride ?? "").isEmpty {
+            if let providerOverride, providerOverride != task.agent.provider {
+                task.agent.model = nil
+                task.agent.effort = nil
+            }
+            task.agent.provider = providerOverride ?? task.agent.provider
+            if let modelOverride, !modelOverride.isEmpty { task.agent.model = modelOverride }
+        }
+        if !task.agent.isAssigned {
+            let fallback = defaultTaskAgent()
+            task.agent.provider = fallback.provider
+            task.agent.model = fallback.model
+        }
+        guard task.agent.isAssigned else {
+            throw IDEToolError.handlerFailed("No agent is assigned to the task and no default task agent is configured.")
+        }
+
+        if board.resolvedStatus(of: task) == chatColumn.id {
+            // Already sitting in the chat column without a live run (e.g. a
+            // released run): moving it there again would not dispatch.
+            upsertTask(task)
+            Task { await startTask(task) }
+        } else {
+            upsertTask(task)
+            moveTask(self.task(id: task.id) ?? task, to: chatColumn.id)
+        }
+        var result = taskJSON(self.task(id: task.id) ?? task)
+        result["dispatched"] = .bool(true)
+        return jsonTextResult(.object(result))
+    }
+
+    @MainActor
+    private func handleGetTaskStatus(arguments: JSONValue) async throws -> JSONValue {
+        let task = try parseTaskId(arguments)
+        var result = taskJSON(task)
+        let limit = max(0, min(Int(arguments["message_limit"]?.numberValue ?? 5), 50))
+        if limit > 0, let messages = await taskRunMessages(for: task) {
+            let iso = ISO8601DateFormatter()
+            result["messages"] = .array(messages.suffix(limit).compactMap { msg in
+                let text = msg.blocks.compactMap(\.text).filter { !$0.isEmpty }.joined(separator: "\n\n")
+                guard !text.isEmpty else { return nil }
+                return .object([
+                    "role": .string(msg.role.rawValue),
+                    "text": .string(text),
+                    "timestamp": .string(iso.string(from: msg.timestamp)),
+                ])
+            })
+        }
+        return jsonTextResult(.object(result))
     }
 
     @MainActor
@@ -371,7 +614,7 @@ extension AppState: IDEToolHandling {
         }
     }
 
-    private func parseOptionalProjectId(_ raw: String?) throws -> UUID? {
+    func parseOptionalProjectId(_ raw: String?) throws -> UUID? {
         guard let raw, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         guard let id = UUID(uuidString: raw) else {
             throw IDEToolError.invalidArguments("'project_id' is not a valid UUID: \(raw)")
@@ -590,7 +833,7 @@ extension AppState: IDEToolHandling {
 
     // MARK: - Formatting helpers
 
-    fileprivate func textResult(_ text: String) -> JSONValue {
+    func textResult(_ text: String) -> JSONValue {
         .object([
             "content": .array([
                 .object([
@@ -601,7 +844,7 @@ extension AppState: IDEToolHandling {
         ])
     }
 
-    fileprivate func jsonTextResult(_ value: JSONValue) -> JSONValue {
+    func jsonTextResult(_ value: JSONValue) -> JSONValue {
         textResult(prettyJSON(value))
     }
 

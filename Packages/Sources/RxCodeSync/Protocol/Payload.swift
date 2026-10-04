@@ -29,6 +29,8 @@ public enum Payload: Sendable {
     case threadChangesResult(ThreadChangesResultPayload)
     case remoteFileRequest(RemoteFileRequestPayload)
     case remoteFileResult(RemoteFileResultPayload)
+    case briefingContentRequest(BriefingContentRequestPayload)
+    case briefingContentResult(BriefingContentResultPayload)
     case searchRequest(SearchRequestPayload)
     case searchResults(SearchResultsPayload)
     case notification(NotificationPayload)
@@ -68,6 +70,9 @@ public enum Payload: Sendable {
     case mcpMutationResult(MCPMutationResultPayload)
     case autopilotRequest(AutopilotRequestPayload)
     case autopilotResult(AutopilotResultPayload)
+    case taskBoardRequest(TaskBoardRequestPayload)
+    case taskBoardResult(TaskBoardResultPayload)
+    case taskBoardUpdate(TaskBoardUpdatePayload)
     case ping(PingPayload)
     case pong(PongPayload)
     // Direct-path (P2P) signaling — exchanged over the relay, consumed inside
@@ -102,6 +107,8 @@ public extension Payload {
         case .threadChangesResult: return "thread_changes_result"
         case .remoteFileRequest: return "remote_file_request"
         case .remoteFileResult: return "remote_file_result"
+        case .briefingContentRequest: return "briefing_content_request"
+        case .briefingContentResult: return "briefing_content_result"
         case .searchRequest: return "search_request"
         case .searchResults: return "search_results"
         case .notification: return "notification"
@@ -141,6 +148,9 @@ public extension Payload {
         case .mcpMutationResult: return "mcp_mutation_result"
         case .autopilotRequest: return "autopilot_request"
         case .autopilotResult: return "autopilot_result"
+        case .taskBoardRequest: return "task_board_request"
+        case .taskBoardResult: return "task_board_result"
+        case .taskBoardUpdate: return "task_board_update"
         case .ping: return "ping"
         case .pong: return "pong"
         case .iceCandidates: return "ice_candidates"
@@ -345,6 +355,7 @@ public struct SnapshotPayload: Codable, Sendable {
     public let projects: [Project]
     public let sessions: [SessionSummary]
     public let branchBriefings: [MobileBranchBriefing]?
+    public let briefingDocuments: [MobileBriefingDocument]?
     public let threadSummaries: [MobileThreadSummary]?
     /// Current GitHub Actions CI status per desktop project. `nil` when the
     /// desktop predates CI-status sync.
@@ -388,6 +399,7 @@ public struct SnapshotPayload: Codable, Sendable {
         projects: [Project],
         sessions: [SessionSummary],
         branchBriefings: [MobileBranchBriefing]? = nil,
+        briefingDocuments: [MobileBriefingDocument]? = nil,
         threadSummaries: [MobileThreadSummary]? = nil,
         ciStatuses: [MobileProjectCIStatus]? = nil,
         settings: MobileSettingsSnapshot? = nil,
@@ -405,6 +417,7 @@ public struct SnapshotPayload: Codable, Sendable {
         self.projects = projects
         self.sessions = sessions
         self.branchBriefings = branchBriefings
+        self.briefingDocuments = briefingDocuments
         self.threadSummaries = threadSummaries
         self.ciStatuses = ciStatuses
         self.settings = settings
@@ -421,7 +434,7 @@ public struct SnapshotPayload: Codable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case projects, sessions, branchBriefings, threadSummaries, ciStatuses, settings
+        case projects, sessions, branchBriefings, briefingDocuments, threadSummaries, ciStatuses, settings
         case activeSessionID, activeSessionMessages, activeSessionHasMore, projectBranches
         case usage, hostMetrics, runProfiles, runTasks, webProxy, seq
     }
@@ -431,6 +444,7 @@ public struct SnapshotPayload: Codable, Sendable {
         projects = try c.decode([Project].self, forKey: .projects)
         sessions = try c.decode([SessionSummary].self, forKey: .sessions)
         branchBriefings = try c.decodeIfPresent([MobileBranchBriefing].self, forKey: .branchBriefings)
+        briefingDocuments = try c.decodeIfPresent([MobileBriefingDocument].self, forKey: .briefingDocuments)
         threadSummaries = try c.decodeIfPresent([MobileThreadSummary].self, forKey: .threadSummaries)
         ciStatuses = try c.decodeIfPresent([MobileProjectCIStatus].self, forKey: .ciStatuses)
         settings = try c.decodeIfPresent(MobileSettingsSnapshot.self, forKey: .settings)
@@ -564,158 +578,8 @@ public struct BranchOpResultPayload: Codable, Sendable {
 // `CreateProjectRequestPayload`, and `CreateProjectResultPayload` live in
 // `FolderPayloads.swift` to keep this file under the line-length limit.
 
-public struct MobileProjectRunProfiles: Codable, Sendable, Equatable {
-    public let projectId: UUID
-    public let profiles: [RunProfile]
-
-    public init(projectId: UUID, profiles: [RunProfile]) {
-        self.projectId = projectId
-        self.profiles = profiles
-    }
-}
-
-public struct MobileRunTaskSnapshot: Codable, Sendable, Identifiable, Equatable {
-    public enum Status: String, Codable, Sendable {
-        case running
-        case succeeded
-        case failed
-        case signaled
-        case stopped
-    }
-
-    public var id: UUID { taskId }
-
-    public let taskId: UUID
-    public let projectId: UUID
-    public let profileId: UUID
-    public let profileName: String
-    public let status: Status
-    public let statusLabel: String
-    public let exitCode: Int32?
-    public let startedAt: Date
-    public let resolvedCwd: String
-    public let commandPreview: String
-    public let terminalOutputTail: String?
-
-    public init(
-        taskId: UUID,
-        projectId: UUID,
-        profileId: UUID,
-        profileName: String,
-        status: Status,
-        statusLabel: String,
-        exitCode: Int32? = nil,
-        startedAt: Date,
-        resolvedCwd: String,
-        commandPreview: String,
-        terminalOutputTail: String? = nil
-    ) {
-        self.taskId = taskId
-        self.projectId = projectId
-        self.profileId = profileId
-        self.profileName = profileName
-        self.status = status
-        self.statusLabel = statusLabel
-        self.exitCode = exitCode
-        self.startedAt = startedAt
-        self.resolvedCwd = resolvedCwd
-        self.commandPreview = commandPreview
-        self.terminalOutputTail = terminalOutputTail
-    }
-
-    public var isRunning: Bool { status == .running }
-}
-
-public struct RunProfileMutationRequestPayload: Codable, Sendable {
-    public enum Operation: String, Codable, Sendable {
-        case upsert
-        case delete
-    }
-
-    public let clientRequestID: UUID
-    public let projectID: UUID
-    public let operation: Operation
-    public let profile: RunProfile?
-    public let profileID: UUID?
-
-    public init(
-        clientRequestID: UUID = UUID(),
-        projectID: UUID,
-        operation: Operation,
-        profile: RunProfile? = nil,
-        profileID: UUID? = nil
-    ) {
-        self.clientRequestID = clientRequestID
-        self.projectID = projectID
-        self.operation = operation
-        self.profile = profile
-        self.profileID = profileID
-    }
-}
-
-public struct RunProfileRunRequestPayload: Codable, Sendable {
-    public let clientRequestID: UUID
-    public let projectID: UUID
-    public let profileID: UUID
-
-    public init(clientRequestID: UUID = UUID(), projectID: UUID, profileID: UUID) {
-        self.clientRequestID = clientRequestID
-        self.projectID = projectID
-        self.profileID = profileID
-    }
-}
-
-public struct RunProfileStopRequestPayload: Codable, Sendable {
-    public let clientRequestID: UUID
-    public let taskID: UUID?
-    public let projectID: UUID?
-    public let profileID: UUID?
-
-    public init(
-        clientRequestID: UUID = UUID(),
-        taskID: UUID? = nil,
-        projectID: UUID? = nil,
-        profileID: UUID? = nil
-    ) {
-        self.clientRequestID = clientRequestID
-        self.taskID = taskID
-        self.projectID = projectID
-        self.profileID = profileID
-    }
-}
-
-public struct RunProfileResultPayload: Codable, Sendable {
-    public let clientRequestID: UUID
-    public let projectID: UUID
-    public let ok: Bool
-    public let errorMessage: String?
-    public let profiles: [RunProfile]?
-    public let task: MobileRunTaskSnapshot?
-
-    public init(
-        clientRequestID: UUID,
-        projectID: UUID,
-        ok: Bool,
-        errorMessage: String? = nil,
-        profiles: [RunProfile]? = nil,
-        task: MobileRunTaskSnapshot? = nil
-    ) {
-        self.clientRequestID = clientRequestID
-        self.projectID = projectID
-        self.ok = ok
-        self.errorMessage = errorMessage
-        self.profiles = profiles
-        self.task = task
-    }
-}
-
-public struct RunTaskUpdatePayload: Codable, Sendable {
-    public let task: MobileRunTaskSnapshot
-
-    public init(task: MobileRunTaskSnapshot) {
-        self.task = task
-    }
-}
+// `MobileProjectRunProfiles`, `MobileRunTaskSnapshot`, and the run-profile
+// request/result payloads live in `RunProfilePayloads.swift`.
 
 // `RunnableDetectRequestPayload` / `RunnableDetectResultPayload` live in
 // `DetectionPayloads.swift` to keep this file under the line-length limit.
@@ -751,6 +615,8 @@ extension Payload: Codable {
         case threadChangesResult = "thread_changes_result"
         case remoteFileRequest = "remote_file_request"
         case remoteFileResult = "remote_file_result"
+        case briefingContentRequest = "briefing_content_request"
+        case briefingContentResult = "briefing_content_result"
         case searchRequest = "search_request"
         case searchResults = "search_results"
         case notification
@@ -790,6 +656,9 @@ extension Payload: Codable {
         case mcpMutationResult = "mcp_mutation_result"
         case autopilotRequest = "autopilot_request"
         case autopilotResult = "autopilot_result"
+        case taskBoardRequest = "task_board_request"
+        case taskBoardResult = "task_board_result"
+        case taskBoardUpdate = "task_board_update"
         case ping
         case pong
         case iceCandidates = "ice_candidates"
@@ -826,6 +695,8 @@ extension Payload: Codable {
         case .threadChangesResult: self = .threadChangesResult(try container.decode(ThreadChangesResultPayload.self, forKey: .data))
         case .remoteFileRequest: self = .remoteFileRequest(try container.decode(RemoteFileRequestPayload.self, forKey: .data))
         case .remoteFileResult: self = .remoteFileResult(try container.decode(RemoteFileResultPayload.self, forKey: .data))
+        case .briefingContentRequest: self = .briefingContentRequest(try container.decode(BriefingContentRequestPayload.self, forKey: .data))
+        case .briefingContentResult: self = .briefingContentResult(try container.decode(BriefingContentResultPayload.self, forKey: .data))
         case .searchRequest: self = .searchRequest(try container.decode(SearchRequestPayload.self, forKey: .data))
         case .searchResults: self = .searchResults(try container.decode(SearchResultsPayload.self, forKey: .data))
         case .notification: self = .notification(try container.decode(NotificationPayload.self, forKey: .data))
@@ -865,6 +736,9 @@ extension Payload: Codable {
         case .mcpMutationResult: self = .mcpMutationResult(try container.decode(MCPMutationResultPayload.self, forKey: .data))
         case .autopilotRequest: self = .autopilotRequest(try container.decode(AutopilotRequestPayload.self, forKey: .data))
         case .autopilotResult: self = .autopilotResult(try container.decode(AutopilotResultPayload.self, forKey: .data))
+        case .taskBoardRequest: self = .taskBoardRequest(try container.decode(TaskBoardRequestPayload.self, forKey: .data))
+        case .taskBoardResult: self = .taskBoardResult(try container.decode(TaskBoardResultPayload.self, forKey: .data))
+        case .taskBoardUpdate: self = .taskBoardUpdate(try container.decode(TaskBoardUpdatePayload.self, forKey: .data))
         case .ping: self = .ping(try container.decode(PingPayload.self, forKey: .data))
         case .pong: self = .pong(try container.decode(PongPayload.self, forKey: .data))
         case .iceCandidates: self = .iceCandidates(try container.decode(ICECandidatesPayload.self, forKey: .data))
@@ -897,6 +771,8 @@ extension Payload: Codable {
         case .threadChangesResult(let p): try container.encode(TypeKey.threadChangesResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .remoteFileRequest(let p): try container.encode(TypeKey.remoteFileRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .remoteFileResult(let p): try container.encode(TypeKey.remoteFileResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .briefingContentRequest(let p): try container.encode(TypeKey.briefingContentRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .briefingContentResult(let p): try container.encode(TypeKey.briefingContentResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .searchRequest(let p): try container.encode(TypeKey.searchRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .searchResults(let p): try container.encode(TypeKey.searchResults.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .notification(let p): try container.encode(TypeKey.notification.rawValue, forKey: .type); try container.encode(p, forKey: .data)
@@ -936,6 +812,9 @@ extension Payload: Codable {
         case .mcpMutationResult(let p): try container.encode(TypeKey.mcpMutationResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .autopilotRequest(let p): try container.encode(TypeKey.autopilotRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .autopilotResult(let p): try container.encode(TypeKey.autopilotResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .taskBoardRequest(let p): try container.encode(TypeKey.taskBoardRequest.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .taskBoardResult(let p): try container.encode(TypeKey.taskBoardResult.rawValue, forKey: .type); try container.encode(p, forKey: .data)
+        case .taskBoardUpdate(let p): try container.encode(TypeKey.taskBoardUpdate.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .ping(let p): try container.encode(TypeKey.ping.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .pong(let p): try container.encode(TypeKey.pong.rawValue, forKey: .type); try container.encode(p, forKey: .data)
         case .iceCandidates(let p): try container.encode(TypeKey.iceCandidates.rawValue, forKey: .type); try container.encode(p, forKey: .data)

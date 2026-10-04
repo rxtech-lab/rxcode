@@ -69,6 +69,23 @@ extension CodexAppServer {
 
     - `ide__get_projects` — list every project registered in RxCode, so you \
     can discover sibling projects to read or message.
+    - `ide__get_stories` — list stories on a project's task board before \
+    linking a new task to one.
+    - `ide__create_story` / `ide__create_task` — record user-requested work \
+    from a chat, in this or any other project (`project_id`). Pass \
+    `story_id` to place a task in an existing story, and \
+    `starts_after_task_ids` to run a task only after every listed task is ready.
+    - `ide__create_scheduled_task` — when the user asks for work to run \
+    periodically, propose a cron-scheduled prompt. RxCode asks the user to \
+    confirm it and the call returns whether it was added.
+    - `ide__link_story` — share a story with other projects so work spanning \
+    several projects is tracked under one story.
+    - `ide__get_tasks` / `ide__get_task_status` — list tasks by project, \
+    story, or column, and check a task's implementation status and latest \
+    thread messages.
+    - `ide__run_task` — start a task's agent in its project, or send a \
+    follow-up to its thread. This triggers a real agent run that may consume \
+    tokens; poll `ide__get_task_status` for progress.
     - `ide__get_threads` — list or natural-language search chat threads across \
     projects.
     - `ide__get_thread_messages` — fetch the message history of a specific \
@@ -99,6 +116,20 @@ extension CodexAppServer {
     - `ide__memory_update` — when saved information changes, update the \
     existing entry by `id` rather than adding a duplicate.
     - `ide__memory_delete` — remove a memory by `id` when it is no longer valid.
+
+    When the user asks for a report or briefing, write it as a document \
+    briefing: `ide__briefing_create` (Markdown or HTML, starts as a draft), \
+    `ide__briefing_add_file` / `ide__briefing_delete_file` for images, \
+    videos, and files, `ide__briefing_update` to edit, and \
+    `ide__briefing_publish` to show it on the briefing timeline. Use \
+    `ide__briefing_list` / `ide__briefing_get` to find and read existing \
+    briefings, and `ide__briefing_delete` only when the user asks. The \
+    briefing title is shown above its content, so do not repeat the title as \
+    a heading in the content.
+    Published briefings may be emailed to the user automatically after your \
+    run. Call `ide__send_notification` only when the user or a \
+    scheduled task's prompt asks to be notified or emailed (pass \
+    `briefing_id` to send a briefing).
 
     Do not store completed work, build results, files changed, available \
     tools, routine requests, or other transient task details.
@@ -136,6 +167,16 @@ extension CodexAppServer {
         default:
             return .object(["type": .string("workspaceWrite")])
         }
+    }
+
+    /// Request id for `turn/steer`. The turn's own handshake uses 1-3 and the
+    /// loop dispatches on those, so steering picks an id outside that range —
+    /// its reply is not something the loop needs to correlate.
+    static let steerRequestId = 100
+
+    /// The live turn id from a `turn/started` notification.
+    static func startedTurnId(from params: [String: JSONValue]) -> String? {
+        params["turn"]?.objectValue?["id"]?.stringValue
     }
 
     static func request(id: Int, method: String, params: [String: JSONValue]) -> JSONValue {

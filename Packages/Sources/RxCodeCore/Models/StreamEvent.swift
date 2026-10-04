@@ -10,6 +10,24 @@ public enum StreamEvent: Sendable {
     case rateLimitEvent(RateLimitInfo)
     case todoSnapshot(TodoSnapshotEvent)
     case acpModelsDiscovered(ACPModelsDiscoveredEvent)
+
+    // MARK: Incremental blocks
+
+    /// A chunk of assistant text. The legacy CLI backends deliver the same
+    /// information inside `.unknown` as a raw `content_block_delta` frame,
+    /// which forces every non-Claude backend to synthesize Claude wire JSON
+    /// just to be understood. Backends built on RxAgentSDK emit this instead.
+    case textDelta(String)
+    /// The model is reasoning. Carries the reasoning text where the backend
+    /// exposes it; the UI currently only uses the fact that it arrived.
+    case thinkingDelta(String)
+    /// A tool call has begun but its arguments have not finished streaming.
+    case toolCallStarted(id: String, name: String)
+    /// The tool call's complete, parsed arguments — emitted exactly once.
+    case toolCallInput(id: String, input: [String: JSONValue])
+
+    /// A wire frame the backend did not decode. Only the legacy CLI backends
+    /// produce this; `AppState.handlePartialEvent(_:for:)` parses it.
     case unknown(String)
 }
 
@@ -87,11 +105,15 @@ public struct UserMessage: Sendable {
     public let toolUseId: String?
     public let content: String
     public let isError: Bool
+    /// Claude Code's `--replay-user-messages` echo of a stdin user frame,
+    /// emitted when the CLI takes that input into a turn.
+    public let isReplay: Bool
 
-    public init(toolUseId: String?, content: String, isError: Bool) {
+    public init(toolUseId: String?, content: String, isError: Bool, isReplay: Bool = false) {
         self.toolUseId = toolUseId
         self.content = content
         self.isError = isError
+        self.isReplay = isReplay
     }
 }
 

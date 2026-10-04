@@ -239,11 +239,15 @@ final class MobileSyncService: ObservableObject {
         let stored = UserDefaults.standard.string(forKey: "mobileSync.relayURL")
         let initial = URL(string: stored ?? "ws://localhost:8787") ?? URL(string: "ws://localhost:8787")!
         self.relayURL = initial
-        do {
-            self.identity = try DeviceIdentity.loadOrCreate()
-        } catch {
-            Self.logFatalKeychain(error)
-            fatalError("Failed to load device identity: \(error)")
+        if AppSupport.isTestProcess {
+            self.identity = DeviceIdentity(privateKey: Curve25519.KeyAgreement.PrivateKey())
+        } else {
+            do {
+                self.identity = try DeviceIdentity.loadOrCreate()
+            } catch {
+                Self.logFatalKeychain(error)
+                fatalError("Failed to load device identity: \(error)")
+            }
         }
         self.client = SyncClient(identity: identity, relayURL: initial, directPathsEnabled: Self.directPathsEnabledSetting)
         loadPairedDevices()
@@ -633,6 +637,12 @@ final class MobileSyncService: ObservableObject {
         }
     }
 
+    func broadcastTaskBoardUpdate(_ snapshot: MobileTaskBoardSnapshot) {
+        Task {
+            await broadcastToAllClients(.taskBoardUpdate(TaskBoardUpdatePayload(snapshot: snapshot)))
+        }
+    }
+
     // MARK: - Online presence
 
     /// Mark a paired peer as online. Returns true if this changed the state
@@ -912,6 +922,7 @@ extension Notification.Name {
     static let mobileSyncSearchRequested = Notification.Name("mobileSync.searchRequested")
     static let mobileSyncThreadChangesRequested = Notification.Name("mobileSync.threadChangesRequested")
     static let mobileSyncRemoteFileRequested = Notification.Name("mobileSync.remoteFileRequested")
+    static let mobileSyncBriefingContentRequested = Notification.Name("mobileSync.briefingContentRequested")
     static let mobileSyncSettingsUpdateReceived = Notification.Name("mobileSync.settingsUpdateReceived")
     static let mobileSyncPermissionResponse = Notification.Name("mobileSync.permissionResponse")
     static let mobileSyncQuestionAnswerReceived = Notification.Name("mobileSync.questionAnswerReceived")
@@ -932,4 +943,5 @@ extension Notification.Name {
     static let mobileSyncMCPConfigRequested = Notification.Name("mobileSync.mcpConfigRequested")
     static let mobileSyncMCPMutationRequested = Notification.Name("mobileSync.mcpMutationRequested")
     static let mobileSyncAutopilotRequested = Notification.Name("mobileSync.autopilotRequested")
+    static let mobileSyncTaskBoardRequested = Notification.Name("mobileSync.taskBoardRequested")
 }

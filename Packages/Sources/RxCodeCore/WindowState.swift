@@ -140,6 +140,37 @@ public struct QueuedMessage: Identifiable, Sendable {
 }
 
 /// Per-window independent UI/session state. Does not own services or shared data.
+/// A full-pane destination in the sidebar's "General" section. Ordered as the
+/// sidebar renders it, so `allCases` drives nothing but stays meaningful.
+public enum GeneralRoute: String, Codable, Sendable, CaseIterable, Hashable {
+    case tasks
+    case briefing
+    case chat
+    case scheduled
+
+    public var displayName: LocalizedStringResource {
+        switch self {
+        case .chat: return "Chat"
+        case .tasks: return "Projects"
+        case .briefing: return "Briefing"
+        case .scheduled: return "Scheduled"
+        }
+    }
+
+    public var displayNameText: String {
+        String(localized: displayName)
+    }
+
+    public var systemImage: String {
+        switch self {
+        case .chat: return "bubble.left.and.bubble.right"
+        case .tasks: return "checklist"
+        case .briefing: return "text.page"
+        case .scheduled: return "calendar.badge.clock"
+        }
+    }
+}
+
 @Observable
 @MainActor
 public final class WindowState {
@@ -290,8 +321,39 @@ public final class WindowState {
     }
     public var inspectorFile: PreviewFile?
     public var diffFile: PreviewFile?
-    public var showingBriefing = true
+    // MARK: - General Route
+
+    /// The full-pane destination selected from the sidebar's "General" section.
+    /// `nil` means a chat thread is showing.
+    ///
+    /// Replaces the former `showingBriefing` boolean now that General has more
+    /// than one entry. `showingBriefing` / `showingTasks` remain as computed
+    /// accessors so the existing call sites keep their original meaning: setting
+    /// either to `false` returns the window to chat, exactly as before.
+    public var generalRoute: GeneralRoute? = .tasks
+
+    public var showingBriefing: Bool {
+        get { generalRoute == .briefing }
+        set { generalRoute = newValue ? .briefing : nil }
+    }
+
+    public var showingTasks: Bool {
+        get { generalRoute == .tasks }
+        set { generalRoute = newValue ? .tasks : nil }
+    }
+
+    /// The project whose task page (views, board, table) is open inside the
+    /// Tasks route. `nil` shows the all-projects overview. Kept on the window
+    /// so returning to Tasks from a chat lands on the same page.
+    public var taskDetailProjectId: UUID?
+
     public var showMarketplace = false
+    /// Whether the New Project sheet is presented, and whether it opens with
+    /// the cloud option selected.
+    public var showNewProjectSheet = false
+    public var newProjectPrefersCloud = false
+    /// The local project whose "Link to Autopilot Project" sheet is open.
+    public var linkCloudProjectId: UUID?
     /// Whether the global thread-search overlay is presented. Toggled by the
     /// toolbar magnifier button and the Cmd+K shortcut.
     public var showGlobalSearch = false

@@ -17,8 +17,16 @@ extension AppState {
         var acpSpec: ACPClientSpec?
         var resolvedPrompt: String
         var resolvedModel: String?
+        /// The turn's effort after checking it against the provider's own
+        /// levels. Nil means "the agent's default" — either nothing was
+        /// selected, or what was selected is not a level this agent accepts.
+        var resolvedEffort: String?
         var resolvedSendMode: PermissionMode
         var earlyStream: AsyncStream<StreamEvent>?
+        /// The same MCP servers as the three rendered fields above, unrendered.
+        /// Backends that render their own config read these instead.
+        var mcpRecords: [MCPServerRecord] = []
+        var ideBridgeCommand: MCPBridgeCommand?
     }
 
     /// Runs the expensive, independent pre-spawn work (memory lookup, git
@@ -34,6 +42,7 @@ extension AppState {
         sessionKey: String,
         agentProvider: AgentProvider,
         model: String?,
+        effort: String?,
         permissionMode: PermissionMode,
         registerMode: PermissionMode,
         projectId: UUID,
@@ -130,16 +139,21 @@ extension AppState {
 
         let branchBriefingContext: String
         if let branch = await currentBranchAsync,
-           let briefing = threadStore.branchBriefingItem(projectId: projectId, branch: branch) {
+           let briefing = threadStore.combinedBranchBriefing(projectId: projectId, branch: branch) {
             branchBriefingContext = Self.branchBriefingSystemPrompt(
                 branch: branch,
-                briefing: briefing.briefing
+                briefing: briefing
             )
             logPreflight("branchBriefing", detail: "branch=\(branch) contextChars=\(branchBriefingContext.count)")
         } else {
             branchBriefingContext = ""
             logPreflight("branchBriefing", detail: "contextChars=0")
         }
+
+        let configuredPromptContext = Self.configuredPromptContext(
+            global: UserDefaults.standard.string(forKey: "globalAgentPrompt"),
+            project: projects.first(where: { $0.id == projectId })?.customPrompt
+        )
 
         // The IDE-MCP port is provider-agnostic at allocation time — the
         // bridge command is built from the port. Per-backend MCP config
@@ -172,6 +186,7 @@ extension AppState {
         case .claudeCode:
             mcpClaudeConfigPath = await mcp.writeClaudeConfig(projectPath: cwd, bridgeCommand: bridge)
             logPreflight("claudeMCP", detail: "hasConfig=\(mcpClaudeConfigPath != nil)")
+            appendExtraSystemPrompt(configuredPromptContext)
             // Surface the accumulated briefing for the project's current branch
             // to the agent as background context via `--append-system-prompt`.
             appendExtraSystemPrompt(branchBriefingContext)
@@ -200,7 +215,7 @@ extension AppState {
             logPreflight("codexSkillOverrides", detail: "args=\(codexSkillOverrides.count)")
             mcpCodexOverrides += codexSkillOverrides
             resolvedPrompt = Self.promptWithBackgroundContext(
-                [branchBriefingContext, resolvedMemoryContext, hookStartContext],
+                [configuredPromptContext, branchBriefingContext, resolvedMemoryContext, hookStartContext],
                 prompt: resolvedPrompt
             )
             if let skillContext = await skillContextAsync {
@@ -217,7 +232,7 @@ extension AppState {
             )
             logPreflight("acpMCP", detail: "servers=\(acpMCPServers.count)")
             resolvedPrompt = Self.promptWithBackgroundContext(
-                [branchBriefingContext, resolvedMemoryContext, hookStartContext],
+                [configuredPromptContext, branchBriefingContext, resolvedMemoryContext, hookStartContext],
                 prompt: resolvedPrompt
             )
             if let skillContext = await skillContextAsync {
@@ -254,6 +269,25 @@ extension AppState {
             }
         }
 
+        if projectId == Project.globalChatID {
+            do {
+                try await Task.detached(priority: .userInitiated) {
+                    try FileManager.default.createDirectory(atPath: cwd, withIntermediateDirectories: true)
+                }.value
+            } catch {
+                let message = "Could not prepare the chat folder: \(error.localizedDescription)"
+                earlyStream = AsyncStream { continuation in
+                    continuation.yield(.user(UserMessage(toolUseId: nil, content: message, isError: true)))
+                    continuation.yield(.result(ResultEvent(
+                        durationMs: nil, totalCostUsd: nil,
+                        sessionId: cliSessionId ?? sessionKey,
+                        isError: true, totalTurns: nil, usage: nil, contextWindow: nil
+                    )))
+                    continuation.finish()
+                }
+            }
+        }
+
         return StreamPreflight(
             mcpClaudeConfigPath: mcpClaudeConfigPath,
             extraSystemPrompt: extraSystemPrompt,
@@ -262,8 +296,16 @@ extension AppState {
             acpSpec: acpSpec,
             resolvedPrompt: resolvedPrompt,
             resolvedModel: resolvedModel,
+            // The single guard for every send path — foreground, queued,
+            // cross-project and MCP-driven turns all funnel through here.
+            resolvedEffort: await sanitizedEffort(effort, for: agentProvider),
             resolvedSendMode: resolvedSendMode,
-            earlyStream: earlyStream
+            earlyStream: earlyStream,
+            // Unrendered, for backends that build their own config. The
+            // provider switch above writes the same servers into the three
+            // rendered fields; these are the source those were rendered from.
+            mcpRecords: await mcp.enabledServerRecords(projectPath: cwd),
+            ideBridgeCommand: bridge.map { MCPBridgeCommand(command: $0.command, args: $0.args) }
         )
     }
 }

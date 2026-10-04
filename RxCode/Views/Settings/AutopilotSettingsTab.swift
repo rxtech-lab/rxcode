@@ -22,6 +22,8 @@ struct AutopilotSettingsTab: View {
     @State private var showManageAutomation = false
     @State private var showManageRepoSetup = false
 
+    @State private var showManageNotifications = false
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -29,6 +31,8 @@ struct AutopilotSettingsTab: View {
                 Divider()
                 accountSection
                 if appState.isSignedIn {
+                    Divider()
+                    notificationsSection
                     Divider()
                     automationSection
                     Divider()
@@ -82,7 +86,46 @@ struct AutopilotSettingsTab: View {
             RepoSetupManageSheet()
                 .environment(appState)
         }
+        .sheet(isPresented: $showManageNotifications) {
+            NotificationSettingsSheet()
+                .environment(appState)
+        }
         .task { await appState.refreshSecretsEnrollment() }
+    }
+
+    // MARK: - Notifications Section
+
+    private var notificationsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Notifications")
+                    .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
+                Text("Send briefings to your email through Autopilot notifications, and manage the trusted emails notifications can be sent to.")
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            secretsCard {
+                HStack(spacing: 12) {
+                    Image(systemName: "bell.badge")
+                        .font(.system(size: ClaudeTheme.size(18)))
+                        .foregroundStyle(ClaudeTheme.accent)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Briefing notifications")
+                            .font(.system(size: ClaudeTheme.size(13), weight: .medium))
+                        Text(appState.briefingNotificationSettings.isEnabled
+                             ? appState.briefingNotificationSettings.defaultMode.title
+                             : "Off")
+                            .font(.system(size: ClaudeTheme.size(11)))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                    Button("Manage") { showManageNotifications = true }
+                        .buttonStyle(.borderedProminent)
+                        .accessibilityIdentifier("manage-notifications")
+                }
+            }
+        }
     }
 
     // MARK: - Automation Section

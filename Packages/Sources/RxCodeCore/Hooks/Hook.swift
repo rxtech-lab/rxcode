@@ -27,6 +27,11 @@ public protocol Hook: AnyObject {
     func onSessionStart(_ payload: SessionStartPayload, controller: any HookController) async -> HookOutcome
     func beforeSessionEnd(_ payload: SessionEndPayload, controller: any HookController) async -> HookOutcome
     func afterSessionEnd(_ payload: SessionEndPayload, controller: any HookController) async -> HookOutcome
+    /// An automatic code review of a thread began (after its countdown).
+    func onReviewStart(_ payload: ReviewEventPayload, controller: any HookController) async -> HookOutcome
+    /// An automatic code review of a thread finished. `payload.passed` is `nil`
+    /// when it was stopped or could not complete.
+    func onReviewStop(_ payload: ReviewEventPayload, controller: any HookController) async -> HookOutcome
     func onRepositoryAdded(_ payload: RepositoryPayload, controller: any HookController) async -> HookOutcome
     func onRepositoryCloned(_ payload: RepositoryPayload, controller: any HookController) async -> HookOutcome
     func onQuestionAsk(_ payload: QuestionAskPayload, controller: any HookController) async -> HookOutcome
@@ -50,6 +55,8 @@ public extension Hook {
     func onSessionStart(_ payload: SessionStartPayload, controller: any HookController) async -> HookOutcome { .ignored }
     func beforeSessionEnd(_ payload: SessionEndPayload, controller: any HookController) async -> HookOutcome { .ignored }
     func afterSessionEnd(_ payload: SessionEndPayload, controller: any HookController) async -> HookOutcome { .ignored }
+    func onReviewStart(_ payload: ReviewEventPayload, controller: any HookController) async -> HookOutcome { .ignored }
+    func onReviewStop(_ payload: ReviewEventPayload, controller: any HookController) async -> HookOutcome { .ignored }
     func onRepositoryAdded(_ payload: RepositoryPayload, controller: any HookController) async -> HookOutcome { .ignored }
     func onRepositoryCloned(_ payload: RepositoryPayload, controller: any HookController) async -> HookOutcome { .ignored }
     func onQuestionAsk(_ payload: QuestionAskPayload, controller: any HookController) async -> HookOutcome { .ignored }

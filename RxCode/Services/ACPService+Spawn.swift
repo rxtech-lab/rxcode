@@ -48,17 +48,16 @@ extension ACPService {
                 stdoutPipe.fileHandleForReading, stderrPipe.fileHandleForReading)
     }
 
+    /// The environment for spawned ACP clients: the GUI environment with the
+    /// login-shell `PATH`.
+    ///
+    /// `ShellPathResolver` owns the caching (shared with the other backends,
+    /// and remembered across launches), so asking it every time costs an actor
+    /// hop and picks up a re-probed PATH without a relaunch.
     func resolvedEnvironment() async -> [String: String] {
         var env = ProcessInfo.processInfo.environment
-        if let cachedShellPath {
-            env["PATH"] = cachedShellPath
-            return env
-        }
-        let shellPath = await readUserShellPath()
-        if let shellPath, !shellPath.isEmpty {
-            cachedShellPath = shellPath
+        if let shellPath = await readUserShellPath(), !shellPath.isEmpty {
             env["PATH"] = shellPath
-            logger.info("[ACP] resolved login shell PATH (\(shellPath.split(separator: ":").count) entries)")
         } else {
             logger.warning("[ACP] could not read login shell PATH; using GUI PATH=\(env["PATH"] ?? "<unset>", privacy: .public)")
         }
@@ -71,25 +70,11 @@ extension ACPService {
         _ = await resolvedEnvironment()
     }
 
+    /// The user's login-shell `$PATH`, via the process-wide resolver: shared with
+    /// the Claude and Codex backends and remembered across launches, so this no
+    /// longer blocks a cooperative thread on `/bin/zsh -ilc`.
     func readUserShellPath() async -> String? {
-        await Task.detached(priority: .userInitiated) {
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-            process.arguments = ["-ilc", "print -rn -- $PATH"]
-            let stdout = Pipe()
-            process.standardOutput = stdout
-            process.standardError = Pipe()
-            do {
-                try process.run()
-                process.waitUntilExit()
-                let data = stdout.fileHandleForReading.readDataToEndOfFile()
-                let out = String(data: data, encoding: .utf8)?
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                return (out?.isEmpty ?? true) ? nil : out
-            } catch {
-                return nil
-            }
-        }.value
+        await ShellPathResolver.shared.current()
     }
 
     func resolveLaunch(_ launch: ACPClientSpec.LaunchKind)

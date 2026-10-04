@@ -584,7 +584,7 @@ struct MobileInAppBrowserView: View {
 
     private var displayTitle: String {
         guard let url = currentDisplayURL ?? loadedURL else {
-            return "Search"
+            return String(localized: "Search")
         }
 
         if let host = url.host {

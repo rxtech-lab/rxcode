@@ -24,7 +24,15 @@ public final class ChatBridge {
     public var liveOutputTokens: Int = 0
     public var lastTurnContextUsedPercentage: Double?
     public var agentProvider: AgentProvider = .claudeCode
+    /// Whether the current session's agent can take input into a turn that is
+    /// already running. Drives the "steer now" action on queued messages; when
+    /// false the queue's only options are to wait for the turn to end or to
+    /// interrupt it.
+    public var canSteer: Bool = false
     public var modelDisplayName: String = ""
+    /// Usage-limit advice for the selected provider and model, e.g. "only ~2
+    /// more tasks fit in the 5-hour limit"; nil when limits need no attention.
+    public var rateLimitAdvice: RateLimitAdvice?
     public var sessionStats: ChatSessionStats = ChatSessionStats()
     public var autoPreviewSettings: AttachmentAutoPreviewSettings = AttachmentAutoPreviewSettings()
     public var appVersion: String = ""
@@ -57,6 +65,8 @@ public final class ChatBridge {
     public var dequeueNextForFlushHandler: (() -> QueuedMessage?)?
     public var sendQueuedNowHandler: ((UUID) async -> Void)?
     public var sendAllQueuedAsOneHandler: (() async -> Void)?
+    public var steerQueuedMessageHandler: ((UUID) async -> Bool)?
+    public var steerAllQueuedAsOneHandler: (() async -> Bool)?
 
     // MARK: - Init
 
@@ -118,6 +128,19 @@ public final class ChatBridge {
 
     public func sendAllQueuedAsOne() async {
         await sendAllQueuedAsOneHandler?()
+    }
+
+    /// Hand a queued message to the turn that is already running, leaving it
+    /// running. Returns `false` when the turn wouldn't take it — the message
+    /// stays queued and still goes out when the turn ends.
+    @discardableResult
+    public func steerQueuedMessage(id: UUID) async -> Bool {
+        await steerQueuedMessageHandler?(id) ?? false
+    }
+
+    @discardableResult
+    public func steerAllQueuedAsOne() async -> Bool {
+        await steerAllQueuedAsOneHandler?() ?? false
     }
 
     // MARK: - Plan Decision State

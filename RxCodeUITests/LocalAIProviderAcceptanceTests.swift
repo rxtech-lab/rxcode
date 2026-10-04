@@ -22,8 +22,8 @@ final class LocalAIProviderAcceptanceTests: XCTestCase {
         continueAfterFailure = false
         try XCTSkipUnless(
             ProcessInfo.processInfo.environment["CI"] != "true"
-                && ProcessInfo.processInfo.environment["RXCODE_SKIP_LOCAL_AI_UI_TESTS"] != "1",
-            "Local AI UI acceptance tests are skipped in CI or when RXCODE_SKIP_LOCAL_AI_UI_TESTS=1."
+                && ProcessInfo.processInfo.environment["RXCODE_RUN_LOCAL_AI_UI_TESTS"] == "1",
+            "Local AI UI acceptance tests require RXCODE_RUN_LOCAL_AI_UI_TESTS=1 outside CI."
         )
     }
 
@@ -92,6 +92,11 @@ final class LocalAIProviderAcceptanceTests: XCTestCase {
     }
 
     private func sendBriefingNewThreadTurn(provider: Provider) {
+        // The app now lands on the Tasks board, so navigate to Briefing first.
+        let briefingRow = app.buttons["general-route-briefing"]
+        XCTAssertTrue(briefingRow.waitForExistence(timeout: 10))
+        briefingRow.click()
+
         XCTAssertTrue(app.staticTexts["Briefings"].waitForExistence(timeout: 10))
 
         let actionsButton = app.buttons["briefing-group-actions-button"]

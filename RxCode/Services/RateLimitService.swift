@@ -32,6 +32,7 @@ actor RateLimitService {
     private var cachedTokens: OAuthTokens?
 
     func fetchUsage(forceRefresh: Bool = false) async -> RateLimitUsage? {
+        guard !AppSupport.isTestProcess else { return nil }
         if !forceRefresh, let c = cached, let at = cachedAt, Date().timeIntervalSince(at) < cacheTTL {
             return c
         }

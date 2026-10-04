@@ -10,7 +10,20 @@ struct BriefingMarkdownView: View {
     var fontSize: CGFloat = 13.5
 
     private var blocks: [Block] {
-        Self.parse(GeneratedTextSanitizer.cleanMarkdownDocument(text))
+        Self.blocks(for: text)
+    }
+
+    /// Parsed blocks and inline runs are cached by source text so re-rendering
+    /// a card (hover, observation updates) doesn't re-parse its markdown.
+    private static let blockCache = NSCache<NSString, CacheBox<[Block]>>()
+    private static let inlineCache = NSCache<NSString, CacheBox<AttributedString>>()
+
+    private static func blocks(for text: String) -> [Block] {
+        let key = text as NSString
+        if let cached = blockCache.object(forKey: key) { return cached.value }
+        let parsed = parse(GeneratedTextSanitizer.cleanMarkdownDocument(text))
+        blockCache.setObject(CacheBox(parsed), forKey: key)
+        return parsed
     }
 
     var body: some View {
@@ -34,6 +47,8 @@ struct BriefingMarkdownView: View {
                     bulletRow(marker: "•", content: content)
                 case .ordered(let number, let content):
                     bulletRow(marker: "\(number).", content: content, monospaced: true)
+                case .table(let header, let rows):
+                    tableView(header: header, rows: rows)
                 }
             }
         }
@@ -57,6 +72,43 @@ struct BriefingMarkdownView: View {
         }
     }
 
+    private func tableView(header: [String], rows: [[String]]) -> some View {
+        let columnCount = max(header.count, rows.map(\.count).max() ?? 0)
+        return Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 6) {
+            GridRow {
+                ForEach(0..<columnCount, id: \.self) { column in
+                    tableCell(column < header.count ? header[column] : "", isHeader: true)
+                }
+            }
+            Divider().opacity(0.6)
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                GridRow {
+                    ForEach(0..<columnCount, id: \.self) { column in
+                        tableCell(column < row.count ? row[column] : "", isHeader: false)
+                    }
+                }
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(ClaudeTheme.surfaceSecondary.opacity(0.6))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(ClaudeTheme.border.opacity(0.6), lineWidth: 0.5)
+        )
+    }
+
+    private func tableCell(_ content: String, isHeader: Bool) -> some View {
+        Text(Self.inline(content))
+            .font(.system(size: fontSize - 0.5, weight: isHeader ? .semibold : .regular))
+            .foregroundStyle(isHeader ? ClaudeTheme.textPrimary : ClaudeTheme.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .textSelection(.enabled)
+    }
+
     private func headingSize(_ level: Int) -> CGFloat {
         switch level {
         case 1: return fontSize + 5
@@ -73,6 +125,7 @@ struct BriefingMarkdownView: View {
         case paragraph(String)
         case bullet(String)
         case ordered(number: Int, content: String)
+        case table(header: [String], rows: [[String]])
     }
 
     private static func parse(_ text: String) -> [Block] {
@@ -89,11 +142,28 @@ struct BriefingMarkdownView: View {
             paragraphBuffer.removeAll()
         }
 
-        for rawLine in text.components(separatedBy: "\n") {
-            let line = rawLine.trimmingCharacters(in: .whitespaces)
+        let lines = text.components(separatedBy: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+        var index = 0
+        while index < lines.count {
+            let line = lines[index]
+            index += 1
 
             if line.isEmpty {
                 flushParagraph()
+                continue
+            }
+
+            // Table: a pipe row followed by a `|---|---|` separator row.
+            if line.hasPrefix("|"), index < lines.count, isTableSeparator(lines[index]) {
+                flushParagraph()
+                let header = tableCells(line)
+                index += 1
+                var rows: [[String]] = []
+                while index < lines.count, lines[index].hasPrefix("|") {
+                    rows.append(tableCells(lines[index]))
+                    index += 1
+                }
+                blocks.append(.table(header: header, rows: rows))
                 continue
             }
 
@@ -137,7 +207,27 @@ struct BriefingMarkdownView: View {
         return blocks
     }
 
+    private static func isTableSeparator(_ line: String) -> Bool {
+        guard line.contains("-") else { return false }
+        return line.allSatisfy { "|-: ".contains($0) }
+    }
+
+    private static func tableCells(_ line: String) -> [String] {
+        var body = Substring(line)
+        if body.hasPrefix("|") { body = body.dropFirst() }
+        if body.hasSuffix("|") { body = body.dropLast() }
+        return body.components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+    }
+
     private static func inline(_ content: String) -> AttributedString {
+        let key = content as NSString
+        if let cached = inlineCache.object(forKey: key) { return cached.value }
+        let rendered = renderInline(content)
+        inlineCache.setObject(CacheBox(rendered), forKey: key)
+        return rendered
+    }
+
+    private static func renderInline(_ content: String) -> AttributedString {
         if var attr = try? AttributedString(
             markdown: content,
             options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
@@ -154,5 +244,13 @@ struct BriefingMarkdownView: View {
             return attr
         }
         return AttributedString(content)
+    }
+}
+
+private final class CacheBox<Value> {
+    let value: Value
+
+    init(_ value: Value) {
+        self.value = value
     }
 }

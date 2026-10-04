@@ -738,7 +738,7 @@ final class AppStateHookController: HookController {
     }
 
     func customMenuItems(projectId: UUID?, surface: CustomMenuItemRecord.Surface) -> [CustomMenuItemRecord] {
-        app?.threadStore.customMenuItems(projectId: projectId, surface: surface) ?? []
+        app?.cachedCustomMenuItems(projectId: projectId, surface: surface) ?? []
     }
 
     func shouldShowConditionalMenuItem(
@@ -783,6 +783,32 @@ final class AppStateHookController: HookController {
             repoFullName: project.gitHubRepo,
             projectPath: project.path
         )
+    }
+
+    // MARK: Project task board
+
+    @discardableResult
+    func applyTaskTrigger(_ event: TaskTriggerEvent, sessionKey: String, sessionContinues: Bool) -> Bool {
+        guard let app else { return false }
+        return app.applyTaskTrigger(event, sessionKey: sessionKey, sessionContinues: sessionContinues) != nil
+    }
+
+    func advanceTaskAfterSessionEnd(_ payload: SessionEndPayload) async -> Bool {
+        guard let app else { return false }
+        return await app.advanceTaskAfterSessionEnd(payload)
+    }
+
+    // Review events are dispatched on their own task rather than awaited: the
+    // caller (`CodeReviewHook`) is itself running inside the serial session-end
+    // dispatch, and review listeners must not wait on it or hold it up.
+    func notifyReviewStarted(_ payload: ReviewEventPayload) {
+        guard let app else { return }
+        Task { await app.hookManager.dispatchReviewStart(payload) }
+    }
+
+    func notifyReviewStopped(_ payload: ReviewEventPayload) {
+        guard let app else { return }
+        Task { await app.hookManager.dispatchReviewStop(payload) }
     }
 
     // MARK: Setup-session tracking

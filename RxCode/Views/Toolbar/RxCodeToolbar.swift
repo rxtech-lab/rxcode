@@ -5,7 +5,7 @@ import SwiftUI
 // MARK: - RxCodeToolbar
 
 /// Shared trailing toolbar group: New Chat, Open in Editor, Terminal,
-/// Memo, Inspector toggle, Settings.
+/// Memo, Inspector toggle, What's New, Settings.
 ///
 /// Wrapped in an isolated struct so toolbar reads do not trigger NSToolbar
 /// re-layout when `selectedProject` changes.

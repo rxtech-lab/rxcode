@@ -42,9 +42,12 @@ private struct TitleBarHider: NSViewRepresentable {
         var savedTitleVisibility: NSWindow.TitleVisibility?
         var savedTitlebarAppearsTransparent: Bool?
         var savedStandardButtonHidden: [NSWindow.ButtonType: Bool] = [:]
+        /// Set once the view is dismantled so a still-queued async `apply`
+        /// can't re-hide the chrome after it has been restored.
+        var isDismantled = false
 
         func apply(to window: NSWindow) {
-            guard self.window !== window else { return }
+            guard !isDismantled, self.window !== window else { return }
             restore()
             self.window = window
             savedStyleMask = window.styleMask
@@ -99,6 +102,7 @@ private struct TitleBarHider: NSViewRepresentable {
     }
 
     static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        coordinator.isDismantled = true
         coordinator.restore()
     }
 }

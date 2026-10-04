@@ -217,6 +217,7 @@ nonisolated final class MockRelayServer: @unchecked Sendable {
             projects: baseFixtures.projects,
             sessions: sessions,
             branchBriefings: baseFixtures.branchBriefings,
+            briefingDocuments: baseFixtures.briefingDocuments,
             threadSummaries: threadSummaries,
             settings: nil,
             activeSessionID: activeSessionID,

@@ -14,7 +14,7 @@ public enum ChatStatus: Sendable, Equatable {
 
 // MARK: - ChatTodoProgress
 
-struct ChatTodoProgress: Sendable, Equatable {
+nonisolated struct ChatTodoProgress: Sendable, Equatable {
     let done: Int
     let total: Int
     let inProgress: Bool
@@ -53,14 +53,40 @@ struct StatusBadgeDot: View {
         Circle()
             .fill(color)
             .frame(width: 6, height: 6)
-            .scaleEffect(shouldPulse ? (pulse ? 1.4 : 1.0) : 1.0)
-            .opacity(shouldPulse ? (pulse ? 0.65 : 1.0) : 1.0)
-            .onAppear {
-                guard shouldPulse else { return }
-                withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
-                    pulse = true
-                }
-            }
+            .scaleEffect(pulse ? 1.4 : 1.0)
+            .opacity(pulse ? 0.65 : 1.0)
+            .onAppear { syncPulse() }
+            .onDisappear { stopPulse() }
+            .onChange(of: shouldPulse) { syncPulse() }
+    }
+
+    /// Start or stop the pulse to match `status`.
+    ///
+    /// Stopping matters as much as starting. A `repeatForever` animation keeps
+    /// SwiftUI's display link running for as long as its value stays animated, and
+    /// this dot survives an `awaitingPermission` -> `done` transition with the same
+    /// view identity — so a pulse started for a permission prompt and never
+    /// stopped keeps re-running the whole sidebar `ForEach` every frame, forever,
+    /// on a thread that has long since gone quiet.
+    ///
+    /// Gating only the rendered value is not enough: `pulse` itself has to be reset
+    /// under a finite animation to detach the repeating one from the view graph.
+    private func syncPulse() {
+        guard shouldPulse else {
+            stopPulse()
+            return
+        }
+        guard !pulse else { return }
+        withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
+            pulse = true
+        }
+    }
+
+    private func stopPulse() {
+        guard pulse else { return }
+        withAnimation(.easeInOut(duration: 0.2)) {
+            pulse = false
+        }
     }
 
     private var shouldPulse: Bool {
@@ -89,7 +115,11 @@ struct ProjectChatRow: View {
     let isCurrent: Bool
     let status: ChatStatus
     let todoProgress: ChatTodoProgress?
+    let linkedTask: ProjectTask?
+    let isCreatingTask: Bool
     let onSelect: () -> Void
+    let onOpenTask: () -> Void
+    let onCreateTask: () -> Void
     let onRename: () -> Void
     let onTogglePin: () -> Void
     let onToggleArchive: () -> Void
@@ -99,7 +129,12 @@ struct ProjectChatRow: View {
     /// Serializable action items (code review, commit, autopilot setup) supplied
     /// by hooks. Rendered via `MenuItemsView`; taps route through the desktop
     /// menu action handler.
-    let hookMenuItems: [MenuItem]
+    ///
+    /// Deferred behind a closure so the hooks only run when the menu is actually
+    /// opened. Building the array at the call site ran every enabled hook — some
+    /// of which hit SwiftData — for every row on every view-graph update, to
+    /// populate a menu nobody had opened yet.
+    let hookMenuItems: () -> [MenuItem]
     /// Nesting depth; review children render one level in from their parent.
     var indentLevel: Int = 0
     /// Replaces the thread title (e.g. `"Review 1"` for a nested review child).
@@ -126,6 +161,21 @@ struct ProjectChatRow: View {
         summary.threadLabel == AppState.manualCodeReviewLabel
     }
 
+    /// The completion-check chip, driven by `AppState` rather than the label
+    /// alone so a check whose verdict never landed stops claiming to verify.
+    private var taskCompletionChip: (text: String, color: Color)? {
+        switch appState.taskCompletionCheckState(for: summary) {
+        case .verifying:
+            return (String(localized: "Verifying"), ClaudeTheme.statusRunning)
+        case .verified:
+            return (String(localized: "Verified"), ClaudeTheme.statusSuccess)
+        case .unverified:
+            return (String(localized: "Unverified"), ClaudeTheme.statusWarning)
+        case nil:
+            return nil
+        }
+    }
+
     private var isActiveStatus: Bool {
         switch status {
         case .awaitingPermission, .done, .error: return true
@@ -135,8 +185,13 @@ struct ProjectChatRow: View {
 
     /// Title cleaned of `[Attached image: ...]` / `[ImageN]` / etc. markers that may
     /// be baked into older persisted summaries from before title stripping landed.
+    ///
+    /// Completion-check threads get a fixed title instead of their generated one —
+    /// the row is only ever "the verification run for the parent thread", and the
+    /// generated title just repeats the prompt.
     private var displayTitle: String {
         if let titleOverride, !titleOverride.isEmpty { return titleOverride }
+        if taskCompletionChip != nil { return String(localized: "Task Verification") }
         let cleaned = ChatSession.stripAttachmentMarkers(from: summary.title)
         let resolved = cleaned.isEmpty ? ChatSession.defaultTitle : cleaned
         return resolved.prefix(1).uppercased() + resolved.dropFirst()
@@ -158,9 +213,31 @@ struct ProjectChatRow: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
 
+            if let taskCompletionChip {
+                Text(taskCompletionChip.text)
+                    .font(.system(size: ClaudeTheme.size(10), weight: .semibold))
+                    .foregroundStyle(taskCompletionChip.color)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2)
+                    .background(taskCompletionChip.color.opacity(0.14), in: Capsule())
+                    .fixedSize()
+            }
+
             Spacer(minLength: 4)
 
-            if showLabelChip, let label = summary.threadLabel, !label.isEmpty {
+            if let linkedTask {
+                Image(systemName: "link")
+                    .font(.system(size: ClaudeTheme.size(10), weight: .medium))
+                    .foregroundStyle(ClaudeTheme.textTertiary)
+                    .help("Linked task: \(linkedTask.title)")
+                    .accessibilityLabel("Linked task: \(linkedTask.title)")
+            } else if isCreatingTask {
+                ProgressView()
+                    .controlSize(.mini)
+                    .help("Creating task from chat")
+            }
+
+            if taskCompletionChip == nil, showLabelChip, let label = summary.threadLabel, !label.isEmpty {
                 Text(label)
                     .font(.system(size: ClaudeTheme.size(9), weight: .semibold))
                     .foregroundStyle(ClaudeTheme.accent)
@@ -207,9 +284,20 @@ struct ProjectChatRow: View {
         .onHover { hovering in
             isHovered = hovering
         }
-        .help(displayTitle)
+        .help(taskCompletionChip.map { "\(displayTitle) — \($0.text)" } ?? displayTitle)
         .onTapGesture { onSelect() }
         .contextMenu {
+            if linkedTask != nil {
+                Button(action: onOpenTask) {
+                    Label("Jump to Task", systemImage: "link")
+                }
+            } else {
+                Button(action: onCreateTask) {
+                    Label("Create Task from Chat with AI", systemImage: "sparkles")
+                }
+                .disabled(isCreatingTask)
+            }
+            Divider()
             Button { onRename() } label: {
                 Label("Rename", systemImage: "pencil")
             }
@@ -230,9 +318,10 @@ struct ProjectChatRow: View {
             // Code review / commit / autopilot actions now come from hooks as
             // serializable MenuItems (gated for review threads and file changes
             // inside the hooks). The handler dispatches taps locally on desktop.
-            if !hookMenuItems.isEmpty {
+            let items = hookMenuItems()
+            if !items.isEmpty {
                 Divider()
-                MenuItemsView(hookMenuItems)
+                MenuItemsView(items)
                     .menuActionHandler(appState.desktopMenuActionHandler(navigatingIn: windowState))
             }
             Divider()
@@ -324,8 +413,8 @@ private struct CompactSessionProgressView: View {
     }
 
     private var helpText: String {
-        guard let progress, progress.total > 0 else { return "Response in progress" }
-        return "Todos \(progress.done)/\(progress.total)"
+        guard let progress, progress.total > 0 else { return String(localized: "Response in progress") }
+        return String(format: String(localized: "Todos %lld/%lld"), progress.done, progress.total)
     }
 
     var body: some View {

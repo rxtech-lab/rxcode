@@ -35,10 +35,8 @@ public struct ChatView<InputAccessory: View, BottomAccessory: View, AboveInputAc
             } else {
                 messageScrollView
 
-                aboveInputAccessory
-
                 InputBarView(accessory: inputAccessory) {
-                    EmptyView()
+                    aboveInputAccessory
                 }
 
                 bottomAccessory
@@ -61,7 +59,8 @@ public struct ChatView<InputAccessory: View, BottomAccessory: View, AboveInputAc
     // MARK: - Empty State
 
     private var emptyStateTitle: String {
-        if let name = windowState.selectedProject?.name {
+        if let project = windowState.selectedProject, !project.isGlobalChat {
+            let name = project.name
             return String(format: String(localized: "What should we build in %@?", bundle: .module), name)
         }
         return String(localized: "How can I help you?", bundle: .module)
@@ -79,10 +78,8 @@ public struct ChatView<InputAccessory: View, BottomAccessory: View, AboveInputAc
                     .lineLimit(2)
                     .padding(.horizontal, 24)
 
-                aboveInputAccessory
-
                 InputBarView(accessory: inputAccessory) {
-                    EmptyView()
+                    aboveInputAccessory
                 }
 
                 bottomAccessory

@@ -7,6 +7,8 @@ actor CodexAppServer {
         case binaryNotFound
         case versionCheckFailed(String)
         case spawnFailed(String)
+        case loginFailed(String)
+        case logoutFailed(String)
 
         var errorDescription: String? {
             switch self {
@@ -16,6 +18,10 @@ actor CodexAppServer {
                 return "Version check failed: \(detail)"
             case .spawnFailed(let detail):
                 return "Failed to spawn codex app-server: \(detail)"
+            case .loginFailed(let detail):
+                return "Codex sign-in failed: \(detail)"
+            case .logoutFailed(let detail):
+                return "Codex sign-out failed: \(detail)"
             }
         }
     }
@@ -23,6 +29,11 @@ actor CodexAppServer {
     struct RunningProcess {
         let process: Process
         let stdin: FileHandle
+    }
+
+    struct ActiveTurn {
+        let threadId: String
+        let turnId: String
     }
 
     struct CodexRateLimitWindow {
@@ -36,8 +47,12 @@ actor CodexAppServer {
         category: "CodexAppServer"
     )
     var running: [UUID: RunningProcess] = [:]
+    /// Thread + turn id for each stream whose turn is currently accepting
+    /// steering input. Present between `turn/started` and `turn/completed`;
+    /// its absence is what makes `steer` decline rather than write into a
+    /// turn the app server has already closed.
+    var activeTurns: [UUID: ActiveTurn] = [:]
     var stderrBuffers: [UUID: String] = [:]
-    var cachedShellPath: String?
     var cachedRateLimits: RateLimitUsage?
     var cachedRateLimitsAt: Date?
     var rateLimitsFetchTask: Task<RateLimitUsage?, Never>?
@@ -52,9 +67,57 @@ actor CodexAppServer {
         self.permissionServer = server
     }
 
+    func setActiveTurn(streamId: UUID, threadId: String, turnId: String) {
+        activeTurns[streamId] = ActiveTurn(threadId: threadId, turnId: turnId)
+    }
+
+    func clearActiveTurn(streamId: UUID) {
+        activeTurns.removeValue(forKey: streamId)
+    }
+
+    /// Deliver extra user input to a turn that is still running.
+    ///
+    /// The app server exposes `turn/steer` for exactly this, so unlike an
+    /// interrupt-and-resend the thread keeps its context and the agent folds
+    /// the new instruction into the work already in flight. `expectedTurnId` is
+    /// a precondition the server checks: if the turn ended between the lookup
+    /// and the write, it rejects the request rather than misapplying it to
+    /// whatever turn came next.
+    ///
+    /// Returns `false` when this stream has no live turn, which is the caller's
+    /// cue to deliver the message as its own turn instead. The write itself is
+    /// fire-and-forget — the turn's own event loop owns the response channel,
+    /// and a rejection surfaces there as an `error` notification.
+    func steer(streamId: UUID, prompt: String) -> Bool {
+        guard let turn = activeTurns[streamId], let stdin = running[streamId]?.stdin else {
+            logger.info("[CodexAppServer] steer declined, no live turn stream=\(streamId)")
+            return false
+        }
+        let params: JSONValue = .object([
+            "threadId": .string(turn.threadId),
+            "expectedTurnId": .string(turn.turnId),
+            "input": .array([.object([
+                "type": .string("text"),
+                "text": .string(prompt),
+            ])]),
+        ])
+        do {
+            try Self.writeJSONLine(
+                Self.request(id: Self.steerRequestId, method: "turn/steer", params: params),
+                to: stdin
+            )
+            logger.info("[CodexAppServer] steered stream=\(streamId) turn=\(turn.turnId, privacy: .public) promptLen=\(prompt.count)")
+            return true
+        } catch {
+            logger.warning("[CodexAppServer] steer failed stream=\(streamId): \(error.localizedDescription)")
+            return false
+        }
+    }
+
     static var candidatePaths: [String] {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         return [
+            AgentRuntimeInstaller.executablePath(for: .codex),
             "/opt/homebrew/bin/codex",
             "/usr/local/bin/codex",
             "\(home)/.local/bin/codex",
@@ -111,7 +174,7 @@ actor CodexAppServer {
             try Self.writeJSONLine(Self.notification(method: "initialized", params: [:]), to: handles.stdin)
             try Self.writeJSONLine(Self.request(id: 2, method: "model/list", params: ["includeHidden": .bool(false)]), to: handles.stdin)
 
-            for try await line in handles.stdout.fileHandleForReading.bytes.lines {
+            for await line in handles.stdout.fileHandleForReading.lineStream() {
                 guard let object = Self.decodeObject(line),
                       Self.idString(object["id"]) == "2",
                       let result = object["result"] else { continue }
@@ -232,6 +295,28 @@ extension CodexAppServer: AgentBackend {
     nonisolated var provider: AgentProvider { .codex }
     nonisolated var staticCapabilities: CapabilitySet { AgentProvider.codex.staticCapabilities }
 
+    /// The app server exposes `turn/steer`; whether a given turn is still open
+    /// to it is decided per-call in `steer`.
+    nonisolated var supportsSteering: Bool { true }
+
+    /// What `model_reasoning_effort` accepts — a different set from Claude's,
+    /// which is why the picker asks the backend instead of using one list.
+    func availableReasoningLevels() async -> [ReasoningLevel] { .codexEfforts }
+
+    /// Codex takes its reasoning effort as a config override rather than a
+    /// flag. Nil (the picker's "Auto") emits nothing, leaving whatever the
+    /// user's `~/.codex/config.toml` sets.
+    ///
+    /// Unknown values are dropped rather than passed through: codex rejects the
+    /// whole config on a bad enum, so forwarding a stale `max` from a thread
+    /// that used to run on Claude would fail the turn outright.
+    static func effortOverrides(_ effort: String?) -> [String] {
+        guard let effort, [ReasoningLevel].codexEfforts.contains(where: { $0.id == effort }) else {
+            return []
+        }
+        return ["-c", "model_reasoning_effort=\"\(effort)\""]
+    }
+
     func send(_ request: BackendSendRequest) -> AsyncStream<StreamEvent> {
         guard let permissionServer else {
             logger.error("[Codex] send called before setPermissionServer wired")
@@ -257,7 +342,7 @@ extension CodexAppServer: AgentBackend {
             model: request.model,
             permissionMode: request.permissionMode,
             planMode: request.planMode,
-            mcpConfigOverrides: request.mcpCodexOverrides,
+            mcpConfigOverrides: request.mcpCodexOverrides + Self.effortOverrides(request.effort),
             permissionServer: permissionServer
         )
     }

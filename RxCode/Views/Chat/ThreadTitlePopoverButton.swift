@@ -13,7 +13,9 @@ struct ThreadTitlePopoverButton: View {
     @State private var showingPopover = false
 
     private var summaryItem: ThreadSummaryItem? {
-        guard !windowState.showingBriefing,
+        // Only meaningful while a chat thread is showing — any General route
+        // (Tasks, Briefing) replaces the whole detail pane.
+        guard windowState.generalRoute == nil,
               let sessionId = windowState.currentSessionId
         else { return nil }
         _ = appState.threadSummaryRevision

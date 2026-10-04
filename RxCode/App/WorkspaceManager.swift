@@ -27,7 +27,6 @@ final class WorkspaceManager {
     /// Whether `MobileSyncService.start()` has run (it is process-global and not
     /// idempotent, so it must fire exactly once).
     private var didStartMobileSync = false
-    @ObservationIgnored private var performanceMonitorTask: Task<Void, Never>?
 
     init() {
         let core = AppCore()
@@ -37,6 +36,24 @@ final class WorkspaceManager {
 
     /// Known workspaces — source of truth is the shared registry.
     var workspaces: [AppWorkspace] { core.workspaceRegistry.load().all }
+
+    /// Clears cached rows in every workspace, including unopened workspaces.
+    func clearCachedData() async throws {
+        let allWorkspaces = workspaces
+        for workspace in allWorkspaces {
+            let state = appState(for: workspace.id)
+            try state.threadStore.clearCachedRecords()
+            await state.searchService.clearCachedIndex()
+            state.branchBriefingRevision &+= 1
+        }
+        try await CacheStorageService.shared.clearFileCaches(
+            workspaceURLs: allWorkspaces.map(\.storageURL)
+        )
+        await ACPIconCache.shared.clear()
+        for workspace in allWorkspaces {
+            await appState(for: workspace.id).reloadBriefingDocuments()
+        }
+    }
 
     /// Returns the AppState bound to `workspaceID`, creating it on first use.
     /// Falls back to the registry's active workspace when the id is unknown.
@@ -51,7 +68,6 @@ final class WorkspaceManager {
         if workspace.id == frontmostWorkspaceID {
             bindMemoryMCPServer(to: appState)
         }
-        startPerformanceMonitorIfNeeded()
         return appState
     }
 
@@ -72,6 +88,7 @@ final class WorkspaceManager {
     }
 
     private func bindMemoryMCPServer(to appState: AppState) {
+        guard !AppSupport.isUnitTesting else { return }
         let defaults = UserDefaults.standard
         let enabled = defaults.bool(forKey: IDEMCPServer.memoryAPIEnabledDefaultsKey)
         let savedPort = defaults.integer(forKey: IDEMCPServer.memoryAPIPortDefaultsKey)
@@ -91,6 +108,7 @@ final class WorkspaceManager {
     /// Hand mobile-sync ownership to `workspaceID`, tearing it down on the
     /// previous owner. Starts the (non-idempotent) mobile service once.
     private func transferMobileSyncOwnership(to workspaceID: String) {
+        guard !AppSupport.isTestProcess else { return }
         guard mobileSyncOwnerID != workspaceID else { return }
         if let previous = mobileSyncOwnerID, let previousState = appStatesByWorkspaceID[previous] {
             previousState.unbindMobileSyncOwnership()
@@ -116,80 +134,5 @@ final class WorkspaceManager {
         if frontmostWorkspaceID == workspaceID {
             markFrontmost(AppWorkspace.personalID)
         }
-    }
-
-    private func startPerformanceMonitorIfNeeded() {
-        guard performanceMonitorTask == nil else { return }
-        performanceMonitorTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            await PerformanceDiagnosticsService.shared.append(
-                state: await performanceStateSnapshot(),
-                mainActorMaxLagMilliseconds: 0
-            )
-
-            let clock = ContinuousClock()
-            var lastSample = clock.now
-            var maximumLagMilliseconds = 0.0
-
-            while !Task.isCancelled {
-                let expectedWake = clock.now.advanced(by: .seconds(5))
-                try? await Task.sleep(for: .seconds(5))
-                guard !Task.isCancelled else { return }
-
-                let now = clock.now
-                let lag = expectedWake.duration(to: now).components
-                let lagMilliseconds = max(
-                    0,
-                    Double(lag.seconds) * 1_000
-                        + Double(lag.attoseconds) / 1_000_000_000_000_000
-                )
-                maximumLagMilliseconds = max(maximumLagMilliseconds, lagMilliseconds)
-
-                guard lastSample.duration(to: now) >= .seconds(30) else { continue }
-                let snapshot = await performanceStateSnapshot()
-                let intervalMaximumLag = maximumLagMilliseconds
-                lastSample = now
-                maximumLagMilliseconds = 0
-                await PerformanceDiagnosticsService.shared.append(
-                    state: snapshot,
-                    mainActorMaxLagMilliseconds: intervalMaximumLag
-                )
-            }
-        }
-    }
-
-    private func performanceStateSnapshot() async -> PerformanceStateSnapshot {
-        let appStates = Array(appStatesByWorkspaceID.values)
-        let states = appStates.flatMap { $0.sessionStates.values }
-        let messageCounts = states.map { $0.messages.count }
-        var searchIndexedThreadCount = 0
-        var searchChunkCount = 0
-        for appState in appStates {
-            let stats = await appState.searchService.diagnosticStats()
-            searchIndexedThreadCount += stats.threadCount
-            searchChunkCount += stats.chunkCount
-        }
-        return PerformanceStateSnapshot(
-            workspaceCount: appStatesByWorkspaceID.count,
-            projectCount: appStatesByWorkspaceID.values.reduce(0) { $0 + $1.projects.count },
-            sessionSummaryCount: appStatesByWorkspaceID.values.reduce(0) { $0 + $1.allSessionSummaries.count },
-            inMemorySessionCount: states.count,
-            inMemoryMessageCount: messageCounts.reduce(0, +),
-            inMemoryBlockCount: states.reduce(0) { total, state in
-                total + state.messages.reduce(0) { $0 + $1.blocks.count }
-            },
-            largestSessionMessageCount: messageCounts.max() ?? 0,
-            activeStreamCount: states.count { $0.isStreaming },
-            streamTaskCount: states.count { $0.streamTask != nil },
-            flushTaskCount: states.count { $0.flushTask != nil },
-            editingFileSnapshotCount: states.reduce(0) { $0 + $1.editingFileSnapshots.count },
-            sessionRedirectCount: appStatesByWorkspaceID.values.reduce(0) { $0 + $1.sessionIdRedirect.count },
-            pendingCompletionCount: appStatesByWorkspaceID.values.reduce(0) { $0 + $1.pendingStreamCompletions.count },
-            completionWaiterCount: appStatesByWorkspaceID.values.reduce(0) { $0 + $1.streamCompletionWaiters.count },
-            pendingMobileRequestCount: appStatesByWorkspaceID.values.reduce(0) { $0 + $1.mobilePendingRequests.count },
-            reconciledSessionCount: appStatesByWorkspaceID.values.reduce(0) { $0 + $1.lastReconciledJsonlSize.count },
-            searchIndexedThreadCount: searchIndexedThreadCount,
-            searchChunkCount: searchChunkCount
-        )
     }
 }

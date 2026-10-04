@@ -12,6 +12,7 @@ nonisolated struct MockFixtures: Sendable {
     let projects: [Project]
     let sessions: [SessionSummary]
     let branchBriefings: [MobileBranchBriefing]
+    let briefingDocuments: [MobileBriefingDocument]
     let threadSummaries: [MobileThreadSummary]
     /// Full message list keyed by session id.
     let messagesBySession: [String: [ChatMessage]]
@@ -25,6 +26,7 @@ nonisolated struct MockFixtures: Sendable {
             projects: projects,
             sessions: sessions,
             branchBriefings: branchBriefings,
+            briefingDocuments: briefingDocuments,
             threadSummaries: threadSummaries,
             settings: nil,
             activeSessionID: activeSessionID,
@@ -101,6 +103,17 @@ nonisolated struct MockFixtures: Sendable {
             ),
         ]
 
+        let briefingDocuments = [
+            MobileBriefingDocument(
+                id: UUID(uuidString: "C0000000-0000-0000-0000-000000000003")!,
+                title: "Published Weekly Briefing",
+                format: "markdown",
+                projectId: nil,
+                createdAt: now,
+                updatedAt: now
+            ),
+        ]
+
         var messagesBySession: [String: [ChatMessage]] = [:]
         for spec in specs {
             messagesBySession[spec.sessionId] = [
@@ -127,6 +140,7 @@ nonisolated struct MockFixtures: Sendable {
             projects: projects,
             sessions: sessions,
             branchBriefings: branchBriefings,
+            briefingDocuments: briefingDocuments,
             threadSummaries: threadSummaries,
             messagesBySession: messagesBySession
         )

@@ -66,6 +66,12 @@ struct SettingsView: View {
                     Label("Autopilot", systemImage: "paperplane.circle")
                 }
                 .tag(7)
+
+            TasksSettingsTab()
+                .tabItem {
+                    Label("Tasks", systemImage: "checklist")
+                }
+                .tag(8)
         }
         .frame(width: 680, height: 620)
         .focusable(false)
@@ -97,10 +103,13 @@ struct SettingsView: View {
 
 struct GeneralSettingsTab: View {
     @Environment(AppState.self) private var appState
+    @Environment(WorkspaceManager.self) private var workspaceManager
     @Binding var showUserManual: Bool
     @Binding var showOnboarding: Bool
     @Binding var showWhatsNew: Bool
     @State private var showThemePicker = false
+    @State private var showCacheStorage = false
+    @State private var occupiedBytes: Int64?
     @AppStorage("showMenuBarExtra") private var showMenuBarExtra: Bool = true
 
     var body: some View {
@@ -119,6 +128,10 @@ struct GeneralSettingsTab: View {
                 Divider()
                 searchIndexSection
                 Divider()
+                cacheSection
+                Divider()
+                AgentPromptsSettingsSection()
+                Divider()
                 MemorySettingsSection()
                 Divider()
                 HooksSettingsSection()
@@ -134,6 +147,31 @@ struct GeneralSettingsTab: View {
             }
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .sheet(isPresented: $showCacheStorage) {
+            CacheStorageSheet(workspaceManager: workspaceManager)
+        }
+        .task { await refreshOccupiedSpace() }
+        .onChange(of: showCacheStorage) { _, isPresented in
+            if !isPresented { Task { await refreshOccupiedSpace() } }
+        }
+    }
+
+    private func refreshOccupiedSpace() async {
+        occupiedBytes = await CacheStorageService.shared.occupiedBytes()
+    }
+
+    private var cacheSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Storage and Cache")
+                .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
+            Text("View total occupied space and clear cached data across all workspaces, including briefings.")
+                .font(.system(size: ClaudeTheme.size(11)))
+                .foregroundStyle(.secondary)
+            Text("Total occupied space: \(occupiedBytes.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? "Calculating…")")
+                .font(.system(size: ClaudeTheme.size(12)))
+                .monospacedDigit()
+            Button("Clear Cached Data…") { showCacheStorage = true }
         }
     }
 
@@ -482,8 +520,142 @@ struct GeneralSettingsTab: View {
     }
 }
 
+private struct AgentPromptsSettingsSection: View {
+    @Environment(AppState.self) private var appState
+    @AppStorage("globalAgentPrompt") private var globalPrompt = ""
+    @State private var showProjectPrompts = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Agent Prompts")
+                .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
+
+            Text("These instructions are included with every agent turn. Project instructions are added after the global instructions.")
+                .font(.system(size: ClaudeTheme.size(11)))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text("Global prompt")
+                .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+            promptEditor(text: $globalPrompt, label: "Global prompt")
+
+            HStack {
+                Text("Project prompts")
+                    .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+                Spacer()
+                Button("Manage Project Prompts…") {
+                    showProjectPrompts = true
+                }
+            }
+        }
+        .sheet(isPresented: $showProjectPrompts) {
+            ProjectPromptsSheet()
+                .environment(appState)
+        }
+    }
+
+    private func promptEditor(text: Binding<String>, label: String) -> some View {
+        TextEditor(text: text)
+            .font(.system(size: ClaudeTheme.size(12)))
+            .frame(height: 88)
+            .overlay {
+                RoundedRectangle(cornerRadius: 6)
+                    .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1)
+                    .allowsHitTesting(false)
+            }
+            .accessibilityLabel(label)
+    }
+}
+
+private struct ProjectPromptsSheet: View {
+    @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if appState.projects.isEmpty {
+                    ContentUnavailableView(
+                        "No Projects",
+                        systemImage: "folder",
+                        description: Text("Add a project to configure its prompt.")
+                    )
+                } else {
+                    List(appState.projects) { project in
+                        NavigationLink(value: project.id) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(project.name)
+                                Text(project.path)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                            .padding(.vertical, 3)
+                        }
+                    }
+                    .navigationDestination(for: UUID.self) { projectId in
+                        ProjectPromptDetailPage(projectId: projectId) { dismiss() }
+                    }
+                }
+            }
+            .navigationTitle("Project Prompts")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+        .frame(width: 600, height: 480)
+    }
+}
+
+private struct ProjectPromptDetailPage: View {
+    @Environment(AppState.self) private var appState
+    let projectId: UUID
+    let closeSheet: () -> Void
+
+    private var project: Project? {
+        appState.projects.first { $0.id == projectId }
+    }
+
+    var body: some View {
+        Group {
+            if let project {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Project prompt")
+                        .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
+                    Text("These instructions are included with every agent turn in this project, after the global prompt.")
+                        .font(.system(size: ClaudeTheme.size(11)))
+                        .foregroundStyle(.secondary)
+                    TextEditor(text: Binding(
+                        get: { appState.projects.first(where: { $0.id == projectId })?.customPrompt ?? "" },
+                        set: { appState.setProjectPrompt($0, for: projectId) }
+                    ))
+                    .font(.system(size: ClaudeTheme.size(12)))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 6)
+                            .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1)
+                            .allowsHitTesting(false)
+                    }
+                    .accessibilityLabel("Project prompt")
+                }
+                .padding(20)
+                .navigationTitle(project.name)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done", action: closeSheet)
+                    }
+                }
+            } else {
+                ContentUnavailableView("Project Unavailable", systemImage: "folder.badge.questionmark")
+            }
+        }
+    }
+}
+
 #Preview {
     SettingsView()
         .environment(AppState())
+        .environment(WorkspaceManager())
         .environment(WindowState())
 }

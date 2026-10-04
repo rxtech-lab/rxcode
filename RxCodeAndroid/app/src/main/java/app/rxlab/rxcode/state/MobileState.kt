@@ -5,6 +5,8 @@ import app.rxlab.rxcode.proto.DocsSearchHit
 import app.rxlab.rxcode.proto.MobileACPClient
 import app.rxlab.rxcode.proto.MobileACPRegistryAgent
 import app.rxlab.rxcode.proto.MobileBranchBriefing
+import app.rxlab.rxcode.proto.MobileBriefingDocument
+import app.rxlab.rxcode.proto.BriefingContentResultPayload
 import app.rxlab.rxcode.proto.MobileMCPServer
 import app.rxlab.rxcode.proto.MobileRunTaskSnapshot
 import app.rxlab.rxcode.proto.MobileSkillPlugin
@@ -50,6 +52,10 @@ data class MobileState(
 
     /** Per-branch briefings keyed by `"<projectId>::<branch>"`. */
     val branchBriefings: List<MobileBranchBriefing> = emptyList(),
+    val briefingDocuments: List<MobileBriefingDocument> = emptyList(),
+    val briefingContentResult: BriefingContentResultPayload? = null,
+    val isLoadingBriefingContent: Boolean = false,
+    val briefingAssetFilePath: String? = null,
     /** Per-thread summary cards shown inside a briefing detail. */
     val threadSummaries: List<MobileThreadSummary> = emptyList(),
     /** Current + available branches per project, indexed by project id. */

@@ -8,6 +8,8 @@ Add a project with the **+** button in the sidebar or by dragging a folder into 
 
 Double-click a project to open it in a dedicated project window. Dedicated windows are independent, so several projects can stay active at the same time.
 
+For stories, task boards, and agent runs, open **Projects Dashboard** in this guide.
+
 ## Sidebar Sections
 
 - **Projects**: switch between workspaces.

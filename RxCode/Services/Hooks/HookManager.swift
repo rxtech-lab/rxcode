@@ -84,6 +84,20 @@ final class HookManager {
         return HookAggregateResult.fold(outcomes)
     }
 
+    // MARK: - Code review
+
+    func dispatchReviewStart(_ payload: ReviewEventPayload) async {
+        for hook in enabledHooks {
+            _ = await hook.onReviewStart(payload, controller: controller)
+        }
+    }
+
+    func dispatchReviewStop(_ payload: ReviewEventPayload) async {
+        for hook in enabledHooks {
+            _ = await hook.onReviewStop(payload, controller: controller)
+        }
+    }
+
     /// Centrally suppress *all* session-end hooks (code review, commit/push, send
     /// message, user stop hooks) for a planning turn — plan mode or an undecided
     /// `ExitPlanMode` plan. Sits beside `threadSkipsHooks` so both completion and

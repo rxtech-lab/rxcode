@@ -10,8 +10,27 @@ if [ -f "$DMG_NAME" ]; then
   rm "$DMG_NAME"
 fi
 
-# Create DMG
-create-dmg --overwrite "$APP_NAME" && mv *.dmg "$DMG_NAME"
+# Create DMG. create-dmg exits non-zero when DMG signing fails (e.g. Apple's
+# timestamp service is temporarily unavailable) even though the DMG was
+# created, so retry a few times and fall back to the unsigned DMG.
+for attempt in 1 2 3; do
+  if create-dmg --overwrite "$APP_NAME"; then
+    break
+  fi
+  echo "create-dmg failed (attempt $attempt)"
+  if [ "$attempt" -lt 3 ]; then
+    sleep 15
+  fi
+done
+
+shopt -s nullglob
+dmgs=(*.dmg)
+shopt -u nullglob
+if [ ${#dmgs[@]} -eq 0 ]; then
+  echo "No DMG was created"
+  exit 1
+fi
+mv "${dmgs[0]}" "$DMG_NAME"
 
 echo "DMG created: $DMG_NAME"
 

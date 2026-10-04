@@ -8,17 +8,36 @@ if [ -z "${SIGNING_CERTIFICATE_NAME}" ]; then
   exit 1
 fi
 
+# --timestamp makes codesign contact Apple's secure timestamp service, which
+# intermittently answers "The timestamp service is not available." Dropping
+# --timestamp is not an option (notarization requires a secure timestamp), so
+# retry instead.
+retry_codesign() {
+  local attempt
+  for attempt in 1 2 3; do
+    if codesign "$@"; then
+      return 0
+    fi
+    if [ "$attempt" -lt 3 ]; then
+      echo "codesign attempt ${attempt}/3 failed; retrying in 15s"
+      sleep 15
+    fi
+  done
+  echo "Error: codesign failed after 3 attempts: $*"
+  return 1
+}
+
 # Sign the main Sparkle framework binary first
-codesign --force --options runtime --timestamp --sign "${SIGNING_CERTIFICATE_NAME}" "$APP_PATH/Contents/Frameworks/Sparkle.framework/Versions/B/Sparkle"
+retry_codesign --force --options runtime --timestamp --sign "${SIGNING_CERTIFICATE_NAME}" "$APP_PATH/Contents/Frameworks/Sparkle.framework/Versions/B/Sparkle"
 
 # Sign Sparkle components
-codesign --force --options runtime --timestamp --sign "${SIGNING_CERTIFICATE_NAME}" "$APP_PATH/Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app"
-codesign --force --options runtime --timestamp --sign "${SIGNING_CERTIFICATE_NAME}" "$APP_PATH/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate"
-codesign --force --options runtime --timestamp --sign "${SIGNING_CERTIFICATE_NAME}" "$APP_PATH/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Downloader.xpc"
-codesign --force --options runtime --timestamp --sign "${SIGNING_CERTIFICATE_NAME}" "$APP_PATH/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Installer.xpc"
+retry_codesign --force --options runtime --timestamp --sign "${SIGNING_CERTIFICATE_NAME}" "$APP_PATH/Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app"
+retry_codesign --force --options runtime --timestamp --sign "${SIGNING_CERTIFICATE_NAME}" "$APP_PATH/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate"
+retry_codesign --force --options runtime --timestamp --sign "${SIGNING_CERTIFICATE_NAME}" "$APP_PATH/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Downloader.xpc"
+retry_codesign --force --options runtime --timestamp --sign "${SIGNING_CERTIFICATE_NAME}" "$APP_PATH/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Installer.xpc"
 
 # Sign the Sparkle framework as a whole
-codesign --force --options runtime --timestamp --sign "${SIGNING_CERTIFICATE_NAME}" "$APP_PATH/Contents/Frameworks/Sparkle.framework"
+retry_codesign --force --options runtime --timestamp --sign "${SIGNING_CERTIFICATE_NAME}" "$APP_PATH/Contents/Frameworks/Sparkle.framework"
 
 # Capture the entitlements xcodebuild embedded in the archive BEFORE re-signing
 # the main app. `codesign --force` without --entitlements drops them, which
@@ -38,10 +57,10 @@ echo "Preserving archived entitlements:"
 /usr/bin/plutil -p "$ENTITLEMENTS_PLIST" || true
 
 # Re-sign the main app binary, re-applying the archived entitlements
-codesign --force --options runtime --timestamp --entitlements "$ENTITLEMENTS_PLIST" --sign "${SIGNING_CERTIFICATE_NAME}" "$APP_PATH/Contents/MacOS/RxCode"
+retry_codesign --force --options runtime --timestamp --entitlements "$ENTITLEMENTS_PLIST" --sign "${SIGNING_CERTIFICATE_NAME}" "$APP_PATH/Contents/MacOS/RxCode"
 
 # Re-sign the main app to ensure everything is properly signed, keeping entitlements
-codesign --force --options runtime --timestamp --entitlements "$ENTITLEMENTS_PLIST" --sign "${SIGNING_CERTIFICATE_NAME}" "$APP_PATH"
+retry_codesign --force --options runtime --timestamp --entitlements "$ENTITLEMENTS_PLIST" --sign "${SIGNING_CERTIFICATE_NAME}" "$APP_PATH"
 
 # Verify the resealed app still declares associated-domains
 if ! codesign -d --entitlements - --xml "$APP_PATH" 2>/dev/null | grep -q "com.apple.developer.associated-domains"; then

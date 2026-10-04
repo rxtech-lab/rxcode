@@ -294,6 +294,44 @@ extension CodexAppServer {
         )
     }
 
+    /// Thread-cumulative (`total`) and latest-request (`last`) usage from a
+    /// `thread/tokenUsage/updated` notification. `turn/completed` carries no
+    /// usage, so these snapshots are the only per-turn token source.
+    static func tokenUsageBreakdowns(from params: [String: JSONValue]) -> (total: UsageInfo, last: UsageInfo)? {
+        guard let usage = firstObject(in: params, keys: ["tokenUsage", "token_usage"])
+                ?? firstNestedObject(in: .object(params), keys: ["tokenUsage", "token_usage"]),
+              let total = firstObject(in: usage, keys: ["total"]) else { return nil }
+        let last = firstObject(in: usage, keys: ["last"]) ?? [:]
+        return (codexUsageBreakdown(total), codexUsageBreakdown(last))
+    }
+
+    /// Maps a Codex `TokenUsageBreakdown` onto `UsageInfo`. OpenAI's
+    /// `inputTokens` already includes `cachedInputTokens` and `outputTokens`
+    /// already includes `reasoningOutputTokens`, so cached input is split out
+    /// and reasoning is not added again.
+    static func codexUsageBreakdown(_ breakdown: [String: JSONValue]) -> UsageInfo {
+        let input = firstInt(in: breakdown, keys: ["inputTokens", "input_tokens"])
+        let cached = firstInt(in: breakdown, keys: ["cachedInputTokens", "cached_input_tokens"])
+        return UsageInfo(
+            inputTokens: max(input - cached, 0),
+            outputTokens: firstInt(in: breakdown, keys: ["outputTokens", "output_tokens"]),
+            cacheCreationInputTokens: 0,
+            cacheReadInputTokens: cached
+        )
+    }
+
+    /// Usage accrued between two cumulative snapshots, or nil when nothing accrued.
+    static func usageDelta(from start: UsageInfo, to end: UsageInfo) -> UsageInfo? {
+        let delta = UsageInfo(
+            inputTokens: max(end.inputTokens - start.inputTokens, 0),
+            outputTokens: max(end.outputTokens - start.outputTokens, 0),
+            cacheCreationInputTokens: max(end.cacheCreationInputTokens - start.cacheCreationInputTokens, 0),
+            cacheReadInputTokens: max(end.cacheReadInputTokens - start.cacheReadInputTokens, 0)
+        )
+        let total = delta.inputTokens + delta.outputTokens + delta.cacheCreationInputTokens + delta.cacheReadInputTokens
+        return total > 0 ? delta : nil
+    }
+
     static func tokenUsageOutputTokens(from params: [String: JSONValue]) -> Int? {
         let usage = tokenUsageSummary(from: params)
         let outputTokens = firstInt(in: usage, keys: ["outputTokens", "output_tokens"])

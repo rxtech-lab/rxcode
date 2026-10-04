@@ -14,6 +14,10 @@ final class NotificationService: NSObject {
     private let logger = Logger(subsystem: "com.idealapp.RxCode", category: "Notification")
     private var didRequestAuthorization = false
 
+    /// Unit and UI test launches can drive real `AppState` streams. Suppress
+    /// hook-driven banners and mobile fan-out for their fixture sessions.
+    private let isRunningTests = AppSupport.isTestProcess
+
     /// Invoked on the main actor when the user clicks a notification.
     /// Parameters: projectId, sessionId
     var onNotificationTapped: ((UUID, String) -> Void)?
@@ -24,7 +28,7 @@ final class NotificationService: NSObject {
     }
 
     func requestAuthorizationIfNeeded() async {
-        guard !didRequestAuthorization else { return }
+        guard !isRunningTests, !didRequestAuthorization else { return }
         didRequestAuthorization = true
         do {
             let granted = try await UNUserNotificationCenter.current()
@@ -38,6 +42,7 @@ final class NotificationService: NSObject {
     /// Post a "permission needed" notification when the CLI queues a tool approval.
     /// Silently no-ops if the user hasn't granted notification permission.
     func postPermissionNeeded(toolName: String, projectName: String?, projectId: UUID?, sessionId: String?) async {
+        guard !isRunningTests else { return }
         let projectSuffixForMirror: String = projectName.map { " — \($0)" } ?? ""
         await fanoutToMobile(.init(
             kind: .permissionNeeded,
@@ -88,6 +93,7 @@ final class NotificationService: NSObject {
     /// Post a "question needed" notification when the CLI invokes AskUserQuestion.
     /// Silently no-ops if the user hasn't granted notification permission.
     func postQuestionNeeded(projectName: String?, projectId: UUID?, sessionId: String?) async {
+        guard !isRunningTests else { return }
         let projectSuffixForMirror: String = projectName.map { " — \($0)" } ?? ""
         await fanoutToMobile(.init(
             kind: .questionNeeded,
@@ -138,6 +144,7 @@ final class NotificationService: NSObject {
     /// transitions a server from connected to failed. Silently no-ops if the user
     /// hasn't granted notification permission.
     func postMCPDisconnected(name: String, error: String?) async {
+        guard !isRunningTests else { return }
         let detailForMirror = (error?.trimmingCharacters(in: .whitespacesAndNewlines))
             .flatMap { $0.isEmpty ? nil : $0 } ?? "connection lost"
         await fanoutToMobile(.init(
@@ -188,6 +195,7 @@ final class NotificationService: NSObject {
     /// banner. Uses a per-project identifier so a newer failure replaces the
     /// previous banner instead of stacking.
     func postCIFailed(projectName: String?, projectId: UUID?, failingWorkflowNames: [String]) async {
+        guard !isRunningTests else { return }
         let body = Self.ciFailureBody(failingWorkflowNames)
         let projectSuffix: String = projectName.map { " — \($0)" } ?? ""
         await fanoutToMobile(.init(
@@ -240,10 +248,54 @@ final class NotificationService: NSObject {
         }
     }
 
+    /// Post a task board notification — a task entered Pending Review, or its
+    /// work was rejected by the completion check or code review. Fans out to
+    /// mobile and (when authorized) shows a local banner. Uses a per-task
+    /// identifier so a newer update replaces the task's previous banner.
+    func postTaskUpdate(title: String, body: String, taskId: UUID, projectId: UUID, sessionId: String?) async {
+        guard !isRunningTests else { return }
+        let cleanBody = stripMarkdown(body)
+        await fanoutToMobile(.init(
+            kind: .generic,
+            title: title,
+            body: cleanBody,
+            sessionID: sessionId,
+            projectID: projectId
+        ))
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        switch settings.authorizationStatus {
+        case .authorized, .provisional:
+            break
+        default:
+            return
+        }
+
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = cleanBody
+        content.sound = .default
+        var userInfo: [String: Any] = ["projectId": projectId.uuidString]
+        if let sessionId { userInfo["sessionId"] = sessionId }
+        content.userInfo = userInfo
+
+        let request = UNNotificationRequest(
+            identifier: "task-update-\(taskId.uuidString)",
+            content: content,
+            trigger: nil
+        )
+
+        do {
+            try await UNUserNotificationCenter.current().add(request)
+        } catch {
+            logger.error("Failed to post task notification: \(error.localizedDescription)")
+        }
+    }
+
     /// Post a local banner after a paired mobile device remotely changed the
     /// desktop's skill / ACP / MCP configuration. Silently no-ops if the user
     /// has not authorized notifications.
     func postRemoteConfigChanged(title: String, body: String) async {
+        guard !isRunningTests else { return }
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         switch settings.authorizationStatus {
         case .authorized, .provisional:
@@ -274,6 +326,7 @@ final class NotificationService: NSObject {
     /// Mobile fan-out always runs; the local macOS banner is skipped when
     /// `postLocalBanner` is false (e.g. the desktop app is foregrounded).
     func postResponseComplete(title: String, body: String, projectId: UUID, sessionId: String, postLocalBanner: Bool = true) async {
+        guard !isRunningTests else { return }
         // Notification banners (the APNs alert and the macOS local banner) render
         // Markdown syntax literally, so strip it from the assistant-summary body.
         let cleanBody = stripMarkdown(body)

@@ -85,9 +85,41 @@ struct BriefingPRStatusView: View {
         .overlay(Capsule(style: .continuous).strokeBorder(color.opacity(0.25), lineWidth: 0.5))
     }
 
+    /// "Create PR" dropdown: create right away with the remembered model, or
+    /// pick a model from the "Create with Model" submenu (remembered for next time).
     private func createPRButton(project: Project) -> some View {
-        Button {
-            startCreatePR(project: project)
+        let remembered = appState.rememberedPullRequestModel
+        return Menu {
+            Button {
+                startCreatePR(project: project)
+            } label: {
+                Label(
+                    "Create Now (\(remembered.map { $0.displayName } ?? "Settings Default"))",
+                    systemImage: "arrow.triangle.pull"
+                )
+            }
+            Menu {
+                Toggle(isOn: Binding(
+                    get: { remembered == nil },
+                    set: { _ in startCreatePR(project: project, model: nil, remember: true) }
+                )) {
+                    Text("Settings Default (\(appState.summarizationProvider.displayNameText))")
+                }
+                ForEach(appState.pullRequestModelSections(), id: \.id) { section in
+                    Section(section.title) {
+                        ForEach(section.models, id: \.key) { model in
+                            Toggle(isOn: Binding(
+                                get: { remembered?.key == model.key },
+                                set: { _ in startCreatePR(project: project, model: model, remember: true) }
+                            )) {
+                                Text(model.displayName)
+                            }
+                        }
+                    }
+                }
+            } label: {
+                Label("Create with Model", systemImage: "cpu")
+            }
         } label: {
             HStack(spacing: 4) {
                 if inFlight {
@@ -102,13 +134,20 @@ struct BriefingPRStatusView: View {
                 Text(inFlight ? "Creating…" : "Create PR")
                     .font(.system(size: 10.5, weight: .semibold))
                     .lineLimit(1)
+                if !inFlight {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 8, weight: .bold))
+                }
             }
             .foregroundStyle(.white)
             .padding(.horizontal, 8)
             .padding(.vertical, 2)
             .background(Capsule(style: .continuous).fill(ClaudeTheme.accent))
         }
+        .menuStyle(.button)
         .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
         .disabled(inFlight)
         .help("Push the branch and open a pull request from this briefing")
     }
@@ -124,8 +163,12 @@ struct BriefingPRStatusView: View {
         return nil
     }
 
-    private func startCreatePR(project: Project) {
+    /// Create the PR. With `remember`, `model` (nil = settings default) is saved
+    /// as the pick for next time and used for this PR; otherwise the remembered
+    /// model is used.
+    private func startCreatePR(project: Project, model: AgentModel? = nil, remember: Bool = false) {
         guard !inFlight else { return }
+        if remember { appState.rememberPullRequestModel(model) }
         inFlight = true
         Task { @MainActor in
             defer { inFlight = false }

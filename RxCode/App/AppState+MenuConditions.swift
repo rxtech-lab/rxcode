@@ -25,7 +25,7 @@ extension AppState {
     ) -> Bool {
         guard record.conditionTypeValue == .swiftScript,
               let script = record.conditionScript, !script.isEmpty else {
-            menuConditionLogger.debug("[ContextMenuCondition] shouldShow[\(record.title, privacy: .public)]: conditionType=\(record.conditionType, privacy: .public) scriptEmpty=\((record.conditionScript ?? "").isEmpty) -> show=true (no condition)")
+            // No log here: this runs on every render of every row's menu.
             return true
         }
 
@@ -81,12 +81,13 @@ extension AppState {
     }
 
     /// Generate a condition script from a natural-language requirement using the
-    /// app's default model (falling back to the Claude default when the configured
-    /// default provider isn't Claude Code).
+    /// general AI model (Settings → Message).
     func generateMenuConditionScript(requirement: String, project: Project?) async -> String? {
-        let selection = defaultModelSelection(for: project)
-        let model = selection.provider == .claudeCode ? selection.model : "default"
-        return await claude.generateConditionScript(requirement: requirement, model: model)
+        let prompt = ClaudeService.conditionScriptPrompt(requirement: requirement)
+        guard let raw = await runTaskAgentCompletion(prompt: prompt, projectId: project?.id, verbatim: true) else {
+            return nil
+        }
+        return ClaudeService.extractGeneratedSwift(from: raw)
     }
 
     // MARK: - Helpers

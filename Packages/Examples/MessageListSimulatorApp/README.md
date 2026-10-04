@@ -2,6 +2,9 @@
 
 Small iOS host app for manually testing `MessageList` in Simulator.
 
+`MessageList` now ships in RxAgentSDK's `AgentMessageListUI` module, so this
+app links the SDK rather than a local package.
+
 Open:
 
 ```bash
@@ -16,6 +19,6 @@ Command-line build example:
 xcodebuild build \
   -project Packages/Examples/MessageListSimulatorApp/MessageListSimulatorApp.xcodeproj \
   -scheme MessageListSimulatorApp \
-  -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.1'
+  -destination 'platform=iOS Simulator,name=iPhone 16,OS=26.0'
 ```
 

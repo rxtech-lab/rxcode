@@ -69,11 +69,6 @@ actor ACPService {
     /// Reference to the permission server for bridging `session/request_permission`.
     weak var permissionServer: PermissionServer?
 
-    /// Cached PATH read from the user's interactive login shell, so spawned
-    /// `npx`/`uvx`/binary agents can locate `node` and friends when the host
-    /// app was launched from Finder with the minimal GUI PATH.
-    var cachedShellPath: String?
-
     init() {}
 
     func setPermissionServer(_ server: PermissionServer) {
@@ -248,6 +243,10 @@ enum ACPError: LocalizedError {
     case agentError(code: Int, message: String)
     case processExited(code: Int32)
     case probeTimeout(seconds: Int)
+    case authRequired(clientName: String)
+
+    /// JSON-RPC error code ACP agents return when a request needs sign-in.
+    static let authRequiredCode = -32000
 
     var errorDescription: String? {
         switch self {
@@ -256,6 +255,7 @@ enum ACPError: LocalizedError {
         case .agentError(let code, let msg): return "ACP agent error \(code): \(msg)"
         case .processExited(let code): return "ACP agent exited (code \(code))"
         case .probeTimeout(let s): return "ACP agent did not respond within \(s)s"
+        case .authRequired(let name): return "\(name) requires sign-in. Open Settings → ACP Clients and choose Manage → Sign In…"
         }
     }
 }

@@ -54,7 +54,10 @@ struct ProjectTreeView: View {
         .task(id: gitDirtyRefreshKey) {
             await appState.refreshProjectGitDirty()
         }
-        .onChange(of: appState.isStreaming(in: windowState)) { old, new in
+        // `isStreamingActivity`, not `isStreaming(in:)`: the latter reads
+        // `sessionStates`, which re-rendered this whole tree (and every row's
+        // eagerly built context menus) on every stream event.
+        .onChange(of: appState.isStreamingActivity(in: windowState)) { old, new in
             if old && !new {
                 Task { await appState.refreshProjectGitDirty() }
             }
@@ -194,33 +197,85 @@ struct ProjectTreeView: View {
                     .padding(.horizontal, 12)
                     .padding(.bottom, 2)
 
+                GeneralRouteRow(route: .tasks, help: "Open the project task board")
+
+                GeneralRouteRow(route: .briefing, help: "Open project branch briefing")
+                    .popoverTip(RxCodeTips.BriefingTip(), arrowEdge: .trailing)
+
+                GeneralRouteRow(route: .chat, help: "Chat with any agent")
+
+                GeneralRouteRow(route: .scheduled, help: "Open tasks that run on a cron schedule")
+            }
+        }
+
+        /// One "General" nav row. Both entries render identically; only the
+        /// route differs, so the styling lives in one place.
+        private struct GeneralRouteRow: View {
+            @Environment(AppState.self) private var appState
+            @Environment(WindowState.self) private var windowState
+            @Environment(\.openWindow) private var openWindow
+            let route: GeneralRoute
+            let help: String
+
+            private var isSelected: Bool { windowState.generalRoute == route }
+
+            var body: some View {
                 Button {
-                    windowState.showingBriefing = true
+                    if route == .chat {
+                        appState.openGlobalChat(in: windowState)
+                    } else {
+                        windowState.generalRoute = route
+                    }
                 } label: {
                     HStack(spacing: 8) {
-                        Image(systemName: "text.page")
+                        Image(systemName: route.systemImage)
                             .font(.system(size: ClaudeTheme.size(12), weight: .medium))
                             .frame(width: 18, height: 18)
 
-                        Text("Briefing")
+                        Text(route.displayName)
                             .font(.system(size: ClaudeTheme.size(13), weight: .medium))
                             .lineLimit(1)
 
                         Spacer(minLength: 4)
                     }
-                    .foregroundStyle(windowState.showingBriefing ? ClaudeTheme.accent : ClaudeTheme.textSecondary)
+                    .foregroundStyle(isSelected ? ClaudeTheme.accent : ClaudeTheme.textSecondary)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 7)
                     .background(
                         RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
-                            .fill(windowState.showingBriefing ? ClaudeTheme.accent.opacity(0.10) : Color.clear)
+                            .fill(isSelected ? ClaudeTheme.accent.opacity(0.10) : Color.clear)
                     )
                     .padding(.horizontal, 8)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help("Open project branch briefing")
-                .popoverTip(RxCodeTips.BriefingTip(), arrowEdge: .trailing)
+                .help(help)
+                .accessibilityIdentifier("general-route-\(route.rawValue)")
+                .contextMenu {
+                    if route == .chat {
+                        Button {
+                            openWindow(
+                                id: "chat-window",
+                                value: ChatWindowValue(instanceId: UUID(), workspaceID: appState.activeWorkspace.id)
+                            )
+                        } label: {
+                            Label("Chat in New Window", systemImage: "macwindow.badge.plus")
+                        }
+                    } else {
+                        Button {
+                            openWindow(
+                                id: "route-window",
+                                value: GeneralRouteWindowValue(
+                                    route: route,
+                                    instanceId: UUID(),
+                                    workspaceID: appState.activeWorkspace.id
+                                )
+                            )
+                        } label: {
+                            Label("Open in New Window", systemImage: "macwindow.badge.plus")
+                        }
+                    }
+                }
             }
         }
     }
@@ -297,7 +352,7 @@ struct ProjectTreeView: View {
                                 }
                             }
                         },
-                        hookMenuItems: appState.projectContextMenuItems(for: project)
+                        hookMenuItems: { appState.projectContextMenuItems(for: project) }
                     )
 
                     if expandedProjectIds.contains(project.id) {
@@ -345,7 +400,9 @@ private struct ProjectTreeRow: View {
     let onNewChat: () -> Void
     let onCodeReview: () -> Void
     let onCommitAll: () -> Void
-    let hookMenuItems: [MenuItem]
+    /// Deferred behind a closure so the hooks only run when the menu is opened,
+    /// rather than once per project row on every view-graph update.
+    let hookMenuItems: () -> [MenuItem]
 
     @State private var isHovered = false
     @State private var showLocationPopover = false
@@ -491,11 +548,14 @@ private struct ProjectTreeRow: View {
         // Code review, commit, create PR, and the autopilot setup actions now
         // come from hooks as serializable MenuItems (gated inside the hooks), so
         // the desktop and mobile render the same set. Taps dispatch locally here.
-        if !hookMenuItems.isEmpty {
+        let items = hookMenuItems()
+        if !items.isEmpty {
             Divider()
-            MenuItemsView(hookMenuItems)
+            MenuItemsView(items)
                 .menuActionHandler(appState.desktopMenuActionHandler(navigatingIn: windowState))
         }
+        Divider()
+        ProjectCloudMenuItems(project: project)
         Divider()
         Button { onRename() } label: {
             Label("Rename Project", systemImage: "pencil")
@@ -541,6 +601,9 @@ private struct ProjectChatsList: View {
     let onDeleteSession: (ChatSession) -> Void
 
     @State private var showsAllThreads = false
+    @State private var taskSheet: TaskBoardSheet?
+    @State private var creatingTaskSessionIds: Set<String> = []
+    @State private var showTaskCreationError = false
     /// Parent thread ids whose nested review children are currently expanded.
     @State private var expandedReviewParentIds: Set<String> = []
 
@@ -624,6 +687,16 @@ private struct ProjectChatsList: View {
         .clipped()
         .animation(.easeInOut(duration: 0.18), value: showsAllThreads)
         .animation(.easeInOut(duration: 0.18), value: expandedReviewParentIds)
+        .sheet(item: $taskSheet) { payload in
+            TaskFormSheet(payload: payload, defaultProjectId: project.id)
+                .environment(appState)
+                .environment(windowState)
+        }
+        .alert("Could Not Create Task", isPresented: $showTaskCreationError) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("The chat has no readable messages, or the AI could not generate a task description. Try again later.")
+        }
     }
 
     /// A top-level thread row plus, when expanded, its nested review children.
@@ -743,13 +816,33 @@ private struct ProjectChatsList: View {
         let session = summary.makeSession()
         let status = appState.chatStatus(forSessionId: sessionId, in: windowState)
         let progress = appState.todoProgress(forSessionId: sessionId)
+        let linkedTask = appState.linkedTask(forSessionId: sessionId, projectId: summary.projectId)
 
         return ProjectChatRow(
             summary: summary,
-            isCurrent: !windowState.showingBriefing && windowState.currentSessionId == sessionId,
+            isCurrent: windowState.generalRoute == nil && windowState.currentSessionId == sessionId,
             status: status,
             todoProgress: progress,
+            linkedTask: linkedTask,
+            isCreatingTask: creatingTaskSessionIds.contains(sessionId),
             onSelect: { onSelectSession(sessionId) },
+            onOpenTask: {
+                if let linkedTask { taskSheet = .task(linkedTask) }
+            },
+            onCreateTask: {
+                guard creatingTaskSessionIds.insert(sessionId).inserted else { return }
+                Task {
+                    let created = await appState.createTaskFromChat(summary)
+                    creatingTaskSessionIds.remove(sessionId)
+                    if let created {
+                        taskSheet = .task(created)
+                    } else if let existing = appState.linkedTask(forSessionId: sessionId, projectId: summary.projectId) {
+                        taskSheet = .task(existing)
+                    } else {
+                        showTaskCreationError = true
+                    }
+                }
+            },
             onRename: { onRenameSession(session) },
             onTogglePin: {
                 Task { await appState.togglePinSession(session) }
@@ -780,7 +873,7 @@ private struct ProjectChatsList: View {
                     }
                 }
             },
-            hookMenuItems: appState.threadContextMenuItems(for: summary),
+            hookMenuItems: { appState.threadContextMenuItems(for: summary) },
             indentLevel: indentLevel,
             titleOverride: titleOverride,
             showLabelChip: showLabelChip,

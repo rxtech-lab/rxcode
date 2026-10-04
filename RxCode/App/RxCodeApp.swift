@@ -9,10 +9,19 @@ private struct StartNewChatKey: FocusedValueKey {
     typealias Value = () -> Void
 }
 
+private struct ShowWhatsNewKey: FocusedValueKey {
+    typealias Value = () -> Void
+}
+
 extension FocusedValues {
     var startNewChat: (() -> Void)? {
         get { self[StartNewChatKey.self] }
         set { self[StartNewChatKey.self] = newValue }
+    }
+
+    var showWhatsNew: (() -> Void)? {
+        get { self[ShowWhatsNewKey.self] }
+        set { self[ShowWhatsNewKey.self] = newValue }
     }
 }
 
@@ -36,6 +45,26 @@ struct ProjectWindowValue: Codable, Hashable {
     var workspaceID: String?
 }
 
+// MARK: - ChatWindowValue
+
+/// Identifies a detached Chat-tab window. `instanceId` lets the user open
+/// several independent chat windows for the same workspace.
+struct ChatWindowValue: Codable, Hashable {
+    let instanceId: UUID
+    var workspaceID: String?
+}
+
+// MARK: - GeneralRouteWindowValue
+
+/// Identifies a detached General-route window (Projects, Briefing, Scheduled)
+/// opened from the sidebar row's context menu. `instanceId` lets the user open
+/// several independent windows for the same route.
+struct GeneralRouteWindowValue: Codable, Hashable {
+    let route: GeneralRoute
+    let instanceId: UUID
+    var workspaceID: String?
+}
+
 // MARK: - TerminalWindowValue
 
 struct TerminalWindowValue: Codable, Hashable {
@@ -48,11 +77,14 @@ struct TerminalWindowValue: Codable, Hashable {
 struct RxCodeApp: App {
     @State private var workspaceManager = WorkspaceManager()
     @FocusedValue(\.startNewChat) private var startNewChat
+    @FocusedValue(\.showCacheStorage) private var showCacheStorage
     @AppStorage("showMenuBarExtra") private var showMenuBarExtra: Bool = true
     private let updateService = UpdateService.shared
 
     init() {
-        FirebaseBootstrap.configure()
+        if !AppSupport.isTestProcess {
+            FirebaseBootstrap.configure()
+        }
         try? Tips.configure([
             .displayFrequency(.immediate),
             .datastoreLocation(.applicationDefault),
@@ -70,6 +102,7 @@ struct RxCodeApp: App {
                 workspaceID: value.workspaceID
             )
             .focusable(false)
+            .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
         } defaultValue: {
             WorkspaceWindowValue(workspaceID: workspaceManager.frontmostWorkspaceID)
         }
@@ -86,6 +119,8 @@ struct RxCodeApp: App {
                 Button("Check for Updates...") {
                     updateService.checkForUpdates()
                 }
+                Button("Clear Cached Data…") { showCacheStorage?() }
+                    .disabled(showCacheStorage == nil)
             }
             CommandMenu("Theme") {
                 ForEach(AppTheme.allCases) { theme in
@@ -110,6 +145,35 @@ struct RxCodeApp: App {
                     projectId: id
                 )
                 .focusable(false)
+                .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
+            }
+        }
+        .defaultSize(width: 1000, height: 700)
+
+        // Detached chat window — opened from the sidebar Chat row's context menu.
+        WindowGroup(id: "chat-window", for: ChatWindowValue.self) { $value in
+            if let value {
+                ChatWindowRoot(
+                    workspaceManager: workspaceManager,
+                    workspaceID: value.workspaceID ?? workspaceManager.frontmostWorkspaceID
+                )
+                .focusable(false)
+                .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
+            }
+        }
+        .defaultSize(width: 800, height: 700)
+
+        // Detached General-route window — opened from the sidebar Projects,
+        // Briefing, and Scheduled rows' context menus.
+        WindowGroup(id: "route-window", for: GeneralRouteWindowValue.self) { $value in
+            if let value {
+                GeneralRouteWindowRoot(
+                    workspaceManager: workspaceManager,
+                    workspaceID: value.workspaceID ?? workspaceManager.frontmostWorkspaceID,
+                    route: value.route
+                )
+                .focusable(false)
+                .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
             }
         }
         .defaultSize(width: 1000, height: 700)
@@ -117,26 +181,32 @@ struct RxCodeApp: App {
         // Detached terminal window — opened from the toolbar.
         WindowGroup(id: "terminal-window", for: TerminalWindowValue.self) { $value in
             TerminalWindowRoot(path: value?.path ?? "")
+                .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
         }
         .defaultSize(width: 900, height: 600)
 
         Settings {
             SettingsWindowRoot(appState: appState)
+                .environment(workspaceManager)
+                .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
         }
 
         // Standalone Automation windows, opened from the "Automation" menu.
         Window("Autopilot", id: "autopilot-window") {
             AutopilotWindowRoot(appState: appState)
+                .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
         }
         .defaultSize(width: 720, height: 640)
 
         Window("Hooks", id: "hooks-window") {
             HooksWindowRoot(appState: appState)
+                .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
         }
         .defaultSize(width: 760, height: 620)
 
         Window("Custom Context Menus", id: "custom-menus-window") {
             CustomMenusWindowRoot(appState: appState)
+                .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
         }
         .defaultSize(width: 720, height: 620)
 
@@ -150,502 +220,6 @@ struct RxCodeApp: App {
         }
         .menuBarExtraStyle(.window)
     }
-}
-
-// MARK: - Menu Bar Label
-
-private struct MenuBarLabel: View {
-    @Environment(AppState.self) private var appState
-
-    var body: some View {
-        let inProgress = appState.inProgressSessionCount
-        let provider = appState.selectedAgentProvider
-        let usage = provider == .codex ? appState.latestCodexRateLimitUsage : appState.latestRateLimitUsage
-        let fiveHour = usage?.fiveHourPercent
-        let _ = appState.ciStatusRevision
-        let ciFailing = appState.anyCIFailing
-
-        if let image = Self.renderLabelImage(agentText: Self.agentText(for: provider), fiveHour: fiveHour, inProgress: inProgress, ciFailing: ciFailing) {
-            Image(nsImage: image)
-        } else {
-            Image(systemName: "message")
-        }
-    }
-
-    @MainActor
-    private static func renderLabelImage(agentText: String, fiveHour: Double?, inProgress: Int, ciFailing: Bool) -> NSImage? {
-        let content = MenuBarLabelContent(
-            agentText: agentText,
-            fiveHourText: fiveHour.map { "\(formatPercent($0))%" } ?? "—%",
-            statusText: inProgress > 0 ? "\(inProgress)job\(inProgress == 1 ? "" : "s")" : "IDLE",
-            ciFailing: ciFailing
-        )
-        let renderer = ImageRenderer(content: content)
-        renderer.scale = NSScreen.main?.backingScaleFactor ?? 2
-        guard let cgImage = renderer.cgImage else { return nil }
-        let size = NSSize(width: CGFloat(cgImage.width) / renderer.scale,
-                          height: CGFloat(cgImage.height) / renderer.scale)
-        let image = NSImage(cgImage: cgImage, size: size)
-        image.isTemplate = true
-        return image
-    }
-
-    private static func agentText(for provider: AgentProvider) -> String {
-        switch provider {
-        case .claudeCode: return "CC"
-        case .codex: return "CODEX"
-        case .acp: return "ACP"
-        }
-    }
-
-    private static func formatPercent(_ value: Double) -> String {
-        if value > 0 && value < 1 {
-            return String(format: "%.1f", value)
-        }
-        return "\(Int(value.rounded()))"
-    }
-}
-
-private struct MenuBarLabelContent: View {
-    private static let textSize: CGFloat = 9
-
-    let agentText: String
-    let fiveHourText: String
-    let statusText: String
-    let ciFailing: Bool
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 8) {
-            Text(agentText)
-                .font(.system(size: Self.textSize, weight: .bold))
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-                .fixedSize(horizontal: true, vertical: false)
-                .frame(height: 18, alignment: .center)
-
-            VStack(alignment: .leading, spacing: -1) {
-                usageLine
-                Text(statusText)
-                    .font(.system(size: Self.textSize, weight: .semibold))
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-            }
-            .fixedSize(horizontal: true, vertical: false)
-
-            // Template-rendered, so this shows as a monochrome glyph rather than
-            // a red dot — the icon shape signals the CI failure.
-            if ciFailing {
-                Image(systemName: "xmark.octagon.fill")
-                    .font(.system(size: Self.textSize + 1, weight: .bold))
-                    .frame(height: 18, alignment: .center)
-            }
-        }
-        .padding(.vertical, 1)
-        .fixedSize(horizontal: true, vertical: true)
-        .foregroundStyle(.black)
-    }
-
-    private var usageLine: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 4) {
-            Text(fiveHourText)
-                .font(.system(size: Self.textSize, weight: .semibold))
-                .monospacedDigit()
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
-            Text("5h")
-                .font(.system(size: Self.textSize, weight: .medium))
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
-        }
-        .fixedSize(horizontal: true, vertical: false)
-    }
-}
-
-// MARK: - Menu Bar Content
-
-private struct MenuBarContentView: View {
-    @Environment(AppState.self) private var appState
-    @State private var isRefreshing = false
-    @State private var showCreateWorkspaceSheet = false
-    @State private var showManageWorkspaceSheet = false
-
-    private var selectedUsage: RateLimitUsage? {
-        switch appState.selectedAgentProvider {
-        case .claudeCode: return appState.latestRateLimitUsage
-        case .codex: return appState.latestCodexRateLimitUsage
-        case .acp: return nil
-        }
-    }
-
-    private var secondaryLimitLabel: String {
-        switch appState.selectedAgentProvider {
-        case .claudeCode: return "7-day limit"
-        case .codex: return "7-day limit"
-        case .acp: return "Usage"
-        }
-    }
-
-    private var secondaryLimitPercent: Double? {
-        switch appState.selectedAgentProvider {
-        case .claudeCode: return selectedUsage?.sevenDayPercent
-        case .codex: return selectedUsage?.sevenDayPercent
-        case .acp: return nil
-        }
-    }
-
-    private var secondaryLimitResetsAt: Date? {
-        switch appState.selectedAgentProvider {
-        case .claudeCode: return selectedUsage?.sevenDayResetsAt
-        case .codex: return selectedUsage?.sevenDayResetsAt
-        case .acp: return nil
-        }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            WorkspaceSwitcher(
-                showingCreateSheet: $showCreateWorkspaceSheet,
-                showingManageSheet: $showManageWorkspaceSheet
-            )
-            header
-            agentPicker
-
-            VStack(alignment: .leading, spacing: 12) {
-                MenuBarUsageBar(
-                    label: "5-hour limit",
-                    percent: selectedUsage?.fiveHourPercent,
-                    resetsAt: selectedUsage?.fiveHourResetsAt,
-                    emptyText: emptyUsageText
-                )
-
-                MenuBarUsageBar(
-                    label: secondaryLimitLabel,
-                    percent: secondaryLimitPercent,
-                    resetsAt: secondaryLimitResetsAt,
-                    emptyText: emptyUsageText
-                )
-            }
-
-            Divider()
-
-            chatActivitySection
-
-            if !ciStatusRows.isEmpty {
-                Divider()
-                ciStatusSection
-            }
-
-            Divider()
-
-            footer
-        }
-        .padding(14)
-        .frame(width: 280)
-        .sheet(isPresented: $showCreateWorkspaceSheet) {
-            CreateWorkspaceSheet()
-                .environment(appState)
-        }
-        .sheet(isPresented: $showManageWorkspaceSheet) {
-            ManageWorkspacesSheet()
-                .environment(appState)
-        }
-        .task {
-            await appState.refreshSelectedAgentRateLimitUsage()
-        }
-        .onChange(of: appState.selectedAgentProvider) {
-            Task { await appState.refreshSelectedAgentRateLimitUsage() }
-        }
-    }
-
-    private var header: some View {
-        HStack {
-            Text("\(appState.selectedAgentProvider.displayNameText) Usage")
-                .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
-
-            Spacer()
-
-            Button {
-                guard !isRefreshing else { return }
-                isRefreshing = true
-                Task {
-                    await appState.refreshSelectedAgentRateLimitUsage(forceRefresh: true)
-                    isRefreshing = false
-                }
-            } label: {
-                Image(systemName: "arrow.clockwise")
-                    .font(.system(size: ClaudeTheme.size(11), weight: .medium))
-                    .symbolEffect(.rotate, options: .repeat(.continuous), isActive: isRefreshing)
-            }
-            .buttonStyle(.borderless)
-            .help("Refresh usage")
-        }
-    }
-
-    private var chatActivitySection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: "circle.dotted")
-                    .font(.system(size: ClaudeTheme.size(11)))
-                    .foregroundStyle(ClaudeTheme.accent)
-                Text("In progress")
-                    .font(.system(size: ClaudeTheme.size(12)))
-                Spacer()
-                Text("\(appState.inProgressSessionCount)")
-                    .font(.system(size: ClaudeTheme.size(12), weight: .medium))
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-            }
-
-            HStack(spacing: 8) {
-                Image(systemName: "checkmark.circle")
-                    .font(.system(size: ClaudeTheme.size(11)))
-                    .foregroundStyle(.secondary)
-                Text("Awaiting check")
-                    .font(.system(size: ClaudeTheme.size(12)))
-                Spacer()
-                Text("\(appState.uncheckedFinishedSessionCount)")
-                    .font(.system(size: ClaudeTheme.size(12), weight: .medium))
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private var agentPicker: some View {
-        Picker("Client", selection: Binding(
-            get: { appState.selectedAgentProvider },
-            set: { provider in
-                appState.setDefaultAgentProvider(provider)
-                Task { await appState.refreshSelectedAgentRateLimitUsage() }
-            }
-        )) {
-            ForEach(AgentProvider.allCases, id: \.self) { provider in
-                Text(provider.displayName)
-                    .tag(provider)
-            }
-        }
-        .pickerStyle(.segmented)
-    }
-
-    private var emptyUsageText: String {
-        switch appState.selectedAgentProvider {
-        case .claudeCode: return "Sign in to Claude Code to see usage"
-        case .codex: return "Sign in to Codex to see usage"
-        case .acp: return "Usage tracking not supported by ACP"
-        }
-    }
-
-    private var ciStatusRows: [(project: Project, status: ProjectCIStatus)] {
-        _ = appState.ciStatusRevision
-        return appState.ciStatusList()
-    }
-
-    private var ciStatusSection: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("CI Status")
-                .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
-                .padding(.bottom, 4)
-
-            ForEach(ciStatusRows, id: \.project.id) { row in
-                CIStatusRow(
-                    row: row,
-                    destinationURL: ciDestinationURL(for: row.status),
-                    help: ciRowHelp(for: row.status)
-                )
-            }
-        }
-    }
-
-    /// Where a CI row should navigate when clicked: the pull request if one is
-    /// associated with the branch, otherwise the failing workflow run on GitHub.
-    private func ciDestinationURL(for status: ProjectCIStatus) -> URL? {
-        if let prNumber = status.prNumber {
-            return URL(string: "https://github.com/\(status.owner)/\(status.repo)/pull/\(prNumber)")
-        }
-        if let urlString = status.failing.first?.htmlUrl {
-            return URL(string: urlString)
-        }
-        return nil
-    }
-
-    private func ciRowHelp(for status: ProjectCIStatus) -> String {
-        if let prNumber = status.prNumber {
-            return "Open PR #\(prNumber) on GitHub"
-        }
-        return "Open failing run on GitHub"
-    }
-
-    private var footer: some View {
-        HStack {
-            Button("Open RxCode") {
-                NSApp.activate(ignoringOtherApps: true)
-            }
-            .buttonStyle(.borderless)
-            .font(.system(size: ClaudeTheme.size(12)))
-
-            Spacer()
-
-            Button("Quit") {
-                NSApp.terminate(nil)
-            }
-            .buttonStyle(.borderless)
-            .keyboardShortcut("q")
-            .font(.system(size: ClaudeTheme.size(12)))
-            .foregroundStyle(.secondary)
-        }
-    }
-}
-
-/// A single CI-status row in the menubar popover. Clickable rows (those with a
-/// `destinationURL`) draw a menu-style highlight on hover — the `.window`
-/// MenuBarExtra style gives no automatic hover effect, so we track it manually.
-private struct CIStatusRow: View {
-    let row: (project: Project, status: ProjectCIStatus)
-    let destinationURL: URL?
-    let help: String
-
-    @State private var isHovering = false
-
-    private var isLink: Bool { destinationURL != nil }
-
-    var body: some View {
-        content
-            .contentShape(Rectangle())
-            .padding(.vertical, 4)
-            .padding(.horizontal, 6)
-            .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(isHovering && isLink ? Color.primary.opacity(0.1) : .clear)
-            )
-            // Extend the highlight past the row's text inset, like a native menu item.
-            .padding(.horizontal, -6)
-            .onHover { hovering in
-                isHovering = hovering
-                guard isLink else { return }
-                if hovering {
-                    NSCursor.pointingHand.push()
-                } else {
-                    NSCursor.pop()
-                }
-            }
-            .onTapGesture {
-                if let url = destinationURL { NSWorkspace.shared.open(url) }
-            }
-            .help(isLink ? help : "")
-    }
-
-    private var content: some View {
-        HStack(spacing: 8) {
-            Image(systemName: row.status.overallState.sfSymbolName)
-                .font(.system(size: ClaudeTheme.size(11)))
-                .foregroundStyle(row.status.overallState.displayColor)
-            VStack(alignment: .leading, spacing: 0) {
-                Text(row.project.name)
-                    .font(.system(size: ClaudeTheme.size(12)))
-                    .foregroundStyle(ClaudeTheme.textPrimary)
-                    .lineLimit(1)
-                if let branch = row.status.branch, !branch.isEmpty {
-                    Text(branch)
-                        .font(.system(size: ClaudeTheme.size(10)))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            }
-            Spacer(minLength: 4)
-            if isLink {
-                Image(systemName: "arrow.up.right.square")
-                    .font(.system(size: ClaudeTheme.size(11)))
-                    .foregroundStyle(.secondary)
-            } else {
-                Text(row.status.overallState.label)
-                    .font(.system(size: ClaudeTheme.size(11)))
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-}
-
-// MARK: - Usage Bar
-
-private struct MenuBarUsageBar: View {
-    let label: String
-    let percent: Double?
-    let resetsAt: Date?
-    let emptyText: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(label)
-                    .font(.system(size: ClaudeTheme.size(13), weight: .medium))
-
-                Spacer()
-
-                if let percent {
-                    Text("\(formatPercent(percent))%")
-                        .font(.system(size: ClaudeTheme.size(12), weight: .medium))
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text("—")
-                        .font(.system(size: ClaudeTheme.size(12)))
-                        .foregroundStyle(.tertiary)
-                }
-            }
-
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(ClaudeTheme.surfaceSecondary)
-                        .frame(height: 6)
-
-                    if let percent {
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(barColor(for: percent))
-                            .frame(width: max(0, min(1, percent / 100)) * geo.size.width, height: 6)
-                    }
-                }
-            }
-            .frame(height: 6)
-
-            if let resetsAt, percent != nil {
-                Text("Resets \(Self.resetFormatter.localizedString(for: resetsAt, relativeTo: Date()))")
-                    .font(.system(size: ClaudeTheme.size(10)))
-                    .foregroundStyle(.tertiary)
-            } else if percent == nil {
-                Text(emptyText)
-                    .font(.system(size: ClaudeTheme.size(10)))
-                    .foregroundStyle(.tertiary)
-            }
-        }
-    }
-
-    private func formatPercent(_ value: Double) -> String {
-        if value > 0 && value < 1 {
-            return String(format: "%.1f", value)
-        }
-        return "\(Int(value.rounded()))"
-    }
-
-    private func barColor(for percent: Double) -> Color {
-        switch percent {
-        case ..<60: return ClaudeTheme.accent
-        case ..<85: return .orange
-        default: return .red
-        }
-    }
-
-    private static let resetFormatter: RelativeDateTimeFormatter = {
-        let f = RelativeDateTimeFormatter()
-        f.locale = .current
-        f.unitsStyle = .abbreviated
-        return f
-    }()
 }
 
 // MARK: - Main Window Root
@@ -667,25 +241,7 @@ struct MainWindowRoot: View {
                     .environment(workspaceManager)
                     .environment(windowState)
                     .environment(chatBridge)
-                    .environment(\.openURL, OpenURLAction { url in
-                        if let docs = DocsDeepLink.parse(url), docs.action == .setup {
-                            appState.docsSetupRequest = DocsSetupRequest(repoFullName: docs.repoFullName)
-                            return .handled
-                        }
-                        if let release = ReleaseDeepLink.parse(url), release.action == .setup {
-                            appState.releaseSetupRequest = ReleaseSetupRequest(repoFullName: release.repoFullName)
-                            return .handled
-                        }
-                        if let request = SecretsDeepLink.parse(url) {
-                            appState.secretsSetupRequest = request
-                            return .handled
-                        }
-                        if let request = CIUpdateDeepLink.parse(url) {
-                            appState.ciSetupRequest = request
-                            return .handled
-                        }
-                        return openMarkdownLink(url, in: windowState)
-                    })
+                    .environment(\.openURL, workspaceOpenURLAction(appState: appState, windowState: windowState))
                     .transition(.opacity)
             } else {
                 LoadingView()
@@ -712,11 +268,38 @@ struct MainWindowRoot: View {
             await appState.initialize()
             appState.setupChatBridge(chatBridge, for: windowState)
             await appState.initializeWindow(windowState)
-            await NotificationService.shared.requestAuthorizationIfNeeded()
+            if !AppSupport.isUnitTesting {
+                await NotificationService.shared.requestAuthorizationIfNeeded()
+            }
             NotificationService.shared.onNotificationTapped = { projectId, sessionId in
                 appState.handleNotificationTap(projectId: projectId, sessionId: sessionId, mainWindow: windowState)
             }
         }
+    }
+}
+
+/// `openURL` handler shared by full workspace windows: routes RxCode setup
+/// deep links to the matching sheet and everything else to `openMarkdownLink`.
+@MainActor
+func workspaceOpenURLAction(appState: AppState, windowState: WindowState) -> OpenURLAction {
+    OpenURLAction { url in
+        if let docs = DocsDeepLink.parse(url), docs.action == .setup {
+            appState.docsSetupRequest = DocsSetupRequest(repoFullName: docs.repoFullName)
+            return .handled
+        }
+        if let release = ReleaseDeepLink.parse(url), release.action == .setup {
+            appState.releaseSetupRequest = ReleaseSetupRequest(repoFullName: release.repoFullName)
+            return .handled
+        }
+        if let request = SecretsDeepLink.parse(url) {
+            appState.secretsSetupRequest = request
+            return .handled
+        }
+        if let request = CIUpdateDeepLink.parse(url) {
+            appState.ciSetupRequest = request
+            return .handled
+        }
+        return openMarkdownLink(url, in: windowState)
     }
 }
 
@@ -828,25 +411,7 @@ struct ProjectWindowRoot: View {
                     .environment(workspaceManager)
                     .environment(windowState)
                     .environment(chatBridge)
-                    .environment(\.openURL, OpenURLAction { url in
-                        if let docs = DocsDeepLink.parse(url), docs.action == .setup {
-                            appState.docsSetupRequest = DocsSetupRequest(repoFullName: docs.repoFullName)
-                            return .handled
-                        }
-                        if let release = ReleaseDeepLink.parse(url), release.action == .setup {
-                            appState.releaseSetupRequest = ReleaseSetupRequest(repoFullName: release.repoFullName)
-                            return .handled
-                        }
-                        if let request = SecretsDeepLink.parse(url) {
-                            appState.secretsSetupRequest = request
-                            return .handled
-                        }
-                        if let request = CIUpdateDeepLink.parse(url) {
-                            appState.ciSetupRequest = request
-                            return .handled
-                        }
-                        return openMarkdownLink(url, in: windowState)
-                    })
+                    .environment(\.openURL, workspaceOpenURLAction(appState: appState, windowState: windowState))
                     .transition(.opacity)
             } else {
                 LoadingView()
@@ -884,6 +449,71 @@ struct ProjectWindowRoot: View {
             windowState.currentSessionId = sessionId
             appState.pendingNotificationSession.removeValue(forKey: projectId)
         }
+    }
+}
+
+// MARK: - Chat Window Root
+
+/// Standalone window hosting only the global Chat tab, with its own
+/// `WindowState` so it chats independently of the main window.
+struct ChatWindowRoot: View {
+    let workspaceManager: WorkspaceManager
+    let workspaceID: String
+    @Environment(\.controlActiveState) private var controlActiveState
+    @State private var windowState = WindowState()
+    @State private var chatBridge = ChatBridge()
+
+    private var appState: AppState { workspaceManager.appState(for: workspaceID) }
+
+    var body: some View {
+        ZStack {
+            if appState.isInitialized, windowState.isInitialized {
+                GlobalChatView()
+                    .hookUI()
+                    .environment(appState)
+                    .environment(workspaceManager)
+                    .environment(windowState)
+                    .environment(chatBridge)
+                    .environment(\.openURL, OpenURLAction { url in
+                        openMarkdownLink(url, in: windowState)
+                    })
+                    .navigationTitle(navigationTitleText)
+                    .transition(.opacity)
+            } else {
+                // Plain spinner rather than `LoadingView`: the splash hides the
+                // window's title bar and traffic lights, which this short-lived
+                // loading phase could leave hidden.
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(ClaudeTheme.background)
+                    .transition(.opacity)
+            }
+        }
+        .frame(minWidth: 480, minHeight: 400)
+        .animation(.easeInOut(duration: 0.3), value: windowState.isInitialized)
+        .onAppear { workspaceManager.markFrontmost(workspaceID) }
+        .onChange(of: controlActiveState) { _, state in
+            if state == .key { workspaceManager.markFrontmost(workspaceID) }
+        }
+        .task {
+            // The main window may still be booting AppState (e.g. on state restoration).
+            while !appState.isInitialized {
+                try? await Task.sleep(nanoseconds: 50000000)
+            }
+            appState.setupChatBridge(chatBridge, for: windowState)
+            await appState.initializeWindow(windowState)
+            appState.openGlobalChat(in: windowState)
+        }
+    }
+
+    private var navigationTitleText: String {
+        if let id = windowState.currentSessionId,
+           let title = appState.allSessionSummaries.first(where: { $0.id == id })?.title,
+           !title.isEmpty {
+            return title
+        }
+        return String(localized: "Chat")
     }
 }
 

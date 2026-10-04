@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import RxCodeCore
 import os
@@ -15,8 +16,14 @@ extension ClaudeCodeServer {
     ///   1. The user's interactive login shell PATH (captures nvm/asdf/.zshrc init)
     ///   2. Well-known tool directories (Homebrew, npm-global, nvm latest)
     ///   3. The GUI process's existing PATH as a final fallback
+    /// The merge is cached against the login-shell PATH it was built from, so a
+    /// re-probed PATH (the resolver refreshes in the background) rebuilds it
+    /// instead of pinning the stale answer for the process.
     func resolvedShellPath() async -> String {
-        if let cached = cachedShellPath { return cached }
+        let loginShellPath = await readUserShellPath()
+        if let cached = cachedShellPath, cachedShellPathSource == loginShellPath {
+            return cached
+        }
 
         var paths: [String] = []
         var seen = Set<String>()
@@ -26,8 +33,8 @@ extension ClaudeCodeServer {
             paths.append(trimmed)
         }
 
-        if let shellPath = await readUserShellPath() {
-            for component in shellPath.split(separator: ":") { add(String(component)) }
+        if let loginShellPath {
+            for component in loginShellPath.split(separator: ":") { add(String(component)) }
         }
 
         let home = FileManager.default.homeDirectoryForCurrentUser.path
@@ -45,30 +52,18 @@ extension ClaudeCodeServer {
             for component in existing.split(separator: ":") { add(String(component)) }
         }
 
-        // Double-check after awaits: another reentrant caller may have populated it.
-        if let cached = cachedShellPath { return cached }
-
         let combined = paths.joined(separator: ":")
         cachedShellPath = combined
+        cachedShellPathSource = loginShellPath
         logger.info("Resolved shell PATH for subprocess (entries=\(paths.count))")
         return combined
     }
 
-    /// Spawn the user's login shell once to read its `$PATH`.
-    /// Uses `-ilc` so `.zshrc` (and the nvm/asdf init it typically sources) runs.
+    /// The user's login-shell `$PATH`, via the process-wide resolver so the
+    /// `/bin/zsh -ilc` round trip is paid once per machine rather than once per
+    /// backend per launch.
     func readUserShellPath() async -> String? {
-        do {
-            let output = try await runShellCommand(
-                "/bin/zsh",
-                arguments: ["-ilc", "print -rn -- $PATH"],
-                injectPath: false
-            )
-            let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty ? nil : trimmed
-        } catch {
-            logger.warning("Failed to read user shell PATH: \(error.localizedDescription)")
-            return nil
-        }
+        await ShellPathResolver.shared.current()
     }
 
     /// Locate the bin directory of the most recent nvm-installed Node, if any.
@@ -105,6 +100,7 @@ extension ClaudeCodeServer {
     static var candidatePaths: [String] {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         return [
+            AgentRuntimeInstaller.executablePath(for: .claude),
             "/usr/local/bin/claude",
             "/opt/homebrew/bin/claude",
             "\(home)/.local/bin/claude",
@@ -194,6 +190,122 @@ extension ClaudeCodeServer {
 
         logger.info("Claude CLI version: \(version, privacy: .public)")
         return version
+    }
+
+    /// Whether `claude auth status` reports a logged-in account.
+    func isSignedIn() async -> Bool {
+        guard let binary = await findClaudeBinary(),
+              let output = try? await runShellCommand(binary, arguments: ["auth", "status"]),
+              let data = output.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return false }
+        return object["loggedIn"] as? Bool ?? false
+    }
+
+    /// Try sign-in without a terminal. A prompt or a stalled login lets the
+    /// caller retry in Terminal, where the user can answer interactively.
+    func signIn() async throws {
+        guard let binary = await findClaudeBinary() else { throw ClaudeError.binaryNotFound }
+        try await runLoginProcess(binary: binary)
+    }
+
+    func signOut() async throws {
+        guard let binary = await findClaudeBinary() else { throw ClaudeError.binaryNotFound }
+        _ = try await runShellCommand(binary, arguments: ["auth", "logout"])
+    }
+
+    func runLoginProcess(
+        binary: String,
+        timeout: Duration = .seconds(90),
+        environment: [String: String]? = nil
+    ) async throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: binary)
+        process.arguments = ["auth", "login"]
+        if let environment {
+            process.environment = environment
+        } else {
+            process.environment = await resolvedEnvironment()
+        }
+        process.standardInput = FileHandle.nullDevice
+        let output = Pipe()
+        process.standardOutput = output
+        process.standardError = output
+        enum LoginEvent: Sendable {
+            case output(String)
+            case exited
+            case timedOut
+        }
+        let (events, continuation) = AsyncStream<LoginEvent>.makeStream()
+        output.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            if data.isEmpty {
+                handle.readabilityHandler = nil
+            } else {
+                continuation.yield(.output(String(decoding: data, as: UTF8.self)))
+            }
+        }
+        process.terminationHandler = { _ in
+            continuation.yield(.exited)
+        }
+        do {
+            try process.run()
+        } catch {
+            output.fileHandleForReading.readabilityHandler = nil
+            continuation.finish()
+            throw error
+        }
+        output.fileHandleForWriting.closeFile()
+        let timer = Task {
+            try? await Task.sleep(for: timeout)
+            if !Task.isCancelled { continuation.yield(.timedOut) }
+        }
+        defer {
+            timer.cancel()
+            output.fileHandleForReading.readabilityHandler = nil
+            continuation.finish()
+        }
+
+        var recentOutput = ""
+        for await event in events {
+            switch event {
+            case .output(let text):
+                recentOutput = String((recentOutput + text).suffix(4096))
+                if Self.requiresInteractiveLogin(recentOutput) {
+                    if process.isRunning { process.terminate() }
+                    throw ClaudeError.interactiveLoginRequired
+                }
+            case .timedOut:
+                if process.isRunning { process.terminate() }
+                throw ClaudeError.interactiveLoginRequired
+            case .exited:
+                guard process.terminationStatus == 0 else {
+                    throw ClaudeError.spawnFailed("Sign-in exited with status \(process.terminationStatus).")
+                }
+                return
+            }
+        }
+    }
+
+    static func requiresInteractiveLogin(_ output: String) -> Bool {
+        let text = output.lowercased()
+        return ((text.contains("code") || text.contains("token")) &&
+                (text.contains("paste") || text.contains("enter") || text.contains("type"))) ||
+            text.contains("press enter") || text.contains("press return") ||
+            text.contains("use arrow keys")
+    }
+
+    @MainActor
+    static func openLoginInTerminal(binary: String) throws {
+        let quoted = "'" + binary.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        let script = "#!/bin/zsh\n\(quoted) auth login\n"
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RxCode-Claude-Login-\(UUID().uuidString).command")
+        try script.write(to: url, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: url.path)
+        guard NSWorkspace.shared.open(url) else {
+            throw ClaudeError.spawnFailed("Could not open Terminal.")
+        }
     }
 
     // MARK: - Shell Command Runner

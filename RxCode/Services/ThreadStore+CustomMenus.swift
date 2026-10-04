@@ -22,6 +22,13 @@ extension ThreadStore {
     func customMenuItems(projectId: UUID?, surface: CustomMenuItemRecord.Surface) -> [CustomMenuItemRecord] {
         // Surface membership lives in the computed `surfaces` list, so it can't be
         // expressed in a #Predicate — fetch the enabled rows and filter in Swift.
+        enabledCustomMenuItems().filter {
+            ($0.projectId == nil || $0.projectId == projectId) && $0.surfaces.contains(surface)
+        }
+    }
+
+    /// All enabled custom menu items, in display order.
+    func enabledCustomMenuItems() -> [CustomMenuItemRecord] {
         let descriptor = FetchDescriptor<CustomMenuItemRecord>(
             predicate: #Predicate { $0.isEnabled },
             sortBy: [
@@ -29,10 +36,7 @@ extension ThreadStore {
                 SortDescriptor(\.createdAt, order: .forward)
             ]
         )
-        let rows = (try? context.fetch(descriptor)) ?? []
-        return rows.filter {
-            ($0.projectId == nil || $0.projectId == projectId) && $0.surfaces.contains(surface)
-        }
+        return (try? context.fetch(descriptor)) ?? []
     }
 
     func fetchCustomMenuItem(id: String) -> CustomMenuItemRecord? {

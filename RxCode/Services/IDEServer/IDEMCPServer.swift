@@ -646,12 +646,17 @@ actor IDEMCPServer {
             "ide__get_running_jobs",
             "ide__get_job_output",
             "ide__get_projects",
+            "ide__get_stories",
+            "ide__get_tasks",
+            "ide__get_task_status",
             "ide__get_threads",
             "ide__get_thread_messages",
             "ide__get_thread_detail",
             "ide__memory_search",
             "memory_search",
             "ide__get_usage",
+            "ide__briefing_list",
+            "ide__briefing_get",
         ]
 
         guard readOnlyTools.contains(tool.name) else { return nil }

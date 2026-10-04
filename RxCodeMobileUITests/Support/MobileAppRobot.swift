@@ -21,7 +21,13 @@ struct MobileAppRobot {
 
     // MARK: - Briefing
 
+    /// The Briefing item in the iPad sidebar. The app opens on Tasks, so iPad
+    /// briefing flows select it first.
+    var sidebarBriefingItem: XCUIElement { element(id: "sidebar-briefing") }
+
     var anyBriefingCard: XCUIElement { firstButton(prefix: "briefing-card-") }
+    var anyBriefingDocumentCard: XCUIElement { firstButton(prefix: "briefing-document-card-") }
+    var briefingDocumentDetail: XCUIElement { element(id: "briefing-document-detail") }
     var anyBriefingListCard: XCUIElement { firstButton(prefix: "briefing-list-card-") }
     var briefingListScreen: XCUIElement { element(id: "briefing-list-screen") }
     var briefingDetailScreen: XCUIElement { element(id: "briefing-detail-screen") }

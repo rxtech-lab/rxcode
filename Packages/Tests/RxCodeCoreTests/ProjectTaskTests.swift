@@ -114,6 +114,28 @@ struct ProjectTaskTests {
         #expect(board.tasks(in: .backlog).map(\.title) == ["orphan"])
     }
 
+    @Test("A story's last activity is its latest edit or its latest task's")
+    func storyLastActivity() {
+        let projectId = UUID()
+        let old = Date(timeIntervalSince1970: 1_000)
+        let newer = Date(timeIntervalSince1970: 5_000)
+        let touched = ProjectStory(projectId: projectId, title: "touched", updatedAt: old)
+        let idle = ProjectStory(projectId: projectId, title: "idle", updatedAt: newer)
+        let board = TaskBoard(
+            stories: [touched, idle],
+            tasks: [
+                ProjectTask(projectId: projectId, storyId: touched.id, title: "a", updatedAt: newer),
+                ProjectTask(projectId: projectId, storyId: idle.id, title: "b", updatedAt: old),
+                ProjectTask(projectId: projectId, storyId: UUID(), title: "orphan", updatedAt: newer),
+            ]
+        )
+
+        let activity = board.storyLastActivity()
+        #expect(activity[touched.id] == newer)
+        #expect(activity[idle.id] == newer)
+        #expect(activity.count == 2)
+    }
+
     @Test("Trigger targets ignore missing columns and the column itself")
     func triggerTargets() {
         var columns = TaskColumn.defaults

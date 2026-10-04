@@ -600,6 +600,7 @@ extension MobileAppState {
             continuation.resume(throwing: AutopilotRemoteError.desktopChanged)
         }
         taskBoardsByProject = [:]
+        deferredTaskBoardSnapshots = [:]
         let pendingTaskBoards = pendingTaskBoardRequests
         pendingTaskBoardRequests = [:]
         for continuation in pendingTaskBoards.values {

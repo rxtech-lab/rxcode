@@ -35,10 +35,13 @@ struct TaskColumnView: View {
     @State private var currentDate = Date()
 
     var body: some View {
+        // Only finished cards age out; open work stays on the board however
+        // long it sits untouched.
         let cutoff = currentDate.addingTimeInterval(-Double(appState.taskCardRetentionDays) * 24 * 60 * 60)
-        let recentTasks = tasks.filter { $0.updatedAt >= cutoff }
-        let olderTasks = tasks.filter { $0.updatedAt < cutoff }
-            .sorted { $0.updatedAt > $1.updatedAt }
+        let recentTasks = column.countsAsDone ? tasks.filter { $0.updatedAt >= cutoff } : tasks
+        let olderTasks = column.countsAsDone
+            ? tasks.filter { $0.updatedAt < cutoff }.sorted { $0.updatedAt > $1.updatedAt }
+            : []
         let shownTasks = recentTasks + Array(olderTasks.prefix(revealedOlderTaskCount))
         let hiddenCount = max(0, olderTasks.count - revealedOlderTaskCount)
         // Queued cards are never aged out: the queue's order is what the user
@@ -123,8 +126,9 @@ struct TaskColumnView: View {
         .accessibilityIdentifier("task-column-\(status.rawValue)")
         .task(id: TaskCardAgeSchedule(
             retentionDays: appState.taskCardRetentionDays,
-            updatedDates: tasks.map(\.updatedAt)
+            updatedDates: column.countsAsDone ? tasks.map(\.updatedAt) : []
         )) {
+            guard column.countsAsDone else { return }
             let retentionInterval = Double(appState.taskCardRetentionDays) * 24 * 60 * 60
             while !Task.isCancelled {
                 let now = Date()

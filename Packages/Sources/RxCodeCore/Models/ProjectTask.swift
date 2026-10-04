@@ -982,6 +982,19 @@ public struct TaskBoard: Codable, Sendable {
         return rollups
     }
 
+    /// When each story was last touched — its own edit or any of its tasks'
+    /// — in one pass over the tasks. Finished stories age off the board's
+    /// story panel by this date, so a story whose last task just finished
+    /// stays in view.
+    public func storyLastActivity() -> [UUID: Date] {
+        var dates = Dictionary(stories.map { ($0.id, $0.updatedAt) }, uniquingKeysWith: max)
+        for task in tasks {
+            guard let storyId = task.storyId, let current = dates[storyId] else { continue }
+            if task.updatedAt > current { dates[storyId] = task.updatedAt }
+        }
+        return dates
+    }
+
     /// Every distinct tag on the board — used by a story or task, or given a
     /// color — sorted for stable picker order.
     public var allTags: [String] {

@@ -210,6 +210,14 @@ final class MobileAppState: ObservableObject {
     /// Outstanding task-board requests keyed by `clientRequestID`; resolved by
     /// the matching `.taskBoardResult`, a timeout, or a desktop switch.
     var pendingTaskBoardRequests: [UUID: CheckedContinuation<TaskBoardResultPayload, Error>] = [:]
+    /// Card moves awaiting their reply, per project. While any are in flight
+    /// (and briefly after), incoming board snapshots are held back so a reply
+    /// to an earlier move can't snap a later, still-pending card back.
+    var taskMovesInFlight: [UUID: Int] = [:]
+    /// The newest snapshot held back per project, applied once moves settle.
+    var deferredTaskBoardSnapshots: [UUID: MobileTaskBoardSnapshot] = [:]
+    var deferredCloudTaskBoardSnapshots: [UUID: MobileTaskBoardSnapshot] = [:]
+    var taskBoardSettleTasks: [UUID: Task<Void, Never>] = [:]
     /// Derives and caches the passkey PRF KEK so secrets are decrypted/encrypted
     /// on-device — the desktop only relays opaque ciphertext.
     let secretsKeyVault = MobileSecretsKeyVault()

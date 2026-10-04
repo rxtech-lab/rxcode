@@ -16,7 +16,7 @@ struct TasksSettingsTab: View {
         Form {
             Section {
                 Stepper(value: $appState.taskCardRetentionDays, in: 1...365) {
-                    LabeledContent("Hide task cards after") {
+                    LabeledContent("Hide done items after") {
                         Text(appState.taskCardRetentionDays == 1 ? "1 day" : "\(appState.taskCardRetentionDays) days")
                             .monospacedDigit()
                     }
@@ -24,7 +24,7 @@ struct TasksSettingsTab: View {
             } header: {
                 Text("Project Dashboard")
             } footer: {
-                Text("Task cards with no updates for this long are hidden from board columns. Reveal older cards 10 at a time in each column.")
+                Text("Cards in done columns and finished stories with no updates for this long are hidden from the board. Open work is never hidden. Reveal older items 10 at a time.")
             }
 
             Section {

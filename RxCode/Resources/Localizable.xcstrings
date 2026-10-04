@@ -3571,6 +3571,9 @@
         }
       }
     },
+    "Ask the agent about this run…" : {
+
+    },
     "Ask the agent for a follow-up…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -4195,6 +4198,9 @@
         }
       }
     },
+    "Back to run history" : {
+
+    },
     "Back up this project's secrets to Autopilot" : {
       "localizations" : {
         "ko" : {
@@ -4771,6 +4777,9 @@
           }
         }
       }
+    },
+    "Cards in done columns and finished stories with no updates for this long are hidden from the board. Open work is never hidden. Reveal older items 10 at a time." : {
+
     },
     "Change status" : {
       "localizations" : {
@@ -5480,6 +5489,9 @@
           }
         }
       }
+    },
+    "Click to view run history, double-click to edit" : {
+
     },
     "Client" : {
       "localizations" : {
@@ -6808,6 +6820,9 @@
           }
         }
       }
+    },
+    "Couldn't send the message. Try again." : {
+
     },
     "Couldn't sync %@ to the cloud: %@" : {
       "localizations" : {
@@ -9218,6 +9233,9 @@
         }
       }
     },
+    "Each run of this task and the agent's log will show here." : {
+
+    },
     "Edit" : {
       "localizations" : {
         "en" : {
@@ -10618,6 +10636,9 @@
         }
       }
     },
+    "Final Message" : {
+
+    },
     "Find stories" : {
       "localizations" : {
         "zh-Hans" : {
@@ -11482,6 +11503,9 @@
         }
       }
     },
+    "Hide done items after" : {
+
+    },
     "Hide Hidden Files" : {
       "localizations" : {
         "ko" : {
@@ -11531,6 +11555,7 @@
       }
     },
     "Hide task cards after" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -12564,6 +12589,9 @@
         }
       }
     },
+    "Interrupted" : {
+
+    },
     "Invalid %@ field \"%@\"." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -12844,6 +12872,9 @@
           }
         }
       }
+    },
+    "Last run: %@" : {
+
     },
     "Last signed in with %@" : {
       "localizations" : {
@@ -13953,6 +13984,9 @@
           }
         }
       }
+    },
+    "Manual" : {
+
     },
     "Manual key/value pairs" : {
       "localizations" : {
@@ -15652,6 +15686,9 @@
         }
       }
     },
+    "No Log" : {
+
+    },
     "No matches." : {
       "localizations" : {
         "ko" : {
@@ -15775,6 +15812,9 @@
           }
         }
       }
+    },
+    "No output." : {
+
     },
     "No paired devices yet." : {
       "localizations" : {
@@ -16127,6 +16167,9 @@
           }
         }
       }
+    },
+    "No Runs Yet" : {
+
     },
     "No scans yet. Trigger one to check this repo's actions." : {
       "localizations" : {
@@ -17387,6 +17430,9 @@
         }
       }
     },
+    "Open this run's chat thread" : {
+
+    },
     "Open this task's project page" : {
       "localizations" : {
         "zh-Hans" : {
@@ -17406,6 +17452,9 @@
           }
         }
       }
+    },
+    "Open Thread" : {
+
     },
     "OpenAI-Compatible Endpoint" : {
       "localizations" : {
@@ -20257,6 +20306,15 @@
         }
       }
     },
+    "Run History" : {
+
+    },
+    "Run History…" : {
+
+    },
+    "Run Log" : {
+
+    },
     "Run needs attention" : {
       "localizations" : {
         "zh-Hans" : {
@@ -20266,6 +20324,9 @@
           }
         }
       }
+    },
+    "Run Not Found" : {
+
     },
     "Run Now" : {
       "localizations" : {
@@ -20903,7 +20964,6 @@
       }
     },
     "Scheduled" : {
-      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -21706,6 +21766,9 @@
         }
       }
     },
+    "Send a follow-up to this run's thread" : {
+
+    },
     "Send as notification" : {
       "localizations" : {
         "zh-Hans" : {
@@ -22247,6 +22310,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "显示 %lld 个代码审查"
+          }
+        }
+      }
+    },
+    "Show %lld more older stories (%lld hidden)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Show %1$lld more older stories (%2$lld hidden)"
           }
         }
       }
@@ -23312,6 +23385,9 @@
         }
       }
     },
+    "Start a run of this task now" : {
+
+    },
     "Start an agent conversation without adding a project first." : {
       "localizations" : {
         "zh-Hans" : {
@@ -23650,6 +23726,9 @@
         }
       }
     },
+    "Succeeded" : {
+
+    },
     "Success" : {
       "localizations" : {
         "ko" : {
@@ -23973,6 +24052,7 @@
       }
     },
     "Task cards with no updates for this long are hidden from board columns. Reveal older cards 10 at a time in each column." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -24340,6 +24420,9 @@
         }
       }
     },
+    "The agent run couldn't start." : {
+
+    },
     "The agent run stopped before the task was completed." : {
       "localizations" : {
         "zh-Hans" : {
@@ -24441,6 +24524,9 @@
           }
         }
       }
+    },
+    "The full log isn't available because this run's thread was deleted." : {
+
     },
     "The general AI task agent didn't return a decision." : {
       "localizations" : {
@@ -24772,6 +24858,9 @@
           }
         }
       }
+    },
+    "The task's project no longer exists." : {
+
     },
     "The type is cleared from every story and task that uses it." : {
       "localizations" : {
@@ -25125,6 +25214,9 @@
         }
       }
     },
+    "This run has no chat thread, or it was deleted." : {
+
+    },
     "This schedule never runs." : {
       "localizations" : {
         "ko" : {
@@ -25182,6 +25274,9 @@
           }
         }
       }
+    },
+    "This task is already running" : {
+
     },
     "This task will be removed from the board." : {
       "localizations" : {
@@ -26643,6 +26738,9 @@
           }
         }
       }
+    },
+    "Wait for the agent to finish responding" : {
+
     },
     "Wait for the agent to finish…" : {
       "localizations" : {

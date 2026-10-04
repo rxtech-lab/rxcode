@@ -12,6 +12,7 @@ actor MockAppStatePersistence: AppStatePersistenceService {
     private var taskBoards: [UUID: TaskBoard] = [:]
     private var acpClients: [ACPClientSpec] = []
     private var scheduledTasks: [ScheduledTask] = []
+    private var scheduledTaskRuns: [ScheduledTaskRun] = []
     private var fullSessions: [String: ChatSession] = [:]
     private var legacySessions: [String: ChatSession] = [:]
 
@@ -122,5 +123,13 @@ actor MockAppStatePersistence: AppStatePersistenceService {
 
     func loadScheduledTasks() -> [ScheduledTask] {
         scheduledTasks
+    }
+
+    func saveScheduledTaskRuns(_ runs: [ScheduledTaskRun]) throws {
+        scheduledTaskRuns = runs
+    }
+
+    func loadScheduledTaskRuns() -> [ScheduledTaskRun] {
+        scheduledTaskRuns
     }
 }

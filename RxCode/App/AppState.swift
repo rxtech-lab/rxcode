@@ -360,6 +360,8 @@ final class AppState {
 
     /// Cron-scheduled prompts across every project. Loaded from disk on init.
     var scheduledTasks: [ScheduledTask] = []
+    /// Past and in-flight runs of every scheduled task, newest first.
+    var scheduledTaskRuns: [ScheduledTaskRun] = []
     /// Agent-proposed scheduled tasks awaiting the user's confirmation, oldest
     /// first. `MainView` presents the first as a sheet.
     var scheduledTaskProposals: [ScheduledTask] = []

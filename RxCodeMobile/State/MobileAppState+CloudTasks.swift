@@ -9,6 +9,7 @@ extension MobileAppState {
     func clearCloudTasks() {
         cloudTaskProjects = []
         cloudTaskBoards = [:]
+        deferredCloudTaskBoardSnapshots = [:]
     }
 
     func refreshCloudTaskProjects() async throws {
@@ -83,7 +84,7 @@ extension MobileAppState {
             board = board.replacingCloudRows(remote, projectID: request.projectID)
         }
         let snapshot = MobileTaskBoardSnapshot(projectID: request.projectID, board: board)
-        cloudTaskBoards[request.projectID] = snapshot
+        storeTaskBoardSnapshot(snapshot, cloud: true)
         return TaskBoardResultPayload(clientRequestID: request.clientRequestID, projectID: request.projectID, ok: true, snapshot: snapshot, taskID: request.task?.id ?? request.taskID)
     }
 

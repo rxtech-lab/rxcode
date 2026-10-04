@@ -10,6 +10,8 @@ import SwiftUI
 /// card names its rolled-up status instead. The panel collapses to a thin rail
 /// so the columns can take the whole width.
 struct TaskStoriesPanel: View {
+    @Environment(AppState.self) private var appState
+
     let stories: [ProjectStory]
     let board: TaskBoard
     let storyRollups: [UUID: StoryRollup]
@@ -29,6 +31,8 @@ struct TaskStoriesPanel: View {
     @AppStorage("taskBoardStoriesPanelExpanded") private var isExpanded = true
     @State private var isFilterPresented = false
     @State private var visibleStoryCount = storyPageSize
+    @State private var revealedOlderStoryCount = 0
+    @State private var currentDate = Date()
 
     /// Statuses the filter currently shows, limited to the offered columns.
     /// An empty or stale saved filter shows them all.
@@ -67,10 +71,49 @@ struct TaskStoriesPanel: View {
         .accessibilityIdentifier("task-stories-panel")
     }
 
+    // MARK: - Aging
+
+    private var retentionInterval: TimeInterval {
+        Double(appState.taskCardRetentionDays) * 24 * 60 * 60
+    }
+
+    /// Finished stories with no activity since the retention cutoff, newest
+    /// first. Like the done column's cards, they're hidden until revealed;
+    /// open stories always stay in the panel.
+    private func agedStories(lastActivity: [UUID: Date]) -> (recent: [ProjectStory], older: [ProjectStory]) {
+        let cutoff = currentDate.addingTimeInterval(-retentionInterval)
+        var recent: [ProjectStory] = []
+        var older: [(story: ProjectStory, date: Date)] = []
+        for story in stories {
+            let status = storyRollups[story.id]?.status ?? board.rolledUpStatus(for: story)
+            let date = lastActivity[story.id] ?? story.updatedAt
+            if board.column(for: status).countsAsDone, date < cutoff {
+                older.append((story, date))
+            } else {
+                recent.append(story)
+            }
+        }
+        return (recent, older.sorted { $0.date > $1.date }.map(\.story))
+    }
+
+    /// Activity dates of the finished stories, which decide when the next one
+    /// ages out.
+    private func doneActivityDates(lastActivity: [UUID: Date]) -> [Date] {
+        stories.compactMap { story in
+            let status = storyRollups[story.id]?.status ?? board.rolledUpStatus(for: story)
+            guard board.column(for: status).countsAsDone else { return nil }
+            return lastActivity[story.id] ?? story.updatedAt
+        }
+    }
+
     // MARK: - Expanded
 
     private var expanded: some View {
-        let visibleStories = Array(stories.prefix(visibleStoryCount))
+        let lastActivity = board.storyLastActivity()
+        let (recentStories, olderStories) = agedStories(lastActivity: lastActivity)
+        let shownStories = recentStories + Array(olderStories.prefix(revealedOlderStoryCount))
+        let hiddenCount = max(0, olderStories.count - revealedOlderStoryCount)
+        let visibleStories = Array(shownStories.prefix(visibleStoryCount))
         let lastVisibleStoryId = visibleStories.last?.id
 
         return VStack(alignment: .leading, spacing: 10) {
@@ -105,16 +148,48 @@ struct TaskStoriesPanel: View {
                         )
                         .transition(TaskBoardMotion.card)
                         .onAppear {
-                            if story.id == lastVisibleStoryId && visibleStoryCount < stories.count {
-                                visibleStoryCount = min(visibleStoryCount + Self.storyPageSize, stories.count)
+                            if story.id == lastVisibleStoryId && visibleStoryCount < shownStories.count {
+                                visibleStoryCount = min(visibleStoryCount + Self.storyPageSize, shownStories.count)
                             }
                         }
+                    }
+                    if hiddenCount > 0 && visibleStories.count == shownStories.count {
+                        Button {
+                            revealedOlderStoryCount += 10
+                        } label: {
+                            Text("Show \(min(10, hiddenCount)) more older stories (\(hiddenCount) hidden)")
+                                .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(ClaudeTheme.accent)
+                        .padding(.vertical, 8)
+                        .accessibilityIdentifier("task-stories-panel-show-more")
                     }
                 }
                 .padding(.horizontal, 12)
                 .padding(.bottom, 16)
             }
             .scrollContentBackground(.hidden)
+        }
+        .task(id: TaskStoryAgeSchedule(
+            retentionDays: appState.taskCardRetentionDays,
+            updatedDates: doneActivityDates(lastActivity: lastActivity)
+        )) {
+            let retentionInterval = retentionInterval
+            let dates = doneActivityDates(lastActivity: lastActivity)
+            while !Task.isCancelled {
+                let now = Date()
+                currentDate = now
+                guard let nextExpiration = dates.map({ $0.addingTimeInterval(retentionInterval) })
+                    .filter({ $0 >= now }).min() else { break }
+                // The cutoff uses a strict comparison, so wake just after the boundary.
+                do {
+                    try await Task.sleep(for: .seconds(nextExpiration.timeIntervalSince(now) + 0.01))
+                } catch {
+                    break
+                }
+            }
         }
     }
 
@@ -267,4 +342,9 @@ struct TaskStoriesPanel: View {
             collapsedStoryIds.insert(id)
         }
     }
+}
+
+private struct TaskStoryAgeSchedule: Hashable {
+    let retentionDays: Int
+    let updatedDates: [Date]
 }

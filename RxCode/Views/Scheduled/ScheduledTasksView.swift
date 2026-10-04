@@ -5,10 +5,19 @@ import SwiftUI
 /// project (tasks without one first), with its schedule, next run, and an enable switch.
 struct ScheduledTasksView: View {
     @Environment(AppState.self) private var appState
+    @Environment(WindowState.self) private var windowState
 
     /// The sheet's subject: a new draft or an existing task being edited.
     @State private var editing: EditingTask?
     @State private var taskToDelete: ScheduledTask?
+    /// The task whose run history sheet is showing.
+    @State private var historyTask: HistoryTask?
+    /// The page's height, so the history sheet can fill the window.
+    @State private var pageHeight: CGFloat = 600
+
+    private struct HistoryTask: Identifiable {
+        let id: UUID
+    }
 
     private struct EditingTask: Identifiable {
         let task: ScheduledTask
@@ -48,6 +57,7 @@ struct ScheduledTasksView: View {
             }
         }
         .background(ClaudeTheme.background)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { pageHeight = $0 }
         .onAppear {
             AnalyticsService.shared.log(.scheduledTasksOpened)
         }
@@ -57,6 +67,13 @@ struct ScheduledTasksView: View {
                 isNew: !appState.scheduledTasks.contains { $0.id == editing.task.id },
                 mode: editing.mode
             )
+            .environment(appState)
+        }
+        .sheet(item: $historyTask) { history in
+            ScheduledTaskHistorySheet(taskId: history.id) { sessionId in
+                appState.selectSession(id: sessionId, in: windowState)
+            }
+            .frame(height: max(480, pageHeight - 60))
             .environment(appState)
         }
         .confirmationDialog(
@@ -205,6 +222,7 @@ struct ScheduledTasksView: View {
                         task: task,
                         now: now,
                         onEdit: { editing = EditingTask(task: task) },
+                        onShowHistory: { historyTask = HistoryTask(id: task.id) },
                         onDelete: { taskToDelete = task }
                     )
                 }
@@ -254,6 +272,7 @@ private struct ScheduledTaskRow: View {
     let task: ScheduledTask
     let now: Date
     let onEdit: () -> Void
+    let onShowHistory: () -> Void
     let onDelete: () -> Void
 
     @State private var isHovering = false
@@ -301,13 +320,19 @@ private struct ScheduledTaskRow: View {
 
             Spacer(minLength: 8)
 
-            if isHovering {
-                Button(action: onEdit) {
-                    Image(systemName: "pencil")
-                }
-                .buttonStyle(.borderless)
-                .help("Edit scheduled task")
+            if let latestRun {
+                ScheduledTaskRunBadge(run: latestRun)
             }
+
+            // Always laid out so hovering doesn't reflow the text column.
+            Button(action: onEdit) {
+                Image(systemName: "pencil")
+            }
+            .buttonStyle(.borderless)
+            .help("Edit scheduled task")
+            .opacity(isHovering ? 1 : 0)
+            .allowsHitTesting(isHovering)
+            .accessibilityHidden(!isHovering)
 
             Toggle("Enabled", isOn: Binding(
                 get: { task.isEnabled },
@@ -324,12 +349,18 @@ private struct ScheduledTaskRow: View {
         .contentShape(Rectangle())
         .onHover { isHovering = $0 }
         .onTapGesture(count: 2, perform: onEdit)
+        .onTapGesture(count: 1, perform: onShowHistory)
+        .help("Click to view run history, double-click to edit")
         .contextMenu {
+            Button("Run History…", systemImage: "clock.arrow.circlepath", action: onShowHistory)
             Button("Edit…", systemImage: "pencil", action: onEdit)
             Button("Run Now", systemImage: "play.circle") {
-                Task { await appState.runScheduledTask(task) }
+                Task { await appState.runScheduledTask(task, trigger: .manual) }
             }
-            .disabled(task.projectId.map { id in !appState.projects.contains { $0.id == id } } ?? false)
+            .disabled(
+                appState.isScheduledTaskRunning(task.id)
+                    || (task.projectId.map { id in !appState.projects.contains { $0.id == id } } ?? false)
+            )
             Button(task.isEnabled ? "Pause" : "Resume", systemImage: task.isEnabled ? "pause" : "play") {
                 appState.setScheduledTaskEnabled(id: task.id, !task.isEnabled)
             }
@@ -337,6 +368,10 @@ private struct ScheduledTaskRow: View {
             Button("Delete…", systemImage: "trash", role: .destructive, action: onDelete)
         }
         .accessibilityIdentifier("scheduled-task-\(task.id.uuidString)")
+    }
+
+    private var latestRun: ScheduledTaskRun? {
+        appState.scheduledTaskRuns.first { $0.taskId == task.id }
     }
 
     @ViewBuilder
@@ -363,5 +398,23 @@ private struct ScheduledTaskRow: View {
                 .font(.system(size: 11))
                 .foregroundStyle(ClaudeTheme.statusWarning)
         }
+    }
+}
+
+/// The outcome of a task's latest run, shown at the row's trailing edge.
+private struct ScheduledTaskRunBadge: View {
+    let run: ScheduledTaskRun
+
+    var body: some View {
+        Group {
+            if run.status == .running {
+                ProgressView().controlSize(.mini)
+            } else {
+                Image(systemName: run.status.systemImage)
+                    .foregroundStyle(run.status.tint)
+            }
+        }
+        .font(.system(size: 13))
+        .help(String(localized: "Last run: \(run.status.title)"))
     }
 }

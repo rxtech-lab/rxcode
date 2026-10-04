@@ -357,7 +357,7 @@ extension MobileAppState {
             applyTaskBoardResult(result)
         case .taskBoardUpdate(let update):
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "task_board_update") else { return }
-            taskBoardsByProject[update.snapshot.projectID] = update.snapshot
+            storeTaskBoardSnapshot(update.snapshot, cloud: false)
         case .ping:
             guard pairedDesktops.contains(where: { $0.pubkeyHex == inbound.fromHex }) else { return }
             Task { try? await self.client.send(.pong(PongPayload()), toHex: inbound.fromHex) }

@@ -44,10 +44,53 @@ extension MobileAppState {
 
     func applyTaskBoardResult(_ result: TaskBoardResultPayload) {
         if let snapshot = result.snapshot {
-            taskBoardsByProject[snapshot.projectID] = snapshot
+            storeTaskBoardSnapshot(snapshot, cloud: false)
         }
         if let continuation = pendingTaskBoardRequests.removeValue(forKey: result.clientRequestID) {
             continuation.resume(returning: result)
+        }
+    }
+
+    // MARK: - Move debounce
+
+    /// How long after the last card move settles before held-back board
+    /// snapshots are applied.
+    static let taskBoardSettleDelay: Duration = .milliseconds(400)
+
+    /// Applies a board snapshot, or holds it back while card moves in its
+    /// project are settling. Only the newest held snapshot is kept.
+    func storeTaskBoardSnapshot(_ snapshot: MobileTaskBoardSnapshot, cloud: Bool) {
+        let projectID = snapshot.projectID
+        let isSettling = taskMovesInFlight[projectID, default: 0] > 0 || taskBoardSettleTasks[projectID] != nil
+        switch (isSettling, cloud) {
+        case (true, true): deferredCloudTaskBoardSnapshots[projectID] = snapshot
+        case (true, false): deferredTaskBoardSnapshots[projectID] = snapshot
+        case (false, true): cloudTaskBoards[projectID] = snapshot
+        case (false, false): taskBoardsByProject[projectID] = snapshot
+        }
+    }
+
+    private func beginTaskMove(in projectID: UUID) {
+        taskBoardSettleTasks.removeValue(forKey: projectID)?.cancel()
+        taskMovesInFlight[projectID, default: 0] += 1
+    }
+
+    /// Once the project's last move has replied, waits briefly for a further
+    /// drop before applying the newest held snapshot.
+    private func endTaskMove(in projectID: UUID) {
+        let remaining = taskMovesInFlight[projectID, default: 1] - 1
+        taskMovesInFlight[projectID] = remaining > 0 ? remaining : nil
+        guard remaining <= 0 else { return }
+        taskBoardSettleTasks[projectID] = Task { [weak self] in
+            try? await Task.sleep(for: Self.taskBoardSettleDelay)
+            guard !Task.isCancelled, let self else { return }
+            self.taskBoardSettleTasks[projectID] = nil
+            if let snapshot = self.deferredTaskBoardSnapshots.removeValue(forKey: projectID) {
+                self.taskBoardsByProject[projectID] = snapshot
+            }
+            if let snapshot = self.deferredCloudTaskBoardSnapshots.removeValue(forKey: projectID) {
+                self.cloudTaskBoards[projectID] = snapshot
+            }
         }
     }
 
@@ -155,21 +198,36 @@ extension MobileAppState {
     /// Moves a task to `status`, at `sortIndex` when dropped between two
     /// cards (else the end of the column). The move is shown immediately and
     /// rolled back to the desktop's board if the desktop rejects it.
+    ///
+    /// Several cards can be in flight at once (a multi-touch drag), so board
+    /// snapshots are held back until every move has replied; see
+    /// `storeTaskBoardSnapshot`.
     func moveTask(_ task: ProjectTask, to status: TaskStatus, sortIndex: Double? = nil) async throws {
-        if !usesCloudTasks, var snapshot = taskBoardsByProject[task.projectId],
+        let projectID = task.projectId
+        beginTaskMove(in: projectID)
+        defer { endTaskMove(in: projectID) }
+        var requestSortIndex = sortIndex
+        if var snapshot = taskSnapshots[projectID],
            let index = snapshot.board.tasks.firstIndex(where: { $0.id == task.id }) {
             let resolvedIndex = sortIndex ?? snapshot.board.appendSortIndex(for: status)
             snapshot.board.tasks[index].status = status
             snapshot.board.tasks[index].sortIndex = resolvedIndex
-            taskBoardsByProject[task.projectId] = snapshot
+            if usesCloudTasks {
+                cloudTaskBoards[projectID] = snapshot
+                // The cloud path computes the index from this already-moved
+                // board, so pin the one shown.
+                requestSortIndex = resolvedIndex
+            } else {
+                taskBoardsByProject[projectID] = snapshot
+            }
         }
         do {
             try await taskBoardCall(TaskBoardRequestPayload(
-                projectID: task.projectId,
+                projectID: projectID,
                 operation: .moveTask,
                 taskID: task.id,
                 status: status,
-                sortIndex: sortIndex
+                sortIndex: requestSortIndex
             ))
         } catch {
             try? await loadTaskBoard(projectID: task.projectId)

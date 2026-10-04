@@ -30,6 +30,9 @@ protocol AppStatePersistenceService: Actor {
 
     func saveScheduledTasks(_ tasks: [ScheduledTask]) throws
     func loadScheduledTasks() -> [ScheduledTask]
+
+    func saveScheduledTaskRuns(_ runs: [ScheduledTaskRun]) throws
+    func loadScheduledTaskRuns() -> [ScheduledTaskRun]
 }
 
 extension AppStatePersistenceService {
@@ -325,6 +328,16 @@ actor PersistenceService: AppStatePersistenceService {
     func loadScheduledTasks() -> [ScheduledTask] {
         let url = baseURL.appendingPathComponent("scheduled_tasks.json")
         return decode([ScheduledTask].self, from: url) ?? []
+    }
+
+    func saveScheduledTaskRuns(_ runs: [ScheduledTaskRun]) throws {
+        let url = baseURL.appendingPathComponent("scheduled_task_runs.json")
+        try encode(runs, to: url)
+    }
+
+    func loadScheduledTaskRuns() -> [ScheduledTaskRun] {
+        let url = baseURL.appendingPathComponent("scheduled_task_runs.json")
+        return decode([ScheduledTaskRun].self, from: url) ?? []
     }
 
     // MARK: - Private Helpers

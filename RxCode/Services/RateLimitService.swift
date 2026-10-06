@@ -31,6 +31,18 @@ actor RateLimitService {
     /// logged into Claude Code with is still picked up on the next poll.
     private var cachedTokens: OAuthTokens?
 
+    /// The in-flight read of the Claude Code Keychain item, if any. While the
+    /// macOS permission prompt is unanswered this stays pending, and later
+    /// polls join it instead of raising a second prompt.
+    private var keychainReadTask: Task<Void, Never>?
+    /// Set when a Keychain read came back empty (prompt denied or no Claude
+    /// Code login). Until then polls skip the Keychain entirely.
+    private var keychainRetryAfter: Date?
+    private let keychainRetryBackoff: TimeInterval = 60 * 60  // 1 hour
+    /// How long a caller waits on the Keychain read before falling back to the
+    /// cached usage. A read without a prompt returns in milliseconds.
+    private let keychainWaitTimeout: Duration = .seconds(5)
+
     func fetchUsage(forceRefresh: Bool = false) async -> RateLimitUsage? {
         guard !AppSupport.isTestProcess else { return nil }
         if !forceRefresh, let c = cached, let at = cachedAt, Date().timeIntervalSince(at) < cacheTTL {
@@ -96,18 +108,73 @@ actor RateLimitService {
         // touches the foreign Keychain item that triggers the prompt.
         if let cachedTokens { return cachedTokens }
 
-        guard let raw = await MainActor.run(body: { KeychainHelper.readString(service: "Claude Code-credentials") }) else {
-            return nil
+        // A read that came back empty (prompt denied, item missing) backs off
+        // so background polls don't re-raise the prompt every few minutes.
+        if let keychainRetryAfter, Date() < keychainRetryAfter { return nil }
+
+        // At most one read in flight, so an unanswered prompt is never stacked
+        // with another one.
+        let read: Task<Void, Never>
+        if let keychainReadTask {
+            read = keychainReadTask
+        } else {
+            read = Task { await self.performKeychainRead() }
+            keychainReadTask = read
         }
-        guard let json = try? JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: Any],
+
+        // The read blocks for as long as the macOS permission prompt is up,
+        // which is indefinitely when the user is away. Don't hold the caller
+        // hostage: give up waiting after a short grace period and let the read
+        // land in `cachedTokens` whenever the user answers.
+        await Self.waitForCompletion(of: read, timeout: keychainWaitTimeout)
+        return cachedTokens
+    }
+
+    private func performKeychainRead() async {
+        // Off the main thread: `SecItemCopyMatching` blocks synchronously
+        // while the permission prompt is shown, and on the main actor that
+        // froze the whole app until someone typed the password.
+        let raw = await Task.detached(priority: .utility) {
+            KeychainHelper.readString(service: "Claude Code-credentials")
+        }.value
+        keychainReadTask = nil
+
+        guard let raw,
+              let json = try? JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: Any],
               let oauth = json["claudeAiOauth"] as? [String: Any],
               let accessToken = oauth["accessToken"] as? String
-        else { return nil }
+        else {
+            keychainRetryAfter = Date().addingTimeInterval(keychainRetryBackoff)
+            return
+        }
 
+        keychainRetryAfter = nil
         let refreshToken = oauth["refreshToken"] as? String
-        let tokens = OAuthTokens(accessToken: accessToken, refreshToken: refreshToken, rawOauth: oauth)
-        cachedTokens = tokens
-        return tokens
+        cachedTokens = OAuthTokens(accessToken: accessToken, refreshToken: refreshToken, rawOauth: oauth)
+    }
+
+    /// Waits until `task` finishes or `timeout` elapses, whichever is first.
+    /// Unlike awaiting `task.value` directly, this returns on time even when
+    /// the task itself is stuck.
+    private nonisolated static func waitForCompletion(of task: Task<Void, Never>, timeout: Duration) async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let resumed = OSAllocatedUnfairLock(initialState: false)
+            let resumeOnce: @Sendable () -> Void = {
+                let first = resumed.withLock { done in
+                    defer { done = true }
+                    return !done
+                }
+                if first { continuation.resume() }
+            }
+            Task {
+                await task.value
+                resumeOnce()
+            }
+            Task {
+                try? await Task.sleep(for: timeout)
+                resumeOnce()
+            }
+        }
     }
 
     private func isExpired(_ oauth: [String: Any]) -> Bool {

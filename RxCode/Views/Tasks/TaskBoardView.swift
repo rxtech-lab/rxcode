@@ -43,6 +43,10 @@ struct TaskBoardView: View {
             guard !Task.isCancelled else { return }
             isContentReady = true
         }
+        .onChange(of: windowState.taskDetailProjectId, initial: true) { _, projectId in
+            guard let projectId else { return }
+            appState.focusProject(id: projectId, in: windowState)
+        }
         .sheet(item: $sheet) { payload in
             TaskFormSheet(payload: payload, defaultProjectId: defaultProjectId)
                 .environment(appState)

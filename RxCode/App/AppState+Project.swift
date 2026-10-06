@@ -118,6 +118,21 @@ extension AppState {
         workspaceDefaults.set(project.id.uuidString, for: "selectedProjectId")
     }
 
+    /// Points the window's project-scoped chrome (run profiles, terminal,
+    /// external editor, inspector diff) at `projectId` without leaving the
+    /// current General route, so opening a project page or task on the
+    /// Projects board retargets the toolbar to that project.
+    func focusProject(id projectId: UUID, in window: WindowState) {
+        guard !window.isProjectWindow,
+              window.selectedProject?.id != projectId,
+              let project = projects.first(where: { $0.id == projectId })
+        else { return }
+        // `selectProject` returns the window to chat; restore the route.
+        let route = window.generalRoute
+        selectProject(project, in: window)
+        window.generalRoute = route
+    }
+
     func addProjectFromFolder(_ url: URL, in window: WindowState) async {
         let isGitRepo = FileManager.default.fileExists(atPath: url.appendingPathComponent(".git").path)
         let gitHubRepo = isGitRepo ? detectGitHubOwnerRepo(at: url.path) : nil

@@ -231,6 +231,11 @@ struct TaskFormSheet: View {
             loadDraft()
             if isExistingRecord {
                 AnalyticsService.shared.log(isStory ? .projectStoryOpened : .projectTaskOpened)
+                // Retarget the toolbar (run, terminal, diff) at the opened
+                // task's project while browsing the Projects board.
+                if windowState.showingTasks {
+                    appState.focusProject(id: currentProjectId, in: windowState)
+                }
             }
             suggestionAgent = appState.generalAIModel()
             // Open on the outcome: a task that has run is usually reopened to

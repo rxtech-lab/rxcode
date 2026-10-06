@@ -69,6 +69,9 @@ struct StoryTasksSheet: View {
         }
         .onAppear {
             if story != nil { AnalyticsService.shared.log(.projectStoryOpened) }
+            if windowState.showingTasks {
+                appState.focusProject(id: projectId, in: windowState)
+            }
             if tasks.isEmpty { isAddFieldFocused = true }
         }
     }

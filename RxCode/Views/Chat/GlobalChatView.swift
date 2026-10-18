@@ -85,7 +85,7 @@ struct GlobalChatView: View {
     }
 }
 
-/// Workspace-wide chat history presented from the Chat tab. Picking a thread
+/// History of chats started from the Chat tab. Picking a thread
 /// opens it in the Chat tab and dismisses the sheet.
 private struct GlobalChatHistorySheet: View {
     let dismiss: () -> Void
@@ -105,8 +105,12 @@ private struct GlobalChatHistorySheet: View {
 
             ClaudeThemeDivider()
 
-            HistoryListView(showsWorkspaceHistory: true, onSelectSession: dismiss)
-                .accessibilityIdentifier("global-chat-history")
+            HistoryListView(
+                scopedProjectId: Project.globalChatID,
+                opensInChatTab: true,
+                onSelectSession: dismiss
+            )
+            .accessibilityIdentifier("global-chat-history")
         }
         .frame(width: 460, height: 560)
         .background(ClaudeTheme.background)

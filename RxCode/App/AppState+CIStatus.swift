@@ -5,7 +5,7 @@ import os
 extension AppState {
 
     /// How often the CI poller refreshes GitHub Actions status for open projects.
-    static let ciStatusPollInterval: TimeInterval = 10
+    static let ciStatusPollInterval: TimeInterval = 60
 
     private static let ciSignaturesDefaultsKey = "ciHandledFailureSignatures"
 

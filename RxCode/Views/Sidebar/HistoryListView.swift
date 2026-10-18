@@ -5,12 +5,13 @@ struct HistoryListView: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
     var scopedProjectId: UUID? = nil
-    var showsWorkspaceHistory = false
+    /// Selecting a row opens the thread in the Chat tab instead of the project chat.
+    var opensInChatTab = false
     /// Called after a row opens its thread, e.g. so a presenting sheet can dismiss.
     var onSelectSession: (() -> Void)? = nil
 
-    private var isScoped: Bool { !showsWorkspaceHistory && (scopedProjectId != nil || windowState.isProjectWindow) }
-    private var includesAllProjects: Bool { showsWorkspaceHistory || (!isScoped && showAllProjects) }
+    private var isScoped: Bool { scopedProjectId != nil || windowState.isProjectWindow }
+    private var includesAllProjects: Bool { !isScoped && showAllProjects }
 
     @State private var renamingSession: ChatSession?
     @State private var renameText = ""
@@ -38,9 +39,7 @@ struct HistoryListView: View {
         .alert(showArchived ? "Delete All Archived" : "Delete All", isPresented: $showDeleteAllAlert) {
             Button("Delete", role: .destructive) {
                 let projectId: UUID?
-                if showsWorkspaceHistory {
-                    projectId = nil
-                } else if isScoped {
+                if isScoped {
                     projectId = scopedProjectId ?? windowState.selectedProject?.id
                 } else {
                     projectId = showAllProjects ? nil : windowState.selectedProject?.id
@@ -132,7 +131,7 @@ struct HistoryListView: View {
             Spacer()
 
             // No need to toggle all/current in the project window
-            if !isScoped && !showsWorkspaceHistory {
+            if !isScoped {
                 Button {
                     showAllProjects.toggle()
                 } label: {
@@ -182,7 +181,7 @@ struct HistoryListView: View {
             get: { appState.currentSession(in: windowState)?.id },
             set: { id in
                 if let id {
-                    appState.selectSession(id: id, inChatTab: showsWorkspaceHistory, in: windowState)
+                    appState.selectSession(id: id, inChatTab: opensInChatTab, in: windowState)
                     onSelectSession?()
                 }
             }
@@ -200,7 +199,7 @@ struct HistoryListView: View {
         )
         .onLongPressGesture(minimumDuration: 0, maximumDistance: 10, pressing: { pressing in
             if pressing {
-                appState.selectSession(id: session.id, inChatTab: showsWorkspaceHistory, in: windowState)
+                appState.selectSession(id: session.id, inChatTab: opensInChatTab, in: windowState)
                 onSelectSession?()
             }
         }, perform: {})

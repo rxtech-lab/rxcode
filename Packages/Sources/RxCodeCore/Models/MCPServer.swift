@@ -283,13 +283,15 @@ public struct MCPProbeResult: Sendable, Equatable {
     public let serverVersion: String?
     public let tools: [MCPTool]
     public let error: String?
+    public let requiresAuthentication: Bool
 
-    public init(ok: Bool, serverName: String? = nil, serverVersion: String? = nil, tools: [MCPTool] = [], error: String? = nil) {
+    public init(ok: Bool, serverName: String? = nil, serverVersion: String? = nil, tools: [MCPTool] = [], error: String? = nil, requiresAuthentication: Bool = false) {
         self.ok = ok
         self.serverName = serverName
         self.serverVersion = serverVersion
         self.tools = tools
         self.error = error
+        self.requiresAuthentication = requiresAuthentication
     }
 }
 

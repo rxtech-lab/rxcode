@@ -648,6 +648,7 @@ actor IDEMCPServer {
             "ide__get_projects",
             "ide__get_stories",
             "ide__get_tasks",
+            "ide__list_agent_models",
             "ide__get_task_status",
             "ide__get_threads",
             "ide__get_thread_messages",

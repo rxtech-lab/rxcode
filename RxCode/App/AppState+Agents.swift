@@ -686,7 +686,7 @@ extension AppState {
 
         let newStatus: MCPStatus = result.ok
             ? .connected
-            : .failed(result.error ?? "Probe failed")
+            : (result.requiresAuthentication ? .needsAuth : .failed(result.error ?? "Probe failed"))
 
         if let idx = mcpServers.firstIndex(where: { $0.id == id }) {
             let row = mcpServers[idx]

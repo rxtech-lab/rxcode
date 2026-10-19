@@ -178,6 +178,8 @@ public final class WindowState {
     // MARK: - Window Identity
 
     public let id = UUID()
+
+    public var mcpAppLoader: MCPAppLoader?
     public var newSessionKey: String { "__new_\(id.uuidString)__" }
 
     // MARK: - Project / Session Selection

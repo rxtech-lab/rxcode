@@ -26,6 +26,29 @@ struct MCPToolCallTests {
         #expect(message.toolCalls.first?.result == "")
     }
 
+    @Test("Task mutation tools are exposed to every backend and require a task id")
+    func taskMutationToolsAreAvailable() throws {
+        for capabilities: Set<BackendCapability> in [[], [.askUserQuestion]] {
+            let tools = IDEToolRegistry.tools(for: capabilities)
+            for name in ["ide__update_task", "ide__delete_task"] {
+                let tool = try #require(tools.first { $0.name == name })
+                #expect(tool.inputSchema["required"]?.arrayValue == [.string("task_id")])
+                #expect(tool.inputSchema["properties"]?["task_id"]?["type"] == .string("string"))
+            }
+        }
+    }
+
+    @Test("Agent discovery and task assignment schemas are available")
+    func agentDiscoverySchema() throws {
+        let tools = IDEToolRegistry.tools(for: [])
+        let discovery = try #require(tools.first { $0.name == "ide__list_agent_models" })
+        #expect(discovery.inputSchema["properties"]?.objectValue?.isEmpty == true)
+        let update = try #require(tools.first { $0.name == "ide__update_task" })
+        for field in ["provider", "model"] {
+            #expect(update.inputSchema["properties"]?[field]?["type"]?.arrayValue == [.string("string"), .string("null")])
+        }
+    }
+
     @Test("Memory tools use search instead of a get-by-id tool")
     func memoryToolsUseSearch() {
         let names = Set(IDEToolRegistry.allTools.map(\.name))

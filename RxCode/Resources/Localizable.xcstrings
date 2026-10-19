@@ -3740,6 +3740,9 @@
         }
       }
     },
+    "Authenticate…" : {
+
+    },
     "Authentication Code" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -3762,6 +3765,12 @@
           }
         }
       }
+    },
+    "Authentication required" : {
+
+    },
+    "Authentication…" : {
+
     },
     "Auto" : {
       "localizations" : {
@@ -6169,6 +6178,7 @@
       }
     },
     "Configure Model Context Protocol servers used by Claude Code and Codex." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -6183,6 +6193,9 @@
           }
         }
       }
+    },
+    "Configure Model Context Protocol servers used by Claude Code, Codex, and ACP clients." : {
+
     },
     "Configure org access →" : {
       "extractionState" : "stale",
@@ -12974,6 +12987,9 @@
     "Least used" : {
 
     },
+    "Leave blank to register automatically when the server supports it." : {
+
+    },
     "Left in 5h" : {
       "localizations" : {
         "zh-Hans" : {
@@ -14101,6 +14117,9 @@
           }
         }
       }
+    },
+    "MCP Authentication" : {
+
     },
     "MCP error" : {
       "localizations" : {
@@ -16877,6 +16896,9 @@
         }
       }
     },
+    "OAuth client ID (optional)" : {
+
+    },
     "Off" : {
       "localizations" : {
         "zh-Hans" : {
@@ -19580,6 +19602,9 @@
           }
         }
       }
+    },
+    "Remove saved credentials for this server?" : {
+
     },
     "Remove Tag" : {
       "localizations" : {
@@ -23171,6 +23196,9 @@
         }
       }
     },
+    "Sign Out…" : {
+
+    },
     "Signed in" : {
       "localizations" : {
         "ko" : {
@@ -25115,6 +25143,9 @@
           }
         }
       }
+    },
+    "This MCP server requires authentication. Sign in to test the connection again." : {
+
     },
     "This memory will be removed from future agent context." : {
       "localizations" : {

@@ -14,6 +14,9 @@ actor MCPService {
     private let baseURL: URL
     private let claudeService: ClaudeService
     private let logger = Logger(subsystem: "com.claudework", category: "MCPService")
+    // Connection health belongs to the connection definition, not the active
+    // project. Never forward a known failed connection to an agent runtime.
+    var failedConnections: [String: MCPServerDetail] = [:]
 
     init(baseURL: URL = AppSupport.bundleScopedURL, claudeService: ClaudeService) {
         self.baseURL = baseURL
@@ -108,12 +111,14 @@ actor MCPService {
         }
 
         try saveConfig(config)
+        failedConnections.removeValue(forKey: name)
     }
 
     func remove(name: String, scope: MCPScope) async throws {
         var config = try loadConfig()
         config.servers.removeAll { $0.name == name }
         try saveConfig(config)
+        failedConnections.removeValue(forKey: name)
     }
 
     func setGlobalEnabled(name: String, enabled: Bool) async throws {
@@ -149,7 +154,7 @@ actor MCPService {
         bridgeCommand: (command: String, args: [String])? = nil
     ) async -> String? {
         do {
-            let records = try enabledRecords(projectPath: projectPath)
+            let records = try await enabledRecords(projectPath: projectPath)
             var servers = dictionaryForClaude(records)
             if let bridge = bridgeCommand {
                 servers["rxcode-ide"] = [
@@ -189,7 +194,7 @@ actor MCPService {
             ]))
         }
         do {
-            let records = try enabledRecords(projectPath: projectPath)
+            let records = try await enabledRecords(projectPath: projectPath)
             let userEntries: [JSONValue] = records
                 .sorted { $0.name < $1.name }
                 .compactMap { record -> JSONValue? in
@@ -201,12 +206,6 @@ actor MCPService {
         }
         let names = entries.compactMap { $0["name"]?.stringValue }.joined(separator: ", ")
         logger.info("[ACP-MCP] built \(entries.count, privacy: .public) mcpServers entries for project=\(projectPath ?? "<nil>", privacy: .public) [\(names, privacy: .public)]")
-        // Dump the full JSON payload so a comparison against a known-good
-        // Python repro is one log line away.
-        if let data = try? JSONEncoder().encode(JSONValue.array(entries)),
-           let json = String(data: data, encoding: .utf8) {
-            logger.info("[ACP-MCP] payload=\(json, privacy: .public)")
-        }
         return entries
     }
 
@@ -278,12 +277,15 @@ actor MCPService {
                 let table = "{enabled=true,command=\(tomlString(bridge.command)),args=\(tomlArray(bridge.args))}"
                 pairs += ["-c", "mcp_servers.rxcode-ide=\(table)"]
             }
-            for record in config.servers.sorted(by: { $0.name < $1.name }) {
+            for configuredRecord in config.servers.sorted(by: { $0.name < $1.name }) {
+                let shouldEnable = !disableAllServers && isAvailableToAgents(configuredRecord, projectPath: projectPath)
+                let authorized = shouldEnable ? try? await authorizedRecord(configuredRecord) : configuredRecord
+                let record = authorized ?? configuredRecord
                 // Always emit the full inline table. A bare `enabled=false`
                 // override fails codex's validation ("invalid transport") when
                 // the server isn't already defined in ~/.codex/config.toml.
                 let key = "mcp_servers.\(tomlKey(record.name))"
-                let enabled = disableAllServers ? false : record.isEnabled(for: projectPath)
+                let enabled = shouldEnable && authorized != nil
                 pairs += ["-c", "\(key)=\(tomlInlineTable(for: record, enabled: enabled))"]
             }
             return pairs
@@ -293,20 +295,41 @@ actor MCPService {
         }
     }
 
-    private func enabledRecords(projectPath: String?) throws -> [MCPServerRecord] {
-        try loadConfig().servers.filter { $0.isEnabled(for: projectPath) }
+    private func enabledRecords(projectPath: String?) async throws -> [MCPServerRecord] {
+        var records: [MCPServerRecord] = []
+        for record in try loadConfig().servers where isAvailableToAgents(record, projectPath: projectPath) {
+            if let authorized = try? await authorizedRecord(record) { records.append(authorized) }
+        }
+        return records
     }
 
-    /// The enabled servers for a project, unrendered.
+    private func authorizedRecord(_ record: MCPServerRecord) async throws -> MCPServerRecord {
+        guard record.transport != .stdio, let resource = record.url,
+              let token = try await MCPOAuthService.shared.accessToken(for: resource) else { return record }
+        var authorized = record
+        authorized.headers = record.headers.filter { $0.key.lowercased() != "authorization" }
+        authorized.headers["Authorization"] = "Bearer \(token)"
+        return authorized
+    }
+
+    func authenticatedDetail(name: String, projectPath: String?) async throws -> MCPServerDetail {
+        guard let record = try loadConfig().servers.first(where: { $0.name == name }),
+              record.isEnabled(for: projectPath) else {
+            throw MCPError.probeFailed("This MCP server is unavailable in the current project.")
+        }
+        return makeDetail(record: try await authorizedRecord(record), projectPath: projectPath)
+    }
+
+    /// The enabled servers without known connection failures, unrendered.
     ///
     /// `writeClaudeConfig`, `codexConfigOverrides` and `acpMCPServers` are three
     /// renderings of this same list into three CLI config dialects. A backend
     /// that renders its own — every RxAgentSDK-based one does — takes the list.
     /// Failure is reported as an empty list to match the rendering methods,
     /// which also degrade to "no servers" rather than failing the turn.
-    func enabledServerRecords(projectPath: String?) -> [MCPServerRecord] {
+    func enabledServerRecords(projectPath: String?) async -> [MCPServerRecord] {
         do {
-            return try enabledRecords(projectPath: projectPath)
+            return try await enabledRecords(projectPath: projectPath)
         } catch {
             logger.warning("Failed to read MCP servers: \(error.localizedDescription)")
             return []
@@ -350,12 +373,15 @@ actor MCPService {
     }
 
     private func probe(detail: MCPServerDetail) async -> MCPProbeResult {
+        let result: MCPProbeResult
         switch detail.transport {
         case .stdio:
-            return await probeStdio(detail)
+            result = await probeStdio(detail)
         case .http, .sse:
-            return await probeHTTP(detail)
+            result = await probeHTTP(detail)
         }
+        await recordProbeResult(result, for: detail)
+        return result
     }
 
     // MARK: - RxCode Config
@@ -393,6 +419,7 @@ actor MCPService {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let path = dir.appendingPathComponent(filename)
         try data.write(to: path, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path.path)
         return path.path
     }
 
@@ -408,30 +435,6 @@ actor MCPService {
             projectOverride: record.projectOverride(for: projectPath),
             effectiveEnabled: record.isEnabled(for: projectPath)
         )
-    }
-
-    private func makeDetail(record: MCPServerRecord, projectPath: String?) -> MCPServerDetail {
-        MCPServerDetail(
-            name: record.name,
-            scope: .user,
-            transport: record.transport,
-            url: record.transport == .stdio ? nil : record.url,
-            command: record.transport == .stdio ? record.command : nil,
-            args: record.args,
-            env: record.env,
-            headers: record.headers,
-            projectPath: projectPath
-        )
-    }
-
-    private func endpoint(from record: MCPServerRecord) -> String {
-        switch record.transport {
-        case .http, .sse:
-            return record.url ?? ""
-        case .stdio:
-            let cmd = record.command ?? ""
-            return ([cmd] + record.args).filter { !$0.isEmpty }.joined(separator: " ")
-        }
     }
 
     // MARK: - Imports
@@ -617,7 +620,10 @@ actor MCPService {
             }
         case .http, .sse:
             parts.append("url=\(tomlString(record.url ?? ""))")
-            if let bearer = record.bearerTokenEnvVar, !bearer.isEmpty {
+            if !record.headers.isEmpty {
+                parts.append("http_headers=\(tomlDictionary(record.headers))")
+            }
+            if record.headers["Authorization"] == nil, let bearer = record.bearerTokenEnvVar, !bearer.isEmpty {
                 parts.append("bearer_token_env_var=\(tomlString(bearer))")
             }
         }
@@ -747,96 +753,9 @@ actor MCPService {
         return nil
     }
 
-    // MARK: - Probe: HTTP / SSE
-
-    private func probeHTTP(_ detail: MCPServerDetail) async -> MCPProbeResult {
-        guard let urlString = detail.url, let baseURL = URL(string: urlString) else {
-            return MCPProbeResult(ok: false, error: "No URL configured.")
-        }
-
-        var sessionID: String?
-        do {
-            let (initData, initResp, sid) = try await postMCP(
-                url: baseURL,
-                body: initializeRequest(id: 1),
-                sessionID: nil,
-                headers: detail.headers
-            )
-            sessionID = sid
-            if let http = initResp as? HTTPURLResponse, http.statusCode == 401 {
-                return MCPProbeResult(ok: false, error: "401 Unauthorized — server requires authentication.")
-            }
-            let (serverName, serverVersion) = parseInitializeResponse(extractJSON(initData))
-
-            _ = try? await postMCP(
-                url: baseURL,
-                body: initializedNotification(),
-                sessionID: sessionID,
-                headers: detail.headers
-            )
-
-            let (toolsData, _, _) = try await postMCP(
-                url: baseURL,
-                body: toolsListRequest(id: 2),
-                sessionID: sessionID,
-                headers: detail.headers
-            )
-            let tools = parseToolsListResponse(extractJSON(toolsData))
-
-            return MCPProbeResult(
-                ok: true,
-                serverName: serverName,
-                serverVersion: serverVersion,
-                tools: tools
-            )
-        } catch {
-            return MCPProbeResult(ok: false, error: error.localizedDescription)
-        }
-    }
-
-    private func postMCP(
-        url: URL,
-        body: [String: Any],
-        sessionID: String?,
-        headers: [String: String] = [:]
-    ) async throws -> (Data, URLResponse, String?) {
-        var req = URLRequest(url: url, timeoutInterval: 10)
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
-        if let sessionID {
-            req.setValue(sessionID, forHTTPHeaderField: "Mcp-Session-Id")
-        }
-        for (key, value) in headers where !key.isEmpty {
-            req.setValue(value, forHTTPHeaderField: key)
-        }
-        req.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-        let (data, response) = try await URLSession.shared.data(for: req)
-        let returnedSession = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Mcp-Session-Id")
-        return (data, response, returnedSession ?? sessionID)
-    }
-
-    private func extractJSON(_ data: Data) -> [String: Any]? {
-        if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            return obj
-        }
-        guard let text = String(data: data, encoding: .utf8) else { return nil }
-        for rawLine in text.split(whereSeparator: \.isNewline) {
-            let line = String(rawLine)
-            guard line.hasPrefix("data: ") else { continue }
-            let payload = String(line.dropFirst("data: ".count))
-            if let payloadData = payload.data(using: .utf8),
-               let obj = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any] {
-                return obj
-            }
-        }
-        return nil
-    }
-
     // MARK: - JSON-RPC payloads
 
-    private nonisolated func initializeRequest(id: Int) -> [String: Any] {
+    nonisolated func initializeRequest(id: Int) -> [String: Any] {
         [
             "jsonrpc": "2.0",
             "id": id,
@@ -852,14 +771,14 @@ actor MCPService {
         ]
     }
 
-    private nonisolated func initializedNotification() -> [String: Any] {
+    nonisolated func initializedNotification() -> [String: Any] {
         [
             "jsonrpc": "2.0",
             "method": "notifications/initialized"
         ]
     }
 
-    private nonisolated func toolsListRequest(id: Int) -> [String: Any] {
+    nonisolated func toolsListRequest(id: Int) -> [String: Any] {
         [
             "jsonrpc": "2.0",
             "id": id,
@@ -867,7 +786,7 @@ actor MCPService {
         ]
     }
 
-    private nonisolated func parseInitializeResponse(_ json: [String: Any]?) -> (String?, String?) {
+    nonisolated func parseInitializeResponse(_ json: [String: Any]?) -> (String?, String?) {
         guard let result = json?["result"] as? [String: Any],
               let info = result["serverInfo"] as? [String: Any] else {
             return (nil, nil)
@@ -875,7 +794,7 @@ actor MCPService {
         return (info["name"] as? String, info["version"] as? String)
     }
 
-    private nonisolated func parseToolsListResponse(_ json: [String: Any]?) -> [MCPTool] {
+    nonisolated func parseToolsListResponse(_ json: [String: Any]?) -> [MCPTool] {
         guard let result = json?["result"] as? [String: Any],
               let tools = result["tools"] as? [[String: Any]] else {
             return []

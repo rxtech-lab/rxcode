@@ -196,6 +196,45 @@ public enum IDEToolRegistry {
                 ]),
             ])
         ),
+        listAgentModelsTool,
+        IDETool(
+            name: "ide__update_task",
+            description: "Update an existing task by task_id from any project. Only supplied fields change. Preserves the task thread. Use provider and model to change its agent assignment; discover choices with ide__list_agent_models. All fields are validated before saving. Use ide__run_task to explicitly start work or send follow-ups.",
+            visibility: .alwaysIDEOnly,
+            inputSchema: .object([
+                "type": .string("object"),
+                "properties": .object([
+                    "task_id": .object(["type": .string("string"), "description": .string("Existing task UUID from ide__get_tasks.")]),
+                    "provider": .object(["type": .array([.string("string"), .string("null")]), "description": .string("claudeCode, codex, acp, or null to unassign. Changing provider clears the old model and effort.")]),
+                    "model": .object(["type": .array([.string("string"), .string("null")]), "description": .string("Model id from ide__list_agent_models for the selected provider, or null to use its default. ACP ids include the client prefix. Omit to keep the current model unless provider changes.")]),
+                    "title": .object(["type": .string("string"), "description": .string("Replacement nonempty title.")]),
+                    "details": .object(["type": .string("string"), "description": .string("Replacement Markdown description. Cannot change after a task has started.")]),
+                    "status": .object(["type": .string("string"), "description": .string("Destination column id. Entering a chat column may start an agent and consume tokens; running tasks cannot change column.")]),
+                    "story_id": .object(["type": .array([.string("string"), .string("null")]), "description": .string("Story UUID on the task project board; null removes the story assignment.")]),
+                    "priority": .object(["type": .array([.string("string"), .string("null")]), "description": .string("urgent, high, medium, low, or null to clear.")]),
+                    "version": .object(["type": .array([.string("string"), .string("null")]), "description": .string("Release version, or null to clear.")]),
+                    "milestone": .object(["type": .array([.string("string"), .string("null")]), "description": .string("Milestone, or null to clear.")]),
+                    "type_id": .object(["type": .array([.string("string"), .string("null")]), "description": .string("Item type UUID on the task project board, or null to clear.")]),
+                    "tags": .object(["type": .string("array"), "items": .object(["type": .string("string")]), "description": .string("Replacement labels. Use an empty array to clear.")]),
+                    "starts_after_task_ids": .object(["type": .string("array"), "items": .object(["type": .string("string")]), "description": .string("Replacement prerequisite task UUIDs from any project. Use an empty array to clear; cycles are rejected.")]),
+                ]),
+                "required": .array([.string("task_id")]),
+                "additionalProperties": .bool(false),
+            ])
+        ),
+        IDETool(
+            name: "ide__delete_task",
+            description: "Delete an existing task by task_id from any project and remove its prerequisite links from other tasks. Keeps its chat thread. Refuses to delete a task while its agent is running.",
+            visibility: .alwaysIDEOnly,
+            inputSchema: .object([
+                "type": .string("object"),
+                "properties": .object([
+                    "task_id": .object(["type": .string("string")]),
+                ]),
+                "required": .array([.string("task_id")]),
+                "additionalProperties": .bool(false),
+            ])
+        ),
         IDETool(
             name: "ide__create_scheduled_task",
             description: "Propose a scheduled task: a prompt RxCode sends to an agent on a cron schedule, optionally in a project. RxCode shows the user a confirmation dialog where they can edit, add, or cancel it; this call waits for their decision and reports whether the task was added. Uses project_id when given, else the current chat's project; from a chat outside any project, the task has no project.",

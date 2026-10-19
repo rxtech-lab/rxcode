@@ -1157,15 +1157,6 @@ final class AppState {
     struct WeakWindowRef { weak var window: WindowState? }
     var liveWindowRefs: [WeakWindowRef] = []
 
-    func registerLiveWindow(_ window: WindowState) {
-        liveWindowRefs.removeAll { $0.window == nil || $0.window === window }
-        liveWindowRefs.append(WeakWindowRef(window: window))
-    }
-
-    func registeredWindows() -> [WindowState] {
-        liveWindowRefs.removeAll { $0.window == nil }
-        return liveWindowRefs.compactMap(\.window)
-    }
     var mobileSnapshotBroadcastTask: Task<Void, Never>?
     /// Pending debounced `taskBoardUpdate` pushes, one per project.
     var mobileTaskBoardBroadcastTasks: [UUID: Task<Void, Never>] = [:]

@@ -142,6 +142,7 @@ extension UserMessage: Decodable {
     private enum CodingKeys: String, CodingKey {
         case message
         case isReplay
+        case toolUseResult = "tool_use_result"
     }
 
     private enum MessageCodingKeys: String, CodingKey {
@@ -170,6 +171,18 @@ extension UserMessage: Decodable {
         )
         self.isError = try messageContainer.decodeIfPresent(Bool.self, forKey: .isError) ?? false
         self.isReplay = try container.decodeIfPresent(Bool.self, forKey: .isReplay) ?? false
+
+        // MCP Apps need the full CallToolResult, including structured content and
+        // private metadata. Preserve it when Claude includes the original result.
+        if let result = try? container.decode(JSONValue.self, forKey: .toolUseResult),
+           result["structuredContent"] != nil || result["_meta"] != nil,
+           let data = try? JSONEncoder().encode(result), let text = String(data: data, encoding: .utf8) {
+            self.content = text
+            let blocks = try? messageContainer.decode([JSONValue].self, forKey: .content)
+            self.toolUseId = try messageContainer.decodeIfPresent(String.self, forKey: .toolUseId)
+                ?? blocks?.first(where: { $0["tool_use_id"] != nil })?["tool_use_id"]?.stringValue
+            return
+        }
 
         var blockToolUseId: String?
         if let stringContent = try? messageContainer.decode(String.self, forKey: .content) {

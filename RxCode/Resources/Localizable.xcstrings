@@ -6110,6 +6110,7 @@
       }
     },
     "Complete sign-in in Terminal." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -20857,6 +20858,9 @@
         }
       }
     },
+    "Saving credentials and refreshing models…" : {
+
+    },
     "Scan frequency" : {
       "localizations" : {
         "ko" : {
@@ -23210,6 +23214,12 @@
       }
     },
     "Sign Out…" : {
+
+    },
+    "Sign-in ended with exit code %d. Close this sheet and try again." : {
+
+    },
+    "Sign-in Failed" : {
 
     },
     "Signed in" : {
@@ -26841,6 +26851,9 @@
           }
         }
       }
+    },
+    "Waiting for sign-in… Complete it in your browser if one opened." : {
+
     },
     "Waits for %@ to finish before starting" : {
       "localizations" : {

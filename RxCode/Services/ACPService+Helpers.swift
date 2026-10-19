@@ -70,7 +70,7 @@ extension ACPService {
 
     /// Scans a `session/new` (or `session/load`) response for the first
     /// `SessionConfigOption` with `category: "model"` and `type: "select"`,
-    /// flattening grouped options.
+    /// retaining provider metadata while flattening grouped options.
     static func parseModelConfig(from result: JSONValue) -> ACPModelConfig? {
         guard let configOptions = result.objectValue?["configOptions"]?.arrayValue else { return nil }
         for option in configOptions {
@@ -86,7 +86,9 @@ extension ACPService {
                 guard let entryObj = entry.objectValue else { continue }
                 if let groupOpts = entryObj["options"]?.arrayValue {
                     for groupEntry in groupOpts {
-                        if let parsed = parseSelectOption(groupEntry) {
+                        if var parsed = parseSelectOption(groupEntry) {
+                            parsed.groupId = entryObj["group"]?.stringValue
+                            parsed.groupName = entryObj["name"]?.stringValue
                             flattened.append(parsed)
                         }
                     }

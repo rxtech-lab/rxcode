@@ -21,6 +21,7 @@ struct ACPSignInSheet: View {
     @State private var isSigningIn = false
     @State private var finishedMessage: String?
     @State private var errorMessage: String?
+    @State private var terminalLogin: InteractiveTerminalState?
     @State private var signInTask: Task<Void, Never>?
 
     var body: some View {
@@ -30,23 +31,41 @@ struct ACPSignInSheet: View {
             if let method = selectedMethod, case .envVar(let vars, let link) = method.kind {
                 credentialFields(vars, link: link)
             }
-            if isSigningIn || finishedMessage != nil {
-                progressSection
-            }
-            if let errorMessage {
-                Text(errorMessage)
-                    .font(.system(size: ClaudeTheme.size(11)))
-                    .foregroundStyle(ClaudeTheme.statusError)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
             footer
         }
         .padding(20)
         .frame(width: 420)
+        .overlay(alignment: .bottom) {
+            if isSigningIn || finishedMessage != nil {
+                progressSection
+                    .padding(12)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 56)
+                    .allowsHitTesting(false)
+            }
+        }
+        .alert("Sign-in Failed", isPresented: Binding(
+            get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) { errorMessage = nil }
+        } message: {
+            Text(errorMessage ?? "")
+        }
         .interactiveDismissDisabled(isSigningIn)
         .task { await loadMethods() }
         .onDisappear { signInTask?.cancel() }
+        .sheet(item: $terminalLogin) { state in
+            ACPTerminalSignInSheet(state: state) {
+                terminalLogin = nil
+                isSigningIn = true
+                signInTask = Task {
+                    defer { isSigningIn = false }
+                    await appState.completeACPTerminalLogin(id: client.id, methodId: selectedMethodId)
+                    finishedMessage = String(localized: "Signed in to \(client.displayName).")
+                }
+            }
+        }
     }
 
     private var selectedMethod: ACPAuthMethod? {
@@ -177,11 +196,18 @@ struct ACPSignInSheet: View {
             } else {
                 ProgressView().progressViewStyle(.linear)
             }
-            Text(finishedMessage ?? "Waiting for sign-in… Complete it in your browser if one opened.")
+            Text(finishedMessage ?? pendingSignInMessage)
                 .font(.system(size: ClaudeTheme.size(11)))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    private var pendingSignInMessage: String {
+        if let method = selectedMethod, case .envVar = method.kind {
+            return String(localized: "Saving credentials and refreshing models…")
+        }
+        return String(localized: "Waiting for sign-in… Complete it in your browser if one opened.")
     }
 
     private var footer: some View {
@@ -265,8 +291,7 @@ struct ACPSignInSheet: View {
                     await appState.setACPClientCredentials(id: client.id, values: values)
                     finishedMessage = String(localized: "Credentials saved.")
                 case .terminal:
-                    try await appState.openACPTerminalLogin(id: client.id, method: method)
-                    finishedMessage = String(localized: "Complete sign-in in Terminal.")
+                    terminalLogin = try await appState.acpTerminalLogin(id: client.id, method: method)
                 }
             } catch is CancellationError {
                 return

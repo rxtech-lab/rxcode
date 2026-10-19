@@ -603,6 +603,16 @@
         }
       }
     },
+    "%@: %@ (unavailable)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@: %2$@ (unavailable)"
+          }
+        }
+      }
+    },
     "%@'s tasks and stories will merge with the Autopilot project's board and sync to every device signed in to your account." : {
       "localizations" : {
         "ko" : {
@@ -7813,6 +7823,9 @@
           }
         }
       }
+    },
+    "Default model" : {
+
     },
     "Default Model" : {
       "localizations" : {
@@ -24645,6 +24658,9 @@
           }
         }
       }
+    },
+    "The model used when this action creates a thread. Default model follows your chat settings." : {
+
     },
     "The most expensive task in this window." : {
       "localizations" : {

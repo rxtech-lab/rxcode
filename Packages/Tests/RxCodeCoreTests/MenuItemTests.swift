@@ -80,6 +80,29 @@ final class MenuItemTests: XCTestCase {
         XCTAssertNil(legacyDecoded.custom)
     }
 
+    func testCustomThreadModelSelectionRoundTripsForEveryProvider() throws {
+        for (provider, model) in [(AgentProvider.claudeCode, "sonnet"), (.codex, "gpt-5.4"), (.acp, "client::model")] {
+            let config = CustomMenuActionConfig(
+                kind: .createThread,
+                message: "Review this project",
+                agentProvider: provider,
+                model: model
+            )
+            let command = MenuActionCommand(kind: .custom, projectId: UUID(), custom: config)
+            let decoded = try JSONDecoder().decode(MenuActionCommand.self, from: JSONEncoder().encode(command))
+            XCTAssertEqual(decoded, command)
+            XCTAssertEqual(decoded.custom?.agentProvider, provider)
+            XCTAssertEqual(decoded.custom?.model, model)
+        }
+    }
+
+    func testLegacyCustomThreadUsesDefaultModel() throws {
+        let legacy = Data(#"{"kind":"createThread","message":"Review this project"}"#.utf8)
+        let config = try JSONDecoder().decode(CustomMenuActionConfig.self, from: legacy)
+        XCTAssertNil(config.agentProvider)
+        XCTAssertNil(config.model)
+    }
+
     func testDeepLinkBuildAndParse() throws {
         let projectId = UUID()
         let url = MenuDeepLink.url(action: MenuDeepLink.releaseCreate, projectId: projectId, sessionId: "s1")

@@ -85,7 +85,9 @@ final class CustomMenuHook: Hook {
         case .createThread:
             return CustomMenuActionConfig(
                 kind: .createThread,
-                message: context.substitute(record.messageTemplate)
+                message: context.substitute(record.messageTemplate),
+                agentProvider: record.agentProvider.flatMap(AgentProvider.init(rawValue:)),
+                model: record.model
             )
         case .continueThread:
             // An explicit target wins (with placeholders like {{sessionId}}

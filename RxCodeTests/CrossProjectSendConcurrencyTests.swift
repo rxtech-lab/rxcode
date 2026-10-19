@@ -351,6 +351,32 @@ final class CrossProjectSendConcurrencyTests: XCTestCase {
         XCTAssertTrue(result.done)
     }
 
+    func testCustomMenuCreatesThreadWithConfiguredModel() async throws {
+        let project = makeProject("custom-menu")
+        appState.projects = [project]
+        appState.selectedAgentProvider = .claudeCode
+        let codexBackend = MockAgentBackend(provider: .codex)
+        appState.agentBackendOverrides[.codex] = codexBackend
+
+        let result = try await appState.dispatchMenuCommand(MenuActionCommand(
+            kind: .custom,
+            projectId: project.id,
+            custom: CustomMenuActionConfig(
+                kind: .createThread,
+                message: "Review this project",
+                agentProvider: .codex,
+                model: "gpt-5.4"
+            )
+        ))
+
+        let requests = await codexBackend.receivedRequests
+        let request = try XCTUnwrap(requests.last)
+        XCTAssertEqual(request.model, "gpt-5.4")
+        let threadId = try XCTUnwrap(result.threadId)
+        XCTAssertEqual(appState.stateForSession(threadId).agentProvider, .codex)
+        XCTAssertEqual(appState.selectedAgentProvider, .claudeCode)
+    }
+
     // MARK: - Helpers
 
     private func makeProject(_ name: String) -> Project {

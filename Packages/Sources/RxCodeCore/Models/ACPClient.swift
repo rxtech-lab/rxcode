@@ -371,11 +371,16 @@ public struct ACPModelOption: Codable, Hashable, Sendable {
     /// Human-readable label.
     public var name: String
     public var description: String?
+    /// Provider group advertised by the ACP model selector, when present.
+    public var groupId: String?
+    public var groupName: String?
 
-    public init(value: String, name: String, description: String? = nil) {
+    public init(value: String, name: String, description: String? = nil, groupId: String? = nil, groupName: String? = nil) {
         self.value = value
         self.name = name
         self.description = description
+        self.groupId = groupId
+        self.groupName = groupName
     }
 }
 

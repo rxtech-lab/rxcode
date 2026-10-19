@@ -419,7 +419,7 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(AppState.splitACPModelKey("client::pro")?.clientId, "client")
         XCTAssertEqual(AppState.splitACPModelKey("client::pro")?.model, "pro")
         XCTAssertEqual(appState.acpSelectionParts(for: "client::pro")?.clientId, "client")
-        XCTAssertEqual(appState.modelDisplayLabel("client::pro", provider: .acp), "Gemini CLI · Gemini Pro")
+        XCTAssertEqual(appState.modelDisplayLabel("client::pro", provider: .acp), "Gemini CLI · Google · Gemini Pro")
     }
 
     func testACPModelSectionsIncludeEnabledClientsAndSkipDisabledClients() {
@@ -444,6 +444,35 @@ final class AppStateTests: XCTestCase {
 
         XCTAssertEqual(acpSections.map(\.id), ["acp:enabled"])
         XCTAssertEqual(acpSections.first?.models.map(\.id), ["enabled::model-a"])
+    }
+
+    func testACPModelSectionsSeparateSubscriptionProvidersWithoutChangingSelectionKeys() {
+        appState.acpClients = [ACPClientSpec(
+            id: "opencode", displayName: "OpenCode",
+            launch: .custom(command: "opencode", args: [], env: [:]),
+            modelOptions: [
+                ACPModelOption(value: "opencode-go/glm-5", name: "GLM-5", groupId: "opencode-go", groupName: "OpenCode Go"),
+                ACPModelOption(value: "opencode/glm-5", name: "GLM-5", groupId: "opencode", groupName: "OpenCode Zen"),
+                ACPModelOption(value: "anthropic/sonnet", name: "Sonnet", groupId: "anthropic", groupName: "Anthropic"),
+            ]
+        )]
+
+        let sections = appState.availableAgentModelSections()
+        XCTAssertTrue(sections.contains { $0.provider == .claudeCode })
+        XCTAssertTrue(sections.contains { $0.provider == .codex })
+        let acp = sections.filter { $0.provider == .acp }
+        XCTAssertEqual(acp.map(\.title), ["OpenCode · OpenCode Go", "OpenCode · OpenCode Zen", "OpenCode · Anthropic"])
+        XCTAssertEqual(acp.flatMap(\.models).map(\.id), ["opencode::opencode-go/glm-5", "opencode::opencode/glm-5", "opencode::anthropic/sonnet"])
+        XCTAssertEqual(Set(acp.map(\.id)).count, 3)
+        XCTAssertEqual(appState.modelDisplayLabel("opencode::opencode-go/glm-5", provider: .acp), "OpenCode · OpenCode Go · GLM-5")
+        XCTAssertEqual(appState.modelDisplayLabel("opencode::opencode/glm-5", provider: .acp), "OpenCode · OpenCode Zen · GLM-5")
+    }
+
+    func testACPModelGroupsRecoverOlderCachedProviderNamesAndOpenCodeIDs() {
+        XCTAssertEqual(AppState.acpModelGroup(ACPModelOption(value: "opencode-go/glm-5", name: "OpenCode Go/GLM-5"))?.title, "OpenCode Go")
+        XCTAssertEqual(AppState.acpModelGroup(ACPModelOption(value: "opencode/glm-5", name: "GLM-5"))?.title, "OpenCode Zen")
+        XCTAssertEqual(AppState.acpModelGroup(ACPModelOption(value: "opencode-go/glm-5", name: "GLM-5"))?.title, "OpenCode Go")
+        XCTAssertNil(AppState.acpModelGroup(ACPModelOption(value: "pro", name: "Gemini Pro")))
     }
 
     func testACPExactVersionUsesPackageInsteadOfCurrentRegistryBinary() async throws {

@@ -33,41 +33,38 @@ extension AppState {
             ("codex", AgentProvider.codex.displayNameText, .codex, nil, Self.availableCodexModels(codexModels)),
         ]
 
-        // Each enabled ACP client becomes its own section, titled with the
-        // client's display name (e.g. "gemini-cli"). Model ids are prefixed
-        // with the client id so the selection round-trips back to the right client.
-        // When no models were discovered, inject a synthetic "Default" entry
-        // (empty model id) so the client is still selectable in the picker —
-        // the agent picks its own default at session start.
+        // Preserve provider groups so subscription and separately billed models
+        // remain distinguishable. Selection keys still identify the ACP client.
         for client in acpClients where client.enabled {
-            let models: [AgentModel]
-            if let options = client.modelOptions, !options.isEmpty {
-                models = options.map { option in
-                    AgentModel(
-                        provider: .acp,
-                        id: "\(client.id)::\(option.value)",
-                        displayName: option.name.isEmpty ? option.value : Self.stripACPProviderPrefix(option.name),
-                        description: option.description ?? "ACP client \(client.displayName)"
-                    )
-                }
-            } else if client.models.isEmpty {
-                models = [AgentModel(
+            let options = client.modelOptions.flatMap { $0.isEmpty ? nil : $0 }
+                ?? client.models.map { ACPModelOption(value: $0, name: $0) }
+            guard !options.isEmpty else {
+                sections.append(("acp:\(client.id)", client.displayName, .acp, client.iconURL, [
+                    AgentModel(provider: .acp, id: "\(client.id)::", displayName: "Default", description: "ACP client \(client.displayName)"),
+                ]))
+                continue
+            }
+
+            var groups: [(id: String?, title: String, models: [AgentModel])] = []
+            for option in options {
+                let group = Self.acpModelGroup(option)
+                let title = group.map { "\(client.displayName) · \($0.title)" } ?? client.displayName
+                let model = AgentModel(
                     provider: .acp,
-                    id: "\(client.id)::",
-                    displayName: "Default",
-                    description: "ACP client \(client.displayName)"
-                )]
-            } else {
-                models = client.models.map { model in
-                    AgentModel(
-                        provider: .acp,
-                        id: "\(client.id)::\(model)",
-                        displayName: model,
-                        description: "ACP client \(client.displayName)"
-                    )
+                    id: "\(client.id)::\(option.value)",
+                    displayName: option.name.isEmpty ? option.value : Self.stripACPProviderPrefix(option.name),
+                    description: option.description ?? title
+                )
+                if let index = groups.firstIndex(where: { $0.id == group?.id }) {
+                    groups[index].models.append(model)
+                } else {
+                    groups.append((group?.id, title, [model]))
                 }
             }
-            sections.append(("acp:\(client.id)", client.displayName, .acp, client.iconURL, models))
+            for group in groups {
+                let id = group.id.map { "acp:\(client.id):group:\($0)" } ?? "acp:\(client.id)"
+                sections.append((id, group.title, .acp, client.iconURL, group.models))
+            }
         }
         return sections
     }
@@ -106,13 +103,40 @@ extension AppState {
         if let option = client.modelOptions?.first(where: { $0.value == model }),
            !option.name.isEmpty
         {
-            return Self.stripACPProviderPrefix(option.name)
+            let name = Self.stripACPProviderPrefix(option.name)
+            if let group = Self.acpModelGroup(option) {
+                return "\(group.title) · \(name)"
+            }
+            return name
         }
         return model
     }
 
+    /// Older saved options lack group metadata but often retain provider-prefixed names.
+    static func acpModelGroup(_ option: ACPModelOption) -> (id: String, title: String)? {
+        if let id = option.groupId, !id.isEmpty {
+            let name = option.groupName.flatMap { $0.isEmpty ? nil : $0 } ?? id
+            return (id, name)
+        }
+        if let name = option.groupName, !name.isEmpty { return (name, name) }
+        // OpenCode IDs identify the billing provider even in older cached lists.
+        let components = option.value.split(separator: "/", maxSplits: 1)
+        if components.count == 2 {
+            switch components[0] {
+            case "opencode-go": return ("opencode-go", "OpenCode Go")
+            case "opencode": return ("opencode", "OpenCode Zen")
+            default: break
+            }
+        }
+        if option.name != option.value, let slash = option.name.firstIndex(of: "/") {
+            let prefix = option.name[..<slash].trimmingCharacters(in: .whitespaces)
+            if !prefix.isEmpty { return (prefix, prefix) }
+        }
+        return nil
+    }
+
     /// Drops the leading `<provider>/` segment from an ACP model option name
-    /// when the picker already shows the client name to the left. Example:
+    /// when the picker already shows the provider group. Example:
     /// `"OpenCode Zen/MiniMax M2.5 Free"` → `"MiniMax M2.5 Free"`. Names
     /// without a `/` are returned unchanged.
     static func stripACPProviderPrefix(_ name: String) -> String {

@@ -476,11 +476,22 @@ extension AppState {
         await refreshACPClientModels(id: id)
     }
 
-    func openACPTerminalLogin(id: String, method: ACPAuthMethod) async throws {
+    func acpTerminalLogin(id: String, method: ACPAuthMethod) async throws -> InteractiveTerminalState {
         guard let spec = acpClients.first(where: { $0.id == id }),
               case .terminal(let command, let args, let env) = method.kind
-        else { return }
-        try await acp.openTerminalLogin(spec: spec, command: command, args: args, env: env)
+        else { throw ACPError.protocolMismatch("Terminal sign-in is no longer available.") }
+        return try await acp.terminalLogin(spec: spec, command: command, args: args, env: env)
+    }
+
+    func completeACPTerminalLogin(id: String, methodId: String?) async {
+        // Console accounts live outside the legacy auth.json credential file.
+        if methodId == "rxcode-opencode-account",
+           let index = acpClients.firstIndex(where: { $0.id == id }) {
+            acpClients[index].authMethodId = methodId
+            acpClients[index].extraEnv["OPENCODE_API_KEY"] = nil
+            saveACPClients()
+        }
+        await refreshACPClientModels(id: id)
     }
 
     /// Re-probes an installed client and persists the result. If the probe

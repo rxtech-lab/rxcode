@@ -21,13 +21,71 @@ extension ACPService {
         ])
     ]
 
-    /// Spawns the agent and reads the sign-in methods it advertises in its
-    /// `initialize` response.
+    /// Offers account and API-key sign-in for OpenCode; other clients advertise
+    /// their sign-in methods in the `initialize` response.
     func authMethods(spec: ACPClientSpec, cwd: String) async throws -> [ACPAuthMethod] {
-        try await withEphemeralAgent(spec: spec, cwd: cwd, label: "auth-methods", timeout: .seconds(90)) { key in
+        if let methods = Self.openCodeAuthMethods(for: spec) { return methods }
+        return try await withEphemeralAgent(spec: spec, cwd: cwd, label: "auth-methods", timeout: .seconds(90)) { key in
             let initResult = try await self.sendRequest(key: key, method: "initialize", params: Self.initializeParams)
             return ACPAuthMethod.parse(initializeResult: initResult)
         }
+    }
+
+    /// Account sign-in connects the OpenCode subscription without requiring
+    /// a manually copied key. Keep API-key entry as an explicit alternative.
+    static func openCodeAuthMethods(for spec: ACPClientSpec) -> [ACPAuthMethod]? {
+        let isOpenCode: Bool
+        if spec.registryId == "opencode" {
+            isOpenCode = true
+        } else if case .binary(let path, _, _) = spec.launch {
+            isOpenCode = URL(fileURLWithPath: path).lastPathComponent == "opencode"
+        } else {
+            isOpenCode = false
+        }
+        guard isOpenCode else { return nil }
+        return [
+            ACPAuthMethod(
+                id: "rxcode-opencode-account", name: "OpenCode Account",
+                description: "Sign in to your OpenCode account in the browser to use your subscription.",
+                kind: .terminal(command: "opencode", args: Self.openCodeAccountAuthArguments(version: spec.installedVersion), env: [:])
+            ),
+            ACPAuthMethod(
+                id: "rxcode-opencode-api-key", name: "OpenCode API Key",
+                description: "Use an API key if you already have one. Account sign-in does not require copying a key.",
+                kind: .envVar(vars: [
+                    .init(name: "OPENCODE_API_KEY", label: "API key")
+                ], link: "https://opencode.ai/auth")
+            ),
+            ACPAuthMethod(
+                id: "opencode-login", name: "Other Providers",
+                description: "Use the terminal for other providers and browser sign-in. Loading provider choices may take a while.",
+                kind: .terminal(command: "opencode", args: ["auth", "login"], env: [:])
+            )
+        ]
+    }
+
+    static func openCodeAccountAuthArguments(version: String?, action: String = "login") -> [String] {
+        if version?.trimmingCharacters(in: CharacterSet(charactersIn: "v")).hasPrefix("1.") == true {
+            return ["console", action]
+        }
+        return ["auth", action, "opencode"]
+    }
+
+    /// Resolve unknown custom installations at launch rather than assuming
+    /// that the executable on PATH has the same major version as the registry.
+    static func openCodeAccountAuthCommand(argv: [String], version: String?, action: String = "login") -> [String] {
+        if let version, !version.isEmpty { return argv }
+        let base = Array(argv.dropLast(3))
+        let script = """
+        action=$1
+        shift
+        version=$("$@" --version) || exit $?
+        case "$version" in
+            1.*|v1.*) exec "$@" console "$action" ;;
+            *) exec "$@" auth "$action" opencode ;;
+        esac
+        """
+        return ["/bin/zsh", "-c", script, "rxcode-opencode-account", action] + base
     }
 
     func supportsLogout(spec: ACPClientSpec, cwd: String) async throws -> Bool {
@@ -68,23 +126,52 @@ extension ACPService {
         return providers.values.contains { $0["type"] is String }
     }
 
-    /// Opens Terminal running the agent's interactive login for a `terminal`
-    /// auth method.
-    func openTerminalLogin(spec: ACPClientSpec, command: String?, args: [String], env: [String: String]) async throws {
+    /// Prepare an interactive login for the in-app pseudo-terminal. Do not
+    /// inherit noninteractive terminal flags from the agent's GUI environment.
+    func terminalLogin(spec: ACPClientSpec, command: String?, args: [String], env: [String: String]) async throws -> InteractiveTerminalState {
         let (executable, launchArgs, launchEnv) = try resolveLaunch(spec.launch)
-        let argv = Self.terminalLoginCommand(
+        var argv = Self.terminalLoginCommand(
             executable: executable, launchArgs: launchArgs, extraArgs: spec.extraArgs,
             command: command, args: args
         )
-        let exports = launchEnv.merging(spec.extraEnv) { _, new in new }.merging(env) { _, new in new }
-        try await openTerminalAuthCommand(argv: argv, exports: exports, label: "Login")
+        if command == "opencode", args == ["auth", "login", "opencode"] {
+            argv = Self.openCodeAccountAuthCommand(argv: argv, version: spec.installedVersion)
+        }
+        var environment = await resolvedEnvironment()
+        environment.merge(launchEnv) { _, new in new }
+        environment.merge(spec.extraEnv) { _, new in new }
+        environment.merge(env) { _, new in new }
+        environment = Self.interactiveAuthEnvironment(environment)
+        return InteractiveTerminalState(
+            title: "Sign In to \(spec.displayName)", executable: argv[0],
+            arguments: Array(argv.dropFirst()),
+            environment: environment.map { "\($0.key)=\($0.value)" },
+            currentDirectory: NSHomeDirectory(), reportToChat: false
+        )
+    }
+
+    static func interactiveAuthEnvironment(_ environment: [String: String]) -> [String: String] {
+        var result = environment
+        for name in ["CI", "NO_COLOR", "TERM_PROGRAM", "TERM_PROGRAM_VERSION"] {
+            result[name] = nil
+        }
+        result["TERM"] = "xterm-256color"
+        result["COLORTERM"] = "truecolor"
+        return result
     }
 
     /// OpenCode manages provider credentials outside ACP, so its older ACP
     /// server can only sign out through the interactive CLI provider picker.
     func openOpenCodeTerminalLogout(spec: ACPClientSpec) async throws {
         let (executable, launchArgs, launchEnv) = try resolveLaunch(spec.launch)
-        let argv = Self.openCodeLogoutCommand(executable: executable, launchArgs: launchArgs)
+        var argv = Self.openCodeLogoutCommand(executable: executable, launchArgs: launchArgs)
+        if spec.authMethodId == "rxcode-opencode-account" {
+            let args = Self.openCodeAccountAuthArguments(version: spec.installedVersion, action: "logout")
+            argv = Self.terminalLoginCommand(
+                executable: executable, launchArgs: launchArgs, extraArgs: [], command: "opencode", args: args
+            )
+            argv = Self.openCodeAccountAuthCommand(argv: argv, version: spec.installedVersion, action: "logout")
+        }
         let exports = launchEnv.merging(spec.extraEnv) { _, new in new }
         try await openTerminalAuthCommand(argv: argv, exports: exports, label: "Logout")
     }
@@ -115,6 +202,9 @@ extension ACPService {
         command: String?, args: [String]
     ) -> [String] {
         guard let command else { return [executable] + launchArgs + extraArgs + args }
+        if command == "opencode", let acpIndex = launchArgs.firstIndex(of: "acp") {
+            return [executable] + Array(launchArgs[..<acpIndex]) + args
+        }
         // A terminal-auth hint may name the agent on PATH even when RxCode
         // installed a different version. Run the same binary used for ACP.
         let resolved = !command.contains("/") && command == URL(fileURLWithPath: executable).lastPathComponent

@@ -116,6 +116,8 @@ extension AppState {
                 projectId: project.id,
                 threadId: nil,
                 prompt: config.message ?? "",
+                agentProvider: config.agentProvider,
+                model: config.model,
                 waitForResponse: false,
                 skipHooks: true
             )

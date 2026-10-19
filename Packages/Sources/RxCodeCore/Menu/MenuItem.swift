@@ -182,6 +182,9 @@ public struct CustomMenuActionConfig: Codable, Sendable, Hashable {
     // createThread / continueThread
     public let message: String?
     public let targetSessionId: String?    // continueThread only
+    // createThread only; optional for compatibility with older peers.
+    public let agentProvider: AgentProvider?
+    public let model: String?
 
     public init(
         kind: Kind,
@@ -190,7 +193,9 @@ public struct CustomMenuActionConfig: Codable, Sendable, Hashable {
         headers: [String: String]? = nil,
         body: String? = nil,
         message: String? = nil,
-        targetSessionId: String? = nil
+        targetSessionId: String? = nil,
+        agentProvider: AgentProvider? = nil,
+        model: String? = nil
     ) {
         self.kind = kind
         self.httpMethod = httpMethod
@@ -198,6 +203,8 @@ public struct CustomMenuActionConfig: Codable, Sendable, Hashable {
         self.headers = headers
         self.body = body
         self.message = message
+        self.agentProvider = agentProvider
+        self.model = model
         self.targetSessionId = targetSessionId
     }
 }

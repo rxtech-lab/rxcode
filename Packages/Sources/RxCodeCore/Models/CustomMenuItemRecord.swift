@@ -65,6 +65,10 @@ public final class CustomMenuItemRecord {
     /// Target thread id for `continueThread`.
     public var targetSessionId: String?
 
+    // createThread only; nil preserves the default model selection.
+    public var agentProvider: String?
+    public var model: String?
+
     // Show condition
     /// Raw `ConditionType` value. Defaults to `always` so existing records — and
     /// any new item without a condition — are simply always shown.
@@ -102,6 +106,8 @@ public final class CustomMenuItemRecord {
         bodyTemplate: String? = nil,
         messageTemplate: String? = nil,
         targetSessionId: String? = nil,
+        agentProvider: AgentProvider? = nil,
+        model: String? = nil,
         conditionType: ConditionType = .always,
         conditionScript: String? = nil,
         conditionCompiled: Bool = false,
@@ -121,6 +127,8 @@ public final class CustomMenuItemRecord {
         self.headersJSON = headersJSON
         self.bodyTemplate = bodyTemplate
         self.messageTemplate = messageTemplate
+        self.agentProvider = agentProvider?.rawValue
+        self.model = model
         self.targetSessionId = targetSessionId
         self.conditionType = conditionType.rawValue
         self.conditionScript = conditionScript

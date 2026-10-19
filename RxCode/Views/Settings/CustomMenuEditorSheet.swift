@@ -22,6 +22,8 @@ struct CustomMenuDraft: Identifiable {
     // create / continue thread
     var messageTemplate: String
     var targetSessionId: String
+    var agentProvider: AgentProvider?
+    var model: String?
 
     // show condition
     var conditionType: CustomMenuItemRecord.ConditionType
@@ -54,6 +56,8 @@ struct CustomMenuDraft: Identifiable {
         headers = []
         bodyTemplate = ""
         messageTemplate = ""
+        agentProvider = nil
+        model = nil
         targetSessionId = ""
         conditionType = .always
         conditionScript = ""
@@ -76,6 +80,8 @@ struct CustomMenuDraft: Identifiable {
         headers = record.headers.map { HeaderPair(name: $0.key, value: $0.value) }
         bodyTemplate = record.bodyTemplate ?? ""
         messageTemplate = record.messageTemplate ?? ""
+        agentProvider = record.agentProvider.flatMap(AgentProvider.init(rawValue:))
+        model = record.model
         targetSessionId = record.targetSessionId ?? ""
         conditionType = record.conditionTypeValue
         conditionScript = record.conditionScript ?? ""
@@ -130,6 +136,8 @@ struct CustomMenuDraft: Identifiable {
             // continueThread always targets the tapped thread, resolved at dispatch
             // time, so no explicit target is stored.
             targetSessionId: nil,
+            agentProvider: actionKind == .createThread ? agentProvider : nil,
+            model: actionKind == .createThread ? model : nil,
             conditionType: conditionType,
             conditionScript: conditionType == .swiftScript && !conditionScript.isEmpty ? conditionScript : nil,
             conditionCompiled: conditionType == .swiftScript && isConditionCompiled,
@@ -416,6 +424,9 @@ struct CustomMenuEditorSheet: View {
 
     private var threadSection: some View {
         Section(draft.actionKind == .continueThread ? "Continue thread" : "New thread") {
+            if draft.actionKind == .createThread {
+                modelPicker
+            }
             if draft.actionKind == .continueThread {
                 Text("Continues the thread this menu is opened from — its session id is filled in automatically.")
                     .font(.system(size: ClaudeTheme.size(11)))
@@ -432,6 +443,45 @@ struct CustomMenuEditorSheet: View {
                     .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color(NSColor.separatorColor)))
             }
         }
+    }
+
+    private var modelSelection: Binding<String> {
+        Binding(
+            get: {
+                guard let provider = draft.agentProvider, let model = draft.model else { return "" }
+                return "\(provider.rawValue):\(model)"
+            },
+            set: { key in
+                let model = appState.availableAgentModelSections().flatMap(\.models)
+                    .first { $0.key == key }
+                draft.agentProvider = model?.provider
+                draft.model = model?.id
+            }
+        )
+    }
+
+    private var modelPicker: some View {
+        Picker("Model", selection: modelSelection) {
+            Text("Default model").tag("")
+            ForEach(appState.availableAgentModelSections(), id: \.id) { section in
+                Section(section.title) {
+                    ForEach(section.models, id: \.key) { model in
+                        Text(model.displayName).tag(model.key)
+                    }
+                }
+            }
+            // Preserve a saved selection even if its ACP client is disabled or
+            // the provider no longer advertises the model.
+            if let provider = draft.agentProvider, let model = draft.model,
+               !appState.availableAgentModelSections().flatMap(\.models).contains(where: {
+                   $0.provider == provider && $0.id == model
+               }) {
+                Text("\(provider.displayNameText): \(model) (unavailable)")
+                    .tag("\(provider.rawValue):\(model)")
+            }
+        }
+        .pickerStyle(.menu)
+        .help("The model used when this action creates a thread. Default model follows your chat settings.")
     }
 
     private var footer: some View {

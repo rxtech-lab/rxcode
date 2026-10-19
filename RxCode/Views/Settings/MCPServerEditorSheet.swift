@@ -2,8 +2,8 @@ import SwiftUI
 import RxCodeCore
 
 struct MCPServerEditorSheet: View {
-    /// Returns true on success (sheet dismisses), false on failure (stays open).
-    let onSave: (MCPServerSpec, MCPScope) async -> Bool
+    /// Includes the connection probe so failures stay visible in the editor.
+    let onSave: (MCPServerSpec, MCPScope) async -> MCPProbeResult
 
     @Environment(\.dismiss) private var dismiss
 
@@ -11,6 +11,10 @@ struct MCPServerEditorSheet: View {
     @State private var scope: MCPScope = .user
     @State private var argsText: String = ""
     @State private var isSaving = false
+    @State private var saveError: String?
+    @State private var confirmAuthentication = false
+    @State private var authenticationServer: MCPServerInfo?
+    @State private var authenticationChanged = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -30,10 +34,46 @@ struct MCPServerEditorSheet: View {
                 }
                 .padding(20)
             }
+            .disabled(isSaving)
             Divider()
             footer
         }
         .frame(width: 540, height: 600)
+        .interactiveDismissDisabled(isSaving)
+        .overlay {
+            if isSaving {
+                ProgressView("Saving and probing…")
+                    .padding(24)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+            }
+        }
+        .alert("MCP error", isPresented: Binding(
+            get: { saveError != nil },
+            set: { if !$0 { saveError = nil } }
+        )) {
+            Button("OK", role: .cancel) { saveError = nil }
+        } message: {
+            Text(verbatim: saveError ?? "")
+        }
+        .confirmationDialog("Authentication required", isPresented: $confirmAuthentication, titleVisibility: .visible) {
+            Button("Authenticate…") {
+                authenticationServer = MCPServerInfo(
+                    name: spec.name, transport: spec.transport, endpoint: spec.url,
+                    status: .needsAuth, scope: scope
+                )
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This MCP server requires authentication. Sign in to test the connection again.")
+        }
+        .sheet(item: $authenticationServer, onDismiss: {
+            if authenticationChanged {
+                authenticationChanged = false
+                Task { await save() }
+            }
+        }) { server in
+            MCPOAuthSheet(server: server) { authenticationChanged = true }
+        }
     }
 
     // MARK: - Header / Footer
@@ -50,14 +90,6 @@ struct MCPServerEditorSheet: View {
 
     private var footer: some View {
         HStack {
-            if isSaving {
-                HStack(spacing: 6) {
-                    ProgressView().controlSize(.small)
-                    Text("Saving and probing…")
-                        .font(.system(size: ClaudeTheme.size(11)))
-                        .foregroundStyle(.secondary)
-                }
-            }
             Spacer()
             Button("Cancel") { dismiss() }
                 .keyboardShortcut(.cancelAction)
@@ -236,10 +268,16 @@ struct MCPServerEditorSheet: View {
     private func save() async {
         isSaving = true
         defer { isSaving = false }
-        // AppState.addMCPServer performs the add + auto-probe (pin + fetch tools),
-        // so the row already shows live status by the time the sheet dismisses.
-        let ok = await onSave(spec, scope)
-        if ok { dismiss() }
+        spec.name = spec.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        spec.url = spec.url.trimmingCharacters(in: .whitespacesAndNewlines)
+        let result = await onSave(spec, scope)
+        if result.requiresAuthentication {
+            confirmAuthentication = true
+        } else if !result.ok || result.error != nil {
+            saveError = result.error ?? "The MCP connection probe failed. Check the server configuration and try again."
+        } else {
+            dismiss()
+        }
     }
 
     // MARK: - Validation

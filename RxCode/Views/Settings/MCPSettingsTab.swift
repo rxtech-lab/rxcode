@@ -6,6 +6,7 @@ struct MCPSettingsTab: View {
     @Environment(AppState.self) private var appState
 
     @State private var showEditor = false
+    @State private var authenticationServer: MCPServerInfo?
     @State private var pendingRemoval: MCPServerInfo?
     @State private var actionError: String?
 
@@ -30,11 +31,17 @@ struct MCPSettingsTab: View {
         .sheet(isPresented: $showEditor) {
             MCPServerEditorSheet { spec, scope in
                 if let err = await appState.addMCPServer(spec: spec, scope: scope) {
-                    actionError = err
-                    return false
+                    return MCPProbeResult(ok: false, error: err)
                 }
-                return true
+                guard let server = appState.mcpServers.first(where: { $0.name == spec.name }),
+                      let result = appState.mcpProbeResults[server.id] else {
+                    return MCPProbeResult(ok: false, error: "The saved MCP server could not be tested. Try saving again.")
+                }
+                return result
             }
+        }
+        .sheet(item: $authenticationServer) { server in
+            MCPOAuthSheet(server: server) { await appState.probeMCPServer(info: server) }
         }
         .alert("Remove MCP server?", isPresented: removalBinding, presenting: pendingRemoval) { server in
             Button("Cancel", role: .cancel) { pendingRemoval = nil }
@@ -64,7 +71,7 @@ struct MCPSettingsTab: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("MCP Servers")
                     .font(.system(size: ClaudeTheme.size(15), weight: .semibold))
-                Text("Configure Model Context Protocol servers used by Claude Code and Codex.")
+                Text("Configure Model Context Protocol servers used by Claude Code, Codex, and ACP clients.")
                     .font(.system(size: ClaudeTheme.size(11)))
                     .foregroundStyle(.secondary)
             }
@@ -172,6 +179,7 @@ struct MCPSettingsTab: View {
                             probe: appState.mcpProbeResults[server.id],
                             isProbing: appState.mcpInFlightProbes.contains(server.id),
                             onTest: { Task { await appState.probeMCPServer(info: server) } },
+                            onAuthenticate: { authenticationServer = server },
                             onGlobalEnabledChange: { enabled in
                                 Task {
                                     if let err = await appState.setMCPServerGlobalEnabled(name: server.name, enabled: enabled) {
@@ -219,6 +227,7 @@ private struct MCPServerRow: View {
     let probe: MCPProbeResult?
     let isProbing: Bool
     let onTest: () -> Void
+    let onAuthenticate: () -> Void
     let onGlobalEnabledChange: (Bool) -> Void
     let onProjectOverrideChange: (MCPProjectOverride) -> Void
     let onRemove: () -> Void
@@ -262,6 +271,9 @@ private struct MCPServerRow: View {
                     .help(toggleHelp)
 
                 Menu {
+                    if server.transport != .stdio {
+                        Button("Authentication…", systemImage: "person.crop.circle.badge.checkmark", action: onAuthenticate)
+                    }
                     Button(isProbing ? "Testing…" : "Test connection", action: onTest)
                         .disabled(isProbing || !server.effectiveEnabled)
                     if let probe, !probe.tools.isEmpty || probe.error != nil {

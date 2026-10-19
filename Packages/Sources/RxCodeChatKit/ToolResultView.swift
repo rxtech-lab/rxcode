@@ -281,7 +281,7 @@ struct ToolResultView: View {
                 .mobileSheetPresentation()
         }
         .sheet(isPresented: $showDetailSheet) {
-            ToolCallDetailSheet(toolCall: toolCall)
+            ToolCallDetailSheet(toolCall: toolCall, appLoader: windowState.mcpAppLoader)
                 .toolCallDetailSheetPresentation()
         }
     }
@@ -698,6 +698,11 @@ struct ToolResultView: View {
 
 struct ToolCallDetailSheet: View {
     let toolCall: ToolCall
+    var appLoader: MCPAppLoader?
+    @State private var appResource: MCPAppResource?
+    @State private var showApp = false
+    @State private var appError: String?
+    @State private var loadingApp = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -734,6 +739,20 @@ struct ToolCallDetailSheet: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
+                    if isMCP, appLoader != nil, toolCall.result != nil {
+                        Button("Open MCP App", systemImage: "app.connected.to.app.below.fill") {
+                            loadingApp = true
+                            Task {
+                                defer { loadingApp = false }
+                                do {
+                                    appResource = try await appLoader?(toolCall)
+                                    if appResource != nil { showApp = true }
+                                    else { appError = "This tool does not advertise an MCP App." }
+                                } catch { appError = error.localizedDescription }
+                            }
+                        }
+                        .disabled(loadingApp)
+                    }
                     JSONCodeBlock(title: "Call Params", code: Self.prettyJSONString(.object(toolCall.input)))
                     JSONCodeBlock(title: "Result", code: Self.prettyResultString(toolCall.result))
                 }
@@ -742,6 +761,13 @@ struct ToolCallDetailSheet: View {
         }
         .toolCallDetailFrame()
         .background(ClaudeTheme.surfacePrimary)
+        .overlay { if loadingApp { ProgressView("Loading App…").padding().background(.regularMaterial) } }
+        .sheet(isPresented: $showApp, onDismiss: { appResource = nil }) {
+            if let appResource { MCPAppSheet(resource: appResource, toolCall: toolCall) }
+        }
+        .alert("MCP App", isPresented: Binding(get: { appError != nil }, set: { if !$0 { appError = nil } })) {
+            Button("OK", role: .cancel) { appError = nil }
+        } message: { Text(verbatim: appError ?? "") }
     }
 
     private var toolNameLower: String { toolCall.name.lowercased() }

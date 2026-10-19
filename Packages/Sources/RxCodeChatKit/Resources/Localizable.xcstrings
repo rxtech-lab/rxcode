@@ -845,6 +845,12 @@
         }
       }
     },
+    "Allow" : {
+
+    },
+    "Allow this MCP App tool call?" : {
+
+    },
     "Allows additional text to be entered after the command" : {
       "localizations" : {
         "en" : {
@@ -2099,6 +2105,9 @@
         }
       }
     },
+    "Done" : {
+
+    },
     "Draft a plan in an ultraplan session" : {
       "localizations" : {
         "en" : {
@@ -3315,6 +3324,9 @@
         }
       }
     },
+    "Loading App…" : {
+
+    },
     "Log in to Anthropic account" : {
       "localizations" : {
         "en" : {
@@ -3534,6 +3546,9 @@
           }
         }
       }
+    },
+    "MCP App" : {
+
     },
     "Message" : {
       "localizations" : {
@@ -3918,6 +3933,9 @@
           }
         }
       }
+    },
+    "Open MCP App" : {
+
     },
     "Open the plan to accept or reject" : {
       "localizations" : {
@@ -4798,6 +4816,9 @@
           }
         }
       }
+    },
+    "Running App action…" : {
+
     },
     "RxCode shortcut export file." : {
       "localizations" : {

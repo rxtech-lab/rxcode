@@ -45,6 +45,12 @@ extension AppState: IDEToolHandling {
             return try await handleCreateStory(arguments: arguments, sessionKey: sessionKey)
         case "ide__create_task":
             return try await handleCreateTask(arguments: arguments, sessionKey: sessionKey)
+        case "ide__list_agent_models":
+            return handleListAgentModels()
+        case "ide__update_task":
+            return try await handleUpdateTask(arguments: arguments)
+        case "ide__delete_task":
+            return try await handleDeleteTask(arguments: arguments)
         case "ide__link_story":
             return try await handleLinkStory(arguments: arguments, sessionKey: sessionKey)
         case "ide__create_scheduled_task":
@@ -336,7 +342,7 @@ extension AppState: IDEToolHandling {
         ]))
     }
 
-    private func parseTaskId(_ arguments: JSONValue) throws -> ProjectTask {
+    func parseTaskId(_ arguments: JSONValue) throws -> ProjectTask {
         guard let raw = arguments["task_id"]?.stringValue, let id = UUID(uuidString: raw) else {
             throw IDEToolError.invalidArguments("A valid task_id is required.")
         }
@@ -346,7 +352,7 @@ extension AppState: IDEToolHandling {
         return task
     }
 
-    private func taskJSON(_ task: ProjectTask) -> [String: JSONValue] {
+    func taskJSON(_ task: ProjectTask) -> [String: JSONValue] {
         let board = taskBoard(for: task.projectId)
         let column = board.column(for: task.status)
         return [
@@ -357,6 +363,12 @@ extension AppState: IDEToolHandling {
             "parent_task_id": task.parentTaskId.map { .string($0.uuidString) } ?? .null,
             "parent_task_ids": .array(task.parentTaskIds.map { .string($0.uuidString) }),
             "title": .string(task.title),
+            "details": .string(task.details),
+            "tags": .array(task.tags.map { .string($0) }),
+            "priority": task.priority.map { .string($0.rawValue) } ?? .null,
+            "version": task.version.map { .string($0) } ?? .null,
+            "milestone": task.milestone.map { .string($0) } ?? .null,
+            "type_id": task.typeId.map { .string($0.uuidString) } ?? .null,
             "status": .string(column.id.rawValue),
             "column": .string(column.name),
             "is_done": .bool(column.countsAsDone),

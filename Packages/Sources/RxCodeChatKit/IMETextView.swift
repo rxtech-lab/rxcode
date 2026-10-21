@@ -131,12 +131,12 @@ public struct IMETextView: NSViewRepresentable {
 
     public static func dismantleNSView(_ nsView: NSScrollView, coordinator: Coordinator) {
         guard let textView = nsView.documentView as? _IMETextView else { return }
+        textView.resetUndoHistory()
         if textView.window?.firstResponder === textView {
             textView.window?.makeFirstResponder(nil)
         }
         textView.delegate = nil
         textView.clearCallbacks()
-        textView.undoManager?.removeAllActions(withTarget: textView)
         textView.allowsUndo = false
         nsView.documentView = nil
     }
@@ -148,6 +148,7 @@ public struct IMETextView: NSViewRepresentable {
         // Compare against coordinator's cached value to avoid materializing textView.string
         // (O(n) in length) on every parent re-render.
         if !textView.hasMarkedText(), context.coordinator.lastAppliedText != text {
+            textView.resetUndoHistory()
             textView.string = text
             context.coordinator.lastAppliedText = text
             textView.refreshChipAppearance()
@@ -386,7 +387,7 @@ extension ChipLayoutManager {
     }
 }
 
-fileprivate final class _IMETextView: NSTextView {
+fileprivate final class _IMETextView: UndoIsolatedTextView {
     var onReturn: () -> Void = {}
     var onUpArrow: () -> Bool = { false }
     var onDownArrow: () -> Bool = { false }

@@ -74,13 +74,13 @@ public struct CodeEditorView: NSViewRepresentable {
 
     public static func dismantleNSView(_ nsView: NSScrollView, coordinator: Coordinator) {
         guard let textView = nsView.documentView as? CompletionTextView else { return }
+        textView.resetUndoHistory()
         if textView.window?.firstResponder === textView {
             textView.window?.makeFirstResponder(nil)
         }
         textView.delegate = nil
         textView.completionRangeProvider = nil
         textView.completionRangeOverride = nil
-        textView.undoManager?.removeAllActions(withTarget: textView)
         textView.allowsUndo = false
         coordinator.textView = nil
         nsView.documentView = nil
@@ -115,6 +115,7 @@ public struct CodeEditorView: NSViewRepresentable {
         func apply(text: String) {
             guard let textView else { return }
             if textView.string != text {
+                textView.resetUndoHistory()
                 textView.string = text
             }
             highlight(textView)
@@ -179,7 +180,7 @@ public struct CodeEditorView: NSViewRepresentable {
     func completionRange(for textView: NSTextView) -> NSRange?
 }
 
-@MainActor final class CompletionTextView: NSTextView {
+@MainActor final class CompletionTextView: UndoIsolatedTextView {
     weak var completionRangeProvider: CompletionRangeProviding?
     var completionRangeOverride: NSRange?
 

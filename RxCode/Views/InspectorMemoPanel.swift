@@ -303,11 +303,11 @@ private struct RichEditorView: NSViewRepresentable {
 
     static func dismantleNSView(_ nsView: NSScrollView, coordinator: Coordinator) {
         if let textView = nsView.documentView as? MemoTextView {
+            textView.resetUndoHistory()
             if textView.window?.firstResponder === textView {
                 textView.window?.makeFirstResponder(nil)
             }
             textView.delegate = nil
-            textView.undoManager?.removeAllActions(withTarget: textView)
             textView.allowsUndo = false
             nsView.documentView = nil
         }
@@ -330,7 +330,8 @@ private struct RichEditorView: NSViewRepresentable {
               trigger != context.coordinator.lastClearTrigger else { return }
         context.coordinator.lastClearTrigger = trigger
         context.coordinator.cancelPendingSave()
-        guard let tv = scrollView.documentView as? NSTextView else { return }
+        guard let tv = scrollView.documentView as? MemoTextView else { return }
+        tv.resetUndoHistory()
         tv.textStorage?.setAttributedString(NSAttributedString(string: ""))
         UserDefaults.standard.removeObject(forKey: context.coordinator.storageKey)
     }
@@ -544,7 +545,7 @@ private final class MemoScrollView: NSScrollView {
 
 // MARK: - MemoTextView
 
-private final class MemoTextView: NSTextView {
+private final class MemoTextView: UndoIsolatedTextView {
 
     var isApplyingAppearance = false
 

@@ -3,7 +3,7 @@ import RxCodeCore
 import os
 
 /// Talks to github-pm's release API (same host as `DocsService` /
-/// `SecretsService`, `https://autopilot.rxlab.app`) using the rxauth bearer.
+/// `SecretsService`, `https://www.flowcy.dev`) using the rxauth bearer.
 /// Powers the release-setup hook, the release management UI, the
 /// `ide__setup_release` MCP tool, and the "Create Release" dispatch dialog.
 /// Transport mirrors `DocsService` / `SecretsService` exactly.
@@ -47,7 +47,7 @@ final class ReleaseService {
            !override.isEmpty, let url = URL(string: override) {
             return url
         }
-        return URL(string: "https://autopilot.rxlab.app")!
+        return URL(string: "https://www.flowcy.dev")!
     }
 
     // MARK: - Repositories

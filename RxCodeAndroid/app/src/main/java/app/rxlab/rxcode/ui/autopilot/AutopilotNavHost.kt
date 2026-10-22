@@ -46,7 +46,7 @@ class AutopilotNav(
 
 /**
  * Host for the Autopilot settings stack. Rendered full-screen from
- * `SettingsScreen` when the user taps the "Autopilot" row. [onExit] pops the
+ * `SettingsScreen` when the user taps the "Flowcy" row. [onExit] pops the
  * whole feature (back from the hub).
  */
 @Composable

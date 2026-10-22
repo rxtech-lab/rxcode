@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		A4E201000000000000000002 /* CustomMenuModelSelectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4E201000000000000000001 /* CustomMenuModelSelectionTests.swift */; };
+		D305A1000000000000000001 /* DesktopWidgetIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = D305A1000000000000000002 /* DesktopWidgetIntents.swift */; };
 		101010102FCB100000000002 /* AppStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 101010102FCB100000000001 /* AppStateTests.swift */; };
 		101010112FCB100000000002 /* BranchBriefingPromptContextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 101010112FCB100000000001 /* BranchBriefingPromptContextTests.swift */; };
 		33993F0F87CF4DB09F2813A8 /* AppStateProjectSwitchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4381E755142272EB2DAA9C96 /* AppStateProjectSwitchTests.swift */; };
@@ -20,13 +20,17 @@
 		5C3333332FCB400000000006 /* ThreadStoreSidebarIndexTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3333332FCB400000000005 /* ThreadStoreSidebarIndexTests.swift */; };
 		5C3333332FCB400000000008 /* ThreadStoreReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3333332FCB400000000007 /* ThreadStoreReaderTests.swift */; };
 		5C4444442FCE100000000002 /* GeneratedTextSanitizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C4444442FCE100000000001 /* GeneratedTextSanitizerTests.swift */; };
+		6721787FCF3F69E34C4D0319 /* DesktopWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = F298966B9AA8AA6C5552E8DA /* DesktopWidgets.swift */; };
 		6E17B0012FC8000100A10001 /* LocalAIProviderAcceptanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E17B0002FC8000100A10001 /* LocalAIProviderAcceptanceTests.swift */; };
 		7A5C0001000000000000A002 /* MockAgentBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A5C0001000000000000A001 /* MockAgentBackend.swift */; };
 		7A5C0002000000000000A002 /* CrossProjectSendConcurrencyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A5C0002000000000000A001 /* CrossProjectSendConcurrencyTests.swift */; };
 		7DEB38D712E3FE9EEDC3B3CD /* MockAppStatePersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85641A3F2099521070F2BAB6 /* MockAppStatePersistence.swift */; };
 		8528C388E27CB1FCEE1DEB96 /* ScheduledTaskStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBE6CEA01FE935F6710EB5B0 /* ScheduledTaskStateTests.swift */; };
+		8922514EE346610B67C3AE53 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DD91B5F821965BD23C5EA360 /* Cocoa.framework */; };
 		92E180F9B311F3C72D5DE6B7 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A9993BB72A5307039A88B729 /* Cocoa.framework */; };
 		A180BD3C246793C79C3C49BB /* ClaudeLoginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9B0483FE5385C1F0E1CFE15 /* ClaudeLoginTests.swift */; };
+		A4E201000000000000000002 /* CustomMenuModelSelectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4E201000000000000000001 /* CustomMenuModelSelectionTests.swift */; };
+		A577A805F4AC47B39EC6E838 /* RxCodeCore in Frameworks */ = {isa = PBXBuildFile; productRef = 77A5E26BCC2CF092F9FF0693 /* RxCodeCore */; };
 		A5E1C0DE0000000000000002 /* MockAppStatePersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5E1C0DE0000000000000001 /* MockAppStatePersistence.swift */; };
 		A5E1C0DE0000000000000012 /* ClaudeLoginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5E1C0DE0000000000000011 /* ClaudeLoginTests.swift */; };
 		A5E1C0DE0000000000000022 /* GlobalSessionPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5E1C0DE0000000000000021 /* GlobalSessionPersistenceTests.swift */; };
@@ -103,6 +107,7 @@
 		FB0000040000000000000001 /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = FB0000020000000000000001 /* FirebaseCrashlytics */; };
 		FB0000070000000000000001 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = FB0000050000000000000001 /* FirebaseAnalytics */; };
 		FB0000080000000000000001 /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = FB0000060000000000000001 /* FirebaseCrashlytics */; };
+		FDEA01E1867DF987C3B47B39 /* RxCodeDesktopWidget.appex in Embed Desktop Widgets */ = {isa = PBXBuildFile; fileRef = E220C5427FC34A8E7DDEADD9 /* RxCodeDesktopWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		FE0A11BB22CC33DD44EE5501 /* PlanModeHookSuppressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0A11BB22CC33DD44EE5502 /* PlanModeHookSuppressionTests.swift */; };
 		FE0A11BB22CC33DD44EE5601 /* TaskBoardHookTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0A11BB22CC33DD44EE5602 /* TaskBoardHookTests.swift */; };
 		FE0A11BB22CC33DD44EE5701 /* MarkdownDescriptionEditorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0A11BB22CC33DD44EE5702 /* MarkdownDescriptionEditorTests.swift */; };
@@ -123,6 +128,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = E67335372F7356F600FD26C7;
 			remoteInfo = RxCode;
+		};
+		7FB2B7DE24D8110AF3CE1C98 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E67335302F7356F600FD26C7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 9FAFDA72455A43BA5125D11E;
+			remoteInfo = RxCodeDesktopWidget;
 		};
 		DF22D8352FBE025D00E3ABFD /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -155,6 +167,17 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
+		2D079341FFDF244B1EB7C14C /* Embed Desktop Widgets */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				FDEA01E1867DF987C3B47B39 /* RxCodeDesktopWidget.appex in Embed Desktop Widgets */,
+			);
+			name = "Embed Desktop Widgets";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		DF230BB52FBC9001008929A6 /* Embed App Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -170,7 +193,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		A4E201000000000000000001 /* CustomMenuModelSelectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CustomMenuModelSelectionTests.swift; sourceTree = "<group>"; };
+		D305A1000000000000000002 /* DesktopWidgetIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RxCode/App/DesktopWidgetIntents.swift; sourceTree = SOURCE_ROOT; };
 		101010102FCB100000000001 /* AppStateTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppStateTests.swift; sourceTree = "<group>"; };
 		101010112FCB100000000001 /* BranchBriefingPromptContextTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BranchBriefingPromptContextTests.swift; sourceTree = "<group>"; };
 		308E9D66FBEB0549929D9E3A /* GlobalSessionPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalSessionPersistenceTests.swift; sourceTree = "<group>"; };
@@ -190,6 +213,7 @@
 		7A5C0002000000000000A001 /* CrossProjectSendConcurrencyTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CrossProjectSendConcurrencyTests.swift; sourceTree = "<group>"; };
 		82AB0A9F0F420072B6D65917 /* TaskRunQueueTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TaskRunQueueTests.swift; sourceTree = "<group>"; };
 		85641A3F2099521070F2BAB6 /* MockAppStatePersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockAppStatePersistence.swift; sourceTree = "<group>"; };
+		A4E201000000000000000001 /* CustomMenuModelSelectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CustomMenuModelSelectionTests.swift; sourceTree = "<group>"; };
 		A5E1C0DE0000000000000001 /* MockAppStatePersistence.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MockAppStatePersistence.swift; sourceTree = "<group>"; };
 		A5E1C0DE0000000000000011 /* ClaudeLoginTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ClaudeLoginTests.swift; sourceTree = "<group>"; };
 		A5E1C0DE0000000000000021 /* GlobalSessionPersistenceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GlobalSessionPersistenceTests.swift; sourceTree = "<group>"; };
@@ -210,6 +234,8 @@
 		C71A00000000000000000002 /* ChatHistoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatHistoryTests.swift; sourceTree = "<group>"; };
 		C9B0483FE5385C1F0E1CFE15 /* ClaudeLoginTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeLoginTests.swift; sourceTree = "<group>"; };
 		CA5E00012FCB400000000001 /* CacheStorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CacheStorageTests.swift; sourceTree = "<group>"; };
+		DABD049CD0A5D38569FD5B47 /* RxCodeDesktopWidget.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = RxCodeDesktopWidget.entitlements; sourceTree = "<group>"; };
+		DD91B5F821965BD23C5EA360 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
 		DF06DCC62FB8552B005991E1 /* UnitTestPlan.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = UnitTestPlan.xctestplan; sourceTree = "<group>"; };
 		DF22D8262FBE025C00E3ABFD /* RxCodeWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RxCodeWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		DF22D8272FBE025C00E3ABFD /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
@@ -229,10 +255,13 @@
 		DFA9E5060000000000000001 /* AppStateSteeringTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppStateSteeringTests.swift; sourceTree = "<group>"; };
 		DFA9E5080000000000000001 /* ReasoningLevelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ReasoningLevelTests.swift; sourceTree = "<group>"; };
 		DFA9E50A0000000000000001 /* EffortSanitizationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EffortSanitizationTests.swift; sourceTree = "<group>"; };
+		E220C5427FC34A8E7DDEADD9 /* RxCodeDesktopWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RxCodeDesktopWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		E62000002FCB000100000001 /* MemoryIntentTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MemoryIntentTests.swift; sourceTree = "<group>"; };
 		E67335382F7356F600FD26C7 /* RxCode.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RxCode.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E8C010000000000000000001 /* MCPConnectionRoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPConnectionRoutingTests.swift; sourceTree = "<group>"; };
 		E92A867810EB489390421B01 /* GlobalChatTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GlobalChatTests.swift; sourceTree = "<group>"; };
+		EE5650BC7C47EAD5F996C021 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		F298966B9AA8AA6C5552E8DA /* DesktopWidgets.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DesktopWidgets.swift; sourceTree = "<group>"; };
 		FBE6CEA01FE935F6710EB5B0 /* ScheduledTaskStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduledTaskStateTests.swift; sourceTree = "<group>"; };
 		FE0A11BB22CC33DD44EE5502 /* PlanModeHookSuppressionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlanModeHookSuppressionTests.swift; sourceTree = "<group>"; };
 		FE0A11BB22CC33DD44EE5602 /* TaskBoardHookTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TaskBoardHookTests.swift; sourceTree = "<group>"; };
@@ -325,6 +354,15 @@
 				DCA8CF4A05C959C4A6EB391F /* RxCodeCore in Frameworks */,
 				DFA0CCD42FB4CC01005991E1 /* RxCodeChatKit in Frameworks */,
 				DF06CCD12FB4CAB5005991E1 /* ViewInspector in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		448EE1352956941639C59A63 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8922514EE346610B67C3AE53 /* Cocoa.framework in Frameworks */,
+				A577A805F4AC47B39EC6E838 /* RxCodeCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -471,10 +509,22 @@
 			path = RxCodeTests;
 			sourceTree = "<group>";
 		};
+		24DF916B3B61C879B237E361 /* RxCodeDesktopWidget */ = {
+			isa = PBXGroup;
+			children = (
+				F298966B9AA8AA6C5552E8DA /* DesktopWidgets.swift */,
+				D305A1000000000000000002 /* DesktopWidgetIntents.swift */,
+				EE5650BC7C47EAD5F996C021 /* Info.plist */,
+				DABD049CD0A5D38569FD5B47 /* RxCodeDesktopWidget.entitlements */,
+			);
+			path = RxCodeDesktopWidget;
+			sourceTree = "<group>";
+		};
 		50F6C20C7EE8F07B95128612 /* OS X */ = {
 			isa = PBXGroup;
 			children = (
 				A9993BB72A5307039A88B729 /* Cocoa.framework */,
+				DD91B5F821965BD23C5EA360 /* Cocoa.framework */,
 			);
 			name = "OS X";
 			sourceTree = "<group>";
@@ -537,6 +587,7 @@
 				609E8EE085862BD7D5B4012F /* Frameworks */,
 				1525FE6BFB6F06A3F00B92D3 /* RxCodeTests */,
 				DFADB4C4306800F700A1E94D /* Recovered References */,
+				24DF916B3B61C879B237E361 /* RxCodeDesktopWidget */,
 			);
 			sourceTree = "<group>";
 		};
@@ -551,6 +602,7 @@
 				DF230B5F2FBC7368008929A6 /* RxCodeMobileTests.xctest */,
 				DF230B692FBC7368008929A6 /* RxCodeMobileUITests.xctest */,
 				DF22D8262FBE025C00E3ABFD /* RxCodeWidgetExtension.appex */,
+				E220C5427FC34A8E7DDEADD9 /* RxCodeDesktopWidget.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -596,11 +648,29 @@
 				6E17B00A2FC8000100A10001 /* PBXTargetDependency */,
 			);
 			name = RxCodeUITests;
-			packageProductDependencies = (
-			);
 			productName = RxCodeUITests;
 			productReference = 6E17B0032FC8000100A10001 /* RxCodeUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		9FAFDA72455A43BA5125D11E /* RxCodeDesktopWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5BFF8DDF3F7945304F89B7E5 /* Build configuration list for PBXNativeTarget "RxCodeDesktopWidget" */;
+			buildPhases = (
+				46DB7FC9C364C805E13D6A85 /* Sources */,
+				448EE1352956941639C59A63 /* Frameworks */,
+				EA3FEEFE77C148B220632CC8 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = RxCodeDesktopWidget;
+			packageProductDependencies = (
+				77A5E26BCC2CF092F9FF0693 /* RxCodeCore */,
+			);
+			productName = RxCodeDesktopWidget;
+			productReference = E220C5427FC34A8E7DDEADD9 /* RxCodeDesktopWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 		DF22D8252FBE025C00E3ABFD /* RxCodeWidgetExtension */ = {
 			isa = PBXNativeTarget;
@@ -618,8 +688,6 @@
 				DF22D82B2FBE025C00E3ABFD /* RxCodeWidget */,
 			);
 			name = RxCodeWidgetExtension;
-			packageProductDependencies = (
-			);
 			productName = RxCodeWidgetExtension;
 			productReference = DF22D8262FBE025C00E3ABFD /* RxCodeWidgetExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
@@ -740,10 +808,12 @@
 				E67335342F7356F600FD26C7 /* Sources */,
 				E67335352F7356F600FD26C7 /* Frameworks */,
 				E67335362F7356F600FD26C7 /* Resources */,
+				2D079341FFDF244B1EB7C14C /* Embed Desktop Widgets */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				E8CCDD9B5ACC2E6AF3E47003 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				E673353A2F7356F600FD26C7 /* RxCode */,
@@ -851,6 +921,7 @@
 				DF230B5E2FBC7368008929A6 /* RxCodeMobileTests */,
 				DF230B682FBC7368008929A6 /* RxCodeMobileUITests */,
 				DF22D8252FBE025C00E3ABFD /* RxCodeWidgetExtension */,
+				9FAFDA72455A43BA5125D11E /* RxCodeDesktopWidget */,
 			);
 		};
 /* End PBXProject section */
@@ -915,9 +986,25 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		EA3FEEFE77C148B220632CC8 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		46DB7FC9C364C805E13D6A85 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6721787FCF3F69E34C4D0319 /* DesktopWidgets.swift in Sources */,
+				D305A1000000000000000001 /* DesktopWidgetIntents.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		6E17B0082FC8000100A10001 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -1060,6 +1147,12 @@
 			target = DF230BA42FBC9001008929A6 /* RxCodeMobileNotificationService */;
 			targetProxy = DF230BB62FBC9001008929A6 /* PBXContainerItemProxy */;
 		};
+		E8CCDD9B5ACC2E6AF3E47003 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = RxCodeDesktopWidget;
+			target = 9FAFDA72455A43BA5125D11E /* RxCodeDesktopWidget */;
+			targetProxy = 7FB2B7DE24D8110AF3CE1C98 /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
@@ -1076,6 +1169,64 @@
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/RxCode.app/Contents/MacOS/RxCode";
 			};
 			name = Debug;
+		};
+		0C75AADDB6A4F78E2CCC3B43 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = RxCodeDesktopWidget/RxCodeDesktopWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = P9KK452K8P;
+				ENABLE_APP_SANDBOX = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RxCodeDesktopWidget/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.8.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.rxlab.RxCode.DesktopWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = NO;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		377CEB687E5C8DA27AE7323E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = RxCodeDesktopWidget/RxCodeDesktopWidget.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Developer ID Application";
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = P9KK452K8P;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RxCodeDesktopWidget/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.8.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.rxlab.RxCode.DesktopWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = NO;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
 		};
 		6E17B00B2FC8000100A10001 /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -1565,7 +1716,7 @@
 				MARKETING_VERSION = 1.8.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.rxlab.RxCode;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				REGISTER_APP_GROUPS = YES;
+				REGISTER_APP_GROUPS = NO;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -1604,7 +1755,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = RxCode;
 				"PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]" = RxCode;
-				REGISTER_APP_GROUPS = YES;
+				REGISTER_APP_GROUPS = NO;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -1622,6 +1773,15 @@
 			buildConfigurations = (
 				AD9E27433C08ABBEF721A8A6 /* Release */,
 				02A62B703D95ABAB7DBCD893 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		5BFF8DDF3F7945304F89B7E5 /* Build configuration list for PBXNativeTarget "RxCodeDesktopWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				377CEB687E5C8DA27AE7323E /* Release */,
+				0C75AADDB6A4F78E2CCC3B43 /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -1799,6 +1959,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		77A5E26BCC2CF092F9FF0693 /* RxCodeCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E6D001002FA0000100000001 /* XCLocalSwiftPackageReference "Packages" */;
+			productName = RxCodeCore;
+		};
 		CCDF9594876099576D4FD46E /* RxCodeCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = RxCodeCore;

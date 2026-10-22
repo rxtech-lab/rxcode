@@ -35,7 +35,7 @@ struct SendBriefingNotificationSheet: View {
             Form {
                 if !appState.isSignedIn {
                     Section {
-                        Label("Sign in to Autopilot under Settings → Autopilot to send notifications.", systemImage: "person.crop.circle.badge.exclamationmark")
+                        Label("Sign in to Flowcy under Settings → Flowcy to send notifications.", systemImage: "person.crop.circle.badge.exclamationmark")
                             .foregroundStyle(ClaudeTheme.statusWarning)
                     }
                 }

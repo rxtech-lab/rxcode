@@ -126,8 +126,8 @@ struct NewProjectSheet: View {
             return "Tasks and stories stay on this Mac."
         case .cloud:
             return appState.isSignedIn
-                ? "Tasks and stories sync through Autopilot to every device signed in to your account."
-                : "Sign in to Autopilot in Settings to create cloud projects."
+                ? "Tasks and stories sync through Flowcy to every device signed in to your account."
+                : "Sign in to Flowcy in Settings to create cloud projects."
         }
     }
 
@@ -178,7 +178,7 @@ struct ProjectCloudMenuItems: View {
 
     var body: some View {
         if !appState.isSignedIn {
-            Text("Sign in to Autopilot in Settings to sync projects to the cloud.")
+            Text("Sign in to Flowcy in Settings to sync projects to the cloud.")
         } else if project.isCloud {
             Button {
                 appState.scheduleCloudBoardSync(for: project.id, delay: .zero)
@@ -209,7 +209,7 @@ struct ProjectCloudMenuItems: View {
             Button {
                 windowState.linkCloudProjectId = project.id
             } label: {
-                Label("Link to Autopilot Project…", systemImage: "link.icloud")
+                Label("Link to Flowcy Project…", systemImage: "link.icloud")
             }
         }
     }
@@ -272,8 +272,8 @@ struct ProjectCloudButton: View {
             return phase.progressText
         }
         return project.isCloud
-            ? String(localized: "Cloud project: syncs through Autopilot. Click to sync now or make it local.")
-            : String(localized: "Local project: stays on this Mac. Click to sync it to the cloud or link an Autopilot project.")
+            ? String(localized: "Cloud project: syncs through Flowcy. Click to sync now or make it local.")
+            : String(localized: "Local project: stays on this Mac. Click to sync it to the cloud or link an Flowcy project.")
     }
 }
 
@@ -330,7 +330,7 @@ struct ProjectCloudBadge: View {
 
     private func helpText(error: String?) -> String {
         if !appState.isSignedIn {
-            return String(localized: "Cloud project. Sign in to Autopilot to sync.")
+            return String(localized: "Cloud project. Sign in to Flowcy to sync.")
         }
         if let phase = appState.cloudSyncPhaseByProjectId[project.id] {
             return phase.progressText
@@ -341,7 +341,7 @@ struct ProjectCloudBadge: View {
         if let date = appState.cloudLastSyncedAt(for: project.id) {
             return String(localized: "Cloud project. Last synced \(date.formatted(.relative(presentation: .named))).")
         }
-        return String(localized: "Cloud project. Syncs through Autopilot.")
+        return String(localized: "Cloud project. Syncs through Flowcy.")
     }
 }
 
@@ -515,10 +515,10 @@ struct LinkCloudProjectSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Link to Autopilot Project")
+                Text("Link to Flowcy Project")
                     .font(.system(size: ClaudeTheme.size(16), weight: .semibold))
                 if let project {
-                    Text("\(project.name)'s tasks and stories will merge with the Autopilot project's board and sync to every device signed in to your account.")
+                    Text("\(project.name)'s tasks and stories will merge with the Flowcy project's board and sync to every device signed in to your account.")
                         .font(.system(size: ClaudeTheme.size(11)))
                         .foregroundStyle(ClaudeTheme.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -530,7 +530,7 @@ struct LinkCloudProjectSheet: View {
             if let selection {
                 selectedRow(selection)
             } else if appState.hasLoadedCloudProjects && candidates.isEmpty {
-                Text("Every Autopilot project on your account is already linked on this Mac. Use Sync to Cloud to create a new one.")
+                Text("Every Flowcy project on your account is already linked on this Mac. Use Sync to Cloud to create a new one.")
                     .font(.system(size: ClaudeTheme.size(11)))
                     .foregroundStyle(ClaudeTheme.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -547,7 +547,7 @@ struct LinkCloudProjectSheet: View {
                     }
                 }
                 .disabled(isRefreshing)
-                .help("Reload your Autopilot projects")
+                .help("Reload your Flowcy projects")
 
                 Spacer()
                 Button("Cancel") { dismiss() }
@@ -573,8 +573,8 @@ struct LinkCloudProjectSheet: View {
     /// plus a browse menu, like the task form's "Starts after" combo.
     private var combo: some View {
         HStack(spacing: 6) {
-            TextField("Autopilot project", text: $search, prompt: Text(
-                appState.hasLoadedCloudProjects ? "Search Autopilot projects" : "Loading Autopilot projects…"
+            TextField("Flowcy project", text: $search, prompt: Text(
+                appState.hasLoadedCloudProjects ? "Search Flowcy projects" : "Loading Flowcy projects…"
             ))
             .textFieldStyle(.roundedBorder)
             .labelsHidden()
@@ -599,7 +599,7 @@ struct LinkCloudProjectSheet: View {
 
             Menu {
                 if candidates.isEmpty {
-                    Text(appState.hasLoadedCloudProjects ? "No unlinked Autopilot projects" : "Loading Autopilot projects…")
+                    Text(appState.hasLoadedCloudProjects ? "No unlinked Flowcy projects" : "Loading Flowcy projects…")
                 }
                 ForEach(candidates) { cloud in
                     Button(cloud.title) { pick(cloud) }
@@ -610,8 +610,8 @@ struct LinkCloudProjectSheet: View {
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .fixedSize()
-            .help("Browse Autopilot projects")
-            .accessibilityLabel("Browse Autopilot projects")
+            .help("Browse Flowcy projects")
+            .accessibilityLabel("Browse Flowcy projects")
         }
     }
 

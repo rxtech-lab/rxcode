@@ -225,6 +225,9 @@
         }
       }
     },
+    "%@" : {
+
+    },
     "%@ — %@" : {
       "comment" : "Notification body for MCP disconnect: server name and error detail.",
       "localizations" : {
@@ -485,18 +488,18 @@
         }
       }
     },
-    "%@ isn't backed up to Autopilot" : {
+    "%@ isn't backed up to Flowcy" : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@이(가) Autopilot에 백업되지 않았습니다"
+            "value" : "%@이(가) Flowcy에 백업되지 않았습니다"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ 尚未备份到 Autopilot"
+            "value" : "%@ 尚未备份到 Flowcy"
           }
         }
       }
@@ -613,18 +616,18 @@
         }
       }
     },
-    "%@'s tasks and stories will merge with the Autopilot project's board and sync to every device signed in to your account." : {
+    "%@'s tasks and stories will merge with the Flowcy project's board and sync to every device signed in to your account." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@의 작업과 스토리가 Autopilot 프로젝트 보드와 병합되어 계정에 로그인한 모든 기기에 동기화됩니다."
+            "value" : "%@의 작업과 스토리가 Flowcy 프로젝트 보드와 병합되어 계정에 로그인한 모든 기기에 동기화됩니다."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ 的任务和故事将与 Autopilot 项目的看板合并，并同步到登录你账户的所有设备。"
+            "value" : "%@ 的任务和故事将与 Flowcy 项目的看板合并，并同步到登录你账户的所有设备。"
           }
         }
       }
@@ -2888,6 +2891,9 @@
         }
       }
     },
+    "Agent Usage" : {
+
+    },
     "Agent-written Swift that narrows the tasks and stories this view shows." : {
       "localizations" : {
         "zh-Hans" : {
@@ -4036,86 +4042,6 @@
         }
       }
     },
-    "Autopilot" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Autopilot"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Autopilot"
-          }
-        }
-      }
-    },
-    "Autopilot Account" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Autopilot 계정"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Autopilot 账户"
-          }
-        }
-      }
-    },
-    "Autopilot project" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Autopilot 프로젝트"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Autopilot 项目"
-          }
-        }
-      }
-    },
-    "Autopilot watches your CI, spots failures, and opens fix pull requests." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Autopilot이 CI를 감시하여 실패를 발견하고 수정 풀 리퀘스트를 엽니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Autopilot 监控你的 CI，发现失败并自动创建修复拉取请求。"
-          }
-        }
-      }
-    },
-    "Autopilot will no longer scan this repo or open CI update PRs." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Autopilot이 더 이상 이 저장소를 스캔하거나 CI 업데이트 PR을 열지 않습니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Autopilot 将不再扫描此仓库或创建 CI 更新 PR。"
-          }
-        }
-      }
-    },
     "Average of 5-hour · 7-day per task" : {
       "localizations" : {
         "zh-Hans" : {
@@ -4220,18 +4146,18 @@
     "Back to run history" : {
 
     },
-    "Back up this project's secrets to Autopilot" : {
+    "Back up this project's secrets to Flowcy" : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "이 프로젝트의 시크릿을 Autopilot에 백업"
+            "value" : "이 프로젝트의 시크릿을 Flowcy에 백업"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "将此项目的密钥备份到 Autopilot"
+            "value" : "将此项目的密钥备份到 Flowcy"
           }
         }
       }
@@ -4573,18 +4499,18 @@
         }
       }
     },
-    "Browse Autopilot projects" : {
+    "Browse Flowcy projects" : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Autopilot 프로젝트 둘러보기"
+            "value" : "Flowcy 프로젝트 둘러보기"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "浏览 Autopilot 项目"
+            "value" : "浏览 Flowcy 项目"
           }
         }
       }
@@ -4995,6 +4921,9 @@
           }
         }
       }
+    },
+    "Choose a project from the workspace most recently used in RxCode." : {
+
     },
     "Choose a published stable npm or PyPI release. RxCode will pin and verify it before saving." : {
       "localizations" : {
@@ -5648,18 +5577,18 @@
         }
       }
     },
-    "Cloud project: syncs through Autopilot. Click to sync now or make it local." : {
+    "Cloud project: syncs through Flowcy. Click to sync now or make it local." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "클라우드 프로젝트: Autopilot을 통해 동기화됩니다. 클릭하여 지금 동기화하거나 로컬 전용으로 전환하세요."
+            "value" : "클라우드 프로젝트: Flowcy을 통해 동기화됩니다. 클릭하여 지금 동기화하거나 로컬 전용으로 전환하세요."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "云端项目：通过 Autopilot 同步。点击可立即同步或改为仅本地。"
+            "value" : "云端项目：通过 Flowcy 同步。点击可立即同步或改为仅本地。"
           }
         }
       }
@@ -5680,34 +5609,34 @@
         }
       }
     },
-    "Cloud project. Sign in to Autopilot to sync." : {
+    "Cloud project. Sign in to Flowcy to sync." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "클라우드 프로젝트입니다. 동기화하려면 Autopilot에 로그인하세요."
+            "value" : "클라우드 프로젝트입니다. 동기화하려면 Flowcy에 로그인하세요."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "云端项目。登录 Autopilot 以同步。"
+            "value" : "云端项目。登录 Flowcy 以同步。"
           }
         }
       }
     },
-    "Cloud project. Syncs through Autopilot." : {
+    "Cloud project. Syncs through Flowcy." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "클라우드 프로젝트입니다. Autopilot을 통해 동기화됩니다."
+            "value" : "클라우드 프로젝트입니다. Flowcy을 통해 동기화됩니다."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "云端项目。通过 Autopilot 同步。"
+            "value" : "云端项目。通过 Flowcy 同步。"
           }
         }
       }
@@ -6231,18 +6160,18 @@
         }
       }
     },
-    "Configure what autopilot does automatically on your repositories." : {
+    "Configure what Flowcy does automatically on your repositories." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Autopilot이 저장소에서 자동으로 수행하는 작업을 구성합니다."
+            "value" : "Flowcy이 저장소에서 자동으로 수행하는 작업을 구성합니다."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "配置 Autopilot 在你的仓库上自动执行的操作。"
+            "value" : "配置 Flowcy 在你的仓库上自动执行的操作。"
           }
         }
       }
@@ -6418,34 +6347,34 @@
         }
       }
     },
-    "Connect your rxlab account to enable autopilot." : {
+    "Connect your rxlab account to enable Flowcy." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Autopilot을 사용하려면 rxlab 계정을 연결하세요."
+            "value" : "Flowcy을 사용하려면 rxlab 계정을 연결하세요."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "连接你的 rxlab 账户以启用 Autopilot。"
+            "value" : "连接你的 rxlab 账户以启用 Flowcy。"
           }
         }
       }
     },
-    "Connect your rxlab account to import GitHub repositories, sync encrypted secrets, and use autopilot features. You can skip this and sign in later." : {
+    "Connect your rxlab account to import GitHub repositories, sync encrypted secrets, and use Flowcy features. You can skip this and sign in later." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "rxlab 계정을 연결하여 GitHub 저장소를 가져오고, 암호화된 시크릿을 동기화하고, Autopilot 기능을 사용하세요. 이 단계를 건너뛰고 나중에 로그인할 수 있습니다."
+            "value" : "rxlab 계정을 연결하여 GitHub 저장소를 가져오고, 암호화된 시크릿을 동기화하고, Flowcy 기능을 사용하세요. 이 단계를 건너뛰고 나중에 로그인할 수 있습니다."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "连接你的 rxlab 账户以导入 GitHub 仓库、同步加密的密钥并使用 Autopilot 功能。你可以跳过此步骤，稍后再登录。"
+            "value" : "连接你的 rxlab 账户以导入 GitHub 仓库、同步加密的密钥并使用 Flowcy 功能。你可以跳过此步骤，稍后再登录。"
           }
         }
       }
@@ -6612,18 +6541,18 @@
         }
       }
     },
-    "Control what autopilot does automatically — issue labeling, PR validation and linking, project field population, and more." : {
+    "Control what Flowcy does automatically — issue labeling, PR validation and linking, project field population, and more." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Autopilot이 자동으로 수행하는 작업을 제어하세요 — 이슈 라벨 지정, PR 검증 및 연결, 프로젝트 필드 채우기 등."
+            "value" : "Flowcy이 자동으로 수행하는 작업을 제어하세요 — 이슈 라벨 지정, PR 검증 및 연결, 프로젝트 필드 채우기 등."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "控制 Autopilot 自动执行的操作 — 议题标记、PR 校验与关联、项目字段填充等。"
+            "value" : "控制 Flowcy 自动执行的操作 — 议题标记、PR 校验与关联、项目字段填充等。"
           }
         }
       }
@@ -9499,18 +9428,18 @@
         }
       }
     },
-    "Edit your autopilot automation preferences." : {
+    "Edit your Flowcy automation preferences." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Autopilot 자동화 환경설정을 편집하세요."
+            "value" : "Flowcy 자동화 환경설정을 편집하세요."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "编辑你的 Autopilot 自动化偏好设置。"
+            "value" : "编辑你的 Flowcy 自动化偏好设置。"
           }
         }
       }
@@ -10016,22 +9945,6 @@
         }
       }
     },
-    "Every Autopilot project on your account is already linked on this Mac. Use Sync to Cloud to create a new one." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "계정의 모든 Autopilot 프로젝트가 이미 이 Mac에 연결되어 있습니다. 새 프로젝트를 만들려면 클라우드에 동기화를 사용하세요."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "你账户中的所有 Autopilot 项目都已在这台 Mac 上关联。使用“同步到云端”可创建新项目。"
-          }
-        }
-      }
-    },
     "Every day at 9:00" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -10045,6 +9958,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "每天 9:00"
+          }
+        }
+      }
+    },
+    "Every Flowcy project on your account is already linked on this Mac. Use Sync to Cloud to create a new one." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "계정의 모든 Flowcy 프로젝트가 이미 이 Mac에 연결되어 있습니다. 새 프로젝트를 만들려면 클라우드에 동기화를 사용하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你账户中的所有 Flowcy 项目都已在这台 Mac 上关联。使用“同步到云端”可创建新项目。"
           }
         }
       }
@@ -10775,6 +10704,86 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "修复失败的 CI"
+          }
+        }
+      }
+    },
+    "Flowcy" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flowcy"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flowcy"
+          }
+        }
+      }
+    },
+    "Flowcy Account" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flowcy 계정"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flowcy 账户"
+          }
+        }
+      }
+    },
+    "Flowcy project" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flowcy 프로젝트"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flowcy 项目"
+          }
+        }
+      }
+    },
+    "Flowcy watches your CI, spots failures, and opens fix pull requests." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flowcy이 CI를 감시하여 실패를 발견하고 수정 풀 리퀘스트를 엽니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flowcy 监控你的 CI，发现失败并自动创建修复拉取请求。"
+          }
+        }
+      }
+    },
+    "Flowcy will no longer scan this repo or open CI update PRs." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flowcy이 더 이상 이 저장소를 스캔하거나 CI 업데이트 PR을 열지 않습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flowcy 将不再扫描此仓库或创建 CI 更新 PR。"
           }
         }
       }
@@ -11873,18 +11882,18 @@
         }
       }
     },
-    "How often autopilot scans this repo's workflows and opens a PR when actions are outdated." : {
+    "How often Flowcy scans this repo's workflows and opens a PR when actions are outdated." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Autopilot이 이 저장소의 워크플로를 스캔하고 액션이 오래되었을 때 PR을 여는 빈도입니다."
+            "value" : "Flowcy이 이 저장소의 워크플로를 스캔하고 액션이 오래되었을 때 PR을 여는 빈도입니다."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Autopilot 扫描此仓库工作流并在动作过期时创建 PR 的频率。"
+            "value" : "Flowcy 扫描此仓库工作流并在动作过期时创建 PR 的频率。"
           }
         }
       }
@@ -12760,18 +12769,18 @@
         }
       }
     },
-    "Keep your repositories' GitHub Actions up to date automatically. Autopilot scans `.github/workflows` on a schedule and opens a PR when actions are outdated." : {
+    "Keep your repositories' GitHub Actions up to date automatically. Flowcy scans `.github/workflows` on a schedule and opens a PR when actions are outdated." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "저장소의 GitHub Actions를 자동으로 최신 상태로 유지하세요. Autopilot은 일정에 따라 `.github/workflows`를 스캔하고 액션이 오래되면 PR을 엽니다."
+            "value" : "저장소의 GitHub Actions를 자동으로 최신 상태로 유지하세요. Flowcy은 일정에 따라 `.github/workflows`를 스캔하고 액션이 오래되면 PR을 엽니다."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "自动保持你的仓库的 GitHub Actions 为最新。Autopilot 按计划扫描 `.github/workflows`，并在动作过期时创建 PR。"
+            "value" : "自动保持你的仓库的 GitHub Actions 为最新。Flowcy 按计划扫描 `.github/workflows`，并在动作过期时创建 PR。"
           }
         }
       }
@@ -13164,34 +13173,34 @@
         }
       }
     },
-    "Link to Autopilot Project" : {
+    "Link to Flowcy Project" : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Autopilot 프로젝트에 연결"
+            "value" : "Flowcy 프로젝트에 연결"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "关联到 Autopilot 项目"
+            "value" : "关联到 Flowcy 项目"
           }
         }
       }
     },
-    "Link to Autopilot Project…" : {
+    "Link to Flowcy Project…" : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Autopilot 프로젝트에 연결…"
+            "value" : "Flowcy 프로젝트에 연결…"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "关联到 Autopilot 项目…"
+            "value" : "关联到 Flowcy 项目…"
           }
         }
       }
@@ -13296,22 +13305,6 @@
         }
       }
     },
-    "Loading Autopilot projects…" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Autopilot 프로젝트 불러오는 중…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在加载 Autopilot 项目…"
-          }
-        }
-      }
-    },
     "Loading catalog..." : {
       "localizations" : {
         "en" : {
@@ -13357,6 +13350,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在加载目标…"
+          }
+        }
+      }
+    },
+    "Loading Flowcy projects…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flowcy 프로젝트 불러오는 중…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在加载 Flowcy 项目…"
           }
         }
       }
@@ -13506,18 +13515,18 @@
         }
       }
     },
-    "Local project: stays on this Mac. Click to sync it to the cloud or link an Autopilot project." : {
+    "Local project: stays on this Mac. Click to sync it to the cloud or link an Flowcy project." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "로컬 프로젝트: 이 Mac에만 저장됩니다. 클릭하여 클라우드에 동기화하거나 Autopilot 프로젝트에 연결하세요."
+            "value" : "로컬 프로젝트: 이 Mac에만 저장됩니다. 클릭하여 클라우드에 동기화하거나 Flowcy 프로젝트에 연결하세요."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "本地项目：仅保存在这台 Mac 上。点击可同步到云端或关联 Autopilot 项目。"
+            "value" : "本地项目：仅保存在这台 Mac 上。点击可同步到云端或关联 Flowcy 项目。"
           }
         }
       }
@@ -13698,22 +13707,6 @@
         }
       }
     },
-    "Manage autopilot automation settings and repo-setup templates." : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Autopilot 자동화 설정과 저장소 설정 템플릿을 관리하세요."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "管理 Autopilot 自动化设置和仓库设置模板。"
-          }
-        }
-      }
-    },
     "Manage Docs" : {
       "localizations" : {
         "ko" : {
@@ -13752,6 +13745,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "管理字段…"
+          }
+        }
+      }
+    },
+    "Manage Flowcy automation settings and repo-setup templates." : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flowcy 자동화 설정과 저장소 설정 템플릿을 관리하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "管理 Flowcy 自动化设置和仓库设置模板。"
           }
         }
       }
@@ -15959,18 +15968,18 @@
         }
       }
     },
-    "No pull requests opened by autopilot yet." : {
+    "No pull requests opened by Flowcy yet." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "아직 Autopilot이 연 풀 리퀘스트가 없습니다."
+            "value" : "아직 Flowcy이 연 풀 리퀘스트가 없습니다."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Autopilot 尚未创建任何拉取请求。"
+            "value" : "Flowcy 尚未创建任何拉取请求。"
           }
         }
       }
@@ -16524,18 +16533,18 @@
         }
       }
     },
-    "No unlinked Autopilot projects" : {
+    "No unlinked Flowcy projects" : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "연결되지 않은 Autopilot 프로젝트 없음"
+            "value" : "연결되지 않은 Flowcy 프로젝트 없음"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "没有未关联的 Autopilot 项目"
+            "value" : "没有未关联的 Flowcy 项目"
           }
         }
       }
@@ -18605,6 +18614,9 @@
         }
       }
     },
+    "Project Tasks" : {
+
+    },
     "Project Unavailable" : {
       "localizations" : {
         "zh-Hans" : {
@@ -19443,18 +19455,18 @@
         }
       }
     },
-    "Reload your Autopilot projects" : {
+    "Reload your Flowcy projects" : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Autopilot 프로젝트 다시 불러오기"
+            "value" : "Flowcy 프로젝트 다시 불러오기"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "重新加载 Autopilot 项目"
+            "value" : "重新加载 Flowcy 项目"
           }
         }
       }
@@ -21147,22 +21159,6 @@
         }
       }
     },
-    "Search Autopilot projects" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Autopilot 프로젝트 검색"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "搜索 Autopilot 项目"
-          }
-        }
-      }
-    },
     "Search Docs" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -21252,6 +21248,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "搜索文件 (⌘F)"
+          }
+        }
+      }
+    },
+    "Search Flowcy projects" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flowcy 프로젝트 검색"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索 Flowcy 项目"
           }
         }
       }
@@ -21831,12 +21843,12 @@
         }
       }
     },
-    "Send briefings to your email through Autopilot notifications, and manage the trusted emails notifications can be sent to." : {
+    "Send briefings to your email through Flowcy notifications, and manage the trusted emails notifications can be sent to." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "通过 Autopilot 通知将简报发送到邮箱，并管理可接收通知的受信任邮箱。"
+            "value" : "通过 Flowcy 通知将简报发送到邮箱，并管理可接收通知的受信任邮箱。"
           }
         }
       }
@@ -22973,64 +22985,64 @@
         }
       }
     },
-    "Sign in to Autopilot in Settings to create cloud projects." : {
+    "Sign in to Flowcy in Settings to create cloud projects." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "클라우드 프로젝트를 만들려면 설정에서 Autopilot에 로그인하세요."
+            "value" : "클라우드 프로젝트를 만들려면 설정에서 Flowcy에 로그인하세요."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "请在设置中登录 Autopilot 以创建云端项目。"
+            "value" : "请在设置中登录 Flowcy 以创建云端项目。"
           }
         }
       }
     },
-    "Sign in to Autopilot in Settings to sync projects to the cloud." : {
+    "Sign in to Flowcy in Settings to sync projects to the cloud." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "프로젝트를 클라우드에 동기화하려면 설정에서 Autopilot에 로그인하세요."
+            "value" : "프로젝트를 클라우드에 동기화하려면 설정에서 Flowcy에 로그인하세요."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "请在设置中登录 Autopilot，以将项目同步到云端。"
+            "value" : "请在设置中登录 Flowcy，以将项目同步到云端。"
           }
         }
       }
     },
-    "Sign in to Autopilot to send notifications." : {
+    "Sign in to Flowcy to send notifications." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "登录 Autopilot 以发送通知。"
+            "value" : "登录 Flowcy 以发送通知。"
           }
         }
       }
     },
-    "Sign in to Autopilot under Settings → Autopilot to send email notifications." : {
+    "Sign in to Flowcy under Settings → Flowcy to send email notifications." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "前往“设置”→“Autopilot”登录，以发送电子邮件通知。"
+            "value" : "前往“设置”→“Flowcy”登录，以发送电子邮件通知。"
           }
         }
       }
     },
-    "Sign in to Autopilot under Settings → Autopilot to send notifications." : {
+    "Sign in to Flowcy under Settings → Flowcy to send notifications." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "前往“设置”→“Autopilot”登录，以发送通知。"
+            "value" : "前往“设置”→“Flowcy”登录，以发送通知。"
           }
         }
       }
@@ -23084,18 +23096,18 @@
         }
       }
     },
-    "Sign in to your Autopilot account" : {
+    "Sign in to your Flowcy account" : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Autopilot 계정에 로그인"
+            "value" : "Flowcy 계정에 로그인"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "登录你的 Autopilot 账户"
+            "value" : "登录你的 Flowcy 账户"
           }
         }
       }
@@ -23139,34 +23151,34 @@
         }
       }
     },
-    "Sign in with rxlab to import GitHub repositories and use autopilot features." : {
+    "Sign in with rxlab to import GitHub repositories and use Flowcy features." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "rxlab으로 로그인하여 GitHub 저장소를 가져오고 Autopilot 기능을 사용하세요."
+            "value" : "rxlab으로 로그인하여 GitHub 저장소를 가져오고 Flowcy 기능을 사용하세요."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "使用 rxlab 登录以导入 GitHub 仓库并使用 Autopilot 功能。"
+            "value" : "使用 rxlab 登录以导入 GitHub 仓库并使用 Flowcy 功能。"
           }
         }
       }
     },
-    "Sign in with rxlab to import GitHub repositories, sync encrypted secrets, and use autopilot features. You can skip this and sign in later from Settings." : {
+    "Sign in with rxlab to import GitHub repositories, sync encrypted secrets, and use Flowcy features. You can skip this and sign in later from Settings." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "rxlab으로 로그인하여 GitHub 저장소를 가져오고, 암호화된 시크릿을 동기화하고, Autopilot 기능을 사용하세요. 이 단계를 건너뛰고 나중에 설정에서 로그인할 수 있습니다."
+            "value" : "rxlab으로 로그인하여 GitHub 저장소를 가져오고, 암호화된 시크릿을 동기화하고, Flowcy 기능을 사용하세요. 이 단계를 건너뛰고 나중에 설정에서 로그인할 수 있습니다."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "使用 rxlab 登录以导入 GitHub 仓库、同步加密的密钥并使用 Autopilot 功能。你可以跳过此步骤，稍后在“设置”中登录。"
+            "value" : "使用 rxlab 登录以导入 GitHub 仓库、同步加密的密钥并使用 Flowcy 功能。你可以跳过此步骤，稍后在“设置”中登录。"
           }
         }
       }
@@ -24195,18 +24207,18 @@
         }
       }
     },
-    "Tasks and stories sync through Autopilot to every device signed in to your account." : {
+    "Tasks and stories sync through Flowcy to every device signed in to your account." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "작업과 스토리가 Autopilot을 통해 계정에 로그인한 모든 기기에 동기화됩니다."
+            "value" : "작업과 스토리가 Flowcy을 통해 계정에 로그인한 모든 기기에 동기화됩니다."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "任务和故事会通过 Autopilot 同步到登录你账户的所有设备。"
+            "value" : "任务和故事会通过 Flowcy 同步到登录你账户的所有设备。"
           }
         }
       }
@@ -27450,12 +27462,12 @@
         }
       }
     },
-    "Your Autopilot account email" : {
+    "Your Flowcy account email" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "你的 Autopilot 账户邮箱"
+            "value" : "你的 Flowcy 账户邮箱"
           }
         }
       }

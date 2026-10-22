@@ -268,7 +268,7 @@ struct ScheduledTaskFormSheet: View {
     private var notificationFooter: some View {
         Group {
             if draft.notification != .none, !appState.isSignedIn {
-                Text("Sign in to Autopilot under Settings → Autopilot to send email notifications.")
+                Text("Sign in to Flowcy under Settings → Flowcy to send email notifications.")
                     .foregroundStyle(ClaudeTheme.statusWarning)
             } else {
                 switch draft.notification {

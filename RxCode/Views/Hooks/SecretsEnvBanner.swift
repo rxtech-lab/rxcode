@@ -20,9 +20,9 @@ struct SecretsEnvBanner: View {
 
     private var message: String {
         if let missingFile {
-            return String(format: String(localized: "%@ isn't backed up to Autopilot"), missingFile)
+            return String(format: String(localized: "%@ isn't backed up to Flowcy"), missingFile)
         }
-        return String(localized: "Back up this project's secrets to Autopilot")
+        return String(localized: "Back up this project's secrets to Flowcy")
     }
 
     var body: some View {

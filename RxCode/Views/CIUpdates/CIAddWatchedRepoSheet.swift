@@ -63,7 +63,7 @@ struct CIAddWatchedRepoSheet: View {
                         Text(freq.displayName).tag(freq)
                     }
                 }
-                Text("How often autopilot scans this repo's workflows and opens a PR when actions are outdated.")
+                Text("How often Flowcy scans this repo's workflows and opens a PR when actions are outdated.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

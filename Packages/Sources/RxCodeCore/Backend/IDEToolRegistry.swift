@@ -727,7 +727,7 @@ public enum IDEToolRegistry {
         ),
         IDETool(
             name: "ide__send_notification",
-            description: "Send the user a notification through the Autopilot notification service (delivered by email to their account email or a verified trusted email; counts against a small daily quota). Use it only when the user or a scheduled task's prompt asks to be notified, emailed, or sent a report. Pass `briefing_id` to send a document briefing; its local images are uploaded and embedded automatically, and RxCode won't send that briefing again. Published briefings may otherwise be sent automatically after your run ends, so don't send one just because you published it.",
+            description: "Send the user a notification through the Flowcy notification service (delivered by email to their account email or a verified trusted email; counts against a small daily quota). Use it only when the user or a scheduled task's prompt asks to be notified, emailed, or sent a report. Pass `briefing_id` to send a document briefing; its local images are uploaded and embedded automatically, and RxCode won't send that briefing again. Published briefings may otherwise be sent automatically after your run ends, so don't send one just because you published it.",
             visibility: .alwaysIDEOnly,
             inputSchema: .object([
                 "type": .string("object"),

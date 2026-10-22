@@ -153,7 +153,9 @@ final class AppState {
     var activeWorkspace: AppWorkspace = .personal
     var workspaceDefaults = WorkspaceDefaults(workspaceID: AppWorkspace.personalID)
 
-    var projects: [Project] = []
+    var projects: [Project] = [] {
+        didSet { scheduleDesktopWidgetUpdate() }
+    }
     @ObservationIgnored var projectPromptSaveTask: Task<Void, Never>?
 
     // MARK: - Per-Session State (shared — managed independently by session ID regardless of window)
@@ -351,7 +353,9 @@ final class AppState {
     // MARK: - ACP
 
     /// User-installed ACP clients. Loaded from disk on init.
-    var acpClients: [ACPClientSpec] = []
+    var acpClients: [ACPClientSpec] = [] {
+        didSet { scheduleDesktopWidgetUpdate() }
+    }
     /// Cached registry from `cdn.agentclientprotocol.com`. Refreshed hourly.
     var acpRegistry: ACPRegistry?
     var acpRegistryLoading: Bool = false
@@ -1177,7 +1181,14 @@ final class AppState {
     /// non-nil entry means "already read from disk" — same convention as
     /// `runProfilesByProject` below. The global board rendered by
     /// `TaskBoardView` is an aggregation of these.
-    var taskBoards: [UUID: TaskBoard] = [:]
+    var taskBoards: [UUID: TaskBoard] = [:] {
+        didSet { scheduleDesktopWidgetUpdate() }
+    }
+    var desktopWidgetNavigationURL: URL?
+    @ObservationIgnored var desktopWidgetUpdateTask: Task<Void, Never>?
+    @ObservationIgnored var desktopWidgetsActive = false
+    @ObservationIgnored var desktopClaudeUsageDate: Date?
+    @ObservationIgnored var desktopCodexUsageDate: Date?
     /// Quick-added tasks whose properties the default agent is still filling
     /// in, so their rows can show progress.
     var classifyingTaskIds: Set<UUID> = []
@@ -1407,41 +1418,6 @@ final class AppState {
         self.reviewScheduler = ReviewScheduler(app: self)
         registerBuiltInHooks()
     }
-
-    /// Register the built-in hooks in dispatch order. User bash hooks run first
-    /// (their start-hook stdout is injected into agent context), then the
-    /// notification hooks. New hooks (or future plugins) append here.
-    private func registerBuiltInHooks() {
-        hookManager.register(UserAddedHook())
-        hookManager.register(ResponseNotificationHook())
-        hookManager.register(QuestionNotificationHook())
-        hookManager.register(PermissionNotificationHook())
-        hookManager.register(MCPNotificationHook())
-        hookManager.register(CINotificationHook())
-        hookManager.register(RemoteConfigNotificationHook())
-        #if os(macOS)
-        // Menu hook first so the standard project/thread actions (code review,
-        // commit, create PR) lead the context menu, followed by the autopilot
-        // setup items (secrets, docs, release, CI).
-        hookManager.register(ActionsMenuHook())
-        hookManager.register(CustomMenuHook())
-        hookManager.register(AutopilotSecretsHook())
-        hookManager.register(AutopilotDocsHook())
-        hookManager.register(AutopilotReleaseHook())
-        hookManager.register(CIUpdateHook())
-        #endif
-        // The task board moves a card on session stop before any review starts:
-        // it only edits the board, and a card must already sit in its
-        // post-stop column when CodeReviewHook fires the review-start trigger.
-        hookManager.register(TaskBoardHook())
-        // Registered last so their (potentially long) after-stop work runs after
-        // the response-complete notification has already fired. CodeReviewHook
-        // must come before CommitPushHook so the commit gate sees the verdict.
-        hookManager.register(CodeReviewHook())
-        hookManager.register(CommitPushHook())
-        hookManager.register(SendMessageHook())
-    }
-
 
     // MARK: - Relocated Stored Properties
 

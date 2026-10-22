@@ -63,6 +63,7 @@ struct GeneralRouteWindowValue: Codable, Hashable {
     let route: GeneralRoute
     let instanceId: UUID
     var workspaceID: String?
+    var taskDetailProjectId: UUID?
 }
 
 // MARK: - TerminalWindowValue
@@ -170,13 +171,15 @@ struct RxCodeApp: App {
                 GeneralRouteWindowRoot(
                     workspaceManager: workspaceManager,
                     workspaceID: value.workspaceID ?? workspaceManager.frontmostWorkspaceID,
-                    route: value.route
+                    route: value.route,
+                    taskDetailProjectId: value.taskDetailProjectId
                 )
                 .focusable(false)
                 .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
             }
         }
         .defaultSize(width: 1000, height: 700)
+        .windowStyle(.hiddenTitleBar)
 
         // Detached terminal window — opened from the toolbar.
         WindowGroup(id: "terminal-window", for: TerminalWindowValue.self) { $value in
@@ -192,7 +195,7 @@ struct RxCodeApp: App {
         }
 
         // Standalone Automation windows, opened from the "Automation" menu.
-        Window("Autopilot", id: "autopilot-window") {
+        Window("Flowcy", id: "autopilot-window") {
             AutopilotWindowRoot(appState: appState)
                 .modifier(CacheStoragePresenter(workspaceManager: workspaceManager))
         }
@@ -225,6 +228,7 @@ struct RxCodeApp: App {
 // MARK: - Main Window Root
 
 struct MainWindowRoot: View {
+    @Environment(\.openWindow) private var openWindow
     let workspaceManager: WorkspaceManager
     let workspaceID: String
     @Environment(\.controlActiveState) private var controlActiveState
@@ -249,6 +253,19 @@ struct MainWindowRoot: View {
             }
         }
         .onOpenURL { url in
+            if url.scheme == "rxcode", url.host == "widget",
+               let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+               let targetID = components.queryItems?.first(where: { $0.name == "workspace" })?.value,
+               workspaceManager.workspaces.contains(where: { $0.id == targetID }) {
+                let target = workspaceManager.appState(for: targetID)
+                target.desktopWidgetNavigationURL = url
+                if targetID == workspaceID {
+                    consumeDesktopWidgetNavigation()
+                } else {
+                    openWindow(id: "workspace-window", value: WorkspaceWindowValue(workspaceID: targetID))
+                }
+                return
+            }
             if let docs = DocsDeepLink.parse(url), docs.action == .setup {
                 appState.docsSetupRequest = DocsSetupRequest(repoFullName: docs.repoFullName)
             } else if let release = ReleaseDeepLink.parse(url), release.action == .setup {
@@ -259,6 +276,9 @@ struct MainWindowRoot: View {
                 appState.ciSetupRequest = request
             }
         }
+        .onChange(of: appState.desktopWidgetNavigationURL) { _, _ in
+            consumeDesktopWidgetNavigation()
+        }
         .animation(.easeInOut(duration: 0.3), value: appState.isInitialized)
         .onAppear { workspaceManager.markFrontmost(workspaceID) }
         .onChange(of: controlActiveState) { _, state in
@@ -268,6 +288,7 @@ struct MainWindowRoot: View {
             await appState.initialize()
             appState.setupChatBridge(chatBridge, for: windowState)
             await appState.initializeWindow(windowState)
+            consumeDesktopWidgetNavigation()
             if !AppSupport.isUnitTesting {
                 await NotificationService.shared.requestAuthorizationIfNeeded()
             }
@@ -275,6 +296,12 @@ struct MainWindowRoot: View {
                 appState.handleNotificationTap(projectId: projectId, sessionId: sessionId, mainWindow: windowState)
             }
         }
+    }
+
+    private func consumeDesktopWidgetNavigation() {
+        guard windowState.isInitialized, let url = appState.desktopWidgetNavigationURL else { return }
+        appState.desktopWidgetNavigationURL = nil
+        _ = appState.handleDesktopWidgetURL(url, in: windowState)
     }
 }
 
@@ -344,7 +371,7 @@ struct AutomationCommands: Commands {
 
     var body: some Commands {
         CommandMenu("Automation") {
-            Button("Autopilot") { openWindow(id: "autopilot-window") }
+            Button("Flowcy") { openWindow(id: "autopilot-window") }
             Button("Hooks") { openWindow(id: "hooks-window") }
             Button("Custom Context Menus") { openWindow(id: "custom-menus-window") }
         }

@@ -3,7 +3,7 @@ import Foundation
 // MARK: - autopilot Repo DTO
 
 /// Repository payload returned by `GET /api/v1/repos` on autopilot
-/// (deployed at https://autopilot.rxlab.app). The macOS app no longer talks
+/// (deployed at https://www.flowcy.dev). The macOS app no longer talks
 /// to api.github.com directly — autopilot fans out across the signed-in
 /// user's GitHub App installations and hands back a deduped list.
 public struct AutopilotRepo: Identifiable, Codable, Sendable, Hashable {
@@ -125,7 +125,7 @@ public struct AutopilotPrecheckResponse: Codable, Sendable {
 /// Reply from `GET /api/v1/installations/install-url`. The URL embeds a
 /// signed `state` JWT tying the GitHub callback back to the requesting
 /// rxauth user, so the install completes correctly even if the browser
-/// is not signed in to autopilot.rxlab.app.
+/// is not signed in to flowcy.dev.
 public struct AutopilotInstallUrlResponse: Codable, Sendable {
     public let url: String
     public let state: String

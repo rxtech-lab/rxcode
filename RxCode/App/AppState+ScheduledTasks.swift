@@ -207,7 +207,7 @@ extension AppState {
             await recordNotification(NotificationRecord(
                 source: .scheduledTask, status: .failed, subject: report.subject,
                 projectId: task.projectId, sessionKey: sessionKey,
-                errorMessage: String(localized: "Sign in to Autopilot to send notifications.")
+                errorMessage: String(localized: "Sign in to Flowcy to send notifications.")
             ))
             return
         }

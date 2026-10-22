@@ -2,7 +2,7 @@ import RxAuthSwift
 import RxCodeCore
 import SwiftUI
 
-/// "Autopilot" tab in SettingsView. Shows the signed-in rxlab user and lets
+/// "Flowcy" tab in SettingsView. Shows the signed-in rxlab user and lets
 /// the user sign in or sign out of the autopilot integration.
 struct AutopilotSettingsTab: View {
     @Environment(AppState.self) private var appState
@@ -100,7 +100,7 @@ struct AutopilotSettingsTab: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Notifications")
                     .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
-                Text("Send briefings to your email through Autopilot notifications, and manage the trusted emails notifications can be sent to.")
+                Text("Send briefings to your email through Flowcy notifications, and manage the trusted emails notifications can be sent to.")
                     .font(.system(size: ClaudeTheme.size(11)))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -135,7 +135,7 @@ struct AutopilotSettingsTab: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Automation Settings")
                     .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
-                Text("Control what autopilot does automatically — issue labeling, PR validation and linking, project field population, and more.")
+                Text("Control what Flowcy does automatically — issue labeling, PR validation and linking, project field population, and more.")
                     .font(.system(size: ClaudeTheme.size(11)))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -148,7 +148,7 @@ struct AutopilotSettingsTab: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Automation")
                             .font(.system(size: ClaudeTheme.size(13), weight: .medium))
-                        Text("Edit your autopilot automation preferences.")
+                        Text("Edit your Flowcy automation preferences.")
                             .font(.system(size: ClaudeTheme.size(11)))
                             .foregroundStyle(.secondary)
                     }
@@ -263,7 +263,7 @@ struct AutopilotSettingsTab: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("CI Auto-Update")
                     .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
-                Text("Keep your repositories' GitHub Actions up to date automatically. Autopilot scans `.github/workflows` on a schedule and opens a PR when actions are outdated.")
+                Text("Keep your repositories' GitHub Actions up to date automatically. Flowcy scans `.github/workflows` on a schedule and opens a PR when actions are outdated.")
                     .font(.system(size: ClaudeTheme.size(11)))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -387,9 +387,9 @@ struct AutopilotSettingsTab: View {
 
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Autopilot")
+            Text("Flowcy")
                 .font(.system(size: ClaudeTheme.size(15), weight: .semibold))
-            Text("Sign in with rxlab to import GitHub repositories and use autopilot features.")
+            Text("Sign in with rxlab to import GitHub repositories and use Flowcy features.")
                 .font(.system(size: ClaudeTheme.size(11)))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -454,7 +454,7 @@ struct AutopilotSettingsTab: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Not signed in")
                     .font(.system(size: ClaudeTheme.size(13), weight: .medium))
-                Text("Connect your rxlab account to enable autopilot.")
+                Text("Connect your rxlab account to enable Flowcy.")
                     .font(.system(size: ClaudeTheme.size(11)))
                     .foregroundStyle(.secondary)
             }

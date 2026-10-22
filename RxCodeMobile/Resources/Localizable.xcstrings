@@ -97,6 +97,16 @@
         }
       }
     },
+    "%@ (%lld)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@（%lld）"
+          }
+        }
+      }
+    },
     "%@, %lld lines added, %lld removed. Tap to view the diff." : {
       "localizations" : {
         "en" : {
@@ -249,6 +259,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld 个环境，%lld 个文件"
+          }
+        }
+      }
+    },
+    "%lld of %lld" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld / %lld"
           }
         }
       }
@@ -1339,52 +1359,6 @@
         }
       }
     },
-    "Autopilot" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Autopilot"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Autopilot"
-          }
-        }
-      }
-    },
-    "Autopilot Account" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Autopilot 账户"
-          }
-        }
-      }
-    },
-    "Autopilot currently syncs one Starts after task per cloud task." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Autopilot 目前为每个云端任务同步一个“开始时间在此之后”任务。"
-          }
-        }
-      }
-    },
-    "Autopilot currently syncs one Starts after task per cloud task. Select one to save this task." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Autopilot 目前为每个云端任务同步一个“开始时间在此之后”任务。请选择一个以保存此任务。"
-          }
-        }
-      }
-    },
     "Available in Registry" : {
       "localizations" : {
         "en" : {
@@ -2326,18 +2300,18 @@
         }
       }
     },
-    "Connect an online Mac to use Autopilot." : {
+    "Connect an online Mac to use Flowcy." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Autopilot을 사용하려면 온라인 상태의 Mac을 연결하세요."
+            "value" : "Flowcy을 사용하려면 온라인 상태의 Mac을 연결하세요."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "请连接一台在线的 Mac 以使用 Autopilot。"
+            "value" : "请连接一台在线的 Mac 以使用 Flowcy。"
           }
         }
       }
@@ -2364,18 +2338,18 @@
         }
       }
     },
-    "Connect to an online Mac to manage Autopilot." : {
+    "Connect to an online Mac to manage Flowcy." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Autopilot을 관리하려면 온라인 상태의 Mac에 연결하세요."
+            "value" : "Flowcy을 관리하려면 온라인 상태의 Mac에 연결하세요."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "请连接一台在线的 Mac 以管理 Autopilot。"
+            "value" : "请连接一台在线的 Mac 以管理 Flowcy。"
           }
         }
       }
@@ -2544,18 +2518,18 @@
         }
       }
     },
-    "Control what autopilot does automatically and the templates applied to new repositories." : {
+    "Control what Flowcy does automatically and the templates applied to new repositories." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Autopilot이 자동으로 수행하는 작업과 새 저장소에 적용되는 템플릿을 제어합니다."
+            "value" : "Flowcy이 자동으로 수행하는 작업과 새 저장소에 적용되는 템플릿을 제어합니다."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "控制 Autopilot 自动执行的操作，以及应用于新仓库的模板。"
+            "value" : "控制 Flowcy 自动执行的操作，以及应用于新仓库的模板。"
           }
         }
       }
@@ -3810,6 +3784,16 @@
         }
       }
     },
+    "Docs" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文档"
+          }
+        }
+      }
+    },
     "Document" : {
       "localizations" : {
         "zh-Hans" : {
@@ -4842,6 +4826,52 @@
         }
       }
     },
+    "Flowcy" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flowcy"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flowcy"
+          }
+        }
+      }
+    },
+    "Flowcy Account" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flowcy 账户"
+          }
+        }
+      }
+    },
+    "Flowcy currently syncs one Starts after task per cloud task." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flowcy 目前为每个云端任务同步一个“开始时间在此之后”任务。"
+          }
+        }
+      }
+    },
+    "Flowcy currently syncs one Starts after task per cloud task. Select one to save this task." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flowcy 目前为每个云端任务同步一个“开始时间在此之后”任务。请选择一个以保存此任务。"
+          }
+        }
+      }
+    },
     "Focus mode" : {
       "localizations" : {
         "en" : {
@@ -5367,18 +5397,18 @@
         }
       }
     },
-    "Install skills and agents, configure MCP servers, and manage Autopilot on the active Mac." : {
+    "Install skills and agents, configure MCP servers, and manage Flowcy on the active Mac." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "활성 Mac에서 스킬과 에이전트를 설치하고 MCP 서버를 구성하며 Autopilot을 관리하세요."
+            "value" : "활성 Mac에서 스킬과 에이전트를 설치하고 MCP 서버를 구성하며 Flowcy을 관리하세요."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在当前 Mac 上安装技能和智能体、配置 MCP 服务器，并管理 Autopilot。"
+            "value" : "在当前 Mac 上安装技能和智能体、配置 MCP 服务器，并管理 Flowcy。"
           }
         }
       }
@@ -5591,22 +5621,6 @@
         }
       }
     },
-    "Loading Autopilot…" : {
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Autopilot 불러오는 중…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在加载 Autopilot…"
-          }
-        }
-      }
-    },
     "Loading changes…" : {
       "localizations" : {
         "en" : {
@@ -5641,6 +5655,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在加载环境…"
+          }
+        }
+      }
+    },
+    "Loading Flowcy…" : {
+      "localizations" : {
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flowcy 불러오는 중…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在加载 Flowcy…"
           }
         }
       }
@@ -6653,6 +6683,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "尚无简报"
+          }
+        }
+      }
+    },
+    "No changes" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有更改"
           }
         }
       }
@@ -8303,6 +8343,16 @@
         }
       }
     },
+    "Question %lld" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "问题 %lld"
+          }
+        }
+      }
+    },
     "Queue a message..." : {
       "localizations" : {
         "en" : {
@@ -9820,16 +9870,6 @@
         }
       }
     },
-    "Sign In to Autopilot" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "登录 Autopilot"
-          }
-        }
-      }
-    },
     "Sign in to Claude Code or Codex on your Mac to see usage." : {
       "localizations" : {
         "en" : {
@@ -9852,6 +9892,16 @@
         }
       }
     },
+    "Sign In to Flowcy" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登录 Flowcy"
+          }
+        }
+      }
+    },
     "Sign in to manage your cloud projects while your Mac is offline." : {
       "localizations" : {
         "zh-Hans" : {
@@ -9862,18 +9912,18 @@
         }
       }
     },
-    "Sign in with rxlab on your Mac to enable Autopilot." : {
+    "Sign in with rxlab on your Mac to enable Flowcy." : {
       "localizations" : {
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Autopilot을 사용하려면 Mac에서 rxlab으로 로그인하세요."
+            "value" : "Flowcy을 사용하려면 Mac에서 rxlab으로 로그인하세요."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在你的 Mac 上使用 rxlab 登录以启用 Autopilot。"
+            "value" : "在你的 Mac 上使用 rxlab 登录以启用 Flowcy。"
           }
         }
       }
@@ -9904,12 +9954,12 @@
         }
       }
     },
-    "Signed in to Autopilot" : {
+    "Signed in to Flowcy" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已登录 Autopilot"
+            "value" : "已登录 Flowcy"
           }
         }
       }
@@ -11162,6 +11212,16 @@
         }
       }
     },
+    "Thread" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "线程"
+          }
+        }
+      }
+    },
     "Thread actions" : {
       "localizations" : {
         "en" : {
@@ -12182,6 +12242,17 @@
         }
       }
     },
+    "XHigh" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "超高"
+          }
+        }
+      }
+    },
     "Your Mac declined the pairing request." : {
       "localizations" : {
         "en" : {
@@ -12242,76 +12313,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你的任务"
-          }
-        }
-      }
-    },
-    "Docs" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "文档"
-          }
-        }
-      }
-    },
-    "Thread" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "线程"
-          }
-        }
-      }
-    },
-    "%@ (%lld)" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@（%lld）"
-          }
-        }
-      }
-    },
-    "XHigh" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "超高"
-          }
-        }
-      }
-    },
-    "No changes" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "没有更改"
-          }
-        }
-      }
-    },
-    "%lld of %lld" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld / %lld"
-          }
-        }
-      }
-    },
-    "Question %lld" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "问题 %lld"
           }
         }
       }

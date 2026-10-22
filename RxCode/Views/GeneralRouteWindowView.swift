@@ -11,6 +11,7 @@ struct GeneralRouteWindowRoot: View {
     let workspaceManager: WorkspaceManager
     let workspaceID: String
     let route: GeneralRoute
+    var taskDetailProjectId: UUID?
     @Environment(\.controlActiveState) private var controlActiveState
     @State private var windowState = WindowState()
     @State private var chatBridge = ChatBridge()
@@ -52,6 +53,7 @@ struct GeneralRouteWindowRoot: View {
             }
             appState.setupChatBridge(chatBridge, for: windowState)
             await appState.initializeWindow(windowState)
+            windowState.taskDetailProjectId = taskDetailProjectId
             windowState.generalRoute = route
             isReady = true
         }
@@ -78,6 +80,12 @@ private struct GeneralRouteWindowView: View {
            let title = appState.allSessionSummaries.first(where: { $0.id == id })?.title,
            !title.isEmpty {
             return title
+        }
+        if isShowingRoute,
+           (windowState.generalRoute ?? route) == .tasks,
+           let projectId = windowState.taskDetailProjectId,
+           let project = appState.projects.first(where: { $0.id == projectId }) {
+            return project.name
         }
         return (windowState.generalRoute ?? route).displayNameText
     }

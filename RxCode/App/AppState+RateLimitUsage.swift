@@ -53,12 +53,15 @@ extension AppState {
         switch provider {
         case .claudeCode:
             latestRateLimitUsage = usage
+            desktopClaudeUsageDate = .now
         case .codex:
             latestCodexRateLimitUsage = usage
+            desktopCodexUsageDate = .now
         case .acp:
             break
         }
         recordRateLimitSample(usage, for: provider)
+        scheduleDesktopWidgetUpdate()
         // Refresh the mobile home-screen widget's usage figures.
         MobileSyncService.shared.pushWidgetUpdate()
     }

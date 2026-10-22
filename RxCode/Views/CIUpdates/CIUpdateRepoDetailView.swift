@@ -79,7 +79,7 @@ struct CIUpdateRepoDetailView: View {
             Button("Remove", role: .destructive) { Task { await remove() } }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Autopilot will no longer scan this repo or open CI update PRs.")
+            Text("Flowcy will no longer scan this repo or open CI update PRs.")
         }
         .task { await loadHistory() }
         .onChange(of: selectedTab) { _, tab in
@@ -196,7 +196,7 @@ struct CIUpdateRepoDetailView: View {
     private var prsList: some View {
         List {
             if prs.isEmpty, !isLoadingPRs {
-                Text("No pull requests opened by autopilot yet.")
+                Text("No pull requests opened by Flowcy yet.")
                     .foregroundStyle(.secondary)
             }
             ForEach(prs) { pr in

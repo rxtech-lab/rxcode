@@ -101,7 +101,7 @@ class AutopilotException(message: String) : Exception(message)
  * typed wrappers for every autopilot operation.
  *
  * The desktop is the source of truth and the only side that talks to
- * `autopilot.rxlab.app`; for secrets the desktop relays opaque ciphertext only
+ * `flowcy.dev`; for secrets the desktop relays opaque ciphertext only
  * — encryption/decryption happens on-device (see [SecretsManager]).
  */
 class AutopilotService(
@@ -130,7 +130,7 @@ class AutopilotService(
         bodyBase64: String?,
     ): AutopilotResultPayload {
         val hex = activeDesktopHex()
-            ?: throw AutopilotException("Connect an online Mac to use Autopilot.")
+            ?: throw AutopilotException("Connect an online Mac to use Flowcy.")
         val payload = AutopilotRequestPayload(domain = domain.wire, operation = op.wire, body = bodyBase64)
         val deferred = CompletableDeferred<AutopilotResultPayload>()
         pending[payload.clientRequestID] = deferred

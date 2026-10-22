@@ -5,7 +5,7 @@ import RxCodeCore
 //
 // The desktop is the source of truth for every autopilot feature: it holds the
 // rxlab bearer token and the passkey-derived secrets key, and is the only side
-// that talks to `autopilot.rxlab.app`. Mobile mirrors the desktop's Autopilot
+// that talks to `flowcy.dev`. Mobile mirrors the desktop's Autopilot
 // settings tab by sending a single generic request/result pair over the
 // E2E-encrypted relay channel; the desktop performs the action with its
 // existing services and replies.

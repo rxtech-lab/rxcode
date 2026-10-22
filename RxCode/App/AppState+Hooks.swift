@@ -4,6 +4,40 @@ import RxCodeChatKit
 import RxCodeCore
 
 extension AppState {
+    /// Register the built-in hooks in dispatch order. User bash hooks run first
+    /// (their start-hook stdout is injected into agent context), then the
+    /// notification hooks. New hooks (or future plugins) append here.
+    func registerBuiltInHooks() {
+        hookManager.register(UserAddedHook())
+        hookManager.register(ResponseNotificationHook())
+        hookManager.register(QuestionNotificationHook())
+        hookManager.register(PermissionNotificationHook())
+        hookManager.register(MCPNotificationHook())
+        hookManager.register(CINotificationHook())
+        hookManager.register(RemoteConfigNotificationHook())
+        #if os(macOS)
+        // Menu hook first so the standard project/thread actions (code review,
+        // commit, create PR) lead the context menu, followed by the autopilot
+        // setup items (secrets, docs, release, CI).
+        hookManager.register(ActionsMenuHook())
+        hookManager.register(CustomMenuHook())
+        hookManager.register(AutopilotSecretsHook())
+        hookManager.register(AutopilotDocsHook())
+        hookManager.register(AutopilotReleaseHook())
+        hookManager.register(CIUpdateHook())
+        #endif
+        // The task board moves a card on session stop before any review starts:
+        // it only edits the board, and a card must already sit in its
+        // post-stop column when CodeReviewHook fires the review-start trigger.
+        hookManager.register(TaskBoardHook())
+        // Registered last so their (potentially long) after-stop work runs after
+        // the response-complete notification has already fired. CodeReviewHook
+        // must come before CommitPushHook so the commit gate sees the verdict.
+        hookManager.register(CodeReviewHook())
+        hookManager.register(CommitPushHook())
+        hookManager.register(SendMessageHook())
+    }
+
     // MARK: - Per-project hook cache (mirrors run profiles)
 
     func hookProfiles(for projectId: UUID) -> [HookProfile] {

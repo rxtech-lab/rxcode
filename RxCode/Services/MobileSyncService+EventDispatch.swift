@@ -452,7 +452,7 @@ extension MobileSyncService {
             )
         case .autopilotRequest(let req):
             guard acceptPairedOnlyPayload(from: inbound.fromHex, type: "autopilot_request") else { return }
-            logger.info("[MobileSync] autopilot requested domain=\(req.domain, privacy: .public) op=\(req.operation, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
+            logger.info("[MobileSync] Flowcy requested domain=\(req.domain, privacy: .public) op=\(req.operation, privacy: .public) mobileKey=\(String(inbound.fromHex.prefix(12)), privacy: .public)")
             NotificationCenter.default.post(
                 name: .mobileSyncAutopilotRequested,
                 object: nil,

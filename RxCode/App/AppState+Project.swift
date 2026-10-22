@@ -353,14 +353,14 @@ extension AppState {
             repoNextCursor = response.pagination?.nextCursor
             repoHasMoreRepos = response.pagination?.hasMore ?? false
         } catch {
-            logger.error("Failed to fetch repos from autopilot: \(error.localizedDescription)")
+            logger.error("Failed to fetch repos from Flowcy: \(error.localizedDescription)")
         }
         do {
             installations = try await installationsTask
         } catch {
             // Avatars degrade gracefully — log and continue with the existing
             // list rather than failing the whole load.
-            logger.error("Failed to fetch installations from autopilot: \(error.localizedDescription)")
+            logger.error("Failed to fetch installations from Flowcy: \(error.localizedDescription)")
         }
     }
 
@@ -388,7 +388,7 @@ extension AppState {
             repoNextCursor = response.pagination?.nextCursor
             repoHasMoreRepos = response.pagination?.hasMore ?? false
         } catch {
-            logger.error("Failed to fetch next repo page from autopilot: \(error.localizedDescription)")
+            logger.error("Failed to fetch next repo page from Flowcy: \(error.localizedDescription)")
         }
     }
 
@@ -419,7 +419,7 @@ extension AppState {
         do {
             let response = try await autopilot.installUrl()
             guard let url = URL(string: response.url) else {
-                logger.error("autopilot returned an invalid install URL: \(response.url)")
+                logger.error("Flowcy returned an invalid install URL: \(response.url)")
                 return
             }
             NSWorkspace.shared.open(url)

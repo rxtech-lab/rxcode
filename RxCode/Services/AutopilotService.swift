@@ -2,7 +2,7 @@ import Foundation
 import RxCodeCore
 import os
 
-/// Talks to the autopilot service (deployed at `https://autopilot.rxlab.app`)
+/// Talks to the autopilot service (deployed at `https://www.flowcy.dev`)
 /// using the rxauth bearer obtained from `RxAuthService`. autopilot holds the
 /// GitHub App installation tokens, so the macOS app never sees a GitHub
 /// OAuth token.
@@ -20,11 +20,11 @@ final class AutopilotService {
             case .notAuthenticated:
                 return "Not signed in. Please sign in with rxlab."
             case .invalidResponse:
-                return "Received an invalid response from autopilot."
+                return "Received an invalid response from Flowcy."
             case .apiError(let code, let detail):
-                return "autopilot error (\(code)): \(detail)"
+                return "Flowcy error (\(code)): \(detail)"
             case .decodingError(let detail):
-                return "Failed to decode autopilot response: \(detail)"
+                return "Failed to decode Flowcy response: \(detail)"
             }
         }
     }
@@ -42,7 +42,7 @@ final class AutopilotService {
         if let override, !override.isEmpty, let url = URL(string: override) {
             return url
         }
-        return URL(string: "https://autopilot.rxlab.app")!
+        return URL(string: "https://www.flowcy.dev")!
     }
 
     /// `GET /api/v1/repos` — live, paginated list of GitHub repos accessible

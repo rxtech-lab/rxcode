@@ -213,7 +213,7 @@ private fun RepoSetupEditor(
     var uiSchema by remember { mutableStateOf<JsonObject?>(null) }
 
     LaunchedEffect(online) {
-        if (!online) { isLoading = false; loadError = "Connect an online Mac to use Autopilot."; return@LaunchedEffect }
+        if (!online) { isLoading = false; loadError = "Connect an online Mac to use Flowcy."; return@LaunchedEffect }
         isLoading = true
         loadError = null
         try {

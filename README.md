@@ -80,6 +80,12 @@ The briefing section keeps you oriented when several sessions are moving at once
   <img src="website/public/screenshot/changes-track.png" alt="RxCode thread review panel listing files changed by an agent session" width="520">
 </p>
 
+## Desktop Widgets
+
+On macOS, open **Edit Widgets**, search for **RxCode**, and add **Project Tasks**, **Ongoing Tasks**, or **Agent Usage**. Each supports small, medium, and large sizes. Use **Edit Widget** to choose a project or an agent in the workspace most recently used in RxCode.
+
+Project Tasks shows open tasks and story progress (medium and large). Ongoing Tasks shows agent-owned runs, excluding queued tasks and runs that need attention. Click a task to open its project board. Agent Usage shows cached Claude Code and Codex limits; ACP clients appear with a “Limits not reported” status because the current ACP integration does not expose quota data. Snapshots update while RxCode is running, and timestamps remain visible when the app is closed. WidgetKit controls refresh timing.
+
 ## Mobile App
 
 RxCode Mobile mirrors the desktop workspace over an end-to-end encrypted sync channel and is designed to support the same core workflows as the desktop app. From your phone you can browse projects, search threads, start or follow agent sessions, review briefings, manage synced desktop context, and preview a website running on the host machine through the in-app browser.
@@ -159,6 +165,7 @@ xcodebuild -project RxCode.xcodeproj -scheme RxCode -configuration Release build
 | `RxCode/` | macOS app target with SwiftUI views, services, resources, and integrations. |
 | `Packages/Sources/RxCodeCore/` | Shared models, theme, utilities, sync protocol, and core logic. |
 | `Packages/Sources/RxCodeChatKit/` | Reusable chat UI, message rendering, input bar, slash commands, shortcuts, diffs, and status line. |
+| `RxCodeDesktopWidget/` | Native macOS project task, ongoing task, and agent usage widgets. |
 | `RxCodeWidget/` | Widget and Live Activity surfaces for active work and usage. |
 | `RxCodeTests/` | App-level XCTest coverage. |
 | `Packages/Tests/` | Swift package tests. |

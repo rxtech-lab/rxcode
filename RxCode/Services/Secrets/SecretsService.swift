@@ -3,7 +3,7 @@ import RxCodeCore
 import os
 
 /// Talks to github-pm's end-to-end-encrypted secrets API (same host as
-/// `AutopilotService`, `https://flowcy.dev`) using the rxauth bearer.
+/// `AutopilotService`, `https://www.flowcy.dev`) using the rxauth bearer.
 /// All ciphertext is produced/consumed by `SecretsCrypto`; this layer only
 /// moves opaque blobs.
 @MainActor
@@ -46,7 +46,7 @@ final class SecretsService {
            !override.isEmpty, let url = URL(string: override) {
             return url
         }
-        return URL(string: "https://flowcy.dev")!
+        return URL(string: "https://www.flowcy.dev")!
     }
 
     // MARK: - Enrollment

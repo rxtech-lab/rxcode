@@ -3,7 +3,7 @@ import RxCodeCore
 import os
 
 /// Talks to github-pm's docs API (same host as `AutopilotService` /
-/// `SecretsService`, `https://flowcy.dev`) using the rxauth bearer.
+/// `SecretsService`, `https://www.flowcy.dev`) using the rxauth bearer.
 /// Powers docs search (⌘K + the `ide__search_docs` tool), the docs management
 /// UI, and the docs-setup hook. Transport mirrors `SecretsService` exactly.
 @MainActor
@@ -46,7 +46,7 @@ final class DocsService {
            !override.isEmpty, let url = URL(string: override) {
             return url
         }
-        return URL(string: "https://flowcy.dev")!
+        return URL(string: "https://www.flowcy.dev")!
     }
 
     // MARK: - Search

@@ -9,7 +9,7 @@ enum DocsSkill {
     # Skill: Set up documentation publishing
 
     You are setting up automatic documentation publishing for this repository so
-    its docs are indexed by the docs service (https://flowcy.dev) and
+    its docs are indexed by the docs service (https://www.flowcy.dev) and
     become searchable in RxCode (⌘K → Docs and the `ide__search_docs` tool).
 
     Follow these steps end to end. Inspect the repo first to choose the right doc
@@ -51,7 +51,7 @@ enum DocsSkill {
     `{DOCS_ENDPOINT}/api/v1/docs/repositories/{url-encoded repo}/documents` with
     `Authorization: Bearer $DOCS_UPLOAD_TOKEN` and body
     `{"documents":[{"docId": slug, "content": body}, ...]}`. Support `--dry-run`
-    and env config: `DOCS_ENDPOINT` (default https://flowcy.dev),
+    and env config: `DOCS_ENDPOINT` (default https://www.flowcy.dev),
     `DOCS_REPOSITORY_ID` (e.g. `owner/repo`), `DOCS_UPLOAD_TOKEN`.
 
     ## 3. Add the GitHub Actions workflow `.github/workflows/upload-docs.yaml`
@@ -79,7 +79,7 @@ enum DocsSkill {
                       python-version: "3.x"
                 - name: Upload docs
                   env:
-                      DOCS_ENDPOINT: https://flowcy.dev
+                      DOCS_ENDPOINT: https://www.flowcy.dev
                       DOCS_REPOSITORY_ID: <owner>/<repo>
                       DOCS_UPLOAD_TOKEN: ${{ secrets.DOCS_UPLOAD_TOKEN }}
                   run: python scripts/upload_docs.py

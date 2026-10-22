@@ -2,7 +2,7 @@ import Foundation
 import RxCodeCore
 import os
 
-/// Talks to the autopilot service (deployed at `https://flowcy.dev`)
+/// Talks to the autopilot service (deployed at `https://www.flowcy.dev`)
 /// using the rxauth bearer obtained from `RxAuthService`. autopilot holds the
 /// GitHub App installation tokens, so the macOS app never sees a GitHub
 /// OAuth token.
@@ -42,7 +42,7 @@ final class AutopilotService {
         if let override, !override.isEmpty, let url = URL(string: override) {
             return url
         }
-        return URL(string: "https://flowcy.dev")!
+        return URL(string: "https://www.flowcy.dev")!
     }
 
     /// `GET /api/v1/repos` — live, paginated list of GitHub repos accessible

@@ -4,7 +4,7 @@ import os
 
 /// Talks to github-pm's CI auto-update API (the "watched repositories" feature,
 /// same host as `AutopilotService` / `SecretsService` / `DocsService`,
-/// `https://flowcy.dev`) using the rxauth bearer. Powers the CI
+/// `https://www.flowcy.dev`) using the rxauth bearer. Powers the CI
 /// Auto-Update management UI in Settings → Autopilot and the setup banner.
 /// Transport mirrors `SecretsService` / `DocsService` exactly.
 @MainActor
@@ -47,7 +47,7 @@ final class CIUpdateService {
            !override.isEmpty, let url = URL(string: override) {
             return url
         }
-        return URL(string: "https://flowcy.dev")!
+        return URL(string: "https://www.flowcy.dev")!
     }
 
     // MARK: - Watched repositories (CRUD)

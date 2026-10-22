@@ -3,7 +3,7 @@ import Foundation
 // MARK: - autopilot Repo DTO
 
 /// Repository payload returned by `GET /api/v1/repos` on autopilot
-/// (deployed at https://flowcy.dev). The macOS app no longer talks
+/// (deployed at https://www.flowcy.dev). The macOS app no longer talks
 /// to api.github.com directly — autopilot fans out across the signed-in
 /// user's GitHub App installations and hands back a deduped list.
 public struct AutopilotRepo: Identifiable, Codable, Sendable, Hashable {

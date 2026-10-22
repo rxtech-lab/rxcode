@@ -6,7 +6,7 @@ import RxCodeSync
 import SwiftUI
 
 /// Desktop-side handling of mobile autopilot requests. Mobile mirrors the
-/// macOS Autopilot settings tab but never calls `autopilot.rxlab.app` itself —
+/// macOS Autopilot settings tab but never calls `flowcy.dev` itself —
 /// every operation arrives here as a generic `AutopilotRequestPayload`, is
 /// dispatched on its `AutopilotOp`, performed with the existing autopilot /
 /// secrets / docs / release / CI services (the desktop holds the rxlab token
@@ -17,14 +17,14 @@ extension AppState {
     func handleMobileAutopilotRequest(_ request: AutopilotRequestPayload, fromHex: String) async {
         guard let op = AutopilotOp(rawValue: request.operation) else {
             await replyAutopilot(request, fromHex: fromHex, ok: false,
-                                 errorMessage: "Unknown autopilot operation \(request.operation).")
+                                 errorMessage: "Unknown Flowcy operation \(request.operation).")
             return
         }
         do {
             let body = try await performAutopilotOperation(op, request: request)
             await replyAutopilot(request, fromHex: fromHex, ok: true, body: body)
         } catch {
-            logger.error("[MobileSync] autopilot op=\(request.operation, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+            logger.error("[MobileSync] Flowcy op=\(request.operation, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
             await replyAutopilot(request, fromHex: fromHex, ok: false, errorMessage: error.localizedDescription)
         }
     }

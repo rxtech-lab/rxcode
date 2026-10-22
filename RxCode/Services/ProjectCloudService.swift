@@ -31,7 +31,7 @@ final class ProjectCloudService {
         if let override, !override.isEmpty, let url = URL(string: override) {
             return url
         }
-        return URL(string: "https://autopilot.rxlab.app")!
+        return URL(string: "https://flowcy.dev")!
     }
 
     private var projectsURL: URL { baseURL.appendingPathComponent("/api/v1/docs/repositories") }

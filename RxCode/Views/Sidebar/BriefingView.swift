@@ -488,7 +488,7 @@ struct BriefingView: View {
             HStack(spacing: 6) {
                 Image(systemName: "wand.and.stars")
                     .font(.system(size: 11, weight: .semibold))
-                Text("Autopilot")
+                Text("Flowcy")
                     .font(.system(size: 11, weight: .semibold))
                     .lineLimit(1)
                 Image(systemName: "chevron.down")
@@ -509,7 +509,7 @@ struct BriefingView: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .help("Manage autopilot automation settings and repo-setup templates.")
+        .help("Manage Flowcy automation settings and repo-setup templates.")
     }
 
     private func heroSubtitle(_ entries: [BriefingEntry]) -> String {

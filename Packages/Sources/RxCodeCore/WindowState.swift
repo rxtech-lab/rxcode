@@ -354,7 +354,7 @@ public final class WindowState {
     /// the cloud option selected.
     public var showNewProjectSheet = false
     public var newProjectPrefersCloud = false
-    /// The local project whose "Link to Autopilot Project" sheet is open.
+    /// The local project whose "Link to Flowcy Project" sheet is open.
     public var linkCloudProjectId: UUID?
     /// Whether the global thread-search overlay is presented. Toggled by the
     /// toolbar magnifier button and the Cmd+K shortcut.

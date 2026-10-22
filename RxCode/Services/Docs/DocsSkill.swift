@@ -9,7 +9,7 @@ enum DocsSkill {
     # Skill: Set up documentation publishing
 
     You are setting up automatic documentation publishing for this repository so
-    its docs are indexed by the docs service (https://autopilot.rxlab.app) and
+    its docs are indexed by the docs service (https://flowcy.dev) and
     become searchable in RxCode (⌘K → Docs and the `ide__search_docs` tool).
 
     Follow these steps end to end. Inspect the repo first to choose the right doc
@@ -51,13 +51,13 @@ enum DocsSkill {
     `{DOCS_ENDPOINT}/api/v1/docs/repositories/{url-encoded repo}/documents` with
     `Authorization: Bearer $DOCS_UPLOAD_TOKEN` and body
     `{"documents":[{"docId": slug, "content": body}, ...]}`. Support `--dry-run`
-    and env config: `DOCS_ENDPOINT` (default https://autopilot.rxlab.app),
+    and env config: `DOCS_ENDPOINT` (default https://flowcy.dev),
     `DOCS_REPOSITORY_ID` (e.g. `owner/repo`), `DOCS_UPLOAD_TOKEN`.
 
     ## 3. Add the GitHub Actions workflow `.github/workflows/upload-docs.yaml`
 
     ```yaml
-    name: Upload docs to autopilot
+    name: Upload docs to Flowcy
     on:
         push:
             branches: ["main"]
@@ -79,7 +79,7 @@ enum DocsSkill {
                       python-version: "3.x"
                 - name: Upload docs
                   env:
-                      DOCS_ENDPOINT: https://autopilot.rxlab.app
+                      DOCS_ENDPOINT: https://flowcy.dev
                       DOCS_REPOSITORY_ID: <owner>/<repo>
                       DOCS_UPLOAD_TOKEN: ${{ secrets.DOCS_UPLOAD_TOKEN }}
                   run: python scripts/upload_docs.py
@@ -98,7 +98,7 @@ enum DocsSkill {
 
     Fallbacks when `ide__setup_docs_secret` isn't available (e.g. running this
     skill outside RxCode):
-    - RxCode UI: Settings → Autopilot → Manage Docs → open the repo → "Install
+    - RxCode UI: Settings → Flowcy → Manage Docs → open the repo → "Install
       DOCS_UPLOAD_TOKEN secret".
     - Mint a token (`POST /api/v1/docs/repositories/{id}/upload-tokens`, shown
       once) and install it manually:

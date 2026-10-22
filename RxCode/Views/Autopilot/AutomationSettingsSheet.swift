@@ -42,7 +42,7 @@ struct AutomationSettingsSheet: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text("Automation Settings").font(.headline)
-            Text("Configure what autopilot does automatically on your repositories.")
+            Text("Configure what Flowcy does automatically on your repositories.")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)

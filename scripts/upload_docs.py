@@ -11,7 +11,7 @@ with `Authorization: Bearer $DOCS_UPLOAD_TOKEN` and body:
     {"documents": [{"docId": slug, "content": body}, ...]}
 
 Environment:
-    DOCS_ENDPOINT        default https://autopilot.rxlab.app
+    DOCS_ENDPOINT        default https://flowcy.dev
     DOCS_REPOSITORY_ID   e.g. owner/repo  (required unless --dry-run)
     DOCS_UPLOAD_TOKEN    bearer token     (required unless --dry-run)
 
@@ -27,7 +27,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-DEFAULT_ENDPOINT = "https://autopilot.rxlab.app"
+DEFAULT_ENDPOINT = "https://flowcy.dev"
 BATCH_SIZE = 50
 
 

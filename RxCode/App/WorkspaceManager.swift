@@ -65,6 +65,7 @@ final class WorkspaceManager {
         let workspace = snapshot.all.first { $0.id == workspaceID } ?? snapshot.active
         let appState = AppState(core: core, workspace: workspace)
         appStatesByWorkspaceID[workspace.id] = appState
+        appState.desktopWidgetsActive = workspace.id == frontmostWorkspaceID
         if workspace.id == frontmostWorkspaceID {
             bindMemoryMCPServer(to: appState)
         }
@@ -82,7 +83,11 @@ final class WorkspaceManager {
     /// Mark a workspace window as frontmost (called from window focus tracking).
     /// Moves mobile-sync ownership to the new frontmost workspace.
     func markFrontmost(_ workspaceID: String) {
+        appStatesByWorkspaceID[frontmostWorkspaceID]?.desktopWidgetsActive = false
         frontmostWorkspaceID = workspaceID
+        let state = appState(for: workspaceID)
+        state.desktopWidgetsActive = true
+        state.scheduleDesktopWidgetUpdate()
         transferMobileSyncOwnership(to: workspaceID)
         bindMemoryMCPServer(to: appState(for: workspaceID))
     }

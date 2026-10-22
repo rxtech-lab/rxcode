@@ -14,7 +14,7 @@ enum AutopilotRemoteError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notPaired:
-            return String(localized: "Connect an online Mac to use Autopilot.")
+            return String(localized: "Connect an online Mac to use Flowcy.")
         case .timedOut:
             return String(localized: "Request timed out. Check your Mac and try again.")
         case .desktopChanged:

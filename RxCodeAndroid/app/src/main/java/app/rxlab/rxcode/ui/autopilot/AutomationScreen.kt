@@ -51,7 +51,7 @@ fun AutomationScreen(
     LaunchedEffect(online, reloadKey) {
         if (!online) {
             isLoading = false
-            loadError = "Connect an online Mac to use Autopilot."
+            loadError = "Connect an online Mac to use Flowcy."
             return@LaunchedEffect
         }
         isLoading = true

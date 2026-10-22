@@ -77,7 +77,7 @@ public struct BriefingNotificationDecision: Equatable, Sendable {
         var lines: [String] = []
         lines.append("""
         An agent in RxCode just published a briefing (a report shown on the user's briefing timeline). \
-        Decide whether to also send it to the user as an email notification through the Autopilot notification service. \
+        Decide whether to also send it to the user as an email notification through the Flowcy notification service. \
         Notifications count against a small daily quota, so only send briefings the user would want delivered: \
         scheduled or requested reports, results the user is waiting for, failures or anything that needs their attention. \
         Do not send trivial, duplicate, or work-in-progress briefings.
@@ -90,7 +90,7 @@ public struct BriefingNotificationDecision: Equatable, Sendable {
         if let path = context.projectPath { lines.append("- Path: \(path)") }
         if let repo = context.gitHubRepo { lines.append("- GitHub repository: \(repo)") }
         lines.append("- Briefing notification mode: \(modeDescription(context.mode))")
-        lines.append("- Recipient: \(context.recipient ?? "the user's Autopilot account email")")
+        lines.append("- Recipient: \(context.recipient ?? "the user's Flowcy account email")")
 
         lines.append("\nSource chat:")
         if let title = context.sourceThreadTitle, !title.isEmpty { lines.append("- Title: \(title)") }

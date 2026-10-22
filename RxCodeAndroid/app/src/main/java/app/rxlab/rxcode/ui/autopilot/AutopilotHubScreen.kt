@@ -76,7 +76,7 @@ fun AutopilotHubScreen(
 
     val signedIn = account?.isSignedIn == true
 
-    AutopilotScaffold(title = "Autopilot", onBack = { nav.pop() }) { modifier ->
+    AutopilotScaffold(title = "Flowcy", onBack = { nav.pop() }) { modifier ->
         Box(modifier.fillMaxSize()) {
             LazyColumn(
                 Modifier.fillMaxSize(),
@@ -126,7 +126,7 @@ fun AutopilotHubScreen(
                 } else if (!isLoading && loadError == null && online) {
                     item {
                         Text(
-                            "Sign in with rxlab on your Mac to enable Autopilot.",
+                            "Sign in with rxlab on your Mac to enable Flowcy.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -156,7 +156,7 @@ private fun OfflineNotice() {
             Column {
                 Text("Mac offline", style = MaterialTheme.typography.titleSmall)
                 Text(
-                    "Connect to an online Mac to manage Autopilot.",
+                    "Connect to an online Mac to manage Flowcy.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

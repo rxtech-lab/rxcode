@@ -210,7 +210,7 @@ private struct TrustedEmailsView: View {
                         email: accountEmail,
                         systemImage: "person.crop.circle.fill",
                         tint: .accentColor,
-                        detail: String(localized: "Your Autopilot account email"),
+                        detail: String(localized: "Your Flowcy account email"),
                         isRecipient: recipient == nil
                     ) {
                         if recipient != nil {

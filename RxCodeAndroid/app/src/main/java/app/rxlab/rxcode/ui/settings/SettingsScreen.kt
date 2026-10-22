@@ -240,7 +240,7 @@ fun SettingsScreen(
                             }
                             Column(Modifier.weight(1f)) {
                                 Text(
-                                    "Autopilot",
+                                    "Flowcy",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.SemiBold,
                                 )

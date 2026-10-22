@@ -194,6 +194,7 @@ extension AppState {
 
         // Permission request routing is handled per-window in initializeWindow's listener.
         isInitialized = true
+        scheduleDesktopWidgetUpdate()
         resumeReadyTaskDependencies()
 
         let elapsed = ContinuousClock.now - launchStart

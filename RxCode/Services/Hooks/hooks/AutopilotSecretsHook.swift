@@ -117,7 +117,7 @@ final class AutopilotSecretsHook: Hook {
             logger.debug("[Hook] onProjectNewChatStart: task cancelled after environments fetch — bailing")
             return .ignored
         }
-        logger.debug("[Hook] onProjectNewChatStart: autopilot environments count=\(environments.count, privacy: .public) names=\(environments.map(\.label).joined(separator: ","), privacy: .public)")
+        logger.debug("[Hook] onProjectNewChatStart: Flowcy environments count=\(environments.count, privacy: .public) names=\(environments.map(\.label).joined(separator: ","), privacy: .public)")
         if environments.isEmpty {
             logger.debug("[Hook] onProjectNewChatStart: repo has no environments — showing 'back up secrets' banner \(bannerID, privacy: .public)")
             controller.showBanner(in: .newProject, position: .aboveInputBox, id: bannerID, projectId: project.id) {

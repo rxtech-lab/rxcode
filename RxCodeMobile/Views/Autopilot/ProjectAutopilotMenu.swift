@@ -85,7 +85,7 @@ struct ProjectAutopilotMenuItems: View {
             codeReviewItem()
         } else {
             Button {} label: {
-                Label("Loading Autopilot…", systemImage: "hourglass")
+                Label("Loading Flowcy…", systemImage: "hourglass")
             }
             .disabled(true)
         }

@@ -69,7 +69,7 @@ struct MobileTaskFormView: View {
                 if isStatusLocked {
                     Text("The agent is working on this task; it moves on when the turn finishes.")
                 } else if state.usesCloudTasks && task.parentTaskIds.count > 1 {
-                    Text("Autopilot currently syncs one Starts after task per cloud task. Select one to save this task.")
+                    Text("Flowcy currently syncs one Starts after task per cloud task. Select one to save this task.")
                 } else if !state.usesCloudTasks, board.column(for: task.status).triggersChat, task.agent.isAssigned {
                     Text("Saving in this column runs the assigned agent on your Mac.")
                 }
@@ -156,7 +156,7 @@ struct MobileTaskFormView: View {
                 .navigationTitle("Starts after")
                 .safeAreaInset(edge: .bottom) {
                     if state.usesCloudTasks {
-                        Text("Autopilot currently syncs one Starts after task per cloud task.")
+                        Text("Flowcy currently syncs one Starts after task per cloud task.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .padding()

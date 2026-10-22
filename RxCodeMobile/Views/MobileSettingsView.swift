@@ -23,12 +23,12 @@ struct MobileSettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Autopilot Account") {
+                Section("Flowcy Account") {
                     if cloud.isSignedIn {
-                        Text("Signed in to Autopilot")
+                        Text("Signed in to Flowcy")
                         Button("Sign Out", role: .destructive) { Task { await cloud.signOut() } }
                     } else {
-                        Button("Sign In to Autopilot") { Task { await cloud.signIn() } }
+                        Button("Sign In to Flowcy") { Task { await cloud.signIn() } }
                             .disabled(cloud.isSigningIn)
                         if let error = cloud.error { Text(error).foregroundStyle(.red) }
                     }
@@ -270,12 +270,12 @@ struct MobileSettingsView: View {
             NavigationLink {
                 MobileAutopilotView()
             } label: {
-                Label("Autopilot", systemImage: "airplane")
+                Label("Flowcy", systemImage: "airplane")
             }
         } header: {
             Text("Desktop Configuration")
         } footer: {
-            Text("Install skills and agents, configure MCP servers, and manage Autopilot on the active Mac.")
+            Text("Install skills and agents, configure MCP servers, and manage Flowcy on the active Mac.")
         }
     }
 

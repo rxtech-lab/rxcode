@@ -14,6 +14,7 @@ import SwiftUI
 struct TaskProjectSection: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
+    @Environment(\.openWindow) private var openWindow
 
     let project: Project
     let keyword: String
@@ -172,10 +173,8 @@ struct TaskProjectSection: View {
     }
 
     private var header: some View {
-        HStack(alignment: .top, spacing: 10) {
-            // The counts sit on their own line under the title: side by side
-            // they squeeze the narrow card until a two-digit count wraps.
-            VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top, spacing: 10) {
                 // Only the title carries the drag: the add button and the menu
                 // in the same row have to stay clickable. A tap gesture rather
                 // than a `Button`, which swallows the drag, as the view tabs do.
@@ -188,62 +187,80 @@ struct TaskProjectSection: View {
                     .accessibilityAddTraits(.isButton)
                     .help("Open the project's task views — drag onto another card to reorder")
 
-                // Never compressed: a squeezed row clips the digits instead of
-                // dropping a count.
-                statusSummary
-                    .fixedSize()
-            }
-            // The name takes the room it needs before the spacer and the
-            // buttons; it only truncates when it truly doesn't fit.
-            .layoutPriority(1)
+                Spacer(minLength: 8)
 
-            Spacer(minLength: 8)
+                ProjectCloudButton(project: project, compact: true)
 
-            ProjectCloudButton(project: project, compact: true)
-
-            TaskOverviewStoryFilter(
-                projectId: project.id,
-                stories: availableStories,
-                board: board,
-                filter: cardFilterBinding,
-                isEvaluatingScript: isEvaluatingScriptFilter,
-                scriptError: scriptFilterError
-            )
-
-            Menu {
-                TaskCreationMenuItems(
-                    onNewTask: { openNewTask(mode: $0) },
-                    onNewStory: { openNewStory(mode: $0) }
+                TaskOverviewStoryFilter(
+                    projectId: project.id,
+                    stories: availableStories,
+                    board: board,
+                    filter: cardFilterBinding,
+                    isEvaluatingScript: isEvaluatingScriptFilter,
+                    scriptError: scriptFilterError
                 )
-            } label: {
-                Image(systemName: "plus")
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .help("New task or story in this project")
-            .accessibilityIdentifier("task-overview-project-add")
 
-            Menu {
-                Button("Open Project Board", action: openProject)
-                Divider()
-                TaskCreationMenuItems(
-                    onNewTask: { openNewTask(mode: $0) },
-                    onNewStory: { openNewStory(mode: $0) }
-                )
-                Divider()
-                Button("New Chat") { appState.startNewChat(inProject: project.id, window: windowState) }
-                Divider()
-                ProjectCloudMenuItems(project: project)
-            } label: {
-                Image(systemName: "ellipsis")
+                Menu {
+                    TaskCreationMenuItems(
+                        onNewTask: { openNewTask(mode: $0) },
+                        onNewStory: { openNewStory(mode: $0) }
+                    )
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("New task or story in this project")
+                .accessibilityIdentifier("task-overview-project-add")
+
+                Menu {
+                    Button("Open Project Board", action: openProject)
+                    openInNewWindowButton
+                    Divider()
+                    TaskCreationMenuItems(
+                        onNewTask: { openNewTask(mode: $0) },
+                        onNewStory: { openNewStory(mode: $0) }
+                    )
+                    Divider()
+                    Button("New Chat") { appState.startNewChat(inProject: project.id, window: windowState) }
+                    Divider()
+                    ProjectCloudMenuItems(project: project)
+                } label: {
+                    Image(systemName: "ellipsis")
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
+
+            // Counts use the whole card width instead of competing with the
+            // header actions and forcing the card outside its column.
+            statusSummary
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
+        .contextMenu {
+            Button("Open Project Board", action: openProject)
+            openInNewWindowButton
+        }
+    }
+
+    private var openInNewWindowButton: some View {
+        Button {
+            openWindow(
+                id: "route-window",
+                value: GeneralRouteWindowValue(
+                    route: .tasks,
+                    instanceId: UUID(),
+                    workspaceID: appState.activeWorkspace.id,
+                    taskDetailProjectId: project.id
+                )
+            )
+        } label: {
+            Label("Open in New Window", systemImage: "macwindow.badge.plus")
+        }
+        .accessibilityIdentifier("task-project-open-new-window")
     }
 
     /// Folder icon, project name and the disclosure chevron — also the card's
@@ -272,7 +289,7 @@ struct TaskProjectSection: View {
         for task in board.tasks(matching: view) {
             counts[board.resolvedStatus(of: task), default: 0] += 1
         }
-        return HStack(spacing: 8) {
+        return VStack(alignment: .leading, spacing: 6) {
             if board.effectiveViews.count > 1 {
                 Label(view.name, systemImage: view.layout.systemImage)
                     .font(.system(size: ClaudeTheme.size(11), weight: .medium))
@@ -280,17 +297,19 @@ struct TaskProjectSection: View {
                     .lineLimit(1)
                     .help("Default view")
             }
-            ForEach(board.effectiveColumns) { column in
-                let count = counts[column.id, default: 0]
-                if count > 0 {
-                    HStack(spacing: 3) {
-                        TaskStatusIcon(column: column, size: 10)
-                        Text("\(count)")
-                            .font(.system(size: ClaudeTheme.size(11), weight: .medium))
-                            .foregroundStyle(ClaudeTheme.textSecondary)
-                            .monospacedDigit()
-                            .lineLimit(1)
-                            .fixedSize()
+            FlowLayout(spacing: 8, lineSpacing: 6) {
+                ForEach(board.effectiveColumns) { column in
+                    let count = counts[column.id, default: 0]
+                    if count > 0 {
+                        HStack(spacing: 3) {
+                            TaskStatusIcon(column: column, size: 10)
+                            Text("\(count)")
+                                .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+                                .foregroundStyle(ClaudeTheme.textSecondary)
+                                .monospacedDigit()
+                                .lineLimit(1)
+                                .fixedSize()
+                        }
                     }
                 }
             }

@@ -63,7 +63,7 @@ struct SettingsView: View {
 
             AutopilotSettingsTab()
                 .tabItem {
-                    Label("Autopilot", systemImage: "paperplane.circle")
+                    Label("Flowcy", systemImage: "paperplane.circle")
                 }
                 .tag(7)
 

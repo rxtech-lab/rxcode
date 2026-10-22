@@ -595,8 +595,8 @@ struct OnboardingSlide: Identifiable {
         ),
         OnboardingSlide(
             id: "autopilot",
-            title: "Sign in to your Autopilot account",
-            subtitle: "Connect your rxlab account to import GitHub repositories, sync encrypted secrets, and use autopilot features. You can skip this and sign in later.",
+            title: "Sign in to your Flowcy account",
+            subtitle: "Connect your rxlab account to import GitHub repositories, sync encrypted secrets, and use Flowcy features. You can skip this and sign in later.",
             visual: .autopilotSignIn,
             canSkip: true
         ),

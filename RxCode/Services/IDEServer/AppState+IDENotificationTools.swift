@@ -12,7 +12,7 @@ extension AppState {
     @MainActor
     func handleSendNotification(arguments: JSONValue, sessionKey: String) async throws -> JSONValue {
         guard isSignedIn else {
-            throw IDEToolError.invalidArguments("Notifications need an Autopilot account. Ask the user to sign in under Settings → Autopilot.")
+            throw IDEToolError.invalidArguments("Notifications need an Flowcy account. Ask the user to sign in under Settings → Flowcy.")
         }
         let subjectArgument = arguments["subject"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let recipient = briefingNotificationSettings.recipient

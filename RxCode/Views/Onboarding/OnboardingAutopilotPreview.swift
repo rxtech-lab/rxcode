@@ -16,13 +16,13 @@ struct AutopilotSignInPreview: View {
                 Image(systemName: "person.badge.shield.checkmark.fill")
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(ClaudeTheme.accent)
-                Text("Autopilot Account")
+                Text("Flowcy Account")
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(.white)
                 Spacer()
             }
 
-            Text("Sign in with rxlab to import GitHub repositories, sync encrypted secrets, and use autopilot features. You can skip this and sign in later from Settings.")
+            Text("Sign in with rxlab to import GitHub repositories, sync encrypted secrets, and use Flowcy features. You can skip this and sign in later from Settings.")
                 .font(.system(size: 12))
                 .foregroundStyle(.white.opacity(0.62))
 
@@ -75,7 +75,7 @@ struct AutopilotSignInPreview: View {
         Capability(
             icon: "arrow.triangle.2.circlepath",
             title: String(localized: "Detect CI Issues"),
-            description: String(localized: "Autopilot watches your CI, spots failures, and opens fix pull requests.")
+            description: String(localized: "Flowcy watches your CI, spots failures, and opens fix pull requests.")
         ),
         Capability(
             icon: "tag.fill",
@@ -173,7 +173,7 @@ struct AutopilotSignInPreview: View {
                 Text("Not signed in")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white)
-                Text("Connect your rxlab account to enable autopilot.")
+                Text("Connect your rxlab account to enable Flowcy.")
                     .font(.system(size: 11))
                     .foregroundStyle(.white.opacity(0.6))
             }

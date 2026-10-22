@@ -3,7 +3,7 @@ import RxCodeCore
 import os
 
 /// Talks to github-pm's notification API (same host as `AutopilotService`,
-/// `https://autopilot.rxlab.app`) using the rxauth bearer: sends notifications,
+/// `https://flowcy.dev`) using the rxauth bearer: sends notifications,
 /// uploads their attachments, and manages trusted recipient emails. Transport
 /// mirrors `DocsService`.
 @MainActor
@@ -54,7 +54,7 @@ final class AutopilotNotificationService {
            !override.isEmpty, let url = URL(string: override) {
             return url
         }
-        return URL(string: "https://autopilot.rxlab.app")!
+        return URL(string: "https://flowcy.dev")!
     }
 
     // MARK: - Notifications

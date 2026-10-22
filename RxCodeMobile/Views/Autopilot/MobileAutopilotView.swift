@@ -2,7 +2,7 @@ import RxCodeCore
 import RxCodeSync
 import SwiftUI
 
-/// Mobile mirror of the desktop "Autopilot" settings tab. Every action is
+/// Mobile mirror of the desktop "Flowcy" settings tab. Every action is
 /// performed by the paired Mac over the sync channel, so the screen requires an
 /// online desktop; when offline it shows a notice and disables navigation.
 struct MobileAutopilotView: View {
@@ -39,7 +39,7 @@ struct MobileAutopilotView: View {
                 } header: {
                     Text("Configuration")
                 } footer: {
-                    Text("Control what autopilot does automatically and the templates applied to new repositories.")
+                    Text("Control what Flowcy does automatically and the templates applied to new repositories.")
                 }
 
                 Section {
@@ -70,7 +70,7 @@ struct MobileAutopilotView: View {
                 }
             } else if !isLoading, loadError == nil, isOnline {
                 Section {
-                    Text("Sign in with rxlab on your Mac to enable Autopilot.")
+                    Text("Sign in with rxlab on your Mac to enable Flowcy.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -84,7 +84,7 @@ struct MobileAutopilotView: View {
                 }
             }
         }
-        .navigationTitle("Autopilot")
+        .navigationTitle("Flowcy")
         .navigationBarTitleDisplayMode(.inline)
         .disabled(!isOnline)
         .mobileAutopilotLoadingOverlay(isOnline && isLoading && account == nil)
@@ -97,7 +97,7 @@ struct MobileAutopilotView: View {
             Label {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Mac offline")
-                    Text("Connect to an online Mac to manage Autopilot.")
+                    Text("Connect to an online Mac to manage Flowcy.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

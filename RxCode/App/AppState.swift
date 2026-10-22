@@ -229,7 +229,9 @@ final class AppState {
 
     // MARK: - Session Summaries (shared — lightweight metadata for all projects)
 
-    var allSessionSummaries: [ChatSession.Summary] = []
+    var allSessionSummaries: [ChatSession.Summary] = [] {
+        didSet { scheduleDesktopWidgetUpdate() }
+    }
 
     /// Bumped each time a thread file-edit row is appended in SwiftData. The
     /// "This thread" inspector reads this so SwiftUI observation re-runs the

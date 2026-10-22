@@ -59,7 +59,10 @@ extension AppState {
 
         // Assigning an equal value still fires observation — only publish real changes.
         if next != sessionActivity {
+            let streamingChanged = next.filter { $0.value.isStreaming }.keys.sorted()
+                != sessionActivity.filter { $0.value.isStreaming }.keys.sorted()
             sessionActivity = next
+            if streamingChanged { scheduleDesktopWidgetUpdate() }
         }
         if needsTodoRefresh {
             scheduleSessionActivityTodoRefresh()

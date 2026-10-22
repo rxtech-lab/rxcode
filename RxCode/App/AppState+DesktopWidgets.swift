@@ -20,6 +20,12 @@ extension AppState {
                     WidgetAgentUsage(id: "codex", name: "Codex", usage: self.latestCodexRateLimitUsage, measuredAt: self.desktopCodexUsageDate)
                 ] + self.acpClients.filter(\.enabled).map {
                     WidgetAgentUsage(id: "acp:\($0.id)", name: $0.displayName, usage: nil, supportsLimits: false)
+                },
+                threads: self.allSessionSummaries.filter { !$0.isArchived }.compactMap { summary in
+                    guard let project = self.sessionProject(id: summary.projectId) else { return nil }
+                    return WidgetThread(id: summary.id, projectID: project.id, projectName: project.name,
+                        title: summary.title, isOngoing: self.sessionActivity[summary.id]?.isStreaming ?? false,
+                        updatedAt: summary.updatedAt)
                 }
             )
             await DesktopWidgetPublisher.shared.publish(snapshot)
@@ -32,6 +38,10 @@ extension AppState {
               components.queryItems?.first(where: { $0.name == "workspace" })?.value == activeWorkspace.id else { return false }
         if url.path == "/usage" {
             window.generalRoute = .briefing
+        } else if url.path == "/thread" {
+            guard let threadID = components.queryItems?.first(where: { $0.name == "thread" })?.value,
+                  allSessionSummaries.contains(where: { $0.id == threadID && !$0.isArchived }) else { return false }
+            selectSession(id: threadID, in: window)
         } else if url.path == "/tasks" {
             window.generalRoute = .tasks
             let id = components.queryItems?.first(where: { $0.name == "project" })?.value.flatMap(UUID.init(uuidString:))

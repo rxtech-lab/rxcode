@@ -7,8 +7,14 @@ private final class MCPOAuthBrowser: NSObject, ASWebAuthenticationPresentationCo
     private var session: ASWebAuthenticationSession?
     private var continuation: CheckedContinuation<URL, Error>?
 
+    func retryWithHTTP() {
+        session?.cancel()
+        finish(.failure(MCPOAuthService.AuthError.invalid("Retrying with an HTTP callback.")))
+    }
+
     func authenticate(url: URL) async throws -> URL {
-        try await withTaskCancellationHandler {
+        try Task.checkCancellation()
+        return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 self.continuation = continuation
                 let session = ASWebAuthenticationSession(url: url, callbackURLScheme: "rxcode") { [weak self] url, error in
@@ -53,6 +59,7 @@ struct MCPOAuthSheet: View {
     @State private var error: String?
     @State private var status: String?
     @State private var confirmSignOut = false
+    @State private var canRetryWithHTTP = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -61,6 +68,7 @@ struct MCPOAuthSheet: View {
             Text(verbatim: server.endpoint).foregroundStyle(.secondary).textSelection(.enabled)
             TextField("OAuth client ID (optional)", text: $clientID)
                 .textFieldStyle(.roundedBorder)
+                .disabled(operation != nil)
             Text("Leave blank to register automatically when the server supports it.")
                 .font(.caption).foregroundStyle(.secondary)
             Spacer()
@@ -75,7 +83,14 @@ struct MCPOAuthSheet: View {
         .padding(24).frame(width: 480, height: 300)
         .overlay {
             if let status {
-                ProgressView(status).padding(24).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                VStack(spacing: 16) {
+                    ProgressView(status)
+                    if canRetryWithHTTP {
+                        Button("Retry with HTTP Callback") { browser.retryWithHTTP() }
+                    }
+                    Button("Cancel", role: .cancel) { operation?.cancel() }
+                }
+                .padding(24).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
             }
         }
         .alert("MCP Authentication", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
@@ -100,17 +115,50 @@ struct MCPOAuthSheet: View {
     private func signIn() {
         operation = Task {
             status = "Signing in…"
-            defer { status = nil; operation = nil }
+            defer { status = nil; operation = nil; canRetryWithHTTP = false }
             do {
                 guard let resource = URL(string: server.endpoint) else { return }
-                let authorization = try await MCPOAuthService.shared.begin(resource: resource, clientID: clientID)
+                let (authorization, callback) = try await authorize(resource: resource)
                 try Task.checkCancellation()
-                let callback = try await browser.authenticate(url: authorization.url)
+                NSApp.activate(ignoringOtherApps: true)
+                status = "Finishing sign-in…"
                 try await MCPOAuthService.shared.complete(authorization, callback: callback)
                 await onComplete()
                 dismiss()
             } catch is CancellationError {
             } catch { self.error = error.localizedDescription }
+        }
+    }
+
+    private func authorize(resource: URL) async throws -> (MCPOAuthService.Authorization, URL) {
+        do {
+            let authorization = try await MCPOAuthService.shared.begin(resource: resource, clientID: clientID)
+            try Task.checkCancellation()
+            canRetryWithHTTP = true
+            defer { canRetryWithHTTP = false }
+            let callback = try await browser.authenticate(url: authorization.url)
+            _ = try MCPOAuthService.callbackCode(authorization, callback: callback)
+            return (authorization, callback)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as ASWebAuthenticationSessionError where error.code == .canceledLogin {
+            throw CancellationError()
+        } catch MCPOAuthService.AuthError.denied {
+            throw MCPOAuthService.AuthError.denied
+        } catch {
+            try Task.checkCancellation()
+            status = "Signing in with HTTP callback…"
+            let receiver = MCPOAuthCallbackServer()
+            defer { receiver.stop() }
+            let redirect = try await receiver.start()
+            let authorization = try await MCPOAuthService.shared.begin(
+                resource: resource, clientID: clientID, redirectURI: redirect.absoluteString
+            )
+            try Task.checkCancellation()
+            let callback = try await receiver.wait(for: authorization) {
+                NSWorkspace.shared.open(authorization.url)
+            }
+            return (authorization, callback)
         }
     }
 }

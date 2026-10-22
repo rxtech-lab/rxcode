@@ -5,6 +5,80 @@ import CryptoKit
 
 @MainActor
 final class MCPOAuthTests: XCTestCase {
+    private func authorization(redirect: String) -> MCPOAuthService.Authorization {
+        MCPOAuthService.Authorization(
+            url: URL(string: "https://auth.example/authorize")!, state: "expected-state", verifier: "verifier",
+            clientID: "rxcode", tokenEndpoint: URL(string: "https://auth.example/token")!,
+            resource: "https://mcp.example/mcp", redirectURI: redirect
+        )
+    }
+
+    func testAuthorizationUsesSelectedLoopbackRedirect() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [OAuthFixtureProtocol.self]
+        let service = MCPOAuthService(session: URLSession(configuration: configuration))
+        let redirect = "http://127.0.0.1:54321/oauth/callback"
+        let authorization = try await service.begin(
+            resource: URL(string: "https://oauth-fixture.example/mcp")!, clientID: nil, redirectURI: redirect
+        )
+        XCTAssertEqual(authorization.redirectURI, redirect)
+        let items = URLComponents(url: authorization.url, resolvingAgainstBaseURL: false)?.queryItems
+        XCTAssertEqual(items?.first(where: { $0.name == "redirect_uri" })?.value, redirect)
+    }
+
+    func testLoopbackCallbackValidation() throws {
+        let authorization = authorization(redirect: "http://127.0.0.1:54321/oauth/callback")
+        let valid = "http://127.0.0.1:54321/oauth/callback?state=expected-state&code=secret"
+        XCTAssertEqual(try MCPOAuthService.callbackCode(authorization, callback: URL(string: valid)!), "secret")
+        for invalid in [
+            valid.replacingOccurrences(of: "54321", with: "54322"),
+            valid.replacingOccurrences(of: "127.0.0.1", with: "localhost"),
+            valid.replacingOccurrences(of: "/oauth/callback", with: "/other"),
+            valid + "&state=expected-state", valid + "&code=other", valid + "#fragment",
+            valid.replacingOccurrences(of: "expected-state", with: "wrong")
+        ] {
+            XCTAssertThrowsError(try MCPOAuthService.callbackCode(authorization, callback: URL(string: invalid)!))
+        }
+        let denied = URL(string: "http://127.0.0.1:54321/oauth/callback?state=expected-state&error=access_denied")!
+        XCTAssertThrowsError(try MCPOAuthService.callbackCode(authorization, callback: denied)) {
+            guard case MCPOAuthService.AuthError.denied = $0 else { return XCTFail("Expected explicit denial") }
+        }
+    }
+
+    func testLoopbackReceiverRejectsForgedStateThenAcceptsCallback() async throws {
+        let server = MCPOAuthCallbackServer()
+        defer { server.stop() }
+        let redirect = try await server.start()
+        XCTAssertEqual(redirect.host, "127.0.0.1")
+        let authorization = authorization(redirect: redirect.absoluteString)
+        let callback = URL(string: redirect.absoluteString + "?state=expected-state&code=secret")!
+        let delivery = Task {
+            try await server.wait(for: authorization) { true }
+        }
+        await Task.yield()
+        let session = URLSession(configuration: .ephemeral)
+        let (_, rejected) = try await session.data(from: URL(string: redirect.absoluteString + "?state=wrong&code=secret")!)
+        XCTAssertEqual((rejected as? HTTPURLResponse)?.statusCode, 400)
+        let (_, accepted) = try await session.data(from: callback)
+        XCTAssertEqual((accepted as? HTTPURLResponse)?.statusCode, 200)
+        let received = try await delivery.value
+        XCTAssertEqual(received, callback)
+    }
+
+    func testLoopbackReceiverCancellation() async throws {
+        let server = MCPOAuthCallbackServer()
+        defer { server.stop() }
+        let redirect = try await server.start()
+        let authorization = authorization(redirect: redirect.absoluteString)
+        let delivery = Task { try await server.wait(for: authorization) { true } }
+        await Task.yield()
+        delivery.cancel()
+        do {
+            _ = try await delivery.value
+            XCTFail("Cancellation must stop waiting for the browser")
+        } catch is CancellationError {}
+    }
+
     func testRejectsInsecureOrCredentialBearingEndpoints() throws {
         for text in ["http://example.com/mcp", "file:///etc/passwd", "https://user:pass@example.com/mcp", "https://example.com/mcp#fragment"] {
             XCTAssertThrowsError(try MCPOAuthService.validate(XCTUnwrap(URL(string: text)) as URL))

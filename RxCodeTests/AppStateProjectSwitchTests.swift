@@ -170,6 +170,46 @@ final class AppStateProjectSwitchTests: XCTestCase {
         )
     }
 
+    func testQueueEvictionWhileViewingAnotherThread_doesNotRestoreSentMessage() {
+        let project = makeProject("A")
+        let sessionA = ChatSession(id: "session-a", projectId: project.id, title: "A")
+        let sessionB = ChatSession(id: "session-b", projectId: project.id, title: "B")
+        let sent = QueuedMessage(text: "sent in background", attachments: [])
+        let remaining = QueuedMessage(text: "still queued", attachments: [])
+        let other = QueuedMessage(text: "queued in B", attachments: [])
+        window.selectedProject = project
+        appState.registerLiveWindow(window)
+        appState.switchToSession(sessionA, messages: [], in: window)
+        window.messageQueue = [sent, remaining]
+        appState.switchToSession(sessionB, messages: [], in: window)
+        window.messageQueue = [other]
+
+        appState.evictFromWindowQueueMirrors(sessionID: sessionA.id, queuedID: sent.id)
+
+        XCTAssertEqual(window.messageQueue.map(\.id), [other.id])
+        XCTAssertEqual(window.draftQueues[sessionA.id]?.map(\.id), [remaining.id])
+        appState.switchToSession(sessionA, messages: [], in: window)
+        XCTAssertEqual(window.messageQueue.map(\.id), [remaining.id])
+    }
+
+    func testQueueEviction_clearsActiveAndInactiveWindowMirrors() {
+        let sent = QueuedMessage(text: "sent", attachments: [])
+        let activeWindow = WindowState()
+        activeWindow.currentSessionId = "session-a"
+        activeWindow.messageQueue = [sent]
+        activeWindow.draftQueues["session-a"] = [sent]
+        window.currentSessionId = "session-b"
+        window.draftQueues["session-a"] = [sent]
+        appState.registerLiveWindow(activeWindow)
+        appState.registerLiveWindow(window)
+
+        appState.evictFromWindowQueueMirrors(sessionID: "session-a", queuedID: sent.id)
+
+        XCTAssertTrue(activeWindow.messageQueue.isEmpty)
+        XCTAssertNil(activeWindow.draftQueues["session-a"])
+        XCTAssertNil(window.draftQueues["session-a"])
+    }
+
     // MARK: - Helpers
 
     private func makeProject(_ name: String) -> Project {

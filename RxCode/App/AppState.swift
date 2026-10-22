@@ -1209,8 +1209,11 @@ final class AppState {
     var cloudProjects: [CloudProject] = []
     /// Whether `cloudProjects` has been fetched since sign-in.
     var hasLoadedCloudProjects = false
-    /// Cloud projects the user hid from the Tasks overview because they
-    /// have no folder on this Mac. Persisted per workspace.
+    /// Local project cards hidden from the Tasks overview, persisted per workspace.
+    var hiddenTaskProjectIds: Set<UUID> = [] {
+        didSet { workspaceDefaults.set(hiddenTaskProjectIds.map(\.uuidString).sorted(), for: "hiddenTaskProjectIds") }
+    }
+    /// Unopened cloud project cards hidden from the Tasks overview, persisted per workspace.
     var hiddenCloudProjectIds: Set<String> = [] {
         didSet { workspaceDefaults.set(hiddenCloudProjectIds.sorted(), for: "hiddenCloudProjectIds") }
     }

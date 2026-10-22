@@ -52,6 +52,13 @@ struct TaskBoardView: View {
                 .environment(appState)
                 .environment(windowState)
         }
+        .onChange(of: windowState.pendingTaskDetailId, initial: true) { _, taskId in
+            guard let taskId else { return }
+            windowState.pendingTaskDetailId = nil
+            guard let projectId = windowState.taskDetailProjectId,
+                  let task = appState.taskBoard(for: projectId).tasks.first(where: { $0.id == taskId }) else { return }
+            sheet = .task(task)
+        }
     }
 
     /// The project a newly-created item belongs to when its payload names a
@@ -85,7 +92,7 @@ struct TaskBoardView: View {
             .padding(.top, 4)
             .accessibilityIdentifier("task-board-new-project")
 
-            HiddenCloudProjectsMenu()
+            TaskProjectVisibilityButton()
                 .padding(.top, 4)
 
             let cloudProjects = appState.visibleUnopenedCloudProjects
@@ -123,6 +130,7 @@ struct TaskOverviewView: View {
     @State private var keyword = ""
     /// The story whose task sheet is open.
     @State private var storySheet: ProjectStory?
+    @State private var hiddenCardFeedback: Project?
 
     /// How many stories each project group shows before "View all".
     static let previewLimit = 10
@@ -137,14 +145,15 @@ struct TaskOverviewView: View {
 
     var body: some View {
         let visibleProjects = visibleProjects
+        let isSearching = !keyword.trimmingCharacters(in: .whitespaces).isEmpty
         VStack(spacing: 0) {
             header
             ClaudeThemeDivider()
             TaskFilterField(text: $keyword)
                 .padding([.horizontal, .top], 16)
 
-            if visibleProjects.isEmpty {
-                Text("No stories match “\(keyword)”.")
+            if visibleProjects.isEmpty && (isSearching || appState.visibleUnopenedCloudProjects.isEmpty) {
+                Text(isSearching ? "No stories match “\(keyword)”." : "All project cards are hidden. Restore them from Project Cards.")
                     .font(.system(size: ClaudeTheme.size(12)))
                     .foregroundStyle(ClaudeTheme.textTertiary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -158,7 +167,11 @@ struct TaskOverviewView: View {
                                 project: project,
                                 keyword: keyword,
                                 sheet: $sheet,
-                                storySheet: $storySheet
+                                storySheet: $storySheet,
+                                onHide: {
+                                    appState.hiddenTaskProjectIds.insert(project.id)
+                                    hiddenCardFeedback = project
+                                }
                             )
                                 .frame(width: Self.cardWidth)
                                 .frame(maxHeight: .infinity)
@@ -185,6 +198,28 @@ struct TaskOverviewView: View {
             }
         }
         .background(backdrop)
+        .overlay(alignment: .topTrailing) {
+            if let project = hiddenCardFeedback {
+                HStack(spacing: 12) {
+                    Label("\(project.name) hidden", systemImage: "checkmark.circle.fill")
+                        .lineLimit(2)
+                    Button("Undo") {
+                        appState.hiddenTaskProjectIds.remove(project.id)
+                        hiddenCardFeedback = nil
+                    }
+                }
+                .font(.callout)
+                .padding(12)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                .padding(12)
+                .accessibilityIdentifier("task-project-hidden-status")
+            }
+        }
+        .task(id: hiddenCardFeedback?.id) {
+            guard hiddenCardFeedback != nil else { return }
+            do { try await Task.sleep(for: .seconds(4)) } catch { return }
+            hiddenCardFeedback = nil
+        }
         .onAppear {
             AnalyticsService.shared.log(.taskDashboardOpened)
         }
@@ -219,8 +254,9 @@ struct TaskOverviewView: View {
     /// While filtering, projects with no match drop out so results stay dense.
     private var visibleProjects: [Project] {
         let trimmed = keyword.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return appState.projects }
-        return appState.projects.filter { !appState.recentStories(for: $0.id, keyword: trimmed).isEmpty }
+        let projects = appState.projects.filter { !appState.hiddenTaskProjectIds.contains($0.id) }
+        guard !trimmed.isEmpty else { return projects }
+        return projects.filter { !appState.recentStories(for: $0.id, keyword: trimmed).isEmpty }
     }
 
     private var header: some View {
@@ -236,7 +272,7 @@ struct TaskOverviewView: View {
 
             Spacer()
 
-            HiddenCloudProjectsMenu()
+            TaskProjectVisibilityButton()
 
             Menu {
                 Button {

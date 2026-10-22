@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		D305A1000000000000000001 /* DesktopWidgetIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = D305A1000000000000000002 /* DesktopWidgetIntents.swift */; };
 		101010102FCB100000000002 /* AppStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 101010102FCB100000000001 /* AppStateTests.swift */; };
 		101010112FCB100000000002 /* BranchBriefingPromptContextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 101010112FCB100000000001 /* BranchBriefingPromptContextTests.swift */; };
 		33993F0F87CF4DB09F2813A8 /* AppStateProjectSwitchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4381E755142272EB2DAA9C96 /* AppStateProjectSwitchTests.swift */; };
@@ -51,6 +50,8 @@
 		C0DE70C00000000000000002 /* CodexTokenUsageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE70C00000000000000001 /* CodexTokenUsageTests.swift */; };
 		C71A00000000000000000001 /* ChatHistoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C71A00000000000000000002 /* ChatHistoryTests.swift */; };
 		CA5E00012FCB400000000002 /* CacheStorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA5E00012FCB400000000001 /* CacheStorageTests.swift */; };
+		D305A1000000000000000001 /* RxCode/App/DesktopWidgetIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = D305A1000000000000000002 /* RxCode/App/DesktopWidgetIntents.swift */; };
+		D305A2000000000000000001 /* DesktopWidgetNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D305A2000000000000000002 /* DesktopWidgetNavigationTests.swift */; };
 		DCA8CF4A05C959C4A6EB391F /* RxCodeCore in Frameworks */ = {isa = PBXBuildFile; productRef = CCDF9594876099576D4FD46E /* RxCodeCore */; };
 		DF06CCD12FB4CAB5005991E1 /* ViewInspector in Frameworks */ = {isa = PBXBuildFile; productRef = DF06CCD02FB4CAB5005991E1 /* ViewInspector */; };
 		DF06CCD22FCB3001005991E1 /* ViewInspector in Frameworks */ = {isa = PBXBuildFile; productRef = DF06CCD02FB4CAB5005991E1 /* ViewInspector */; };
@@ -193,7 +194,6 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		D305A1000000000000000002 /* DesktopWidgetIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RxCode/App/DesktopWidgetIntents.swift; sourceTree = SOURCE_ROOT; };
 		101010102FCB100000000001 /* AppStateTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppStateTests.swift; sourceTree = "<group>"; };
 		101010112FCB100000000001 /* BranchBriefingPromptContextTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BranchBriefingPromptContextTests.swift; sourceTree = "<group>"; };
 		308E9D66FBEB0549929D9E3A /* GlobalSessionPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalSessionPersistenceTests.swift; sourceTree = "<group>"; };
@@ -234,6 +234,8 @@
 		C71A00000000000000000002 /* ChatHistoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatHistoryTests.swift; sourceTree = "<group>"; };
 		C9B0483FE5385C1F0E1CFE15 /* ClaudeLoginTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeLoginTests.swift; sourceTree = "<group>"; };
 		CA5E00012FCB400000000001 /* CacheStorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CacheStorageTests.swift; sourceTree = "<group>"; };
+		D305A1000000000000000002 /* RxCode/App/DesktopWidgetIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RxCode/App/DesktopWidgetIntents.swift; sourceTree = SOURCE_ROOT; };
+		D305A2000000000000000002 /* DesktopWidgetNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopWidgetNavigationTests.swift; sourceTree = "<group>"; };
 		DABD049CD0A5D38569FD5B47 /* RxCodeDesktopWidget.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = RxCodeDesktopWidget.entitlements; sourceTree = "<group>"; };
 		DD91B5F821965BD23C5EA360 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
 		DF06DCC62FB8552B005991E1 /* UnitTestPlan.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = UnitTestPlan.xctestplan; sourceTree = "<group>"; };
@@ -479,6 +481,7 @@
 				FE0A11BB22CC33DD44EE5502 /* PlanModeHookSuppressionTests.swift */,
 				FE0A11BB22CC33DD44EE5602 /* TaskBoardHookTests.swift */,
 				B8B1DF41290C4F20951DAC32 /* IDETaskMutationTests.swift */,
+				D305A2000000000000000002 /* DesktopWidgetNavigationTests.swift */,
 				E8C010000000000000000001 /* MCPConnectionRoutingTests.swift */,
 				535C9B55985741FE9A80AF27 /* MCPAppConnectionTests.swift */,
 				B2F2EE0EE87F4F36B534FDDA /* MCPOAuthTests.swift */,
@@ -513,7 +516,7 @@
 			isa = PBXGroup;
 			children = (
 				F298966B9AA8AA6C5552E8DA /* DesktopWidgets.swift */,
-				D305A1000000000000000002 /* DesktopWidgetIntents.swift */,
+				D305A1000000000000000002 /* RxCode/App/DesktopWidgetIntents.swift */,
 				EE5650BC7C47EAD5F996C021 /* Info.plist */,
 				DABD049CD0A5D38569FD5B47 /* RxCodeDesktopWidget.entitlements */,
 			);
@@ -1001,7 +1004,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				6721787FCF3F69E34C4D0319 /* DesktopWidgets.swift in Sources */,
-				D305A1000000000000000001 /* DesktopWidgetIntents.swift in Sources */,
+				D305A1000000000000000001 /* RxCode/App/DesktopWidgetIntents.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1037,6 +1040,7 @@
 				FE0A11BB22CC33DD44EE5501 /* PlanModeHookSuppressionTests.swift in Sources */,
 				FE0A11BB22CC33DD44EE5601 /* TaskBoardHookTests.swift in Sources */,
 				B8B1DF41290C4F20951DAC31 /* IDETaskMutationTests.swift in Sources */,
+				D305A2000000000000000001 /* DesktopWidgetNavigationTests.swift in Sources */,
 				E8C010000000000000000002 /* MCPConnectionRoutingTests.swift in Sources */,
 				4DB3FD78155F4469BBFB353C /* MCPAppConnectionTests.swift in Sources */,
 				54F5577C2A9B42D393384D6E /* MCPOAuthTests.swift in Sources */,

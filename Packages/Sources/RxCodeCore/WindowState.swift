@@ -349,6 +349,9 @@ public final class WindowState {
     /// so returning to Tasks from a chat lands on the same page.
     public var taskDetailProjectId: UUID?
 
+    /// A task requested by an external link, consumed by the Tasks detail sheet.
+    public var pendingTaskDetailId: UUID?
+
     public var showMarketplace = false
     /// Whether the New Project sheet is presented, and whether it opens with
     /// the cloud option selected.

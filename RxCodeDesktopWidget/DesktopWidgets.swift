@@ -75,7 +75,7 @@ struct TaskWidgetView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             } else {
                 ForEach(Array(rows.prefix(limit)), id: \.task.id) { row in
-                    Link(destination: entry.snapshot.url(projectID: row.project.id)) {
+                    Link(destination: entry.snapshot.url(projectID: row.project.id, taskID: row.task.id)) {
                         VStack(alignment: .leading, spacing: 2) {
                             HStack(spacing: 5) {
                                 Image(systemName: row.task.isOngoing ? "bolt.fill" : "circle")
@@ -104,7 +104,9 @@ struct TaskWidgetView: View {
             }
             WidgetUpdatedLabel(date: entry.snapshot.updatedAt)
         }
-        .widgetURL(entry.snapshot.url(projectID: entry.projectID))
+        .widgetURL(family == .systemSmall && !rows.isEmpty
+            ? entry.snapshot.url(projectID: rows[0].project.id, taskID: rows[0].task.id)
+            : entry.snapshot.url(projectID: entry.projectID))
         .containerBackground(.fill.tertiary, for: .widget)
         .privacySensitive()
     }

@@ -71,6 +71,7 @@ extension AppState {
         notificationsEnabled = workspaceDefaults.bool(for: "notificationsEnabled", default: true)
         enableAutoCIFix = workspaceDefaults.bool(for: "enableAutoCIFix", default: false)
         focusMode = workspaceDefaults.bool(for: "focusMode", default: false)
+        hiddenTaskProjectIds = Set(workspaceDefaults.stringArray(for: "hiddenTaskProjectIds").compactMap(UUID.init(uuidString:)))
         hiddenCloudProjectIds = Set(workspaceDefaults.stringArray(for: "hiddenCloudProjectIds"))
         showRightSidebar = workspaceDefaults.bool(for: AppStorageKeys.showRightSidebar, default: false)
         rightInspectorWidth = workspaceDefaults.double(

@@ -18,6 +18,7 @@ struct TaskProjectSection: View {
 
     let project: Project
     let keyword: String
+    let onHide: () -> Void
     @Binding var sheet: TaskBoardSheet?
     @Binding var storySheet: ProjectStory?
     @AppStorage private var cardFilterData: Data
@@ -33,10 +34,12 @@ struct TaskProjectSection: View {
         project: Project,
         keyword: String,
         sheet: Binding<TaskBoardSheet?>,
-        storySheet: Binding<ProjectStory?>
+        storySheet: Binding<ProjectStory?>,
+        onHide: @escaping () -> Void
     ) {
         self.project = project
         self.keyword = keyword
+        self.onHide = onHide
         self._sheet = sheet
         self._storySheet = storySheet
         self._cardFilterData = AppStorage(wrappedValue: Data(), "taskOverviewFilter.\(project.id.uuidString)")
@@ -226,6 +229,9 @@ struct TaskProjectSection: View {
                     Button("New Chat") { appState.startNewChat(inProject: project.id, window: windowState) }
                     Divider()
                     ProjectCloudMenuItems(project: project)
+                    Divider()
+                    Button("Hide Project Card", systemImage: "eye.slash", action: onHide)
+                        .accessibilityIdentifier("task-project-hide-\(project.id.uuidString)")
                 } label: {
                     Image(systemName: "ellipsis")
                 }

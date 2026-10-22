@@ -252,6 +252,12 @@ struct MainWindowRoot: View {
                     .transition(.opacity)
             }
         }
+        // Prefer the workspace's open window when WidgetKit delivers a URL.
+        // Without this preference SwiftUI creates a new WindowGroup instance.
+        .handlesExternalEvents(
+            preferring: ["rxcode://widget/tasks?workspace=\(workspaceID)", "rxcode://widget/usage?workspace=\(workspaceID)"],
+            allowing: ["*"]
+        )
         .onOpenURL { url in
             if url.scheme == "rxcode", url.host == "widget",
                let components = URLComponents(url: url, resolvingAgainstBaseURL: false),

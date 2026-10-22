@@ -44,15 +44,18 @@ struct DesktopWidgetSnapshotTests {
         #expect(try JSONDecoder().decode(DesktopWidgetSnapshot.self, from: JSONEncoder().encode(snapshot)) == snapshot)
     }
 
-    @Test("Deep links retain workspace and project identities")
+    @Test("Deep links retain workspace, project, and task identities")
     func links() {
         let id = UUID()
+        let taskID = UUID()
         let snapshot = DesktopWidgetSnapshot(workspaceID: "work & space", workspaceName: "Work", projects: [], agents: [])
-        let components = URLComponents(url: snapshot.url(projectID: id), resolvingAgainstBaseURL: false)!
+        let components = URLComponents(url: snapshot.url(projectID: id, taskID: taskID), resolvingAgainstBaseURL: false)!
         #expect(components.host == "widget")
         #expect(components.path == "/tasks")
         #expect(components.queryItems?.first(where: { $0.name == "workspace" })?.value == "work & space")
         #expect(components.queryItems?.first(where: { $0.name == "project" })?.value == id.uuidString)
+        #expect(components.queryItems?.first(where: { $0.name == "task" })?.value == taskID.uuidString)
+        #expect(URLComponents(url: snapshot.url(projectID: id), resolvingAgainstBaseURL: false)?.queryItems?.contains(where: { $0.name == "task" }) == false)
         #expect(snapshot.url(usage: true).path == "/usage")
     }
 }

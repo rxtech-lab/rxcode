@@ -18,13 +18,14 @@ public struct DesktopWidgetSnapshot: Codable, Equatable, Sendable {
 
     public static let empty = Self(workspaceID: "", workspaceName: "RxCode", projects: [], agents: [], updatedAt: .distantPast)
 
-    public func url(projectID: UUID? = nil, usage: Bool = false) -> URL {
+    public func url(projectID: UUID? = nil, taskID: UUID? = nil, usage: Bool = false) -> URL {
         var components = URLComponents()
         components.scheme = "rxcode"
         components.host = "widget"
         components.path = usage ? "/usage" : "/tasks"
         components.queryItems = [URLQueryItem(name: "workspace", value: workspaceID)]
         if let projectID { components.queryItems?.append(URLQueryItem(name: "project", value: projectID.uuidString)) }
+        if let taskID { components.queryItems?.append(URLQueryItem(name: "task", value: taskID.uuidString)) }
         return components.url!
     }
 }

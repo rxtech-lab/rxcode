@@ -392,6 +392,16 @@
         }
       }
     },
+    "%@ %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ %2$@"
+          }
+        }
+      }
+    },
     "%@ %@ · %@" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -438,6 +448,9 @@
           }
         }
       }
+    },
+    "%@ hidden" : {
+
     },
     "%@ in · %@ out" : {
       "localizations" : {
@@ -3047,6 +3060,9 @@
         }
       }
     },
+    "All project cards are hidden. Restore them from Project Cards." : {
+
+    },
     "All projects" : {
       "localizations" : {
         "ko" : {
@@ -5054,6 +5070,9 @@
           }
         }
       }
+    },
+    "Choose which project cards appear on the Tasks page. Hiding a card does not delete its project or tasks." : {
+
     },
     "Choose which providers and limits to show." : {
       "localizations" : {
@@ -11481,6 +11500,9 @@
         }
       }
     },
+    "Hide" : {
+
+    },
     "Hide Cloud Project" : {
       "localizations" : {
         "ko" : {
@@ -11574,6 +11596,12 @@
         }
       }
     },
+    "Hide or restore project cards on the Tasks page" : {
+
+    },
+    "Hide Project Card" : {
+
+    },
     "Hide stories" : {
       "localizations" : {
         "ko" : {
@@ -11617,7 +11645,11 @@
         }
       }
     },
+    "Hide this cloud project. Show it again from Project Cards." : {
+
+    },
     "Hide this cloud project. Show it again from the Hidden menu." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -18483,6 +18515,9 @@
         }
       }
     },
+    "Project Cards" : {
+
+    },
     "Project Dashboard" : {
       "localizations" : {
         "zh-Hans" : {
@@ -22352,6 +22387,9 @@
         }
       }
     },
+    "Show" : {
+
+    },
     "Show %lld code review(s)" : {
       "localizations" : {
         "ko" : {
@@ -25903,6 +25941,9 @@
           }
         }
       }
+    },
+    "Undo" : {
+
     },
     "Unknown project" : {
       "localizations" : {

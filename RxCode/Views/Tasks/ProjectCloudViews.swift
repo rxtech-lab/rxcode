@@ -381,7 +381,7 @@ struct CloudProjectCard: View {
                         .foregroundStyle(ClaudeTheme.textTertiary)
                 }
                 .buttonStyle(.plain)
-                .help("Hide this cloud project. Show it again from the Hidden menu.")
+                .help("Hide this cloud project. Show it again from Project Cards.")
                 .accessibilityLabel("Hide Cloud Project")
                 .accessibilityIdentifier("cloud-project-hide-\(cloud.id)")
             }

@@ -36,6 +36,10 @@ extension AppState {
             window.generalRoute = .tasks
             let id = components.queryItems?.first(where: { $0.name == "project" })?.value.flatMap(UUID.init(uuidString:))
             window.taskDetailProjectId = projects.first(where: { $0.id == id })?.id
+            let taskID = components.queryItems?.first(where: { $0.name == "task" })?.value.flatMap(UUID.init(uuidString:))
+            window.pendingTaskDetailId = window.taskDetailProjectId.flatMap { projectID in
+                taskBoard(for: projectID).tasks.first(where: { $0.id == taskID })?.id
+            }
         } else { return false }
         return true
     }

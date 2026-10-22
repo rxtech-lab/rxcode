@@ -2,7 +2,6 @@ import Foundation
 import CryptoKit
 import Security
 import RxCodeCore
-import RxCodeCore
 
 /// Credentials are keyed by the full resource URL, never by a display name.
 actor MCPOAuthService {
@@ -25,12 +24,19 @@ actor MCPOAuthService {
         let clientID: String
         let tokenEndpoint: URL
         let resource: String
+        var redirectURI: String = MCPOAuthService.redirectURI
     }
 
     enum AuthError: LocalizedError {
         case invalid(String)
+        case denied
+        case authorizationFailed
         var errorDescription: String? {
-            switch self { case .invalid(let message): message }
+            switch self {
+            case .invalid(let message): message
+            case .denied: "The authorization server declined sign-in."
+            case .authorizationFailed: "The authorization server returned an OAuth error."
+            }
         }
     }
 
@@ -41,7 +47,7 @@ actor MCPOAuthService {
 
     private let service = "com.rxlab.RxCode.mcp.oauth"
 
-    func begin(resource: URL, clientID: String?) async throws -> Authorization {
+    func begin(resource: URL, clientID: String?, redirectURI: String = MCPOAuthService.redirectURI) async throws -> Authorization {
         try Self.validate(resource)
         // Discover from the challenge first, then the path-aware RFC 9728 URL.
         var request = URLRequest(url: resource)
@@ -100,7 +106,7 @@ actor MCPOAuthService {
             }
             let registered = try await json(url: registration, body: .object([
                 "client_name": .string("RxCode"),
-                "redirect_uris": .array([.string(Self.redirectURI)]),
+                "redirect_uris": .array([.string(redirectURI)]),
                 "grant_types": .array([.string("authorization_code"), .string("refresh_token")]),
                 "response_types": .array([.string("code")]),
                 "token_endpoint_auth_method": .string("none")
@@ -115,7 +121,7 @@ actor MCPOAuthService {
         var items = [
             URLQueryItem(name: "response_type", value: "code"),
             URLQueryItem(name: "client_id", value: resolvedClientID),
-            URLQueryItem(name: "redirect_uri", value: Self.redirectURI),
+            URLQueryItem(name: "redirect_uri", value: redirectURI),
             URLQueryItem(name: "state", value: state),
             URLQueryItem(name: "code_challenge", value: challengeValue),
             URLQueryItem(name: "code_challenge_method", value: "S256"),
@@ -126,23 +132,41 @@ actor MCPOAuthService {
         if let scope, !scope.isEmpty { items.append(URLQueryItem(name: "scope", value: scope)) }
         components.queryItems = (components.queryItems ?? []) + items
         return Authorization(url: components.url!, state: state, verifier: verifier,
-                             clientID: resolvedClientID, tokenEndpoint: tokenEndpoint, resource: resource.absoluteString)
+                             clientID: resolvedClientID, tokenEndpoint: tokenEndpoint, resource: resource.absoluteString, redirectURI: redirectURI)
     }
 
     func complete(_ authorization: Authorization, callback: URL) async throws {
-        guard callback.scheme == "rxcode", callback.host == "mcp", callback.path == "/oauth/callback",
-              let items = URLComponents(url: callback, resolvingAgainstBaseURL: false)?.queryItems,
-              items.first(where: { $0.name == "state" })?.value == authorization.state,
-              let code = items.first(where: { $0.name == "code" })?.value else {
-            throw AuthError.invalid("OAuth callback was cancelled or failed state validation.")
-        }
+        let code = try Self.callbackCode(authorization, callback: callback)
         let token = try await exchange(endpoint: authorization.tokenEndpoint, fields: [
             "grant_type": "authorization_code", "code": code, "code_verifier": authorization.verifier,
-            "redirect_uri": Self.redirectURI, "client_id": authorization.clientID, "resource": authorization.resource
+            "redirect_uri": authorization.redirectURI, "client_id": authorization.clientID, "resource": authorization.resource
         ])
         let credential = try credential(from: token, clientID: authorization.clientID,
                                         endpoint: authorization.tokenEndpoint, resource: authorization.resource)
+        try Task.checkCancellation()
         try store(credential)
+    }
+
+    nonisolated static func callbackCode(_ authorization: Authorization, callback: URL) throws -> String {
+        guard let expected = URL(string: authorization.redirectURI),
+              callback.scheme == expected.scheme, callback.host == expected.host,
+              callback.port == expected.port, callback.path == expected.path,
+              callback.user == nil, callback.password == nil, callback.fragment == nil,
+              let items = URLComponents(url: callback, resolvingAgainstBaseURL: false)?.queryItems,
+              items.filter({ $0.name == "state" }).count == 1,
+              items.first(where: { $0.name == "state" })?.value == authorization.state else {
+            throw AuthError.invalid("OAuth callback was cancelled or failed state validation.")
+        }
+        if let error = items.first(where: { $0.name == "error" }) {
+            // Do not display untrusted provider descriptions or retry explicit denial.
+            if error.value == "access_denied" { throw AuthError.denied }
+            throw AuthError.authorizationFailed
+        }
+        guard items.filter({ $0.name == "code" }).count == 1,
+              let code = items.first(where: { $0.name == "code" })?.value, !code.isEmpty else {
+            throw AuthError.invalid("OAuth callback did not include an authorization code.")
+        }
+        return code
     }
 
     func accessToken(for resource: String) async throws -> String? {

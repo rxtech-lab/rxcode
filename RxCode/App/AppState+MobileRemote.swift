@@ -672,8 +672,11 @@ extension AppState {
     /// (auto-flush or remote remove), drop it from every registered window so
     /// the UI doesn't show a phantom queued row.
     func evictFromWindowQueueMirrors(sessionID: String, queuedID: UUID) {
-        for window in registeredWindows() where window.currentSessionId == sessionID {
-            window.messageQueue.removeAll { $0.id == queuedID }
+        for window in registeredWindows() {
+            if window.currentSessionId == sessionID {
+                window.messageQueue.removeAll { $0.id == queuedID }
+            }
+            // Inactive threads also retain a queue that is restored on navigation.
             if var mirror = window.draftQueues[sessionID] {
                 mirror.removeAll { $0.id == queuedID }
                 if mirror.isEmpty {

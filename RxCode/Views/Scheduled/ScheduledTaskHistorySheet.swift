@@ -128,6 +128,7 @@ struct ScheduledTaskHistorySheet: View {
         } description: {
             Text("Each run of this task and the agent's log will show here.")
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func open(_ sessionId: String) {
@@ -248,6 +249,7 @@ private struct ScheduledTaskRunLogView: View {
                 }
             } else {
                 ContentUnavailableView("Run Not Found", systemImage: "questionmark.circle")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .task(id: run?.status) { await reload() }
@@ -256,49 +258,51 @@ private struct ScheduledTaskRunLogView: View {
     @ViewBuilder
     private func content(_ run: ScheduledTaskRun) -> some View {
         let shown = liveMessages ?? messages
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    header(run)
-                    if let error = run.errorMessage {
-                        Label(error, systemImage: "exclamationmark.triangle.fill")
-                            .font(.system(size: ClaudeTheme.size(12)))
-                            .foregroundStyle(ClaudeTheme.statusError)
-                            .padding(10)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(
-                                RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusMedium)
-                                    .fill(ClaudeTheme.statusError.opacity(0.08))
-                            )
-                    }
-                    if isLoading, shown.isEmpty {
-                        ProgressView()
-                            .controlSize(.small)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 40)
-                    } else if shown.isEmpty {
-                        missingThread(run)
-                    } else {
-                        ForEach(shown) { message in
-                            ScheduledTaskLogMessage(message: message)
+        GeometryReader { geometry in
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        header(run)
+                        if let error = run.errorMessage {
+                            Label(error, systemImage: "exclamationmark.triangle.fill")
+                                .font(.system(size: ClaudeTheme.size(12)))
+                                .foregroundStyle(ClaudeTheme.statusError)
+                                .padding(10)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(
+                                    RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusMedium)
+                                        .fill(ClaudeTheme.statusError.opacity(0.08))
+                                )
                         }
-                        if run.status == .running || isAgentResponding {
-                            HStack(spacing: 8) {
-                                ProgressView().controlSize(.small)
-                                Text("The agent is working…")
-                                    .font(.system(size: ClaudeTheme.size(12)))
-                                    .foregroundStyle(ClaudeTheme.textSecondary)
+                        if isLoading, shown.isEmpty {
+                            ProgressView()
+                                .controlSize(.small)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 40)
+                        } else if shown.isEmpty {
+                            missingThread(run)
+                        } else {
+                            ForEach(shown) { message in
+                                ScheduledTaskLogMessage(message: message)
+                            }
+                            if run.status == .running || isAgentResponding {
+                                HStack(spacing: 8) {
+                                    ProgressView().controlSize(.small)
+                                    Text("The agent is working…")
+                                        .font(.system(size: ClaudeTheme.size(12)))
+                                        .foregroundStyle(ClaudeTheme.textSecondary)
+                                }
                             }
                         }
+                        Color.clear.frame(height: 1).id(Self.bottomID)
                     }
-                    Color.clear.frame(height: 1).id(Self.bottomID)
+                    .padding(20)
+                    .frame(maxWidth: .infinity, minHeight: geometry.size.height, alignment: .topLeading)
                 }
-                .padding(20)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            // Follow the conversation as messages arrive.
-            .onChange(of: shown.count) {
-                withAnimation(.snappy) { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
+                // Follow the conversation as messages arrive.
+                .onChange(of: shown.count) {
+                    withAnimation(.snappy) { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
+                }
             }
         }
     }
@@ -406,6 +410,7 @@ private struct ScheduledTaskRunLogView: View {
                 systemImage: "doc.text.magnifyingglass",
                 description: Text("This run has no chat thread, or it was deleted.")
             )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 

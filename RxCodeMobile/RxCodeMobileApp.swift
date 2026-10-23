@@ -34,6 +34,7 @@ struct RxCodeMobileApp: App {
                 .onAppear {
                     state.taskCloud = cloud
                     appDelegate.mobileState = state
+                    appDelegate.cloudState = cloud
                     liveActivityCoordinator.bind(state: state)
                     state.start()
                 }
@@ -48,6 +49,9 @@ struct RxCodeMobileApp: App {
         .onChange(of: scenePhase) { oldPhase, newPhase in
             NSLog("[Lifecycle] scenePhase \(String(describing: oldPhase)) -> \(String(describing: newPhase))")
             state.handleScenePhase(newPhase)
+            if newPhase == .active {
+                Task { if cloud.isSignedIn { await cloud.push.synchronize(accountID: cloud.accountID) } }
+            }
         }
     }
 

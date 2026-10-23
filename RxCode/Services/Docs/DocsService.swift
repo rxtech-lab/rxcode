@@ -93,7 +93,10 @@ final class DocsService {
         guard !repos.isEmpty else { return [] }
         let managed = try await allManagedRepositories()
         let byName = Dictionary(
-            managed.map { ($0.repositoryFullName.lowercased(), $0) },
+            managed.compactMap { repo -> (String, DocsRepo)? in
+                guard let fullName = repo.repositoryFullName else { return nil }
+                return (fullName.lowercased(), repo)
+            },
             uniquingKeysWith: { _, last in last }
         )
         return repos.map { repo in

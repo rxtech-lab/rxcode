@@ -175,6 +175,18 @@ final class AutopilotService {
         return baseURL.appendingPathComponent("/api/v1/repo-setup/templates/\(encoded)")
     }
 
+    /// Native workflow history, job details, and logs share the account-scoped CI endpoint.
+    func ciActivity<T: Decodable>(repository: String, parameters: [String: String] = [:]) async throws -> T {
+        let parts = repository.split(separator: "/", omittingEmptySubsequences: false)
+        guard parts.count == 2 else { throw ServiceError.invalidResponse }
+        var components = URLComponents(url: baseURL.appendingPathComponent("/api/v1/ci-status/runs"), resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "owner", value: String(parts[0])),
+                                 URLQueryItem(name: "repo", value: String(parts[1]))]
+            + parameters.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) }
+        guard let url = components.url else { throw ServiceError.invalidResponse }
+        return try await get(url: url)
+    }
+
     // MARK: - Internal
 
     /// Sentinel for endpoints that return no decodable body (e.g. 204).

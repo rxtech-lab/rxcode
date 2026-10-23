@@ -1,0 +1,5 @@
+simulation: flowcy-mobile
+routing: path
+mocks:
+  - routeKey: flowcy
+    path: ../mocks/flowcy-mobile/config.yaml

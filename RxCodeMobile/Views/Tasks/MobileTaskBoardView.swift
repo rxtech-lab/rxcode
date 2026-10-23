@@ -32,6 +32,8 @@ struct MobileTaskBoardView: View {
     /// pushed inside the Tasks dashboard's stack.
     var isModal = true
 
+    @State private var viewFeedback: String?
+    @State private var isSavingView = false
     @State private var mode: Mode = .tasks
     @State private var selectedViewID: UUID?
     @State private var editingView: MobileViewEditorPayload?
@@ -42,6 +44,7 @@ struct MobileTaskBoardView: View {
     @State private var editingStory: ProjectStory?
     @State private var showingQuickAdd = false
     @State private var collapsedColumns: Set<TaskStatus> = []
+    @State private var runRequest: MobileTaskRunRequest?
 
     private var project: Project? {
         state.taskProjects.first { $0.id == projectID }
@@ -87,10 +90,29 @@ struct MobileTaskBoardView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, prompt: Text("Filter tasks"))
-        .overlay { overlayContent }
+        .overlay {
+            if !isRegularWidth || !hasLoaded {
+                boardStatusContent
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
         .toolbar { toolbarContent }
+        .overlay(alignment: .topTrailing) {
+            if isSavingView {
+                ProgressView("Saving view…").padding(12).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12)).padding()
+            } else if let viewFeedback {
+                Label(viewFeedback, systemImage: "checkmark.circle.fill")
+                    .padding(12).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12)).padding()
+            }
+        }
+        .task(id: viewFeedback) {
+            guard viewFeedback != nil else { return }
+            do { try await Task.sleep(for: .seconds(3)) } catch { return }
+            viewFeedback = nil
+        }
         .modifier(MobileTaskDestinations(isEnabled: isModal, onOpenChat: openChat))
         .task(id: state.taskSyncReloadKey) {
+            state.restoreCloudTaskCacheIfNeeded()
             guard state.isTaskSyncReady else { return }
             await load()
         }
@@ -124,12 +146,19 @@ struct MobileTaskBoardView: View {
             }
             .mobileSheetPresentation([.large])
         }
+        .mobileTaskRunDevicePicker($runRequest)
         .mobileTaskErrorAlert($errorMessage)
     }
 
     @ViewBuilder
     private var boardContent: some View {
-        if isRegularWidth && mode == .tasks && currentView.layout == .board {
+        if isRegularWidth && hasLoaded && (mode == .tasks ? visibleTasks.isEmpty : visibleStories.isEmpty) {
+            boardStatusContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(.systemGroupedBackground))
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("task-board-empty-state")
+        } else if isRegularWidth && mode == .tasks && currentView.layout == .board {
             kanbanBoard
         } else {
             List {
@@ -209,7 +238,7 @@ struct MobileTaskBoardView: View {
 
         } cards: {
             ForEach(tasks) { task in
-                NavigationLink(value: MobileTaskRoute.task(projectID: projectID, taskID: task.id)) {
+                MobileTaskDetailButton(route: MobileTaskRoute.task(projectID: projectID, taskID: task.id), onOpenChat: openChat) {
                     MobileTaskRow(task: task, board: board)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(12)
@@ -251,7 +280,7 @@ struct MobileTaskBoardView: View {
                 let right = board.columnIndex(of: board.resolvedStatus(of: rhs))
                 return left == right ? lhs.sortIndex < rhs.sortIndex : left < right
             }) { task in
-                NavigationLink(value: MobileTaskRoute.task(projectID: projectID, taskID: task.id)) {
+                MobileTaskDetailButton(route: MobileTaskRoute.task(projectID: projectID, taskID: task.id), onOpenChat: openChat) {
                     MobileTaskRow(task: task, board: board)
                 }
                 .modifier(MobileTaskActions(
@@ -273,7 +302,7 @@ struct MobileTaskBoardView: View {
                 Section {
                     if !collapsedColumns.contains(column.id) {
                         ForEach(tasks) { task in
-                            NavigationLink(value: MobileTaskRoute.task(projectID: projectID, taskID: task.id)) {
+                            MobileTaskDetailButton(route: MobileTaskRoute.task(projectID: projectID, taskID: task.id), onOpenChat: openChat) {
                                 MobileTaskRow(task: task, board: board)
                             }
                             .modifier(MobileTaskActions(
@@ -335,7 +364,7 @@ struct MobileTaskBoardView: View {
         let stories = visibleStories.sorted { $0.updatedAt > $1.updatedAt }
         Section {
             ForEach(stories) { story in
-                NavigationLink(value: MobileTaskRoute.story(projectID: projectID, storyID: story.id)) {
+                MobileTaskDetailButton(route: MobileTaskRoute.story(projectID: projectID, storyID: story.id), onOpenChat: openChat) {
                     MobileStoryRow(story: story, board: board, rollup: rollups[story.id])
                 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
@@ -358,7 +387,7 @@ struct MobileTaskBoardView: View {
     // MARK: - Chrome
 
     @ViewBuilder
-    private var overlayContent: some View {
+    private var boardStatusContent: some View {
         if !hasLoaded && isLoading {
             ProgressView("Loading tasks…")
         } else if hasLoaded {
@@ -413,7 +442,10 @@ struct MobileTaskBoardView: View {
         ToolbarItem(placement: .primaryAction) {
             Menu {
                 ForEach(views) { view in
-                    Button { selectedViewID = view.id } label: {
+                    Button {
+                        selectedViewID = view.id
+                        UISelectionFeedbackGenerator().selectionChanged()
+                    } label: {
                         Label(view.name, systemImage: view.id == currentView.id ? "checkmark" : view.layout.systemImage)
                     }
                 }
@@ -437,7 +469,7 @@ struct MobileTaskBoardView: View {
             } label: {
                 Label(currentView.name, systemImage: currentView.layout.systemImage)
             }
-            .disabled(!hasLoaded)
+            .disabled(!hasLoaded || isSavingView)
             .accessibilityIdentifier("task-board-views")
         }
         ToolbarItem(placement: .primaryAction) {
@@ -484,8 +516,18 @@ struct MobileTaskBoardView: View {
         var updated = view
         updated.isDefault = true
         selectedViewID = view.id
-        perform {
-            try await state.saveView(updated, projectID: projectID)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        isSavingView = true
+        Task {
+            defer { isSavingView = false }
+            do {
+                try await state.saveView(updated, projectID: projectID)
+                viewFeedback = String(localized: "Default view updated")
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+            } catch {
+                errorMessage = error.localizedDescription
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
+            }
         }
     }
 
@@ -513,8 +555,17 @@ struct MobileTaskBoardView: View {
     /// header (appended to the column).
     private func drop(_ items: [String], before target: ProjectTask?, in status: TaskStatus) -> Bool {
         guard let taskID = items.first.flatMap(UUID.init(uuidString:)),
-              board.tasks.contains(where: { $0.id == taskID })
+              let task = board.tasks.first(where: { $0.id == taskID })
         else { return false }
+        if task.id != target?.id, state.moveStartsRun(task, to: status) {
+            // Dropping into a run column asks which Mac runs it first.
+            runRequest = MobileTaskRunRequest(
+                task: task,
+                status: status,
+                sortIndex: state.dropSortIndex(taskID, projectID: projectID, before: target, in: status)
+            )
+            return true
+        }
         perform {
             try await state.dropTask(taskID, projectID: projectID, before: target, in: status)
         }
@@ -524,357 +575,5 @@ struct MobileTaskBoardView: View {
     private func openChat(_ sessionID: String) {
         onOpenChat?(sessionID)
         if isModal { dismiss() }
-    }
-}
-
-private struct MobileViewEditorPayload: Identifiable {
-    let view: TaskSavedView
-    var id: UUID { view.id }
-}
-
-private struct MobileTaskViewForm: View {
-    @EnvironmentObject private var state: MobileAppState
-    @Environment(\.dismiss) private var dismiss
-
-    let projectID: UUID
-    let onSave: (TaskSavedView) -> Void
-    @State private var draft: TaskSavedView
-    @State private var isSaving = false
-    @State private var errorMessage: String?
-
-    init(projectID: UUID, view: TaskSavedView, onSave: @escaping (TaskSavedView) -> Void) {
-        self.projectID = projectID
-        self.onSave = onSave
-        _draft = State(initialValue: view)
-    }
-
-    private var board: TaskBoard { state.taskBoard(for: projectID) }
-
-    var body: some View {
-        Form {
-            Section("View") {
-                TextField("Name", text: $draft.name)
-                Picker("Layout", selection: $draft.layout) {
-                    ForEach(TaskViewLayout.allCases, id: \.self) { layout in
-                        Label { Text(layout.displayName) } icon: { Image(systemName: layout.systemImage) }
-                            .tag(layout)
-                    }
-                }
-            }
-
-            Section("Statuses") {
-                ForEach(board.effectiveColumns) { column in
-                    Toggle(column.name, isOn: statusBinding(column.id))
-                }
-            }
-
-            Section {
-                filterLink(
-                    "Stories",
-                    options: board.stories.map { ($0.id, $0.title) },
-                    selection: $draft.storyIds
-                )
-                filterLink(
-                    "Versions",
-                    options: listed(board.allVersions, draft.versions),
-                    selection: $draft.versions
-                )
-                filterLink(
-                    "Milestones",
-                    options: listed(board.allMilestones, draft.milestones),
-                    selection: $draft.milestones
-                )
-                filterLink(
-                    "Tags",
-                    options: listed(board.allTags, draft.tags),
-                    selection: $draft.tags
-                )
-            } header: {
-                Text("Filters")
-            } footer: {
-                Text("Items match any selected story, version and milestone, and must carry every selected tag.")
-            }
-        }
-        .navigationTitle("View")
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") { dismiss() }
-            }
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Save") { save() }
-                    .disabled(isSaving || draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-        }
-        .mobileTaskErrorAlert($errorMessage)
-    }
-
-    private func statusBinding(_ status: TaskStatus) -> Binding<Bool> {
-        let columns = board.effectiveColumns
-        return Binding(
-            get: { draft.visibleColumns(in: columns).contains { $0.id == status } },
-            set: { isOn in
-                var selected = Set(draft.visibleColumns(in: columns).map(\.id))
-                if isOn { selected.insert(status) } else { selected.remove(status) }
-                guard !selected.isEmpty else { return }
-                draft.statuses = selected.count == columns.count ? [] : columns.map(\.id).filter(selected.contains)
-            }
-        )
-    }
-
-    private func filterLink<Value: Hashable>(
-        _ title: LocalizedStringKey,
-        options: [(Value, String)],
-        selection: Binding<[Value]>
-    ) -> some View {
-        NavigationLink {
-            MobileFilterValuesList(title: title, options: options, selection: selection)
-        } label: {
-            LabeledContent(title) {
-                Text(summary(of: selection.wrappedValue, in: options))
-            }
-        }
-    }
-
-    private func summary<Value: Hashable>(of selected: [Value], in options: [(Value, String)]) -> String {
-        switch selected.count {
-        case 0: return String(localized: "Any")
-        case 1: return options.first { $0.0 == selected[0] }?.1 ?? String(localized: "1 selected")
-        default: return String(localized: "\(selected.count) selected")
-        }
-    }
-
-    /// The board's values plus any selected value no item uses anymore, so a
-    /// stale selection stays visible and can be switched off.
-    private func listed(_ values: [String], _ selected: [String]) -> [(String, String)] {
-        (values + selected.filter { !values.contains($0) }).map { ($0, $0) }
-    }
-
-    private func save() {
-        var saved = draft
-        saved.name = saved.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Deleted stories can't be shown or unselected, so they don't persist.
-        saved.storyIds.removeAll { board.story(id: $0) == nil }
-        guard !saved.name.isEmpty else { return }
-        isSaving = true
-        Task {
-            defer { isSaving = false }
-            do {
-                try await state.saveView(saved, projectID: projectID)
-                onSave(saved)
-                dismiss()
-            } catch {
-                errorMessage = error.localizedDescription
-            }
-        }
-    }
-}
-
-/// Makes a task row draggable onto other rows and column headers. Agent-owned
-/// tasks stay put, matching the desktop board.
-struct MobileTaskDraggable: ViewModifier {
-    let task: ProjectTask
-    let isEnabled: Bool
-
-    func body(content: Content) -> some View {
-        if isEnabled {
-            content.draggable(task.id.uuidString) {
-                Text(task.title.isEmpty ? String(localized: "Untitled Task") : task.title)
-                    .font(.subheadline.weight(.medium))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
-            }
-        } else {
-            content
-        }
-    }
-}
-
-enum MobileTaskRoute: Hashable {
-    case board(UUID)
-    case task(projectID: UUID, taskID: UUID)
-    case story(projectID: UUID, storyID: UUID)
-}
-
-/// Registers the task board's push destinations on the enclosing stack.
-/// Applied once per stack: by the dashboard root, or by a board presented in
-/// its own sheet.
-struct MobileTaskDestinations: ViewModifier {
-    var isEnabled = true
-    let onOpenChat: (String) -> Void
-
-    func body(content: Content) -> some View {
-        if isEnabled {
-            content.navigationDestination(for: MobileTaskRoute.self) { route in
-                switch route {
-                case .board(let projectID):
-                    MobileTaskBoardView(projectID: projectID, onOpenChat: onOpenChat, isModal: false)
-                case .task(let projectID, let taskID):
-                    MobileTaskDetailView(projectID: projectID, taskID: taskID, onOpenChat: onOpenChat)
-                case .story(let projectID, let storyID):
-                    MobileStoryDetailView(projectID: projectID, storyID: storyID, onOpenChat: onOpenChat)
-                }
-            }
-        } else {
-            content
-        }
-    }
-}
-
-// MARK: - Shared task actions
-
-/// Swipe actions and the long-press menu for a task row, so the board and
-/// the story detail offer the same verbs as the desktop's context menu.
-struct MobileTaskActions: ViewModifier {
-    @EnvironmentObject private var state: MobileAppState
-    let task: ProjectTask
-    let board: TaskBoard
-    let onEdit: () -> Void
-    let onOpenChat: (String) -> Void
-    let onError: (String) -> Void
-
-    private var isLocked: Bool { board.isStatusLocked(task) }
-
-    private var canRun: Bool {
-        !state.usesCloudTasks && task.agent.isAssigned && !board.column(for: task.status).triggersChat && board.firstChatColumn != nil
-    }
-
-    func body(content: Content) -> some View {
-        content
-            .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                if canRun {
-                    Button {
-                        perform { try await state.runTask(task) }
-                    } label: {
-                        Label("Run", systemImage: "play.fill")
-                    }
-                    .tint(.green)
-                }
-            }
-            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                Button(role: .destructive) {
-                    perform { try await state.deleteTask(task) }
-                } label: {
-                    Label("Delete", systemImage: "trash")
-                }
-                Button(action: onEdit) {
-                    Label("Edit", systemImage: "pencil")
-                }
-                .tint(.blue)
-            }
-            .contextMenu {
-                Button(action: onEdit) {
-                    Label("Edit", systemImage: "pencil")
-                }
-                if let sessionID = state.taskSessionID(task) {
-                    Button {
-                        onOpenChat(sessionID)
-                    } label: {
-                        Label("Open Chat", systemImage: "bubble.left.and.text.bubble.right")
-                    }
-                }
-                if canRun {
-                    Button {
-                        perform { try await state.runTask(task) }
-                    } label: {
-                        Label("Run with Agent", systemImage: "play")
-                    }
-                }
-                Menu {
-                    ForEach(board.effectiveColumns) { column in
-                        Button {
-                            perform { try await state.moveTask(task, to: column.id) }
-                        } label: {
-                            Label(column.name, systemImage: column.systemImage)
-                        }
-                        .disabled(column.id == board.resolvedStatus(of: task))
-                    }
-                } label: {
-                    Label("Move To", systemImage: "arrow.right.square")
-                }
-                .disabled(isLocked)
-                Divider()
-                Button(role: .destructive) {
-                    perform { try await state.deleteTask(task) }
-                } label: {
-                    Label("Delete", systemImage: "trash")
-                }
-            }
-    }
-
-    private func perform(_ operation: @escaping () async throws -> Void) {
-        Task {
-            do {
-                try await operation()
-            } catch {
-                onError(error.localizedDescription)
-            }
-        }
-    }
-}
-
-extension View {
-    /// Presents a task-board error as an alert while `message` is non-nil.
-    func mobileTaskErrorAlert(_ message: Binding<String?>) -> some View {
-        alert(
-            "Task Board Error",
-            isPresented: Binding(
-                get: { message.wrappedValue != nil },
-                set: { if !$0 { message.wrappedValue = nil } }
-            )
-        ) {
-            Button("OK", role: .cancel) { message.wrappedValue = nil }
-        } message: {
-            Text(message.wrappedValue ?? "")
-        }
-    }
-}
-
-/// Multi-select checklist for one view filter condition.
-private struct MobileFilterValuesList<Value: Hashable>: View {
-    let title: LocalizedStringKey
-    let options: [(Value, String)]
-    @Binding var selection: [Value]
-
-    var body: some View {
-        List {
-            if options.isEmpty {
-                Text("Nothing to filter by yet.")
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(options, id: \.0) { value, label in
-                    Button {
-                        toggle(value)
-                    } label: {
-                        HStack {
-                            Text(label)
-                                .foregroundStyle(.primary)
-                            Spacer()
-                            if selection.contains(value) {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(.tint)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        .navigationTitle(title)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            if !selection.isEmpty {
-                ToolbarItem(placement: .primaryAction) {
-                    Button("Clear") { selection = [] }
-                }
-            }
-        }
-    }
-
-    private func toggle(_ value: Value) {
-        if selection.contains(value) {
-            selection.removeAll { $0 == value }
-        } else {
-            selection.append(value)
-        }
     }
 }

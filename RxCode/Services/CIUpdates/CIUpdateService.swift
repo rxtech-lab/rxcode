@@ -23,7 +23,7 @@ final class CIUpdateService {
             case .invalidResponse:
                 return "Received an invalid response from the CI update service."
             case .apiError(let code, let detail):
-                return "CI update service error (\(code)): \(detail)"
+                return detail.isEmpty ? "CI update service error (\(code))." : detail
             case .decodingError(let detail):
                 return "Failed to decode CI update response: \(detail)"
             }
@@ -51,6 +51,11 @@ final class CIUpdateService {
     }
 
     // MARK: - Watched repositories (CRUD)
+
+    func overview(repository: String) async throws -> CIRepositoryOverview {
+        try await get(url: url("/api/v1/watched-repositories/overview",
+                               query: [.init(name: "repository", value: repository)]))
+    }
 
     func listWatchedRepositories(cursor: String? = nil, pageSize: Int? = nil) async throws -> WatchedRepoPage {
         var items: [URLQueryItem] = []
@@ -102,8 +107,37 @@ final class CIUpdateService {
 
     // MARK: - Manual trigger
 
+    /// The server scans workflows and opens the PR before replying, so this
+    /// gets a longer ceiling than the default 60s request timeout.
     func trigger(id: String) async throws -> CITriggerResponse {
-        try await send(method: "POST", url: url("/api/v1/watched-repositories/\(seg(id))/trigger"))
+        try await send(method: "POST", url: url("/api/v1/watched-repositories/\(seg(id))/trigger"), timeout: 300)
+    }
+
+    func triggerDependencies(id: String) async throws -> DependencyScanTriggerResponse {
+        try await send(method: "POST", url: url("/api/v1/watched-repositories/\(seg(id))/dependencies/trigger"))
+    }
+
+    // MARK: - Repository automation
+
+    /// Settings plus recent dependency/security scan runs for a watched repo.
+    func automation(id: String) async throws -> RepositoryAutomationResponse {
+        try await get(url: url("/api/v1/watched-repositories/\(seg(id))/automation"))
+    }
+
+    func saveAutomation(id: String, settings: RepositoryAutomationSettings) async throws -> RepositoryAutomationSettings {
+        let response: RepositoryAutomationSaveResponse = try await send(
+            method: "PUT",
+            url: url("/api/v1/watched-repositories/\(seg(id))/automation"),
+            body: settings
+        )
+        return response.settings
+    }
+
+    /// One folder level of the default branch, or of the tree `sha` when given.
+    func directories(id: String, sha: String? = nil) async throws -> RepositoryDirectoryListing {
+        var items: [URLQueryItem] = []
+        if let sha { items.append(.init(name: "sha", value: sha)) }
+        return try await get(url: url("/api/v1/watched-repositories/\(seg(id))/directories", query: items))
     }
 
     // MARK: - Pull requests
@@ -142,6 +176,7 @@ final class CIUpdateService {
     // MARK: - Transport (mirrors SecretsService / DocsService)
 
     private struct Ignored: Decodable {}
+    private struct ErrorBody: Decodable { let error: String? }
 
     private func get<T: Decodable>(url: URL) async throws -> T {
         try await performWithRetry { token in
@@ -171,9 +206,9 @@ final class CIUpdateService {
         }
     }
 
-    private func send<T: Decodable>(method: String, url: URL) async throws -> T {
+    private func send<T: Decodable>(method: String, url: URL, timeout: TimeInterval = 60) async throws -> T {
         try await performWithRetry { token in
-            var request = URLRequest(url: url)
+            var request = URLRequest(url: url, timeoutInterval: timeout)
             request.httpMethod = method
             request.setValue("application/json", forHTTPHeaderField: "Accept")
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -208,8 +243,9 @@ final class CIUpdateService {
 
     private func decode<T: Decodable>(data: Data, response: HTTPURLResponse) throws -> T {
         guard (200..<300).contains(response.statusCode) else {
-            let body = String(data: data, encoding: .utf8) ?? "no body"
-            throw ServiceError.apiError(response.statusCode, body)
+            // Routes reply `{ "error": "…" }`; surface that message, not raw JSON.
+            let message = (try? JSONDecoder().decode(ErrorBody.self, from: data))?.error
+            throw ServiceError.apiError(response.statusCode, message ?? "")
         }
         if T.self == Ignored.self {
             return Ignored() as! T

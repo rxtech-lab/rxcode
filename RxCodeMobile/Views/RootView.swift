@@ -15,7 +15,7 @@ private enum MobileRootTab: Hashable {
 
 /// Mobile app root. iPad / wide screens use NavigationSplitView; iPhone uses
 /// bottom navigation with independent NavigationStack tabs.
-struct RootView: View {
+struct RemoteWorkspaceView: View {
     @Environment(MobileCloudState.self) private var cloud
     @State private var showOfflineTasksSheet = false
     @State private var showOfflineTasksFullScreen = false
@@ -55,7 +55,7 @@ struct RootView: View {
         }
         .animation(.smooth(duration: 0.3), value: cloud.isSignedIn)
         .onReceive(NotificationCenter.default.publisher(for: .rxAuthSessionExpired)) { _ in
-            Task { await cloud.signOut() }
+            Task { await cloud.signOut(requiresPushRemoval: false) }
         }
         .onChange(of: cloud.isSignedIn) { _, signedIn in
             if !signedIn {

@@ -1,5 +1,14 @@
 import Foundation
 
+/// One page load, including repository resolution and independently available sections.
+public struct CIRepositoryOverview: Codable, Sendable {
+    public let repository: WatchedRepo?
+    public let history: [CIUpdateRunHistory]?
+    public let pullRequests: [CIPullRequest]?
+    public let automation: RepositoryAutomationResponse?
+    public let errors: [String: String]
+}
+
 // Codable DTOs mirroring github-pm's `/api/v1/watched-repositories/*` JSON
 // shapes (the "CI auto-update scan" feature). Field names match the server
 // responses; extra fields decode harmlessly and uncertain fields are optional
@@ -295,4 +304,177 @@ public struct CIPullRequest: Codable, Sendable, Identifiable, Hashable {
 
 public struct CIUpdateIDResponse: Codable, Sendable {
     public let id: String
+}
+
+/// Accepted dependency scan; completion happens asynchronously on the server.
+public struct DependencyScanTriggerResponse: Codable, Sendable {
+    public let queued: Bool
+    public let runId: String
+}
+
+// MARK: - Repository automation (dependency & security scans)
+
+/// Package manager a dependency target is scanned with. Mirrors github-pm's
+/// `managers` list; unknown values fall back to `.auto`.
+public enum DependencyManager: String, Codable, Sendable, CaseIterable, Identifiable {
+    case auto, bun, npm, yarn, pnpm, go, swift, python
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .auto: return "Auto Detect"
+        case .bun: return "Bun"
+        case .npm: return "npm"
+        case .yarn: return "Yarn"
+        case .pnpm: return "pnpm"
+        case .go: return "Go"
+        case .swift: return "Swift"
+        case .python: return "Python"
+        }
+    }
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = DependencyManager(rawValue: raw) ?? .auto
+    }
+}
+
+/// One project directory included in dependency scans. `directory` is relative
+/// to the repository root; the root itself is the empty string.
+public struct DependencyTarget: Codable, Sendable, Hashable {
+    public var directory: String
+    public var manager: DependencyManager
+
+    public init(directory: String = "", manager: DependencyManager = .auto) {
+        self.directory = directory
+        self.manager = manager
+    }
+
+    public var displayDirectory: String { directory.isEmpty ? "." : directory }
+}
+
+/// Per-repository automation settings from
+/// `GET/PUT /api/v1/watched-repositories/{id}/automation`. The server schema is
+/// strict, so this encodes exactly these keys.
+public struct RepositoryAutomationSettings: Codable, Sendable, Hashable {
+    public var dependenciesEnabled: Bool
+    public var dependencyCiRepair: Bool
+    public var dependencyAutoMerge: Bool
+    public var ciAutoMerge: Bool
+    public var dependencySecurityEnabled: Bool
+    public var ciSecurityEnabled: Bool
+    public var dependencyNotifications: Bool
+    public var ciNotifications: Bool
+    public var targets: [DependencyTarget]
+
+    public static let maxTargets = 20
+
+    public init(
+        dependenciesEnabled: Bool = false,
+        dependencyCiRepair: Bool = true,
+        dependencyAutoMerge: Bool = false,
+        ciAutoMerge: Bool = false,
+        dependencySecurityEnabled: Bool = true,
+        ciSecurityEnabled: Bool = true,
+        dependencyNotifications: Bool = true,
+        ciNotifications: Bool = true,
+        targets: [DependencyTarget] = [DependencyTarget()]
+    ) {
+        self.dependenciesEnabled = dependenciesEnabled
+        self.dependencyCiRepair = dependencyCiRepair
+        self.dependencyAutoMerge = dependencyAutoMerge
+        self.ciAutoMerge = ciAutoMerge
+        self.dependencySecurityEnabled = dependencySecurityEnabled
+        self.ciSecurityEnabled = ciSecurityEnabled
+        self.dependencyNotifications = dependencyNotifications
+        self.ciNotifications = ciNotifications
+        self.targets = targets
+    }
+
+    /// Missing keys take the server defaults so an older payload still decodes.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = RepositoryAutomationSettings()
+        dependenciesEnabled = try c.decodeIfPresent(Bool.self, forKey: .dependenciesEnabled) ?? defaults.dependenciesEnabled
+        dependencyCiRepair = try c.decodeIfPresent(Bool.self, forKey: .dependencyCiRepair) ?? defaults.dependencyCiRepair
+        dependencyAutoMerge = try c.decodeIfPresent(Bool.self, forKey: .dependencyAutoMerge) ?? defaults.dependencyAutoMerge
+        ciAutoMerge = try c.decodeIfPresent(Bool.self, forKey: .ciAutoMerge) ?? defaults.ciAutoMerge
+        dependencySecurityEnabled = try c.decodeIfPresent(Bool.self, forKey: .dependencySecurityEnabled) ?? defaults.dependencySecurityEnabled
+        ciSecurityEnabled = try c.decodeIfPresent(Bool.self, forKey: .ciSecurityEnabled) ?? defaults.ciSecurityEnabled
+        dependencyNotifications = try c.decodeIfPresent(Bool.self, forKey: .dependencyNotifications) ?? defaults.dependencyNotifications
+        ciNotifications = try c.decodeIfPresent(Bool.self, forKey: .ciNotifications) ?? defaults.ciNotifications
+        targets = try c.decodeIfPresent([DependencyTarget].self, forKey: .targets) ?? defaults.targets
+    }
+
+    /// Client-side mirror of the server's directory rule, used to validate
+    /// picks before saving: relative, no traversal, no `.git`, no wildcards.
+    public static func isValidDirectory(_ value: String) -> Bool {
+        if value.isEmpty { return true }
+        guard value.count <= 240 else { return false }
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "_.-"))
+        return value.split(separator: "/", omittingEmptySubsequences: false).allSatisfy { part in
+            !part.isEmpty && part != "." && part != ".." && part != ".git"
+                && part.unicodeScalars.allSatisfy { allowed.contains($0) && $0.isASCII }
+        }
+    }
+}
+
+/// A vulnerability reported by a dependency or GitHub Actions security scan.
+public struct DependencyVulnerability: Codable, Sendable, Hashable {
+    public let id: String
+    public let package: String
+    public let version: String
+    public let path: String
+    public let url: String
+}
+
+/// One dependency or CI security scan run.
+public struct DependencyUpdateRun: Codable, Sendable, Identifiable, Hashable {
+    public let id: String
+    /// `"dependencies"` or `"ci-security"`.
+    public let kind: String
+    /// `"queued"`, `"running"`, `"success"` or `"error"`.
+    public let status: String
+    public let prUrls: [String]?
+    public let findings: [DependencyVulnerability]?
+    public let error: String?
+    public let startedAt: FlexibleTimestamp?
+    public let completedAt: FlexibleTimestamp?
+
+    public var isDependencies: Bool { kind == "dependencies" }
+    public var isActive: Bool { status == "queued" || status == "running" }
+    public var startedDate: Date? { startedAt?.date }
+    public var completedDate: Date? { completedAt?.date }
+}
+
+/// `GET /api/v1/watched-repositories/{id}/automation`.
+public struct RepositoryAutomationResponse: Codable, Sendable {
+    public let settings: RepositoryAutomationSettings
+    public let runs: [DependencyUpdateRun]
+    public let scannerConfigured: Bool
+
+    public init(settings: RepositoryAutomationSettings, runs: [DependencyUpdateRun], scannerConfigured: Bool) {
+        self.settings = settings
+        self.runs = runs
+        self.scannerConfigured = scannerConfigured
+    }
+}
+
+/// `PUT /api/v1/watched-repositories/{id}/automation`.
+public struct RepositoryAutomationSaveResponse: Codable, Sendable {
+    public let settings: RepositoryAutomationSettings
+    public init(settings: RepositoryAutomationSettings) { self.settings = settings }
+}
+
+/// One folder level from `GET /api/v1/watched-repositories/{id}/directories`.
+public struct RepositoryDirectoryListing: Codable, Sendable {
+    public struct Directory: Codable, Sendable, Hashable, Identifiable {
+        public let name: String
+        public let sha: String
+        public var id: String { sha + name }
+    }
+
+    public let sha: String
+    public let directories: [Directory]
 }

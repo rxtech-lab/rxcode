@@ -430,7 +430,7 @@ extension MobileAppState {
     }
 
     func reportAPNsToken(hex: String, environment: String) {
-        logger.info("[APNs] received token from app delegate tokenPrefix=\(String(hex.prefix(12)), privacy: .public) environment=\(environment, privacy: .public)")
+        logger.info("[APNs] received device token environment=\(environment, privacy: .public)")
         apnsTokenHex = hex
         apnsEnvironment = environment
         Task { await reportAPNsTokenIfPending() }
@@ -600,6 +600,8 @@ extension MobileAppState {
             continuation.resume(throwing: AutopilotRemoteError.desktopChanged)
         }
         taskBoardsByProject = [:]
+        cachedDesktopTaskProjects = []
+        taskCacheSaveTask?.cancel()
         deferredTaskBoardSnapshots = [:]
         let pendingTaskBoards = pendingTaskBoardRequests
         pendingTaskBoardRequests = [:]

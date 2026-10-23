@@ -346,6 +346,7 @@ extension AppState {
             try await syncStories(remote.stories, cloudId: cloudId, projectId: projectId, sync: &sync)
             cloudSyncPhaseByProjectId[projectId] = .syncingTasks
             try await syncTasks(remote.tasks, cloudId: cloudId, projectId: projectId, sync: &sync)
+            try await syncSavedViews(cloudId: cloudId, projectId: projectId, sync: &sync)
             cloudSyncPhaseByProjectId[projectId] = .savingChanges
             sync.lastSyncedAt = Date()
             sync.lastError = nil
@@ -357,6 +358,31 @@ extension AppState {
         guard isCloudLinked(projectId, to: cloudId) else { return }
         editCloudBoard(projectId, cloudId: cloudId, sync: sync)
         setTaskBoard(taskBoard(for: projectId), for: projectId, fromCloud: true)
+    }
+
+    private func syncSavedViews(cloudId: String, projectId: UUID, sync: inout CloudBoardSyncState) async throws {
+        // A conflict is retried from a fresh revision; never blindly replace
+        // changes made by the phone while this Mac was uploading.
+        for attempt in 0..<3 {
+            guard let remote = try await projectCloud.savedViews(projectId: cloudId),
+                  isCloudLinked(projectId, to: cloudId) else { return }
+            let local = taskBoard(for: projectId).savedViews.map { CloudSavedView(view: $0, sync: sync) }
+            let merged = CloudSavedViews.merging(local: local, base: sync.savedViewsBase, remote: remote.views)
+            do {
+                if merged != remote.views {
+                    _ = try await projectCloud.saveViews(CloudSavedViews(views: merged, revision: remote.revision), projectId: cloudId)
+                }
+                guard isCloudLinked(projectId, to: cloudId) else { return }
+                // Preserve edits made during the upload for the next sync.
+                let latest = taskBoard(for: projectId).savedViews.map { CloudSavedView(view: $0, sync: sync) }
+                let applied = CloudSavedViews.merging(local: latest, base: local, remote: merged)
+                sync.savedViewsBase = merged
+                editCloudBoard(projectId, cloudId: cloudId, sync: sync) { board in
+                    board.savedViews = applied.map { $0.localView(sync: sync) }
+                }
+                return
+            } catch where ProjectCloudService.isConflict(error) && attempt < 2 { continue }
+        }
     }
 
     private func isCloudLinked(_ projectId: UUID, to cloudId: String) -> Bool {

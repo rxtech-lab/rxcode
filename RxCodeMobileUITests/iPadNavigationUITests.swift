@@ -43,19 +43,19 @@ final class iPadNavigationUITests: XCTestCase {
     }
 
     @MainActor
-    func testSettingsOpensRemoteTasksFullScreen() throws {
-        let session = try UITestRunner.launch(.pad, on: self, additionalLaunchArguments: ["-uitest-cloud"])
+    func testSettingsDismissesBackToTasksWorkspace() throws {
+        let session = try UITestRunner.launch(.pad, on: self)
         let app = session.app
+        let overview = app.descendants(matching: .any)["tasks-ipad-overview"].firstMatch
+        XCTAssertTrue(overview.waitForExistence(timeout: 10))
         session.robot.tap(app.buttons["open-settings"], "Settings toolbar button")
-        session.robot.tap(app.buttons["settings-view-remote-tasks"], "View Remote Tasks")
-
-        let tasksBar = app.navigationBars["Tasks"].firstMatch
-        XCTAssertTrue(tasksBar.waitForExistence(timeout: 10))
-        XCTAssertGreaterThan(tasksBar.frame.width, app.frame.width * 0.85)
-        XCTAssertTrue(app.staticTexts["Cloud Project"].firstMatch.waitForExistence(timeout: 15))
-
-        app.buttons["settings-remote-tasks-done"].tap()
-        XCTAssertTrue(app.navigationBars["Settings"].firstMatch.waitForExistence(timeout: 5))
+        let settingsBar = app.navigationBars["Settings"].firstMatch
+        XCTAssertTrue(settingsBar.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Pair New Mac"].exists)
+        session.robot.tap(settingsBar.buttons["Done"], "Dismiss Settings")
+        XCTAssertTrue(settingsBar.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(overview.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Project Alpha"].firstMatch.exists)
     }
 
     /// Case 2: Briefing → briefing detail → thread → messages, and the briefing

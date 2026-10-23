@@ -23,7 +23,7 @@ final class ReleaseService {
             case .invalidResponse:
                 return "Received an invalid response from the release service."
             case .apiError(let code, let detail):
-                return "Release service error (\(code)): \(detail)"
+                return detail.isEmpty ? "Release service error (\(code))." : detail
             case .decodingError(let detail):
                 return "Failed to decode release response: \(detail)"
             }
@@ -101,6 +101,31 @@ final class ReleaseService {
         try await get(url: url("/api/v1/release-repositories/\(seg(repoId))/workflows"))
     }
 
+    /// Re-reads `.github/workflows` from GitHub and reclassifies release workflows.
+    func rescanWorkflows(repoId: String) async throws -> ReleaseWorkflowScanResult {
+        try await send(method: "POST", url: url("/api/v1/release-repositories/\(seg(repoId))/workflows/scan"))
+    }
+
+    /// Marks a workflow as (not) one of the repo's release workflows.
+    func setWorkflowSelected(repoId: String, workflowId: String, isSelected: Bool) async throws {
+        let _: Ignored = try await send(
+            method: "PATCH",
+            url: url("/api/v1/release-repositories/\(seg(repoId))/workflows/\(seg(workflowId))"),
+            body: ReleaseWorkflowSelectionBody(isSelected: isSelected)
+        )
+    }
+
+    /// Branches a release can be dispatched from.
+    func branches(repoId: String) async throws -> [ReleaseBranch] {
+        try await get(url: url("/api/v1/release-repositories/\(seg(repoId))/branches"))
+    }
+
+    /// Most recent release dispatches, newest first.
+    func dispatchHistory(repoId: String, pageSize: Int = 20) async throws -> ReleaseDispatchHistoryPage {
+        try await get(url: url("/api/v1/release-repositories/\(seg(repoId))/dispatch/history",
+                               query: [.init(name: "pageSize", value: String(pageSize))]))
+    }
+
     // MARK: - Dispatch
 
     /// Triggers a `workflow_dispatch` on the given workflow. `repoId` may be the
@@ -149,6 +174,7 @@ final class ReleaseService {
     // MARK: - Transport (mirrors DocsService / SecretsService)
 
     private struct Ignored: Decodable {}
+    private struct ErrorBody: Decodable { let error: String? }
 
     private func get<T: Decodable>(url: URL) async throws -> T {
         try await performWithRetry { token in
@@ -215,8 +241,9 @@ final class ReleaseService {
 
     private func decode<T: Decodable>(data: Data, response: HTTPURLResponse) throws -> T {
         guard (200..<300).contains(response.statusCode) else {
-            let body = String(data: data, encoding: .utf8) ?? "no body"
-            throw ServiceError.apiError(response.statusCode, body)
+            // Routes reply `{ "error": "…" }`; surface that message, not raw JSON.
+            let message = (try? JSONDecoder().decode(ErrorBody.self, from: data))?.error
+            throw ServiceError.apiError(response.statusCode, message ?? "")
         }
         if T.self == Ignored.self {
             return Ignored() as! T

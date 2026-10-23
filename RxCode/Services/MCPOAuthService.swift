@@ -42,15 +42,19 @@ actor MCPOAuthService {
 
     private var refreshes: [String: Task<Credential, Error>] = [:]
     private let session: URLSession
+    private let requestURL: @Sendable (URL) -> URL
 
-    init(session: URLSession = MCPOAuthHTTP.session) { self.session = session }
+    init(session: URLSession = MCPOAuthHTTP.session, requestURL: @escaping @Sendable (URL) -> URL = { $0 }) {
+        self.session = session
+        self.requestURL = requestURL
+    }
 
     private let service = "com.rxlab.RxCode.mcp.oauth"
 
     func begin(resource: URL, clientID: String?, redirectURI: String = MCPOAuthService.redirectURI) async throws -> Authorization {
         try Self.validate(resource)
         // Discover from the challenge first, then the path-aware RFC 9728 URL.
-        var request = URLRequest(url: resource)
+        var request = URLRequest(url: requestURL(resource))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
@@ -212,7 +216,7 @@ actor MCPOAuthService {
     }
 
     private func exchange(endpoint: URL, fields: [String: String]) async throws -> JSONValue {
-        var request = URLRequest(url: endpoint, timeoutInterval: 30)
+        var request = URLRequest(url: requestURL(endpoint), timeoutInterval: 30)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         var allowed = CharacterSet.alphanumerics
@@ -243,7 +247,7 @@ actor MCPOAuthService {
 
     private func json(url: URL, body: JSONValue? = nil) async throws -> JSONValue {
         try Self.validate(url)
-        var request = URLRequest(url: url, timeoutInterval: 30)
+        var request = URLRequest(url: requestURL(url), timeoutInterval: 30)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let body {
             request.httpMethod = "POST"

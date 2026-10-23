@@ -65,7 +65,7 @@ final class CloudWorkspaceUITests: XCTestCase {
     }
 
     @MainActor
-    func testIPadSyncFailureOpensFullScreenKanbanTasks() throws {
+    func testIPadSyncFailureOpensFullScreenEmptyBoard() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad-only test.")
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -89,7 +89,13 @@ final class CloudWorkspaceUITests: XCTestCase {
         let project = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'tasks-dashboard-project-'")).firstMatch
         XCTAssertTrue(project.waitForExistence(timeout: 15))
         project.tap()
-        XCTAssertTrue(app.descendants(matching: .any)["tasks-ipad-kanban"].firstMatch.waitForExistence(timeout: 10))
+        let emptyState = app.descendants(matching: .any)["task-board-empty-state"].firstMatch
+        XCTAssertTrue(emptyState.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["No Tasks"].exists)
+        XCTAssertGreaterThan(emptyState.frame.width, app.frame.width * 0.85)
+        XCTAssertGreaterThan(emptyState.frame.height, app.frame.height * 0.65)
+        XCTAssertFalse(app.descendants(matching: .any)["tasks-ipad-kanban"].firstMatch.exists)
+        XCTAssertTrue(app.buttons["task-board-add"].exists)
     }
 
     @MainActor

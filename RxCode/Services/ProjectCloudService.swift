@@ -80,6 +80,23 @@ final class ProjectCloudService {
 
     // MARK: - Board
 
+    enum DraftKind: String, Encodable { case task, story }
+
+    struct ItemDraft: Decodable {
+        let title: String
+        let details: String
+    }
+
+    func generateDraft(projectId: String, kind: DraftKind, prompt: String) async throws -> ItemDraft {
+        struct Input: Encodable {
+            let projectId: String
+            let kind: DraftKind
+            let prompt: String
+        }
+        return try await request("POST", url: baseURL.appendingPathComponent("api/v1/agent/draft"),
+                                 body: Input(projectId: projectId, kind: kind, prompt: prompt))
+    }
+
     /// The board payload can hold hundreds of tasks, so it is decoded off the
     /// main actor — decoding it inline stalled scrolling on every sync.
     func board(projectId: String) async throws -> CloudRemoteBoard {
@@ -111,6 +128,24 @@ final class ProjectCloudService {
 
     func deleteTask(projectId: String, taskId: String) async throws {
         try await delete(projectURL(projectId).appendingPathComponent("tasks/\(taskId)"))
+    }
+
+    // MARK: - Saved views
+
+    /// Nil means this server predates account-level saved views.
+    func savedViews(projectId: String) async throws -> CloudSavedViews? {
+        do {
+            return try await request("GET", url: projectURL(projectId).appendingPathComponent("board-views"))
+        } catch where Self.isNotFound(error) { return nil }
+    }
+
+    func saveViews(_ settings: CloudSavedViews, projectId: String) async throws -> CloudSavedViews {
+        try await request("PUT", url: projectURL(projectId).appendingPathComponent("board-views"), body: settings)
+    }
+
+    static func isConflict(_ error: Error) -> Bool {
+        if case AutopilotService.ServiceError.apiError(409, _) = error { return true }
+        return false
     }
 
     // MARK: - Transport

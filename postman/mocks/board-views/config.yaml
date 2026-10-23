@@ -1,0 +1,10 @@
+version: 1
+id: 57c52ee8-f96d-4c5e-9641-cc901b7f9c50
+name: RxCode saved views
+slug: rxcode-saved-views
+protocol: http
+port: 4912
+scenarios:
+  - name: default
+    path: ./default.js
+    default: true

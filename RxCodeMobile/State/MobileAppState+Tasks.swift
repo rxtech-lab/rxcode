@@ -16,6 +16,13 @@ extension MobileAppState {
     @discardableResult
     func taskBoardCall(_ payload: TaskBoardRequestPayload) async throws -> TaskBoardResultPayload {
         if usesCloudTasks { return try await cloudTaskBoardCall(payload) }
+        return try await desktopTaskBoardCall(payload)
+    }
+
+    /// Sends a task-board operation to the active Mac, even while a cloud
+    /// board is on screen (running a cloud task on a paired Mac).
+    @discardableResult
+    func desktopTaskBoardCall(_ payload: TaskBoardRequestPayload) async throws -> TaskBoardResultPayload {
         guard isPaired else { throw AutopilotRemoteError.notPaired }
         let desktop = pairedDesktopPubkey
         let result: TaskBoardResultPayload = try await withCheckedThrowingContinuation { continuation in
@@ -61,6 +68,7 @@ extension MobileAppState {
     /// project are settling. Only the newest held snapshot is kept.
     func storeTaskBoardSnapshot(_ snapshot: MobileTaskBoardSnapshot, cloud: Bool) {
         let projectID = snapshot.projectID
+        if !cloud { refreshTaskRunLinks(from: snapshot) }
         let isSettling = taskMovesInFlight[projectID, default: 0] > 0 || taskBoardSettleTasks[projectID] != nil
         switch (isSettling, cloud) {
         case (true, true): deferredCloudTaskBoardSnapshots[projectID] = snapshot
@@ -68,6 +76,7 @@ extension MobileAppState {
         case (false, true): cloudTaskBoards[projectID] = snapshot
         case (false, false): taskBoardsByProject[projectID] = snapshot
         }
+        scheduleTaskCacheSave()
     }
 
     private func beginTaskMove(in projectID: UUID) {
@@ -91,6 +100,7 @@ extension MobileAppState {
             if let snapshot = self.deferredCloudTaskBoardSnapshots.removeValue(forKey: projectID) {
                 self.cloudTaskBoards[projectID] = snapshot
             }
+            self.scheduleTaskCacheSave()
         }
     }
 
@@ -114,7 +124,10 @@ extension MobileAppState {
     /// list changing. Views key their load `.task` on it, since a Tasks view
     /// can appear — as the first tab does at launch — before sync is ready.
     var taskSyncReloadKey: String {
-        "\(usesCloudTasks)|\(isTaskSyncReady)|\(pairedDesktopPubkey)|" + taskProjects.map(\.id.uuidString).joined(separator: ",")
+        // Cloud loading discovers the projects itself. Including those results
+        // would cancel the initial load as soon as it publishes its project list.
+        if usesCloudTasks { return "cloud|\(isTaskSyncReady)|\(taskCloud?.accountID ?? "")" }
+        return "\(usesCloudTasks)|\(isTaskSyncReady)|\(pairedDesktopPubkey)|" + taskProjects.map(\.id.uuidString).joined(separator: ",")
     }
 
     func taskBoard(for projectID: UUID) -> TaskBoard {
@@ -165,8 +178,9 @@ extension MobileAppState {
     func loadAllTaskBoards() async -> String? {
         if usesCloudTasks {
             do { try await refreshCloudTaskProjects() }
-            catch { return error.localizedDescription }
+            catch { return MobileCloudState.isCancellation(error) ? nil : error.localizedDescription }
         }
+        guard !Task.isCancelled else { return nil }
         let projectIDs = taskProjects.map(\.id)
         return await withTaskGroup(of: String?.self) { group in
             for projectID in projectIDs {
@@ -175,7 +189,7 @@ extension MobileAppState {
                         try await self.loadTaskBoard(projectID: projectID)
                         return nil
                     } catch {
-                        return error.localizedDescription
+                        return MobileCloudState.isCancellation(error) ? nil : error.localizedDescription
                     }
                 }
             }
@@ -244,21 +258,16 @@ extension MobileAppState {
         guard !board.isStatusLocked(task) || board.resolvedStatus(of: task) == status else {
             throw AutopilotRemoteError.server(String(localized: "The agent is working on this task; it moves on when the turn finishes."))
         }
-        let column = board.tasks(in: status).filter { $0.id != taskID }
-        var sortIndex: Double?
-        if let target, let position = column.firstIndex(where: { $0.id == target.id }) {
-            let after = position > 0 ? column[position - 1] : nil
-            sortIndex = TaskBoard.sortIndex(between: after, and: target, in: column)
-        }
-        try await moveTask(task, to: status, sortIndex: sortIndex)
+        try await moveTask(task, to: status, sortIndex: dropSortIndex(taskID, projectID: projectID, before: target, in: status))
     }
 
-    /// Runs the task with its assigned agent by moving it into the board's
-    /// first chat column — the same path as the desktop's "Run with Agent".
-    func runTask(_ task: ProjectTask) async throws {
-        guard !usesCloudTasks else { throw AutopilotRemoteError.server("Connect to a Mac to run an agent.") }
-        guard let column = taskBoard(for: task.projectId).firstChatColumn else { return }
-        try await moveTask(task, to: column.id)
+    /// The sort index that places `taskID` just before `target` in `status`,
+    /// or `nil` to append it to the column.
+    func dropSortIndex(_ taskID: UUID, projectID: UUID, before target: ProjectTask?, in status: TaskStatus) -> Double? {
+        let column = taskBoard(for: projectID).tasks(in: status).filter { $0.id != taskID }
+        guard let target, let position = column.firstIndex(where: { $0.id == target.id }) else { return nil }
+        let after = position > 0 ? column[position - 1] : nil
+        return TaskBoard.sortIndex(between: after, and: target, in: column)
     }
 
     @discardableResult

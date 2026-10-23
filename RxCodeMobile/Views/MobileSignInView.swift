@@ -15,8 +15,8 @@ struct MobileSignInView: View {
         RxSignInView(
             manager: manager,
             appearance: RxSignInAppearance(
-                title: "Welcome to RxCode",
-                subtitle: "Sign in with your rxlab account to pair with your Mac.",
+                title: "Welcome to Flowcy",
+                subtitle: "Projects, automation, and your agent. Sign in with your RxLab account.",
                 accentColor: .accentColor
             ),
             style: .native,
@@ -25,7 +25,7 @@ struct MobileSignInView: View {
                 Task { await cloud.refresh() }
             },
             onAuthFailed: { error in
-                signInLogger.error("rxauth sign-in failed: \(String(describing: error), privacy: .public)")
+                signInLogger.error("rxauth sign-in failed")
             }
         )
         .accessibilityIdentifier("mobile-sign-in")

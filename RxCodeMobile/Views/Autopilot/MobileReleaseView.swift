@@ -1,9 +1,10 @@
+import RxCodeChatKit
 import RxCodeCore
 import RxCodeSync
 import SwiftUI
 
 /// Release management: registered release repositories, their scanned
-/// workflows, the RELEASE_TOKEN secret, and triggering releases.
+/// workflows, recent releases, the RELEASE_TOKEN secret, and creating releases.
 struct MobileReleaseView: View {
     @EnvironmentObject private var state: MobileAppState
 
@@ -12,6 +13,7 @@ struct MobileReleaseView: View {
     @State private var errorMessage: String?
     @State private var showingAdd = false
     @State private var pendingDelete: ReleaseRepo?
+    @State private var isRemoving = false
 
     var body: some View {
         List {
@@ -21,28 +23,40 @@ struct MobileReleaseView: View {
             }
             ForEach(repos) { repo in
                 NavigationLink {
-                    MobileReleaseRepoDetailView(repo: repo)
+                    MobileReleaseRepoDetailView(repo: repo, onRemoved: { await reload() })
                 } label: {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(repo.repositoryFullName)
-                        if let tag = repo.latestReleaseTag {
-                            Text("Latest: \(tag)").font(.caption).foregroundStyle(.secondary)
-                        }
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(repo.repositoryFullName).lineLimit(1).truncationMode(.middle)
+                        Text(repo.latestReleaseTag.map { "Latest: \($0)" } ?? String(localized: "No releases yet"))
+                            .font(.caption).foregroundStyle(.secondary)
                     }
                 }
                 .swipeActions {
                     Button("Remove", role: .destructive) { pendingDelete = repo }
                 }
+                .contextMenu {
+                    Button("Remove Repository", systemImage: "trash", role: .destructive) { pendingDelete = repo }
+                }
             }
-            if repos.isEmpty, !isLoading {
-                Text("No release repositories. Tap + to add one.").foregroundStyle(.secondary)
+        }
+        .overlay {
+            if repos.isEmpty, !isLoading, errorMessage == nil {
+                ContentUnavailableView {
+                    Label("No Release Repositories", systemImage: "shippingbox")
+                } description: {
+                    Text("Add a repository to create releases from its GitHub Actions workflows.")
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .navigationTitle("Releases")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button { showingAdd = true } label: { Image(systemName: "plus") }
+                Button("Add Repository", systemImage: "plus") {
+                    MobileHaptics.buttonTap()
+                    showingAdd = true
+                }
             }
         }
         .sheet(isPresented: $showingAdd) {
@@ -55,16 +69,19 @@ struct MobileReleaseView: View {
             .environmentObject(state)
             .mobileSheetPresentation()
         }
-        .alert(
-            "Remove repository?",
-            isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } })
+        .confirmationDialog(
+            "Remove \(pendingDelete?.repositoryFullName ?? "")?",
+            isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
+            titleVisibility: .visible
         ) {
-            Button("Cancel", role: .cancel) {}
-            Button("Remove", role: .destructive) {
+            Button("Remove Repository", role: .destructive) {
                 if let repo = pendingDelete { Task { await delete(repo) } }
                 pendingDelete = nil
             }
+        } message: {
+            Text("Flowcy stops managing releases for this repository. Existing GitHub releases are not affected.")
         }
+        .mobileAutopilotLoadingDialog(isRemoving, title: "Removing repository…")
         .mobileAutopilotLoadingOverlay(isLoading && repos.isEmpty)
         .refreshable { await reload() }
         .task { await reload() }
@@ -88,256 +105,316 @@ struct MobileReleaseView: View {
                 repositoryId: repo.id,
                 repositoryFullName: repo.fullName
             ))
+            MobileHaptics.connected()
             await reload()
         } catch {
             errorMessage = error.localizedDescription
+            MobileHaptics.connectionError()
         }
     }
 
     private func delete(_ repo: ReleaseRepo) async {
+        isRemoving = true
+        defer { isRemoving = false }
         do {
             try await state.deleteReleaseRepo(id: repo.id)
+            MobileHaptics.connected()
             await reload()
         } catch {
             errorMessage = error.localizedDescription
+            MobileHaptics.connectionError()
         }
     }
 }
 
+// MARK: - Repository detail
+
+/// Workflows and recent releases. "Release" in the toolbar starts the
+/// pick-a-workflow → fill-inputs flow; everything else lives in the menu.
 struct MobileReleaseRepoDetailView: View {
     @EnvironmentObject private var state: MobileAppState
+    @Environment(\.dismiss) private var dismiss
     let repo: ReleaseRepo
+    var onRemoved: (() async -> Void)? = nil
 
     @State private var workflows: [MobileReleaseWorkflow] = []
+    @State private var history: [ReleaseDispatchHistoryItem]?
     @State private var isLoading = true
     @State private var errorMessage: String?
-    @State private var statusMessage: String?
-    @State private var tokenValue = ""
-    @State private var isInstallingToken = false
-    @State private var dispatchWorkflow: MobileReleaseWorkflow?
+    @State private var toast: String?
+    @State private var busyTitle: LocalizedStringKey?
+    @State private var releasing: ReleaseStart?
+    @State private var showingToken = false
+    @State private var confirmRemove = false
+
+    /// Starting point of the release sheet: the workflow list, or one workflow.
+    struct ReleaseStart: Identifiable {
+        let workflow: MobileReleaseWorkflow?
+        var id: String { workflow?.id ?? "picker" }
+    }
+
+    private var sortedWorkflows: [MobileReleaseWorkflow] { MobileReleaseWorkflow.releaseOrder(workflows) }
+    private var dispatchable: [MobileReleaseWorkflow] { sortedWorkflows.filter(\.hasWorkflowDispatch) }
 
     var body: some View {
         List {
-            if let errorMessage {
-                Label(errorMessage, systemImage: "exclamationmark.triangle")
-                    .font(.footnote).foregroundStyle(.orange)
-            }
-            if let statusMessage {
-                Label(statusMessage, systemImage: "checkmark.circle").font(.footnote).foregroundStyle(.green)
-            }
-
-            Section("Workflows") {
-                if workflows.isEmpty, !isLoading {
-                    Text("No workflows scanned yet.").foregroundStyle(.secondary)
-                }
-                ForEach(workflows) { workflow in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(workflow.displayName)
-                            Text(workflow.workflowPath).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                        }
-                        Spacer()
-                        if workflow.isSelected {
-                            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                        }
-                        if workflow.hasWorkflowDispatch {
-                            Button("Release") { dispatchWorkflow = workflow }
-                                .buttonStyle(.borderless)
-                        }
-                    }
-                }
+            Section {
+                LabeledContent("Latest Release", value: repo.latestReleaseTag ?? String(localized: "None"))
+                LabeledContent("Release Workflows", value: "\(workflows.filter(\.isSelected).count)")
+            } header: {
+                Text(repo.repositoryFullName)
             }
 
             Section {
-                SecureField("ghp_… or github_pat_…", text: $tokenValue)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                Button {
-                    Task { await installToken() }
-                } label: {
-                    if isInstallingToken {
-                        HStack { ProgressView(); Text("Installing…") }
-                    } else {
-                        Label("Install RELEASE_TOKEN", systemImage: "key.horizontal")
+                ForEach(sortedWorkflows) { workflow in
+                    NavigationLink {
+                        MobileWorkflowFileView(repoId: repo.id, workflow: workflow,
+                                               onRelease: workflow.hasWorkflowDispatch ? { startRelease(workflow) } : nil,
+                                               onToggleRelease: { await toggleRelease(workflow) })
+                    } label: {
+                        MobileReleaseWorkflowRow(workflow: workflow)
+                    }
+                    .contextMenu { workflowMenu(workflow) }
+                    .swipeActions(edge: .leading) {
+                        if workflow.hasWorkflowDispatch {
+                            Button("Release", systemImage: "paperplane") { startRelease(workflow) }.tint(.accentColor)
+                        }
                     }
                 }
-                .disabled(isInstallingToken || tokenValue.trimmingCharacters(in: .whitespaces).isEmpty)
             } header: {
-                Text("RELEASE_TOKEN")
+                Text("Workflows")
             } footer: {
-                Text("Installed as the repo's GitHub Actions secret so the release workflow can publish.")
+                if workflows.isEmpty, !isLoading {
+                    Text("No workflows found. Choose Rescan Workflows from the menu after adding files to .github/workflows.")
+                } else {
+                    Text("Tap a workflow to view its file. Long-press for more options.")
+                }
+            }
+
+            if let history {
+                Section("Recent Releases") {
+                    if history.isEmpty {
+                        Text("No releases created from Flowcy yet.").foregroundStyle(.secondary)
+                    }
+                    ForEach(history.prefix(5)) { item in
+                        NavigationLink {
+                            MobileReleaseDispatchDetailView(item: item, workflowName: workflowName(item.releaseWorkflowId))
+                        } label: {
+                            MobileReleaseDispatchRow(item: item, workflowName: workflowName(item.releaseWorkflowId))
+                        }
+                    }
+                    if history.count > 5 {
+                        NavigationLink("Show All") {
+                            List(history) { item in
+                                NavigationLink {
+                                    MobileReleaseDispatchDetailView(item: item, workflowName: workflowName(item.releaseWorkflowId))
+                                } label: {
+                                    MobileReleaseDispatchRow(item: item, workflowName: workflowName(item.releaseWorkflowId))
+                                }
+                            }
+                            .navigationTitle("Recent Releases")
+                        }
+                    }
+                }
             }
         }
         .navigationTitle(repo.repositoryFullName)
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(item: $dispatchWorkflow) { workflow in
-            MobileReleaseDispatchView(repo: repo, workflow: workflow) { message in
-                statusMessage = message
-                await reload()
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Release", systemImage: "paperplane") { startRelease(nil) }
+                    .disabled(busyTitle != nil || (!isLoading && dispatchable.isEmpty))
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button("Rescan Workflows", systemImage: "arrow.clockwise") { Task { await rescan() } }
+                    Button("Install RELEASE_TOKEN", systemImage: "key.horizontal") {
+                        MobileHaptics.buttonTap()
+                        showingToken = true
+                    }
+                    Section {
+                        Button("Remove Repository", systemImage: "trash", role: .destructive) {
+                            MobileHaptics.buttonTap()
+                            confirmRemove = true
+                        }
+                    }
+                } label: {
+                    Label("More", systemImage: "ellipsis.circle")
+                }
+                .disabled(busyTitle != nil)
+            }
+        }
+        .sheet(item: $releasing) { start in
+            NavigationStack {
+                if let workflow = start.workflow {
+                    MobileReleaseDispatchView(repo: repo, workflow: workflow, isRoot: true) { message in
+                        await didRelease(message)
+                    }
+                } else {
+                    MobileReleaseWorkflowPicker(repo: repo, workflows: dispatchable) { message in
+                        await didRelease(message)
+                    }
+                }
             }
             .environmentObject(state)
             .mobileSheetPresentation()
         }
+        .sheet(isPresented: $showingToken) {
+            MobileReleaseTokenSheet(repo: repo) { name in
+                toast = String(localized: "Installed \(name).")
+            }
+            .environmentObject(state)
+            .mobileSheetPresentation()
+        }
+        .confirmationDialog("Remove \(repo.repositoryFullName)?", isPresented: $confirmRemove, titleVisibility: .visible) {
+            Button("Remove Repository", role: .destructive) { Task { await remove() } }
+        } message: {
+            Text("Flowcy stops managing releases for this repository. Existing GitHub releases are not affected.")
+        }
+        .alert("Could Not Complete Request", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+            Button("OK") { errorMessage = nil }
+        } message: { Text(errorMessage ?? "") }
+        .mobileAutopilotLoadingDialog(busyTitle != nil, title: busyTitle ?? "Working…")
         .mobileAutopilotLoadingOverlay(isLoading && workflows.isEmpty)
+        .mobileStatusToast($toast)
         .refreshable { await reload() }
         .task { await reload() }
     }
 
+    @ViewBuilder private func workflowMenu(_ workflow: MobileReleaseWorkflow) -> some View {
+        if workflow.hasWorkflowDispatch {
+            Button("Release with This Workflow", systemImage: "paperplane") { startRelease(workflow) }
+        }
+        Button(workflow.isSelected ? "Unmark as Release Workflow" : "Mark as Release Workflow",
+               systemImage: workflow.isSelected ? "tag.slash" : "tag") {
+            Task { await toggleRelease(workflow) }
+        }
+    }
+
+    private func workflowName(_ id: String?) -> String? {
+        workflows.first { $0.id == id }?.displayName
+    }
+
+    private func startRelease(_ workflow: MobileReleaseWorkflow?) {
+        MobileHaptics.buttonTap()
+        guard workflow != nil || !dispatchable.isEmpty else {
+            errorMessage = String(localized: "No workflow in this repository can be started manually. Add a workflow_dispatch trigger, then rescan workflows.")
+            return
+        }
+        releasing = ReleaseStart(workflow: workflow)
+    }
+
+    private func didRelease(_ message: String) async {
+        releasing = nil
+        toast = message
+        MobileHaptics.connected()
+        history = try? await state.releaseDispatchHistory(repoId: repo.id)
+    }
+
     private func reload() async {
         isLoading = true
-        errorMessage = nil
         defer { isLoading = false }
         do {
             workflows = try await state.listReleaseWorkflows(repoId: repo.id)
         } catch {
             errorMessage = error.localizedDescription
         }
+        // Older servers don't expose history to the app; hide the section then.
+        history = try? await state.releaseDispatchHistory(repoId: repo.id)
     }
 
-    private func installToken() async {
-        isInstallingToken = true
-        statusMessage = nil
-        errorMessage = nil
-        defer { isInstallingToken = false }
+    private func rescan() async {
+        MobileHaptics.buttonTap()
+        busyTitle = "Rescanning workflows…"
+        defer { busyTitle = nil }
         do {
-            let result = try await state.installReleaseToken(repoId: repo.id, value: tokenValue.trimmingCharacters(in: .whitespacesAndNewlines))
-            statusMessage = "Installed \(result.secretName)."
-            tokenValue = ""
+            let result = try await state.rescanReleaseWorkflows(repoId: repo.id)
+            workflows = try await state.listReleaseWorkflows(repoId: repo.id)
+            MobileHaptics.connected()
+            toast = String(localized: "Found \(result.workflowsFound) workflows (\(result.releaseWorkflowsFound) release).")
         } catch {
+            MobileHaptics.connectionError()
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func toggleRelease(_ workflow: MobileReleaseWorkflow) async {
+        MobileHaptics.buttonTap()
+        busyTitle = "Updating workflow…"
+        defer { busyTitle = nil }
+        do {
+            try await state.setReleaseWorkflowSelected(repoId: repo.id, workflowId: workflow.id, isSelected: !workflow.isSelected)
+            workflows = try await state.listReleaseWorkflows(repoId: repo.id)
+            MobileHaptics.connected()
+            toast = workflow.isSelected
+                ? String(localized: "\(workflow.displayName) is no longer a release workflow.")
+                : String(localized: "\(workflow.displayName) marked as a release workflow.")
+        } catch {
+            MobileHaptics.connectionError()
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func remove() async {
+        busyTitle = "Removing repository…"
+        defer { busyTitle = nil }
+        do {
+            try await state.deleteReleaseRepo(id: repo.id)
+            MobileHaptics.connected()
+            if let onRemoved { await onRemoved() }
+            dismiss()
+        } catch {
+            MobileHaptics.connectionError()
             errorMessage = error.localizedDescription
         }
     }
 }
 
-/// Fills out a release workflow's `workflow_dispatch` inputs and triggers it.
-struct MobileReleaseDispatchView: View {
-    @EnvironmentObject private var state: MobileAppState
-    @Environment(\.dismiss) private var dismiss
-    let repo: ReleaseRepo
+extension MobileReleaseWorkflow {
+    /// Release workflows first, then manually triggerable ones, then by name.
+    static func releaseOrder(_ workflows: [MobileReleaseWorkflow]) -> [MobileReleaseWorkflow] {
+        workflows.sorted {
+            if $0.isSelected != $1.isSelected { return $0.isSelected }
+            if $0.hasWorkflowDispatch != $1.hasWorkflowDispatch { return $0.hasWorkflowDispatch }
+            return $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending
+        }
+    }
+}
+
+struct MobileReleaseWorkflowRow: View {
     let workflow: MobileReleaseWorkflow
-    let onDispatched: (String) async -> Void
-
-    @State private var branch: String
-    @State private var inputValues: [String: String] = [:]
-    @State private var isDispatching = false
-    @State private var errorMessage: String?
-
-    init(repo: ReleaseRepo, workflow: MobileReleaseWorkflow, onDispatched: @escaping (String) async -> Void) {
-        self.repo = repo
-        self.workflow = workflow
-        self.onDispatched = onDispatched
-        _branch = State(initialValue: "main")
-    }
-
-    /// Branches synced from the desktop for the local project that matches this
-    /// release repo (if any), offered as a picker instead of free text.
-    private var branchOptions: [String] {
-        guard let project = state.projects.first(where: {
-            $0.gitHubRepo?.lowercased() == repo.repositoryFullName.lowercased()
-        }) else { return [] }
-        return state.availableBranchesByProject[project.id] ?? []
-    }
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section("Branch") {
-                    if branchOptions.isEmpty {
-                        TextField("main", text: $branch)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                    } else {
-                        Picker("Branch", selection: $branch) {
-                            ForEach(branchOptions, id: \.self) { Text($0).tag($0) }
-                        }
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: workflow.isSelected ? "tag.fill" : "doc.text")
+                .foregroundStyle(workflow.isSelected ? Color.accentColor : .secondary)
+                .frame(width: 22)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(workflow.displayName).font(.headline).lineLimit(2)
+                Text(workflow.workflowPath).font(.caption.monospaced()).foregroundStyle(.secondary)
+                    .lineLimit(1).truncationMode(.middle)
+                HStack(spacing: 6) {
+                    if workflow.isSelected { MobileReleaseBadge(title: "Release", color: .accentColor) }
+                    if workflow.hasWorkflowDispatch { MobileReleaseBadge(title: "Manual Trigger", color: .green) }
+                    if let count = workflow.inputs?.count, count > 0 {
+                        MobileReleaseBadge(title: "\(count) inputs", color: .secondary)
                     }
                 }
-                if let inputs = workflow.inputs, !inputs.isEmpty {
-                    Section("Inputs") {
-                        ForEach(inputs) { input in
-                            inputRow(input)
-                        }
-                    }
-                }
-                if let errorMessage {
-                    Label(errorMessage, systemImage: "exclamationmark.triangle")
-                        .font(.footnote).foregroundStyle(.orange)
-                }
             }
-            .navigationTitle("Create Release")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Dispatch") { Task { await dispatch() } }
-                        .disabled(isDispatching || branch.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
-            }
-            .onAppear(perform: seedDefaults)
         }
+        .padding(.vertical, 2)
     }
+}
 
-    @ViewBuilder
-    private func inputRow(_ input: MobileReleaseWorkflowInput) -> some View {
-        let binding = Binding(
-            get: { inputValues[input.name] ?? input.defaultString ?? "" },
-            set: { inputValues[input.name] = $0 }
-        )
-        if input.type == "boolean" {
-            Toggle(input.name, isOn: Binding(
-                get: { (inputValues[input.name] ?? (input.defaultBool == true ? "true" : "false")) == "true" },
-                set: { inputValues[input.name] = $0 ? "true" : "false" }
-            ))
-        } else if input.type == "choice", let options = input.options {
-            Picker(input.name, selection: binding) {
-                ForEach(options, id: \.self) { Text($0).tag($0) }
-            }
-        } else {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(input.name).font(.caption).foregroundStyle(.secondary)
-                TextField(input.description ?? input.name, text: binding)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-            }
-        }
-    }
+struct MobileReleaseBadge: View {
+    let title: LocalizedStringKey
+    let color: Color
 
-    private func seedDefaults() {
-        for input in workflow.inputs ?? [] where inputValues[input.name] == nil {
-            if let value = input.defaultString { inputValues[input.name] = value }
-        }
-        // Open the branch picker on a valid selection.
-        if !branchOptions.isEmpty {
-            let project = state.projects.first {
-                $0.gitHubRepo?.lowercased() == repo.repositoryFullName.lowercased()
-            }
-            let current = project.flatMap { state.projectBranches[$0.id] }
-            branch = current.flatMap { branchOptions.contains($0) ? $0 : nil }
-                ?? (branchOptions.contains(branch) ? branch : branchOptions.first ?? branch)
-        }
-    }
-
-    private func dispatch() async {
-        isDispatching = true
-        errorMessage = nil
-        defer { isDispatching = false }
-        do {
-            let result = try await state.dispatchRelease(
-                repoId: repo.id,
-                request: ReleaseDispatchRequest(
-                    workflowId: workflow.id,
-                    branch: branch.trimmingCharacters(in: .whitespacesAndNewlines),
-                    inputs: inputValues
-                )
-            )
-            if result.success == false, let error = result.error {
-                errorMessage = error
-                return
-            }
-            await onDispatched("Release dispatched.")
-            dismiss()
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+    var body: some View {
+        Text(title)
+            .font(.caption2.weight(.medium))
+            .padding(.horizontal, 6).padding(.vertical, 2)
+            .foregroundStyle(color)
+            .background(color.opacity(0.12), in: Capsule())
     }
 }

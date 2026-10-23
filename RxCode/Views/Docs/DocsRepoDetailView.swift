@@ -27,11 +27,11 @@ struct DocsRepoDetailView: View {
 
     var body: some View {
         List {
-            tokenSection
+            if repo.repositoryFullName != nil { tokenSection }
             documentsSection
             dangerSection
         }
-        .navigationTitle(repo.repositoryFullName)
+        .navigationTitle(repo.fullName)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -63,7 +63,7 @@ struct DocsRepoDetailView: View {
             Button("Remove", role: .destructive) { Task { await deleteRepo() } }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This unregisters \(repo.repositoryFullName) from the docs service and removes its indexed documents. The repo's files are not affected.")
+            Text("This unregisters \(repo.fullName) from the docs service and removes its indexed documents. The repo's files are not affected.")
         }
         .alert("Delete this document?", isPresented: deleteDocumentBinding) {
             Button("Delete", role: .destructive) {

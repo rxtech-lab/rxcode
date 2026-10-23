@@ -51,7 +51,12 @@ public struct FlowLayout: Layout {
         var rows: [Row] = []
         var current = Row()
         for index in subviews.indices {
-            let size = subviews[index].sizeThatFits(.unspecified)
+            let idealSize = subviews[index].sizeThatFits(.unspecified)
+            // Remeasure oversized chips at the row width so text truncates or
+            // wraps inside the card, and use that same size when placing them.
+            let size = idealSize.width > maxWidth
+                ? subviews[index].sizeThatFits(ProposedViewSize(width: maxWidth, height: nil))
+                : idealSize
             // Skip empty subviews so conditional chips don't add spacing.
             guard size.width > 0, size.height > 0 else { continue }
 

@@ -194,6 +194,7 @@ struct MobileRepoSetupEditor: View {
                     }
                 }
             }
+            .mobileAutopilotLoadingDialog(isSaving, title: "Saving template…")
             .navigationTitle(existing == nil ? "New Template" : "Edit Template")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

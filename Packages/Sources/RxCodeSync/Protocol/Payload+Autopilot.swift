@@ -70,13 +70,18 @@ public enum AutopilotOp: String, Codable, Sendable {
 
     // CI auto-update
     case ciList
+    case ciOverview
     case ciAdd
     case ciUpdateFrequency
     case ciDelete
     case ciHistory
     case ciTrigger
+    case ciTriggerDependencies
     case ciListPRs
     case ciClosePR
+    case ciAutomationGet
+    case ciAutomationSave
+    case ciDirectories
 
     // Docs
     case docsList
@@ -96,6 +101,10 @@ public enum AutopilotOp: String, Codable, Sendable {
     case releaseListWorkflows
     case releaseDispatch
     case releaseInstallToken
+    case releaseBranches
+    case releaseDispatchHistory
+    case releaseRescanWorkflows
+    case releaseSetWorkflowSelected
 
     // Project context-menu actions — desktop-mediated so the Mac performs the
     // exact work its own project/briefing context menu does. `*Setup` ops set
@@ -341,6 +350,24 @@ public struct AutopilotCIHistoryBody: Codable, Sendable {
     }
 }
 
+public struct AutopilotCIAutomationSaveBody: Codable, Sendable {
+    public let id: String
+    public let settings: RepositoryAutomationSettings
+    public init(id: String, settings: RepositoryAutomationSettings) {
+        self.id = id
+        self.settings = settings
+    }
+}
+
+public struct AutopilotCIDirectoriesBody: Codable, Sendable {
+    public let id: String
+    public let sha: String?
+    public init(id: String, sha: String? = nil) {
+        self.id = id
+        self.sha = sha
+    }
+}
+
 public struct AutopilotCIClosePRBody: Codable, Sendable {
     public let id: String
     public let prNumber: Int
@@ -452,6 +479,8 @@ public struct MobileReleaseWorkflow: Codable, Sendable, Identifiable, Hashable {
     public let isReleaseWorkflow: Bool?
     public let hasWorkflowDispatch: Bool
     public let inputs: [MobileReleaseWorkflowInput]?
+    /// Raw workflow YAML. Nil from older desktops that don't relay it.
+    public let content: String?
 
     public var displayName: String {
         if let workflowName, !workflowName.isEmpty { return workflowName }
@@ -465,7 +494,8 @@ public struct MobileReleaseWorkflow: Codable, Sendable, Identifiable, Hashable {
         isSelected: Bool,
         isReleaseWorkflow: Bool? = nil,
         hasWorkflowDispatch: Bool,
-        inputs: [MobileReleaseWorkflowInput]? = nil
+        inputs: [MobileReleaseWorkflowInput]? = nil,
+        content: String? = nil
     ) {
         self.id = id
         self.workflowPath = workflowPath
@@ -474,11 +504,28 @@ public struct MobileReleaseWorkflow: Codable, Sendable, Identifiable, Hashable {
         self.isReleaseWorkflow = isReleaseWorkflow
         self.hasWorkflowDispatch = hasWorkflowDispatch
         self.inputs = inputs
+        self.content = content
     }
 }
 
 /// Array wrappers — keep result bodies as named objects for forward-compatible
 /// decode and clearer logging than bare top-level JSON arrays.
+public struct AutopilotReleaseWorkflowSelectionBody: Codable, Sendable {
+    public let repoId: String
+    public let workflowId: String
+    public let isSelected: Bool
+    public init(repoId: String, workflowId: String, isSelected: Bool) {
+        self.repoId = repoId
+        self.workflowId = workflowId
+        self.isSelected = isSelected
+    }
+}
+
+public struct ReleaseBranchList: Codable, Sendable {
+    public let items: [ReleaseBranch]
+    public init(items: [ReleaseBranch]) { self.items = items }
+}
+
 public struct MobileReleaseWorkflowList: Codable, Sendable {
     public let items: [MobileReleaseWorkflow]
     public init(items: [MobileReleaseWorkflow]) { self.items = items }

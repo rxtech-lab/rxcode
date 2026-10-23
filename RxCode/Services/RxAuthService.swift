@@ -107,9 +107,6 @@ final class RxAuthService {
     /// to avoid a token rotation + userinfo round trip on every autopilot call.
     func accessToken(forceRefresh: Bool = false) async -> String? {
         let token = await resolveAccessToken(forceRefresh: forceRefresh)
-        #if DEBUG
-        if let token { Self.debugLogToken(token) }
-        #endif
         if let token, await resetSessionIfScopesOutdated(token) {
             return nil
         }
@@ -151,34 +148,6 @@ final class RxAuthService {
         base64 += String(repeating: "=", count: (4 - base64.count % 4) % 4)
         return Data(base64Encoded: base64)
     }
-
-    #if DEBUG
-    /// Last token printed by `debugLogToken`, so each token is logged once.
-    private static var lastLoggedToken: String?
-
-    /// Debug builds only: prints the access token and its decoded JWT header
-    /// and claims to the Xcode console (once per token) to diagnose scopes.
-    private static func debugLogToken(_ token: String) {
-        guard token != lastLoggedToken else { return }
-        lastLoggedToken = token
-        func decode(_ segment: Substring) -> String {
-            guard let data = base64URLDecode(segment) else { return "<not base64>" }
-            if let object = try? JSONSerialization.jsonObject(with: data),
-               let pretty = try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys]) {
-                return String(decoding: pretty, as: UTF8.self)
-            }
-            return String(decoding: data, as: UTF8.self)
-        }
-        let parts = token.split(separator: ".", omittingEmptySubsequences: false)
-        print("[RxAuth][DEBUG] access token: \(token)")
-        if parts.count == 3 {
-            print("[RxAuth][DEBUG] header: \(decode(parts[0]))")
-            print("[RxAuth][DEBUG] claims: \(decode(parts[1]))")
-        } else {
-            print("[RxAuth][DEBUG] token is not a JWT (\(parts.count) segments)")
-        }
-    }
-    #endif
 
     private func resolveAccessToken(forceRefresh: Bool) async -> String? {
         guard !AppSupport.isTestProcess else { return nil }

@@ -3,20 +3,22 @@ import RxCodeCore
 import RxCodeSync
 
 extension MobileAppState {
-    var taskProjects: [Project] { usesCloudTasks ? cloudTaskProjects : projects }
+    var taskProjects: [Project] {
+        if usesCloudTasks { return cloudTaskProjects }
+        return hasReceivedInitialSnapshot ? projects : cachedDesktopTaskProjects
+    }
     var taskSnapshots: [UUID: MobileTaskBoardSnapshot] { usesCloudTasks ? cloudTaskBoards : taskBoardsByProject }
 
     func clearCloudTasks() {
         cloudTaskProjects = []
         cloudTaskBoards = [:]
         deferredCloudTaskBoardSnapshots = [:]
+        pruneTaskCache(keepCloud: false)
     }
 
     func refreshCloudTaskProjects() async throws {
         guard let cloud = taskCloud, cloud.isSignedIn else { throw AutopilotRemoteError.server("Sign in to view your cloud projects.") }
-        await cloud.refresh()
-        guard cloud.isSignedIn else { clearCloudTasks(); return }
-        if let error = cloud.error { throw AutopilotRemoteError.server(error) }
+        try await cloud.refreshProjects()
         cloudTaskProjects = cloud.projects.map { remote in
             let id = cloudTaskProjects.first { $0.cloudId == remote.id }?.id ?? UUID(uuidString: remote.id) ?? UUID()
             return Project(id: id, name: remote.title, path: "", gitHubRepo: remote.repositoryFullName, cloudId: remote.id)
@@ -69,12 +71,10 @@ extension MobileAppState {
             guard let id = sync.storyRemoteId(request.storyID) else { throw cloudTaskInvalidRequest() }
             try await cloud.deleteStory(id, projectID: remoteID)
         case .upsertView:
-            // Saved filters are local presentation preferences, as on the Mac.
+            // Publish view edits through the account, including the default marker.
             guard let view = request.view else { throw cloudTaskInvalidRequest() }
             board.upsertSavedView(view)
-            if let viewsKey {
-                UserDefaults.standard.set(try JSONEncoder().encode(board.savedViews), forKey: viewsKey)
-            }
+
         case .quickAddTask, .followUp, .fetchRuns:
             throw AutopilotRemoteError.server("Connect to a Mac to use its agent and task runs.")
         }
@@ -82,6 +82,27 @@ extension MobileAppState {
         board.cloudSync = sync
         if let remote = cloud.boards[remoteID] {
             board = board.replacingCloudRows(remote, projectID: request.projectID)
+        }
+        if request.operation == .fetch || request.operation == .upsertView {
+            for attempt in 0..<3 {
+                guard let remote = try await cloud.savedViews(remoteID) else {
+                    if request.operation == .upsertView {
+                        throw AutopilotRemoteError.server("Saved view sync requires an updated Flowcy server. Try again after the server is updated.")
+                    }
+                    break
+                }
+                let local = board.savedViews.map { CloudSavedView(view: $0, sync: board.cloudSync ?? sync) }
+                let merged = CloudSavedViews.merging(local: local, base: board.cloudSync?.savedViewsBase, remote: remote.views)
+                do {
+                    if merged != remote.views {
+                        _ = try await cloud.saveViews(CloudSavedViews(views: merged, revision: remote.revision), projectID: remoteID)
+                    }
+                    board.savedViews = merged.map { $0.localView(sync: board.cloudSync ?? sync) }
+                    board.cloudSync?.savedViewsBase = merged
+                    if let viewsKey { UserDefaults.standard.removeObject(forKey: viewsKey) }
+                    break
+                } catch where ProjectCloudService.isConflict(error) && attempt < 2 { continue }
+            }
         }
         let snapshot = MobileTaskBoardSnapshot(projectID: request.projectID, board: board)
         storeTaskBoardSnapshot(snapshot, cloud: true)

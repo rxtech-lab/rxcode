@@ -1,6 +1,5 @@
 import RxCodeCore
 import RxCodeChatKit
-import SafariServices
 import SwiftUI
 
 struct FlowcySessionDetailView: View {
@@ -179,50 +178,37 @@ struct FlowcySessionDetailView: View {
 struct FlowcyBillingView: View {
     @State private var subscription: JSONValue?
     @State private var loading = false
-    @State private var opening = false
     @State private var error: String?
-    @State private var portal: FlowcyPortal?
+
     var body: some View {
         Form {
             if let subscription {
                 Section("Subscription") {
                     LabeledContent("Plan", value: subscription["tier"]?.stringValue?.capitalized ?? "Unknown")
-                    LabeledContent("Status", value: subscription["status"]?.stringValue?.capitalized ?? "")
+                    LabeledContent("Status", value: subscription["status"]?.stringValue?.capitalized ?? "Unknown")
                 }
-                Section {
-                    Button("Manage Billing") { Task { await openPortal() } }.disabled(opening)
-                }
-            } else if !loading {
-                ContentUnavailableView("No Subscription", systemImage: "creditcard")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                Button("Retry") { Task { await load() } }
+            }
+            Section("Manage Your Subscription") {
+                Text("To view or change your subscription and billing details, sign in to your account on the Flowcy website using a web browser.")
+                    .foregroundStyle(.secondary)
             }
         }
         .navigationTitle("Billing")
-        .overlay { if loading || opening { ProgressView(opening ? "Opening billing…" : "Loading…").padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16)) } }
-        .alert("Billing", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) { Button("OK") { error = nil } } message: { Text(error ?? "") }
-        .sheet(item: $portal, onDismiss: { Task { await load() } }) { FlowcySafariView(url: $0.url).ignoresSafeArea() }
+        .navigationBarTitleDisplayMode(.inline)
+        .overlay { if loading { ProgressView("Loading…").padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16)) } }
+        .alert("Billing", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
+            Button("Retry") { Task { await load() } }
+            Button("Cancel", role: .cancel) { error = nil }
+        } message: { Text(error ?? "") }
         .task { await load() }
     }
-    private func load() async {
-        loading = true; defer { loading = false }
-        do { let result = try await FlowcyAPI().read("subscriptions"); subscription = result.isNull ? nil : result }
-        catch { self.error = error.localizedDescription }
-    }
-    private func openPortal() async {
-        opening = true; MobileHaptics.buttonTap(); defer { opening = false }
-        do {
-            let result = try await FlowcyAPI().read("subscriptions/portal", method: "POST", body: .object([:]))
-            guard let target = result["url"]?.stringValue, let url = URL(string: target), url.scheme == "https" else { throw FlowcyError.protocolError }
-            portal = FlowcyPortal(url: url)
-            MobileHaptics.connected()
-        } catch { self.error = error.localizedDescription; MobileHaptics.connectionError() }
-    }
-}
 
-private struct FlowcyPortal: Identifiable { let id = UUID(); let url: URL }
-private struct FlowcySafariView: UIViewControllerRepresentable {
-    let url: URL
-    func makeUIViewController(context: Context) -> SFSafariViewController { SFSafariViewController(url: url) }
-    func updateUIViewController(_ controller: SFSafariViewController, context: Context) {}
+    private func load() async {
+        loading = true
+        defer { loading = false }
+        do {
+            let result = try await FlowcyAPI().read("subscriptions")
+            subscription = result.isNull ? nil : result
+        } catch { self.error = error.localizedDescription }
+    }
 }

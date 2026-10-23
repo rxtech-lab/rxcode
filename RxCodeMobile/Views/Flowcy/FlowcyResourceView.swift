@@ -37,6 +37,8 @@ struct FlowcyResourceView: View {
                         NavigationLink {
                             if path.hasPrefix("sessions"), let id = value["id"]?.stringValue {
                                 FlowcySessionDetailView(id: id)
+                            } else if path == "notifications" {
+                                FlowcyNotificationDetailView(value: value)
                             } else if path == "issues" || path == "pull-requests" {
                                 FlowcyGitHubDetailView(value: value, isPullRequest: path == "pull-requests")
                             } else {
@@ -48,7 +50,9 @@ struct FlowcyResourceView: View {
                                 FlowcyGitHubRow(value: value, isPullRequest: path == "pull-requests")
                             } else {
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text(Self.label(value))
+                                    Text(path == "notifications" ? FlowcyNotificationDetailView.title(value) : Self.label(value))
+                                        .font(.body.weight(.medium))
+                                        .lineLimit(3)
                                     if let subtitle = value["status"]?.stringValue ?? value["state"]?.stringValue {
                                         Text(subtitle).font(.caption).foregroundStyle(.secondary)
                                     }

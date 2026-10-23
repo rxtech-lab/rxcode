@@ -5,8 +5,8 @@ import RxCodeSync
 import SwiftUI
 
 /// Automation settings: fetches the automation JSON Schema + current values
-/// from the paired Mac, renders them as a native form via `JSONSchemaForm`, and
-/// saves edited values back. Mirrors the desktop `AutomationSettingsSheet`,
+/// from the active service, renders them as a native form via `JSONSchemaForm`, and
+/// automatically saves edits. Mirrors the desktop `AutomationSettingsSheet`,
 /// including the raw-JSON fallback when the schema can't be rendered.
 struct MobileAutomationView: View {
     @EnvironmentObject private var state: MobileAppState
@@ -24,6 +24,17 @@ struct MobileAutomationView: View {
     @State private var isSaving = false
     @State private var errorMessage: String?
     @State private var savedMessage: String?
+    @State private var debounceTask: Task<Void, Never>?
+    @State private var feedbackTask: Task<Void, Never>?
+    @State private var savedDraft = ""
+    @State private var savePending = false
+
+    private var draft: String {
+        if useFallback { return fallbackJSON }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return (try? encoder.encode(formData)).map { String(decoding: $0, as: UTF8.self) } ?? ""
+    }
 
     var body: some View {
         Form {
@@ -52,23 +63,29 @@ struct MobileAutomationView: View {
                     controller: controller
                 )
             }
-
-            if let errorMessage {
-                Label(errorMessage, systemImage: "exclamationmark.triangle")
-                    .font(.footnote).foregroundStyle(.orange)
-            }
         }
         .navigationTitle("Automation")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Save") { Task { await save() } }
-                    .disabled(isSaving || isLoading || loadError != nil)
-            }
+        .onChange(of: draft) { _, _ in scheduleSave() }
+        .onDisappear {
+            debounceTask?.cancel()
+            feedbackTask?.cancel()
+            // Finish pending edits even when the user navigates away during debounce.
+            Task { await save() }
         }
-        .mobileAutopilotLoadingDialog(isSaving, title: "Saving automation…")
-        .overlay(alignment: .top) {
-            if let savedMessage {
+        .alert("Could Not Save Automation", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("Retry") { Task { await save() } }
+            Button("Cancel", role: .cancel) { errorMessage = nil }
+        } message: { Text(errorMessage ?? "") }
+        .overlay(alignment: .topTrailing) {
+            if isSaving {
+                ProgressView("Saving…")
+                    .padding().background(.regularMaterial, in: Capsule()).padding()
+                    .allowsHitTesting(false)
+            } else if let savedMessage {
                 Label(savedMessage, systemImage: "checkmark.circle.fill")
                     .padding().background(.regularMaterial, in: Capsule()).padding()
             }
@@ -96,16 +113,39 @@ struct MobileAutomationView: View {
             } catch {
                 useFallback = true
             }
+            savedDraft = draft
         } catch {
             loadError = error.localizedDescription
         }
     }
 
+    private func scheduleSave() {
+        guard !isLoading, loadError == nil, draft != savedDraft else { return }
+        debounceTask?.cancel()
+        debounceTask = Task {
+            do { try await Task.sleep(for: .milliseconds(600)) }
+            catch { return }
+            guard !Task.isCancelled else { return }
+            // Keep an in-flight write separate from the cancellable debounce.
+            Task { await save() }
+        }
+    }
+
     private func save() async {
+        guard !isLoading, loadError == nil else { return }
+        guard !isSaving else { savePending = true; return }
+        guard draft != savedDraft else { return }
+        var savingDraft = draft
         isSaving = true
         errorMessage = nil
         savedMessage = nil
-        defer { isSaving = false }
+        defer {
+            isSaving = false
+            if savePending {
+                savePending = false
+                Task { await save() }
+            }
+        }
         do {
             let values: JSONValue
             if useFallback {
@@ -121,18 +161,25 @@ struct MobileAutomationView: View {
                     errorMessage = "Please fix the highlighted fields."
                     return
                 }
-                let data = try JSONEncoder().encode(formData)
-                values = try JSONValue(jsonData: data)
+                savingDraft = draft
+                values = try JSONValue(jsonData: Data(savingDraft.utf8))
             }
             try await state.saveAutomationValues(values)
-            savedMessage = "Saved."
+            savedDraft = savingDraft
+            // A user can continue editing while the request is in flight,
+            // including reverting to the previously saved value.
+            if draft != savedDraft { savePending = true }
+            savedMessage = "Saved automatically"
             MobileHaptics.connected()
-            Task {
-                try? await Task.sleep(for: .seconds(2))
+            feedbackTask?.cancel()
+            feedbackTask = Task {
+                do { try await Task.sleep(for: .seconds(2)) }
+                catch { return }
                 savedMessage = nil
             }
         } catch {
             errorMessage = error.localizedDescription
+            MobileHaptics.connectionError()
         }
     }
 }

@@ -1,3 +1,4 @@
+import RxCodeChatKit
 import RxCodeCore
 import SwiftUI
 import UserNotifications
@@ -124,5 +125,84 @@ struct FlowcyPushDestinationView: View {
             } else { route = .board(project.id) }
         } catch is CancellationError { }
         catch { self.error = error.localizedDescription }
+    }
+}
+
+/// Notification content uses a readable column; delivery metadata stays in its own section.
+struct FlowcyNotificationDetailView: View {
+    let value: JSONValue
+
+    static func title(_ value: JSONValue) -> String {
+        for key in ["subject", "title"] {
+            if let text = value[key]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
+                return text
+            }
+        }
+        return "Notification"
+    }
+
+    private var createdAt: Date? {
+        guard let raw = value["createdAt"]?.stringValue else { return nil }
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return fractional.date(from: raw) ?? ISO8601DateFormatter().date(from: raw)
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(Self.title(value))
+                        .font(.title2.bold())
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityAddTraits(.isHeader)
+                    if let createdAt {
+                        Text(createdAt.formatted(date: .abbreviated, time: .shortened))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                VStack(spacing: 12) {
+                    if let status = value["status"]?.stringValue {
+                        LabeledContent("Status") {
+                            Label(status.capitalized, systemImage: status == "sent" ? "checkmark.circle" : status == "failed" ? "exclamationmark.circle" : "clock")
+                                .foregroundStyle(status == "failed" ? Color.red : Color.secondary)
+                        }
+                    }
+                    if let channel = value["channel"]?.stringValue {
+                        Divider()
+                        LabeledContent("Channel", value: channel == "rxcode" ? "Push Notification" : channel.capitalized)
+                    }
+                    if value["channel"]?.stringValue == "email", let recipient = value["recipient"]?.stringValue {
+                        Divider()
+                        LabeledContent("To", value: recipient)
+                    }
+                }
+                .font(.subheadline)
+                .padding(16)
+                .background(.background, in: RoundedRectangle(cornerRadius: 16))
+
+                if let error = value["error"]?.stringValue, !error.isEmpty {
+                    Label(error, systemImage: "exclamationmark.triangle")
+                        .font(.callout)
+                        .foregroundStyle(.red)
+                }
+                if let body = value["body"]?.stringValue ?? value["content"]?.stringValue, !body.isEmpty {
+                    MarkdownContentView(text: body)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(20)
+                        .background(.background, in: RoundedRectangle(cornerRadius: 20))
+                }
+            }
+            .textSelection(.enabled)
+            .padding(20)
+            .frame(maxWidth: 720, alignment: .leading)
+            .frame(maxWidth: .infinity)
+        }
+        .background(Color(.systemGroupedBackground))
+        .navigationTitle("Notification")
+        .navigationBarTitleDisplayMode(.inline)
+        .accessibilityIdentifier("flowcy-notification-detail")
     }
 }

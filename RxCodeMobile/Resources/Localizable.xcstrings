@@ -631,6 +631,9 @@
         }
       }
     },
+    "Account & General" : {
+
+    },
     "Action" : {
       "localizations" : {
         "en" : {
@@ -1965,6 +1968,9 @@
         }
       }
     },
+    "Channel" : {
+
+    },
     "Checking account…" : {
       "localizations" : {
         "ko" : {
@@ -2326,6 +2332,9 @@
           }
         }
       }
+    },
+    "Collaboration" : {
+
     },
     "Column" : {
 
@@ -2828,6 +2837,9 @@
 
     },
     "Could Not Save" : {
+
+    },
+    "Could Not Save Automation" : {
 
     },
     "Could Not Save Webhook" : {
@@ -3767,6 +3779,9 @@
       }
     },
     "Deleting webhook…" : {
+
+    },
+    "Delivery" : {
 
     },
     "Deny" : {
@@ -5106,6 +5121,9 @@
     "Feature Not Configured" : {
 
     },
+    "Features" : {
+
+    },
     "File" : {
 
     },
@@ -5988,6 +6006,9 @@
         }
       }
     },
+    "Integrations" : {
+
+    },
     "Into" : {
 
     },
@@ -6606,9 +6627,6 @@
         }
       }
     },
-    "Manage Billing" : {
-
-    },
     "Manage end-to-end encrypted secrets, CI auto-update scans, indexed docs, and release workflows." : {
       "localizations" : {
         "ko" : {
@@ -6634,6 +6652,9 @@
           }
         }
       }
+    },
+    "Manage Your Subscription" : {
+
     },
     "Manual" : {
 
@@ -7514,6 +7535,9 @@
     "No items for this project." : {
 
     },
+    "No jobs are available yet. Pull to refresh." : {
+
+    },
     "No matches" : {
       "localizations" : {
         "zh-Hans" : {
@@ -7906,9 +7930,6 @@
     "No subfolders" : {
 
     },
-    "No Subscription" : {
-
-    },
     "No summary available yet" : {
       "localizations" : {
         "en" : {
@@ -8252,6 +8273,9 @@
         }
       }
     },
+    "Notification" : {
+
+    },
     "Notification Settings" : {
 
     },
@@ -8502,9 +8526,6 @@
     "Opened" : {
 
     },
-    "Opening billing…" : {
-
-    },
     "Opening notification…" : {
 
     },
@@ -8512,6 +8533,9 @@
 
     },
     "Opens the project board. Long press and drag to reorder." : {
+
+    },
+    "Opens the project. Long press and drag to reorder." : {
 
     },
     "Opens todos and thread summary" : {
@@ -8962,6 +8986,9 @@
         }
       }
     },
+    "Project" : {
+
+    },
     "Project / Workspace" : {
       "localizations" : {
         "en" : {
@@ -9200,6 +9227,9 @@
 
     },
     "Recent Releases" : {
+
+    },
+    "Recent Runs" : {
 
     },
     "Reconnect" : {
@@ -9553,6 +9583,9 @@
         }
       }
     },
+    "Reorder Projects" : {
+
+    },
     "Repo Setup" : {
       "localizations" : {
         "ko" : {
@@ -9600,6 +9633,12 @@
           }
         }
       }
+    },
+    "Repository is no longer configured for CI updates." : {
+
+    },
+    "Repository Setup" : {
+
     },
     "Request timed out. Check your Mac and try again." : {
       "localizations" : {
@@ -9786,6 +9825,9 @@
           }
         }
       }
+    },
+    "Run #%lld" : {
+
     },
     "Run actions" : {
       "localizations" : {
@@ -10003,9 +10045,6 @@
     "Saving automation settings…" : {
 
     },
-    "Saving automation…" : {
-
-    },
     "Saving file…" : {
       "localizations" : {
         "ko" : {
@@ -10039,6 +10078,9 @@
 
     },
     "Saving webhook…" : {
+
+    },
+    "Saving…" : {
 
     },
     "Scan" : {
@@ -10914,6 +10956,9 @@
       }
     },
     "Sign out of Flowcy?" : {
+
+    },
+    "Signed In" : {
 
     },
     "Signed in to Flowcy" : {
@@ -12371,6 +12416,12 @@
         }
       }
     },
+    "To" : {
+
+    },
+    "To view or change your subscription and billing details, sign in to your account on the Flowcy website using a web browser." : {
+
+    },
     "Todos" : {
       "localizations" : {
         "ko" : {
@@ -12652,6 +12703,9 @@
           }
         }
       }
+    },
+    "Unable to Load Log" : {
+
     },
     "Unable to Load Projects" : {
 
@@ -13109,6 +13163,9 @@
           }
         }
       }
+    },
+    "View Log" : {
+
     },
     "View pull request" : {
       "extractionState" : "stale",

@@ -57,9 +57,6 @@ struct MobileAutomationView: View {
                 Label(errorMessage, systemImage: "exclamationmark.triangle")
                     .font(.footnote).foregroundStyle(.orange)
             }
-            if let savedMessage {
-                Label(savedMessage, systemImage: "checkmark.circle").font(.footnote).foregroundStyle(.green)
-            }
         }
         .navigationTitle("Automation")
         .navigationBarTitleDisplayMode(.inline)
@@ -67,6 +64,13 @@ struct MobileAutomationView: View {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") { Task { await save() } }
                     .disabled(isSaving || isLoading || loadError != nil)
+            }
+        }
+        .mobileAutopilotLoadingDialog(isSaving, title: "Saving automation…")
+        .overlay(alignment: .top) {
+            if let savedMessage {
+                Label(savedMessage, systemImage: "checkmark.circle.fill")
+                    .padding().background(.regularMaterial, in: Capsule()).padding()
             }
         }
         .task { await load() }
@@ -122,6 +126,11 @@ struct MobileAutomationView: View {
             }
             try await state.saveAutomationValues(values)
             savedMessage = "Saved."
+            MobileHaptics.connected()
+            Task {
+                try? await Task.sleep(for: .seconds(2))
+                savedMessage = nil
+            }
         } catch {
             errorMessage = error.localizedDescription
         }

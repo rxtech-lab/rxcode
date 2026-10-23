@@ -350,27 +350,31 @@ public struct CloudItemLink<Fields: Codable & Sendable & Hashable>: Codable, Sen
 public struct CloudBoardSyncState: Codable, Sendable, Hashable {
     public var stories: [UUID: CloudItemLink<CloudStoryFields>]
     public var tasks: [UUID: CloudItemLink<CloudTaskFields>]
+    public var savedViewsBase: [CloudSavedView]?
     public var lastSyncedAt: Date?
     public var lastError: String?
 
     public init(
         stories: [UUID: CloudItemLink<CloudStoryFields>] = [:],
         tasks: [UUID: CloudItemLink<CloudTaskFields>] = [:],
+        savedViewsBase: [CloudSavedView]? = nil,
         lastSyncedAt: Date? = nil,
         lastError: String? = nil
     ) {
         self.stories = stories
         self.tasks = tasks
+        self.savedViewsBase = savedViewsBase
         self.lastSyncedAt = lastSyncedAt
         self.lastError = lastError
     }
 
-    private enum CodingKeys: String, CodingKey { case stories, tasks, lastSyncedAt, lastError }
+    private enum CodingKeys: String, CodingKey { case stories, tasks, savedViewsBase, lastSyncedAt, lastError }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         stories = (try? c.decodeIfPresent([UUID: CloudItemLink<CloudStoryFields>].self, forKey: .stories)) ?? [:]
         tasks = (try? c.decodeIfPresent([UUID: CloudItemLink<CloudTaskFields>].self, forKey: .tasks)) ?? [:]
+        savedViewsBase = try c.decodeIfPresent([CloudSavedView].self, forKey: .savedViewsBase)
         lastSyncedAt = try? c.decodeIfPresent(Date.self, forKey: .lastSyncedAt)
         lastError = try? c.decodeIfPresent(String.self, forKey: .lastError)
     }

@@ -62,6 +62,14 @@ struct MobileTaskRow: View {
                     .lineLimit(2)
             }
 
+            if let link = state.activeTaskRunLink(for: task) {
+                Label("Running on \(link.desktopName)", systemImage: "desktopcomputer")
+                    .font(.caption)
+                    .foregroundStyle(Color.accentColor)
+                    .lineLimit(1)
+                    .accessibilityIdentifier("task-run-device-\(task.id.uuidString)")
+            }
+
             MobileTaskPills(
                 board: board,
                 column: showsColumn ? board.column(for: task.status) : nil,

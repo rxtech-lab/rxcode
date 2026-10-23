@@ -1,0 +1,6 @@
+simulation: RxCode account saved views
+routing: path
+mocks:
+  - name: RxCode saved views
+    routeKey: flowcy
+    path: ../mocks/board-views/config.yaml

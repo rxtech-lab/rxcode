@@ -65,6 +65,7 @@ extension MobileAppState {
             defaults.set(pairedDesktopName, forKey: Self.legacyDesktopNameKey)
             defaults.set(identity.publicKeyHex, forKey: Self.mobilePubkeyKey)
         }
+        pruneTaskCache()
     }
 
     func setActiveDesktop(pubkeyHex: String?) {
@@ -84,6 +85,7 @@ extension MobileAppState {
         // misinterpreted as "stale" relative to the previous peer.
         if previousKey != newKey {
             lastAppliedSnapshotSeq = nil
+            restoreDesktopTaskCache()
         }
     }
 

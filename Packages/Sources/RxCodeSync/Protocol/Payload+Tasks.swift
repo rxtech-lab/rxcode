@@ -100,6 +100,12 @@ public struct TaskBoardRequestPayload: Codable, Sendable {
     /// `nil` appends to the end of the column.
     public let sortIndex: Double?
     public let text: String?
+    /// Set when a phone runs a cloud board's task on a paired Mac: the Mac
+    /// resolves its own project and task copies from these Autopilot IDs,
+    /// since its local IDs differ from the phone's. `projectID` and `taskID`
+    /// are then the phone's IDs and are ignored.
+    public let cloudProjectID: String?
+    public let cloudTaskID: String?
 
     public init(
         clientRequestID: UUID = UUID(),
@@ -112,7 +118,9 @@ public struct TaskBoardRequestPayload: Codable, Sendable {
         storyID: UUID? = nil,
         status: TaskStatus? = nil,
         sortIndex: Double? = nil,
-        text: String? = nil
+        text: String? = nil,
+        cloudProjectID: String? = nil,
+        cloudTaskID: String? = nil
     ) {
         self.clientRequestID = clientRequestID
         self.projectID = projectID
@@ -125,6 +133,8 @@ public struct TaskBoardRequestPayload: Codable, Sendable {
         self.status = status
         self.sortIndex = sortIndex
         self.text = text
+        self.cloudProjectID = cloudProjectID
+        self.cloudTaskID = cloudTaskID
     }
 }
 

@@ -27,7 +27,7 @@ struct DocsManageSheet: View {
     private var visibleRepos: [DocsRepo] {
         let q = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !q.isEmpty else { return repos }
-        return repos.filter { $0.repositoryFullName.lowercased().contains(q) }
+        return repos.filter { $0.fullName.lowercased().contains(q) }
     }
 
     var body: some View {
@@ -56,7 +56,7 @@ struct DocsManageSheet: View {
         .task { await reload() }
         .sheet(isPresented: $showAddRepo) {
             AddDocsRepoSheet(
-                existingRepoFullNames: Set(repos.map { $0.repositoryFullName.lowercased() }),
+                existingRepoFullNames: Set(repos.compactMap { $0.repositoryFullName?.lowercased() }),
                 onAdded: { _ in Task { await reload() } }
             )
             .environment(appState)
@@ -155,7 +155,7 @@ private struct DocsRepoRow: View {
             Image(systemName: "books.vertical")
                 .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 2) {
-                Text(repo.repositoryFullName).font(.body)
+                Text(repo.fullName).font(.body)
                 Text("\(repo.documentsCount ?? 0) document(s)")
                     .font(.caption).foregroundStyle(.secondary)
             }

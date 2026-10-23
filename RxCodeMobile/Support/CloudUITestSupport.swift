@@ -15,10 +15,25 @@ final class CloudUITestProtocol: URLProtocol, @unchecked Sendable {
         defer { Self.lock.unlock() }
         let path = request.url!.path
         var object: Any
-        if path == "/api/v1/devices" {
+        if path == "/api/v1/agent/draft" {
+            object = ["title": "Support offline work", "details": "## Acceptance criteria\nBoard data remains available offline."]
+        } else if path.hasSuffix("/board-views"), request.httpMethod == "GET" {
+            object = ["views": [], "revision": 0]
+        } else if path == "/api/v1/devices" {
             object = [["id": "cf8c1089-8a5d-47f9-bcd2-bcfe4c0a1691", "name": "Offline Work Mac"]]
         } else if path == "/api/v1/docs/repositories" {
-            object = ["items": [["id": "project", "name": "Cloud Project"]]]
+            if ProcessInfo.processInfo.arguments.contains("-uitest-project-cards") {
+                object = ["items": [
+                    ["id": "A0000000-0000-0000-0000-000000000001", "name": "Alpha Project"],
+                    ["id": "B0000000-0000-0000-0000-000000000002", "name": "Beta Project"]
+                ]]
+            } else {
+                var project = ["id": "project", "name": "Cloud Project"]
+                if ProcessInfo.processInfo.arguments.contains("-uitest-feature-navigation") {
+                    project["repositoryFullName"] = "rxtech-lab/rxcode"
+                }
+                object = ["items": [project]]
+            }
         } else if request.httpMethod == "POST" || request.httpMethod == "PATCH" {
             var data = request.httpBody ?? Data()
             if let stream = request.httpBodyStream {

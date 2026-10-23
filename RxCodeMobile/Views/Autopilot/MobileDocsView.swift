@@ -27,7 +27,7 @@ struct MobileDocsView: View {
                     MobileDocsRepoDetailView(repo: repo)
                 } label: {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(repo.repositoryFullName)
+                        Text(repo.fullName)
                         if let count = repo.documentsCount {
                             Text("\(count) document(s)").font(.caption).foregroundStyle(.secondary)
                         }
@@ -60,7 +60,7 @@ struct MobileDocsView: View {
         .sheet(isPresented: $showingAdd) {
             MobileAutopilotRepoPicker(
                 title: "Add Docs Repository",
-                existingRepoFullNames: Set(repos.map { $0.repositoryFullName.lowercased() })
+                existingRepoFullNames: Set(repos.compactMap { $0.repositoryFullName?.lowercased() })
             ) { repo in
                 await add(repo)
             }
@@ -141,21 +141,23 @@ struct MobileDocsRepoDetailView: View {
                 Label(statusMessage, systemImage: "checkmark.circle").font(.footnote).foregroundStyle(.green)
             }
 
-            Section {
-                Button {
-                    Task { await installSecret() }
-                } label: {
-                    if isInstallingSecret {
-                        HStack { ProgressView(); Text("Installing…") }
-                    } else {
-                        Label("Install CI upload token", systemImage: "key.horizontal")
+            if repo.repositoryFullName != nil {
+                Section {
+                    Button {
+                        Task { await installSecret() }
+                    } label: {
+                        if isInstallingSecret {
+                            HStack { ProgressView(); Text("Installing…") }
+                        } else {
+                            Label("Install CI upload token", systemImage: "key.horizontal")
+                        }
                     }
+                    .disabled(isInstallingSecret)
+                } header: {
+                    Text("CI")
+                } footer: {
+                    Text("Mints a DOCS_UPLOAD_TOKEN and installs it as the repo's GitHub Actions secret so CI can publish docs automatically.")
                 }
-                .disabled(isInstallingSecret)
-            } header: {
-                Text("CI")
-            } footer: {
-                Text("Mints a DOCS_UPLOAD_TOKEN and installs it as the repo's GitHub Actions secret so CI can publish docs automatically.")
             }
 
             Section("Documents") {
@@ -185,7 +187,7 @@ struct MobileDocsRepoDetailView: View {
                 }
             }
         }
-        .navigationTitle(repo.repositoryFullName)
+        .navigationTitle(repo.fullName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -336,6 +338,7 @@ struct MobileDocsUploadView: View {
                         .font(.footnote).foregroundStyle(.orange)
                 }
             }
+            .mobileAutopilotLoadingDialog(isSaving, title: "Uploading document…")
             .navigationTitle("Add Document")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

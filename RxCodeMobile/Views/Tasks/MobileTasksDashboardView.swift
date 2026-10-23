@@ -14,9 +14,14 @@ struct MobileTasksDashboardView: View {
 
     @State private var searchText = ""
     @State private var showingNewProject = false
-    @State private var projectName = ""
+    @State private var showingProjectCards = false
+    @State private var openingProject: UUID?
+    @State private var feedback: String?
+    @State private var recentlyHidden: Project?
+    @AppStorage("mobile.tasks.hiddenProjects") private var savedHiddenProjects = Data()
     @State private var creatingProject = false
     @State private var isLoading = false
+    @State private var loadID = UUID()
     @State private var errorMessage: String?
     @AppStorage("mobile.tasks.projectOrder") private var savedProjectOrder = Data()
 
@@ -32,6 +37,14 @@ struct MobileTasksDashboardView: View {
             let right = ranks[orderKey(for: rhs.element)] ?? Int.max
             return left == right ? lhs.offset < rhs.offset : left < right
         }.map(\.element)
+    }
+
+    private var hiddenKeys: Set<String> {
+        Set((try? JSONDecoder().decode([String].self, from: savedHiddenProjects)) ?? [])
+    }
+
+    private var visibleProjects: [Project] {
+        orderedProjects.filter { !hiddenKeys.contains(visibilityKey(for: $0)) }
     }
 
     var body: some View {
@@ -62,55 +75,86 @@ struct MobileTasksDashboardView: View {
             AnalyticsService.shared.log(.taskDashboardOpened)
         }
         .overlay {
-            if state.taskProjects.isEmpty && (!state.usesCloudTasks || cloud.isSignedIn) {
+            if !hasLoadedAny && isLoading {
+                ProgressView("Loading tasks…")
+            } else if state.taskProjects.isEmpty && (!state.usesCloudTasks || cloud.isSignedIn) {
                 ContentUnavailableView(
                     "No Projects",
                     systemImage: "folder",
                     description: Text(state.usesCloudTasks ? "Create a project to plan its tasks here." : "Add a project on your Mac to plan its tasks here.")
                 )
-            } else if !hasLoadedAny && isLoading {
-                ProgressView("Loading tasks…")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if !orderedProjects.isEmpty && visibleProjects.isEmpty {
+                ContentUnavailableView {
+                    Label("All Project Cards Hidden", systemImage: "eye.slash")
+                } description: {
+                    Text("Restore cards from Project Cards.")
+                } actions: {
+                    Button("Project Cards") { openProjectCards() }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .modifier(MobileTaskDestinations(onOpenChat: onOpenChat))
-        .toolbar {
-            if UIDevice.current.userInterfaceIdiom == .phone && orderedProjects.count > 1 {
-                ToolbarItem(placement: .primaryAction) { EditButton() }
-            }
-            if state.usesCloudTasks && cloud.isSignedIn {
-                ToolbarItem(placement: .primaryAction) {
-                    Menu {
-                        Button("Sign Out", role: .destructive) { Task { await cloud.signOut() } }
-                    } label: {
-                        Label("Account", systemImage: "person.crop.circle")
+        .overlay(alignment: .topTrailing) {
+            if let feedback {
+                HStack {
+                    Label(feedback, systemImage: "checkmark.circle.fill")
+                    if let recentlyHidden {
+                        Button("Undo") { setHidden(false, project: recentlyHidden) }
                     }
                 }
-                ToolbarItem(placement: .primaryAction) {
-                    Button("New Project", systemImage: "folder.badge.plus") { showingNewProject = true }
-                        .disabled(creatingProject)
-                }
+                .font(.callout)
+                .padding(12)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                .padding(12)
+                .accessibilityIdentifier("tasks-project-card-status")
             }
         }
-        .alert("New Project", isPresented: $showingNewProject) {
-            TextField("Project name", text: $projectName)
-            Button("Cancel", role: .cancel) {}
-            Button("Create") {
-                creatingProject = true
-                Task {
-                    defer { creatingProject = false }
-                    do {
-                        try await cloud.createProject(name: projectName.trimmingCharacters(in: .whitespacesAndNewlines))
-                        projectName = ""
-                        await load()
-                    } catch { errorMessage = error.localizedDescription }
-                }
-            }.disabled(projectName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        .task(id: feedback) {
+            guard feedback != nil else { return }
+            do { try await Task.sleep(for: .seconds(4)) } catch { return }
+            feedback = nil
+            recentlyHidden = nil
+        }
+        .navigationDestination(item: $openingProject) { id in
+            MobileTaskBoardView(projectID: id, onOpenChat: onOpenChat, isModal: false)
+        }
+        .modifier(MobileTaskDestinations(onOpenChat: onOpenChat))
+        .toolbar { projectToolbar }
+        .sheet(isPresented: $showingNewProject) {
+            FlowcyProjectForm { await load() }
+                .mobileSheetPresentation()
+        }
+        .sheet(isPresented: $showingProjectCards) {
+            MobileProjectCardsSheet(projects: orderedProjects,
+                                    isHidden: { hiddenKeys.contains(visibilityKey(for: $0)) },
+                                    setHidden: { hidden, project in setHidden(hidden, project: project) },
+                                    reorder: saveOrder)
+                .mobileSheetPresentation()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .flowcyDashboardChanged)) { _ in
+            Task { await load() }
         }
         .task(id: "\(state.taskSyncReloadKey)|\(cloud.isSignedIn)") {
+            state.restoreCloudTaskCacheIfNeeded()
             guard state.isTaskSyncReady else { return }
             await load()
         }
         .mobileTaskErrorAlert($errorMessage)
+    }
+
+    @ToolbarContentBuilder
+    private var projectToolbar: some ToolbarContent {
+        ToolbarItem(placement: .primaryAction) {
+            Button("Project Cards", systemImage: "rectangle.stack") { openProjectCards() }
+                .accessibilityIdentifier("tasks-project-cards")
+        }
+        if state.usesCloudTasks && cloud.isSignedIn {
+            ToolbarItem(placement: .primaryAction) {
+                Button("New Project", systemImage: "folder.badge.plus") { showingNewProject = true }
+                    .disabled(creatingProject)
+            }
+        }
     }
 
     // MARK: - iPad overview
@@ -119,8 +163,11 @@ struct MobileTasksDashboardView: View {
         GeometryReader { proxy in
             ScrollView(.horizontal) {
                 LazyHStack(alignment: .top, spacing: 16) {
-                    ForEach(orderedProjects) { project in
-                        MobileProjectTaskCard(project: project, keyword: searchText)
+                    ForEach(visibleProjects) { project in
+                        MobileProjectTaskCard(project: project, keyword: searchText, onOpen: {
+                            MobileHaptics.buttonTap()
+                            openingProject = project.id
+                        }, onHide: { setHidden(true, project: project) }, onOpenChat: onOpenChat)
                             .frame(width: 340, height: max(proxy.size.height - 32, 0), alignment: .top)
                             .dropDestination(for: String.self) { items, _ in
                                 guard let dragged = items.first,
@@ -147,19 +194,36 @@ struct MobileTasksDashboardView: View {
     private var list: some View {
         List {
             Section("Projects") {
-                ForEach(orderedProjects) { project in
-                    NavigationLink(value: MobileTaskRoute.board(project.id)) {
+                ForEach(visibleProjects) { project in
+                    HStack {
                         MobileProjectTaskSummaryRow(
                             project: project,
                             snapshot: state.taskSnapshots[project.id]
                         )
+                        Image(systemName: "chevron.right")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.tertiary)
                     }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        MobileHaptics.buttonTap()
+                        openingProject = project.id
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityAddTraits(.isButton)
                     .accessibilityIdentifier("tasks-dashboard-project-\(project.id.uuidString)")
+                    .swipeActions {
+                        Button("Hide Project Card", systemImage: "eye.slash") { setHidden(true, project: project) }
+                    }
                 }
                 .onMove { source, destination in
-                    var projects = orderedProjects
-                    projects.move(fromOffsets: source, toOffset: destination)
-                    saveOrder(projects)
+                    var visible = visibleProjects
+                    visible.move(fromOffsets: source, toOffset: destination)
+                    var iterator = visible.makeIterator()
+                    // Keep hidden cards in their saved slots while moving visible rows.
+                    saveOrder(orderedProjects.map { project in
+                        hiddenKeys.contains(visibilityKey(for: project)) ? project : (iterator.next() ?? project)
+                    })
                 }
             }
         }
@@ -170,7 +234,32 @@ struct MobileTasksDashboardView: View {
         return "local:\(project.id.uuidString)"
     }
 
+    private func visibilityKey(for project: Project) -> String {
+        if let cloudID = project.cloudId { return "cloud:\(cloud.accountID ?? "signed-in"):\(cloudID)" }
+        return "local:\(project.id.uuidString)"
+    }
+
+    private func openProjectCards() {
+        MobileHaptics.buttonTap()
+        showingProjectCards = true
+    }
+
+    private func setHidden(_ hidden: Bool, project: Project) {
+        var keys = hiddenKeys
+        if hidden { keys.insert(visibilityKey(for: project)) }
+        else { keys.remove(visibilityKey(for: project)) }
+        withAnimation(.snappy) {
+            savedHiddenProjects = (try? JSONEncoder().encode(keys.sorted())) ?? Data()
+        }
+        MobileHaptics.buttonTap()
+        recentlyHidden = hidden ? project : nil
+        feedback = hidden ? "\(project.name) hidden" : "\(project.name) restored"
+    }
+
     private func saveOrder(_ projects: [Project]) {
+        MobileHaptics.buttonTap()
+        recentlyHidden = nil
+        feedback = "Project cards reordered"
         withAnimation(.snappy(duration: 0.3)) {
             savedProjectOrder = (try? JSONEncoder().encode(projects.map(orderKey))) ?? Data()
         }
@@ -183,11 +272,13 @@ struct MobileTasksDashboardView: View {
     }
 
     private func load() async {
+        let current = UUID()
+        loadID = current
         isLoading = true
-        defer { isLoading = false }
-        if let error = await state.loadAllTaskBoards(), !Task.isCancelled {
-            errorMessage = error
-        }
+        defer { if loadID == current { isLoading = false } }
+        let error = await state.loadAllTaskBoards()
+        guard loadID == current, !Task.isCancelled else { return }
+        errorMessage = error
     }
 }
 
@@ -279,6 +370,9 @@ struct MobileProjectTaskCard: View {
     @EnvironmentObject private var state: MobileAppState
     let project: Project
     var keyword = ""
+    let onOpen: () -> Void
+    let onHide: () -> Void
+    let onOpenChat: (String) -> Void
 
     /// How many stories the card lists, matching the Mac overview.
     private static let previewLimit = 10
@@ -301,20 +395,25 @@ struct MobileProjectTaskCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            NavigationLink(value: MobileTaskRoute.board(project.id)) {
-                HStack(alignment: .top) {
-                    MobileProjectTaskSummaryRow(project: project, snapshot: snapshot)
-                    Image(systemName: "chevron.right")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                        .padding(.top, 2)
+            HStack(alignment: .top, spacing: 8) {
+                MobileProjectTaskSummaryRow(project: project, snapshot: snapshot)
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: onOpen)
+                    .draggable("task-project:\(project.id.uuidString)")
+                    .accessibilityElement(children: .combine)
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityHint("Opens the project board. Long press and drag to reorder.")
+                    .accessibilityIdentifier("tasks-dashboard-project-\(project.id.uuidString)")
+                Menu {
+                    Button("Open Project Board", systemImage: "rectangle.split.3x1", action: onOpen)
+                    Button("Hide Project Card", systemImage: "eye.slash", action: onHide)
+                } label: {
+                    Image(systemName: "ellipsis").padding(8).contentShape(Rectangle())
                 }
-                .padding(14)
-                .contentShape(Rectangle())
+                .accessibilityLabel("Project Card Actions")
+                .accessibilityIdentifier("tasks-project-actions-\(project.id.uuidString)")
             }
-            .buttonStyle(.plain)
-            .draggable("task-project:\(project.id.uuidString)")
-            .accessibilityIdentifier("tasks-dashboard-project-\(project.id.uuidString)")
+            .padding(14)
 
             Divider()
 
@@ -324,14 +423,14 @@ struct MobileProjectTaskCard: View {
                         if !stories.isEmpty {
                             let rollups = board.storyRollups()
                             ForEach(stories.prefix(Self.previewLimit)) { story in
-                                NavigationLink(value: MobileTaskRoute.story(projectID: project.id, storyID: story.id)) {
+                                MobileTaskDetailButton(route: MobileTaskRoute.story(projectID: project.id, storyID: story.id), onOpenChat: onOpenChat) {
                                     cardRow { MobileStoryRow(story: story, board: board, rollup: rollups[story.id]) }
                                 }
                                 .buttonStyle(.plain)
                             }
                         } else if !looseTasks.isEmpty {
                             ForEach(looseTasks.prefix(Self.previewLimit)) { task in
-                                NavigationLink(value: MobileTaskRoute.task(projectID: project.id, taskID: task.id)) {
+                                MobileTaskDetailButton(route: MobileTaskRoute.task(projectID: project.id, taskID: task.id), onOpenChat: onOpenChat) {
                                     cardRow { MobileTaskRow(task: task, board: board, showsColumn: true) }
                                 }
                                 .buttonStyle(.plain)

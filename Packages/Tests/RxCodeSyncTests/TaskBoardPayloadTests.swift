@@ -31,6 +31,31 @@ struct TaskBoardPayloadTests {
         #expect(decoded.task?.tags == ["Mobile"])
     }
 
+    @Test("cloud task run request carries Autopilot IDs")
+    func cloudRunRequestRoundTrips() throws {
+        let request = TaskBoardRequestPayload(
+            projectID: projectID,
+            operation: .moveTask,
+            status: .inProgress,
+            cloudProjectID: "cloud-project",
+            cloudTaskID: "cloud-task"
+        )
+        let decoded = try JSONDecoder().decode(TaskBoardRequestPayload.self, from: JSONEncoder().encode(request))
+        #expect(decoded.cloudProjectID == "cloud-project")
+        #expect(decoded.cloudTaskID == "cloud-task")
+    }
+
+    @Test("request from an older phone decodes without cloud IDs")
+    func legacyRequestDecodes() throws {
+        let json = """
+        {"clientRequestID":"\(UUID().uuidString)","projectID":"\(projectID.uuidString)","operation":"fetch"}
+        """
+        let decoded = try JSONDecoder().decode(TaskBoardRequestPayload.self, from: Data(json.utf8))
+        #expect(decoded.operation == .fetch)
+        #expect(decoded.cloudProjectID == nil)
+        #expect(decoded.cloudTaskID == nil)
+    }
+
     @Test("task board result carries the board and resolved chat threads")
     func resultRoundTrips() throws {
         let story = ProjectStory(projectId: projectID, title: "Projects Dashboard")

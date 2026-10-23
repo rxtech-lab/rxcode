@@ -1,0 +1,54 @@
+{
+  "configurations": [
+    {
+      "id": "B1A2C3D4-0004-0004-0004-000000000004",
+      "name": "Flowcy HTTP integration",
+      "options": {}
+    }
+  ],
+  "defaultOptions": {
+    "codeCoverage": false,
+    "testTimeoutsEnabled": true,
+    "environmentVariableEntries": [
+      {
+        "key": "FLOWCY_SIMULATION",
+        "value": "1"
+      },
+      {
+        "key": "FLOWCY_SIMULATION_BASE_URL",
+        "value": "http://127.0.0.1:4922/flowcy"
+      }
+    ],
+    "commandLineArgumentEntries": [
+      {
+        "argument": "-uitest-cloud",
+        "enabled": true
+      },
+      {
+        "argument": "-uitest-flowcy",
+        "enabled": true
+      }
+    ]
+  },
+  "testTargets": [
+    {
+      "target": {
+        "containerPath": "container:RxCode.xcodeproj",
+        "identifier": "DF230B5E2FBC7368008929A6",
+        "name": "RxCodeMobileTests"
+      },
+      "selectedTests": [
+        "FlowcyProtocolTests",
+        "FlowcyDraftSimulationTests",
+        "FlowcyTransportSimulationTests",
+        "FlowcyAgentSimulationTests",
+        "ProjectCloudServiceTests",
+        "FlowcyPushLifecycleTests",
+        "FlowcyPushRoutingTests",
+        "FlowcyPushTransportSimulationTests",
+        "FlowcyTaskLoadingSimulationTests"
+      ]
+    }
+  ],
+  "version": 1
+}

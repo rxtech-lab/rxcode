@@ -172,6 +172,8 @@ extension MobileAppState {
             }
             desktopTaskUnavailable = false
             hasReceivedInitialSnapshot = true
+            cachedDesktopTaskProjects = []
+            scheduleTaskCacheSave()
             refreshWidgetData()
         case .moreMessages(let page):
             guard acceptsActiveDesktopPayload(from: inbound.fromHex, type: "more_messages") else { return }

@@ -15,10 +15,15 @@
   "testTargets" : [
     {
       "selectedTests" : [
+        "TaskDetailSheetUITests/testTaskAndStoryCardsOpenDismissibleDetailSheets()",
+        "FlowcyAIDraftUITests/testTaskAndStoryDraftReviewBeforeSave()",
+        "FlowcyProductionUITests/testDashboardWithoutPairingAndRootNavigation()",
+        "FlowcyProductionUITests/testProjectCardsDragHideRestoreAndPersist()",
         "RxCodeMobileUITests\/testLaunchesPastPairingIntoMainUI()",
         "iPhoneNavigationUITests\/testBriefingFlowReturnsToDetailAfterBack()",
         "iPhoneNavigationUITests\/testNewThreadFromBriefingDetailOpensChat()",
-        "iPhoneNavigationUITests\/testProjectsFlowReturnsToThreadListAfterBack()"
+        "iPhoneNavigationUITests\/testProjectsFlowReturnsToThreadListAfterBack()",
+        "FlowcyProductionUITests/testCIAndReleaseProjectNavigation()"
       ],
       "target" : {
         "containerPath" : "container:RxCode.xcodeproj",

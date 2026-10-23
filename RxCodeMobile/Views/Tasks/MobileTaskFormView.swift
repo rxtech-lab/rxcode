@@ -11,6 +11,7 @@ struct MobileTaskFormView: View {
     @State private var task: ProjectTask
     let isNew: Bool
 
+    @State private var showsAIDraft = false
     @State private var isSaving = false
     @State private var errorMessage: String?
     @State private var showsParentTasks = false
@@ -31,6 +32,24 @@ struct MobileTaskFormView: View {
 
     var body: some View {
         Form {
+            if isNew, state.usesCloudTasks,
+               let remoteID = state.taskProjects.first(where: { $0.id == task.projectId })?.cloudId {
+                Section {
+                    Button("Create with AI", systemImage: "sparkles") {
+                        MobileHaptics.buttonTap()
+                        showsAIDraft = true
+                    }
+                    .disabled(!task.title.isEmpty || !task.details.isEmpty)
+                    .accessibilityIdentifier("task-form-ai")
+                }
+                .sheet(isPresented: $showsAIDraft) {
+                    MobileAIDraftSheet(projectID: remoteID, kind: .task) { draft in
+                        task.title = draft.title
+                        task.details = draft.details
+                    }
+                }
+            }
+
             Section {
                 TextField("Title", text: $task.title)
                     .accessibilityIdentifier("task-form-title")
@@ -244,6 +263,7 @@ struct MobileStoryFormView: View {
     @State private var story: ProjectStory
     let isNew: Bool
 
+    @State private var showsAIDraft = false
     @State private var isSaving = false
     @State private var errorMessage: String?
 
@@ -260,6 +280,24 @@ struct MobileStoryFormView: View {
 
     var body: some View {
         Form {
+            if isNew, state.usesCloudTasks,
+               let remoteID = state.taskProjects.first(where: { $0.id == story.projectId })?.cloudId {
+                Section {
+                    Button("Create with AI", systemImage: "sparkles") {
+                        MobileHaptics.buttonTap()
+                        showsAIDraft = true
+                    }
+                    .disabled(!story.title.isEmpty || !story.details.isEmpty)
+                    .accessibilityIdentifier("story-form-ai")
+                }
+                .sheet(isPresented: $showsAIDraft) {
+                    MobileAIDraftSheet(projectID: remoteID, kind: .story) { draft in
+                        story.title = draft.title
+                        story.details = draft.details
+                    }
+                }
+            }
+
             Section {
                 TextField("Title", text: $story.title)
                     .accessibilityIdentifier("story-form-title")

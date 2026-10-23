@@ -69,7 +69,10 @@ public struct DocsRepo: Codable, Sendable, Identifiable, Hashable {
     public let id: String
     public let installationId: Int?
     public let repositoryId: Int?
-    public let repositoryFullName: String
+    /// Standalone docs projects have no linked GitHub repository.
+    public let repositoryFullName: String?
+    public let name: String?
+    public let displayName: String?
     public let owner: String?
     public let repo: String?
     public let lastIndexedAt: String?
@@ -77,13 +80,15 @@ public struct DocsRepo: Codable, Sendable, Identifiable, Hashable {
     public let createdAt: String?
     public let updatedAt: String?
 
-    public var fullName: String { repositoryFullName }
+    public var fullName: String { displayName ?? name ?? repositoryFullName ?? "Untitled project" }
 
     public init(
         id: String,
         installationId: Int? = nil,
         repositoryId: Int? = nil,
-        repositoryFullName: String,
+        repositoryFullName: String? = nil,
+        name: String? = nil,
+        displayName: String? = nil,
         owner: String? = nil,
         repo: String? = nil,
         lastIndexedAt: String? = nil,
@@ -95,6 +100,8 @@ public struct DocsRepo: Codable, Sendable, Identifiable, Hashable {
         self.installationId = installationId
         self.repositoryId = repositoryId
         self.repositoryFullName = repositoryFullName
+        self.name = name
+        self.displayName = displayName
         self.owner = owner
         self.repo = repo
         self.lastIndexedAt = lastIndexedAt

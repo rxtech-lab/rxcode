@@ -172,6 +172,9 @@ extension AppState {
         case .ciList:
             let q = optionalAutopilotBody(request, as: AutopilotCursorQuery.self)
             return try encoder.encode(try await ciUpdates.listWatchedRepositories(cursor: q?.cursor))
+        case .ciOverview:
+            let body = try decodeAutopilotBody(request, as: AutopilotIDBody.self)
+            return try encoder.encode(try await ciUpdates.overview(repository: body.id))
         case .ciAdd:
             let body = try decodeAutopilotBody(request, as: AddWatchedRepoBody.self)
             _ = try await ciUpdates.addWatchedRepository(body)
@@ -191,6 +194,9 @@ extension AppState {
         case .ciTrigger:
             let body = try decodeAutopilotBody(request, as: AutopilotIDBody.self)
             return try encoder.encode(try await ciUpdates.trigger(id: body.id))
+        case .ciTriggerDependencies:
+            let body = try decodeAutopilotBody(request, as: AutopilotIDBody.self)
+            return try encoder.encode(try await ciUpdates.triggerDependencies(id: body.id))
         case .ciListPRs:
             let body = try decodeAutopilotBody(request, as: AutopilotIDBody.self)
             let items = try await ciUpdates.pullRequests(id: body.id)
@@ -199,6 +205,16 @@ extension AppState {
             let body = try decodeAutopilotBody(request, as: AutopilotCIClosePRBody.self)
             try await ciUpdates.closePullRequest(id: body.id, prNumber: body.prNumber)
             return nil
+
+        case .ciAutomationGet:
+            let body = try decodeAutopilotBody(request, as: AutopilotIDBody.self)
+            return try encoder.encode(try await ciUpdates.automation(id: body.id))
+        case .ciAutomationSave:
+            let body = try decodeAutopilotBody(request, as: AutopilotCIAutomationSaveBody.self)
+            return try encoder.encode(RepositoryAutomationSaveResponse(settings: try await ciUpdates.saveAutomation(id: body.id, settings: body.settings)))
+        case .ciDirectories:
+            let body = try decodeAutopilotBody(request, as: AutopilotCIDirectoriesBody.self)
+            return try encoder.encode(try await ciUpdates.directories(id: body.id, sha: body.sha))
 
         // MARK: Docs
         case .docsList:
@@ -248,6 +264,19 @@ extension AppState {
             let body = try decodeAutopilotBody(request, as: AutopilotIDBody.self)
             try await release.deleteRepository(id: body.id)
             return nil
+        case .releaseBranches:
+            let body = try decodeAutopilotBody(request, as: AutopilotRepoIDBody.self)
+            return try encoder.encode(ReleaseBranchList(items: try await release.branches(repoId: body.repoId)))
+        case .releaseDispatchHistory:
+            let body = try decodeAutopilotBody(request, as: AutopilotRepoIDBody.self)
+            return try encoder.encode(try await release.dispatchHistory(repoId: body.repoId))
+        case .releaseRescanWorkflows:
+            let body = try decodeAutopilotBody(request, as: AutopilotRepoIDBody.self)
+            return try encoder.encode(try await release.rescanWorkflows(repoId: body.repoId))
+        case .releaseSetWorkflowSelected:
+            let body = try decodeAutopilotBody(request, as: AutopilotReleaseWorkflowSelectionBody.self)
+            try await release.setWorkflowSelected(repoId: body.repoId, workflowId: body.workflowId, isSelected: body.isSelected)
+            return nil
         case .releaseListWorkflows:
             let body = try decodeAutopilotBody(request, as: AutopilotRepoIDBody.self)
             let workflows = try await release.listWorkflows(repoId: body.repoId)
@@ -269,7 +298,8 @@ extension AppState {
                             defaultBool: input.defaultBool,
                             options: input.options
                         )
-                    }
+                    },
+                    content: workflow.content
                 )
             }
             return try encoder.encode(MobileReleaseWorkflowList(items: mapped))

@@ -46,6 +46,10 @@ extension AppState {
 
     func handleMobileTaskBoardRequest(_ request: TaskBoardRequestPayload, fromHex: String) async {
         logger.info("[MobileSync] handling task board operation=\(request.operation.rawValue, privacy: .public) project=\(request.projectID.uuidString, privacy: .public) mobileKey=\(String(fromHex.prefix(12)), privacy: .public)")
+        if let cloudProjectID = request.cloudProjectID {
+            await runMobileCloudTask(request, cloudProjectID: cloudProjectID, fromHex: fromHex)
+            return
+        }
         guard projects.contains(where: { $0.id == request.projectID }) else {
             await replyTaskBoardResult(request, ok: false, errorMessage: String(localized: "Project not found on desktop."), toHex: fromHex)
             return
@@ -148,6 +152,70 @@ extension AppState {
             return nil
 
         }
+    }
+
+    /// Runs a phone's cloud-board task on this Mac. The phone picked this Mac
+    /// to run it, so the task is assigned here (and to the default agent when
+    /// it has none) before it enters a chat column the usual way.
+    private func runMobileCloudTask(_ request: TaskBoardRequestPayload, cloudProjectID: String, fromHex: String) async {
+        func fail(_ message: String) async {
+            await MobileSyncService.shared.send(.taskBoardResult(TaskBoardResultPayload(
+                clientRequestID: request.clientRequestID,
+                projectID: request.projectID,
+                ok: false,
+                errorMessage: message
+            )), toHex: fromHex)
+        }
+        guard request.operation == .moveTask else {
+            await fail(String(localized: "This Mac can only run cloud tasks."))
+            return
+        }
+        guard let project = projects.first(where: { $0.cloudId == cloudProjectID }) else {
+            await fail(String(localized: "This project isn't open on this Mac. Open it from Flowcy on the Mac, then try again."))
+            return
+        }
+        await ensureTaskBoardLoaded(for: project.id)
+        func localTask() -> ProjectTask? {
+            let board = taskBoard(for: project.id)
+            guard let id = board.cloudSync?.localTaskId(forRemote: request.cloudTaskID) else { return nil }
+            return board.tasks.first { $0.id == id }
+        }
+        if localTask() == nil {
+            // The task may be newer than this Mac's last pull.
+            await syncCloudBoard(projectId: project.id)
+        }
+        guard var task = localTask() else {
+            await fail(MobileTaskBoardError.taskNotFound.localizedDescription)
+            return
+        }
+
+        if !isStatusLocked(task) {
+            task.assignedDeviceId = cloudDeviceID
+            if !task.agent.isAssigned {
+                task.agent = defaultTaskAgent()
+            }
+            upsertTask(task)
+            let board = taskBoard(for: project.id)
+            if let stored = self.task(id: task.id) {
+                if board.column(for: stored.status).triggersChat {
+                    // Already in a chat column from a cloud pull, so a move
+                    // would not dispatch it.
+                    Task { await startTask(stored) }
+                } else if let target = request.status.flatMap({ status in
+                    board.effectiveColumns.first { $0.id == status && $0.triggersChat }
+                }) ?? board.firstChatColumn {
+                    moveTask(stored, to: target.id)
+                }
+            }
+        }
+
+        await MobileSyncService.shared.send(.taskBoardResult(TaskBoardResultPayload(
+            clientRequestID: request.clientRequestID,
+            projectID: project.id,
+            ok: true,
+            snapshot: mobileTaskBoardSnapshot(for: project.id),
+            taskID: task.id
+        )), toHex: fromHex)
     }
 
     private func requestedTask(_ request: TaskBoardRequestPayload) -> ProjectTask? {

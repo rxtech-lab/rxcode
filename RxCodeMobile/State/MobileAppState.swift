@@ -203,8 +203,16 @@ final class MobileAppState: ObservableObject {
     @Published var cloudTaskProjects: [Project] = []
     @Published var cloudTaskBoards: [UUID: MobileTaskBoardSnapshot] = [:]
     var taskCloud: MobileCloudState?
+    /// Which paired Mac each task was last run on, and its session there;
+    /// keyed by `taskRunLinkKey(for:)`. Persisted across launches.
+    @Published var taskRunLinks: [String: MobileTaskRunLink] = MobileTaskRunLink.loadAll()
 
     @Published var taskBoardsByProject: [UUID: MobileTaskBoardSnapshot] = [:]
+    /// The active Mac's projects from the on-device task cache, listed on the
+    /// Tasks tab until its first snapshot delivers the real project list.
+    @Published var cachedDesktopTaskProjects: [Project] = []
+    /// Pending debounced write of the on-device task cache.
+    var taskCacheSaveTask: Task<Void, Never>?
     /// Projects whose board fetch is in flight.
     @Published var loadingTaskBoardProjects: Set<UUID> = []
     /// Outstanding task-board requests keyed by `clientRequestID`; resolved by

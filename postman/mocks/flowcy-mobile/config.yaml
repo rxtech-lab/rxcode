@@ -1,0 +1,10 @@
+version: 1
+name: flowcy-mobile
+slug: flowcy-mobile
+protocol: http
+port: 4913
+interceptRequests: true
+scenarios:
+  - name: default
+    path: ./default.js
+    default: true

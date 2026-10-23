@@ -19,6 +19,21 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             state.openThreadFromNotification(sessionID: target.sessionID, projectID: target.projectID)
         }
     }
+    weak var cloudState: MobileCloudState? {
+        didSet {
+            if let cloudState, let pendingFlowcyNotification {
+                cloudState.pendingNotification = pendingFlowcyNotification
+                self.pendingFlowcyNotification = nil
+            }
+            if let cloudState, let bufferedPushToken {
+                Task { await cloudState.push.updateToken(bufferedPushToken.hex, environment: bufferedPushToken.environment,
+                                                        accountID: cloudState.isSignedIn ? cloudState.accountID : nil) }
+            }
+        }
+    }
+    private var pendingFlowcyNotification: FlowcyPushDestination?
+    private var bufferedPushToken: (hex: String, environment: String)?
+
     /// Buffers a notification tap that arrives before `mobileState` is wired up
     /// (cold launch). Flushed by the `mobileState` `didSet` above.
     private var pendingNotificationDeepLink: (sessionID: String, projectID: UUID?)?
@@ -53,8 +68,13 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
                      didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         let tokenHex = deviceToken.map { String(format: "%02x", $0) }.joined()
         let environment = MobileAppState.currentAPNsEnvironment
-        logger.info("[APNs] registered tokenPrefix=\(String(tokenHex.prefix(12)), privacy: .public) environment=\(environment, privacy: .public)")
+        logger.info("[APNs] registered environment=\(environment, privacy: .public)")
         mobileState?.reportAPNsToken(hex: tokenHex, environment: environment)
+        bufferedPushToken = (tokenHex, environment)
+        if let cloudState {
+            Task { await cloudState.push.updateToken(tokenHex, environment: environment,
+                                                    accountID: cloudState.isSignedIn ? cloudState.accountID : nil) }
+        }
     }
 
     func application(_ application: UIApplication,
@@ -91,7 +111,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
                                 willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
         let content = notification.request.content
         let requestID = notification.request.identifier
-        logger.info("[APNs] willPresent request=\(requestID, privacy: .public) title=\(content.title, privacy: .public) body=\(content.body, privacy: .public) category=\(content.categoryIdentifier, privacy: .public) keys=\(content.userInfo.keys.map { "\($0)" }.sorted().joined(separator: ","), privacy: .public) aps=\(Self.apnsSummary(content.userInfo), privacy: .public)")
+        logger.info("[APNs] willPresent request=\(requestID, privacy: .public)")
         if content.userInfo["rxcodeForegroundDecrypted"] as? Bool == true {
             logger.info("[APNs] willPresent decrypted foreground replacement request=\(requestID, privacy: .public)")
             return [.banner, .sound, .list]
@@ -119,6 +139,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             return
         }
         let userInfo = response.notification.request.content.userInfo
+        if let destination = FlowcyPushDestination(userInfo: userInfo) {
+            if let cloudState { cloudState.pendingNotification = destination }
+            else { pendingFlowcyNotification = destination }
+            return
+        }
         guard let target = notificationThreadTarget(from: userInfo, requestID: requestID) else {
             logger.info("[APNs] notification tap has no thread target request=\(requestID, privacy: .public)")
             return

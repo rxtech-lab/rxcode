@@ -190,7 +190,8 @@ public struct ReleaseWorkflowInput: Decodable, Sendable, Hashable, Identifiable 
 }
 
 /// A scanned workflow from `GET /api/v1/release-repositories/{id}/workflows`
-/// (raw `releaseWorkflow` rows). `content` (raw YAML) is omitted from app use.
+/// (raw `releaseWorkflow` rows). `content` is the raw YAML, shown in the
+/// workflow file viewer.
 public struct ReleaseWorkflow: Decodable, Sendable, Identifiable, Hashable {
     public let id: String
     public let releaseRepositoryId: String?
@@ -203,6 +204,7 @@ public struct ReleaseWorkflow: Decodable, Sendable, Identifiable, Hashable {
     /// Can be triggered via `workflow_dispatch`.
     public let hasWorkflowDispatch: Bool
     public let inputs: [ReleaseWorkflowInput]?
+    public let content: String?
     public let createdAt: String?
     public let updatedAt: String?
 
@@ -215,12 +217,13 @@ public struct ReleaseWorkflow: Decodable, Sendable, Identifiable, Hashable {
     enum CodingKeys: String, CodingKey {
         case id, releaseRepositoryId, workflowPath, workflowName
         case isSelected, isReleaseWorkflow, hasWorkflowDispatch, inputs
-        case createdAt, updatedAt
+        case content, createdAt, updatedAt
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
+        content = try? c.decode(String.self, forKey: .content)
         releaseRepositoryId = try? c.decode(String.self, forKey: .releaseRepositoryId)
         workflowPath = try c.decode(String.self, forKey: .workflowPath)
         workflowName = try? c.decode(String.self, forKey: .workflowName)
@@ -279,4 +282,110 @@ public struct ReleaseGithubSecretResult: Codable, Sendable {
         self.secretName = secretName
         self.repositoryFullName = repositoryFullName
     }
+}
+
+// MARK: - Branches, dispatch history, rescan
+
+/// One branch from `GET /api/v1/release-repositories/{id}/branches`.
+public struct ReleaseBranch: Codable, Sendable, Hashable, Identifiable {
+    public let name: String
+    public let protected: Bool?
+    public var id: String { name }
+
+    public init(name: String, protected: Bool? = nil) {
+        self.name = name
+        self.protected = protected
+    }
+}
+
+/// One past release dispatch from
+/// `GET /api/v1/release-repositories/{id}/dispatch/history`. Timestamps are
+/// epoch-ms or ISO depending on the serializer, so both are tolerated.
+public struct ReleaseDispatchHistoryItem: Codable, Sendable, Hashable, Identifiable {
+    public let id: String
+    public let releaseWorkflowId: String?
+    /// `pending`, `triggered`, `completed` or `failed`.
+    public let status: String
+    public let branch: String
+    public let inputValues: [String: ReleaseInputValue]?
+    public let workflowRunUrl: String?
+    public let errorMessage: String?
+    public let triggeredAt: FlexibleTimestamp?
+    public let completedAt: FlexibleTimestamp?
+
+    public var triggeredDate: Date? { triggeredAt?.date }
+    public var isFailed: Bool { status == "failed" }
+
+    public init(id: String, releaseWorkflowId: String? = nil, status: String, branch: String,
+                inputValues: [String: ReleaseInputValue]? = nil, workflowRunUrl: String? = nil,
+                errorMessage: String? = nil, triggeredAt: FlexibleTimestamp? = nil, completedAt: FlexibleTimestamp? = nil) {
+        self.id = id
+        self.releaseWorkflowId = releaseWorkflowId
+        self.status = status
+        self.branch = branch
+        self.inputValues = inputValues
+        self.workflowRunUrl = workflowRunUrl
+        self.errorMessage = errorMessage
+        self.triggeredAt = triggeredAt
+        self.completedAt = completedAt
+    }
+}
+
+/// A dispatch input value as stored by the server (`string | boolean`).
+public enum ReleaseInputValue: Codable, Sendable, Hashable, CustomStringConvertible {
+    case string(String)
+    case bool(Bool)
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if let value = try? c.decode(Bool.self) { self = .bool(value) }
+        else if let value = try? c.decode(Double.self) { self = .string(value.formatted()) }
+        else { self = .string((try? c.decode(String.self)) ?? "") }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        switch self {
+        case .string(let value): try c.encode(value)
+        case .bool(let value): try c.encode(value)
+        }
+    }
+
+    public var description: String {
+        switch self {
+        case .string(let value): return value
+        case .bool(let value): return value ? "true" : "false"
+        }
+    }
+}
+
+public struct ReleaseDispatchHistoryPage: Codable, Sendable {
+    public struct Pagination: Codable, Sendable {
+        public let nextCursor: String?
+        public let hasMore: Bool?
+    }
+    public let items: [ReleaseDispatchHistoryItem]
+    public let pagination: Pagination?
+
+    public init(items: [ReleaseDispatchHistoryItem], pagination: Pagination? = nil) {
+        self.items = items
+        self.pagination = pagination
+    }
+}
+
+/// `POST /api/v1/release-repositories/{id}/workflows/scan` result.
+public struct ReleaseWorkflowScanResult: Codable, Sendable {
+    public let workflowsFound: Int
+    public let releaseWorkflowsFound: Int
+
+    public init(workflowsFound: Int, releaseWorkflowsFound: Int) {
+        self.workflowsFound = workflowsFound
+        self.releaseWorkflowsFound = releaseWorkflowsFound
+    }
+}
+
+/// Body for `PATCH /api/v1/release-repositories/{id}/workflows/{workflowId}`.
+public struct ReleaseWorkflowSelectionBody: Codable, Sendable {
+    public let isSelected: Bool
+    public init(isSelected: Bool) { self.isSelected = isSelected }
 }

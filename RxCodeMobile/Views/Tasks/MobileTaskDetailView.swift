@@ -1,3 +1,4 @@
+import RxCodeChatKit
 import RxCodeCore
 import RxCodeSync
 import SwiftUI
@@ -26,6 +27,7 @@ struct MobileTaskDetailView: View {
     /// `nil` until the user picks one: Runs for a task that has a thread,
     /// Config otherwise.
     @State private var selectedTab: Tab?
+    @State private var runRequest: MobileTaskRunRequest?
 
     private var board: TaskBoard { state.taskBoard(for: projectID) }
     private var task: ProjectTask? { board.tasks.first { $0.id == taskID } }
@@ -49,6 +51,7 @@ struct MobileTaskDetailView: View {
                 }
             } else {
                 ContentUnavailableView("Task Not Found", systemImage: "checklist", description: Text("It may have been deleted."))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .navigationTitle("Task")
@@ -86,6 +89,7 @@ struct MobileTaskDetailView: View {
             }
             .mobileSheetPresentation([.medium, .large])
         }
+        .mobileTaskRunDevicePicker($runRequest)
         .mobileTaskErrorAlert($errorMessage)
     }
 
@@ -133,7 +137,7 @@ struct MobileTaskDetailView: View {
                     Text("No description")
                         .foregroundStyle(.secondary)
                 } else {
-                    Text(markdown(task.details))
+                    MarkdownContentView(text: task.details)
                         .font(.subheadline)
                         .textSelection(.enabled)
                 }
@@ -189,9 +193,9 @@ struct MobileTaskDetailView: View {
                         Label("Open Chat", systemImage: "bubble.left.and.text.bubble.right")
                     }
                 }
-                if !state.usesCloudTasks, task.agent.isAssigned, !column.triggersChat, board.firstChatColumn != nil {
+                if let chatColumn = board.firstChatColumn, state.moveStartsRun(task, to: chatColumn.id) {
                     Button {
-                        perform { try await state.runTask(task) }
+                        runRequest = MobileTaskRunRequest(task: task, status: chatColumn.id)
                     } label: {
                         Label("Run with Agent", systemImage: "play.fill")
                     }
@@ -206,12 +210,10 @@ struct MobileTaskDetailView: View {
                 if let prompt = task.checkErrorFixPrompt, !isLocked,
                    sessionID != nil || (task.agent.isAssigned && board.firstChatColumn != nil) {
                     Button {
-                        perform {
-                            if sessionID != nil {
-                                try await state.sendTaskFollowUp(task, text: prompt)
-                            } else {
-                                try await state.runTask(task)
-                            }
+                        if sessionID != nil {
+                            perform { try await state.sendTaskFollowUp(task, text: prompt) }
+                        } else if let chatColumn = board.firstChatColumn {
+                            runRequest = MobileTaskRunRequest(task: task, status: chatColumn.id)
                         }
                     } label: {
                         Label("Fix Check Error", systemImage: "wrench.and.screwdriver")
@@ -220,7 +222,11 @@ struct MobileTaskDetailView: View {
                 Menu {
                     ForEach(board.effectiveColumns) { target in
                         Button {
-                            perform { try await state.moveTask(task, to: target.id) }
+                            if state.moveStartsRun(task, to: target.id) {
+                                runRequest = MobileTaskRunRequest(task: task, status: target.id)
+                            } else {
+                                perform { try await state.moveTask(task, to: target.id) }
+                            }
                         } label: {
                             Label(target.name, systemImage: target.systemImage)
                         }
@@ -271,13 +277,6 @@ struct MobileTaskDetailView: View {
         }
     }
 
-    private func markdown(_ text: String) -> AttributedString {
-        (try? AttributedString(
-            markdown: text,
-            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        )) ?? AttributedString(text)
-    }
-
     private func perform(_ operation: @escaping () async throws -> Void) {
         guard !isWorking else { return }
         isWorking = true
@@ -315,6 +314,7 @@ struct MobileStoryDetailView: View {
                 content(story)
             } else {
                 ContentUnavailableView("Story Not Found", systemImage: "rectangle.stack", description: Text("It may have been deleted."))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .navigationTitle("Story")
@@ -372,7 +372,7 @@ struct MobileStoryDetailView: View {
                 }
                 .padding(.vertical, 4)
                 if !story.details.isEmpty {
-                    Text(story.details)
+                    MarkdownContentView(text: story.details)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
@@ -385,7 +385,7 @@ struct MobileStoryDetailView: View {
                         .foregroundStyle(.secondary)
                 }
                 ForEach(tasks) { task in
-                    NavigationLink(value: MobileTaskRoute.task(projectID: projectID, taskID: task.id)) {
+                    MobileTaskDetailButton(route: MobileTaskRoute.task(projectID: projectID, taskID: task.id), onOpenChat: onOpenChat) {
                         MobileTaskRow(task: task, board: board, showsColumn: true, showsStory: false)
                     }
                     .modifier(MobileTaskActions(

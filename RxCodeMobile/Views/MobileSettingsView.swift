@@ -23,29 +23,6 @@ struct MobileSettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Flowcy Account") {
-                    if cloud.isSignedIn {
-                        Text("Signed in to Flowcy")
-                        Button("Sign Out", role: .destructive) { Task { await cloud.signOut() } }
-                    } else {
-                        Button("Sign In to Flowcy") { Task { await cloud.signIn() } }
-                            .disabled(cloud.isSigningIn)
-                        if let error = cloud.error { Text(error).foregroundStyle(.red) }
-                    }
-                }
-                Section {
-                    Button {
-                        state.usesCloudTasks = true
-                        showRemoteTasks = true
-                    } label: {
-                        Label("View Remote Tasks", systemImage: "checklist")
-                    }
-                    .accessibilityIdentifier("settings-view-remote-tasks")
-                } header: {
-                    Text("Remote Tasks")
-                } footer: {
-                    Text("Open cloud project plans and task boards.")
-                }
                 pairedMacsSection
 
                 computerStatusSection
@@ -267,15 +244,10 @@ struct MobileSettingsView: View {
             } label: {
                 Label("MCP Servers", systemImage: "server.rack")
             }
-            NavigationLink {
-                MobileAutopilotView()
-            } label: {
-                Label("Flowcy", systemImage: "airplane")
-            }
         } header: {
             Text("Desktop Configuration")
         } footer: {
-            Text("Install skills and agents, configure MCP servers, and manage Flowcy on the active Mac.")
+            Text("Install skills and agents and configure MCP servers on the active Mac.")
         }
     }
 

@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import UIKit
 import RxCodeCore
 import RxAuthSwift
 
@@ -14,7 +15,12 @@ final class MobileCloudState {
     private(set) var isSigningIn = false
     var error: String?
     var deviceError: String?
+    var pendingNotification: FlowcyPushDestination?
     private var generation = UUID()
+    private(set) var isSigningOut = false
+    @ObservationIgnored lazy var push = FlowcyPushRegistration(deviceName: UIDevice.current.name) { method, body in
+        _ = try await FlowcyAPI(notifySessionExpiry: false).read("notifications/devices", method: method, body: body)
+    }
     @ObservationIgnored private lazy var service = ProjectCloudService(rxAuth: auth)
 
     var accountID: String? { auth.user?.id }
@@ -26,12 +32,16 @@ final class MobileCloudState {
         return auth.isAuthenticated
     }
 
-    init() {
+    init(service: ProjectCloudService? = nil) {
+        if let service {
+            self.service = service
+            return
+        }
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-uitest-cloud") {
             let config = URLSessionConfiguration.ephemeral
             config.protocolClasses = [CloudUITestProtocol.self]
-            service = ProjectCloudService(session: URLSession(configuration: config), baseURL: URL(string: "https://cloud-ui.test")!) { _ in "ui-test" }
+            self.service = ProjectCloudService(session: URLSession(configuration: config), baseURL: URL(string: "https://cloud-ui.test")!) { _ in "ui-test" }
             isRestoring = false
         }
         #endif
@@ -55,7 +65,18 @@ final class MobileCloudState {
         } catch { self.error = error.localizedDescription }
     }
 
-    func signOut() async {
+    func signOut(requiresPushRemoval: Bool = true) async {
+        guard !isSigningOut else { return }
+        isSigningOut = true
+        defer { isSigningOut = false }
+        do { try await push.disconnect(accountID: accountID) }
+        catch {
+            if requiresPushRemoval {
+                self.error = "Could not disconnect notifications. Retry signing out while connected."
+                return
+            }
+        }
+        push.sessionEnded()
         generation = UUID()
         projects = []
         boards = [:]
@@ -66,15 +87,15 @@ final class MobileCloudState {
     }
 
     func refresh() async {
+        Task { [weak self] in
+            guard let self, !isSigningOut, isSignedIn else { return }
+            await push.synchronize(accountID: accountID)
+        }
         let current = generation
         do {
-            let result = try await service.listProjects()
-            guard current == generation, isSignedIn else { return }
-            projects = result
-            boards = boards.filter { id, _ in result.contains { $0.id == id } }
-            error = nil
+            try await refreshProjects()
         } catch {
-            guard current == generation else { return }
+            guard current == generation, !Self.isCancellation(error) else { return }
             self.error = error.localizedDescription
         }
         do {
@@ -83,9 +104,24 @@ final class MobileCloudState {
             devices = result
             deviceError = nil
         } catch {
-            guard current == generation else { return }
+            guard current == generation, !Self.isCancellation(error) else { return }
             deviceError = error.localizedDescription
         }
+    }
+
+    /// Board loading needs this request's result, not a shared error from another refresh.
+    func refreshProjects() async throws {
+        let current = generation
+        let result = try await service.listProjects()
+        try Task.checkCancellation()
+        try checkSession(current)
+        projects = result
+        boards = boards.filter { id, _ in result.contains { $0.id == id } }
+        error = nil
+    }
+
+    static func isCancellation(_ error: Error) -> Bool {
+        Task.isCancelled || error is CancellationError || (error as? URLError)?.code == .cancelled
     }
 
     func loadBoard(_ projectID: String) async throws {
@@ -95,11 +131,34 @@ final class MobileCloudState {
         boards[projectID] = board
     }
 
+    func savedViews(_ projectID: String) async throws -> CloudSavedViews? {
+        let current = generation
+        let result = try await service.savedViews(projectId: projectID)
+        try checkSession(current)
+        return result
+    }
+
+    func saveViews(_ settings: CloudSavedViews, projectID: String) async throws -> CloudSavedViews {
+        let current = generation
+        let result = try await service.saveViews(settings, projectId: projectID)
+        try checkSession(current)
+        return result
+    }
+
     func createProject(name: String) async throws {
         let current = generation
         let project = try await service.createProject(name: name)
         try checkSession(current)
         projects.append(project)
+    }
+
+    func generateDraft(projectID: String, kind: ProjectCloudService.DraftKind, prompt: String) async throws -> ProjectCloudService.ItemDraft {
+        let current = generation
+        guard isSignedIn else { throw CancellationError() }
+        let draft = try await service.generateDraft(projectId: projectID, kind: kind, prompt: prompt)
+        try Task.checkCancellation()
+        try checkSession(current)
+        return draft
     }
 
     @discardableResult

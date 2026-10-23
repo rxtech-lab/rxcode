@@ -39,6 +39,9 @@
          <TestPlanReference
             reference = "container:MobileUnitTestPlan.xctestplan">
          </TestPlanReference>
+         <TestPlanReference
+            reference = "container:MobileFlowcyIntegrationTestPlan.xctestplan">
+         </TestPlanReference>
       </TestPlans>
    </TestAction>
    <LaunchAction

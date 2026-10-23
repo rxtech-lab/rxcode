@@ -39,6 +39,18 @@ extension MobileAppState {
         _ op: AutopilotOp,
         bodyData: Data?
     ) async throws -> AutopilotResultPayload {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-uitest-feature-navigation") {
+            return AutopilotResultPayload(clientRequestID: UUID(), domain: domain.rawValue, operation: op.rawValue,
+                                          ok: true, body: try FeatureNavigationUITestSupport.response(op))
+        }
+        #endif
+        if usesCloudTasks {
+            let request = AutopilotRequestPayload(domain: domain, operation: op, body: bodyData)
+            let body = try await FlowcyDirectService().perform(op, request: request)
+            return AutopilotResultPayload(clientRequestID: request.clientRequestID, domain: request.domain,
+                                          operation: request.operation, ok: true, body: body)
+        }
         guard isPaired else { throw AutopilotRemoteError.notPaired }
         let payload = AutopilotRequestPayload(domain: domain, operation: op, body: bodyData)
         let desktop = pairedDesktopPubkey
@@ -48,7 +60,7 @@ extension MobileAppState {
                 guard let self else { return }
                 do {
                     try await self.client.send(.autopilotRequest(payload), toHex: desktop)
-                    self.scheduleTimeout(Self.autopilotTimeout) { state in
+                    self.scheduleTimeout(op == .ciTrigger ? Self.ciScanTimeout : Self.autopilotTimeout) { state in
                         if let pending = state.pendingAutopilotRequests.removeValue(forKey: payload.clientRequestID) {
                             pending.resume(throwing: AutopilotRemoteError.timedOut)
                         }
@@ -65,6 +77,8 @@ extension MobileAppState {
     /// Autopilot requests can scan workflows / mint GitHub secrets on the
     /// desktop, so they get a longer ceiling than the snappy config calls.
     static let autopilotTimeout: Duration = .seconds(45)
+    /// A CI scan replies only after the server has scanned workflows and opened its PR.
+    static let ciScanTimeout: Duration = .seconds(300)
 
     /// Send with an encodable body and decode a typed response.
     func autopilotSend<Req: Encodable, Res: Decodable>(
@@ -283,6 +297,10 @@ extension MobileAppState {
 
     // MARK: - CI auto-update
 
+    func watchedRepoOverview(repository: String) async throws -> CIRepositoryOverview {
+        try await autopilotSend(.ciUpdates, .ciOverview, body: AutopilotIDBody(id: repository), as: CIRepositoryOverview.self)
+    }
+
     func listWatchedRepos(cursor: String? = nil) async throws -> WatchedRepoPage {
         try await autopilotSend(.ciUpdates, .ciList, body: AutopilotCursorQuery(cursor: cursor), as: WatchedRepoPage.self)
     }
@@ -307,12 +325,29 @@ extension MobileAppState {
         try await autopilotSend(.ciUpdates, .ciTrigger, body: AutopilotIDBody(id: id), as: CITriggerResponse.self)
     }
 
+    func triggerWatchedRepoDependencyScan(id: String) async throws -> DependencyScanTriggerResponse {
+        try await autopilotSend(.ciUpdates, .ciTriggerDependencies, body: AutopilotIDBody(id: id), as: DependencyScanTriggerResponse.self)
+    }
+
     func watchedRepoPullRequests(id: String) async throws -> [CIPullRequest] {
         try await autopilotSend(.ciUpdates, .ciListPRs, body: AutopilotIDBody(id: id), as: CIPullRequestList.self).items
     }
 
     func closeWatchedRepoPR(id: String, prNumber: Int) async throws {
         try await autopilotSendVoid(.ciUpdates, .ciClosePR, body: AutopilotCIClosePRBody(id: id, prNumber: prNumber))
+    }
+
+    func watchedRepoAutomation(id: String) async throws -> RepositoryAutomationResponse {
+        try await autopilotSend(.ciUpdates, .ciAutomationGet, body: AutopilotIDBody(id: id), as: RepositoryAutomationResponse.self)
+    }
+
+    func saveWatchedRepoAutomation(id: String, settings: RepositoryAutomationSettings) async throws -> RepositoryAutomationSettings {
+        try await autopilotSend(.ciUpdates, .ciAutomationSave, body: AutopilotCIAutomationSaveBody(id: id, settings: settings),
+                                as: RepositoryAutomationSaveResponse.self).settings
+    }
+
+    func watchedRepoDirectories(id: String, sha: String? = nil) async throws -> RepositoryDirectoryListing {
+        try await autopilotSend(.ciUpdates, .ciDirectories, body: AutopilotCIDirectoriesBody(id: id, sha: sha), as: RepositoryDirectoryListing.self)
     }
 
     // MARK: - Docs
@@ -394,6 +429,23 @@ extension MobileAppState {
     }
 
     @discardableResult
+    func listReleaseBranches(repoId: String) async throws -> [ReleaseBranch] {
+        try await autopilotSend(.release, .releaseBranches, body: AutopilotRepoIDBody(repoId: repoId), as: ReleaseBranchList.self).items
+    }
+
+    func releaseDispatchHistory(repoId: String) async throws -> [ReleaseDispatchHistoryItem] {
+        try await autopilotSend(.release, .releaseDispatchHistory, body: AutopilotRepoIDBody(repoId: repoId), as: ReleaseDispatchHistoryPage.self).items
+    }
+
+    func rescanReleaseWorkflows(repoId: String) async throws -> ReleaseWorkflowScanResult {
+        try await autopilotSend(.release, .releaseRescanWorkflows, body: AutopilotRepoIDBody(repoId: repoId), as: ReleaseWorkflowScanResult.self)
+    }
+
+    func setReleaseWorkflowSelected(repoId: String, workflowId: String, isSelected: Bool) async throws {
+        try await autopilotSendVoid(.release, .releaseSetWorkflowSelected,
+                                    body: AutopilotReleaseWorkflowSelectionBody(repoId: repoId, workflowId: workflowId, isSelected: isSelected))
+    }
+
     func installReleaseToken(repoId: String, value: String) async throws -> ReleaseGithubSecretResult {
         try await autopilotSend(.release, .releaseInstallToken, body: AutopilotReleaseTokenBody(repoId: repoId, value: value), as: ReleaseGithubSecretResult.self)
     }

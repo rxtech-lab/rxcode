@@ -49,6 +49,18 @@
         }
       }
     },
+    "·" : {
+
+    },
+    "· %@" : {
+
+    },
+    "· %lld PRs" : {
+
+    },
+    "· %lld vulnerabilities" : {
+
+    },
     "· Agent working" : {
       "localizations" : {
         "zh-Hans" : {
@@ -59,7 +71,11 @@
         }
       }
     },
+    "#%@" : {
+
+    },
     "#%lld" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -74,6 +90,9 @@
           }
         }
       }
+    },
+    "#%lld ·" : {
+
     },
     "%@ · %lld model%@" : {
       "localizations" : {
@@ -106,6 +125,31 @@
           }
         }
       }
+    },
+    "%@ (root)" : {
+
+    },
+    "%@ %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ %2$@"
+          }
+        }
+      }
+    },
+    "%@ is no longer a release workflow." : {
+
+    },
+    "%@ is no longer paired." : {
+
+    },
+    "%@ isn't reachable. Make sure RxCode is open on it." : {
+
+    },
+    "%@ marked as a release workflow." : {
+
     },
     "%@, %lld lines added, %lld removed. Tap to view the diff." : {
       "localizations" : {
@@ -173,6 +217,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@。点按以查看。"
+          }
+        }
+      }
+    },
+    "%@@%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@@%2$@"
           }
         }
       }
@@ -263,12 +317,25 @@
         }
       }
     },
+    "%lld inputs" : {
+
+    },
     "%lld of %lld" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld / %lld"
+          }
+        }
+      }
+    },
+    "%lld of %lld complete" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld complete"
           }
         }
       }
@@ -290,6 +357,7 @@
       }
     },
     "%lld outdated action(s)" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -359,6 +427,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld 个故事"
+          }
+        }
+      }
+    },
+    "%lld workflows · %lld actions · %lld outdated" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld workflows · %2$lld actions · %3$lld outdated"
           }
         }
       }
@@ -509,6 +587,12 @@
         }
       }
     },
+    "A pull request with the GitHub Actions updates is ready for review." : {
+
+    },
+    "A scan is already in progress. Results will appear when it finishes." : {
+
+    },
     "A summary will appear after threads complete" : {
       "localizations" : {
         "en" : {
@@ -569,6 +653,12 @@
         }
       }
     },
+    "Actions" : {
+
+    },
+    "Actions Found" : {
+
+    },
     "Active" : {
       "localizations" : {
         "en" : {
@@ -590,6 +680,9 @@
           }
         }
       }
+    },
+    "Activity" : {
+
     },
     "Add" : {
       "localizations" : {
@@ -705,6 +798,9 @@
         }
       }
     },
+    "Add a repository to create releases from its GitHub Actions workflows." : {
+
+    },
     "Add a task to start planning your project." : {
       "localizations" : {
         "zh-Hans" : {
@@ -714,6 +810,9 @@
           }
         }
       }
+    },
+    "Add a workflow_dispatch trigger to a workflow, then rescan workflows." : {
+
     },
     "Add Argument" : {
       "localizations" : {
@@ -736,6 +835,9 @@
           }
         }
       }
+    },
+    "Add Directory" : {
+
     },
     "Add Document" : {
       "localizations" : {
@@ -851,6 +953,18 @@
         }
       }
     },
+    "Add Repository" : {
+
+    },
+    "Add the root (.) or each child project directory. For shared lockfiles, include the workspace root and each child project you want to update. Auto Detect picks the package manager from repository configuration and lockfiles." : {
+
+    },
+    "Added" : {
+
+    },
+    "Advisory" : {
+
+    },
     "Agent" : {
       "localizations" : {
         "zh-Hans" : {
@@ -935,6 +1049,12 @@
         }
       }
     },
+    "AI repair of failing dependency CI" : {
+
+    },
+    "AI writes a title and description. Review the draft before adding it to your board." : {
+
+    },
     "All" : {
       "localizations" : {
         "en" : {
@@ -979,6 +1099,12 @@
         }
       }
     },
+    "All GitHub Actions are up to date. No changes were needed." : {
+
+    },
+    "All Project Cards Hidden" : {
+
+    },
     "All projects" : {
       "localizations" : {
         "en" : {
@@ -1001,6 +1127,9 @@
         }
       }
     },
+    "All workflows passing" : {
+
+    },
     "Allow" : {
       "localizations" : {
         "en" : {
@@ -1022,6 +1151,9 @@
           }
         }
       }
+    },
+    "Allow %@?" : {
+
     },
     "Answer" : {
       "localizations" : {
@@ -1092,6 +1224,9 @@
           }
         }
       }
+    },
+    "Appearance" : {
+
     },
     "Archive" : {
       "localizations" : {
@@ -1247,6 +1382,9 @@
         }
       }
     },
+    "Ask about your projects, issues, and builds. Flowcy uses your signed-in account to access tools." : {
+
+    },
     "Ask the agent to change something…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1276,6 +1414,9 @@
           }
         }
       }
+    },
+    "Assistant" : {
+
     },
     "Assistant has a question" : {
       "localizations" : {
@@ -1321,6 +1462,9 @@
         }
       }
     },
+    "Auto · %@" : {
+
+    },
     "Auto-archive" : {
       "localizations" : {
         "en" : {
@@ -1343,6 +1487,27 @@
         }
       }
     },
+    "Auto-merge" : {
+
+    },
+    "Auto-merge CI update PRs" : {
+
+    },
+    "Auto-merge dependency PRs" : {
+
+    },
+    "Auto-merge requires GitHub repository auto-merge to be enabled and respects required checks and reviews." : {
+
+    },
+    "Auto: %@" : {
+
+    },
+    "Automatic scans stop. Existing pull requests stay open." : {
+
+    },
+    "Automatically update dependencies" : {
+
+    },
     "Automation" : {
       "localizations" : {
         "ko" : {
@@ -1358,6 +1523,21 @@
           }
         }
       }
+    },
+    "Automation is unavailable on this Flowcy server. Update the service, then try again. CI history and pull requests remain available." : {
+
+    },
+    "Automation Settings" : {
+
+    },
+    "Automation settings are still loading. Try again in a moment." : {
+
+    },
+    "Automation settings saved." : {
+
+    },
+    "Automation Unavailable" : {
+
     },
     "Available in Registry" : {
       "localizations" : {
@@ -1380,6 +1560,9 @@
           }
         }
       }
+    },
+    "Available Tools" : {
+
     },
     "Bash" : {
       "extractionState" : "stale",
@@ -1425,6 +1608,9 @@
           }
         }
       }
+    },
+    "Billing" : {
+
     },
     "Branch" : {
       "localizations" : {
@@ -1732,6 +1918,9 @@
         }
       }
     },
+    "Cancelled" : {
+
+    },
     "Change the summarization provider from mobile; API keys and endpoint secrets stay on the Mac." : {
       "localizations" : {
         "en" : {
@@ -1792,6 +1981,12 @@
         }
       }
     },
+    "Checks %@'s GitHub Actions for outdated versions and opens a pull request when updates are needed." : {
+
+    },
+    "Choose a setting from the sidebar." : {
+
+    },
     "Choose from Photos" : {
       "localizations" : {
         "en" : {
@@ -1836,6 +2031,12 @@
         }
       }
     },
+    "Choose Scan CI Updates from the repository's actions menu to run the first scan." : {
+
+    },
+    "Choose the root or each child project to include in dependency updates." : {
+
+    },
     "Choose the thread agent" : {
       "localizations" : {
         "en" : {
@@ -1857,6 +2058,9 @@
           }
         }
       }
+    },
+    "Choose Workflow" : {
+
     },
     "CI" : {
       "localizations" : {
@@ -1889,6 +2093,27 @@
           }
         }
       }
+    },
+    "CI History" : {
+
+    },
+    "CI Pull Requests" : {
+
+    },
+    "CI Scan" : {
+
+    },
+    "CI Scan Complete" : {
+
+    },
+    "CI scan failed." : {
+
+    },
+    "CI Security" : {
+
+    },
+    "CI Security Scan" : {
+
     },
     "Classifying" : {
       "localizations" : {
@@ -2003,6 +2228,7 @@
       }
     },
     "Close PR" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -2018,7 +2244,14 @@
         }
       }
     },
+    "Close Pull Request" : {
+
+    },
+    "Close pull request #%lld?" : {
+
+    },
     "Close pull request?" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -2033,6 +2266,12 @@
           }
         }
       }
+    },
+    "Closed" : {
+
+    },
+    "Closing pull request…" : {
+
     },
     "Code Review" : {
       "localizations" : {
@@ -2087,6 +2326,9 @@
           }
         }
       }
+    },
+    "Column" : {
+
     },
     "Command" : {
       "localizations" : {
@@ -2158,6 +2400,9 @@
         }
       }
     },
+    "Completed" : {
+
+    },
     "Computer Status" : {
       "localizations" : {
         "en" : {
@@ -2211,6 +2456,12 @@
           }
         }
       }
+    },
+    "Confirm Tool Action" : {
+
+    },
+    "Confirmation required before execution" : {
+
     },
     "Connect a Mac first." : {
       "localizations" : {
@@ -2316,6 +2567,12 @@
         }
       }
     },
+    "Connect New Remote" : {
+
+    },
+    "Connect Notifications" : {
+
+    },
     "Connect to" : {
       "localizations" : {
         "en" : {
@@ -2375,6 +2632,12 @@
           }
         }
       }
+    },
+    "Connected" : {
+
+    },
+    "Connected · Tools discovered" : {
+
     },
     "Connecting to %@" : {
       "localizations" : {
@@ -2533,6 +2796,45 @@
           }
         }
       }
+    },
+    "Conversation" : {
+
+    },
+    "Copied %@." : {
+
+    },
+    "Copy File" : {
+
+    },
+    "Could Not Close Pull Request" : {
+
+    },
+    "Could Not Complete Chat" : {
+
+    },
+    "Could Not Complete Request" : {
+
+    },
+    "Could Not Create Project" : {
+
+    },
+    "Could Not Enable Feature" : {
+
+    },
+    "Could Not Install Token" : {
+
+    },
+    "Could Not Load Folders" : {
+
+    },
+    "Could Not Save" : {
+
+    },
+    "Could Not Save Webhook" : {
+
+    },
+    "Could Not Sign Out" : {
+
     },
     "Couldn’t Complete" : {
       "localizations" : {
@@ -2768,6 +3070,9 @@
         }
       }
     },
+    "Create a project to get started." : {
+
+    },
     "Create a project to plan its tasks here." : {
       "localizations" : {
         "zh-Hans" : {
@@ -2777,6 +3082,9 @@
           }
         }
       }
+    },
+    "Create a webhook to receive Flowcy events." : {
+
     },
     "Create branch" : {
       "localizations" : {
@@ -2853,6 +3161,18 @@
           }
         }
       }
+    },
+    "Create Story with AI" : {
+
+    },
+    "Create Task with AI" : {
+
+    },
+    "Create with AI" : {
+
+    },
+    "Create your first task using the + button." : {
+
     },
     "Created" : {
       "localizations" : {
@@ -2982,6 +3302,9 @@
         }
       }
     },
+    "Creating project…" : {
+
+    },
     "Creating Pull Request…" : {
       "localizations" : {
         "ko" : {
@@ -3041,6 +3364,12 @@
           }
         }
       }
+    },
+    "Current Folder" : {
+
+    },
+    "Current Mac" : {
+
     },
     "Current project" : {
       "localizations" : {
@@ -3184,6 +3513,9 @@
         }
       }
     },
+    "Dark" : {
+
+    },
     "Default" : {
       "localizations" : {
         "ko" : {
@@ -3215,6 +3547,9 @@
           }
         }
       }
+    },
+    "Default view updated" : {
+
     },
     "Delete" : {
       "localizations" : {
@@ -3396,6 +3731,9 @@
         }
       }
     },
+    "Delete this webhook?" : {
+
+    },
     "Deleting environment…" : {
       "localizations" : {
         "ko" : {
@@ -3428,6 +3766,9 @@
         }
       }
     },
+    "Deleting webhook…" : {
+
+    },
     "Deny" : {
       "localizations" : {
         "en" : {
@@ -3449,6 +3790,36 @@
           }
         }
       }
+    },
+    "Dependencies" : {
+
+    },
+    "Dependencies & Security" : {
+
+    },
+    "Dependency Scan" : {
+
+    },
+    "Dependency scan finished." : {
+
+    },
+    "Dependency scan queued." : {
+
+    },
+    "Dependency Scan Unavailable" : {
+
+    },
+    "Dependency scan was not queued." : {
+
+    },
+    "Dependency updates" : {
+
+    },
+    "Dependency vulnerability emails" : {
+
+    },
+    "Dependency vulnerability scans" : {
+
     },
     "Describe a task, paste a snippet, or ask a question." : {
       "localizations" : {
@@ -3730,6 +4101,9 @@
         }
       }
     },
+    "Directory" : {
+
+    },
     "Disabled" : {
       "localizations" : {
         "ko" : {
@@ -3745,6 +4119,21 @@
           }
         }
       }
+    },
+    "Discard Changes" : {
+
+    },
+    "Discard changes?" : {
+
+    },
+    "Disconnect" : {
+
+    },
+    "Disconnect Notifications" : {
+
+    },
+    "Disconnect this device from Flowcy notifications?" : {
+
     },
     "Disconnected" : {
       "localizations" : {
@@ -3769,6 +4158,7 @@
       }
     },
     "Dispatch" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -3852,6 +4242,9 @@
         }
       }
     },
+    "Don't Wrap Lines" : {
+
+    },
     "Done" : {
       "localizations" : {
         "en" : {
@@ -3906,6 +4299,9 @@
         }
       }
     },
+    "Drag the handles to reorder project cards. Hiding a card keeps its project and tasks. Long press a card's title on the Tasks page to drag it directly." : {
+
+    },
     "Duplicate" : {
       "localizations" : {
         "en" : {
@@ -3928,6 +4324,9 @@
         }
       }
     },
+    "Each directory can only be configured once." : {
+
+    },
     "Edit" : {
       "localizations" : {
         "en" : {
@@ -3949,6 +4348,9 @@
           }
         }
       }
+    },
+    "Edit Directory" : {
+
     },
     "Edit MCP Server" : {
       "localizations" : {
@@ -4018,6 +4420,15 @@
         }
       }
     },
+    "Edit Webhook" : {
+
+    },
+    "Email me about dependency vulnerabilities" : {
+
+    },
+    "Email me about GitHub Actions vulnerabilities" : {
+
+    },
     "Empty Folder" : {
       "localizations" : {
         "en" : {
@@ -4039,6 +4450,15 @@
           }
         }
       }
+    },
+    "Enable" : {
+
+    },
+    "Enable native release management for this repository. You can review workflows and trigger releases from your device." : {
+
+    },
+    "Enable or Retry Registration" : {
+
     },
     "Enable Plan before sending a new thread so the desktop agent drafts a read-only plan first." : {
       "localizations" : {
@@ -4077,6 +4497,9 @@
           }
         }
       }
+    },
+    "Enabling feature…" : {
+
     },
     "Encryption not set up" : {
       "localizations" : {
@@ -4208,6 +4631,15 @@
         }
       }
     },
+    "Events" : {
+
+    },
+    "Explicit Node.js choices must match the committed lockfile. Python supports requirements, pipenv, Poetry and uv. Swift supports Package.swift." : {
+
+    },
+    "Explore Project" : {
+
+    },
     "Extra High" : {
       "localizations" : {
         "en" : {
@@ -4229,6 +4661,9 @@
           }
         }
       }
+    },
+    "Failed" : {
+
     },
     "Failed to add project." : {
       "localizations" : {
@@ -4668,6 +5103,12 @@
         }
       }
     },
+    "Feature Not Configured" : {
+
+    },
+    "File" : {
+
+    },
     "File paths" : {
       "localizations" : {
         "en" : {
@@ -4705,6 +5146,9 @@
           }
         }
       }
+    },
+    "File Unavailable" : {
+
     },
     "Filename" : {
       "localizations" : {
@@ -4816,6 +5260,9 @@
         }
       }
     },
+    "Finished" : {
+
+    },
     "Fix Check Error" : {
       "localizations" : {
         "zh-Hans" : {
@@ -4843,6 +5290,7 @@
       }
     },
     "Flowcy Account" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -4851,6 +5299,12 @@
           }
         }
       }
+    },
+    "Flowcy Agent" : {
+
+    },
+    "Flowcy can send notifications to this device without a paired Mac." : {
+
     },
     "Flowcy currently syncs one Starts after task per cloud task." : {
       "localizations" : {
@@ -4871,6 +5325,12 @@
           }
         }
       }
+    },
+    "Flowcy stops managing releases for this repository. Existing GitHub releases are not affected." : {
+
+    },
+    "Flowcy Tools" : {
+
     },
     "Focus mode" : {
       "localizations" : {
@@ -4974,7 +5434,18 @@
         }
       }
     },
+    "Found %lld workflows (%lld release)." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Found %1$lld workflows (%2$lld release)."
+          }
+        }
+      }
+    },
     "Frequency" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -4989,6 +5460,18 @@
           }
         }
       }
+    },
+    "From" : {
+
+    },
+    "General" : {
+
+    },
+    "Generate" : {
+
+    },
+    "Generating draft…" : {
+
     },
     "ghp_… or github_pat_…" : {
       "localizations" : {
@@ -5050,6 +5533,12 @@
         }
       }
     },
+    "GitHub Actions vulnerability emails" : {
+
+    },
+    "GitHub Actions vulnerability scans" : {
+
+    },
     "Global search" : {
       "localizations" : {
         "en" : {
@@ -5110,6 +5599,12 @@
         }
       }
     },
+    "Has its own task board" : {
+
+    },
+    "Hide" : {
+
+    },
     "Hide code reviews" : {
       "localizations" : {
         "ko" : {
@@ -5125,6 +5620,9 @@
           }
         }
       }
+    },
+    "Hide Project Card" : {
+
     },
     "Hide values" : {
       "localizations" : {
@@ -5179,6 +5677,9 @@
           }
         }
       }
+    },
+    "HTTPS endpoint" : {
+
     },
     "https://…" : {
       "localizations" : {
@@ -5374,6 +5875,9 @@
         }
       }
     },
+    "Install skills and agents and configure MCP servers on the active Mac." : {
+
+    },
     "Install skills and agents, and configure MCP servers on the active Mac." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -5398,6 +5902,7 @@
       }
     },
     "Install skills and agents, configure MCP servers, and manage Flowcy on the active Mac." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -5435,7 +5940,14 @@
         }
       }
     },
+    "Installed %@." : {
+
+    },
+    "Installed as the RELEASE_TOKEN GitHub Actions secret in %@ so the release workflow can publish. The token is encrypted on the server and never shown again." : {
+
+    },
     "Installed as the repo's GitHub Actions secret so the release workflow can publish." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -5450,6 +5962,9 @@
           }
         }
       }
+    },
+    "Installing RELEASE_TOKEN…" : {
+
     },
     "Installing…" : {
       "localizations" : {
@@ -5473,6 +5988,12 @@
         }
       }
     },
+    "Into" : {
+
+    },
+    "Invalid Directory" : {
+
+    },
     "Invalid or expired pairing code." : {
       "localizations" : {
         "en" : {
@@ -5495,6 +6016,9 @@
         }
       }
     },
+    "Issue" : {
+
+    },
     "It may have been deleted." : {
       "localizations" : {
         "zh-Hans" : {
@@ -5514,6 +6038,9 @@
           }
         }
       }
+    },
+    "Keep Editing" : {
+
     },
     "Key" : {
       "localizations" : {
@@ -5537,6 +6064,9 @@
         }
       }
     },
+    "Labels" : {
+
+    },
     "Laptop" : {
       "localizations" : {
         "zh-Hans" : {
@@ -5547,7 +6077,17 @@
         }
       }
     },
+    "Last Scanned" : {
+
+    },
+    "Last seen %@ ago" : {
+
+    },
+    "Latest Release" : {
+
+    },
     "Latest: %@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -5572,6 +6112,9 @@
           }
         }
       }
+    },
+    "Light" : {
+
     },
     "Linked Tasks" : {
       "localizations" : {
@@ -5621,6 +6164,9 @@
         }
       }
     },
+    "Load More" : {
+
+    },
     "Loading changes…" : {
       "localizations" : {
         "en" : {
@@ -5642,6 +6188,12 @@
           }
         }
       }
+    },
+    "Loading CI…" : {
+
+    },
+    "Loading conversation…" : {
+
     },
     "Loading environments…" : {
       "localizations" : {
@@ -5697,6 +6249,9 @@
         }
       }
     },
+    "Loading folders…" : {
+
+    },
     "Loading messages" : {
       "localizations" : {
         "ko" : {
@@ -5712,6 +6267,12 @@
           }
         }
       }
+    },
+    "Loading project…" : {
+
+    },
+    "Loading projects…" : {
+
     },
     "Loading skills…" : {
       "localizations" : {
@@ -5734,6 +6295,9 @@
           }
         }
       }
+    },
+    "Loading task overview…" : {
+
     },
     "Loading tasks…" : {
       "localizations" : {
@@ -5798,6 +6362,9 @@
           }
         }
       }
+    },
+    "Location" : {
+
     },
     "Locked once the task has run, so it keeps matching what the agent was asked to do." : {
       "localizations" : {
@@ -6039,6 +6606,9 @@
         }
       }
     },
+    "Manage Billing" : {
+
+    },
     "Manage end-to-end encrypted secrets, CI auto-update scans, indexed docs, and release workflows." : {
       "localizations" : {
         "ko" : {
@@ -6064,6 +6634,15 @@
           }
         }
       }
+    },
+    "Manual" : {
+
+    },
+    "Manual Trigger" : {
+
+    },
+    "Mark as Release Workflow" : {
+
     },
     "Markdown" : {
       "localizations" : {
@@ -6229,6 +6808,12 @@
         }
       }
     },
+    "Merged" : {
+
+    },
+    "Message Flowcy…" : {
+
+    },
     "Message…" : {
       "localizations" : {
         "en" : {
@@ -6250,6 +6835,9 @@
           }
         }
       }
+    },
+    "Messages from this session will appear here." : {
+
     },
     "Messages you queue while a response is streaming appear here." : {
       "localizations" : {
@@ -6341,6 +6929,9 @@
         }
       }
     },
+    "More" : {
+
+    },
     "Move To" : {
       "localizations" : {
         "zh-Hans" : {
@@ -6350,6 +6941,12 @@
           }
         }
       }
+    },
+    "Move Without Running" : {
+
+    },
+    "Moving task…" : {
+
     },
     "Moving this task into a chat column runs the assigned agent in a new thread on your Mac." : {
       "localizations" : {
@@ -6409,6 +7006,12 @@
         }
       }
     },
+    "Never" : {
+
+    },
+    "Never scanned" : {
+
+    },
     "New" : {
       "localizations" : {
         "en" : {
@@ -6431,6 +7034,9 @@
         }
       }
     },
+    "New Chat" : {
+
+    },
     "New environment" : {
       "localizations" : {
         "ko" : {
@@ -6447,6 +7053,9 @@
         }
       }
     },
+    "New findings go to your account email. Delivery failures appear in scan history and retry on the next scan." : {
+
+    },
     "New Project" : {
       "localizations" : {
         "zh-Hans" : {
@@ -6456,6 +7065,9 @@
           }
         }
       }
+    },
+    "New signing secret (leave blank to keep)" : {
+
     },
     "New Story" : {
       "localizations" : {
@@ -6545,6 +7157,9 @@
         }
       }
     },
+    "New Webhook" : {
+
+    },
     "New worktree" : {
       "localizations" : {
         "ko" : {
@@ -6577,6 +7192,9 @@
         }
       }
     },
+    "No %@" : {
+
+    },
     "No agents found." : {
       "localizations" : {
         "en" : {
@@ -6598,6 +7216,9 @@
           }
         }
       }
+    },
+    "No automatic schedule is active. Saving creates one with this frequency." : {
+
     },
     "No briefings for the current branch." : {
       "localizations" : {
@@ -6719,6 +7340,15 @@
         }
       }
     },
+    "No CI Activity" : {
+
+    },
+    "No CI Scans Yet" : {
+
+    },
+    "No CI Update Pull Requests" : {
+
+    },
     "No custom Git sources added." : {
       "localizations" : {
         "en" : {
@@ -6741,6 +7371,9 @@
         }
       }
     },
+    "No Dependency or Security Scans" : {
+
+    },
     "No description" : {
       "localizations" : {
         "zh-Hans" : {
@@ -6750,6 +7383,9 @@
           }
         }
       }
+    },
+    "No description provided." : {
+
     },
     "No diff content available." : {
       "localizations" : {
@@ -6875,6 +7511,9 @@
         }
       }
     },
+    "No items for this project." : {
+
+    },
     "No matches" : {
       "localizations" : {
         "zh-Hans" : {
@@ -6884,6 +7523,12 @@
           }
         }
       }
+    },
+    "No matching items on this page." : {
+
+    },
+    "No Matching Projects" : {
+
     },
     "No Matching Stories" : {
       "localizations" : {
@@ -6927,6 +7572,9 @@
         }
       }
     },
+    "No Messages" : {
+
+    },
     "No models available" : {
       "localizations" : {
         "en" : {
@@ -6950,6 +7598,7 @@
       }
     },
     "No open auto-update pull requests." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -6964,6 +7613,9 @@
           }
         }
       }
+    },
+    "No Project Cards" : {
+
     },
     "No Projects" : {
       "localizations" : {
@@ -7025,7 +7677,11 @@
         }
       }
     },
+    "No Release Repositories" : {
+
+    },
     "No release repositories. Tap + to add one." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -7040,6 +7696,15 @@
           }
         }
       }
+    },
+    "No Release Workflows" : {
+
+    },
+    "No releases created from Flowcy yet." : {
+
+    },
+    "No releases yet" : {
+
     },
     "No repositories available to add." : {
       "localizations" : {
@@ -7116,6 +7781,7 @@
       }
     },
     "No scans yet." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -7236,6 +7902,12 @@
           }
         }
       }
+    },
+    "No subfolders" : {
+
+    },
+    "No Subscription" : {
+
     },
     "No summary available yet" : {
       "localizations" : {
@@ -7403,7 +8075,11 @@
         }
       }
     },
+    "No Watched Repositories" : {
+
+    },
     "No watched repositories. Tap + to add one." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -7419,7 +8095,20 @@
         }
       }
     },
+    "No Webhooks" : {
+
+    },
+    "No workflow in this repository can be started manually. Add a workflow_dispatch trigger, then rescan workflows." : {
+
+    },
+    "No workflow runs have been recorded for this repository. Flowcy records activity when its GitHub App receives workflow run events." : {
+
+    },
+    "No workflows found. Choose Rescan Workflows from the menu after adding files to .github/workflows." : {
+
+    },
     "No workflows scanned yet." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -7563,6 +8252,15 @@
         }
       }
     },
+    "Notification Settings" : {
+
+    },
+    "Notifications" : {
+
+    },
+    "Number" : {
+
+    },
     "of %@" : {
       "localizations" : {
         "en" : {
@@ -7651,6 +8349,9 @@
         }
       }
     },
+    "Only workflows with a workflow_dispatch trigger can be started from Flowcy." : {
+
+    },
     "Open" : {
       "localizations" : {
         "ko" : {
@@ -7689,6 +8390,9 @@
         }
       }
     },
+    "Open Advisory" : {
+
+    },
     "Open Chat" : {
       "localizations" : {
         "zh-Hans" : {
@@ -7700,6 +8404,7 @@
       }
     },
     "Open cloud project plans and task boards." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -7753,6 +8458,9 @@
         }
       }
     },
+    "Open in GitHub" : {
+
+    },
     "Open on GitHub" : {
       "localizations" : {
         "ko" : {
@@ -7769,6 +8477,9 @@
         }
       }
     },
+    "Open Project Board" : {
+
+    },
     "Open Pull Request" : {
       "localizations" : {
         "ko" : {
@@ -7784,6 +8495,24 @@
           }
         }
       }
+    },
+    "Open System Notification Settings" : {
+
+    },
+    "Opened" : {
+
+    },
+    "Opening billing…" : {
+
+    },
+    "Opening notification…" : {
+
+    },
+    "Opening on %@…" : {
+
+    },
+    "Opens the project board. Long press and drag to reorder." : {
+
     },
     "Opens todos and thread summary" : {
       "localizations" : {
@@ -7833,6 +8562,9 @@
         }
       }
     },
+    "Outdated Actions" : {
+
+    },
     "Overwrite existing files" : {
       "localizations" : {
         "ko" : {
@@ -7850,7 +8582,6 @@
       }
     },
     "Package" : {
-      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -8079,6 +8810,12 @@
         }
       }
     },
+    "Paused" : {
+
+    },
+    "Pending" : {
+
+    },
     "Permission needed" : {
       "localizations" : {
         "en" : {
@@ -8101,6 +8838,9 @@
         }
       }
     },
+    "Personal Access Token" : {
+
+    },
     "Pick a desktop folder remotely, then start or continue its threads from mobile." : {
       "localizations" : {
         "en" : {
@@ -8122,6 +8862,9 @@
           }
         }
       }
+    },
+    "Plan" : {
+
     },
     "Plan mode" : {
       "localizations" : {
@@ -8257,6 +9000,15 @@
         }
       }
     },
+    "Project Card Actions" : {
+
+    },
+    "Project Cards" : {
+
+    },
+    "Project Directories" : {
+
+    },
     "Project name" : {
       "localizations" : {
         "zh-Hans" : {
@@ -8283,6 +9035,9 @@
         }
       }
     },
+    "Project Unavailable" : {
+
+    },
     "Projects" : {
       "localizations" : {
         "en" : {
@@ -8304,6 +9059,9 @@
           }
         }
       }
+    },
+    "Projects, automation, and your agent. Sign in with your RxLab account." : {
+
     },
     "Provider" : {
       "localizations" : {
@@ -8327,6 +9085,25 @@
         }
       }
     },
+    "Pull Request" : {
+
+    },
+    "Pull Request #%lld" : {
+
+    },
+    "Pull Request #%lld%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Pull Request #%1$lld%2$@"
+          }
+        }
+      }
+    },
+    "Pull Request Created" : {
+
+    },
     "Pull Requests" : {
       "localizations" : {
         "ko" : {
@@ -8342,6 +9119,12 @@
           }
         }
       }
+    },
+    "Pull requests opened by CI update scans appear here." : {
+
+    },
+    "Pull to refresh the repository." : {
+
     },
     "Question %lld" : {
       "localizations" : {
@@ -8375,6 +9158,12 @@
         }
       }
     },
+    "Queue Dependency Scan" : {
+
+    },
+    "Queued" : {
+
+    },
     "Queued Messages" : {
       "localizations" : {
         "ko" : {
@@ -8391,6 +9180,12 @@
         }
       }
     },
+    "Queuing dependency scan…" : {
+
+    },
+    "Quick Actions" : {
+
+    },
     "Quick Add Task" : {
       "localizations" : {
         "zh-Hans" : {
@@ -8400,6 +9195,15 @@
           }
         }
       }
+    },
+    "Read access" : {
+
+    },
+    "Recent Releases" : {
+
+    },
+    "Reconnect" : {
+
     },
     "Reconnecting in %llds" : {
       "localizations" : {
@@ -8445,6 +9249,9 @@
         }
       }
     },
+    "Refresh this project before running its tasks." : {
+
+    },
     "Release" : {
       "localizations" : {
         "ko" : {
@@ -8461,6 +9268,15 @@
         }
       }
     },
+    "Release Failed" : {
+
+    },
+    "Release started on %@." : {
+
+    },
+    "Release with This Workflow" : {
+
+    },
     "Release workflow triggered" : {
       "localizations" : {
         "ko" : {
@@ -8476,6 +9292,9 @@
           }
         }
       }
+    },
+    "Release Workflows" : {
+
     },
     "RELEASE_TOKEN" : {
       "localizations" : {
@@ -8526,6 +9345,7 @@
       }
     },
     "Remote Tasks" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -8534,6 +9354,9 @@
           }
         }
       }
+    },
+    "Remote Workspace" : {
+
     },
     "Remove" : {
       "localizations" : {
@@ -8579,6 +9402,9 @@
         }
       }
     },
+    "Remove %@?" : {
+
+    },
     "Remove agent?" : {
       "localizations" : {
         "ko" : {
@@ -8594,6 +9420,12 @@
           }
         }
       }
+    },
+    "Remove Directory" : {
+
+    },
+    "Remove from Watch List" : {
+
     },
     "Remove MCP server?" : {
       "localizations" : {
@@ -8633,6 +9465,9 @@
         }
       }
     },
+    "Remove Repository" : {
+
+    },
     "Remove repository?" : {
       "localizations" : {
         "ko" : {
@@ -8648,6 +9483,15 @@
           }
         }
       }
+    },
+    "Remove this project directory from scanning?" : {
+
+    },
+    "Removes the repository and its automatic scan schedule." : {
+
+    },
+    "Removing repository…" : {
+
     },
     "Rename" : {
       "localizations" : {
@@ -8779,6 +9623,12 @@
         }
       }
     },
+    "Rescan Workflows" : {
+
+    },
+    "Rescanning workflows…" : {
+
+    },
     "Resets %@" : {
       "localizations" : {
         "en" : {
@@ -8839,6 +9689,9 @@
         }
       }
     },
+    "Restore cards from Project Cards." : {
+
+    },
     "Restoring session…" : {
       "localizations" : {
         "ko" : {
@@ -8854,6 +9707,9 @@
           }
         }
       }
+    },
+    "Results" : {
+
     },
     "Retry" : {
       "localizations" : {
@@ -8940,6 +9796,9 @@
           }
         }
       }
+    },
+    "Run on Mac" : {
+
     },
     "Run Profile Error" : {
       "localizations" : {
@@ -9049,6 +9908,9 @@
         }
       }
     },
+    "Running on %@" : {
+
+    },
     "Runs" : {
       "localizations" : {
         "en" : {
@@ -9067,6 +9929,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "运行"
+          }
+        }
+      }
+    },
+    "Runs on %@ in %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Runs on %1$@ in %2$@."
           }
         }
       }
@@ -9125,6 +9997,15 @@
         }
       }
     },
+    "Saved conversation" : {
+
+    },
+    "Saving automation settings…" : {
+
+    },
+    "Saving automation…" : {
+
+    },
     "Saving file…" : {
       "localizations" : {
         "ko" : {
@@ -9151,6 +10032,15 @@
         }
       }
     },
+    "Saving template…" : {
+
+    },
+    "Saving view…" : {
+
+    },
+    "Saving webhook…" : {
+
+    },
     "Scan" : {
       "localizations" : {
         "ko" : {
@@ -9167,7 +10057,32 @@
         }
       }
     },
+    "Scan CI" : {
+
+    },
+    "Scan CI Updates" : {
+
+    },
+    "Scan CI updates?" : {
+
+    },
+    "Scan Dependencies" : {
+
+    },
+    "Scan dependencies for vulnerabilities" : {
+
+    },
+    "Scan dependencies?" : {
+
+    },
+    "Scan Frequency" : {
+
+    },
+    "Scan GitHub Actions for vulnerabilities" : {
+
+    },
     "Scan History" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -9293,6 +10208,9 @@
         }
       }
     },
+    "Scan Unavailable" : {
+
+    },
     "Scan with Camera" : {
       "localizations" : {
         "en" : {
@@ -9315,6 +10233,12 @@
         }
       }
     },
+    "Scanned %@" : {
+
+    },
+    "Scanning CI updates…" : {
+
+    },
     "Scanning…" : {
       "localizations" : {
         "ko" : {
@@ -9330,6 +10254,12 @@
           }
         }
       }
+    },
+    "Scans Unavailable" : {
+
+    },
+    "Schedule" : {
+
     },
     "Scheme" : {
       "localizations" : {
@@ -9438,6 +10368,9 @@
           }
         }
       }
+    },
+    "Search projects" : {
+
     },
     "Search projects and threads" : {
       "localizations" : {
@@ -9569,6 +10502,12 @@
         }
       }
     },
+    "Security" : {
+
+    },
+    "Select" : {
+
+    },
     "Select a briefing to view details" : {
       "localizations" : {
         "ko" : {
@@ -9585,6 +10524,12 @@
         }
       }
     },
+    "Select a Feature" : {
+
+    },
+    "Select a folder from the repository's default branch." : {
+
+    },
     "Select a project" : {
       "localizations" : {
         "ko" : {
@@ -9600,6 +10545,9 @@
           }
         }
       }
+    },
+    "Select a Setting" : {
+
     },
     "Select a thread" : {
       "localizations" : {
@@ -9774,6 +10722,9 @@
         }
       }
     },
+    "Set Up %@" : {
+
+    },
     "Set Up Docs" : {
       "localizations" : {
         "ko" : {
@@ -9844,6 +10795,9 @@
         }
       }
     },
+    "Show" : {
+
+    },
     "Show %lld code reviews" : {
       "localizations" : {
         "ko" : {
@@ -9859,6 +10813,9 @@
           }
         }
       }
+    },
+    "Show All" : {
+
     },
     "Sign In" : {
       "localizations" : {
@@ -9893,6 +10850,7 @@
       }
     },
     "Sign In to Flowcy" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -9929,6 +10887,7 @@
       }
     },
     "Sign in with your rxlab account to pair with your Mac." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -9954,7 +10913,11 @@
         }
       }
     },
+    "Sign out of Flowcy?" : {
+
+    },
     "Signed in to Flowcy" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -9963,6 +10926,12 @@
           }
         }
       }
+    },
+    "Signing out…" : {
+
+    },
+    "Signing secret (optional)" : {
+
     },
     "Skill operation failed." : {
       "localizations" : {
@@ -10052,6 +11021,12 @@
         }
       }
     },
+    "Skipped" : {
+
+    },
+    "Some workflows failing" : {
+
+    },
     "Source link (optional)" : {
       "localizations" : {
         "ko" : {
@@ -10083,6 +11058,9 @@
           }
         }
       }
+    },
+    "Start %@?" : {
+
     },
     "Start a conversation from your Mac" : {
       "localizations" : {
@@ -10128,6 +11106,9 @@
         }
       }
     },
+    "Start a new chat?" : {
+
+    },
     "Start a new conversation to get help with your project." : {
       "localizations" : {
         "en" : {
@@ -10149,6 +11130,9 @@
           }
         }
       }
+    },
+    "Start Release" : {
+
     },
     "Start with a plan" : {
       "localizations" : {
@@ -10172,6 +11156,9 @@
         }
       }
     },
+    "Started" : {
+
+    },
     "Starting Code Review…" : {
       "localizations" : {
         "ko" : {
@@ -10187,6 +11174,12 @@
           }
         }
       }
+    },
+    "Starting on %@…" : {
+
+    },
+    "Starting release…" : {
+
     },
     "Starts after" : {
       "localizations" : {
@@ -10208,6 +11201,9 @@
         }
       }
     },
+    "State" : {
+
+    },
     "Status" : {
       "localizations" : {
         "zh-Hans" : {
@@ -10217,6 +11213,9 @@
           }
         }
       }
+    },
+    "Status unknown" : {
+
     },
     "Statuses" : {
       "localizations" : {
@@ -10266,7 +11265,11 @@
         }
       }
     },
+    "Stop watching %@?" : {
+
+    },
     "Stop watching?" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -10331,6 +11334,9 @@
           }
         }
       }
+    },
+    "Subscription" : {
+
     },
     "Success" : {
       "localizations" : {
@@ -10436,6 +11442,9 @@
         }
       }
     },
+    "Switch to %@ to run its tasks." : {
+
+    },
     "Switch to horizontal scroll" : {
       "localizations" : {
         "ko" : {
@@ -10467,6 +11476,9 @@
           }
         }
       }
+    },
+    "Switches to this Mac" : {
+
     },
     "Syncing settings…" : {
       "localizations" : {
@@ -10512,6 +11524,9 @@
         }
       }
     },
+    "System" : {
+
+    },
     "Tags" : {
       "localizations" : {
         "zh-Hans" : {
@@ -10521,6 +11536,9 @@
           }
         }
       }
+    },
+    "Tap a workflow to view its file. Long-press for more options." : {
+
     },
     "Target" : {
       "localizations" : {
@@ -10574,6 +11592,9 @@
         }
       }
     },
+    "Task Progress" : {
+
+    },
     "Tasks" : {
       "localizations" : {
         "zh-Hans" : {
@@ -10593,6 +11614,9 @@
           }
         }
       }
+    },
+    "Tasks on this board run on the Mac it belongs to. Tap the card later to open its session." : {
+
     },
     "Template" : {
       "localizations" : {
@@ -10645,6 +11669,15 @@
           }
         }
       }
+    },
+    "The change applies when you save automation settings." : {
+
+    },
+    "The dependency scanner is not configured on this deployment." : {
+
+    },
+    "The dependency scanner needs deployment configuration before scans can run." : {
+
     },
     "The description is locked once a task has run, so it keeps matching what the agent was asked to do." : {
       "localizations" : {
@@ -10758,6 +11791,9 @@
         }
       }
     },
+    "The Mac must have this project open. Tap the card later to open its session on that Mac." : {
+
+    },
     "The Mac returned an empty response." : {
       "localizations" : {
         "ko" : {
@@ -10838,6 +11874,12 @@
         }
       }
     },
+    "The pull request is closed on GitHub without merging." : {
+
+    },
+    "The release workflow could not be started." : {
+
+    },
     "The run ended with an error. Open the chat for details." : {
       "localizations" : {
         "zh-Hans" : {
@@ -10847,6 +11889,15 @@
           }
         }
       }
+    },
+    "The scan runs in the background. Results appear in Dependencies & Security." : {
+
+    },
+    "The session on %@ hasn't started yet. Try again in a moment." : {
+
+    },
+    "The workflow runs on the latest commit of this branch." : {
+
     },
     "Thermal" : {
       "localizations" : {
@@ -10901,6 +11952,12 @@
           }
         }
       }
+    },
+    "This Device" : {
+
+    },
+    "This input is required." : {
+
     },
     "This location has no visible folders." : {
       "localizations" : {
@@ -11037,6 +12094,9 @@
           }
         }
       }
+    },
+    "This project is not linked to a GitHub repository." : {
+
     },
     "This QR has expired. Generate a new one on your Mac." : {
       "localizations" : {
@@ -11189,6 +12249,9 @@
           }
         }
       }
+    },
+    "This task wasn't run from this device." : {
+
     },
     "This Turn" : {
       "localizations" : {
@@ -11362,6 +12425,12 @@
         }
       }
     },
+    "Tool Result" : {
+
+    },
+    "Tools use your signed-in Flowcy account." : {
+
+    },
     "Transport" : {
       "localizations" : {
         "en" : {
@@ -11385,6 +12454,7 @@
       }
     },
     "Trigger scan now" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -11422,6 +12492,9 @@
         }
       }
     },
+    "Try another search." : {
+
+    },
     "Try another view or search." : {
       "localizations" : {
         "zh-Hans" : {
@@ -11431,6 +12504,12 @@
           }
         }
       }
+    },
+    "Turn on “Automatically update dependencies” in automation settings first." : {
+
+    },
+    "Turn on dependency updates in automation settings, then choose Scan Dependencies from the actions menu." : {
+
     },
     "Type" : {
       "localizations" : {
@@ -11520,6 +12599,9 @@
         }
       }
     },
+    "Unable to Load %@" : {
+
+    },
     "Unable to Load Briefing" : {
       "localizations" : {
         "zh-Hans" : {
@@ -11529,6 +12611,15 @@
           }
         }
       }
+    },
+    "Unable to Load CI" : {
+
+    },
+    "Unable to Load Conversation" : {
+
+    },
+    "Unable to Load Feature" : {
+
     },
     "Unable to Load File" : {
       "localizations" : {
@@ -11562,6 +12653,15 @@
         }
       }
     },
+    "Unable to Load Projects" : {
+
+    },
+    "Unable to Load Tasks" : {
+
+    },
+    "Unable to Open Notification" : {
+
+    },
     "Unassigned" : {
       "localizations" : {
         "zh-Hans" : {
@@ -11593,6 +12693,9 @@
           }
         }
       }
+    },
+    "Undo" : {
+
     },
     "Unknown" : {
       "localizations" : {
@@ -11637,6 +12740,12 @@
           }
         }
       }
+    },
+    "Unknown Workflow" : {
+
+    },
+    "Unmark as Release Workflow" : {
+
     },
     "Unrecognized pairing link. Generate a new QR code on your Mac." : {
       "localizations" : {
@@ -11702,6 +12811,9 @@
         }
       }
     },
+    "Update Flowcy on your Mac to view workflow files, or rescan workflows." : {
+
+    },
     "Updated" : {
       "localizations" : {
         "zh-Hans" : {
@@ -11744,6 +12856,15 @@
         }
       }
     },
+    "Updates" : {
+
+    },
+    "Updating notifications…" : {
+
+    },
+    "Updating workflow…" : {
+
+    },
     "Upload" : {
       "localizations" : {
         "ko" : {
@@ -11759,6 +12880,9 @@
           }
         }
       }
+    },
+    "Uploading document…" : {
+
     },
     "URL" : {
       "localizations" : {
@@ -11841,6 +12965,18 @@
           }
         }
       }
+    },
+    "Use a relative directory without wildcards or parent traversal." : {
+
+    },
+    "Use AI to remove incompatible updates when dependency CI fails" : {
+
+    },
+    "Use Draft" : {
+
+    },
+    "Use Folder" : {
+
     },
     "Use mobile search to find synced projects, thread titles, and desktop search hits." : {
       "localizations" : {
@@ -11975,6 +13111,7 @@
       }
     },
     "View pull request" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -11990,7 +13127,11 @@
         }
       }
     },
+    "View Pull Request" : {
+
+    },
     "View Remote Tasks" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -11999,6 +13140,9 @@
           }
         }
       }
+    },
+    "View Run" : {
+
     },
     "View Tasks" : {
       "localizations" : {
@@ -12026,6 +13170,9 @@
         }
       }
     },
+    "View Workflow File" : {
+
+    },
     "View workflow run on GitHub" : {
       "localizations" : {
         "ko" : {
@@ -12042,7 +13189,29 @@
         }
       }
     },
+    "Vulnerabilities (%lld)" : {
+
+    },
+    "Watch a repository to keep its GitHub Actions and dependencies up to date." : {
+
+    },
+    "Watch Repository" : {
+
+    },
+    "Watch this repository for dependency and CI updates. Automated scans may create pull requests." : {
+
+    },
+    "Webhook" : {
+
+    },
+    "Webhooks" : {
+
+    },
+    "Welcome to Flowcy" : {
+
+    },
     "Welcome to RxCode" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -12138,6 +13307,12 @@
         }
       }
     },
+    "Workflows running" : {
+
+    },
+    "Workflows Scanned" : {
+
+    },
     "Working Directory" : {
       "localizations" : {
         "en" : {
@@ -12175,6 +13350,9 @@
           }
         }
       }
+    },
+    "Wrap Lines" : {
+
     },
     "Xcode" : {
       "localizations" : {
@@ -12306,6 +13484,9 @@
           }
         }
       }
+    },
+    "Your project cards will appear here." : {
+
     },
     "Your Tasks" : {
       "localizations" : {

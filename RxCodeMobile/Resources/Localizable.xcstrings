@@ -4435,6 +4435,9 @@
         }
       }
     },
+    "Edit this view's Swift filter in RxCode on your Mac." : {
+
+    },
     "Edit View" : {
       "localizations" : {
         "zh-Hans" : {
@@ -5764,6 +5767,12 @@
         }
       }
     },
+    "Import JSON File" : {
+
+    },
+    "Importing ruleset…" : {
+
+    },
     "Initialize Git" : {
       "localizations" : {
         "ko" : {
@@ -6675,6 +6684,9 @@
     "Manage Your Subscription" : {
 
     },
+    "Managed on Mac" : {
+
+    },
     "Manual" : {
 
     },
@@ -6986,6 +6998,9 @@
 
     },
     "Moving task…" : {
+
+    },
+    "Moving tasks…" : {
 
     },
     "Moving this task into a chat column runs the assigned agent in a new thread on your Mac." : {
@@ -7387,6 +7402,9 @@
 
     },
     "No CI Update Pull Requests" : {
+
+    },
+    "No Columns" : {
 
     },
     "No custom Git sources added." : {
@@ -8542,6 +8560,9 @@
         }
       }
     },
+    "Open RxCode on your Mac to sync this Swift filter view." : {
+
+    },
     "Open System Notification Settings" : {
 
     },
@@ -8847,6 +8868,7 @@
       }
     },
     "Paste a GitHub ruleset JSON with name, target, enforcement, and rules." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -8861,6 +8883,9 @@
           }
         }
       }
+    },
+    "Paste or import a GitHub ruleset JSON file with name, target, enforcement, and rules. Importing replaces the ruleset in this draft; save the template to apply it." : {
+
     },
     "Paused" : {
 
@@ -9618,6 +9643,9 @@
           }
         }
       }
+    },
+    "Reorder Columns" : {
+
     },
     "Reorder Projects" : {
 
@@ -11480,6 +11508,9 @@
         }
       }
     },
+    "Swift Filter" : {
+
+    },
     "Switch branch" : {
       "localizations" : {
         "en" : {
@@ -11655,6 +11686,9 @@
         }
       }
     },
+    "Task Actions" : {
+
+    },
     "Task Board Error" : {
       "localizations" : {
         "zh-Hans" : {
@@ -11716,6 +11750,9 @@
           }
         }
       }
+    },
+    "Template Name" : {
+
     },
     "Templates of GitHub merge settings and branch rulesets. The default template is applied to newly created repositories." : {
       "localizations" : {
@@ -12692,6 +12729,9 @@
         }
       }
     },
+    "Unable to Import Ruleset" : {
+
+    },
     "Unable to Load %@" : {
 
     },
@@ -13295,6 +13335,9 @@
       }
     },
     "Vulnerabilities (%lld)" : {
+
+    },
+    "Waiting for Host Sync" : {
 
     },
     "Watch a repository to keep its GitHub Actions and dependencies up to date." : {

@@ -8,7 +8,6 @@ private let logger = Logger(subsystem: "com.idealapp.RxCode", category: "RootVie
 private enum MobileRootTab: Hashable {
     case briefing
     case projects
-    case tasks
     case settings
     case search
 }
@@ -29,7 +28,7 @@ struct RemoteWorkspaceView: View {
     @State private var showingBriefing = false
     @State private var showSettings = false
     @State private var showingTasks = true
-    @State private var selectedTab: MobileRootTab = .tasks
+    @State private var selectedTab: MobileRootTab = .briefing
     @State private var projectsPath = NavigationPath()
     /// Owned here (not by the stack) so the Tasks navigation survives layout
     /// changes, and so chats opened from a task push onto it.
@@ -83,7 +82,7 @@ struct RemoteWorkspaceView: View {
 
     private func openOfflineTasks() {
         if state.isDesktopTaskSyncReady {
-            selectedTab = .tasks
+            selectedTab = .projects
             showingTasks = true
             return
         }
@@ -271,10 +270,6 @@ struct RemoteWorkspaceView: View {
 
     private var phoneTabs: some View {
         TabView(selection: $selectedTab) {
-            Tab("Tasks", systemImage: "checklist", value: MobileRootTab.tasks) {
-                tasksStack
-            }
-
             Tab("Briefing", systemImage: "doc.text", value: MobileRootTab.briefing) {
                 NavigationStack(path: $briefingDetailPath) {
                     MobileBriefingView(
@@ -508,11 +503,11 @@ struct RemoteWorkspaceView: View {
         navigate(toSession: sessionID, projectID: nil)
     }
 
-    /// A task, board, or chat pushed from the Tasks tab. Subscribing to a chat
+    /// A task, board, or chat pushed from the iPad Tasks sidebar. Subscribing to a chat
     /// opened there updates `activeSessionID`, which must not pull the user
     /// over to the Projects tab.
     private var isViewingTasksDetail: Bool {
-        let tasksVisible = usesPhoneLayout ? selectedTab == .tasks : showingTasks
+        let tasksVisible = !usesPhoneLayout && showingTasks
         return tasksVisible && !tasksPath.isEmpty
     }
 

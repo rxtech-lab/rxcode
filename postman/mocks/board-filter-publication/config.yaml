@@ -1,0 +1,10 @@
+version: 1
+name: board-filter-publication
+slug: board-filter-publication
+protocol: http
+port: 4914
+interceptRequests: true
+scenarios:
+  - name: default
+    path: ./default.js
+    default: true

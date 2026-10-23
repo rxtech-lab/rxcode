@@ -81,13 +81,34 @@ final class FlowcyProductionUITests: XCTestCase {
         let alphaFirst = wide ? alpha.frame.minX < beta.frame.minX : alpha.frame.minY < beta.frame.minY
         let first = alphaFirst ? alpha : beta
         let second = alphaFirst ? beta : alpha
-        first.press(forDuration: 1.2, thenDragTo: second)
-        XCTAssertTrue(wide ? first.frame.minX > second.frame.minX : first.frame.minY > second.frame.minY)
+        // Move upward on iPhone so the drop stays inside the section as rows shift.
+        let source = (wide ? first : second).coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let destination = (wide ? second : first).coordinate(withNormalizedOffset: CGVector(dx: wide ? 0.95 : 0.5, dy: wide ? 0.5 : 0.05))
+        source.press(forDuration: 1.2, thenDragTo: destination, withVelocity: .slow, thenHoldForDuration: 2)
+        // The status overlay can expire while XCTest waits for the drag to settle.
+        // Verify the resulting order, then verify it again from persisted state.
+        let reordered = NSPredicate { _, _ in
+            guard first.exists, second.exists else { return false }
+            return wide ? first.frame.minX > second.frame.minX : first.frame.minY > second.frame.minY
+        }
+        let moved = XCTNSPredicateExpectation(predicate: reordered, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [moved], timeout: 10), .completed,
+                       "Dragging a project should swap the project order.")
+        // This sheet reads the saved model rather than the List's drag preview.
+        controls.tap()
+        let firstControl = app.buttons[alphaFirst ? "Hide Alpha Project" : "Hide Beta Project"]
+        let secondControl = app.buttons[alphaFirst ? "Hide Beta Project" : "Hide Alpha Project"]
+        let saved = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            firstControl.exists && secondControl.exists && firstControl.frame.minY > secondControl.frame.minY
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [saved], timeout: 10), .completed,
+                       "The project controls should reflect the saved order after dragging.")
+        app.buttons["Done"].tap()
         app.terminate()
         app.launch()
-        XCTAssertTrue(first.waitForExistence(timeout: 15))
-        XCTAssertTrue(second.exists)
-        XCTAssertTrue(wide ? first.frame.minX > second.frame.minX : first.frame.minY > second.frame.minY)
+        let persisted = XCTNSPredicateExpectation(predicate: reordered, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [persisted], timeout: 15), .completed,
+                       "The reordered projects should keep their order after relaunching.")
 
         controls.tap()
         app.buttons["Hide Alpha Project"].tap()

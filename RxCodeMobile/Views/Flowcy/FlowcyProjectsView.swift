@@ -71,13 +71,21 @@ struct FlowcyProjectsView: View {
                                     .padding(20)
                                     .frame(maxWidth: .infinity, minHeight: 130, alignment: .leading)
                                     .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+                                    .mobileReorderItem()
                             }
-                        }.padding()
+                            .mobileReorderable()
+                        }
+                        .mobileReorderContainer(for: CloudProject.self, move: reorderProjects)
+                        .padding()
                     }
                     .background(Color(.systemGroupedBackground))
                     .refreshable { await reload() }
                 } else {
-                    List(projects) { project in projectButton(project) }
+                    List {
+                        ForEach(projects) { project in projectButton(project).mobileReorderItem() }
+                            .mobileReorderable()
+                    }
+                        .mobileReorderContainer(for: CloudProject.self, move: reorderProjects)
                         .refreshable { await reload() }
                 }
             }
@@ -129,8 +137,8 @@ struct FlowcyProjectsView: View {
         .buttonStyle(.plain)
         .accessibilityIdentifier("flowcy-project-\(project.id)")
         .accessibilityHint("Opens the project. Long press and drag to reorder.")
-        .draggable("flowcy-project:\(project.id)")
-        .dropDestination(for: String.self) { items, _ in
+        .mobileLegacyDrag("flowcy-project:\(project.id)")
+        .mobileLegacyDrop { items, _ in
             guard let item = items.first, item.hasPrefix("flowcy-project:") else { return false }
             let moved = String(item.dropFirst("flowcy-project:".count))
             var order = orderedProjects
@@ -141,6 +149,11 @@ struct FlowcyProjectsView: View {
             saveOrder(order)
             return true
         }
+    }
+
+    private func reorderProjects(_ sources: [String], before target: String?) {
+        guard let order = mobileReordered(orderedProjects, moving: sources, before: target) else { return }
+        saveOrder(order)
     }
 
     private var projectOrderSheet: some View {

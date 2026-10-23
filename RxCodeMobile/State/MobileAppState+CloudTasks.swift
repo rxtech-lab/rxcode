@@ -10,6 +10,8 @@ extension MobileAppState {
     var taskSnapshots: [UUID: MobileTaskBoardSnapshot] { usesCloudTasks ? cloudTaskBoards : taskBoardsByProject }
 
     func clearCloudTasks() {
+        for call in cloudTaskBoardCalls.values { call.task.cancel() }
+        cloudTaskBoardCalls = [:]
         cloudTaskProjects = []
         cloudTaskBoards = [:]
         deferredCloudTaskBoardSnapshots = [:]
@@ -29,13 +31,37 @@ extension MobileAppState {
 
     /// The board views use one command path; only the storage transport changes.
     func cloudTaskBoardCall(_ request: TaskBoardRequestPayload) async throws -> TaskBoardResultPayload {
+        let previous = cloudTaskBoardCalls[request.projectID]?.task
+        let id = UUID()
+        let accountID = taskCloud?.accountID
+        let task = Task { @MainActor in
+            _ = await previous?.result
+            try Task.checkCancellation()
+            guard self.taskCloud?.accountID == accountID else { throw CancellationError() }
+            return try await self.performCloudTaskBoardCall(request)
+        }
+        cloudTaskBoardCalls[request.projectID] = (id, task)
+        defer {
+            if cloudTaskBoardCalls[request.projectID]?.id == id {
+                cloudTaskBoardCalls[request.projectID] = nil
+            }
+        }
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func performCloudTaskBoardCall(_ request: TaskBoardRequestPayload) async throws -> TaskBoardResultPayload {
         guard let cloud = taskCloud, cloud.isSignedIn,
               let remoteID = cloudTaskProjects.first(where: { $0.id == request.projectID })?.cloudId else {
             throw AutopilotRemoteError.server("Sign in and refresh this project before editing it.")
         }
-        var board = cloudTaskBoards[request.projectID]?.board ?? TaskBoard()
+        let latestSnapshot = deferredCloudTaskBoardSnapshots[request.projectID] ?? cloudTaskBoards[request.projectID]
+        var board = latestSnapshot?.board ?? TaskBoard()
         let viewsKey = cloud.accountID.map { "cloudTaskViews.\($0).\(remoteID)" }
-        if cloudTaskBoards[request.projectID] == nil, let viewsKey,
+        if latestSnapshot == nil, let viewsKey,
            let data = UserDefaults.standard.data(forKey: viewsKey),
            let views = try? JSONDecoder().decode([TaskSavedView].self, from: data) {
             board.savedViews = views
@@ -86,13 +112,17 @@ extension MobileAppState {
         if request.operation == .fetch || request.operation == .upsertView {
             for attempt in 0..<3 {
                 guard let remote = try await cloud.savedViews(remoteID) else {
-                    if request.operation == .upsertView {
-                        throw AutopilotRemoteError.server("Saved view sync requires an updated Flowcy server. Try again after the server is updated.")
+                    // Keep the freshly loaded tasks and cached views available while reporting the sync failure.
+                    if request.operation == .fetch {
+                        storeTaskBoardSnapshot(MobileTaskBoardSnapshot(projectID: request.projectID, board: board), cloud: true)
                     }
-                    break
+                    throw AutopilotRemoteError.server("Saved views could not sync. Update the Flowcy server, then refresh this board.")
                 }
                 let local = board.savedViews.map { CloudSavedView(view: $0, sync: board.cloudSync ?? sync) }
-                let merged = CloudSavedViews.merging(local: local, base: board.cloudSync?.savedViewsBase, remote: remote.views)
+                let merged = CloudSavedViews.preservingRemoteScripts(
+                    in: CloudSavedViews.merging(local: local, base: board.cloudSync?.savedViewsBase, remote: remote.views),
+                    remote: remote.views
+                )
                 do {
                     if merged != remote.views {
                         _ = try await cloud.saveViews(CloudSavedViews(views: merged, revision: remote.revision), projectID: remoteID)

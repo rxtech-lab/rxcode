@@ -48,7 +48,7 @@ final class CloudWorkspaceUITests: XCTestCase {
     }
 
     @MainActor
-    func testPairedButUnreachableMacOffersTasks() {
+    func testPairedButUnreachableMacOffersRetry() {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = [
@@ -57,15 +57,13 @@ final class CloudWorkspaceUITests: XCTestCase {
             "-uitest-desktop-pubkey", String(repeating: "2", count: 64),
         ]
         app.launch()
-        let viewTasks = app.buttons["view-tasks-offline"]
-        XCTAssertTrue(viewTasks.waitForExistence(timeout: 15))
-        viewTasks.tap()
-        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS 'Cloud Project'")).firstMatch.waitForExistence(timeout: 15))
-        XCTAssertFalse(app.buttons["Open Paired Macs"].exists)
+        XCTAssertTrue(app.buttons["sync-retry"].waitForExistence(timeout: 25))
+        XCTAssertTrue(app.staticTexts["Connection Timed Out"].exists)
+        XCTAssertFalse(app.buttons["view-tasks-offline"].exists)
     }
 
     @MainActor
-    func testIPadSyncFailureOpensFullScreenEmptyBoard() throws {
+    func testIPadSyncFailureOffersRetry() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad-only test.")
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -76,8 +74,24 @@ final class CloudWorkspaceUITests: XCTestCase {
         ]
         app.launch()
 
-        XCTAssertTrue(app.buttons["sync-retry"].waitForExistence(timeout: 25))
-        app.buttons["view-tasks-offline"].tap()
+        let retry = app.buttons["sync-retry"]
+        XCTAssertTrue(retry.waitForExistence(timeout: 25))
+        XCTAssertTrue(retry.isEnabled)
+        XCTAssertTrue(app.staticTexts["Connection Timed Out"].exists)
+        XCTAssertFalse(app.buttons["view-tasks-offline"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["tasks-ipad-overview"].firstMatch.exists)
+    }
+
+    @MainActor
+    func testIPadUnpairedTasksOpenFullScreenEmptyBoard() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad-only test.")
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-uitest-cloud"]
+        app.launch()
+        let viewTasks = app.buttons["view-tasks-offline"]
+        XCTAssertTrue(viewTasks.waitForExistence(timeout: 15))
+        viewTasks.tap()
 
         let overview = app.descendants(matching: .any)["tasks-ipad-overview"].firstMatch
         XCTAssertTrue(overview.waitForExistence(timeout: 15))

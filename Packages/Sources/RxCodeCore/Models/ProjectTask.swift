@@ -617,6 +617,17 @@ public enum TaskViewLayout: String, Codable, Sendable, CaseIterable, Hashable {
 /// story, targeting any selected version or milestone, and sitting in one of
 /// the visible statuses. Tags are the exception: a task must carry every
 /// selected tag.
+public struct TaskFilterSnapshot: Codable, Sendable, Hashable {
+    public var source: String
+    public var tasks: [String]
+    public var stories: [String]
+    public init(source: String, tasks: [String], stories: [String]) {
+        self.source = source
+        self.tasks = tasks
+        self.stories = stories
+    }
+}
+
 public struct TaskSavedView: Identifiable, Codable, Sendable, Hashable {
     public let id: UUID
     public var name: String
@@ -632,6 +643,7 @@ public struct TaskSavedView: Identifiable, Codable, Sendable, Hashable {
     public var statuses: [TaskStatus]
     /// Agent-written Swift that further narrows the view; see
     /// `TaskFilterScript`. `nil` means no script.
+    public var filterSnapshot: TaskFilterSnapshot?
     public var filterScript: String?
     /// Statuses the board's story panel shows, matched against each story's
     /// rolled-up status. Empty means every status the view's columns allow.
@@ -667,7 +679,7 @@ public struct TaskSavedView: Identifiable, Codable, Sendable, Hashable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, layout, tags, versions, milestones, storyIds, statuses, filterScript, storyPanelStatuses, isDefault
+        case id, name, layout, tags, versions, milestones, storyIds, statuses, filterScript, filterSnapshot, storyPanelStatuses, isDefault
         /// Single-value filters written before multi-select existed.
         case version, storyId
     }
@@ -695,6 +707,7 @@ public struct TaskSavedView: Identifiable, Codable, Sendable, Hashable {
             storyIds = legacy.map { [$0] } ?? []
         }
         statuses = (try? c.decodeIfPresent([TaskStatus].self, forKey: .statuses)) ?? []
+        filterSnapshot = try? c.decodeIfPresent(TaskFilterSnapshot.self, forKey: .filterSnapshot)
         filterScript = try? c.decodeIfPresent(String.self, forKey: .filterScript)
         storyPanelStatuses = (try? c.decodeIfPresent([TaskStatus].self, forKey: .storyPanelStatuses)) ?? []
         isDefault = (try? c.decodeIfPresent(Bool.self, forKey: .isDefault)) ?? false
@@ -712,6 +725,7 @@ public struct TaskSavedView: Identifiable, Codable, Sendable, Hashable {
         try c.encode(milestones, forKey: .milestones)
         try c.encode(storyIds, forKey: .storyIds)
         try c.encode(statuses, forKey: .statuses)
+        try c.encodeIfPresent(filterSnapshot, forKey: .filterSnapshot)
         try c.encodeIfPresent(filterScript, forKey: .filterScript)
         try c.encode(storyPanelStatuses, forKey: .storyPanelStatuses)
         if isDefault { try c.encode(isDefault, forKey: .isDefault) }

@@ -348,6 +348,8 @@ public struct CloudItemLink<Fields: Codable & Sendable & Hashable>: Codable, Sen
 /// Per-board bookkeeping for cloud sync, persisted with the board. Keyed by
 /// local story and task id.
 public struct CloudBoardSyncState: Codable, Sendable, Hashable {
+    /// Persist failed publication until the user explicitly retries.
+    public var filterPublicationError: String?
     public var stories: [UUID: CloudItemLink<CloudStoryFields>]
     public var tasks: [UUID: CloudItemLink<CloudTaskFields>]
     public var savedViewsBase: [CloudSavedView]?
@@ -368,12 +370,13 @@ public struct CloudBoardSyncState: Codable, Sendable, Hashable {
         self.lastError = lastError
     }
 
-    private enum CodingKeys: String, CodingKey { case stories, tasks, savedViewsBase, lastSyncedAt, lastError }
+    private enum CodingKeys: String, CodingKey { case stories, tasks, savedViewsBase, lastSyncedAt, lastError, filterPublicationError }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         stories = (try? c.decodeIfPresent([UUID: CloudItemLink<CloudStoryFields>].self, forKey: .stories)) ?? [:]
         tasks = (try? c.decodeIfPresent([UUID: CloudItemLink<CloudTaskFields>].self, forKey: .tasks)) ?? [:]
+        filterPublicationError = try c.decodeIfPresent(String.self, forKey: .filterPublicationError)
         savedViewsBase = try c.decodeIfPresent([CloudSavedView].self, forKey: .savedViewsBase)
         lastSyncedAt = try? c.decodeIfPresent(Date.self, forKey: .lastSyncedAt)
         lastError = try? c.decodeIfPresent(String.self, forKey: .lastError)

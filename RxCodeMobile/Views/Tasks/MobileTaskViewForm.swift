@@ -42,6 +42,14 @@ struct MobileTaskViewForm: View {
                 }
             }
 
+            if draft.hasFilterScript {
+                Section("Swift Filter") {
+                    Label("Managed on Mac", systemImage: "lock")
+                    Text("Edit this view's Swift filter in RxCode on your Mac.")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             Section {
                 filterLink(
                     "Stories",

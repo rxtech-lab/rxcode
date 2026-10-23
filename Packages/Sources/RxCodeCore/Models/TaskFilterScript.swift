@@ -191,7 +191,9 @@ public enum TaskFilterScript {
     /// Wraps the user's two functions in a program that reads `Input` JSON
     /// from stdin and prints `Output` JSON.
     public static func harness(userScript: String) -> String {
-        """
+        let input = "let data = FileHandle.standardInput.readDataToEndOfFile()"
+        let output = "FileHandle.standardOutput.write(encoded)"
+        return """
         import Foundation
 
         \(apiDeclarations)
@@ -213,7 +215,7 @@ public enum TaskFilterScript {
         @main
         struct __RxCodeFilterRunner {
             static func main() throws {
-                let data = FileHandle.standardInput.readDataToEndOfFile()
+                \(input)
                 let decoder = JSONDecoder()
                 decoder.dateDecodingStrategy = .iso8601
                 let input = try decoder.decode(__RxCodeFilterInput.self, from: data)
@@ -222,7 +224,7 @@ public enum TaskFilterScript {
                     stories: input.stories.filter { includeStory($0) }.map(\\.id)
                 )
                 let encoded = try JSONEncoder().encode(output)
-                FileHandle.standardOutput.write(encoded)
+                \(output)
             }
         }
         """

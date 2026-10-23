@@ -5,17 +5,20 @@ import SwiftUI
 public struct TaskKanbanColumnContent<Header: View, Cards: View>: View {
     private let headerSpacing: CGFloat
     private let cardInsets: EdgeInsets
+    private let allowsCardOverflow: Bool
     private let header: Header
     private let cards: Cards
 
     public init(
         headerSpacing: CGFloat = 10,
         cardInsets: EdgeInsets = EdgeInsets(top: 0, leading: 0, bottom: 8, trailing: 0),
+        allowsCardOverflow: Bool = false,
         @ViewBuilder header: () -> Header,
         @ViewBuilder cards: () -> Cards
     ) {
         self.headerSpacing = headerSpacing
         self.cardInsets = cardInsets
+        self.allowsCardOverflow = allowsCardOverflow
         self.header = header()
         self.cards = cards()
     }
@@ -28,6 +31,7 @@ public struct TaskKanbanColumnContent<Header: View, Cards: View>: View {
                     .padding(cardInsets)
             }
             .scrollContentBackground(.hidden)
+            .scrollClipDisabled(allowsCardOverflow)
         }
     }
 }

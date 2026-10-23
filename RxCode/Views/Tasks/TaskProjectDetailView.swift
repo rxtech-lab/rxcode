@@ -9,6 +9,7 @@ struct TaskProjectDetailView: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
 
+    @State private var dismissedCloudSyncError: String?
     let project: Project
     @Binding var sheet: TaskBoardSheet?
 
@@ -45,7 +46,45 @@ struct TaskProjectDetailView: View {
             }
             content
         }
-        .task(id: scriptFilterKey) { await runScriptFilter() }
+        .overlay(alignment: .topTrailing) {
+            if project.isCloud, board.savedViews.contains(where: \.hasFilterScript) {
+                if appState.cloudSyncPhaseByProjectId[project.id] != .publishingFilters,
+                   let error = appState.cloudSyncError(for: project.id), error != dismissedCloudSyncError {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(alignment: .top) {
+                            Label("Cloud filter sync needs attention", systemImage: "exclamationmark.icloud")
+                            Spacer(minLength: 8)
+                            Button {
+                                dismissedCloudSyncError = error
+                            } label: {
+                                Image(systemName: "xmark")
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Dismiss sync notification")
+                            .help("Dismiss sync notification")
+                        }
+                        Text(error).font(.caption).lineLimit(3)
+                        HStack {
+                            Button("Retry Sync") {
+                                dismissedCloudSyncError = nil
+                                appState.retryCloudBoardSync(for: project.id)
+                            }
+                        }
+                    }
+                    .padding(12).frame(maxWidth: 360)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10)).padding()
+                }
+            }
+        }
+        .onChange(of: appState.cloudSyncError(for: project.id)) { _, error in
+            if error == nil { dismissedCloudSyncError = nil }
+        }
+        .onChange(of: project.id) { _, _ in
+            dismissedCloudSyncError = nil
+        }
+        .task(id: scriptFilterKey) {
+            await runScriptFilter()
+        }
         .onAppear {
             AnalyticsService.shared.log(.taskProjectBoardOpened, parameters: [
                 "project_type": project.cloudId == nil ? "local" : "cloud"

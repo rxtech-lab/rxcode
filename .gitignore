@@ -48,3 +48,6 @@ RxCodeAndroid/app/google-services.json
 .env
 *.log
 android/.idea
+
+# Downloaded Swift filter compiler and WASI SDK
+.toolchains/

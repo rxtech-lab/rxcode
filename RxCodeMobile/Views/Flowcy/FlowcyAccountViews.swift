@@ -179,6 +179,8 @@ struct FlowcyBillingView: View {
     @State private var subscription: JSONValue?
     @State private var loading = false
     @State private var error: String?
+    @State private var reloadID = UUID()
+    @State private var activeLoadID: UUID?
 
     var body: some View {
         Form {
@@ -197,18 +199,38 @@ struct FlowcyBillingView: View {
         .navigationBarTitleDisplayMode(.inline)
         .overlay { if loading { ProgressView("Loading…").padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16)) } }
         .alert("Billing", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
-            Button("Retry") { Task { await load() } }
-            Button("Cancel", role: .cancel) { error = nil }
+            Button("Retry") {
+                MobileHaptics.buttonTap()
+                error = nil
+                reloadID = UUID()
+            }
+            Button("Cancel", role: .cancel) {
+                MobileHaptics.buttonTap()
+                error = nil
+            }
         } message: { Text(error ?? "") }
-        .task { await load() }
+        .task(id: reloadID) { await load() }
     }
 
     private func load() async {
+        let loadID = UUID()
+        activeLoadID = loadID
         loading = true
-        defer { loading = false }
+        error = nil
+        defer {
+            if activeLoadID == loadID { loading = false }
+        }
         do {
             let result = try await FlowcyAPI().read("subscriptions")
+            try Task.checkCancellation()
+            guard activeLoadID == loadID else { return }
             subscription = result.isNull ? nil : result
-        } catch { self.error = error.localizedDescription }
+        } catch {
+            // Navigation can cancel URLSession with URLError.cancelled instead of CancellationError.
+            guard activeLoadID == loadID, !Task.isCancelled,
+                  !(error is CancellationError),
+                  (error as? URLError)?.code != .cancelled else { return }
+            self.error = error.localizedDescription
+        }
     }
 }

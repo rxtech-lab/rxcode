@@ -8,7 +8,15 @@ struct MobileTaskDraggable: ViewModifier {
     let isEnabled: Bool
 
     func body(content: Content) -> some View {
-        if isEnabled {
+        if #available(iOS 27.0, *), isEnabled {
+            // Register the card itself as the source, so SwiftUI lifts this
+            // row rather than using the enclosing column as its preview.
+            content
+                .draggable(containerItemID: task.id)
+                .contentShape(.dragPreview, RoundedRectangle(cornerRadius: 10))
+        } else if #available(iOS 27.0, *) {
+            content.moveDisabled(true)
+        } else if isEnabled {
             content.draggable(task.id.uuidString) {
                 Text(task.title.isEmpty ? String(localized: "Untitled Task") : task.title)
                     .font(.subheadline.weight(.medium))
@@ -159,8 +167,8 @@ struct MobileTaskDetailButton<Label: View>: View {
 
 // MARK: - Shared task actions
 
-/// Swipe actions and the long-press menu for a task row, so the board and
-/// the story detail offer the same verbs as the desktop's context menu.
+/// Shared task actions. Native reorderable cards use an explicit menu;
+/// other rows retain their long-press menu and swipe actions.
 struct MobileTaskActions: ViewModifier {
     @EnvironmentObject private var state: MobileAppState
     let task: ProjectTask
@@ -168,6 +176,7 @@ struct MobileTaskActions: ViewModifier {
     let onEdit: () -> Void
     let onOpenChat: (String) -> Void
     let onError: (String) -> Void
+    var nativeReordering = false
 
     @State private var runRequest: MobileTaskRunRequest?
 
@@ -179,7 +188,7 @@ struct MobileTaskActions: ViewModifier {
     }
 
     func body(content: Content) -> some View {
-        content
+        taskContent(content)
             .swipeActions(edge: .leading, allowsFullSwipe: true) {
                 if canRun {
                     Button {
@@ -201,45 +210,67 @@ struct MobileTaskActions: ViewModifier {
                 }
                 .tint(.blue)
             }
-            .contextMenu {
-                Button(action: onEdit) {
-                    Label("Edit", systemImage: "pencil")
-                }
-                if let sessionID = state.taskSessionID(task) {
-                    Button {
-                        onOpenChat(sessionID)
-                    } label: {
-                        Label("Open Chat", systemImage: "bubble.left.and.text.bubble.right")
-                    }
-                }
-                if canRun {
-                    Button {
-                        requestRun()
-                    } label: {
-                        Label("Run with Agent", systemImage: "play")
-                    }
-                }
-                Menu {
-                    ForEach(board.effectiveColumns) { column in
-                        Button {
-                            move(to: column.id)
-                        } label: {
-                            Label(column.name, systemImage: column.systemImage)
-                        }
-                        .disabled(column.id == board.resolvedStatus(of: task))
-                    }
-                } label: {
-                    Label("Move To", systemImage: "arrow.right.square")
-                }
-                .disabled(isLocked)
-                Divider()
-                Button(role: .destructive) {
-                    perform { try await state.deleteTask(task) }
-                } label: {
-                    Label("Delete", systemImage: "trash")
-                }
-            }
             .mobileTaskRunDevicePicker($runRequest)
+    }
+
+    @ViewBuilder
+    private func taskContent(_ content: Content) -> some View {
+        if #available(iOS 27.0, *), nativeReordering {
+            // Reserve long press for native reordering; the same actions
+            // remain available through an explicit card menu.
+            content.overlay(alignment: .topTrailing) {
+                Menu { menuActions } label: {
+                    Image(systemName: "ellipsis")
+                        .padding(10)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Task Actions")
+                .accessibilityIdentifier("task-actions-\(task.id)")
+            }
+        } else {
+            content.contextMenu { menuActions }
+        }
+    }
+
+    @ViewBuilder
+    private var menuActions: some View {
+        Button(action: onEdit) {
+            Label("Edit", systemImage: "pencil")
+        }
+        if let sessionID = state.taskSessionID(task) {
+            Button {
+                onOpenChat(sessionID)
+            } label: {
+                Label("Open Chat", systemImage: "bubble.left.and.text.bubble.right")
+            }
+        }
+        if canRun {
+            Button {
+                requestRun()
+            } label: {
+                Label("Run with Agent", systemImage: "play")
+            }
+        }
+        Menu {
+            ForEach(board.effectiveColumns) { column in
+                Button {
+                    move(to: column.id)
+                } label: {
+                    Label(column.name, systemImage: column.systemImage)
+                }
+                .disabled(column.id == board.resolvedStatus(of: task))
+            }
+        } label: {
+            Label("Move To", systemImage: "arrow.right.square")
+        }
+        .disabled(isLocked)
+        Divider()
+        Button(role: .destructive) {
+            perform { try await state.deleteTask(task) }
+        } label: {
+            Label("Delete", systemImage: "trash")
+        }
     }
 
     private func requestRun() {

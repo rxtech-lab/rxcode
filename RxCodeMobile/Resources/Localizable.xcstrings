@@ -168,6 +168,7 @@
       }
     },
     "%@, Active" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -464,6 +465,7 @@
       }
     },
     "•" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -683,6 +685,9 @@
           }
         }
       }
+    },
+    "Active computer" : {
+
     },
     "Activity" : {
 
@@ -2412,6 +2417,9 @@
     "Completed" : {
 
     },
+    "Computer name" : {
+
+    },
     "Computer Status" : {
       "localizations" : {
         "en" : {
@@ -4097,6 +4105,7 @@
       }
     },
     "Direct · LAN%@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -4107,6 +4116,7 @@
       }
     },
     "Direct connection" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -4593,6 +4603,7 @@
       }
     },
     "Enter a new name for this Mac." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -6148,6 +6159,7 @@
       }
     },
     "Live" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -6464,6 +6476,7 @@
       }
     },
     "Mac name" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -6627,6 +6640,9 @@
         }
       }
     },
+    "Manage Computer" : {
+
+    },
     "Manage end-to-end encrypted secrets, CI auto-update scans, indexed docs, and release workflows." : {
       "localizations" : {
         "ko" : {
@@ -6642,6 +6658,9 @@
           }
         }
       }
+    },
+    "Manage Paired Computers" : {
+
     },
     "Manage your cloud projects without connecting to a Mac." : {
       "localizations" : {
@@ -7638,6 +7657,9 @@
         }
       }
     },
+    "No Paired Computers" : {
+
+    },
     "No Project Cards" : {
 
     },
@@ -8577,6 +8599,7 @@
       }
     },
     "or" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -8655,6 +8678,7 @@
       }
     },
     "Pair New Mac" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -8699,6 +8723,7 @@
       }
     },
     "Paired %@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -8719,6 +8744,9 @@
           }
         }
       }
+    },
+    "Paired Computers" : {
+
     },
     "Paired Macs" : {
       "localizations" : {
@@ -9236,6 +9264,7 @@
 
     },
     "Reconnecting in %llds" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -9473,6 +9502,9 @@
         }
       }
     },
+    "Remove Pairing" : {
+
+    },
     "Remove pairing?" : {
       "localizations" : {
         "en" : {
@@ -9545,7 +9577,11 @@
         }
       }
     },
+    "Rename Computer" : {
+
+    },
     "Rename Mac" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -10675,6 +10711,7 @@
       }
     },
     "Select which Mac this device controls. When Direct connection is on and you're on the same network, sync connects straight to your Mac (end-to-end encrypted) and falls back to the relay automatically." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -11466,6 +11503,7 @@
       }
     },
     "Switch to %@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -12204,6 +12242,7 @@
       }
     },
     "This removes %@ from this device. Other paired Macs stay available." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -12246,6 +12285,9 @@
           }
         }
       }
+    },
+    "This removes the computer from this device. You can pair it again later." : {
+
     },
     "This removes the repository and its indexed documents from docs search." : {
       "localizations" : {
@@ -13026,6 +13068,9 @@
     "Use AI to remove incompatible updates when dependency CI fails" : {
 
     },
+    "Use Connect New Remote to pair a Mac." : {
+
+    },
     "Use Draft" : {
 
     },
@@ -13063,6 +13108,9 @@
           }
         }
       }
+    },
+    "Use This Computer" : {
+
     },
     "Use Workspace" : {
       "localizations" : {

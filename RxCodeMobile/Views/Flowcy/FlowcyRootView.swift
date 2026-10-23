@@ -102,19 +102,10 @@ struct RootView: View {
             state.usesCloudTasks = true
         }) {
             RemoteWorkspaceView()
-                .safeAreaInset(edge: .top, spacing: 0) {
-                    HStack {
-                        Button("Flowcy", systemImage: "chevron.left") {
-                            MobileHaptics.buttonTap()
-                            state.usesCloudTasks = true
-                            showingRemote = false
-                        }
-                        Spacer()
-                        Text(state.activePairedDesktop?.displayName ?? "Remote Workspace").font(.caption).foregroundStyle(.secondary)
-                    }
-                    .padding(.horizontal).padding(.vertical, 8)
-                    .background(.bar)
-                }
+                .environment(\.closeRemoteWorkspace, {
+                    state.usesCloudTasks = true
+                    showingRemote = false
+                })
         }
     }
 
@@ -179,6 +170,7 @@ extension EnvironmentValues {
 /// Attach to navigation column content so SwiftUI keeps the menu when columns collapse.
 struct FlowcyRemoteToolbar: ToolbarContent {
     var compactOnly = false
+    @State private var showingPairedComputers = false
     @Environment(\.flowcyRemoteActions) private var actions
     @EnvironmentObject private var state: MobileAppState
 
@@ -190,6 +182,11 @@ struct FlowcyRemoteToolbar: ToolbarContent {
                         MobileHaptics.buttonTap()
                         actions.connect()
                     }
+                    Button("Manage Paired Computers", systemImage: "desktopcomputer.and.gearshape") {
+                        MobileHaptics.buttonTap()
+                        showingPairedComputers = true
+                    }
+                    Divider()
                     ForEach(state.pairedDesktops) { desktop in
                         Button(desktop.displayName, systemImage: "desktopcomputer") {
                             MobileHaptics.buttonTap()
@@ -201,6 +198,10 @@ struct FlowcyRemoteToolbar: ToolbarContent {
                     }
                 } label: { Label("Remote Workspace", systemImage: "desktopcomputer") }
                 .accessibilityIdentifier("flowcy-remote-menu")
+                .sheet(isPresented: $showingPairedComputers) {
+                    MobilePairedComputersView()
+                        .mobileSheetPresentation()
+                }
             }
         }
     }
@@ -261,36 +262,46 @@ struct FlowcySettingsView: View {
                         NavigationLink(value: setting) {
                             Label(setting.rawValue, systemImage: setting.symbol)
                         }
-                        .listRowSeparator(.visible)
+                        .listRowSeparator(.hidden)
+                    }
+                    if UIDevice.current.userInterfaceIdiom == .phone {
+                        NavigationLink(value: FlowcySetting.account) {
+                            Label("Account & General", systemImage: "person.crop.circle")
+                        }
+                        .listRowSeparator(.hidden)
+                        .accessibilityIdentifier("flowcy-settings-account")
                     }
                 }
+                .listSectionSeparator(.hidden)
             }
             .listStyle(.insetGrouped)
             .safeAreaInset(edge: .bottom) {
-                Button {
-                    selection = .account
-                    preferredColumn = .detail
-                    MobileHaptics.buttonTap()
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: "person.crop.circle.fill")
-                            .font(.largeTitle)
-                            .foregroundStyle(.tint)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(cloud.auth.user?.email ?? "RxLab account")
-                                .font(.subheadline.weight(.semibold))
-                                .lineLimit(1)
-                            Text("Account & General").font(.caption).foregroundStyle(.secondary)
+                if UIDevice.current.userInterfaceIdiom != .phone {
+                    Button {
+                        selection = .account
+                        preferredColumn = .detail
+                        MobileHaptics.buttonTap()
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "person.crop.circle.fill")
+                                .font(.largeTitle)
+                                .foregroundStyle(.tint)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(cloud.auth.user?.email ?? "RxLab account")
+                                    .font(.subheadline.weight(.semibold))
+                                    .lineLimit(1)
+                                Text("Account & General").font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer(minLength: 0)
+                            Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                         }
-                        Spacer(minLength: 0)
-                        Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                        .padding(14)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24))
                     }
-                    .padding(14)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24))
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("flowcy-settings-account")
+                    .padding()
                 }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("flowcy-settings-account")
-                .padding()
             }
             .navigationTitle("Settings")
             .toolbar { FlowcyRemoteToolbar(compactOnly: true) }

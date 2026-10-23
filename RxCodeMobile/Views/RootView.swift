@@ -16,6 +16,7 @@ private enum MobileRootTab: Hashable {
 /// Mobile app root. iPad / wide screens use NavigationSplitView; iPhone uses
 /// bottom navigation with independent NavigationStack tabs.
 struct RemoteWorkspaceView: View {
+    @Environment(\.closeRemoteWorkspace) private var closeRemoteWorkspace
     @Environment(MobileCloudState.self) private var cloud
     @State private var showOfflineTasksSheet = false
     @State private var showOfflineTasksFullScreen = false
@@ -35,7 +36,6 @@ struct RemoteWorkspaceView: View {
     @State private var tasksPath = NavigationPath()
     @State private var minimumLoadingTimeElapsed = false
     @State private var connectionTimedOut = false
-    @State private var showPairingSheet = false
 
     var body: some View {
         Group {
@@ -45,7 +45,10 @@ struct RemoteWorkspaceView: View {
                 if state.isPaired {
                     paired
                 } else {
-                    OnboardingView(onViewTasks: openOfflineTasks)
+                    NavigationStack {
+                        OnboardingView(onViewTasks: openOfflineTasks)
+                            .toolbar { RemoteWorkspaceCloseToolbar() }
+                    }
                 }
             } else if cloud.isRestoring {
                 MobileRestoringSessionView()
@@ -74,22 +77,6 @@ struct RemoteWorkspaceView: View {
         .sheet(item: $state.pendingPermission) { req in
             PermissionApprovalSheet(request: req)
                 .environmentObject(state)
-        }
-        .sheet(isPresented: $showPairingSheet) {
-            NavigationStack {
-                OnboardingView(showsCancelButton: true) {
-                    showPairingSheet = false
-                    connectionTimedOut = false
-                    minimumLoadingTimeElapsed = false
-                    Task {
-                        await retryConnection()
-                    }
-                }
-                .environmentObject(state)
-                .navigationTitle("Pair New Mac")
-                .navigationBarTitleDisplayMode(.inline)
-            }
-            .mobileSheetPresentation()
         }
         .mobileDismissesKeyboardOnScroll()
     }
@@ -158,12 +145,26 @@ struct RemoteWorkspaceView: View {
                             await state.switchPairedDesktop(desktop)
                             await retryConnection()
                         }
-                    },
-                    onPairNewDesktop: {
-                        showPairingSheet = true
-                    },
-                    onViewTasks: openOfflineTasks
+                    }
                 )
+                .overlay(alignment: .topTrailing) {
+                    if let closeRemoteWorkspace {
+                        Button {
+                            MobileHaptics.buttonTap()
+                            closeRemoteWorkspace()
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 16, weight: .semibold))
+                                .frame(width: 28, height: 28)
+                        }
+                        .accessibilityLabel("Close")
+                        .buttonStyle(.glass)
+                        .controlSize(.regular)
+                        .buttonBorderShape(.circle)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .padding()
+                    }
+                }
                 .transition(.splashTransition)
                 .zIndex(1)
             }
@@ -280,6 +281,7 @@ struct RemoteWorkspaceView: View {
                         onCloseChat: { closeBriefingChat() },
                         onOpenSession: { briefingDetailPath.append($0) }
                     )
+                    .toolbar { RemoteWorkspaceCloseToolbar() }
                 }
             }
 
@@ -291,6 +293,7 @@ struct RemoteWorkspaceView: View {
                         showsBriefingItem: false,
                         usesSelection: false
                     )
+                    .toolbar { RemoteWorkspaceCloseToolbar() }
                     .navigationDestination(for: UUID.self) { projectID in
                         SessionsList(
                             projectID: projectID,
@@ -308,14 +311,25 @@ struct RemoteWorkspaceView: View {
                 MobileSettingsView(showsDoneButton: false)
             }
 
-            Tab(value: MobileRootTab.search, role: .search) {
-                NavigationStack {
-                    MobileSearchContentView(searchText: $searchText)
-                        .navigationTitle("Search")
+            if #available(iOS 27.0, *) {
+                Tab("Search", systemImage: "magnifyingglass", value: MobileRootTab.search, role: .prominent) {
+                    searchContent
                 }
-                .searchable(text: $searchText, prompt: "Search threads and docs")
+            } else {
+                Tab(value: MobileRootTab.search, role: .search) {
+                    searchContent
+                }
             }
         }
+    }
+
+    private var searchContent: some View {
+        NavigationStack {
+            MobileSearchContentView(searchText: $searchText)
+                .navigationTitle("Search")
+                .toolbar { RemoteWorkspaceCloseToolbar() }
+        }
+        .searchable(text: $searchText, prompt: "Search threads and docs")
     }
 
     private var ipadSplitView: some View {
@@ -407,6 +421,7 @@ struct RemoteWorkspaceView: View {
             MobileTasksDashboardView { sessionID in
                 tasksPath.append(sessionID)
             }
+            .toolbar { RemoteWorkspaceCloseToolbar() }
             .navigationDestination(for: String.self) { sessionID in
                 chatDestination(sessionID, onClose: closeTasksChat)
             }
@@ -451,6 +466,7 @@ struct RemoteWorkspaceView: View {
             showingTasks: $showingTasks
         )
             .toolbar {
+                if !showingTasks { RemoteWorkspaceCloseToolbar() }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showSettings = true } label: {
                         Image(systemName: "gear")
@@ -559,6 +575,27 @@ struct RemoteWorkspaceView: View {
             guard let resolvedProjectID else { return }
             selectedProject = resolvedProjectID
             selectedSession = sessionID
+        }
+    }
+}
+
+extension EnvironmentValues {
+    @Entry var closeRemoteWorkspace: (@MainActor () -> Void)?
+}
+
+struct RemoteWorkspaceCloseToolbar: ToolbarContent {
+    @Environment(\.closeRemoteWorkspace) private var closeRemoteWorkspace
+
+    var body: some ToolbarContent {
+        if let closeRemoteWorkspace {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Close", systemImage: "xmark") {
+                    MobileHaptics.buttonTap()
+                    closeRemoteWorkspace()
+                }
+                .labelStyle(.iconOnly)
+                .accessibilityIdentifier("close-remote-workspace")
+            }
         }
     }
 }

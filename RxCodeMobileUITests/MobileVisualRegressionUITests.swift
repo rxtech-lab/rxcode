@@ -30,6 +30,10 @@ final class MobileVisualRegressionUITests: XCTestCase {
 
         app.buttons["Integrations"].tap()
         XCTAssertTrue(app.buttons["Notifications"].waitForExistence(timeout: 5))
+        if wide {
+            // Move focus off the sidebar before capturing its inactive selection.
+            app.navigationBars["Integrations"].tap()
+        }
         capture("integrations", app: app)
         if wide {
             XCTAssertTrue(account.isHittable, "The fixed account button must survive detail navigation.")

@@ -155,7 +155,8 @@ def execute(options, profiles, output):
         run("xcrun", "simctl", "bootstatus", device_id, "-b")
         test_error = None
         try:
-            run("xcrun", "simctl", "status_bar", device_id, "override", "--time", "2026-01-01T01:41:00.000Z",
+            # A literal clock avoids converting an ISO timestamp in the runner's timezone.
+            run("xcrun", "simctl", "status_bar", device_id, "override", "--time", "9:41",
                 "--dataNetwork", "wifi", "--wifiMode", "active", "--wifiBars", "3",
                 "--cellularMode", "active", "--cellularBars", "4",
                 "--batteryState", "charged", "--batteryLevel", "100")

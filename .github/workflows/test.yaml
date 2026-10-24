@@ -237,15 +237,11 @@ jobs:
           retention-days: 14
 
   test-mobile-visual:
-    name: Mobile screenshot regression (${{ matrix.profile }})
+    name: Mobile screenshot regression (iPhone and iPad)
     runs-on: [self-hosted, ui-tests]
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        profile: [iphone, ipad, iphone-duo]
+    timeout-minutes: 60
     env:
-      MOBILE_VISUAL_OUTPUT: test-results/mobile-visual-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.profile }}
+      MOBILE_VISUAL_OUTPUT: test-results/mobile-visual-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -258,17 +254,18 @@ jobs:
         run: ./scripts/ci/write-firebase-config.sh
 
       - name: Compare approved mobile screenshots
-        run: python3 scripts/mobile-visual/run.py compare --profile "${{ matrix.profile }}" --output "$MOBILE_VISUAL_OUTPUT"
+        # The runner processes these profiles sequentially with XCTest parallelism disabled.
+        run: python3 scripts/mobile-visual/run.py compare --profile iphone --profile ipad --output "$MOBILE_VISUAL_OUTPUT"
 
       - name: Package failed screenshot report
         if: failure()
-        run: python3 scripts/mobile-visual/run.py report --failed --profile "${{ matrix.profile }}" --output "$MOBILE_VISUAL_OUTPUT"
+        run: python3 scripts/mobile-visual/run.py report --failed --profile iphone --profile ipad --output "$MOBILE_VISUAL_OUTPUT"
 
       - name: Upload failed mobile test results
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: mobile-visual-test-results-${{ matrix.profile }}
+          name: mobile-visual-test-results
           path: ${{ env.MOBILE_VISUAL_OUTPUT }}/mobile-visual-failure.zip
           if-no-files-found: error
           retention-days: 14

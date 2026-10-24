@@ -1,0 +1,26 @@
+{
+  "configurations": [
+    {
+      "id": "72A0EA2C-4034-4A3B-8817-AF4F87E13A17",
+      "name": "Visual regression",
+      "options": {}
+    }
+  ],
+  "defaultOptions": {
+    "codeCoverage": false,
+    "testTimeoutsEnabled": true
+  },
+  "testTargets": [
+    {
+      "selectedTests": [
+        "MobileVisualRegressionUITests/testSettingsAccountLayouts()"
+      ],
+      "target": {
+        "containerPath": "container:RxCode.xcodeproj",
+        "identifier": "DF230B682FBC7368008929A6",
+        "name": "RxCodeMobileUITests"
+      }
+    }
+  ],
+  "version": 1
+}

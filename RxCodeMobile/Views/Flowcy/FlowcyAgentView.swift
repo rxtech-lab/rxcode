@@ -47,12 +47,15 @@ struct FlowcyAgentView: View {
                         if agent.isStreaming {
                             Button("Cancel", systemImage: "stop.circle.fill") { agent.cancel(); MobileHaptics.buttonTap() }
                         } else {
-                            Button("Send", systemImage: "arrow.up.circle.fill") {
-                                let text = prompt; prompt = ""
-                                MobileHaptics.buttonTap()
-                                agent.send(text, tools: tools, cloud: cloud)
+                            TimelineView(.periodic(from: .now, by: 1)) { context in
+                                Button("Send", systemImage: "arrow.up.circle.fill") {
+                                    guard agent.canSubmit() else { return }
+                                    let text = prompt; prompt = ""
+                                    MobileHaptics.buttonTap()
+                                    agent.send(text, tools: tools, cloud: cloud)
+                                }
+                                .disabled(prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !agent.canSubmit(at: context.date))
                             }
-                            .disabled(prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         }
                     }
                     .labelStyle(.iconOnly)
@@ -68,9 +71,34 @@ struct FlowcyAgentView: View {
             .padding(.vertical, 8)
         }
         .alert("Could Not Complete Chat", isPresented: Binding(get: { agent.error != nil }, set: { if !$0 { agent.error = nil } })) {
-            Button("Retry") { agent.retry(tools: tools, cloud: cloud) }.disabled(agent.isStreaming)
             Button("OK", role: .cancel) { agent.error = nil }
         } message: { Text(agent.error ?? "") }
+        .overlay(alignment: .top) {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                if agent.canRetry || !agent.canSubmit(at: context.date) {
+                    VStack(spacing: 8) {
+                        Text("Flowcy is rate limited").font(.headline)
+                        if let date = agent.retryAt, context.date < date {
+                            Text("Retry available at \(date.formatted(date: .omitted, time: .standard))").font(.caption)
+                        } else if agent.retryAt == nil {
+                            Text("No retry time was provided. Wait before retrying.").font(.caption)
+                        }
+                        if agent.canRetry {
+                            Button("Retry Response") {
+                                MobileHaptics.buttonTap()
+                                agent.retry(tools: tools, cloud: cloud)
+                            }
+                            .disabled(agent.isStreaming || !agent.canSubmit(at: context.date))
+                            .accessibilityIdentifier("flowcy-agent-retry")
+                        }
+                    }
+                    .padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                    .padding()
+                } else if let progress = agent.progress, agent.pendingTool == nil {
+                    ProgressView(progress).padding().background(.regularMaterial, in: Capsule()).padding()
+                }
+            }
+        }
         .sheet(item: $agent.pendingTool, onDismiss: { agent.approve(false) }) { pending in
             NavigationStack {
                 ScrollView {
@@ -157,15 +185,20 @@ struct FlowcyAgentView: View {
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
             .accessibilityIdentifier("flowcy-agent-user-message")
-        } else if !message.text.isEmpty {
+        } else if !message.text.isEmpty || !(message.toolCalls ?? []).isEmpty {
             VStack(alignment: .leading, spacing: 6) {
                 if message.role == "tool" {
                     Text("Tool Result")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                 }
-                MarkdownContentView(text: message.text)
-                    .textSelection(.enabled)
+                if !message.text.isEmpty {
+                    MarkdownContentView(text: message.text)
+                        .textSelection(.enabled)
+                }
+                if let calls = message.toolCalls, !calls.isEmpty {
+                    ToolActivityGroupView(tools: calls, isStreaming: agent.isStreaming && message.id == agent.messages.last?.id)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }

@@ -16,6 +16,67 @@ final class iPhoneNavigationUITests: XCTestCase {
         r.assertExists(r.briefingDocumentDetail, "published document detail")
     }
 
+    @MainActor
+    func testToolGroupsExpandAndShowFullLongResult() throws {
+        let session = try UITestRunner.launch(.phone, on: self, additionalLaunchArguments: ["-uitest-tool-activity"])
+        let r = session.robot
+        let app = session.app
+        XCUIDevice.shared.orientation = .portrait
+        r.tap(r.anyBriefingCard, "briefing card")
+        r.tap(r.anyBriefingThreadRow, "briefing thread")
+        let toggle = app.buttons["tool-activity-toggle"].firstMatch
+        XCTAssertTrue(toggle.waitForExistence(timeout: 15))
+        attachScreenshot(app, name: "Collapsed tool group")
+        toggle.tap()
+        let call = app.buttons["tool-activity-fixture-bash"]
+        XCTAssertTrue(call.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Failed"].exists)
+        XCTAssertLessThanOrEqual(call.frame.maxX, app.frame.maxX)
+        attachScreenshot(app, name: "Expanded tool calls")
+        call.tap()
+        XCTAssertTrue(app.navigationBars["Bash"].waitForExistence(timeout: 5))
+        let firstRecord = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Task 1:")).firstMatch
+        XCTAssertTrue(firstRecord.waitForExistence(timeout: 5))
+        XCTAssertTrue(firstRecord.isHittable, "JSON must draw on the first result page")
+        attachScreenshot(app, name: "Visible first JSON result page")
+        XCUIDevice.shared.orientation = .landscapeLeft
+        XCTAssertTrue(firstRecord.waitForExistence(timeout: 5))
+        XCTAssertTrue(firstRecord.isHittable)
+        let pager = app.buttons["tool-detail-page-picker"]
+        XCTAssertTrue(pager.exists && pager.isHittable)
+        app.buttons["Next page"].tap()
+        let nextRecord = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Task 9:")).firstMatch
+        XCTAssertTrue(nextRecord.waitForExistence(timeout: 5))
+        attachScreenshot(app, name: "Visible JSON result in landscape")
+        pager.tap()
+        app.buttons["Last Page"].tap()
+        let end = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "END OF TOOL RESULT")).firstMatch
+        for _ in 0..<8 {
+            if end.exists && end.isHittable { break }
+            app.scrollViews.firstMatch.swipeUp()
+        }
+        XCTAssertTrue(end.exists && end.isHittable, "The last page must be directly reachable")
+        attachScreenshot(app, name: "Last JSON result page")
+        XCUIDevice.shared.orientation = .portrait
+        app.buttons["Parameters"].tap()
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "build")).firstMatch.waitForExistence(timeout: 5))
+        app.buttons["Raw Result"].tap()
+        XCTAssertTrue(pager.waitForExistence(timeout: 5))
+        attachScreenshot(app, name: "Raw result on separate tab")
+        app.buttons["Done"].tap()
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        toggle.tap()
+        XCTAssertFalse(call.exists)
+    }
+
+    @MainActor
+    private func attachScreenshot(_ app: XCUIApplication, name: String) {
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
     /// Case 1: Briefing tab → briefing detail → thread → messages → back →
     /// briefing detail is shown again.
     @MainActor

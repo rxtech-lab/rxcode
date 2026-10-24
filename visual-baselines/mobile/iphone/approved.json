@@ -1,0 +1,16 @@
+{
+  "environment": {
+    "deviceType": "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro",
+    "runtime": "com.apple.CoreSimulator.SimRuntime.iOS-27-0",
+    "xcode": "Xcode 27.1\nBuild version 27A9275"
+  },
+  "sha256": {
+    "settings": "0bf6778f7ed5b996f0eb3e9e8a1a74874ccdcc370f2413284b3f9c6072fb32b6",
+    "integrations": "b4ef2294760394c1bd76a91ec5864ece4466c254ead4cb96bfd0745fd8789860",
+    "account": "cc2797db718a3686726a7238852d5d34a427f22174a65785155bc28fe8c41ed4"
+  },
+  "approval": {
+    "reviewer": "qiweili",
+    "at": "2026-10-24T07:33:56.827113+00:00"
+  }
+}

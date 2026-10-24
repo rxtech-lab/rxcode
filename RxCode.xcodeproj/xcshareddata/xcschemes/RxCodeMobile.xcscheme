@@ -29,6 +29,8 @@
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES">
       <TestPlans>
+         <TestPlanReference reference = "container:MobileVisualRegression.xctestplan">
+         </TestPlanReference>
          <TestPlanReference
             reference = "container:MobileUITestPlan-iPhone.xctestplan"
             default = "YES">

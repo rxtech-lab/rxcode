@@ -21,14 +21,47 @@ extension ACPService {
         ])
     ]
 
-    /// Offers account and API-key sign-in for OpenCode; other clients advertise
-    /// their sign-in methods in the `initialize` response.
+    /// Cursor loads existing credentials through ACP, so browser login must
+    /// use its CLI. OpenCode also needs explicit account and API-key choices.
     func authMethods(spec: ACPClientSpec, cwd: String) async throws -> [ACPAuthMethod] {
+        if Self.isCursorClient(spec) {
+            return [ACPAuthMethod(
+                id: "cursor_login", name: "Cursor Login",
+                description: "Sign in to Cursor in your browser using the installed Cursor CLI.",
+                kind: .terminal(command: "cursor-agent", args: ["login"], env: [:])
+            )]
+        }
         if let methods = Self.openCodeAuthMethods(for: spec) { return methods }
         return try await withEphemeralAgent(spec: spec, cwd: cwd, label: "auth-methods", timeout: .seconds(90)) { key in
             let initResult = try await self.sendRequest(key: key, method: "initialize", params: Self.initializeParams)
             return ACPAuthMethod.parse(initializeResult: initResult)
         }
+    }
+
+    static func isCursorClient(_ spec: ACPClientSpec) -> Bool {
+        if spec.registryId == "cursor" { return true }
+        switch spec.launch {
+        case .binary(let path, _, _), .custom(let path, _, _):
+            return URL(fileURLWithPath: path).lastPathComponent == "cursor-agent"
+        default:
+            return false
+        }
+    }
+
+    func retireSessions(clientId: String) {
+        for key in sessions.keys.filter({ sessions[$0]?.spec.id == clientId }) {
+            killSession(key: key)
+        }
+    }
+
+    func cursorTerminalLogout(spec: ACPClientSpec) async throws -> InteractiveTerminalState {
+        guard Self.isCursorClient(spec) else { throw ACPError.protocolMismatch("This client is not Cursor.") }
+        let state = try await terminalLogin(spec: spec, command: "cursor-agent", args: ["logout"], env: [:])
+        return InteractiveTerminalState(
+            title: "Sign Out of \(spec.displayName)", executable: state.executable,
+            arguments: state.arguments, environment: state.environment,
+            currentDirectory: state.currentDirectory, reportToChat: false
+        )
     }
 
     /// Account sign-in connects the OpenCode subscription without requiring
@@ -202,7 +235,7 @@ extension ACPService {
         command: String?, args: [String]
     ) -> [String] {
         guard let command else { return [executable] + launchArgs + extraArgs + args }
-        if command == "opencode", let acpIndex = launchArgs.firstIndex(of: "acp") {
+        if (command == "opencode" || command == "cursor-agent"), let acpIndex = launchArgs.firstIndex(of: "acp") {
             return [executable] + Array(launchArgs[..<acpIndex]) + args
         }
         // A terminal-auth hint may name the agent on PATH even when RxCode

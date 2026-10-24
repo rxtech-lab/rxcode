@@ -2,6 +2,8 @@
 // This server is a local simulator dependency; it is never bundled in the app.
 const http = require('http');
 let notificationDevice = null;
+const rejectedChats = new Set();
+const writes = new Map();
 http.createServer(async (req, res) => {
   let raw = '';
   for await (const chunk of req) raw += chunk;
@@ -34,12 +36,20 @@ http.createServer(async (req, res) => {
     return json(501, {error:'Outside simulation contract'});
   }
   if (req.url.endsWith('/api/v1/agent/tools')) {
+    if (req.headers.authorization === 'Bearer rate-tools') {
+      res.setHeader('Retry-After', '1');
+      return json(429, {error:'Tools rate limit reached'});
+    }
     const body = req.body ?? JSON.parse(raw);
     if (body.method === 'notifications/initialized') { res.writeHead(202); return res.end(); }
     let result;
     if (body.method === 'initialize') result = {protocolVersion:'2025-11-25',capabilities:{tools:{}},serverInfo:{name:'Flowcy simulation',version:'1'}};
     else if (body.method === 'tools/list') result = {tools:[{name:'list_tasks',description:'List authorized project tasks',inputSchema:{type:'object',properties:{repoId:{type:'string'}}}},{name:'create_task',description:'Create a task',inputSchema:{type:'object',properties:{repoId:{type:'string'},title:{type:'string'}}}}]};
     else if (body.method === 'tools/call') {
+      if (body.params.name === 'create_task') {
+        const key = body.params.arguments.title;
+        writes.set(key, (writes.get(key) ?? 0) + 1);
+      }
       if (body.params.arguments.repoId === 'denied') return json(403, {error:'Forbidden'});
       result = body.params.arguments.fail ? {isError:true,content:[{type:'text',text:'Permission denied'}]} : {content:[{type:'text',text:JSON.stringify({tasks:[],projectId:body.params.arguments.repoId})}]};
     } else return json(501, {error:'Outside simulation contract'});
@@ -56,13 +66,26 @@ http.createServer(async (req, res) => {
     return json(200, {title:body.kind === 'story' ? 'Enable offline work' : 'Cache board data',details:'## Acceptance criteria\nBoard data remains available offline.'});
   }
   if (req.url.endsWith('/api/v1/agent/chat')) {
-    res.writeHead(200, {'Content-Type':'application/x-ndjson'});
     const body = req.body ?? JSON.parse(raw);
     const messages = body.messages ?? [];
     const prompt = messages.findLast(m => m.role === 'user')?.content ?? '';
     const hasResult = messages.at(-1)?.role === 'tool';
+    const shouldReject = prompt.includes('RateLimit') && (!prompt.includes('Tool') || hasResult);
+    if (shouldReject && !rejectedChats.has(prompt)) {
+      rejectedChats.add(prompt);
+      if (!prompt.includes('NoTiming')) res.setHeader('Retry-After', prompt.includes('BadTiming') ? 'invalid' : '1');
+      return json(429, {error:'Chat rate limit reached'});
+    }
+    if (prompt.includes('HTTPFailure')) return json(503, {error:'Unavailable'});
+    if (prompt.includes('RateLimit') && messages.filter(m => m.role === 'user').length !== 1)
+      return json(400, {error:'Duplicate prompt on retry'});
+    if (prompt.includes('Create') && hasResult && (writes.get(prompt) ?? 0) !== 1)
+      return json(400, {error:'Mutation was replayed'});
+    res.writeHead(200, {'Content-Type':'application/x-ndjson'});
+    if (prompt.includes('StreamFailure')) return res.end(JSON.stringify({type:'error'})+'\n');
+    if (prompt.includes('Interrupted')) return res.end(JSON.stringify({type:'text',text:'Partial'})+'\n');
     if (prompt.includes('Tool') && !hasResult) {
-      res.write(JSON.stringify({type:'tool-call',id:'simulation-call',name:prompt.includes('Create') ? 'create_task' : 'list_tasks',arguments:{repoId:'authorized',title:'Simulation task'}})+'\n');
+      res.write(JSON.stringify({type:'tool-call',id:'simulation-call',name:prompt.includes('Create') ? 'create_task' : 'list_tasks',arguments:{repoId:'authorized',title:prompt}})+'\n');
     } else res.write(JSON.stringify({type:'text',text:'**Actual simulated transport** ✓'})+'\n');
     return setTimeout(()=>res.end(JSON.stringify({type:'finish'})+'\n'),prompt.includes('Slow') ? 5000 : 100);
   }

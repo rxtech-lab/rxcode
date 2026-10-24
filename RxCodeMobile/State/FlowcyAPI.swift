@@ -43,6 +43,9 @@ final class FlowcyAPI {
                 throw FlowcyError.message("This feature could not accept your account session. Try again after the Flowcy service is updated.")
             }
             if http.statusCode == 403 { throw FlowcyError.denied }
+            if http.statusCode == 429 {
+                throw FlowcyError.rateLimit(http, service: path == "agent/chat" ? "Flowcy Chat" : "Flowcy")
+            }
             guard (200..<300).contains(http.statusCode) else { throw FlowcyError.transport(http.statusCode) }
             return (bytes, http)
         }

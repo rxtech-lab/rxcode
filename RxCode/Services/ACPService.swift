@@ -29,6 +29,8 @@ actor ACPService {
     struct SessionEntry {
         // Persistent (process-level)
         let process: Process
+        // A retry can reuse the thread key before the old process exits.
+        let generation = UUID()
         let stdin: FileHandle
         let spec: ACPClientSpec
         let cwd: String
@@ -58,6 +60,7 @@ actor ACPService {
     }
 
     var sessions: [String: SessionEntry] = [:]
+    var completedErrors: [UUID: String] = [:]
     /// Maps an externally-issued streamId to its canonical pool key.
     var streamToKey: [UUID: String] = [:]
     /// Maps a previously-seen pool key (e.g. AppState's "pending-…" key) to
@@ -134,6 +137,7 @@ actor ACPService {
     }
 
     func consumeStderr(for streamId: UUID) -> String? {
+        if let error = completedErrors.removeValue(forKey: streamId) { return error }
         guard let key = streamToKey[streamId], let entry = sessions[key] else {
             return nil
         }
@@ -148,6 +152,7 @@ actor ACPService {
         sessions.removeAll()
         streamToKey.removeAll()
         aliasToCanonical.removeAll()
+        completedErrors.removeAll()
     }
 
     /// Tear down a pooled session — terminate the process and forget all
@@ -176,7 +181,7 @@ actor ACPService {
 
     // MARK: - Process Lifecycle
 
-    func startStderrReader(key: String, stderr: FileHandle) {
+    func startStderrReader(key: String, generation: UUID, stderr: FileHandle) {
         let chunkStream = AsyncStream<Data> { continuation in
             stderr.readabilityHandler = { handle in
                 let data = handle.availableData
@@ -204,10 +209,16 @@ actor ACPService {
                     let lineData = buffer.subdata(in: buffer.startIndex..<nlIdx)
                     buffer.removeSubrange(buffer.startIndex...nlIdx)
                     guard let line = String(data: lineData, encoding: .utf8) else { continue }
-                    await self?.appendStderr(key: key, line: line)
+                    await self?.appendProcessStderr(key: key, generation: generation, line: line)
                 }
             }
         }
+    }
+
+    func appendProcessStderr(key: String, generation: UUID, line: String) {
+        let resolved = aliasToCanonical[key] ?? key
+        guard sessions[resolved]?.generation == generation else { return }
+        appendStderr(key: resolved, line: line)
     }
 
     func appendStderr(key: String, line: String) {
@@ -219,9 +230,9 @@ actor ACPService {
         }
     }
 
-    func handleProcessExit(key: String) {
+    func handleProcessExit(key: String, generation: UUID) {
         let resolved = aliasToCanonical[key] ?? key
-        guard let entry = sessions[resolved] else { return }
+        guard let entry = sessions[resolved], entry.generation == generation else { return }
         logger.info("[ACP] process exit pid=\(entry.process.processIdentifier) status=\(entry.process.terminationStatus) reason=\(String(describing: entry.process.terminationReason.rawValue), privacy: .public) pending=\(entry.pending.count) client=\(entry.spec.displayName, privacy: .public)")
         for (_, cont) in entry.pending {
             cont.resume(throwing: ACPError.processExited(code: entry.process.terminationStatus))

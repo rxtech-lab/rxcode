@@ -3798,6 +3798,9 @@
         }
       }
     },
+    "Authentication command ended with exit code %d. Close this sheet and try again." : {
+
+    },
     "Authentication required" : {
 
     },
@@ -23289,10 +23292,10 @@
     "Sign Out…" : {
 
     },
-    "Sign-in ended with exit code %d. Close this sheet and try again." : {
+    "Sign-in Failed" : {
 
     },
-    "Sign-in Failed" : {
+    "Sign-out Failed" : {
 
     },
     "Signed in" : {

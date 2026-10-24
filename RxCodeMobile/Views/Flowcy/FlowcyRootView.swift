@@ -250,6 +250,7 @@ private struct FlowcyIntegrationsView: View {
 }
 
 struct FlowcySettingsView: View {
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(MobileCloudState.self) private var cloud
     @State private var selection: FlowcySetting?
     @State private var preferredColumn: NavigationSplitViewColumn = .sidebar
@@ -264,19 +265,20 @@ struct FlowcySettingsView: View {
                         }
                         .listRowSeparator(.hidden)
                     }
-                    if UIDevice.current.userInterfaceIdiom == .phone {
+                    if sizeClass == .compact {
                         NavigationLink(value: FlowcySetting.account) {
                             Label("Account & General", systemImage: "person.crop.circle")
                         }
                         .listRowSeparator(.hidden)
                         .accessibilityIdentifier("flowcy-settings-account")
+                        .accessibilityValue("Settings menu item")
                     }
                 }
                 .listSectionSeparator(.hidden)
             }
             .listStyle(.insetGrouped)
             .safeAreaInset(edge: .bottom) {
-                if UIDevice.current.userInterfaceIdiom != .phone {
+                if sizeClass == .regular {
                     Button {
                         selection = .account
                         preferredColumn = .detail
@@ -300,6 +302,7 @@ struct FlowcySettingsView: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("flowcy-settings-account")
+                    .accessibilityValue("Pinned account button")
                     .padding()
                 }
             }

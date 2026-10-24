@@ -88,7 +88,7 @@ private struct CompactChatMessageBubble: View {
                 ToolResultView(toolCall: toolCall, isMessageStreaming: message.isStreaming)
             }
         case .transientTools(_, let tools):
-            ChatTransientToolSummaryView(tools: tools)
+            ToolActivityGroupView(tools: tools, isStreaming: message.isStreaming)
         }
     }
 
@@ -177,7 +177,7 @@ private struct CompactChatMessageBubble: View {
             guard !pendingTransientTools.isEmpty else { return }
             let startId = pendingTransientGroupStartId ?? pendingTransientTools[0].id
             result.append(.transientTools(
-                id: "transient-tools-\(startId)-\(pendingTransientTools.count)",
+                id: "transient-tools-\(startId)",
                 tools: pendingTransientTools
             ))
             pendingTransientTools = []
@@ -192,21 +192,14 @@ private struct CompactChatMessageBubble: View {
             }
 
             guard let toolCall = block.toolCall else { continue }
-            if message.isStreaming {
+            // Interactive questions and plan cards retain their dedicated controls.
+            if ["askuserquestion", "exitplanmode", "exit_plan_mode"].contains(toolCall.name.lowercased())
+                || toolCall.name == ReviewCountdownCard.toolName {
                 flushTransientTools()
                 result.append(.tool(toolCall))
-                continue
-            }
-
-            if ToolCategory(toolName: toolCall.name).isTransient {
-                guard toolCall.result != nil || toolCall.isError else { continue }
-                if pendingTransientGroupStartId == nil {
-                    pendingTransientGroupStartId = toolCall.id
-                }
+            } else {
+                if pendingTransientGroupStartId == nil { pendingTransientGroupStartId = toolCall.id }
                 pendingTransientTools.append(toolCall)
-            } else if toolCall.isKeepAlways || toolCall.result != nil || toolCall.isError {
-                flushTransientTools()
-                result.append(.tool(toolCall))
             }
         }
 

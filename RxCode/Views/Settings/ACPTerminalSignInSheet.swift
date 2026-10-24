@@ -40,7 +40,7 @@ struct ACPTerminalSignInSheet: View {
             .background(ClaudeTheme.codeBackground)
             .overlay(alignment: .bottom) {
                 if let exitCode, exitCode != 0 {
-                    Text("Sign-in ended with exit code \(exitCode). Close this sheet and try again.")
+                    Text("Authentication command ended with exit code \(exitCode). Close this sheet and try again.")
                         .padding()
                         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
                         .padding()

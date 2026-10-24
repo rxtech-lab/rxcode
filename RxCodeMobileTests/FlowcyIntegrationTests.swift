@@ -12,6 +12,20 @@ enum FlowcySimulation {
 }
 
 final class FlowcyProtocolTests: XCTestCase {
+    @MainActor
+    func testRetryAfterParsing() throws {
+        let now = Date(timeIntervalSince1970: 0)
+        for (header, expected) in [("12", 12.0), ("Thu, 01 Jan 1970 00:00:30 GMT", 30.0), ("-2", nil), ("NaN", nil), ("", nil)] {
+            let response = try XCTUnwrap(HTTPURLResponse(url: URL(string: "https://www.flowcy.dev")!, statusCode: 429,
+                httpVersion: nil, headerFields: ["Retry-After": header]))
+            guard case let .rateLimited(service, date) = FlowcyError.rateLimit(response, service: "Flowcy Chat", now: now) else {
+                return XCTFail("Expected rate limit")
+            }
+            XCTAssertEqual(service, "Flowcy Chat")
+            XCTAssertEqual(date?.timeIntervalSince1970, expected)
+        }
+    }
+
     func testNotificationUsesSubjectInsteadOfIdentifier() {
         let value: JSONValue = .object([
             "id": .string("bbb5fa72-9f1f-41c6-84ac-5380b0e08262"),
@@ -133,7 +147,7 @@ final class FlowcyAgentSimulationTests: XCTestCase {
         agent.send("Tool list my tasks", tools: tools, cloud: MobileCloudState())
         try await wait { !agent.isStreaming }
         XCTAssertNil(agent.error)
-        XCTAssertTrue(agent.messages.contains { $0.role == "tool" && $0.text.contains("authorized") })
+        XCTAssertTrue(agent.messages.flatMap { $0.toolCalls ?? [] }.contains { $0.result?.contains("authorized") == true })
         XCTAssertTrue(agent.messages.last?.text.contains("simulated transport") == true)
         agent.newChat()
         XCTAssertTrue(agent.messages.isEmpty)
@@ -148,7 +162,7 @@ final class FlowcyAgentSimulationTests: XCTestCase {
         XCTAssertFalse(agent.messages.contains { $0.role == "tool" })
         agent.approve(false)
         try await wait { !agent.isStreaming }
-        XCTAssertTrue(agent.messages.contains { $0.role == "tool" && $0.text.contains("denied") })
+        XCTAssertTrue(agent.messages.flatMap { $0.toolCalls ?? [] }.contains { $0.result?.contains("denied") == true })
         agent.newChat()
     }
 
@@ -163,6 +177,104 @@ final class FlowcyAgentSimulationTests: XCTestCase {
         XCTAssertTrue(agent.messages.isEmpty)
         try await Task.sleep(for: .milliseconds(150))
         XCTAssertTrue(agent.messages.isEmpty)
+    }
+
+    func testRateLimitRetryRetainsOnePromptAndHonorsDeadline() async throws {
+        let tools = try await connectedTools()
+        let agent = agent()
+        let cloud = MobileCloudState()
+        agent.send("RateLimit " + UUID().uuidString, tools: tools, cloud: cloud)
+        try await wait { !agent.isStreaming }
+        XCTAssertTrue(agent.canRetry)
+        let deadline = try XCTUnwrap(agent.retryAt)
+        XCTAssertFalse(agent.canSubmit(at: deadline.addingTimeInterval(-0.01)))
+        XCTAssertTrue(agent.canSubmit(at: deadline))
+        agent.retry(tools: tools, cloud: cloud)
+        XCTAssertFalse(agent.isStreaming, "Retry must be blocked during cooldown")
+        agent.send("Another prompt", tools: tools, cloud: cloud)
+        XCTAssertEqual(agent.messages.filter { $0.role == "user" }.count, 1)
+        try await Task.sleep(for: .seconds(1.1))
+        XCTAssertFalse(agent.isStreaming, "Rate limits must never trigger automatic submission")
+        agent.retry(tools: tools, cloud: cloud)
+        agent.retry(tools: tools, cloud: cloud)
+        try await wait { !agent.isStreaming }
+        XCTAssertNil(agent.error)
+        XCTAssertFalse(agent.canRetry)
+        XCTAssertEqual(agent.messages.filter { $0.role == "user" }.count, 1)
+        XCTAssertTrue(agent.messages.last?.text.contains("simulated transport") == true)
+        agent.newChat()
+    }
+
+    func testToolsRateLimitIsIdentifiedAndAccountSwitchClearsRecovery() async throws {
+        let tools = FlowcyToolsState(client: FlowcyMCPClient(endpoint: URL(string: "\(FlowcySimulation.baseURL)/api/v1/agent/tools")!,
+            session: .shared, token: { _ in "rate-tools" }))
+        let agent = agent()
+        agent.send("Hello", tools: tools, cloud: MobileCloudState())
+        try await wait { !agent.isStreaming }
+        XCTAssertTrue(agent.error?.contains("Flowcy Tools") == true)
+        XCTAssertTrue(agent.canRetry)
+        XCTAssertNotNil(agent.retryAt)
+        XCTAssertFalse(tools.isConnected)
+        agent.restore(accountID: nil)
+        XCTAssertFalse(agent.canRetry)
+        XCTAssertNil(agent.retryAt)
+        XCTAssertNil(agent.error)
+    }
+
+    func testMissingAndInvalidRetryTimingDoNotInventDeadline() async throws {
+        let tools = try await connectedTools()
+        for timing in ["NoTiming", "BadTiming"] {
+            let agent = agent()
+            let cloud = MobileCloudState()
+            agent.send("RateLimit \(timing) " + UUID().uuidString, tools: tools, cloud: cloud)
+            try await wait { !agent.isStreaming }
+            XCTAssertTrue(agent.canRetry)
+            XCTAssertNil(agent.retryAt)
+            XCTAssertTrue(agent.error?.contains("did not provide a retry time") == true)
+            agent.error = nil // Dismissing the alert must retain recovery.
+            agent.retry(tools: tools, cloud: cloud)
+            try await wait { !agent.isStreaming }
+            XCTAssertNil(agent.error)
+            XCTAssertEqual(agent.messages.filter { $0.role == "user" }.count, 1)
+            agent.newChat()
+        }
+    }
+
+    func testRateLimitAfterMutationResumesWithoutReplayingTool() async throws {
+        let tools = try await connectedTools()
+        let agent = agent()
+        let cloud = MobileCloudState(service: ProjectCloudService(session: .shared,
+            baseURL: URL(string: FlowcySimulation.baseURL)!, tokenProvider: { _ in "simulation" }))
+        agent.send("RateLimit Tool Create " + UUID().uuidString, tools: tools, cloud: cloud)
+        try await wait { agent.pendingTool != nil }
+        agent.approve(true)
+        try await wait { !agent.isStreaming }
+        XCTAssertTrue(agent.canRetry)
+        XCTAssertEqual(agent.messages.flatMap { $0.toolCalls ?? [] }.count, 1)
+        try await Task.sleep(for: .seconds(1.1))
+        agent.retry(tools: tools, cloud: cloud)
+        try await wait { !agent.isStreaming }
+        XCTAssertNil(agent.pendingTool, "Completed writes must not ask for consent again")
+        XCTAssertNil(agent.error, "The HTTP fixture rejects repeated writes or duplicate prompts")
+        XCTAssertTrue(agent.messages.last?.text.contains("simulated transport") == true)
+        XCTAssertEqual(agent.messages.filter { $0.role == "user" }.count, 1)
+        agent.newChat()
+    }
+
+    func testAmbiguousFailuresCannotReplaySubmission() async throws {
+        let tools = try await connectedTools()
+        for failure in ["HTTPFailure", "StreamFailure", "Interrupted"] {
+            let agent = agent()
+            let cloud = MobileCloudState()
+            agent.send(failure, tools: tools, cloud: cloud)
+            try await wait { !agent.isStreaming }
+            XCTAssertNotNil(agent.error)
+            XCTAssertFalse(agent.canRetry)
+            agent.retry(tools: tools, cloud: cloud)
+            XCTAssertFalse(agent.isStreaming)
+            XCTAssertEqual(agent.messages.filter { $0.role == "user" }.count, 1)
+            agent.newChat()
+        }
     }
 
     private func wait(_ condition: () -> Bool) async throws {

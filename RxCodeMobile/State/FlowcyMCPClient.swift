@@ -12,15 +12,44 @@ nonisolated struct FlowcyTool: Codable, Identifiable, Sendable {
 
 enum FlowcyError: LocalizedError {
     case signIn, denied, transport(Int), protocolError, toolFailed, message(String)
+    case rateLimited(service: String, retryAt: Date?)
     var errorDescription: String? {
         switch self {
         case .signIn: "Your account session is unavailable. Sign in to Flowcy again."
         case .denied: "Your account does not have permission for this operation."
         case .transport(let status): "Flowcy returned HTTP \(status). Try again."
+        case .rateLimited(let service, let retryAt):
+            if let retryAt {
+                "\(service) is rate limited (HTTP 429). Retry after \(retryAt.formatted(date: .omitted, time: .standard))."
+            } else {
+                "\(service) is rate limited (HTTP 429). The service did not provide a retry time. Wait before retrying."
+            }
         case .protocolError: "Flowcy returned an invalid protocol response."
         case .toolFailed: "The tool reported an error. Review its result before retrying."
         case .message(let message): message
         }
+    }
+
+    /// Only server-provided timing is used; a missing header is not a one-minute promise.
+    static func rateLimit(_ response: HTTPURLResponse, service: String, now: Date = Date()) -> FlowcyError {
+        let value = response.value(forHTTPHeaderField: "Retry-After")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        var retryAt: Date?
+        if let value {
+            if !value.isEmpty, value.allSatisfy({ $0.isASCII && $0.isNumber }), let seconds = TimeInterval(value), seconds.isFinite {
+                retryAt = now.addingTimeInterval(seconds)
+            } else {
+                let formatter = DateFormatter()
+                formatter.locale = Locale(identifier: "en_US_POSIX")
+                formatter.timeZone = TimeZone(secondsFromGMT: 0)
+                formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+                if let date = formatter.date(from: value) {
+                    // Account for the server's clock when its Date header is available.
+                    let serverNow = response.value(forHTTPHeaderField: "Date").flatMap { formatter.date(from: $0) } ?? now
+                    retryAt = now.addingTimeInterval(max(0, date.timeIntervalSince(serverNow)))
+                }
+            }
+        }
+        return .rateLimited(service: service, retryAt: retryAt)
     }
 }
 
@@ -102,6 +131,7 @@ actor FlowcyMCPClient {
             initialized = false
             throw FlowcyError.signIn
         case 403: throw FlowcyError.denied
+        case 429: throw FlowcyError.rateLimit(http, service: "Flowcy Tools")
         case 404 where sessionID != nil: initialized = false; sessionID = nil; throw FlowcyError.message("The tools session expired. Reconnect and try again.")
         case 200..<300: break
         default: throw FlowcyError.transport(http.statusCode)

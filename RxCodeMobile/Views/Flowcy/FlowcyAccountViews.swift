@@ -9,8 +9,19 @@ struct FlowcySessionDetailView: View {
     @State private var error: String?
     @State private var selectedActivity: SessionActivity?
 
-    private var visibleMessages: [JSONValue] {
-        messages.filter { !Self.messageText($0).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    private struct TranscriptRow: Identifiable {
+        let id: Int
+        let message: JSONValue
+        let tools: [ToolCall]
+    }
+
+    private var visibleMessages: [TranscriptRow] {
+        let groups = SavedSessionToolCalls.groups(in: messages)
+        return messages.enumerated().compactMap { index, message in
+            guard !Self.messageText(message).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    || !groups[index].isEmpty else { return nil }
+            return TranscriptRow(id: index, message: message, tools: groups[index])
+        }
     }
 
     var body: some View {
@@ -39,8 +50,11 @@ struct FlowcySessionDetailView: View {
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity)
                             .padding(.bottom, 8)
-                        ForEach(Array(visibleMessages.enumerated()), id: \.offset) { _, message in
-                            messageRow(message)
+                        ForEach(visibleMessages) { row in
+                            VStack(alignment: .leading, spacing: 12) {
+                                if !Self.messageText(row.message).isEmpty { messageRow(row.message) }
+                                if !row.tools.isEmpty { ToolActivityGroupView(tools: row.tools) }
+                            }
                         }
                     }
                     .padding(.horizontal, 20)
@@ -97,7 +111,7 @@ struct FlowcySessionDetailView: View {
                     ))
             }
             .accessibilityIdentifier("flowcy-session-user-message")
-        } else if role == "tool" || role == "system" || !(message["toolCalls"]?.arrayValue ?? []).isEmpty {
+        } else if role == "tool" || role == "system" {
             Button {
                 MobileHaptics.buttonTap()
                 selectedActivity = SessionActivity(title: role == "system" ? "Session Details" : "Tool Activity", text: text)
@@ -137,22 +151,7 @@ struct FlowcySessionDetailView: View {
         if let content, !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             sections.append(content)
         }
-        // Saved sessions keep tool activity alongside content, including turns
-        // with no prose. Preserve these entries in the conversation timeline.
-        for call in message["toolCalls"]?.arrayValue ?? [] {
-            sections.append("### Tool call: \(call["name"]?.stringValue ?? "Tool")\n\n" + jsonMarkdown(call["arguments"] ?? .null))
-        }
-        for result in message["toolResults"]?.arrayValue ?? [] {
-            sections.append("### Tool result: \(result["name"]?.stringValue ?? "Tool")\n\n" + jsonMarkdown(result["result"] ?? .null))
-        }
         return sections.joined(separator: "\n\n")
-    }
-
-    private static func jsonMarkdown(_ value: JSONValue) -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        let text = String(decoding: (try? encoder.encode(value)) ?? Data(), as: UTF8.self)
-        return "````json\n" + text + "\n````"
     }
 
     private func load() async {

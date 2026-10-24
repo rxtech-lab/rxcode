@@ -26,6 +26,17 @@ final class FlowcyProductionUITests: XCTestCase {
         app.buttons["Cancel"].tap()
         XCTAssertTrue(app.scrollViews["flowcy-project-overview"].waitForExistence(timeout: 5))
         capture("Flowcy Project Overview")
+        let closeProject = app.buttons["flowcy-close-project"]
+        if !closeProject.isHittable {
+            // Compact layouts first pop the overview to the workspace's feature list.
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+        }
+        XCTAssertTrue(closeProject.waitForExistence(timeout: 5))
+        closeProject.tap()
+        XCTAssertTrue(project.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["Projects"].exists)
+        project.tap()
+        XCTAssertTrue(app.scrollViews["flowcy-project-overview"].waitForExistence(timeout: 5))
         app.buttons["Settings"].firstMatch.tap()
         XCTAssertTrue(app.buttons["Integrations"].waitForExistence(timeout: 5))
         capture("Flowcy Settings")

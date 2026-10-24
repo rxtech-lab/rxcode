@@ -42,7 +42,7 @@ nonisolated struct MockFixtures: Sendable {
     }
 
     /// The standard fixture set used by every UI test.
-    static func standard() -> MockFixtures {
+    static func standard(includeToolActivity: Bool = false) -> MockFixtures {
         let projectAlpha = UUID(uuidString: "A0000000-0000-0000-0000-000000000001")!
         let projectBeta = UUID(uuidString: "B0000000-0000-0000-0000-000000000002")!
         let branch = "main"
@@ -134,6 +134,21 @@ nonisolated struct MockFixtures: Sendable {
                     timestamp: now
                 ),
             ]
+        }
+
+        if includeToolActivity {
+            let records = (1...100).map { index in
+                ["title": "Task \(index): verified readable tool output.",
+                 "status": index == 100 ? "END OF TOOL RESULT" : "backlog"]
+            }
+            let longResult = String(decoding: try! JSONEncoder().encode(records), as: UTF8.self)
+            for spec in specs {
+                messagesBySession[spec.sessionId]?.append(ChatMessage(role: .assistant, blocks: [
+                    .toolCall(ToolCall(id: "fixture-read", name: "Read", input: ["path": .string("README.md")], result: "# Project\n\nRead successfully.")),
+                    .toolCall(ToolCall(id: "fixture-bash", name: "Bash", input: ["command": .string("build")], result: longResult)),
+                    .toolCall(ToolCall(id: "fixture-error", name: "Search", result: "The requested file was not found.", isError: true))
+                ]))
+            }
         }
 
         return MockFixtures(

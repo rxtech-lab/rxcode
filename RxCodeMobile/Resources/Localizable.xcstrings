@@ -5358,6 +5358,9 @@
         }
       }
     },
+    "Flowcy is rate limited" : {
+
+    },
     "Flowcy stops managing releases for this repository. Existing GitHub releases are not affected." : {
 
     },
@@ -7812,6 +7815,9 @@
         }
       }
     },
+    "No retry time was provided. Wait before retrying." : {
+
+    },
     "No Run Profiles" : {
       "localizations" : {
         "en" : {
@@ -8940,6 +8946,9 @@
         }
       }
     },
+    "Pinned account button" : {
+
+    },
     "Plan" : {
 
     },
@@ -9835,6 +9844,12 @@
           }
         }
       }
+    },
+    "Retry available at %@" : {
+
+    },
+    "Retry Response" : {
+
     },
     "Review" : {
       "localizations" : {
@@ -10901,6 +10916,9 @@
           }
         }
       }
+    },
+    "Settings menu item" : {
+
     },
     "Show" : {
 

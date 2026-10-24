@@ -9,6 +9,7 @@ final class FlowcyToolsState {
     private(set) var isConnected = false
     private(set) var isBusy = false
     var error: String?
+    private(set) var failure: FlowcyError?
     let client: FlowcyMCPClient
     @ObservationIgnored private var generation = UUID()
     @ObservationIgnored private var connection: Task<Void, Never>?
@@ -27,6 +28,7 @@ final class FlowcyToolsState {
     private func discover(current: UUID) async {
         isBusy = true
         error = nil
+        failure = nil
         isConnected = false
         defer { if generation == current { isBusy = false } }
         do {
@@ -40,6 +42,7 @@ final class FlowcyToolsState {
             guard current == generation else { return }
             tools = []
             self.error = error.localizedDescription
+            failure = error as? FlowcyError
         }
     }
 
@@ -51,6 +54,7 @@ final class FlowcyToolsState {
         isConnected = false
         isBusy = false
         error = nil
+        failure = nil
         await client.reset()
     }
 

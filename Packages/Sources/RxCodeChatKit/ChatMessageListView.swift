@@ -91,7 +91,11 @@ struct ChatTransientGroupSummaryView: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
+            #if os(macOS)
             ChatTransientToolSummaryView(tools: allToolCalls)
+            #else
+            ToolActivityGroupView(tools: allToolCalls, isStreaming: messages.contains(where: \.isStreaming))
+            #endif
             Spacer(minLength: 40)
         }
     }

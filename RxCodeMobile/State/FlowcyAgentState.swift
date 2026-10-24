@@ -6,6 +6,7 @@ struct FlowcyChatMessage: Codable, Identifiable {
     let id: UUID
     let role: String
     var text: String
+    var toolCalls: [ToolCall]? = nil
     init(role: String, text: String) { id = UUID(); self.role = role; self.text = text }
 }
 
@@ -22,6 +23,8 @@ final class FlowcyAgentState {
     private(set) var isStreaming = false
     private(set) var progress: String?
     var error: String?
+    private(set) var canRetry = false
+    private(set) var retryAt: Date?
     var pendingTool: FlowcyPendingTool?
     @ObservationIgnored private let api: FlowcyAPI
     init(api: FlowcyAPI? = nil) { self.api = api ?? FlowcyAPI() }
@@ -31,7 +34,6 @@ final class FlowcyAgentState {
     @ObservationIgnored private var approval: CheckedContinuation<Bool, Never>?
     @ObservationIgnored private var accountID: String?
     @ObservationIgnored private var generation = UUID()
-    @ObservationIgnored private var lastPrompt = ""
     @ObservationIgnored private var performedWrite = false
 
     private struct Saved: Codable { let messages: [FlowcyChatMessage]; let history: [JSONValue] }
@@ -45,6 +47,8 @@ final class FlowcyAgentState {
     func restore(accountID: String?) {
         guard accountID != self.accountID else { return }
         cancel()
+        retryAt = nil
+        error = nil
         self.accountID = accountID
         messages = []
         history = []
@@ -58,7 +62,6 @@ final class FlowcyAgentState {
         cancel()
         messages = []
         history = []
-        lastPrompt = ""
         error = nil
         persist()
         MobileHaptics.buttonTap()
@@ -72,6 +75,7 @@ final class FlowcyAgentState {
         approve(false)
         isStreaming = false
         progress = nil
+        canRetry = false
     }
 
     func approve(_ allowed: Bool) {
@@ -81,19 +85,29 @@ final class FlowcyAgentState {
     }
 
     func retry(tools: FlowcyToolsState, cloud: MobileCloudState) {
-        guard !performedWrite else { error = "A tool action was already submitted. Check its result before sending a new prompt."; return }
-        guard !lastPrompt.isEmpty else { return }
-        send(lastPrompt, tools: tools, cloud: cloud)
+        guard canRetry, !isStreaming, accountID != nil, canSubmit() else { return }
+        // Resume the rejected model step with its existing tool results and user message.
+        // Completed mutations must never be replayed by resubmitting the original prompt.
+        start(tools: tools, cloud: cloud)
+    }
+
+    func canSubmit(at date: Date = Date()) -> Bool {
+        retryAt.map { date >= $0 } ?? true
     }
 
     func send(_ prompt: String, tools: FlowcyToolsState, cloud: MobileCloudState) {
         let prompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !prompt.isEmpty, !isStreaming, accountID != nil else { return }
+        guard !prompt.isEmpty, !isStreaming, accountID != nil, canSubmit() else { return }
         performedWrite = false
-        lastPrompt = prompt
-        error = nil
         messages.append(.init(role: "user", text: prompt))
         history.append(.object(["role": .string("user"), "content": .string(prompt + "\n\nAvailable account projects: " + cloud.projects.map { "\($0.title) (project: \($0.id))" }.joined(separator: ", "))]))
+        start(tools: tools, cloud: cloud)
+    }
+
+    private func start(tools: FlowcyToolsState, cloud: MobileCloudState) {
+        error = nil
+        canRetry = false
+        retryAt = nil
         isStreaming = true
         let current = generation
         run = Task {
@@ -107,14 +121,22 @@ final class FlowcyAgentState {
                 }
                 try Task.checkCancellation()
                 guard generation == current else { throw CancellationError() }
-                guard tools.isConnected else { throw FlowcyError.message(tools.error ?? "Could not load Flowcy tools. Try again.") }
+                guard tools.isConnected else { throw tools.failure ?? FlowcyError.message(tools.error ?? "Could not load Flowcy tools. Try again.") }
                 try await turn(tools: tools, cloud: cloud, current: current)
                 try Task.checkCancellation()
                 if generation == current { MobileHaptics.streamFinished() }
             } catch is CancellationError { }
             catch {
                 guard generation == current else { return }
+                if case let FlowcyError.rateLimited(_, date) = error {
+                    canRetry = true
+                    retryAt = date
+                }
                 self.error = error.localizedDescription
+                if canRetry { self.error? += " Your prompt is saved; it will not be sent automatically." }
+                if performedWrite && !canRetry {
+                    self.error? += " A tool action was already submitted. Check its result before sending another prompt."
+                }
                 MobileHaptics.connectionError()
             }
         }
@@ -124,7 +146,7 @@ final class FlowcyAgentState {
         // Each model step is separated from tool execution so writes can require native consent.
         for _ in 0..<8 {
             try Task.checkCancellation()
-            progress = "Thinking…"
+            progress = nil
             let declared = try tools.tools.map { tool -> JSONValue in
                 try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(tool))
             }
@@ -152,6 +174,10 @@ final class FlowcyAgentState {
                     guard let name = event["name"]?.stringValue, let id = event["id"]?.stringValue,
                           let tool = tools.tools.first(where: { $0.name == name }), let arguments = event["arguments"] else { throw FlowcyError.protocolError }
                     calls.append((id, tool, arguments))
+                    var input: [String: JSONValue] = ["arguments": arguments]
+                    if case .object(let object) = arguments { input = object }
+                    if messages[index].toolCalls == nil { messages[index].toolCalls = [] }
+                    messages[index].toolCalls?.append(ToolCall(id: id, name: name, input: input))
                 case "finish": finished = true
                 case "error": throw FlowcyError.message("The agent could not complete its response. Try again.")
                 default: throw FlowcyError.protocolError
@@ -195,7 +221,10 @@ final class FlowcyAgentState {
                 guard generation == current else { throw CancellationError() }
                 let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
                 let output = String(decoding: try encoder.encode(result), as: UTF8.self)
-                messages.append(.init(role: "tool", text: "**\(tool.name)**\n\n```json\n\(output)\n```"))
+                if let callIndex = messages[index].toolCalls?.firstIndex(where: { $0.id == id }) {
+                    messages[index].toolCalls?[callIndex].result = output
+                    messages[index].toolCalls?[callIndex].isError = result["isError"]?.boolValue == true
+                }
                 results.append(.object(["type": .string("tool-result"), "toolCallId": .string(id), "toolName": .string(tool.name), "output": .object(["type": .string("json"), "value": result])]))
             }
             history.append(assistant)

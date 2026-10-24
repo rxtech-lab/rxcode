@@ -221,6 +221,9 @@
         }
       }
     },
+    "%lld tool calls" : {
+
+    },
     "%lld tools executed" : {
       "localizations" : {
         "en" : {
@@ -335,6 +338,9 @@
           }
         }
       }
+    },
+    "1 tool call" : {
+
     },
     "5-hour rate limit" : {
       "localizations" : {
@@ -1216,6 +1222,9 @@
           }
         }
       }
+    },
+    "Collapsed" : {
+
     },
     "Combine and send all queued messages as a single turn" : {
       "localizations" : {
@@ -2558,6 +2567,9 @@
         }
       }
     },
+    "Expanded" : {
+
+    },
     "Export" : {
       "localizations" : {
         "en" : {
@@ -2727,6 +2739,9 @@
           }
         }
       }
+    },
+    "First Page" : {
+
     },
     "Generate a one-line session summary" : {
       "localizations" : {
@@ -3280,6 +3295,9 @@
         }
       }
     },
+    "Last Page" : {
+
+    },
     "List available skills" : {
       "localizations" : {
         "en" : {
@@ -3786,6 +3804,9 @@
         }
       }
     },
+    "Next page" : {
+
+    },
     "No changes" : {
       "localizations" : {
         "en" : {
@@ -3807,6 +3828,12 @@
           }
         }
       }
+    },
+    "No Result" : {
+
+    },
+    "No result was received." : {
+
     },
     "No results found" : {
       "localizations" : {
@@ -4057,6 +4084,22 @@
         }
       }
     },
+    "Page %lld" : {
+
+    },
+    "Page %lld of %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Page %1$lld of %2$lld"
+          }
+        }
+      }
+    },
+    "Parameters" : {
+
+    },
     "Plan" : {
       "localizations" : {
         "en" : {
@@ -4231,6 +4274,9 @@
         }
       }
     },
+    "Previous page" : {
+
+    },
     "Privacy settings (Pro/Max)" : {
       "localizations" : {
         "en" : {
@@ -4274,6 +4320,9 @@
           }
         }
       }
+    },
+    "Raw Result" : {
+
     },
     "Read file" : {
       "localizations" : {
@@ -4636,6 +4685,9 @@
           }
         }
       }
+    },
+    "Result" : {
+
     },
     "Review" : {
       "localizations" : {
@@ -5710,6 +5762,12 @@
         }
       }
     },
+    "The tool failed without a result." : {
+
+    },
+    "The tool returned an empty result." : {
+
+    },
     "This command will run in the terminal when the button is clicked" : {
       "localizations" : {
         "en" : {
@@ -5885,6 +5943,9 @@
           }
         }
       }
+    },
+    "Tool details" : {
+
     },
     "Tracks usage against Anthropic's rolling 5-hour limit. Resets gradually as older requests age out." : {
       "localizations" : {
@@ -6279,6 +6340,9 @@
           }
         }
       }
+    },
+    "Waiting for the tool result…" : {
+
     },
     "Waiting to start review" : {
       "localizations" : {

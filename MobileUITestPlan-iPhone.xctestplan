@@ -15,6 +15,7 @@
   "testTargets" : [
     {
       "selectedTests" : [
+        "iPhoneNavigationUITests/testToolGroupsExpandAndShowFullLongResult()",
         "TaskDetailSheetUITests/testTaskAndStoryCardsOpenDismissibleDetailSheets()",
         "FlowcyAIDraftUITests/testTaskAndStoryDraftReviewBeforeSave()",
         "FlowcyProductionUITests/testDashboardWithoutPairingAndRootNavigation()",

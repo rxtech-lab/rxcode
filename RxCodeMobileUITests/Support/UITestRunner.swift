@@ -48,7 +48,7 @@ enum UITestRunner {
             break
         }
 
-        let server = MockRelayServer(fixtures: .standard())
+        let server = MockRelayServer(fixtures: .standard(includeToolActivity: additionalLaunchArguments.contains("-uitest-tool-activity")))
         try server.start()
         // Stop the server at teardown. `MockRelayServer` is Sendable; the app is
         // re-terminated automatically by the next `XCUIApplication.launch()`.

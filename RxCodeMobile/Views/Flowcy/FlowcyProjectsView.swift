@@ -36,87 +36,86 @@ struct FlowcyProjectsView: View {
     }
 
     var body: some View {
-        Group {
-            if let selected {
-                FlowcyProjectWorkspace(project: selected) {
-                    MobileHaptics.buttonTap()
-                    self.selected = nil
+        NavigationStack {
+            directory
+                .navigationDestination(item: $selected) { project in
+                    FlowcyProjectWorkspace(project: project) {
+                        MobileHaptics.buttonTap()
+                        selected = nil
+                    }
+                    // The workspace supplies its own sidebar and detail toolbars.
+                    .toolbar(.hidden, for: .navigationBar)
                 }
-            } else {
-                directory
-            }
         }
     }
 
     private var directory: some View {
-        NavigationStack {
-            Group {
-                if loading && cloud.projects.isEmpty {
-                    ProgressView("Loading projects…")
-                } else if let error, cloud.projects.isEmpty {
-                    ContentUnavailableView {
-                        Label("Unable to Load Projects", systemImage: "exclamationmark.triangle")
-                    } description: { Text(error) } actions: {
-                        Button("Retry") { Task { await reload() } }
-                    }
-                } else if projects.isEmpty {
-                    ContentUnavailableView(search.isEmpty ? "No Projects" : "No Matching Projects",
-                                           systemImage: "folder",
-                                           description: Text(search.isEmpty ? "Create a project to get started." : "Try another search."))
-                } else if sizeClass == .regular {
-                    ScrollView {
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), alignment: .top)], spacing: 16) {
-                            ForEach(projects) { project in
-                                projectButton(project)
-                                    .padding(20)
-                                    .frame(maxWidth: .infinity, minHeight: 130, alignment: .leading)
-                                    .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
-                                    .mobileReorderItem()
-                            }
-                            .mobileReorderable()
+        Group {
+            if loading && cloud.projects.isEmpty {
+                ProgressView("Loading projects…")
+            } else if let error, cloud.projects.isEmpty {
+                ContentUnavailableView {
+                    Label("Unable to Load Projects", systemImage: "exclamationmark.triangle")
+                } description: { Text(error) } actions: {
+                    Button("Retry") { Task { await reload() } }
+                }
+            } else if projects.isEmpty {
+                ContentUnavailableView(search.isEmpty ? "No Projects" : "No Matching Projects",
+                                       systemImage: "folder",
+                                       description: Text(search.isEmpty ? "Create a project to get started." : "Try another search."))
+            } else if sizeClass == .regular {
+                ScrollView {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), alignment: .top)], spacing: 16) {
+                        ForEach(projects) { project in
+                            projectButton(project)
+                                .padding(20)
+                                .frame(maxWidth: .infinity, minHeight: 130, alignment: .leading)
+                                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+                                .mobileReorderItem()
                         }
-                        .mobileReorderContainer(for: CloudProject.self, move: reorderProjects)
-                        .padding()
+                        .mobileReorderable()
                     }
-                    .background(Color(.systemGroupedBackground))
+                    .mobileReorderContainer(for: CloudProject.self, move: reorderProjects)
+                    .padding()
+                }
+                .background(Color(.systemGroupedBackground))
+                .refreshable { await reload() }
+            } else {
+                List {
+                    ForEach(projects) { project in projectButton(project).mobileReorderItem() }
+                        .mobileReorderable()
+                }
+                    .mobileReorderContainer(for: CloudProject.self, move: reorderProjects)
                     .refreshable { await reload() }
-                } else {
-                    List {
-                        ForEach(projects) { project in projectButton(project).mobileReorderItem() }
-                            .mobileReorderable()
-                    }
-                        .mobileReorderContainer(for: CloudProject.self, move: reorderProjects)
-                        .refreshable { await reload() }
-                }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .navigationTitle("Projects")
-            .searchable(text: $search, prompt: "Search projects")
-            .toolbar {
-                FlowcyRemoteToolbar()
-                ToolbarItem(placement: .primaryAction) {
-                    Button("Reorder Projects", systemImage: "arrow.up.arrow.down") {
-                        MobileHaptics.buttonTap()
-                        showingOrder = true
-                    }
-                    .disabled(cloud.projects.count < 2)
-                }
-                ToolbarItem(placement: .primaryAction) {
-                    Button("New Project", systemImage: "plus") {
-                        MobileHaptics.buttonTap()
-                        creating = true
-                    }
-                }
-            }
-            .sheet(isPresented: $creating) {
-                FlowcyProjectForm { await reload() }.mobileSheetPresentation()
-            }
-            .sheet(isPresented: $showingOrder) {
-                projectOrderSheet.mobileSheetPresentation()
-            }
-            .mobileStatusToast($feedback)
-            .task { await reload() }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .navigationTitle("Projects")
+        .searchable(text: $search, prompt: "Search projects")
+        .toolbar {
+            FlowcyRemoteToolbar()
+            ToolbarItem(placement: .primaryAction) {
+                Button("Reorder Projects", systemImage: "arrow.up.arrow.down") {
+                    MobileHaptics.buttonTap()
+                    showingOrder = true
+                }
+                .disabled(cloud.projects.count < 2)
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button("New Project", systemImage: "plus") {
+                    MobileHaptics.buttonTap()
+                    creating = true
+                }
+            }
+        }
+        .sheet(isPresented: $creating) {
+            FlowcyProjectForm { await reload() }.mobileSheetPresentation()
+        }
+        .sheet(isPresented: $showingOrder) {
+            projectOrderSheet.mobileSheetPresentation()
+        }
+        .mobileStatusToast($feedback)
+        .task { await reload() }
     }
 
     private func projectButton(_ project: CloudProject) -> some View {

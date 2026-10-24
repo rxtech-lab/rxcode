@@ -236,6 +236,43 @@ jobs:
           path: TestResults-${{ matrix.label }}.xcresult
           retention-days: 14
 
+  test-mobile-visual:
+    name: Mobile screenshot regression (${{ matrix.profile }})
+    runs-on: [self-hosted, ui-tests]
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [iphone, ipad, iphone-duo]
+    env:
+      MOBILE_VISUAL_OUTPUT: test-results/mobile-visual-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.profile }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      # Visual baselines pin Xcode, device model, and runtime. Keep the runner's
+      # reviewed Xcode selected rather than silently upgrading to latest-stable.
+      - name: Write Firebase config
+        env:
+          FIREBASE_IOS_B64: ${{ secrets.FIREBASE_IOS_B64 }}
+        run: ./scripts/ci/write-firebase-config.sh
+
+      - name: Compare approved mobile screenshots
+        run: python3 scripts/mobile-visual/run.py compare --profile "${{ matrix.profile }}" --output "$MOBILE_VISUAL_OUTPUT"
+
+      - name: Package failed screenshot report
+        if: failure()
+        run: python3 scripts/mobile-visual/run.py report --failed --profile "${{ matrix.profile }}" --output "$MOBILE_VISUAL_OUTPUT"
+
+      - name: Upload failed mobile test results
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mobile-visual-test-results-${{ matrix.profile }}
+          path: ${{ env.MOBILE_VISUAL_OUTPUT }}/mobile-visual-failure.zip
+          if-no-files-found: error
+          retention-days: 14
+
   build-android:
     name: gradle build (RxCodeAndroid)
     runs-on: blacksmith-4vcpu-ubuntu-2404

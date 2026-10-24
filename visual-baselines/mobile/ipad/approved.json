@@ -1,0 +1,16 @@
+{
+  "environment": {
+    "deviceType": "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-13-inch-M5-12GB",
+    "runtime": "com.apple.CoreSimulator.SimRuntime.iOS-27-0",
+    "xcode": "Xcode 27.1\nBuild version 27A9275"
+  },
+  "sha256": {
+    "settings": "2e2fe2bcc93c5f45aefa51e2255c7ceef28f8243a8144b0532f0641722947b2d",
+    "integrations": "80999d7c321c818fb8a1a601a02cdde0004f890c89939eec3ba42eaa76874917",
+    "account": "08b0281fe71d6708bf1dbdeaa6a22764b7710f82ddb6b8a00cf8b47dac97f363"
+  },
+  "approval": {
+    "reviewer": "qiweili",
+    "at": "2026-10-24T07:33:56.827987+00:00"
+  }
+}

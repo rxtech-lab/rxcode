@@ -1,0 +1,16 @@
+{
+  "environment": {
+    "deviceType": "com.apple.CoreSimulator.SimDeviceType.iPhone-Duo",
+    "runtime": "com.apple.CoreSimulator.SimRuntime.iOS-27-1",
+    "xcode": "Xcode 27.1\nBuild version 27A9275"
+  },
+  "sha256": {
+    "settings": "5e710aa3b008880c32cd5748201dcf3574a7a55f3e10760aa8c23500c35ca04d",
+    "integrations": "0989813a3ac939d59c999e6740cfe7645acab9515aea0400a6276e01df4a5b73",
+    "account": "22a705167215185ef21b2db1ad7ae3c74208d7f7fa31f7c99ad19565e74582a6"
+  },
+  "approval": {
+    "reviewer": "qiweili",
+    "at": "2026-10-24T07:33:56.828845+00:00"
+  }
+}

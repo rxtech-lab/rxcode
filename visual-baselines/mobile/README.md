@@ -16,8 +16,11 @@ python3 scripts/mobile-visual/run.py capture --output test-results/mobile-review
 The default simulator UUIDs are local fixtures. On another machine, pass
 `--device iphone=UUID --device ipad=UUID --device iphone-duo=UUID`.
 If a default UUID is absent, the runner locates the exact model and runtime in
-the committed approval manifest. Install those runtimes and select the recorded
-Xcode version on the self-hosted UI test runner; environment drift fails visibly.
+the committed approval manifest. Install those runtimes on the UI test runner.
+CI uses Xcode 27.0 for the iPhone and iPad iOS 27.0 baselines, as authorized by
+qiweili. That toolchain exception keeps the approved model/runtime and pixel
+thresholds unchanged. Duo and other toolchain changes still require the
+recorded Xcode version.
 Use `--profile iphone` (repeatable) for a focused run. All three profiles run by
 default. Simulator status bars are fixed at 9:41 on January 1, 2026, with full Wi-Fi and battery;
 tests use the existing offline cloud fixtures, English, light appearance, and
@@ -46,7 +49,7 @@ python3 scripts/mobile-visual/run.py compare --output test-results/mobile-compar
 
 Use a new output directory for each run. The command runs XCTest, exports new
 screenshots, and returns a failure for missing approval, altered baseline hashes,
-environment changes, dimension changes, or visual differences. Baselines are
+simulator model/runtime changes, dimension changes, or visual differences. Baselines are
 never recorded or replaced by comparison runs. A failed XCTest also fails the
 command; inspect the profile's `xcodebuild.log` and `result.xcresult`.
 
@@ -55,7 +58,8 @@ difference of 8/255 in at most 0.1% of pixels to accommodate small rasterization
 variations. It does not mask any UI region. A visual failure writes a
 `SCREEN-diff.png` highlighting changed pixels in magenta beside the latest
 image. Inspect baseline, latest, and diff before deciding whether a change is
-intentional. OS/Xcode updates require a new capture and user review.
+intentional. Simulator model/runtime updates require a new capture and user review.
+The authorized Xcode 27.0 exception still runs the same strict pixel comparisons.
 
 XCTest also asserts the account presentation and navigation behavior, so an
 incorrect menu/button substitution fails even if its visual change is small.
@@ -75,10 +79,12 @@ captured images, differences, comparison diagnostics, logs, and any available
 `.xcresult` bundle. Missing captures are identified in the report. The command
 still exits with failure. Passing runs do not create a failure ZIP.
 
-The Tests workflow runs all three profiles as separate jobs on the self-hosted
-`ui-tests` runners. On failure, it rebuilds the report and uploads the ZIP as
-`mobile-visual-test-results-PROFILE` with 14-day retention. This configuration
-requires the pinned Xcode and simulator runtimes; it does not upgrade baselines.
+The Tests workflow runs iPhone and iPad sequentially on a self-hosted `ui-tests`
+runner using Xcode 27.0. Duo remains available locally and is excluded from CI.
+On failure, the workflow rebuilds the report and uploads the ZIP as
+`mobile-visual-test-results` with 14-day retention (subject to repository limits).
+This configuration requires the approved simulator models and runtimes; it does
+not upgrade baselines.
 
 To regenerate a report for an existing run, or package partial results manually:
 

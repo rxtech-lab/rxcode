@@ -246,11 +246,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      # Match the reviewed baselines instead of using the runner's default Xcode.
-      - name: Setup approved Xcode
+      # iPhone and iPad use the approved iOS 27.0 runtime; Duo is excluded.
+      - name: Setup screenshot Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: '27.1'
+          xcode-version: '27.0'
 
       - name: Prepare approved simulators
         run: python3 scripts/mobile-visual/prepare.py --profile iphone --profile ipad

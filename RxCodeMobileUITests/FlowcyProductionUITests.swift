@@ -37,6 +37,13 @@ final class FlowcyProductionUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Projects"].exists)
         project.tap()
         XCTAssertTrue(app.scrollViews["flowcy-project-overview"].waitForExistence(timeout: 5))
+        // Root tabs are behind the project's full-screen workspace.
+        if !closeProject.isHittable {
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+        }
+        XCTAssertTrue(closeProject.waitForExistence(timeout: 5))
+        closeProject.tap()
+        XCTAssertTrue(project.waitForExistence(timeout: 5))
         app.buttons["Settings"].firstMatch.tap()
         XCTAssertTrue(app.buttons["Integrations"].waitForExistence(timeout: 5))
         capture("Flowcy Settings")

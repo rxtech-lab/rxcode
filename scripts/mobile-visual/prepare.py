@@ -4,7 +4,7 @@ import argparse
 import json
 import subprocess
 
-from run import BASELINES, DEFAULT_DEVICES, read_json
+from run import BASELINES, DEFAULT_DEVICES, read_json, validate_environment
 
 
 def prepare(profiles):
@@ -12,8 +12,7 @@ def prepare(profiles):
     inventory = json.loads(subprocess.check_output(["xcrun", "simctl", "list", "--json"]))
     for profile in profiles:
         environment = read_json(BASELINES / profile / "approved.json")["environment"]
-        if xcode != environment["xcode"]:
-            raise RuntimeError(f"Install the approved Xcode for {profile}: {environment['xcode']}")
+        validate_environment(profile, {**environment, "xcode": xcode}, environment)
         runtime = environment["runtime"]
         if not any(item["identifier"] == runtime and item.get("isAvailable", False)
                    for item in inventory["runtimes"]):

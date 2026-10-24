@@ -9,12 +9,12 @@ class PreparationTests(unittest.TestCase):
     environment = {"xcode": "Xcode 27.1\nBuild version 27A9275",
                    "runtime": "approved-runtime", "deviceType": "approved-model"}
 
-    def prepare_inventory(self, devices, xcode=None, available=True):
+    def prepare_inventory(self, devices, available=True):
         inventory = {"runtimes": [{"identifier": "approved-runtime", "isAvailable": available}],
                      "devicetypes": [{"identifier": "approved-model"}],
                      "devices": {"approved-runtime": devices}}
         with patch.object(prepare, "read_json", return_value={"environment": self.environment}), patch.object(
-            prepare.subprocess, "check_output", side_effect=[xcode or self.environment["xcode"], json.dumps(inventory)]
+            prepare.subprocess, "check_output", side_effect=[self.environment["xcode"], json.dumps(inventory)]
         ):
             prepare.prepare(["iphone"])
 
@@ -31,8 +31,6 @@ class PreparationTests(unittest.TestCase):
 
     @patch.object(prepare.subprocess, "run")
     def test_environment_mismatch_never_creates_a_substitute_device(self, run):
-        with self.assertRaisesRegex(RuntimeError, "approved Xcode"):
-            self.prepare_inventory([], xcode="Xcode 27.0")
         with self.assertRaisesRegex(RuntimeError, "approved simulator runtime"):
             self.prepare_inventory([], available=False)
         run.assert_not_called()

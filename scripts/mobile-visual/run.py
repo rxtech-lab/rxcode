@@ -37,6 +37,19 @@ def write_json(path, value):
     path.write_text(json.dumps(value, indent=2) + "\n")
 
 
+
+def validate_environment(profile, actual, approved):
+    if any(actual[key] != approved[key] for key in ("runtime", "deviceType")):
+        raise RuntimeError(f"Pinned simulator changed for {profile}; capture and review new candidates.")
+    # The user authorized Xcode 27.0 for the iPhone/iPad iOS 27.0 baselines.
+    compatible_toolchain = (profile in ("iphone", "ipad")
+                            and approved["runtime"] == "com.apple.CoreSimulator.SimRuntime.iOS-27-0"
+                            and approved["xcode"].splitlines()[0] == "Xcode 27.1"
+                            and actual["xcode"].splitlines()[0] == "Xcode 27.0")
+    if actual["xcode"] != approved["xcode"] and not compatible_toolchain:
+        raise RuntimeError(f"Install the approved Xcode for {profile}: {approved['xcode']}")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("mode", choices=["capture", "compare", "approve", "report"])
@@ -132,8 +145,9 @@ def execute(options, profiles, output):
             raise RuntimeError(f"Wrong device type for {profile}: {device_type}")
         metadata = {"deviceType": device["deviceTypeIdentifier"], "runtime": runtime,
                     "xcode": subprocess.check_output(["xcodebuild", "-version"], text=True).strip()}
-        if options.mode == "compare" and metadata != read_json(BASELINES / profile / "approved.json")["environment"]:
-            raise RuntimeError(f"Pinned environment changed for {profile}; capture and review new candidates.")
+        if options.mode == "compare":
+            approved = read_json(BASELINES / profile / "approved.json")["environment"]
+            validate_environment(profile, metadata, approved)
         folder = output / profile
         folder.mkdir()
         if device["state"] != "Booted":

@@ -1,11 +1,10 @@
 import Foundation
 
 #if DEBUG
-/// Parses the UI-test launch arguments and applies the two overrides the UI
-/// test harness depends on: pointing the relay at the in-process mock server,
-/// and skipping the QR-code pairing flow.
+/// Parses UI-test launch arguments to configure mock relay connections,
+/// skip pairing, and optionally reset persisted test preferences.
 ///
-/// Entirely inert unless the app is launched with `-uitest-mock`, and compiled
+/// Entirely inert unless the app is launched in a UI-test mode, and compiled
 /// only into Debug builds, so it never affects shipping behaviour.
 enum UITestSupport {
     /// `true` when the app was launched by the UI test harness.
@@ -34,6 +33,9 @@ enum UITestSupport {
     static func applyDefaultsOverrides() {
         guard isActive else { return }
         let defaults = UserDefaults.standard
+        if ProcessInfo.processInfo.arguments.contains("-uitest-reset-column-order") {
+            defaults.removeObject(forKey: "mobile.tasks.columnOrder")
+        }
         if let relayURL {
             defaults.set(relayURL, forKey: "mobileSync.relayURL")
         }

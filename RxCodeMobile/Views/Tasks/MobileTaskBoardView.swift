@@ -365,6 +365,8 @@ struct MobileTaskBoardView: View {
         .mobileLegacyDrop { items, _ in
             drop(items, before: nil, in: column.id)
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("task-kanban-column-\(column.id.rawValue)")
     }
 
     // MARK: - Tasks

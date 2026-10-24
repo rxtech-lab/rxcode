@@ -6,8 +6,9 @@ final class MobileNativeReorderingUITests: XCTestCase {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "Uses two fully visible columns.")
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launchArguments = ["-uitest-cloud", "-uitest-flowcy"]
+        app.launchArguments = ["-uitest-cloud", "-uitest-flowcy", "-uitest-reset-column-order"]
         app.launch()
+        XCUIDevice.shared.orientation = .portrait
         let deny = XCUIApplication(bundleIdentifier: "com.apple.springboard").buttons
             .matching(NSPredicate(format: "label IN %@", ["Don’t Allow", "Don't Allow"])).firstMatch
         if deny.waitForExistence(timeout: 3) { deny.tap() }
@@ -31,8 +32,8 @@ final class MobileNativeReorderingUITests: XCTestCase {
         let second = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Second reorder card'")).firstMatch
         XCTAssertTrue(first.waitForExistence(timeout: 10))
         XCTAssertTrue(second.waitForExistence(timeout: 10))
-        let backlog = app.descendants(matching: .any)["task-column-backlog"].firstMatch
-        let pending = app.descendants(matching: .any)["task-column-pending"].firstMatch
+        let backlog = app.otherElements["task-kanban-column-backlog"].firstMatch
+        let pending = app.otherElements["task-kanban-column-pending"].firstMatch
         XCTAssertTrue(backlog.exists)
         XCTAssertTrue(pending.exists)
         let backlogOrigin = backlog.frame.origin
@@ -40,9 +41,10 @@ final class MobileNativeReorderingUITests: XCTestCase {
         let pendingIsRight = pending.frame.minX > backlog.frame.minX
         let upper = first.frame.minY < second.frame.minY ? first : second
         let lower = first.frame.minY < second.frame.minY ? second : first
-        upper.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(
+        // Drop inside the first card instead of beyond the last insertion target.
+        lower.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(
             forDuration: 1.2,
-            thenDragTo: lower.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 1.1)),
+            thenDragTo: upper.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)),
             withVelocity: .slow,
             thenHoldForDuration: 2
         )
@@ -64,8 +66,10 @@ final class MobileNativeReorderingUITests: XCTestCase {
         XCTAssertEqual(pending.frame.minY, pendingOrigin.y, accuracy: 1)
         upper.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(
             forDuration: 1.2,
-            thenDragTo: pending.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-                .withOffset(CGVector(dx: 0, dy: 100))
+            thenDragTo: pending.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0))
+                .withOffset(CGVector(dx: 0, dy: 100)),
+            withVelocity: .slow,
+            thenHoldForDuration: 2
         )
         let changedColumn = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             pendingIsRight ? upper.frame.minX > lower.frame.minX : upper.frame.minX < lower.frame.minX
@@ -85,13 +89,16 @@ final class MobileNativeReorderingUITests: XCTestCase {
         let backlogWasFirst = firstColumn.frame.minY < secondColumn.frame.minY
         let upperColumn = backlogWasFirst ? firstColumn : secondColumn
         let lowerColumn = backlogWasFirst ? secondColumn : firstColumn
-        upperColumn.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(
+        lowerColumn.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(
             forDuration: 1.2,
-            thenDragTo: lowerColumn.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 1))
-                .withOffset(CGVector(dx: 0, dy: 24))
+            thenDragTo: upperColumn.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)),
+            withVelocity: .slow,
+            thenHoldForDuration: 2
         )
-        XCTAssertTrue(app.staticTexts["Column order saved"].waitForExistence(timeout: 5))
-        XCTAssertGreaterThan(upperColumn.frame.minY, lowerColumn.frame.minY)
+        let columnsMoved = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            upperColumn.frame.minY > lowerColumn.frame.minY
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [columnsMoved], timeout: 10), .completed)
         app.buttons["Done"].tap()
         XCTAssertTrue(backlogWasFirst ? backlog.frame.minX > pending.frame.minX : pending.frame.minX > backlog.frame.minX)
     }

@@ -23,7 +23,7 @@ struct MobileAppRobot {
 
     /// The Briefing item in the iPad sidebar. The app opens on Tasks, so iPad
     /// briefing flows select it first.
-    var sidebarBriefingItem: XCUIElement { element(id: "sidebar-briefing") }
+    var sidebarBriefingItem: XCUIElement { app.buttons["sidebar-briefing"].firstMatch }
 
     var anyBriefingCard: XCUIElement { firstButton(prefix: "briefing-card-") }
     var anyBriefingDocumentCard: XCUIElement { firstButton(prefix: "briefing-document-card-") }

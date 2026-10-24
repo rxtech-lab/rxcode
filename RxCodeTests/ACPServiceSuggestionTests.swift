@@ -6,6 +6,113 @@ import RxCodeCore
 @testable import RxCode
 
 final class ACPServiceSuggestionTests: XCTestCase {
+    func testFailedBootstrapCanBeRetriedOnSameThread() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("rxcode-acp-retry-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let script = directory.appendingPathComponent("agent.py")
+        try """
+        import json, sys
+        for line in sys.stdin:
+            request = json.loads(line)
+            method = request.get("method")
+            if method == "initialize":
+                response = {"result": {"protocolVersion": 1}}
+            elif method == "session/new":
+                response = {"error": {"code": -32603, "message": "Internal error",
+                    "data": {"message": "Failed to initialize session services"}}}
+            else:
+                sys.exit(2)
+            print(json.dumps({"jsonrpc": "2.0", "id": request["id"], **response}), flush=True)
+        """.write(to: script, atomically: true, encoding: .utf8)
+        let service = ACPService()
+        let spec = ACPClientSpec(displayName: "Mock Cursor", launch: .binary(
+            path: "/usr/bin/python3", args: ["-u", script.path], env: [:]
+        ))
+        for _ in 0..<3 {
+            let streamId = UUID()
+            let stream = await service.send(
+                streamId: streamId, prompt: "Hello", cwd: directory.path, sessionId: nil,
+                model: nil, spec: spec, permissionMode: .default, clientSessionKey: "pending-retry"
+            )
+            var failures = 0
+            for await event in stream {
+                if case .result(let result) = event {
+                    XCTAssertTrue(result.isError)
+                    failures += 1
+                }
+            }
+            XCTAssertEqual(failures, 1)
+            let error = await service.consumeStderr(for: streamId)
+            XCTAssertTrue(error?.contains("Failed to initialize session services") == true)
+            let count = await service.sessions.count
+            XCTAssertEqual(count, 0)
+        }
+        await service.cleanup()
+    }
+
+    func testRetiredProcessCallbacksCannotAffectReplacement() async throws {
+        let service = ACPService()
+        let pipe = Pipe()
+        let spec = ACPClientSpec(displayName: "Mock", launch: .binary(path: "/usr/bin/true", args: [], env: [:]))
+        let entry = ACPService.SessionEntry(process: Process(), stdin: pipe.fileHandleForWriting,
+                                           spec: spec, cwd: "/tmp", canonicalKey: "retry", isEphemeral: false)
+        await service.installTestEntry(entry, key: "retry")
+        let retiredGeneration = UUID()
+        await service.handleProcessExit(key: "retry", generation: retiredGeneration)
+        await service.appendProcessStderr(key: "retry", generation: retiredGeneration, line: "stale stderr")
+        let staleFrame = #"{"id":1,"result":{}}"#
+        await service.deliverStdoutLine(key: "retry", generation: retiredGeneration,
+                                       line: staleFrame, data: Data(staleFrame.utf8))
+        let remaining = await service.sessions["retry"]
+        XCTAssertEqual(remaining?.generation, entry.generation)
+        XCTAssertEqual(remaining?.stderr, "")
+        XCTAssertEqual(remaining?.stdoutLineCount, 0)
+        await service.cleanup()
+    }
+
+    func testCursorUsesInstalledCLIForBrowserLoginAndLogout() async throws {
+        let spec = ACPClientSpec(registryId: "cursor", displayName: "Cursor", launch: .binary(
+            path: "/nonexistent/installed/cursor-agent", args: ["acp"], env: [:]
+        ))
+        let service = ACPService()
+        let methods = try await service.authMethods(spec: spec, cwd: "/nonexistent")
+        XCTAssertEqual(methods.map(\.id), ["cursor_login"])
+        guard case .terminal(let command, let args, let env) = methods[0].kind else {
+            return XCTFail("Cursor must run CLI login instead of ACP authenticate")
+        }
+        let login = try await service.terminalLogin(spec: spec, command: command, args: args, env: env)
+        XCTAssertEqual(login.executable, "/nonexistent/installed/cursor-agent")
+        XCTAssertEqual(login.arguments, ["login"])
+        let logout = try await service.cursorTerminalLogout(spec: spec)
+        XCTAssertEqual(logout.executable, login.executable)
+        XCTAssertEqual(logout.arguments, ["logout"])
+        XCTAssertEqual(logout.title, "Sign Out of Cursor")
+        XCTAssertFalse(logout.reportToChat)
+        XCTAssertEqual(ACPService.terminalLoginCommand(
+            executable: "/usr/bin/env", launchArgs: ["cursor-agent", "acp"], extraArgs: [],
+            command: "cursor-agent", args: ["login"]
+        ), ["/usr/bin/env", "cursor-agent", "login"])
+    }
+
+    @MainActor
+    func testCursorTerminalAuthRemembersAndClearsSignInAfterCompletion() async throws {
+        let appState = AppState(persistence: MockAppStatePersistence(), startBackgroundServices: false)
+        let spec = ACPClientSpec(registryId: "cursor", displayName: "Cursor", launch: .binary(
+            path: "/nonexistent/cursor-agent", args: ["acp"], env: [:]
+        ))
+        appState.acpClients = [spec]
+        let supportsLogout = await appState.acpClientSupportsLogout(spec)
+        XCTAssertTrue(supportsLogout)
+        _ = try await appState.acpCursorTerminalLogout(id: spec.id)
+        XCTAssertNil(appState.acpClients.first?.authMethodId, "Preparing a command must not mark authentication complete")
+        await appState.completeACPTerminalLogin(id: spec.id, methodId: "cursor_login")
+        XCTAssertEqual(appState.acpClients.first?.authMethodId, "cursor_login")
+        await appState.completeACPTerminalLogout(id: spec.id)
+        XCTAssertNil(appState.acpClients.first?.authMethodId)
+    }
+
     func testOpenCodeAccountCommandsMatchInstalledMajorVersion() {
         XCTAssertEqual(ACPService.openCodeAccountAuthArguments(version: "1.19.3"), ["console", "login"])
         XCTAssertEqual(ACPService.openCodeAccountAuthArguments(version: "v2.0.1"), ["auth", "login", "opencode"])
@@ -358,5 +465,12 @@ final class ACPServiceSuggestionTests: XCTestCase {
             cwd: directory.path
         )
         XCTAssertEqual(response, "chosen-model: response")
+    }
+}
+
+// Actor-isolated fixture setup keeps production session mutation encapsulated.
+extension ACPService {
+    func installTestEntry(_ entry: SessionEntry, key: String) {
+        sessions[key] = entry
     }
 }

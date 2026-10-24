@@ -38,6 +38,9 @@ struct ACPClientSettingsTab: View {
     @State private var logoutClientIDs: Set<String> = []
     @State private var signingOutClientID: String?
     @State private var signOutMessage: String?
+    @State private var signOutError: String?
+    @State private var cursorLogout: InteractiveTerminalState?
+    @State private var cursorLogoutClientID: String?
 
     var body: some View {
         ScrollView {
@@ -51,15 +54,43 @@ struct ACPClientSettingsTab: View {
                 case .registry:
                     registrySection
                 }
-                if let signOutMessage {
-                    Text(signOutMessage)
-                        .font(.system(size: ClaudeTheme.size(11)))
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                }
             }
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .overlay(alignment: .bottom) {
+            if signingOutClientID != nil || signOutMessage != nil {
+                HStack(spacing: 8) {
+                    if signingOutClientID != nil { ProgressView().controlSize(.small) }
+                    Text(signOutMessage ?? "Signing out…")
+                    if signOutMessage != nil {
+                        Button("Dismiss") { signOutMessage = nil }
+                    }
+                }
+                .padding(12)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                .padding()
+            }
+        }
+        .alert("Sign-out Failed", isPresented: Binding(
+            get: { signOutError != nil }, set: { if !$0 { signOutError = nil } }
+        )) {
+            Button("OK", role: .cancel) { signOutError = nil }
+        } message: {
+            Text(signOutError ?? "")
+        }
+        .sheet(item: $cursorLogout, onDismiss: { cursorLogoutClientID = nil }) { state in
+            ACPTerminalSignInSheet(state: state) {
+                guard let clientID = cursorLogoutClientID else { return }
+                cursorLogout = nil
+                signingOutClientID = clientID
+                Task {
+                    defer { signingOutClientID = nil }
+                    await appState.completeACPTerminalLogout(id: clientID)
+                    await refreshSignInStatuses()
+                    signOutMessage = "Signed out of Cursor."
+                }
+            }
         }
         .task {
             if appState.acpRegistry == nil && !appState.acpRegistryLoading {
@@ -468,6 +499,11 @@ struct ACPClientSettingsTab: View {
         Task {
             defer { signingOutClientID = nil }
             do {
+                if ACPService.isCursorClient(client) {
+                    cursorLogoutClientID = client.id
+                    cursorLogout = try await appState.acpCursorTerminalLogout(id: client.id)
+                    return
+                }
                 let terminalOpened = try await appState.signOutACPClient(id: client.id)
                 if terminalOpened {
                     signOutMessage = "Choose the provider to sign out in Terminal."
@@ -480,7 +516,7 @@ struct ACPClientSettingsTab: View {
                     ? "Stored sign-in cleared, but \(client.displayName) still has credentials from its environment."
                     : "Signed out of \(client.displayName)."
             } catch {
-                signOutMessage = error.localizedDescription
+                signOutError = error.localizedDescription
             }
         }
     }

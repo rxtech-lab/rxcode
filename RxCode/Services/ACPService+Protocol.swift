@@ -82,6 +82,7 @@ extension ACPService {
 
     static func spawnStdoutReader(
         key: String,
+        generation: UUID,
         stdout: FileHandle,
         service: ACPService
     ) -> Task<Void, Never> {
@@ -115,7 +116,7 @@ extension ACPService {
                     buffer.removeSubrange(buffer.startIndex...nlIdx)
                     guard !lineData.isEmpty,
                           let line = String(data: lineData, encoding: .utf8) else { continue }
-                    await service?.deliverStdoutLine(key: key, line: line, data: lineData)
+                    await service?.deliverStdoutLine(key: key, generation: generation, line: line, data: lineData)
                 }
             }
             await service?.logReaderEOF(key: key)
@@ -135,10 +136,11 @@ extension ACPService {
         logger.warning("[ACP] read loop error: \(error.localizedDescription, privacy: .public)")
     }
 
-    func deliverStdoutLine(key: String, line: String, data: Data) async {
+    func deliverStdoutLine(key: String, generation: UUID, line: String, data: Data) async {
         // Resolve the latest canonical key in case the entry has been
         // re-keyed (bootstrap key → agent sessionId).
         let resolved = aliasToCanonical[key] ?? key
+        guard sessions[resolved]?.generation == generation else { return }
         var lineCount = 0
         mutateSession(resolved) { entry in
             entry.stdoutLineCount += 1
@@ -189,7 +191,9 @@ extension ACPService {
             return
         }
         if let err = body["error"]?.objectValue {
-            let msg = err["message"]?.stringValue ?? "ACP error"
+            let summary = err["message"]?.stringValue ?? "ACP error"
+            let detail = err["data"]?.objectValue?["message"]?.stringValue
+            let msg = detail.map { $0 == summary ? summary : "\(summary): \($0)" } ?? summary
             let code = err["code"]?.intValue ?? -1
             logger.error("[ACP] ← error id=\(id) code=\(code) msg=\(msg, privacy: .public)")
             cont.resume(throwing: ACPError.agentError(code: code, message: msg))

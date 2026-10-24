@@ -158,11 +158,12 @@ extension ACPService {
         sessions[key] = entry
         streamToKey[streamId] = key
 
-        startStderrReader(key: key, stderr: stderr)
-        let readerTask = Self.spawnStdoutReader(key: key, stdout: stdout, service: self)
+        let generation = entry.generation
+        startStderrReader(key: key, generation: generation, stderr: stderr)
+        let readerTask = Self.spawnStdoutReader(key: key, generation: generation, stdout: stdout, service: self)
         mutateSession(key) { $0.stdoutReaderTask = readerTask }
         process.terminationHandler = { [weak self] _ in
-            Task.detached { await self?.handleProcessExit(key: key) }
+            Task.detached { await self?.handleProcessExit(key: key, generation: generation) }
         }
 
         defer {
@@ -306,6 +307,10 @@ extension ACPService {
             if let key {
                 appendStderr(key: key, line: error.localizedDescription)
             }
+            // Preserve diagnostics after retiring the failed process. A failed
+            // bootstrap must never remain pooled for a retry on the same thread.
+            if completedErrors.count >= 100 { completedErrors.removeAll() }
+            completedErrors[streamId] = key.flatMap { sessions[$0]?.stderr } ?? error.localizedDescription
             continuation.yield(.user(UserMessage(
                 toolUseId: nil,
                 content: "ACP error: \(error.localizedDescription)",
@@ -325,6 +330,7 @@ extension ACPService {
                 usage: nil,
                 contextWindow: nil
             )))
+            if let key { killSession(key: key) }
             continuation.finish()
             finalize(streamId: streamId)
         }
@@ -360,14 +366,15 @@ extension ACPService {
         // Reader closures capture the canonical key, not the streamId, so
         // the readers keep delivering correctly across turns when the pool
         // entry is later re-keyed to the agent's sessionId.
-        startStderrReader(key: bootstrapKey, stderr: stderr)
-        let readerTask = Self.spawnStdoutReader(key: bootstrapKey, stdout: stdout, service: self)
+        let generation = entry.generation
+        startStderrReader(key: bootstrapKey, generation: generation, stderr: stderr)
+        let readerTask = Self.spawnStdoutReader(key: bootstrapKey, generation: generation, stdout: stdout, service: self)
         mutateSession(bootstrapKey) { $0.stdoutReaderTask = readerTask }
         process.terminationHandler = { [weak self] _ in
             // Use the canonical key at exit time — `handleProcessExit` looks
             // up via the alias map, so this works even if the pool entry has
             // since been re-keyed to the agent's sessionId.
-            Task.detached { await self?.handleProcessExit(key: bootstrapKey) }
+            Task.detached { await self?.handleProcessExit(key: bootstrapKey, generation: generation) }
         }
 
         let heartbeat = Task.detached { [weak self, displayName = spec.displayName, launchKind = spec.launch.displayKind] in
@@ -380,6 +387,8 @@ extension ACPService {
             }
         }
 
+        defer { heartbeat.cancel() }
+
         // 1. initialize
         let initResult = try await sendRequest(
             key: bootstrapKey,
@@ -390,10 +399,6 @@ extension ACPService {
         logger.info("[ACP] initialize ok for \(spec.displayName, privacy: .public): \(initResult.shortDescription, privacy: .public)")
         logger.info("[ACP-MCP] runFreshTurn received \(mcpServers.count, privacy: .public) candidate mcpServers from caller")
         let filteredMCPServers = supportedMCPServers(mcpServers, initResult: initResult)
-        if let data = try? JSONEncoder().encode(JSONValue.array(filteredMCPServers)),
-           let json = String(data: data, encoding: .utf8) {
-            logger.info("[ACP-MCP] session/new mcpServers payload=\(json, privacy: .public)")
-        }
 
         continuation.yield(.system(SystemEvent(
             subtype: "init",

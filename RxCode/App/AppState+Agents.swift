@@ -384,10 +384,24 @@ extension AppState {
     }
 
     func acpClientSupportsLogout(_ spec: ACPClientSpec) async -> Bool {
-        if isOpenCodeClient(spec) { return true }
+        if isOpenCodeClient(spec) || ACPService.isCursorClient(spec) { return true }
         if (try? await acp.supportsLogout(spec: spec, cwd: NSHomeDirectory())) == true { return true }
         let methods = (try? await acp.authMethods(spec: spec, cwd: NSHomeDirectory())) ?? []
         return !storedACPAuthVariableNames(spec: spec, methods: methods).isEmpty
+    }
+
+    func acpCursorTerminalLogout(id: String) async throws -> InteractiveTerminalState {
+        guard let spec = acpClients.first(where: { $0.id == id }) else {
+            throw ACPError.protocolMismatch("The ACP client is no longer installed.")
+        }
+        return try await acp.cursorTerminalLogout(spec: spec)
+    }
+
+    func completeACPTerminalLogout(id: String) async {
+        await acp.retireSessions(clientId: id)
+        guard let index = acpClients.firstIndex(where: { $0.id == id }) else { return }
+        acpClients[index].authMethodId = nil
+        saveACPClients()
     }
 
     /// Returns true when the user must finish provider selection in Terminal.
@@ -485,12 +499,15 @@ extension AppState {
 
     func completeACPTerminalLogin(id: String, methodId: String?) async {
         // Console accounts live outside the legacy auth.json credential file.
-        if methodId == "rxcode-opencode-account",
-           let index = acpClients.firstIndex(where: { $0.id == id }) {
+        if let index = acpClients.firstIndex(where: { $0.id == id }),
+           methodId == "rxcode-opencode-account" || ACPService.isCursorClient(acpClients[index]) {
             acpClients[index].authMethodId = methodId
-            acpClients[index].extraEnv["OPENCODE_API_KEY"] = nil
+            if methodId == "rxcode-opencode-account" {
+                acpClients[index].extraEnv["OPENCODE_API_KEY"] = nil
+            }
             saveACPClients()
         }
+        await acp.retireSessions(clientId: id)
         await refreshACPClientModels(id: id)
     }
 

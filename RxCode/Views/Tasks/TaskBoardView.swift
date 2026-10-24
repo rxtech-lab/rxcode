@@ -45,7 +45,13 @@ struct TaskBoardView: View {
         }
         .onChange(of: windowState.taskDetailProjectId, initial: true) { _, projectId in
             guard let projectId else { return }
-            appState.focusProject(id: projectId, in: windowState)
+            // Defer to the next main-actor turn. Opening a project page
+            // rebuilds the window toolbar in this same update; switching the
+            // project now would leave the rebuilt run-profile item showing
+            // the previous project.
+            Task { @MainActor in
+                appState.focusProject(id: projectId, in: windowState)
+            }
         }
         .sheet(item: $sheet) { payload in
             TaskFormSheet(payload: payload, defaultProjectId: defaultProjectId)

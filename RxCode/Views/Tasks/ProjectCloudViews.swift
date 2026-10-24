@@ -181,7 +181,7 @@ struct ProjectCloudMenuItems: View {
             Text("Sign in to Flowcy in Settings to sync projects to the cloud.")
         } else if project.isCloud {
             Button {
-                appState.scheduleCloudBoardSync(for: project.id, delay: .zero)
+                appState.retryCloudBoardSync(for: project.id)
             } label: {
                 Label("Sync Now", systemImage: "arrow.triangle.2.circlepath.icloud")
             }

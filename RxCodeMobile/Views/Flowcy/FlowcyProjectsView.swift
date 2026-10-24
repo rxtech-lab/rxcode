@@ -13,9 +13,25 @@ struct FlowcyProjectsView: View {
     @State private var loading = false
     @State private var error: String?
     @State private var creating = false
+    @State private var showingOrder = false
+    @State private var feedback: String?
+    @AppStorage("mobile.flowcy.projectOrder") private var savedProjectOrders = Data()
+
+    private var orderScope: String { cloud.accountID ?? "signed-in" }
+
+    private var orderedProjects: [CloudProject] {
+        let orders = (try? JSONDecoder().decode([String: [String]].self, from: savedProjectOrders)) ?? [:]
+        let ranks = Dictionary((orders[orderScope] ?? []).enumerated().map { ($0.element, $0.offset) },
+                               uniquingKeysWith: { first, _ in first })
+        return cloud.projects.enumerated().sorted { lhs, rhs in
+            let left = ranks[lhs.element.id] ?? Int.max
+            let right = ranks[rhs.element.id] ?? Int.max
+            return left == right ? lhs.offset < rhs.offset : left < right
+        }.map(\.element)
+    }
 
     private var projects: [CloudProject] {
-        cloud.projects.filter { search.isEmpty || $0.title.localizedCaseInsensitiveContains(search)
+        orderedProjects.filter { search.isEmpty || $0.title.localizedCaseInsensitiveContains(search)
             || ($0.repositoryFullName?.localizedCaseInsensitiveContains(search) ?? false) }
     }
 
@@ -55,13 +71,21 @@ struct FlowcyProjectsView: View {
                                     .padding(20)
                                     .frame(maxWidth: .infinity, minHeight: 130, alignment: .leading)
                                     .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+                                    .mobileReorderItem()
                             }
-                        }.padding()
+                            .mobileReorderable()
+                        }
+                        .mobileReorderContainer(for: CloudProject.self, move: reorderProjects)
+                        .padding()
                     }
                     .background(Color(.systemGroupedBackground))
                     .refreshable { await reload() }
                 } else {
-                    List(projects) { project in projectButton(project) }
+                    List {
+                        ForEach(projects) { project in projectButton(project).mobileReorderItem() }
+                            .mobileReorderable()
+                    }
+                        .mobileReorderContainer(for: CloudProject.self, move: reorderProjects)
                         .refreshable { await reload() }
                 }
             }
@@ -70,6 +94,13 @@ struct FlowcyProjectsView: View {
             .searchable(text: $search, prompt: "Search projects")
             .toolbar {
                 FlowcyRemoteToolbar()
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Reorder Projects", systemImage: "arrow.up.arrow.down") {
+                        MobileHaptics.buttonTap()
+                        showingOrder = true
+                    }
+                    .disabled(cloud.projects.count < 2)
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Button("New Project", systemImage: "plus") {
                         MobileHaptics.buttonTap()
@@ -80,6 +111,10 @@ struct FlowcyProjectsView: View {
             .sheet(isPresented: $creating) {
                 FlowcyProjectForm { await reload() }.mobileSheetPresentation()
             }
+            .sheet(isPresented: $showingOrder) {
+                projectOrderSheet.mobileSheetPresentation()
+            }
+            .mobileStatusToast($feedback)
             .task { await reload() }
         }
     }
@@ -101,6 +136,66 @@ struct FlowcyProjectsView: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("flowcy-project-\(project.id)")
+        .accessibilityHint("Opens the project. Long press and drag to reorder.")
+        .mobileLegacyDrag("flowcy-project:\(project.id)")
+        .mobileLegacyDrop { items, _ in
+            guard let item = items.first, item.hasPrefix("flowcy-project:") else { return false }
+            let moved = String(item.dropFirst("flowcy-project:".count))
+            var order = orderedProjects
+            guard moved != project.id,
+                  let source = order.firstIndex(where: { $0.id == moved }),
+                  let target = order.firstIndex(where: { $0.id == project.id }) else { return false }
+            order.insert(order.remove(at: source), at: target)
+            saveOrder(order)
+            return true
+        }
+    }
+
+    private func reorderProjects(_ sources: [String], before target: String?) {
+        guard let order = mobileReordered(orderedProjects, moving: sources, before: target) else { return }
+        saveOrder(order)
+    }
+
+    private var projectOrderSheet: some View {
+        NavigationStack {
+            List {
+                ForEach(orderedProjects) { project in
+                    Label(project.title, systemImage: "folder")
+                }
+                .onMove { source, destination in
+                    var order = orderedProjects
+                    order.move(fromOffsets: source, toOffset: destination)
+                    saveOrder(order)
+                }
+            }
+            .environment(\.editMode, .constant(.active))
+            .overlay {
+                if orderedProjects.isEmpty {
+                    ContentUnavailableView("No Projects", systemImage: "folder")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+            .navigationTitle("Reorder Projects")
+            .navigationBarTitleDisplayMode(.inline)
+            .mobileStatusToast($feedback)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        MobileHaptics.buttonTap()
+                        showingOrder = false
+                    }
+                }
+            }
+        }
+    }
+
+    private func saveOrder(_ projects: [CloudProject]) {
+        var orders = (try? JSONDecoder().decode([String: [String]].self, from: savedProjectOrders)) ?? [:]
+        orders[orderScope] = projects.map(\.id)
+        guard let data = try? JSONEncoder().encode(orders) else { return }
+        withAnimation(.snappy) { savedProjectOrders = data }
+        MobileHaptics.buttonTap()
+        feedback = "Project order saved"
     }
 
     private func reload() async {
@@ -162,11 +257,22 @@ private struct FlowcyProjectWorkspace: View {
     var body: some View {
         NavigationSplitView {
             List(selection: $selection) {
-                ForEach(sections) { section in
-                    NavigationLink(value: section) { Label(section.rawValue, systemImage: section.icon) }
-                        .accessibilityIdentifier("flowcy-section-\(section.id)")
+                Section("Project") {
+                    sidebarLinks([.overview, .tasks, .docs])
+                }
+                if project.repositoryFullName != nil {
+                    Section("Collaboration") {
+                        sidebarLinks([.issues, .pullRequests, .sessions])
+                    }
+                    Section("Delivery") {
+                        sidebarLinks([.actions, .updates, .releases])
+                    }
+                    Section("Security") {
+                        sidebarLinks([.secrets])
+                    }
                 }
             }
+            .listStyle(.sidebar)
             .navigationTitle(project.title)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -205,6 +311,13 @@ private struct FlowcyProjectWorkspace: View {
                         }
                     }
             }.mobileSheetPresentation()
+        }
+    }
+
+    private func sidebarLinks(_ sections: [FlowcyProjectSection]) -> some View {
+        ForEach(sections) { section in
+            NavigationLink(value: section) { Label(section.rawValue, systemImage: section.icon) }
+                .accessibilityIdentifier("flowcy-section-\(section.id)")
         }
     }
 

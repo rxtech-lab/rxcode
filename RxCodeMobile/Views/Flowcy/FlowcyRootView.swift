@@ -102,19 +102,10 @@ struct RootView: View {
             state.usesCloudTasks = true
         }) {
             RemoteWorkspaceView()
-                .safeAreaInset(edge: .top, spacing: 0) {
-                    HStack {
-                        Button("Flowcy", systemImage: "chevron.left") {
-                            MobileHaptics.buttonTap()
-                            state.usesCloudTasks = true
-                            showingRemote = false
-                        }
-                        Spacer()
-                        Text(state.activePairedDesktop?.displayName ?? "Remote Workspace").font(.caption).foregroundStyle(.secondary)
-                    }
-                    .padding(.horizontal).padding(.vertical, 8)
-                    .background(.bar)
-                }
+                .environment(\.closeRemoteWorkspace, {
+                    state.usesCloudTasks = true
+                    showingRemote = false
+                })
         }
     }
 
@@ -179,6 +170,7 @@ extension EnvironmentValues {
 /// Attach to navigation column content so SwiftUI keeps the menu when columns collapse.
 struct FlowcyRemoteToolbar: ToolbarContent {
     var compactOnly = false
+    @State private var showingPairedComputers = false
     @Environment(\.flowcyRemoteActions) private var actions
     @EnvironmentObject private var state: MobileAppState
 
@@ -190,6 +182,11 @@ struct FlowcyRemoteToolbar: ToolbarContent {
                         MobileHaptics.buttonTap()
                         actions.connect()
                     }
+                    Button("Manage Paired Computers", systemImage: "desktopcomputer.and.gearshape") {
+                        MobileHaptics.buttonTap()
+                        showingPairedComputers = true
+                    }
+                    Divider()
                     ForEach(state.pairedDesktops) { desktop in
                         Button(desktop.displayName, systemImage: "desktopcomputer") {
                             MobileHaptics.buttonTap()
@@ -201,44 +198,110 @@ struct FlowcyRemoteToolbar: ToolbarContent {
                     }
                 } label: { Label("Remote Workspace", systemImage: "desktopcomputer") }
                 .accessibilityIdentifier("flowcy-remote-menu")
+                .sheet(isPresented: $showingPairedComputers) {
+                    MobilePairedComputersView()
+                        .mobileSheetPresentation()
+                }
             }
         }
     }
 }
 
 private enum FlowcySetting: String, CaseIterable, Identifiable {
-    case notifications = "Notifications", webhooks = "Webhooks", billing = "Billing"
-    case automation = "Automation", repositorySetup = "Repository Setup", general = "General"
+    case integrations = "Integrations", automation = "Automation", billing = "Billing", account = "Account"
     var id: Self { self }
+
+    var symbol: String {
+        switch self {
+        case .integrations: "point.3.connected.trianglepath.dotted"
+        case .automation: "bolt"
+        case .billing: "creditcard"
+        case .account: "person.crop.circle"
+        }
+    }
 
     @ViewBuilder var destination: some View {
         switch self {
-        case .notifications: FlowcyNotificationsView()
-        case .webhooks: FlowcyWebhooksView()
+        case .integrations: FlowcyIntegrationsView()
         case .billing: FlowcyBillingView()
         case .automation: MobileAutomationView()
-        case .repositorySetup: MobileRepoSetupView()
-        case .general: FlowcyGeneralView()
+        case .account: FlowcyAccountView()
         }
+    }
+}
+
+private struct FlowcyIntegrationsView: View {
+    var body: some View {
+        List {
+            NavigationLink { FlowcyNotificationsView() } label: {
+                Label("Notifications", systemImage: "bell")
+            }
+            NavigationLink { FlowcyWebhooksView() } label: {
+                Label("Webhooks", systemImage: "arrow.triangle.branch")
+            }
+            NavigationLink { MobileRepoSetupView() } label: {
+                Label("Repository Setup", systemImage: "shippingbox")
+            }
+        }
+        .listStyle(.insetGrouped)
+        .navigationTitle("Integrations")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
 struct FlowcySettingsView: View {
     @Environment(MobileCloudState.self) private var cloud
     @State private var selection: FlowcySetting?
-    @State private var confirmingSignOut = false
-    @State private var signingOut = false
-    @State private var signOutError: String?
+    @State private var preferredColumn: NavigationSplitViewColumn = .sidebar
+
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(preferredCompactColumn: $preferredColumn) {
             List(selection: $selection) {
-                Section("Account") {
-                    Text(cloud.auth.user?.email ?? "RxLab account")
-                    ForEach(FlowcySetting.allCases) { setting in
-                        NavigationLink(setting.rawValue, value: setting)
+                Section("Features") {
+                    ForEach(FlowcySetting.allCases.filter { $0 != .account }) { setting in
+                        NavigationLink(value: setting) {
+                            Label(setting.rawValue, systemImage: setting.symbol)
+                        }
+                        .listRowSeparator(.hidden)
+                    }
+                    if UIDevice.current.userInterfaceIdiom == .phone {
+                        NavigationLink(value: FlowcySetting.account) {
+                            Label("Account & General", systemImage: "person.crop.circle")
+                        }
+                        .listRowSeparator(.hidden)
+                        .accessibilityIdentifier("flowcy-settings-account")
                     }
                 }
-                Button("Sign Out", role: .destructive) { confirmingSignOut = true; MobileHaptics.buttonTap() }
+                .listSectionSeparator(.hidden)
+            }
+            .listStyle(.insetGrouped)
+            .safeAreaInset(edge: .bottom) {
+                if UIDevice.current.userInterfaceIdiom != .phone {
+                    Button {
+                        selection = .account
+                        preferredColumn = .detail
+                        MobileHaptics.buttonTap()
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "person.crop.circle.fill")
+                                .font(.largeTitle)
+                                .foregroundStyle(.tint)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(cloud.auth.user?.email ?? "RxLab account")
+                                    .font(.subheadline.weight(.semibold))
+                                    .lineLimit(1)
+                                Text("Account & General").font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer(minLength: 0)
+                            Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                        }
+                        .padding(14)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("flowcy-settings-account")
+                    .padding()
+                }
             }
             .navigationTitle("Settings")
             .toolbar { FlowcyRemoteToolbar(compactOnly: true) }
@@ -259,6 +322,37 @@ struct FlowcySettingsView: View {
         }
         .navigationSplitViewStyle(.balanced)
         .onChange(of: selection) { _, _ in MobileHaptics.buttonTap() }
+    }
+}
+
+private struct FlowcyAccountView: View {
+    @Environment(MobileCloudState.self) private var cloud
+    @AppStorage("flowcy.appearance") private var appearance = "system"
+    @State private var confirmingSignOut = false
+    @State private var signingOut = false
+    @State private var signOutError: String?
+    var body: some View {
+        Form {
+            Section("Signed In") {
+                Label(cloud.auth.user?.email ?? "RxLab account", systemImage: "person.crop.circle")
+                    .textSelection(.enabled)
+            }
+            Section("General") {
+                Picker("Appearance", selection: $appearance) {
+                    Text("System").tag("system")
+                    Text("Light").tag("light")
+                    Text("Dark").tag("dark")
+                }
+                .onChange(of: appearance) { _, _ in MobileHaptics.buttonTap() }
+                LabeledContent("Version", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "")
+            }
+            Section {
+                Button("Sign Out", role: .destructive) { confirmingSignOut = true; MobileHaptics.buttonTap() }
+                    .disabled(signingOut)
+            }
+        }
+        .navigationTitle("Account")
+        .navigationBarTitleDisplayMode(.inline)
         .confirmationDialog("Sign out of Flowcy?", isPresented: $confirmingSignOut, titleVisibility: .visible) {
             Button("Sign Out", role: .destructive) {
                 signingOut = true
@@ -274,23 +368,5 @@ struct FlowcySettingsView: View {
             Button("OK") { signOutError = nil }
         } message: { Text(signOutError ?? "") }
         .overlay { if signingOut { ProgressView("Signing out…").padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16)) } }
-    }
-}
-
-private struct FlowcyGeneralView: View {
-    @AppStorage("flowcy.appearance") private var appearance = "system"
-    var body: some View {
-        Form {
-            Section("Flowcy") {
-                LabeledContent("Version", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "")
-                Picker("Appearance", selection: $appearance) {
-                    Text("System").tag("system")
-                    Text("Light").tag("light")
-                    Text("Dark").tag("dark")
-                }
-                .onChange(of: appearance) { _, _ in MobileHaptics.buttonTap() }
-            }
-        }
-        .navigationTitle("General")
     }
 }

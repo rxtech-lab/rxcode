@@ -3,6 +3,7 @@ import JSONSchemaForm
 import RxCodeCore
 import RxCodeSync
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Repo-setup templates: reusable GitHub merge settings + branch rulesets
 /// applied to new repositories. Mirrors the desktop `RepoSetupManageSheet`.
@@ -131,6 +132,9 @@ struct MobileRepoSetupEditor: View {
     @State private var mergeSettingsJSON = "{}"
 
     @State private var rulesetJSON = ""
+    @State private var showingRulesetImporter = false
+    @State private var isImportingRuleset = false
+    @State private var rulesetImportError: String?
 
     @State private var isLoading = true
     @State private var loadError: String?
@@ -154,7 +158,11 @@ struct MobileRepoSetupEditor: View {
                     }
                 } else {
                     Section("Template") {
-                        TextField("Name", text: $name)
+                        LabeledContent("Template Name") {
+                            TextField("Name", text: $name)
+                                .multilineTextAlignment(.trailing)
+                                .accessibilityIdentifier("repo-setup-template-name")
+                        }
                         Toggle("Enabled", isOn: $enabled)
                         Toggle("Default for new repositories", isOn: $isDefault)
                     }
@@ -179,13 +187,19 @@ struct MobileRepoSetupEditor: View {
                     }
 
                     Section {
+                        Button("Import JSON File", systemImage: "doc.badge.plus") {
+                            MobileHaptics.buttonTap()
+                            showingRulesetImporter = true
+                        }
+                        .disabled(isImportingRuleset || isSaving)
                         TextEditor(text: $rulesetJSON)
                             .font(.system(.body, design: .monospaced))
                             .frame(minHeight: 140)
+                            .disabled(isImportingRuleset)
                     } header: {
                         Text("Branch Ruleset (optional)")
                     } footer: {
-                        Text("Paste a GitHub ruleset JSON with name, target, enforcement, and rules.")
+                        Text("Paste or import a GitHub ruleset JSON file with name, target, enforcement, and rules. Importing replaces the ruleset in this draft; save the template to apply it.")
                     }
 
                     if let errorMessage {
@@ -195,13 +209,25 @@ struct MobileRepoSetupEditor: View {
                 }
             }
             .mobileAutopilotLoadingDialog(isSaving, title: "Saving template…")
+            .mobileAutopilotLoadingDialog(isImportingRuleset, title: "Importing ruleset…")
+            .fileImporter(isPresented: $showingRulesetImporter, allowedContentTypes: [.json]) { result in
+                Task { await importRuleset(result) }
+            }
+            .alert("Unable to Import Ruleset", isPresented: Binding(
+                get: { rulesetImportError != nil },
+                set: { if !$0 { rulesetImportError = nil } }
+            )) {
+                Button("OK", role: .cancel) { MobileHaptics.buttonTap() }
+            } message: {
+                Text(rulesetImportError ?? "")
+            }
             .navigationTitle(existing == nil ? "New Template" : "Edit Template")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { Task { await save() } }
-                        .disabled(isSaving || isLoading || loadError != nil || name.trimmingCharacters(in: .whitespaces).isEmpty)
+                        .disabled(isSaving || isImportingRuleset || isLoading || loadError != nil || name.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
             .task { await load() }
@@ -221,9 +247,14 @@ struct MobileRepoSetupEditor: View {
         }
         do {
             let env = try await state.repoSetupSchema()
-            uiSchema = env.uiSchema?.foundationObject as? [String: Any]
+            // This section edits only merge settings; name and enabled have their own fields above.
+            uiSchema = env.uiSchema?["mergeSettings"]?.foundationObject as? [String: Any]
             do {
-                let parsed = try JSONSchema(jsonString: env.schema.rawJSONString)
+                guard let mergeSchema = env.schema["properties"]?["mergeSettings"] else {
+                    useFallback = true
+                    return
+                }
+                let parsed = try JSONSchema(jsonString: mergeSchema.rawJSONString)
                 let seedJSON = existing?.mergeSettings.rawJSONString ?? "{}"
                 let seeded = try FormData.fromJSONString(seedJSON)
                 formData = seeded.applyingDefaults(schema: parsed)
@@ -234,6 +265,27 @@ struct MobileRepoSetupEditor: View {
             }
         } catch {
             loadError = error.localizedDescription
+        }
+    }
+
+    private func importRuleset(_ result: Result<URL, Error>) async {
+        isImportingRuleset = true
+        rulesetImportError = nil
+        defer { isImportingRuleset = false }
+        do {
+            let url = try result.get()
+            let text = try await Task.detached {
+                let hasAccess = url.startAccessingSecurityScopedResource()
+                defer { if hasAccess { url.stopAccessingSecurityScopedResource() } }
+                return try String(contentsOf: url, encoding: .utf8)
+            }.value
+            let summary = try GitHubRulesetSummary.validate(rawJSON: text).get()
+            rulesetJSON = summary.value.prettyJSONString
+            errorMessage = nil
+            MobileHaptics.connected()
+        } catch {
+            rulesetImportError = error.localizedDescription
+            MobileHaptics.connectionError()
         }
     }
 

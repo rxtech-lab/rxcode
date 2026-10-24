@@ -5596,6 +5596,9 @@
         }
       }
     },
+    "Cloud filter sync needs attention" : {
+
+    },
     "Cloud project: syncs through Flowcy. Click to sync now or make it local." : {
       "localizations" : {
         "ko" : {
@@ -8694,6 +8697,9 @@
         }
       }
     },
+    "Dismiss sync notification" : {
+
+    },
     "dispatchable" : {
       "localizations" : {
         "ko" : {
@@ -10413,6 +10419,7 @@
       }
     },
     "Fetching cloud board (step 1 of 4)" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -10421,6 +10428,9 @@
           }
         }
       }
+    },
+    "Fetching cloud board (step 1 of 5)" : {
+
     },
     "Fields" : {
       "localizations" : {
@@ -10641,6 +10651,7 @@
       }
     },
     "Finishing sync (step 4 of 4)" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -10649,6 +10660,9 @@
           }
         }
       }
+    },
+    "Finishing sync (step 5 of 5)" : {
+
     },
     "First day of the month at 9:00" : {
       "extractionState" : "stale",
@@ -18826,6 +18840,9 @@
         }
       }
     },
+    "Publishing Swift filters (step 4 of 5)" : {
+
+    },
     "Push" : {
       "localizations" : {
         "ko" : {
@@ -20197,6 +20214,9 @@
           }
         }
       }
+    },
+    "Retry Sync" : {
+
     },
     "Retry with HTTP Callback" : {
 
@@ -24056,6 +24076,7 @@
       }
     },
     "Syncing stories (step 2 of 4)" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -24065,7 +24086,11 @@
         }
       }
     },
+    "Syncing stories (step 2 of 5)" : {
+
+    },
     "Syncing tasks (step 3 of 4)" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -24074,6 +24099,9 @@
           }
         }
       }
+    },
+    "Syncing tasks (step 3 of 5)" : {
+
     },
     "Tag" : {
       "localizations" : {
@@ -25223,6 +25251,9 @@
         }
       }
     },
+    "This Mac can only run cloud tasks." : {
+
+    },
     "This MCP server requires authentication. Sign in to test the connection again." : {
 
     },
@@ -25297,6 +25328,9 @@
           }
         }
       }
+    },
+    "This project isn't open on this Mac. Open it from Flowcy on the Mac, then try again." : {
+
     },
     "This removes the history stored on this Mac. RxCode also uses it to avoid sending a briefing twice." : {
       "localizations" : {

@@ -8,11 +8,7 @@ struct MobileSettingsView: View {
     @EnvironmentObject private var state: MobileAppState
     @Environment(\.dismiss) private var dismiss
     let showsDoneButton: Bool
-    @State private var showPairingSheet = false
     @State private var showRemoteTasks = false
-    @State private var desktopPendingRemoval: PairedDesktop?
-    @State private var desktopBeingRenamed: PairedDesktop?
-    @State private var renameText: String = ""
     @State private var modelDraft = ""
     @State private var acpClientDraft = ""
 
@@ -23,8 +19,6 @@ struct MobileSettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                pairedMacsSection
-
                 computerStatusSection
 
                 desktopUsageSection
@@ -55,22 +49,12 @@ struct MobileSettingsView: View {
                 await state.refreshSnapshot()
             }
             .toolbar {
+                if !showsDoneButton { RemoteWorkspaceCloseToolbar() }
                 if showsDoneButton {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button("Done") { dismiss() }
                     }
                 }
-            }
-            .sheet(isPresented: $showPairingSheet) {
-                NavigationStack {
-                    OnboardingView(showsCancelButton: true) {
-                        showPairingSheet = false
-                    }
-                    .environmentObject(state)
-                    .navigationTitle("Pair New Mac")
-                    .navigationBarTitleDisplayMode(.inline)
-                }
-                .mobileSheetPresentation()
             }
             .fullScreenCover(isPresented: $showRemoteTasks, onDismiss: { state.usesCloudTasks = false }) {
                 NavigationStack {
@@ -85,45 +69,6 @@ struct MobileSettingsView: View {
                 .environmentObject(state)
                 .environment(cloud)
             }
-            .alert(
-                "Remove pairing?",
-                isPresented: Binding(
-                    get: { desktopPendingRemoval != nil },
-                    set: { if !$0 { desktopPendingRemoval = nil } }
-                )
-            ) {
-                Button("Cancel", role: .cancel) {}
-                Button("Remove", role: .destructive) {
-                    if let desktop = desktopPendingRemoval {
-                        Task { await state.removePairedDesktop(desktop) }
-                    }
-                    desktopPendingRemoval = nil
-                }
-            } message: {
-                if let desktop = desktopPendingRemoval {
-                    Text("This removes \(desktop.displayName.isEmpty ? "this Mac" : desktop.displayName) from this device. Other paired Macs stay available.")
-                }
-            }
-            .alert(
-                "Rename Mac",
-                isPresented: Binding(
-                    get: { desktopBeingRenamed != nil },
-                    set: { if !$0 { desktopBeingRenamed = nil } }
-                )
-            ) {
-                TextField("Mac name", text: $renameText)
-                Button("Cancel", role: .cancel) {
-                    desktopBeingRenamed = nil
-                }
-                Button("Save") {
-                    if let desktop = desktopBeingRenamed {
-                        state.renamePairedDesktop(desktop, to: renameText)
-                    }
-                    desktopBeingRenamed = nil
-                }
-            } message: {
-                Text("Enter a new name for this Mac.")
-            }
             .onAppear {
                 modelDraft = state.desktopSettings?.selectedModel ?? ""
                 acpClientDraft = state.desktopSettings?.selectedACPClientId ?? ""
@@ -134,93 +79,6 @@ struct MobileSettingsView: View {
             .onChange(of: state.desktopSettings?.selectedACPClientId) { _, value in
                 acpClientDraft = value ?? ""
             }
-        }
-    }
-
-    private var pairedMacsSection: some View {
-        Section {
-            ForEach(state.pairedDesktops) { desktop in
-                pairedMacRow(desktop)
-            }
-            Button {
-                showPairingSheet = true
-            } label: {
-                Label("Pair New Mac", systemImage: "plus.circle")
-            }
-            .popoverTip(MobileTips.PairingTip(), arrowEdge: .top)
-            HStack {
-                Text("Connection")
-                Spacer()
-                connectionLabel
-            }
-            Toggle(isOn: Binding(
-                get: { MobileAppState.directPathsEnabledSetting },
-                set: { enabled in Task { await state.setDirectPathsEnabled(enabled) } }
-            )) {
-                Text("Direct connection")
-            }
-        } header: {
-            Text("Paired Macs")
-        } footer: {
-            Text("Select which Mac this device controls. When Direct connection is on and you're on the same network, sync connects straight to your Mac (end-to-end encrypted) and falls back to the relay automatically.")
-        }
-    }
-
-    private func pairedMacRow(_ desktop: PairedDesktop) -> some View {
-        Button {
-            if desktop.id != state.activePairedDesktop?.id {
-                Task { await state.switchPairedDesktop(desktop) }
-            }
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "desktopcomputer")
-                    .frame(width: 22)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(desktop.displayName.isEmpty ? "Unknown Mac" : desktop.displayName)
-                        .foregroundStyle(.primary)
-                    HStack(spacing: 6) {
-                        Text("Paired \(desktop.pairedAt, format: .relative(presentation: .named))")
-                        if state.activePathByDesktop[desktop.pubkeyHex] == .directLAN {
-                            Text("•")
-                            let rtt = (state.directRTTByDesktop[desktop.pubkeyHex] ?? nil).map { " · \($0)ms" } ?? ""
-                            Label("Direct · LAN\(rtt)", systemImage: "bolt.horizontal.fill")
-                                .labelStyle(.titleAndIcon)
-                                .foregroundStyle(.green)
-                        } else if let relay = desktop.relayDisplayName {
-                            Text("•")
-                            Label(relay, systemImage: "antenna.radiowaves.left.and.right")
-                                .labelStyle(.titleOnly)
-                        }
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                }
-                Spacer()
-                if desktop.id == state.activePairedDesktop?.id {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                        .accessibilityLabel("Active")
-                }
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(desktop.id == state.activePairedDesktop?.id
-            ? "\(desktop.displayName.isEmpty ? "Mac" : desktop.displayName), Active"
-            : "Switch to \(desktop.displayName.isEmpty ? "Mac" : desktop.displayName)")
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            Button(role: .destructive) {
-                desktopPendingRemoval = desktop
-            } label: {
-                Label("Remove", systemImage: "trash")
-            }
-            Button {
-                renameText = desktop.displayName
-                desktopBeingRenamed = desktop
-            } label: {
-                Label("Rename", systemImage: "pencil")
-            }
-            .tint(.orange)
         }
     }
 
@@ -531,19 +389,7 @@ struct MobileSettingsView: View {
         }
     }
 
-    @ViewBuilder
-    private var connectionLabel: some View {
-        switch state.connectionState {
-        case .connected:
-            Label("Live", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-        case .connecting:
-            Label("Connecting…", systemImage: "circle.dotted")
-        case .disconnected:
-            Label("Disconnected", systemImage: "circle.slash").foregroundStyle(.secondary)
-        case .reconnecting(let seconds):
-            Label(String(localized: "Reconnecting in \(seconds)s"), systemImage: "arrow.clockwise.circle").foregroundStyle(.orange)
-        }
-    }
+
 }
 
 /// A labeled progress bar with a trailing value and optional caption. Shared by

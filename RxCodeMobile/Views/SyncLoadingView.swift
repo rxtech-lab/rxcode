@@ -13,8 +13,6 @@ struct SyncLoadingView: View {
     var activeDesktopID: String?
     var onRetry: (() -> Void)?
     var onSelectDesktop: ((PairedDesktop) -> Void)?
-    var onPairNewDesktop: (() -> Void)?
-    var onViewTasks: (() -> Void)?
 
     @State private var pulseScale: CGFloat = 1.0
     @State private var orbRotation: Double = 0
@@ -29,42 +27,6 @@ struct SyncLoadingView: View {
             timeoutView
         } else {
             loadingView
-        }
-    }
-
-    private var hasSecondaryActions: Bool {
-        onViewTasks != nil || onPairNewDesktop != nil
-    }
-
-    /// Offline escape hatches shared by the loading and timeout screens,
-    /// stacked full width so labels never truncate.
-    @ViewBuilder
-    private var secondaryActions: some View {
-        if hasSecondaryActions {
-            VStack(spacing: 10) { secondaryButtons }
-        }
-    }
-
-    @ViewBuilder
-    private var secondaryButtons: some View {
-        if let onViewTasks {
-            Button(action: onViewTasks) {
-                Label("View Tasks", systemImage: "checklist")
-                    .font(.body.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.glass)
-            .controlSize(.large)
-            .accessibilityIdentifier("view-tasks-offline")
-        }
-        if let onPairNewDesktop {
-            Button(action: onPairNewDesktop) {
-                Label("Pair New Mac", systemImage: "plus.circle")
-                    .font(.body.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.glass)
-            .controlSize(.large)
         }
     }
 
@@ -108,12 +70,6 @@ struct SyncLoadingView: View {
                 shimmerBar
                     .padding(.top, 8)
                     .opacity(appeared ? 1 : 0)
-
-                secondaryActions
-                    .frame(maxWidth: 360)
-                    .opacity(appeared ? 1 : 0)
-                    .offset(y: appeared ? 0 : 16)
-                    .padding(.top, 8)
 
                 Spacer()
                 Spacer()
@@ -171,8 +127,7 @@ struct SyncLoadingView: View {
         }
     }
 
-    /// One clear primary action (reconnect), with the offline alternatives
-    /// grouped underneath as equal-weight secondary buttons.
+    /// Reconnect after the initial connection attempt times out.
     private var timeoutActions: some View {
         VStack(spacing: 12) {
             Button {
@@ -187,18 +142,7 @@ struct SyncLoadingView: View {
             .controlSize(.large)
             .accessibilityIdentifier("sync-retry")
 
-            if hasSecondaryActions {
-                HStack(spacing: 12) {
-                    VStack { Divider() }
-                    Text("or")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    VStack { Divider() }
-                }
-                .padding(.vertical, 4)
 
-                secondaryActions
-            }
         }
         .frame(maxWidth: 360)
         .padding(.top, 8)

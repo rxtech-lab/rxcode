@@ -8,8 +8,18 @@ import RxCodeSync
 extension AppState {
     /// The board of `projectId` as mobile renders it, including the resolved
     /// chat thread of every dispatched task.
-    func mobileTaskBoardSnapshot(for projectId: UUID) -> MobileTaskBoardSnapshot {
+    func mobileTaskBoardSnapshot(for projectId: UUID) async -> MobileTaskBoardSnapshot {
         var board = taskBoard(for: projectId)
+        for index in board.savedViews.indices {
+            guard let source = board.savedViews[index].filterScript, board.savedViews[index].hasFilterScript else { continue }
+            switch await taskFilterEvaluator.evaluate(script: source, input: TaskFilterScript.input(for: board)) {
+            case .selection(let selection):
+                board.savedViews[index].filterSnapshot = TaskFilterSnapshot(source: source,
+                    tasks: selection.taskIds.map(\.uuidString).sorted(), stories: selection.storyIds.map(\.uuidString).sorted())
+            case .failure:
+                board.savedViews[index].filterSnapshot = nil
+            }
+        }
         // Cloud sync bookkeeping is desktop-only and would roughly double the
         // payload; mobile edits come back as per-item operations.
         board.cloudSync = nil
@@ -40,7 +50,7 @@ extension AppState {
             guard !Task.isCancelled, let self else { return }
             self.mobileTaskBoardBroadcastTasks[projectId] = nil
             guard self.projects.contains(where: { $0.id == projectId }) else { return }
-            MobileSyncService.shared.broadcastTaskBoardUpdate(self.mobileTaskBoardSnapshot(for: projectId))
+            MobileSyncService.shared.broadcastTaskBoardUpdate(await self.mobileTaskBoardSnapshot(for: projectId))
         }
     }
 
@@ -147,7 +157,11 @@ extension AppState {
             return nil
 
         case .upsertView:
-            guard let view = request.view else { throw MobileTaskBoardError.missing("view") }
+            guard var view = request.view else { throw MobileTaskBoardError.missing("view") }
+            // The phone can edit standard settings, but cannot replace or
+            // remove Swift code, including through a stale editor draft.
+            view.filterScript = taskBoard(for: projectId).effectiveViews
+                .first(where: { $0.id == view.id })?.filterScript
             upsertSavedView(view, projectId: projectId)
             return nil
 
@@ -213,7 +227,7 @@ extension AppState {
             clientRequestID: request.clientRequestID,
             projectID: project.id,
             ok: true,
-            snapshot: mobileTaskBoardSnapshot(for: project.id),
+            snapshot: await mobileTaskBoardSnapshot(for: project.id),
             taskID: task.id
         )), toHex: fromHex)
     }
@@ -237,7 +251,7 @@ extension AppState {
             projectID: request.projectID,
             ok: ok,
             errorMessage: errorMessage,
-            snapshot: exists ? mobileTaskBoardSnapshot(for: request.projectID) : nil,
+            snapshot: exists ? await mobileTaskBoardSnapshot(for: request.projectID) : nil,
             taskID: taskID,
             runs: runs
         )

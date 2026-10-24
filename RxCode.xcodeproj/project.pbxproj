@@ -826,6 +826,7 @@
 				E67335342F7356F600FD26C7 /* Sources */,
 				E67335352F7356F600FD26C7 /* Frameworks */,
 				E67335362F7356F600FD26C7 /* Resources */,
+				ABF17E000000000000000003 /* Remove Legacy Bundled Compiler */,
 				2D079341FFDF244B1EB7C14C /* Embed Desktop Widgets */,
 			);
 			buildRules = (
@@ -1012,6 +1013,24 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		ABF17E000000000000000003 /* Remove Legacy Bundled Compiler */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Remove Legacy Bundled Compiler";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "/bin/sh \"$SRCROOT/scripts/remove-bundled-swift-filter.sh\"";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		46DB7FC9C364C805E13D6A85 /* Sources */ = {
@@ -1728,6 +1747,7 @@
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = RxCode/Info.plist;
@@ -1765,6 +1785,7 @@
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = RxCode/Info.plist;

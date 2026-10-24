@@ -51,7 +51,7 @@ final class iPadNavigationUITests: XCTestCase {
         session.robot.tap(app.buttons["open-settings"], "Settings toolbar button")
         let settingsBar = app.navigationBars["Settings"].firstMatch
         XCTAssertTrue(settingsBar.waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["Pair New Mac"].exists)
+        XCTAssertTrue(app.buttons["Skills"].waitForExistence(timeout: 5))
         session.robot.tap(settingsBar.buttons["Done"], "Dismiss Settings")
         XCTAssertTrue(settingsBar.waitForNonExistence(timeout: 5))
         XCTAssertTrue(overview.waitForExistence(timeout: 10))

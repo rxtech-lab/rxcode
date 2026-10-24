@@ -18,12 +18,15 @@
         "TaskDetailSheetUITests/testTaskAndStoryCardsOpenDismissibleDetailSheets()",
         "FlowcyProductionUITests/testDashboardWithoutPairingAndRootNavigation()",
         "RxCodeMobileUITests\/testLaunchesPastPairingIntoMainUI()",
-        "CloudWorkspaceUITests\/testIPadSyncFailureOpensFullScreenEmptyBoard()",
+        "CloudWorkspaceUITests\/testIPadSyncFailureOffersRetry()",
+        "CloudWorkspaceUITests\/testIPadUnpairedTasksOpenFullScreenEmptyBoard()",
         "iPadNavigationUITests\/testBriefingSplitKeepsListVisible()",
         "iPadNavigationUITests\/testTaskProjectsCanBeDraggedAndKeepTheirOrder()",
         "iPadNavigationUITests\/testSettingsDismissesBackToTasksWorkspace()",
         "iPadNavigationUITests\/testProjectsSplitKeepsThreadListVisible()",
-        "FlowcyProductionUITests/testCIAndReleaseProjectNavigation()"
+        "FlowcyProductionUITests/testCIAndReleaseProjectNavigation()",
+        "FlowcyProductionUITests/testProjectCardsDragHideRestoreAndPersist()",
+        "MobileNativeReorderingUITests/testNativeBoardReordersColumnsAndCards()"
       ],
       "target" : {
         "containerPath" : "container:RxCode.xcodeproj",

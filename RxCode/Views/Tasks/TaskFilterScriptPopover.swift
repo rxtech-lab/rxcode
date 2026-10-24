@@ -37,12 +37,11 @@ struct TaskFilterScriptSection: View {
                 .accessibilityIdentifier("task-view-filter-script")
                 // Refuse to close while an agent is writing the code, so the
                 // result lands in front of the user.
-                .popover(
+                .sheet(
                     isPresented: Binding(
                         get: { isPresented },
                         set: { if $0 || !isGenerating { isPresented = $0 } }
-                    ),
-                    arrowEdge: .trailing
+                    )
                 ) {
                     TaskFilterScriptPopover(
                         projectId: projectId,

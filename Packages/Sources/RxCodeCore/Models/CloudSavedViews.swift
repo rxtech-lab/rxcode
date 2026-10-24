@@ -11,6 +11,8 @@ public struct CloudSavedView: Codable, Sendable, Hashable, Identifiable {
         self.view = view
         storyRemoteIDs = view.storyIds.map { sync.storyRemoteId($0) ?? $0.uuidString }
         self.view.storyIds = []
+        self.view.filterSnapshot?.tasks = view.filterSnapshot?.tasks.compactMap { UUID(uuidString: $0).flatMap { sync.taskRemoteId($0) } } ?? []
+        self.view.filterSnapshot?.stories = view.filterSnapshot?.stories.compactMap { UUID(uuidString: $0).flatMap { sync.storyRemoteId($0) } } ?? []
     }
 
     public func localView(sync: CloudBoardSyncState) -> TaskSavedView {
@@ -19,6 +21,8 @@ public struct CloudSavedView: Codable, Sendable, Hashable, Identifiable {
         result.storyIds = storyRemoteIDs.map {
             sync.localStoryId(forRemote: $0) ?? UUID(uuidString: $0) ?? view.id
         }
+        result.filterSnapshot?.tasks = view.filterSnapshot?.tasks.compactMap { sync.localTaskId(forRemote: $0)?.uuidString } ?? []
+        result.filterSnapshot?.stories = view.filterSnapshot?.stories.compactMap { sync.localStoryId(forRemote: $0)?.uuidString } ?? []
         return result
     }
 }
@@ -30,6 +34,24 @@ public struct CloudSavedViews: Codable, Sendable, Equatable {
     public init(views: [CloudSavedView] = [], revision: Int = 0) {
         self.views = views
         self.revision = revision
+    }
+
+    /// Mobile may edit standard views; Swift-filter views remain host-owned.
+    public static func preservingRemoteScripts(
+        in views: [CloudSavedView], remote: [CloudSavedView]
+    ) -> [CloudSavedView] {
+        let scripts = Dictionary(remote.map { ($0.id, $0.view) }, uniquingKeysWith: { first, _ in first })
+        let preserved = remote.filter { entry in entry.view.hasFilterScript && !views.contains(where: { $0.id == entry.id }) }
+        return (views + preserved).map { entry in
+            var result = entry
+            if var remote = remote.first(where: { $0.id == entry.id }), remote.view.hasFilterScript {
+                // Choosing a standard default view may clear the previous default marker.
+                remote.view.isDefault = remote.view.isDefault && entry.view.isDefault
+                return remote
+            }
+            result.view.filterScript = scripts[entry.id]?.filterScript
+            return result
+        }
     }
 
     /// Merge independent tab edits and deletions. A same-tab conflict favors

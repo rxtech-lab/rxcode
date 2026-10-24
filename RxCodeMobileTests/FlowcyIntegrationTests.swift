@@ -12,6 +12,21 @@ enum FlowcySimulation {
 }
 
 final class FlowcyProtocolTests: XCTestCase {
+    func testNotificationUsesSubjectInsteadOfIdentifier() {
+        let value: JSONValue = .object([
+            "id": .string("bbb5fa72-9f1f-41c6-84ac-5380b0e08262"),
+            "subject": .string("Hourly task finished"),
+            "title": .string("Legacy title")
+        ])
+        XCTAssertEqual(FlowcyNotificationDetailView.title(value), "Hourly task finished")
+        XCTAssertEqual(FlowcyNotificationDetailView.title(.object([
+            "subject": .string("  "), "title": .string("Legacy title")
+        ])), "Legacy title")
+        XCTAssertEqual(FlowcyNotificationDetailView.title(.object([
+            "id": .string("bbb5fa72-9f1f-41c6-84ac-5380b0e08262")
+        ])), "Notification")
+    }
+
     func testRPCErrorCannotBeReportedAsSuccessfulResult() throws {
         XCTAssertThrowsError(try FlowcyMCPClient.response(#"{"jsonrpc":"2.0","id":"one","error":{"code":-32603}}"#, id: "one"))
         XCTAssertNil(try FlowcyMCPClient.response(#"{"jsonrpc":"2.0","id":"other","result":{}}"#, id: "one"))

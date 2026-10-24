@@ -169,15 +169,18 @@ struct MobileTasksDashboardView: View {
                             openingProject = project.id
                         }, onHide: { setHidden(true, project: project) }, onOpenChat: onOpenChat)
                             .frame(width: 340, height: max(proxy.size.height - 32, 0), alignment: .top)
-                            .dropDestination(for: String.self) { items, _ in
+                            .mobileLegacyDrop { items, _ in
                                 guard let dragged = items.first,
                                       dragged.hasPrefix("task-project:"),
                                       let moved = UUID(uuidString: String(dragged.dropFirst("task-project:".count)))
                                 else { return false }
                                 return reorder(moving: moved, onto: project.id)
                             }
+                            .mobileReorderItem()
                     }
+                    .mobileReorderable()
                 }
+                .mobileReorderContainer(for: Project.self, move: reorderProjects)
                 .padding(16)
                 .animation(.snappy(duration: 0.3), value: orderedProjects.map(\.id))
             }
@@ -215,7 +218,9 @@ struct MobileTasksDashboardView: View {
                     .swipeActions {
                         Button("Hide Project Card", systemImage: "eye.slash") { setHidden(true, project: project) }
                     }
+                    .mobileReorderItem()
                 }
+                // Let List commit its native row moves directly to the saved order.
                 .onMove { source, destination in
                     var visible = visibleProjects
                     visible.move(fromOffsets: source, toOffset: destination)
@@ -227,6 +232,14 @@ struct MobileTasksDashboardView: View {
                 }
             }
         }
+    }
+
+    private func reorderProjects(_ sources: [UUID], before target: UUID?) {
+        guard let visible = mobileReordered(visibleProjects, moving: sources, before: target) else { return }
+        var iterator = visible.makeIterator()
+        saveOrder(orderedProjects.map { project in
+            hiddenKeys.contains(visibilityKey(for: project)) ? project : (iterator.next() ?? project)
+        })
     }
 
     private func orderKey(for project: Project) -> String {
@@ -399,7 +412,7 @@ struct MobileProjectTaskCard: View {
                 MobileProjectTaskSummaryRow(project: project, snapshot: snapshot)
                     .contentShape(Rectangle())
                     .onTapGesture(perform: onOpen)
-                    .draggable("task-project:\(project.id.uuidString)")
+                    .mobileLegacyDrag("task-project:\(project.id.uuidString)")
                     .accessibilityElement(children: .combine)
                     .accessibilityAddTraits(.isButton)
                     .accessibilityHint("Opens the project board. Long press and drag to reorder.")

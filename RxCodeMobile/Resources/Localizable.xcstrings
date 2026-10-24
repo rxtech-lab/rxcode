@@ -168,6 +168,7 @@
       }
     },
     "%@, Active" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -464,6 +465,7 @@
       }
     },
     "•" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -631,6 +633,9 @@
         }
       }
     },
+    "Account & General" : {
+
+    },
     "Action" : {
       "localizations" : {
         "en" : {
@@ -680,6 +685,9 @@
           }
         }
       }
+    },
+    "Active computer" : {
+
     },
     "Activity" : {
 
@@ -1965,6 +1973,9 @@
         }
       }
     },
+    "Channel" : {
+
+    },
     "Checking account…" : {
       "localizations" : {
         "ko" : {
@@ -2327,6 +2338,9 @@
         }
       }
     },
+    "Collaboration" : {
+
+    },
     "Column" : {
 
     },
@@ -2401,6 +2415,9 @@
       }
     },
     "Completed" : {
+
+    },
+    "Computer name" : {
 
     },
     "Computer Status" : {
@@ -2828,6 +2845,9 @@
 
     },
     "Could Not Save" : {
+
+    },
+    "Could Not Save Automation" : {
 
     },
     "Could Not Save Webhook" : {
@@ -3769,6 +3789,9 @@
     "Deleting webhook…" : {
 
     },
+    "Delivery" : {
+
+    },
     "Deny" : {
       "localizations" : {
         "en" : {
@@ -4082,6 +4105,7 @@
       }
     },
     "Direct · LAN%@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -4092,6 +4116,7 @@
       }
     },
     "Direct connection" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -4410,6 +4435,9 @@
         }
       }
     },
+    "Edit this view's Swift filter in RxCode on your Mac." : {
+
+    },
     "Edit View" : {
       "localizations" : {
         "zh-Hans" : {
@@ -4578,6 +4606,7 @@
       }
     },
     "Enter a new name for this Mac." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5104,6 +5133,9 @@
       }
     },
     "Feature Not Configured" : {
+
+    },
+    "Features" : {
 
     },
     "File" : {
@@ -5735,6 +5767,12 @@
         }
       }
     },
+    "Import JSON File" : {
+
+    },
+    "Importing ruleset…" : {
+
+    },
     "Initialize Git" : {
       "localizations" : {
         "ko" : {
@@ -5988,6 +6026,9 @@
         }
       }
     },
+    "Integrations" : {
+
+    },
     "Into" : {
 
     },
@@ -6127,6 +6168,7 @@
       }
     },
     "Live" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -6443,6 +6485,7 @@
       }
     },
     "Mac name" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -6606,7 +6649,7 @@
         }
       }
     },
-    "Manage Billing" : {
+    "Manage Computer" : {
 
     },
     "Manage end-to-end encrypted secrets, CI auto-update scans, indexed docs, and release workflows." : {
@@ -6625,6 +6668,9 @@
         }
       }
     },
+    "Manage Paired Computers" : {
+
+    },
     "Manage your cloud projects without connecting to a Mac." : {
       "localizations" : {
         "zh-Hans" : {
@@ -6634,6 +6680,12 @@
           }
         }
       }
+    },
+    "Manage Your Subscription" : {
+
+    },
+    "Managed on Mac" : {
+
     },
     "Manual" : {
 
@@ -6946,6 +6998,9 @@
 
     },
     "Moving task…" : {
+
+    },
+    "Moving tasks…" : {
 
     },
     "Moving this task into a chat column runs the assigned agent in a new thread on your Mac." : {
@@ -7349,6 +7404,9 @@
     "No CI Update Pull Requests" : {
 
     },
+    "No Columns" : {
+
+    },
     "No custom Git sources added." : {
       "localizations" : {
         "en" : {
@@ -7514,6 +7572,9 @@
     "No items for this project." : {
 
     },
+    "No jobs are available yet. Pull to refresh." : {
+
+    },
     "No matches" : {
       "localizations" : {
         "zh-Hans" : {
@@ -7613,6 +7674,9 @@
           }
         }
       }
+    },
+    "No Paired Computers" : {
+
     },
     "No Project Cards" : {
 
@@ -7904,9 +7968,6 @@
       }
     },
     "No subfolders" : {
-
-    },
-    "No Subscription" : {
 
     },
     "No summary available yet" : {
@@ -8252,6 +8313,9 @@
         }
       }
     },
+    "Notification" : {
+
+    },
     "Notification Settings" : {
 
     },
@@ -8496,13 +8560,13 @@
         }
       }
     },
+    "Open RxCode on your Mac to sync this Swift filter view." : {
+
+    },
     "Open System Notification Settings" : {
 
     },
     "Opened" : {
-
-    },
-    "Opening billing…" : {
 
     },
     "Opening notification…" : {
@@ -8512,6 +8576,9 @@
 
     },
     "Opens the project board. Long press and drag to reorder." : {
+
+    },
+    "Opens the project. Long press and drag to reorder." : {
 
     },
     "Opens todos and thread summary" : {
@@ -8553,6 +8620,7 @@
       }
     },
     "or" : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -8631,6 +8699,7 @@
       }
     },
     "Pair New Mac" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -8675,6 +8744,7 @@
       }
     },
     "Paired %@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -8695,6 +8765,9 @@
           }
         }
       }
+    },
+    "Paired Computers" : {
+
     },
     "Paired Macs" : {
       "localizations" : {
@@ -8795,6 +8868,7 @@
       }
     },
     "Paste a GitHub ruleset JSON with name, target, enforcement, and rules." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ko" : {
           "stringUnit" : {
@@ -8809,6 +8883,9 @@
           }
         }
       }
+    },
+    "Paste or import a GitHub ruleset JSON file with name, target, enforcement, and rules. Importing replaces the ruleset in this draft; save the template to apply it." : {
+
     },
     "Paused" : {
 
@@ -8961,6 +9038,9 @@
           }
         }
       }
+    },
+    "Project" : {
+
     },
     "Project / Workspace" : {
       "localizations" : {
@@ -9202,10 +9282,14 @@
     "Recent Releases" : {
 
     },
+    "Recent Runs" : {
+
+    },
     "Reconnect" : {
 
     },
     "Reconnecting in %llds" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -9443,6 +9527,9 @@
         }
       }
     },
+    "Remove Pairing" : {
+
+    },
     "Remove pairing?" : {
       "localizations" : {
         "en" : {
@@ -9515,7 +9602,11 @@
         }
       }
     },
+    "Rename Computer" : {
+
+    },
     "Rename Mac" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -9552,6 +9643,12 @@
           }
         }
       }
+    },
+    "Reorder Columns" : {
+
+    },
+    "Reorder Projects" : {
+
     },
     "Repo Setup" : {
       "localizations" : {
@@ -9600,6 +9697,12 @@
           }
         }
       }
+    },
+    "Repository is no longer configured for CI updates." : {
+
+    },
+    "Repository Setup" : {
+
     },
     "Request timed out. Check your Mac and try again." : {
       "localizations" : {
@@ -9786,6 +9889,9 @@
           }
         }
       }
+    },
+    "Run #%lld" : {
+
     },
     "Run actions" : {
       "localizations" : {
@@ -10003,9 +10109,6 @@
     "Saving automation settings…" : {
 
     },
-    "Saving automation…" : {
-
-    },
     "Saving file…" : {
       "localizations" : {
         "ko" : {
@@ -10039,6 +10142,9 @@
 
     },
     "Saving webhook…" : {
+
+    },
+    "Saving…" : {
 
     },
     "Scan" : {
@@ -10633,6 +10739,7 @@
       }
     },
     "Select which Mac this device controls. When Direct connection is on and you're on the same network, sync connects straight to your Mac (end-to-end encrypted) and falls back to the relay automatically." : {
+      "extractionState" : "stale",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -10914,6 +11021,9 @@
       }
     },
     "Sign out of Flowcy?" : {
+
+    },
+    "Signed In" : {
 
     },
     "Signed in to Flowcy" : {
@@ -11398,6 +11508,9 @@
         }
       }
     },
+    "Swift Filter" : {
+
+    },
     "Switch branch" : {
       "localizations" : {
         "en" : {
@@ -11421,6 +11534,7 @@
       }
     },
     "Switch to %@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -11572,6 +11686,9 @@
         }
       }
     },
+    "Task Actions" : {
+
+    },
     "Task Board Error" : {
       "localizations" : {
         "zh-Hans" : {
@@ -11633,6 +11750,9 @@
           }
         }
       }
+    },
+    "Template Name" : {
+
     },
     "Templates of GitHub merge settings and branch rulesets. The default template is applied to newly created repositories." : {
       "localizations" : {
@@ -12159,6 +12279,7 @@
       }
     },
     "This removes %@ from this device. Other paired Macs stay available." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -12201,6 +12322,9 @@
           }
         }
       }
+    },
+    "This removes the computer from this device. You can pair it again later." : {
+
     },
     "This removes the repository and its indexed documents from docs search." : {
       "localizations" : {
@@ -12370,6 +12494,12 @@
           }
         }
       }
+    },
+    "To" : {
+
+    },
+    "To view or change your subscription and billing details, sign in to your account on the Flowcy website using a web browser." : {
+
     },
     "Todos" : {
       "localizations" : {
@@ -12599,6 +12729,9 @@
         }
       }
     },
+    "Unable to Import Ruleset" : {
+
+    },
     "Unable to Load %@" : {
 
     },
@@ -12652,6 +12785,9 @@
           }
         }
       }
+    },
+    "Unable to Load Log" : {
+
     },
     "Unable to Load Projects" : {
 
@@ -12972,6 +13108,9 @@
     "Use AI to remove incompatible updates when dependency CI fails" : {
 
     },
+    "Use Connect New Remote to pair a Mac." : {
+
+    },
     "Use Draft" : {
 
     },
@@ -13009,6 +13148,9 @@
           }
         }
       }
+    },
+    "Use This Computer" : {
+
     },
     "Use Workspace" : {
       "localizations" : {
@@ -13110,6 +13252,9 @@
         }
       }
     },
+    "View Log" : {
+
+    },
     "View pull request" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -13190,6 +13335,9 @@
       }
     },
     "Vulnerabilities (%lld)" : {
+
+    },
+    "Waiting for Host Sync" : {
 
     },
     "Watch a repository to keep its GitHub Actions and dependencies up to date." : {

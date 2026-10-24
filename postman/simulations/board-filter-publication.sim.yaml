@@ -1,0 +1,5 @@
+simulation: board-filter-publication
+routing: path
+mocks:
+  - routeKey: flowcy
+    path: ../mocks/board-filter-publication/config.yaml

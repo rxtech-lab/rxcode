@@ -5,6 +5,16 @@ import Testing
 @Suite("Project cloud sync")
 struct ProjectCloudSyncTests {
 
+    @Test("Filter publication failure survives restart and older state remains compatible")
+    func publicationFailurePersistence() throws {
+        let legacy = try JSONDecoder().decode(CloudBoardSyncState.self, from: Data("{}".utf8))
+        #expect(legacy.filterPublicationError == nil)
+        var failed = legacy
+        failed.filterPublicationError = "Filter execution failed"
+        let restored = try JSONDecoder().decode(CloudBoardSyncState.self, from: JSONEncoder().encode(failed))
+        #expect(restored.filterPublicationError == failed.filterPublicationError)
+    }
+
     // MARK: - Merge decisions
 
     @Test("Three-way merge picks the side that changed")

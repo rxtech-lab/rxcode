@@ -17,16 +17,18 @@ enum CloudProjectSyncPhase: Int {
     case fetchingBoard
     case syncingStories
     case syncingTasks
+    case publishingFilters
     case savingChanges
 
-    var fractionCompleted: Double { Double(rawValue) / 4 }
+    var fractionCompleted: Double { Double(rawValue) / 5 }
 
     var progressText: String {
         switch self {
-        case .fetchingBoard: String(localized: "Fetching cloud board (step 1 of 4)")
-        case .syncingStories: String(localized: "Syncing stories (step 2 of 4)")
-        case .syncingTasks: String(localized: "Syncing tasks (step 3 of 4)")
-        case .savingChanges: String(localized: "Finishing sync (step 4 of 4)")
+        case .fetchingBoard: String(localized: "Fetching cloud board (step 1 of 5)")
+        case .syncingStories: String(localized: "Syncing stories (step 2 of 5)")
+        case .syncingTasks: String(localized: "Syncing tasks (step 3 of 5)")
+        case .publishingFilters: String(localized: "Publishing Swift filters (step 4 of 5)")
+        case .savingChanges: String(localized: "Finishing sync (step 5 of 5)")
         }
     }
 }
@@ -196,6 +198,15 @@ extension AppState {
         }
     }
 
+    /// Explicit user action releases the persisted publication failure latch.
+    func retryCloudBoardSync(for projectId: UUID) {
+        var board = taskBoard(for: projectId)
+        board.cloudSync?.filterPublicationError = nil
+        board.cloudSync?.lastError = nil
+        setTaskBoard(board, for: projectId, fromCloud: true)
+        scheduleCloudBoardSync(for: projectId, delay: .zero)
+    }
+
     /// Runs one sync at a time per project; a request made while one is in
     /// flight runs once more when it finishes.
     private func runCloudBoardSync(for projectId: UUID) {
@@ -349,7 +360,7 @@ extension AppState {
             try await syncSavedViews(cloudId: cloudId, projectId: projectId, sync: &sync)
             cloudSyncPhaseByProjectId[projectId] = .savingChanges
             sync.lastSyncedAt = Date()
-            sync.lastError = nil
+            sync.lastError = sync.filterPublicationError
         } catch {
             logger.error("Cloud sync failed: \(error.localizedDescription, privacy: .public)")
             sync.lastError = error.localizedDescription
@@ -361,17 +372,48 @@ extension AppState {
     }
 
     private func syncSavedViews(cloudId: String, projectId: UUID, sync: inout CloudBoardSyncState) async throws {
+        sync.filterPublicationError = nil
+        cloudSyncPhaseByProjectId[projectId] = .publishingFilters
+        var board = taskBoard(for: projectId)
+        let originalViews = board.savedViews
+        let account = rxAuth.user?.id
+        for index in board.savedViews.indices {
+            guard let source = board.savedViews[index].filterScript, board.savedViews[index].hasFilterScript else {
+                board.savedViews[index].filterSnapshot = nil
+                continue
+            }
+            let outcome = await taskFilterEvaluator.evaluate(script: source, input: TaskFilterScript.input(for: board))
+            guard isSignedIn, rxAuth.user?.id == account, isCloudLinked(projectId, to: cloudId),
+                  taskBoard(for: projectId).savedViews == originalViews else {
+                scheduleCloudBoardSync(for: projectId, delay: .zero)
+                return
+            }
+            switch outcome {
+            case .selection(let selection):
+                board.savedViews[index].filterSnapshot = TaskFilterSnapshot(source: source,
+                    tasks: selection.taskIds.map(\.uuidString).sorted(), stories: selection.storyIds.map(\.uuidString).sorted())
+            case .failure(let message):
+                board.savedViews[index].filterSnapshot = nil
+                sync.filterPublicationError = message
+            }
+        }
+        editCloudBoard(projectId, cloudId: cloudId, sync: sync) { $0.savedViews = board.savedViews }
         // A conflict is retried from a fresh revision; never blindly replace
         // changes made by the phone while this Mac was uploading.
         for attempt in 0..<3 {
-            guard let remote = try await projectCloud.savedViews(projectId: cloudId),
-                  isCloudLinked(projectId, to: cloudId) else { return }
+            guard let remote = try await projectCloud.savedViews(projectId: cloudId) else {
+                if taskBoard(for: projectId).savedViews.contains(where: \.hasFilterScript) {
+                    throw AutopilotService.ServiceError.apiError(404, "Update the Flowcy server to publish Swift filters.")
+                }
+                return
+            }
+            guard isCloudLinked(projectId, to: cloudId) else { return }
             let local = taskBoard(for: projectId).savedViews.map { CloudSavedView(view: $0, sync: sync) }
             let merged = CloudSavedViews.merging(local: local, base: sync.savedViewsBase, remote: remote.views)
             do {
-                if merged != remote.views {
-                    _ = try await projectCloud.saveViews(CloudSavedViews(views: merged, revision: remote.revision), projectId: cloudId)
-                }
+                _ = merged != remote.views
+                    ? try await projectCloud.saveViews(CloudSavedViews(views: merged, revision: remote.revision), projectId: cloudId)
+                    : remote
                 guard isCloudLinked(projectId, to: cloudId) else { return }
                 // Preserve edits made during the upload for the next sync.
                 let latest = taskBoard(for: projectId).savedViews.map { CloudSavedView(view: $0, sync: sync) }
@@ -381,7 +423,7 @@ extension AppState {
                     board.savedViews = applied.map { $0.localView(sync: sync) }
                 }
                 return
-            } catch where ProjectCloudService.isConflict(error) && attempt < 2 { continue }
+            } catch where sync.filterPublicationError == nil && ProjectCloudService.isConflict(error) && attempt < 2 { continue }
         }
     }
 

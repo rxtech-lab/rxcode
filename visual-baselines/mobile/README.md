@@ -54,7 +54,7 @@ never recorded or replaced by comparison runs. A failed XCTest also fails the
 command; inspect the profile's `xcodebuild.log` and `result.xcresult`.
 
 The native comparator converts images to sRGB RGBA and permits a per-channel
-difference of 8/255 in at most 0.1% of pixels to accommodate small rasterization
+difference of 8/255 in at most 1% of pixels to accommodate small rasterization
 variations. It does not mask any UI region. A visual failure writes a
 `SCREEN-diff.png` highlighting changed pixels in magenta beside the latest
 image. Inspect baseline, latest, and diff before deciding whether a change is

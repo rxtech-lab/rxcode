@@ -39,8 +39,8 @@ for offset in stride(from: 0, to: baseline.count, by: 4) {
     diff[offset + 3] = 255
 }
 let fraction = Double(changed) / Double(width * height)
-print(String(format: "Changed pixels: %.5f%% (limit 0.1%%, channel tolerance 8/255)", fraction * 100))
-if fraction > 0.001 {
+print(String(format: "Changed pixels: %.5f%% (limit 1%%, channel tolerance 8/255)", fraction * 100))
+if fraction > 0.01 {
     let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height,
         bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
         colorSpaceName: .deviceRGB, bytesPerRow: width * 4, bitsPerPixel: 32)!

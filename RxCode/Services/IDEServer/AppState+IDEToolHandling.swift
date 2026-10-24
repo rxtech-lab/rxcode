@@ -47,6 +47,12 @@ extension AppState: IDEToolHandling {
             return try await handleCreateTask(arguments: arguments, sessionKey: sessionKey)
         case "ide__list_agent_models":
             return handleListAgentModels()
+        case JSONUITool.ideName:
+            do {
+                return textResult(try JSONUITool.result(for: arguments))
+            } catch {
+                throw IDEToolError.invalidArguments(error.localizedDescription)
+            }
         case "ide__update_task":
             return try await handleUpdateTask(arguments: arguments)
         case "ide__delete_task":

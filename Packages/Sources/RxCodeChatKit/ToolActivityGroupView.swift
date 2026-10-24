@@ -8,12 +8,25 @@ public struct ToolActivityGroupView: View {
     @State private var isExpanded = false
     @State private var selectedID: String?
 
+    /// Interactive json-render views drawn inline above the group instead of folded into it.
+    private let views: [ToolCall]
+
     public init(tools: [ToolCall], isStreaming: Bool = false) {
-        self.tools = tools
+        self.tools = tools.filter { !JSONUITool.matches($0.name) }
+        self.views = tools.filter { JSONUITool.matches($0.name) }
         self.isStreaming = isStreaming
     }
 
     public var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(views) { view in
+                JSONUIToolCard(toolCall: view, isStreaming: isStreaming)
+            }
+            if !tools.isEmpty { activity }
+        }
+    }
+
+    private var activity: some View {
         VStack(alignment: .leading, spacing: 0) {
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }

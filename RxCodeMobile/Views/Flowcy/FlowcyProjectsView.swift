@@ -15,6 +15,10 @@ struct FlowcyProjectsView: View {
     @State private var creating = false
     @State private var showingOrder = false
     @State private var feedback: String?
+    @State private var ciByRepository: [String: ProjectCIStatus] = [:]
+    @State private var releaseByRepository: [String: ReleaseRepoStatus] = [:]
+    @State private var summaryLoading = false
+    @State private var refreshID = UUID()
     @AppStorage("mobile.flowcy.projectOrder") private var savedProjectOrders = Data()
 
     private var orderScope: String { cloud.accountID ?? "signed-in" }
@@ -115,7 +119,7 @@ struct FlowcyProjectsView: View {
             projectOrderSheet.mobileSheetPresentation()
         }
         .mobileStatusToast($feedback)
-        .task { await reload() }
+        .task(id: cloud.accountID) { await reload() }
     }
 
     private func projectButton(_ project: CloudProject) -> some View {
@@ -123,15 +127,25 @@ struct FlowcyProjectsView: View {
             MobileHaptics.buttonTap()
             selected = project
         } label: {
-            HStack {
-                VStack(alignment: .leading, spacing: 8) {
-                    Label(project.title, systemImage: "folder").font(.headline).lineLimit(2)
-                    Text(project.repositoryFullName ?? "Standalone project")
-                        .font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label(project.title, systemImage: "folder").font(.headline).lineLimit(2)
+                        Text(project.repositoryFullName ?? "Standalone project")
+                            .font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.right").foregroundStyle(.tertiary)
                 }
-                Spacer(minLength: 8)
-                Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+                FlowcyProjectCardSummary(
+                    project: project,
+                    ci: ciByRepository[project.repositoryFullName?.lowercased() ?? ""],
+                    release: releaseByRepository[project.repositoryFullName?.lowercased() ?? ""],
+                    loading: summaryLoading,
+                    refreshID: refreshID
+                )
             }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                .padding(.vertical, 8)
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("flowcy-project-\(project.id)")
@@ -198,11 +212,55 @@ struct FlowcyProjectsView: View {
     }
 
     private func reload() async {
+        guard !loading else { return }
         loading = true
         error = nil
         defer { loading = false }
-        do { try await state.refreshCloudTaskProjects() }
-        catch { self.error = error.localizedDescription }
+        do {
+            try await state.refreshCloudTaskProjects()
+            try Task.checkCancellation()
+            refreshID = UUID()
+            summaryLoading = true
+            ciByRepository = [:]
+            releaseByRepository = [:]
+            defer { summaryLoading = false }
+            let repositories = Array(Set(cloud.projects.compactMap(\.repositoryFullName).map { $0.lowercased() }))
+            async let ci: () = loadCI(repositories)
+            async let releases: () = loadReleases(repositories)
+            _ = await (ci, releases)
+        } catch {
+            guard !MobileCloudState.isCancellation(error) else { return }
+            self.error = error.localizedDescription
+        }
+    }
+
+    private func loadCI(_ repositories: [String]) async {
+        let account = cloud.accountID
+        let queries = repositories.compactMap { repository -> CIStatusQuery? in
+            let parts = repository.split(separator: "/", maxSplits: 1).map(String.init)
+            guard parts.count == 2 else { return nil }
+            return CIStatusQuery(owner: parts[0], repo: parts[1], branch: nil)
+        }
+        guard !queries.isEmpty else { return }
+        do {
+            let response = try await AutopilotService(rxAuth: .shared).batchCIStatus(queries)
+            try Task.checkCancellation()
+            guard account == cloud.accountID else { return }
+            ciByRepository = Dictionary(response.results.map { ("\($0.owner)/\($0.repo)".lowercased(), $0) },
+                                        uniquingKeysWith: { first, _ in first })
+        } catch { /* Cards distinguish unavailable data from an empty CI history. */ }
+    }
+
+    private func loadReleases(_ repositories: [String]) async {
+        let account = cloud.accountID
+        guard !repositories.isEmpty else { return }
+        do {
+            let statuses = try await ReleaseService(rxAuth: .shared).statuses(forRepos: repositories)
+            try Task.checkCancellation()
+            guard account == cloud.accountID else { return }
+            releaseByRepository = Dictionary(statuses.map { ($0.fullName.lowercased(), $0) },
+                                             uniquingKeysWith: { first, _ in first })
+        } catch { /* A missing response is shown as unavailable, never as no releases. */ }
     }
 }
 

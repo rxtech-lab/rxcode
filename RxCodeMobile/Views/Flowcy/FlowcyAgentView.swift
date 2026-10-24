@@ -43,6 +43,7 @@ struct FlowcyAgentView: View {
                         .lineLimit(1...6).textFieldStyle(.plain)
                         .padding(.horizontal, 8).padding(.vertical, 10)
                         .accessibilityIdentifier("flowcy-agent-composer")
+                    MobileVoiceInputButton(text: $prompt)
                     Group {
                         if agent.isStreaming {
                             Button("Cancel", systemImage: "stop.circle.fill") { agent.cancel(); MobileHaptics.buttonTap() }

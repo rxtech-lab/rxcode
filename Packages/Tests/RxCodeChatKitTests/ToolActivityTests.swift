@@ -88,4 +88,18 @@ struct ToolActivityTests {
         #expect(labels.contains("1 running · 1 succeeded · 1 failed"))
         #expect(!labels.contains("Read"))
     }
+
+    @Test func interactiveViewsRenderInlineOutsideTheGroup() throws {
+        let view = ToolActivityGroupView(tools: [
+            ToolCall(id: "a", name: "Read", result: "ok"),
+            ToolCall(id: "ui", name: "show_ui", input: [
+                "title": "Plan",
+                "spec": ["root": "s", "elements": ["s": ["type": "Steps", "props": ["items": [["title": "Measure"]]]]]],
+            ], result: "ok"),
+        ])
+        let labels = try view.inspect().findAll(ViewType.Text.self).compactMap { try? $0.string() }
+        #expect(labels.contains("1 tool call"))
+        #expect(labels.contains("Plan"))
+        #expect(labels.contains("Measure"))
+    }
 }

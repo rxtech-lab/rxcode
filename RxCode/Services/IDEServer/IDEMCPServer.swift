@@ -649,6 +649,7 @@ actor IDEMCPServer {
             "ide__get_stories",
             "ide__get_tasks",
             "ide__list_agent_models",
+            JSONUITool.ideName,
             "ide__get_task_status",
             "ide__get_threads",
             "ide__get_thread_messages",

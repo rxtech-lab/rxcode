@@ -128,7 +128,7 @@ struct RemoteWorkspaceView: View {
             // Loading splash - shown until first snapshot AND minimum 2 seconds
             if !shouldShowContent {
                 SyncLoadingView(
-                    isTimedOut: connectionTimedOut || state.desktopTaskUnavailable,
+                    isTimedOut: !isRetryingConnection && (connectionTimedOut || state.desktopTaskUnavailable),
                     pairedDesktops: state.pairedDesktops,
                     activeDesktopID: state.activePairedDesktop?.id,
                     onRetry: {
@@ -243,9 +243,17 @@ struct RemoteWorkspaceView: View {
         }
     }
 
-    /// Retry connection after timeout
+    @State private var isRetryingConnection = false
+
+    /// Retry connection after timeout.
     private func retryConnection() async {
+        guard !isRetryingConnection else { return }
+        isRetryingConnection = true
+        defer { isRetryingConnection = false }
         logger.info("Retry connection requested")
+        connectionTimedOut = false
+        minimumLoadingTimeElapsed = false
+        await state.reconnectToDesktop()
         await initialLoad()
     }
 

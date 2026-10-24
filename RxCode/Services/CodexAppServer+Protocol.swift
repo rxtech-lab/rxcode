@@ -99,6 +99,11 @@ extension CodexAppServer {
     - `ide__get_running_jobs` / `ide__get_job_output` — inspect run-profile \
     jobs executing in the IDE.
     - `ide__get_usage` — current rate-limit / token usage.
+    - `ide__show_ui` — show the user an interactive native UI inline in the \
+    chat (json-render style spec: cards, tables, tabs, steps, stats, charts, \
+    code). Use it when a visual explanation — a comparison, an architecture or \
+    flow walkthrough, a plan, a test or build summary — is clearer than prose, \
+    then don't repeat its content in text.
 
     Reach for these when a task spans projects rather than guessing. Prefer \
     reading threads first; only use `ide__send_to_thread` when you actually \

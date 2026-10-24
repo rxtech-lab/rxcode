@@ -41,6 +41,8 @@ struct MobileInputBar: View {
             inputField
                 .frame(maxWidth: .infinity)
 
+            MobileVoiceInputButton(text: $text)
+
             if isStreaming {
                 stopButton
                 if hasText {

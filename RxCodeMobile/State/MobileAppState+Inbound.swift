@@ -39,6 +39,9 @@ extension MobileAppState {
             logger.info("[Direct] active path for desktopKey=\(String(peerHex.prefix(12)), privacy: .public) is now \(String(describing: path), privacy: .public)")
             activePathByDesktop[peerHex] = path
             directRTTByDesktop[peerHex] = rttMillis
+            if peerHex == pairedDesktopPubkey {
+                Task { await self.requestSnapshot(reason: "connection_path_changed") }
+            }
         }
     }
 

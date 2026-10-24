@@ -94,6 +94,8 @@ struct MessageBubble: View {
                             case .tool(let toolCall):
                                 if toolCall.name == "AskUserQuestion" {
                                     AskUserQuestionView(toolCall: toolCall)
+                                } else if JSONUITool.matches(toolCall.name) {
+                                    JSONUIToolCard(toolCall: toolCall, isStreaming: siblingStreaming)
                                 } else if let planMd = PlanCardView.renderMarkdown(for: toolCall, in: message) {
                                     let external: String? = (PlanCardView.isExitPlanMode(toolCall) && planMd.isEmpty)
                                         ? PlanCardView.latestPriorPlanMarkdown(before: message, in: chatBridge.messages)

@@ -49,9 +49,9 @@ struct SettingsView: View {
                 }
                 .tag(4)
 
-            ACPClientSettingsTab()
+            AgentSettingsTab()
                 .tabItem {
-                    Label("ACP Clients", systemImage: "link.circle")
+                    Label("Agent", systemImage: "person.crop.rectangle.stack")
                 }
                 .tag(5)
 

@@ -2,7 +2,9 @@ import RxCodeCore
 import SwiftUI
 
 extension AgentRuntimeInstaller.Runtime: Identifiable {
-    var id: String { rawValue }
+    var id: String {
+        rawValue
+    }
 
     var displayName: String {
         switch self {
@@ -38,20 +40,27 @@ struct AgentRuntimeInstallSheet: View {
         VStack(alignment: .leading, spacing: 16) {
             header
             versionPicker
-            if isInstalling || didFinish || progress != nil {
-                progressSection
-            }
-            if let errorMessage {
-                Text(errorMessage)
-                    .font(.system(size: ClaudeTheme.size(11)))
-                    .foregroundStyle(ClaudeTheme.statusError)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            Color.clear.frame(height: 50)
             footer
         }
         .padding(20)
         .frame(width: 420)
+        .overlay(alignment: .bottom) {
+            if isInstalling || didFinish {
+                progressSection
+                    .padding(12)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 60)
+            }
+        }
+        .alert("Installation Failed", isPresented: Binding(
+            get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } },
+        )) {
+            Button("OK", role: .cancel) { errorMessage = nil }
+        } message: {
+            Text(errorMessage ?? "")
+        }
         .interactiveDismissDisabled(isInstalling)
         .task { await loadVersions() }
         .onDisappear { installTask?.cancel() }

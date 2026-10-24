@@ -15,6 +15,10 @@
     <true/>
     <key>NSCameraUsageDescription</key>
     <string>Scan a QR code shown by RxCode on your Mac to pair this device.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Use the microphone to dictate messages to your agent chat.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Transcribe your voice into editable chat messages using on-device speech recognition.</string>
     <key>NSLocalNetworkUsageDescription</key>
     <string>RxCode connects directly to your Mac over the local network for a faster, private peer-to-peer sync.</string>
     <key>NSBonjourServices</key>

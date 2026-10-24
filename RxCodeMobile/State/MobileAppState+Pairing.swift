@@ -14,6 +14,8 @@ extension MobileAppState {
             failPairing(String(localized: "Invalid or expired pairing code."))
             return
         }
+        pairingTimeoutTask?.cancel()
+        pairingTimeoutTask = nil
         pairingStatus = .inProgress
         let desktopHex = token.desktopPubkeyHex
         logger.info("pairing with relayURL=\(token.relayURL, privacy: .public)")
@@ -25,6 +27,8 @@ extension MobileAppState {
         }
         if !clientStarted {
             await startClient()
+        } else if connectionState != .connected {
+            await reconnectToDesktop()
         }
         try? await client.addPeer(desktopHex)
         guard await waitForRelayConnection() else {

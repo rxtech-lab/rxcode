@@ -28,13 +28,19 @@ After save, RxCode probes the server, pins the configuration, and lists availabl
 
 User-scope servers can be overridden per project from the same MCP tab when a project is selected. Use overrides to disable a global server in one repository or to swap credentials.
 
+## Agent Runtimes
+
+Open **Settings -> Agent** to manage Claude Code, Codex, and installed ACP clients. Click **Install Client…** to open the installation catalogue. Claude Code and Codex offer published npm versions in their install sheets.
+
+Click **Manage…** beside an installed runtime to open its management sheet, where you can install another version, sign in, or sign out. Removal requires confirmation. For Claude Code and Codex, removal is available for copies installed by RxCode; separately installed copies are managed outside RxCode.
+
 ## ACP Clients
 
 The Agent Client Protocol lets RxCode talk to additional coding agents besides Claude Code and Codex. Examples include OpenCode and Gemini CLI.
 
 ### Installing From the Registry
 
-Open **Settings -> ACP Clients -> Registry**. RxCode fetches the official registry from `cdn.agentclientprotocol.com` and lists each agent with version, license, and a short description.
+Open **Settings -> Agent -> Install Client…** and browse the registry. RxCode fetches the official registry from `cdn.agentclientprotocol.com` and lists each agent with version, license, and a short description.
 
 Click **Add…** to install the registry release. For clients with an npm or PyPI package, choose a published stable version from the dropdown in the install sheet. RxCode pins that package version and starts it before saving the client. Binary-only clients can use the current registry release because the registry supplies no historical download URLs. Binary downloads are stored in:
 
@@ -44,7 +50,7 @@ Click **Add…** to install the registry release. For clients with an npm or PyP
 
 If a binary distribution is not available for macOS, RxCode falls back to `npx` or `uvx` packages declared in the registry.
 
-In **Installed**, click **Version…** to choose another package version from the dropdown, or **Update to** to install the current registry release. The selected version appears on the client card.
+In **Agent**, click **Manage… -> Install Version…** to choose another package version from the dropdown, or **Update to** to install the current registry release. The selected version appears on the client card.
 
 ### Models
 
@@ -56,7 +62,7 @@ Edit a client to inject extra environment variables — for example API keys req
 
 ### Enable and Remove
 
-Toggle the row to enable or disable a client for new threads. Remove deletes the installed binary from disk along with the configuration.
+Open **Manage…** and toggle **Enabled** to enable or disable a client for new threads. Remove deletes the installed binary from disk along with the configuration.
 
 ## When to Use Which
 

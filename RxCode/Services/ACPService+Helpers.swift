@@ -289,7 +289,7 @@ extension ACPService: AgentBackend {
             return AsyncStream<StreamEvent> { c in
                 c.yield(.user(UserMessage(
                     toolUseId: nil,
-                    content: "No ACP client configured. Add one in Settings → ACP Clients.",
+                    content: "No ACP client configured. Add one in Settings → Agent.",
                     isError: true
                 )))
                 c.yield(.result(ResultEvent(

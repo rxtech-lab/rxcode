@@ -109,7 +109,7 @@ struct SyncLoadingView: View {
                         .font(.title.weight(.semibold))
                         .foregroundStyle(.primary)
 
-                    Text("Unable to connect to your Mac. Make sure RxCode is running on your desktop and both devices are on the same network.")
+                    Text("Unable to connect to your Mac. Make sure RxCode is running on your desktop and both devices have an internet connection.")
                         .font(.body)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -131,6 +131,7 @@ struct SyncLoadingView: View {
     private var timeoutActions: some View {
         VStack(spacing: 12) {
             Button {
+                MobileHaptics.buttonTap()
                 onRetry?()
             } label: {
                 Label("Try Again", systemImage: "arrow.clockwise")

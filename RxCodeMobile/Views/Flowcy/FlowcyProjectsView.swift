@@ -38,14 +38,14 @@ struct FlowcyProjectsView: View {
     var body: some View {
         NavigationStack {
             directory
-                .navigationDestination(item: $selected) { project in
-                    FlowcyProjectWorkspace(project: project) {
-                        MobileHaptics.buttonTap()
-                        selected = nil
-                    }
-                    // The workspace supplies its own sidebar and detail toolbars.
-                    .toolbar(.hidden, for: .navigationBar)
-                }
+        }
+        .fullScreenCover(item: $selected) { project in
+            // Give the split workspace its own navigation hierarchy while keeping
+            // the directory mounted, including its search and scroll position.
+            FlowcyProjectWorkspace(project: project) {
+                MobileHaptics.buttonTap()
+                selected = nil
+            }
         }
     }
 

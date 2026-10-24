@@ -246,8 +246,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      # Visual baselines pin Xcode, device model, and runtime. Keep the runner's
-      # reviewed Xcode selected rather than silently upgrading to latest-stable.
+      # Match the reviewed baselines instead of using the runner's default Xcode.
+      - name: Setup approved Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '27.1'
+
+      - name: Prepare approved simulators
+        run: python3 scripts/mobile-visual/prepare.py --profile iphone --profile ipad
+
       - name: Write Firebase config
         env:
           FIREBASE_IOS_B64: ${{ secrets.FIREBASE_IOS_B64 }}

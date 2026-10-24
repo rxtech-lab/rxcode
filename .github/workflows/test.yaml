@@ -22,6 +22,9 @@ jobs:
       - name: Run SwiftLint
         run: make lint-ci
 
+      - name: Test package resolution retries
+        run: python3 -m unittest discover -s scripts/ci -p test_resolve_packages.py -v
+
   test-packages:
     name: swift test (Packages)
     runs-on: [self-hosted, regular]
@@ -183,6 +186,9 @@ jobs:
           FIREBASE_IOS_B64: ${{ secrets.FIREBASE_IOS_B64 }}
         run: ./scripts/ci/write-firebase-config.sh
 
+      - name: Resolve mobile dependencies
+        run: bash scripts/ci/resolve-packages.sh -project RxCode.xcodeproj -scheme RxCodeMobile
+
       - name: Resolve simulator
         id: sim
         run: |
@@ -259,6 +265,9 @@ jobs:
         env:
           FIREBASE_IOS_B64: ${{ secrets.FIREBASE_IOS_B64 }}
         run: ./scripts/ci/write-firebase-config.sh
+
+      - name: Resolve screenshot dependencies
+        run: bash scripts/ci/resolve-packages.sh -project RxCode.xcodeproj -scheme RxCodeMobile -derivedDataPath build/mobile-visual
 
       - name: Compare approved mobile screenshots
         # The runner processes these profiles sequentially with XCTest parallelism disabled.
